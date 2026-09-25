@@ -119,7 +119,9 @@ def need_stack():
 # post-admission step) no longer exists (`has_point`): the race it holds open is gone.
 POINTS = {
     "upload": (("infrx.media.uploads", "MediaUploads", "put_upload", "after", False),),
-    "admission": (("infrx.state.jobstore", "PgJobStore", "admit_ready", "after", False),
+    # D10 (codex/d10-durable) puts `admit_ready` on the ReadinessStore port's adapter
+    "admission": (("infrx.state.lifecycle", "PgLifecycle", "admit_ready", "after", False),
+                  ("infrx.state.jobstore", "PgJobStore", "admit_ready", "after", False),
                   ("infrx.state.jobstore", "PgJobStore", "admit_credit", "after", False)),
     "readiness": (("infrx.gateway.routes.relay", "Relay", "_admitted", "before", False),),
     "attachment": (("infrx.media.attachments", "PgAttachments", "put", "after", False),),
@@ -310,6 +312,19 @@ def install(environ=os.environ, workdir: Path | None = None, role: str = "") -> 
 # ------------------------------------------------------------------ the box
 
 
+def fake_only(env: dict) -> list[str]:
+    """What makes a box environment NOT the namespace's real services in pilot mode (the
+    failure oracle: a fake-only substitution is a non-pass). Empty when it is real."""
+    want = {"INFRX_MODE": "pilot", "S3_ENDPOINT_URL": harness.s3_endpoint(),
+            "VALKEY_URL": harness.valkey_url()}
+    wrong = [name for name, value in want.items() if env.get(name) != value]
+    if not env.get("DATABASE_URL", "").startswith(harness.pg_dsn("").split("?")[0]):
+        wrong.append("DATABASE_URL")
+    if not env.get("S3_MEDIA_BUCKET"):
+        wrong.append("S3_MEDIA_BUCKET")
+    return wrong
+
+
 class Box(pilotbox.PilotBox):
     """pilotbox's processes, each started through this file (`main`) so a fault point or a
     bypass is installed first. `start(role, **env)` adds environment for that start only."""
@@ -319,7 +334,12 @@ class Box(pilotbox.PilotBox):
         return [sys.executable, str(Path(__file__).resolve()), role], ready
 
     def start(self, role: str, timeout: float = 60.0, **env: str) -> None:
-        """Start `role` (`bind_retried`), with `env` added for this start only."""
+        """Start `role` (`bind_retried`), with `env` added for this start only. A box not on
+        the real services is INVALID[fake-only] before anything is spawned."""
+        wrong = fake_only({**self.env, **env})
+        if wrong:
+            import pytest
+            pytest.skip(f"INVALID[fake-only] the box is not on the e3c services: {wrong}")
         base = self.env
         self.env = {**base, **env}
         (self.workdir / f"barrier-{role}.json").unlink(missing_ok=True)
@@ -455,17 +475,28 @@ def money(trip, request_id: str) -> dict:
                                  request_id)[0][0]}
 
 
+def readiness_reader(dsn: str):
+    """The `ReadinessStore.readiness` of this tree, through the port's adapter: D10's
+    `infrx.state.lifecycle.PgLifecycle` first, then `PgJobStore`; None when neither has it."""
+    from infrx.state.jobstore import connector
+    for module, cls in (("infrx.state.lifecycle", "PgLifecycle"),
+                        ("infrx.state.jobstore", "PgJobStore")):
+        try:
+            owner = getattr(importlib.import_module(module), cls)
+        except (ImportError, AttributeError):
+            continue
+        reader = getattr(owner(connector(dsn)), "readiness", None)
+        if callable(reader):
+            return reader
+    return None
+
+
 def durably_ready(trip, request_id: str) -> bool:
     """Whether the store records the job as eligible to execute (F2C-L `ReadinessStore.
     readiness`, D10's adapter). A tree with no readiness record has no durable eligibility
     at all: False, so executing such a job is executing before eligibility (RV-05)."""
-    import asyncio as _asyncio
-
-    from infrx.state.jobstore import PgJobStore, connector
-    store = PgJobStore(connector(harness.pg_dsn(trip.world.database)))
-    if not callable(getattr(store, "readiness", None)):
-        return False
-    return _asyncio.run(store.readiness(request_id)) is not None
+    reader = readiness_reader(harness.pg_dsn(trip.world.database))
+    return reader is not None and asyncio.run(reader(request_id)) is not None
 
 
 def executed(trip, request_id: str) -> dict:

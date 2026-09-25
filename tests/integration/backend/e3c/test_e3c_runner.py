@@ -37,7 +37,7 @@ def test_s12_a_missing_or_skipped_case_is_never_a_pass():
         ("test_s03_upload", "skip", "no stack"),
         ("test_s04_ready", "skip", "INVALID[premise] engine answered nothing"),
         ("test_s05_crash[claim]", "xfail", "known"),
-        ("test_s06_retention", "error", "boom")))
+        ("test_s06_retention", "error", "boom")), required={})
     status = {sid: entry["status"] for sid, entry in result["scenarios"].items()}
     assert (status["s01"], status["s02"], status["s03"], status["s04"], status["s05"],
             status["s06"]) == ("PASS", "BLOCKED", "NOT RUN", "INVALID", "NOT RUN", "FAIL")
@@ -51,7 +51,7 @@ def test_s12_the_gate_is_the_worst_status_and_exits_as_e2c_does():
                         if c.get("case")),
                       *((f"test_nc_{nc[3:].replace('-', '_')}__{c['scenario']}_x", "pass", "")
                         for nc, c in runner.CONTROLS.items()))
-    result = runner.classify(only_pass)
+    result = runner.classify(only_pass, required={})
     # the two revert-type controls cannot run on one tree: the gate stays open
     assert {nc for nc, entry in result["controls"].items() if entry["status"] != "PASS"} == \
         {nc for nc, c in runner.CONTROLS.items() if c.get("revert")}
@@ -59,7 +59,7 @@ def test_s12_the_gate_is_the_worst_status_and_exits_as_e2c_does():
     blocked = runner.classify(only_pass.replace(
         '<testcase classname="m" name="test_s03_create_put_complete_x"></testcase>',
         '<testcase classname="m" name="test_s03_create_put_complete_x"><skipped '
-        'message="BLOCKED[M5] x"/></testcase>'))
+        'message="BLOCKED[M5] x"/></testcase>'), required={})
     assert blocked["scenarios"]["s03"]["status"] == "BLOCKED"
     assert blocked["controls"]["nc-upload-restart"]["status"] == "NOT RUN", \
         "a control over a scenario that did not pass proves nothing"
@@ -156,3 +156,133 @@ def test_nc_verify_repro__s12_a_required_case_that_did_not_run_keeps_the_gate_op
         result = runner.classify(junit(*broken))
         assert result["scenarios"]["s05"]["status"] == "NOT RUN"
         assert runner.gate(result) != "PASS"
+
+
+# ------------------------------------------------------------------ fix round (verification)
+
+
+def green(required=None) -> list[tuple[str, str, str]]:
+    """Every required case of the manifest and every control case, passing."""
+    required = runner.REQUIRED if required is None else required
+    return [*((name, "pass", "") for names in required.values() for name in names),
+            *((f"test_nc_{nc[3:].replace('-', '_')}__{c['scenario']}_x", "pass", "")
+              for nc, c in runner.CONTROLS.items())]
+
+
+def test_s12_a_scenario_missing_a_required_case_is_not_run():
+    """0-MUT-2 / 2-ACC-3: a case deselected (`-k`) or deleted leaves no trace in the JUnit;
+    the manifest makes its scenario NOT RUN, and the gate cannot pass even once phase 2
+    supplies both revert controls."""
+    partial = [c for c in green() if not (c[0].startswith("test_s05_") and "[settle]" not in c[0])]
+    result = runner.classify(junit(*partial))
+    assert result["scenarios"]["s05"]["status"] == "NOT RUN"
+    assert any("required case absent" in r for r in result["scenarios"]["s05"]["reasons"])
+    for nc, control in runner.CONTROLS.items():
+        if control.get("revert"):
+            result["controls"][nc]["status"] = runner.control_verdict("FAIL")
+    assert runner.gate(result) == "NOT RUN"
+    whole = runner.classify(junit(*green()))
+    for nc, control in runner.CONTROLS.items():
+        if control.get("revert"):
+            whole["controls"][nc]["status"] = runner.control_verdict("FAIL")
+    assert runner.gate(whole) == "PASS", "the manifest itself must be satisfiable"
+
+
+def test_s12_the_manifest_is_exactly_what_the_scenario_modules_define():
+    """A case deleted from a module (or added without the manifest) fails HERE."""
+    import subprocess
+    done = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q",
+                           "-p", "no:cacheprovider", *runner.scenario_files()],
+                          cwd=str(HERE), capture_output=True, text=True, timeout=120)
+    collected = {line.split("::", 1)[1] for line in done.stdout.splitlines() if "::" in line}
+    plain = {name for name in collected if not name.startswith("test_nc_")}
+    assert plain == {n for names in runner.REQUIRED.values() for n in names}, done.stdout[-800:]
+
+
+@pytest.mark.parametrize("reverted,expected", [
+    ("FAIL", "PASS"), ("PASS", "FAIL"), ("BLOCKED", "BLOCKED"), ("NOT RUN", "NOT RUN"),
+    ("INVALID", "INVALID")])
+def test_s12_a_revert_control_passes_only_when_the_reverted_tree_is_red(reverted, expected):
+    """0-MUT-3: the only path by which ADMISSION-READY / RETENTION-DURABLE can pass."""
+    assert runner.control_verdict(reverted) == expected
+
+
+@pytest.mark.parametrize("message,expected", [
+    ("harness.HarnessError: docker compose up failed", "INVALID"),
+    ("psycopg.OperationalError: database infrx_e3c_1_2 does not exist", "INVALID"),
+    ("RuntimeError: [Errno 98] address already in use", "INVALID"),
+    ("AssertionError: the gateway never reached its fault point in 60s", "INVALID"),
+    ("AssertionError: executed before durable eligibility", "FAIL")])
+def test_s12_a_harness_error_is_invalid_not_a_product_fail(message, expected):
+    """2-ACC-2: infrastructure that broke under the case is INVALID[harness] (still never a
+    pass); FAIL stays for assertions about product state."""
+    for outcome in ("fail", "error"):
+        result = runner.classify(junit(("test_s06_x", outcome, message)), required={})
+        assert result["scenarios"]["s06"]["status"] == expected, (outcome, message)
+
+
+def test_s12_a_held_namespace_lock_blocks_the_run_and_touches_nothing(tmp_path, monkeypatch):
+    """0-MUT-1 / 1-RULES-1 / 2-ACC-1: a second runner never provisions, never tears down."""
+    import fcntl
+
+    import world                     # E2's harness loads under THIS session's namespace
+    assert world.harness
+    monkeypatch.setenv("INFRX_E2_NAMESPACE", "e3c")     # main() sets it; restored after
+    monkeypatch.setattr(runner, "LOCK", tmp_path / "e3c.lock")
+
+    def touched(*_a, **_k):
+        raise AssertionError("a blocked run touched the stack")
+    monkeypatch.setattr(runner, "provision", touched)
+    monkeypatch.setattr(runner, "teardown", touched)
+    with open(runner.LOCK, "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert runner.main(["--out", str(tmp_path / "out")]) == 3
+    verdict = json.loads((tmp_path / "out" / "verdict.json").read_text())
+    assert verdict["verdict"] == "BLOCKED" and verdict["lock"]["held"] is False
+    assert all(s["status"] == "BLOCKED" and "another run" in s["reasons"][0]
+               for s in verdict["scenarios"])
+
+
+def test_s12_a_fake_only_box_is_invalid_before_any_process_starts(tmp_path):
+    """2-ACC-5: a box not on the namespace's real PostgreSQL / S3 / Valkey in pilot mode is
+    refused as INVALID[fake-only] before it spawns anything, and classifies as a non-pass."""
+    import world
+    real = {"INFRX_MODE": "pilot", "DATABASE_URL": world.harness.pg_dsn("x"),
+            "S3_MEDIA_BUCKET": world.harness.S3_BUCKET,
+            "S3_ENDPOINT_URL": world.harness.s3_endpoint(),
+            "VALKEY_URL": world.harness.valkey_url()}
+    assert world.fake_only(real) == []
+    for name, value in (("INFRX_MODE", "local"), ("DATABASE_URL", ""),
+                        ("S3_ENDPOINT_URL", "http://127.0.0.1:1"), ("VALKEY_URL", "")):
+        box = world.Box({**real, name: value}, "http://127.0.0.1:1", tmp_path, 1)
+        with pytest.raises(pytest.skip.Exception, match=r"INVALID\[fake-only\]") as skipped:
+            box.start("gateway")
+        assert not box.processes
+        result = runner.classify(junit(("test_s02_x", "skip", str(skipped.value))),
+                                 required={})
+        assert result["scenarios"]["s02"]["status"] == "INVALID"
+
+
+def test_s12_the_readiness_oracle_and_admission_point_follow_d10s_port(monkeypatch):
+    """2-ACC-4: D10 puts `admit_ready`/`readiness` on `infrx.state.lifecycle.PgLifecycle`;
+    the oracle and the admission hold must find them there, not only on PgJobStore."""
+    import types
+    import world
+    assert world.POINTS["admission"][0][:3] == ("infrx.state.lifecycle", "PgLifecycle",
+                                                "admit_ready")
+
+    class PgLifecycle:
+        def __init__(self, connect, **_kw):
+            self.connect = connect
+
+        async def readiness(self, job_id):
+            return {"job_id": job_id}
+
+        async def admit_ready(self, *args):
+            return None
+    fake = types.ModuleType("infrx.state.lifecycle")
+    fake.PgLifecycle = PgLifecycle
+    monkeypatch.setitem(sys.modules, "infrx.state.lifecycle", fake)
+    reader = world.readiness_reader("postgresql://nobody@127.0.0.1:1/x")
+    assert reader is not None and reader.__self__.__class__ is PgLifecycle
+    assert world.point_target("admission")[0] is PgLifecycle

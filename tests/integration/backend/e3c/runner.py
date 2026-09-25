@@ -26,6 +26,7 @@ Label: orchestration with a controlled engine - not Marlin quality, not GPU capa
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -119,6 +120,77 @@ CONTROLS = {
     "nc-verify-repro": {"oracle": "VERIFY-REPRO", "scenario": "s12",
                         "mechanism": "classify(): a skipped / missing required case"},
 }
+# The required cases (0-MUT-2): a scenario missing any of these - deselected by `-k`/`--only`
+# or deleted - is NOT RUN, never PASS over the cases that happen to be there. s12 checks the
+# manifest equals what the modules define (a deletion fails there too).
+REQUIRED = {
+    "s01": ("test_s01_cli_identity_grant_key_modes_result_revoke",
+            "test_s01_the_external_dataset_client_resumes_uploads_across_a_gateway_restart"),
+    "s02": ("test_s02_two_gateways_two_tenants_one_logical_request",),
+    "s03": ("test_s03_create_put_complete_resolve_each_on_another_gateway",
+            *(f"test_s03_a_gateway_sigkill_after_each_step_loses_nothing[{p}]"
+              for p in ("create", "put", "complete")),
+            "test_s03_wrong_owner_and_wrong_digest_are_refused_on_every_process"),
+    "s04": ("test_s04_nothing_executes_while_the_acceptance_is_incomplete[text]",
+            "test_s04_nothing_executes_while_the_acceptance_is_incomplete[video]",
+            "test_s04_late_rejection_refuses_before_any_execution",
+            "test_s04_a_permanent_preparation_refusal_ends_the_job_on_its_first_refusal"),
+    "s05": (*(f"test_s05_a_gateway_crash_at_each_step_recovers_once[{p}]"
+              for p in ("upload", "admission", "readiness", "attachment", "outbox")),
+            *(f"test_s05_a_worker_crash_at_each_step_recovers_once[{p}]"
+              for p in ("prep", "claim", "output", "settle"))),
+    "s06": ("test_s06_two_fresh_collectors_never_delete_a_live_jobs_media",
+            "test_s06_a_collector_that_cannot_reach_the_database_deletes_nothing",
+            "test_s06_past_expiry_content_is_scrubbed_and_metadata_kept"),
+    "s07": ("test_s07_one_persisted_expiry_governs_every_read_across_a_policy_change",),
+    "s08": ("test_s08_an_unavailable_store_is_a_bounded_refusal_then_one_job[postgres]",
+            "test_s08_an_unavailable_store_is_a_bounded_refusal_then_one_job[s3]",
+            "test_s08_a_lost_valkey_index_is_rebuilt_and_loses_no_accepted_job"),
+    "s09": ("test_s09_concurrent_signup_callbacks_and_grants_grant_exactly_once",
+            "test_s09_a_historical_usd_job_keeps_its_units_while_credit_serves",
+            "test_s09_the_credit_transition_is_a_reported_dry_run_first"),
+    "s10": ("test_s10_the_runtime_login_cannot_become_an_owner_or_rewrite_money",
+            "test_s10_the_browser_roles_reach_nothing_outside_the_console_surface",
+            "test_s10_operator_and_consumer_credentials_stay_in_their_lane"),
+    "s11": ("test_s11_reconcile_of_a_live_job_is_typed_and_moves_no_money",
+            "test_s11_cancel_racing_completion_and_reconcile_ends_once",
+            "test_s11_reconcile_never_recreates_scrubbed_content"),
+    "s13": ("test_s13_discovery_claims_nothing_serving_contradicts",
+            "test_s13_discovery_matches_the_running_serving_profile"),
+    "s12": ("test_s12_a_missing_or_skipped_case_is_never_a_pass",
+            "test_s12_the_gate_is_the_worst_status_and_exits_as_e2c_does",
+            "test_s12_a_control_that_is_not_detected_fails_the_gate",
+            "test_s12_a_control_counts_over_the_case_it_guards_not_the_whole_scenario",
+            "test_s12_the_matrix_covers_the_brief_and_the_task",
+            "test_s12_scenario_modules_are_not_collected_by_the_default_suites",
+            "test_s12_every_fault_point_and_bypass_names_code_that_exists",
+            "test_s12_the_namespace_is_the_reserved_block",
+            "test_s12_blocked_must_name_known_lanes[lanes0]",
+            "test_s12_blocked_must_name_known_lanes[lanes1]",
+            "test_s12_no_stack_blocks_every_scenario",
+            "test_s12_a_scenario_missing_a_required_case_is_not_run",
+            "test_s12_the_manifest_is_exactly_what_the_scenario_modules_define",
+            *(f"test_s12_a_revert_control_passes_only_when_the_reverted_tree_is_red[{r}-{e}]"
+              for r, e in (("FAIL", "PASS"), ("PASS", "FAIL"), ("BLOCKED", "BLOCKED"),
+                           ("NOT RUN", "NOT RUN"), ("INVALID", "INVALID"))),
+            *(f"test_s12_a_harness_error_is_invalid_not_a_product_fail[{m}-{e}]" for m, e in (
+                ("harness.HarnessError: docker compose up failed", "INVALID"),
+                ('psycopg.OperationalError: database infrx_e3c_1_2 does not exist',
+                 "INVALID"),
+                ("RuntimeError: [Errno 98] address already in use", "INVALID"),
+                ("AssertionError: the gateway never reached its fault point in 60s",
+                 "INVALID"),
+                ("AssertionError: executed before durable eligibility", "FAIL"))),
+            "test_s12_a_held_namespace_lock_blocks_the_run_and_touches_nothing",
+            "test_s12_a_fake_only_box_is_invalid_before_any_process_starts",
+            "test_s12_the_readiness_oracle_and_admission_point_follow_d10s_port"),
+}
+# 2-ACC-2: infrastructure that broke under a case (never a product gap): INVALID[harness].
+HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError|BypassTargetMissing)\b"
+                     r"|address already in use|never reached its fault point")
+# 0-MUT-1: one runner per namespace on this host (a second one's preflight would tear the
+# live stack down). Host-wide, not $TMPDIR: two sessions may have different TMPDIRs.
+LOCK = Path("/tmp") / f"infrx-{NAMESPACE}.runner.lock"
 CASE = re.compile(r"test_(?:nc_(?P<nc>[a-z0-9_]+?)__)?(?P<sid>s\d\d)")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[([^\]]*)\]")
 
@@ -132,7 +204,10 @@ def case_status(case) -> tuple[str, str]:
     for tag in ("failure", "error"):
         node = case.find(tag)
         if node is not None:
-            return FAIL, (node.get("message") or node.text or "")[:400]
+            message = (node.get("message") or node.text or "")[:400]
+            if HARNESS.search(message):
+                return INVALID, "INVALID[harness] " + message
+            return FAIL, message
     node = case.find("skipped")
     if node is None:
         return PASS, ""
@@ -144,8 +219,11 @@ def case_status(case) -> tuple[str, str]:
             message.strip()[:400])
 
 
-def classify(junit_xml: str, only: set[str] | None = None) -> dict:
-    """Per scenario and per control: status, cases and reasons, from pytest's JUnit XML."""
+def classify(junit_xml: str, only: set[str] | None = None,
+             required: dict | None = None) -> dict:
+    """Per scenario and per control: status, cases and reasons, from pytest's JUnit XML.
+    `required` (default REQUIRED): cases whose absence makes their scenario NOT RUN."""
+    required = REQUIRED if required is None else required
     scenarios = {sid: {"status": NOT_RUN, "cases": {}, "reasons": []} for sid in SCENARIOS}
     controls = {nc: {"status": NOT_RUN, "cases": {}, "reasons": []} for nc in CONTROLS}
     for case in ET.fromstring(junit_xml).iter("testcase"):
@@ -168,6 +246,10 @@ def classify(junit_xml: str, only: set[str] | None = None) -> dict:
         if only and sid not in only:
             entry["reasons"].append("not selected (--only)")
         entry["status"] = worst(entry["cases"].values()) if entry["cases"] else NOT_RUN
+        absent = [name for name in required.get(sid, ()) if name not in entry["cases"]]
+        if absent and entry["cases"]:
+            entry["status"] = worst([entry["status"], NOT_RUN])
+            entry["reasons"].append(f"required case absent (deselected or deleted): {absent}")
     for nc, entry in controls.items():
         control = CONTROLS[nc]
         scenario = scenarios[control["scenario"]]
@@ -188,6 +270,12 @@ def classify(junit_xml: str, only: set[str] | None = None) -> dict:
         else:
             entry["status"] = detected
     return {"scenarios": scenarios, "controls": controls}
+
+
+def control_verdict(reverted: str) -> str:
+    """A revert-type control: its scenario on the tree with the fix reverted must be red.
+    FAIL there -> the control PASSES; PASS there -> it FAILS; anything else propagates."""
+    return PASS if reverted == FAIL else FAIL if reverted == PASS else reverted
 
 
 def blocked_all(result: dict, why: str) -> dict:
@@ -321,9 +409,21 @@ def main(argv: list[str] | None = None) -> int:
     usable, why = False, ""
     runs: dict = {}
     result = classify("<testsuites/>", only)
+    lock = LOCK.open("a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        held = True
+    except BlockingIOError:
+        held = False
     try:
         with run.signals_handled():
-            usable, why = provision(report, args.reuse, args.pull)
+            if not held:
+                why = f"namespace {NAMESPACE} in use by another run (lock {LOCK})"
+                blocked_all(result, why)
+                for entry in result["scenarios"].values():
+                    entry["reasons"] = [f"BLOCKED[E2C] another run holds namespace {NAMESPACE}"]
+            else:
+                usable, why = provision(report, args.reuse, args.pull)
             if usable:
                 done, junit = pytest_run(out, "scenarios", scenario_files(), keyword)
                 runs["scenarios"] = done
@@ -337,16 +437,16 @@ def main(argv: list[str] | None = None) -> int:
                     scenario = classify(junit or "<testsuites/>")["scenarios"][
                         control["scenario"]]["status"]
                     result["controls"][nc].update(
-                        status=PASS if scenario == FAIL else (FAIL if scenario == PASS
-                                                              else scenario),
+                        status=control_verdict(scenario),
                         reasons=[f"{control['scenario']} on {tree} (fix reverted): {scenario}"])
-            else:
+            elif held:
                 blocked_all(result, why)
     except run.Interrupted as stop:
         why = f"interrupted by signal {stop.signum}: unfinished scenarios are NOT RUN"
     finally:
         if usable and not args.keep:
             teardown(report)
+        lock.close()                      # releases the flock, after teardown
     verdict = gate(result)
     children = resource.getrusage(resource.RUSAGE_CHILDREN)
     payload = {
@@ -365,6 +465,7 @@ def main(argv: list[str] | None = None) -> int:
                                "reproduce": reproduce(CONTROLS[nc]["scenario"], nc.replace(
                                    "nc-", "nc_").replace("-", "_"))}
                               for nc, entry in result["controls"].items()],
+        "lock": {"path": str(LOCK), "held": held},
         "runs": runs, "deviations": deviations,
         "evidence": {"junit": str(out / "scenarios.xml"), "log": str(out / "scenarios.log"),
                      "box_logs": str(out / "cases")},
