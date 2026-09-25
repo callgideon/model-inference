@@ -186,3 +186,122 @@ Confidence is medium. The code and tests are done. What remains is the coordinat
 ## Verification log
 
 - 2026-09-25T22:04Z: evidence written at code head `acfd9a51`; all commands above rerun at that head.
+
+## Fix round (review findings 0-C0-V1, 0-C0-V2, 0-C0-V3, 1-C0-V1)
+
+| Field | Value |
+|---|---|
+| Handback head reviewed | `5a152cdd` (code `acfd9a51`) |
+| Fix-round code head | `ffd5ba7c` (this section is committed on top of it) |
+| Commits | `f2746f01` tests first · `40758d58` split + shell · `8264e104` real-stack case · `ffd5ba7c` layout guard |
+| Changed paths (all owned) | `apps/app/lib/services/{console,server}.ts`, `apps/app/tests/c/{consumer.test.ts,consumer-postgrest.test.ts,client-boundary.test.ts,credits.test.ts,mutants.json}` |
+
+### Per finding
+
+| Id | Fixed here | What changed | Fails before → passes after |
+|---|---|---|---|
+| 0-C0-V1 | **yes** | `consumerSession()`'s logic is now `consumerSessionFrom(client, cursorSecret)` in `console.ts` (no `next/*`, so testable under R48). `server.ts` is a one-line `cache()` wrapper passing `createClient` and `consoleCursorSecret` as thunks. Both are called **inside** the guard, the secret first, so a missing secret is `unavailable` for every state, not only once an account is ready. Three new cases: auth outage (retryable fetch, GoTrue 500) → `unavailable`; missing secret / `createClient` throw / `getUser` reject → `unavailable`; signed out, unverified and onboarding → `reads: null`, ready → reads on the same client. | Reproduced both reviewer mutants on `server.ts` at `acfd9a51`: `pnpm test` exit 0, 375 pass / 0 fail (both **survive**). The tests at `f2746f01` fail to load (`does not provide an export named 'consoleShell'`). The mutants are re-expressed in the tested function: `C0-SES-01` (outage → signed_out) and `C0-SES-02` (catch → onboarding) are **killed**, as are `C0-SES-03` (secret read lazily) and `C0-SES-04` (non-ready context gets reads). |
+| 1-C0-V1 | **yes** (decision + guard); applying the layout is the coordinator's (WR-1 revised below) | New `consoleShell(session, isOperator, routes)` in `console.ts` is the layout's whole decision. An operator whose consumer state is `onboarding` gets `render` with `reads: null`, so `/admin` (which checks `isOperator` itself and 404s otherwise) stays reachable. `unverified`/`onboarding` redirect only when the route is non-null, otherwise a fixed `panel`, so there is never a redirect to a route that has not shipped. `unavailable` is a panel for everyone, operators included. The unit composition is `consumerSessionFrom` (operator: view returns no own wallet) → `consoleShell(…, true, …)` → `render`. The real stack now runs the same composition over supabase-js and PostgREST: the stack's operator renders, the ungranted individual is redirected to `/onboarding`, and c1 renders with a CREDIT balance equal to the durable wallet's. | `C0-SHELL-01` removes the operator bypass (WR-1 as first written) and is **killed**. `C0-SHELL-02..05` (ungated onboarding or verify redirect, operator outage rendered, ready without reads rendered) are **killed**. At the composition root, the new `client-boundary` case "the console layout never redirects to onboarding or verification itself…" **fails** against WR-1 as first written (exit 1, `those redirects are consoleShell's, gated on the route`) and **passes** on today's layout and on WR-1 as revised. |
+| 0-C0-V2 | **no**: coordinator (Makefile, gates) | WR-4 restated with an exact patch (below). The real stack was rerun at `8264e104`, and it is now 12 cases with the composed session/shell. | n/a |
+| 0-C0-V3 | **no**: coordinator (layout) and U1R/U4 (pages) | WR-1 is revised (below) so that it is safe to apply. WR-2 is unchanged. C0/APP-M1 closure stays held until WR-1 and WR-2 land. | n/a |
+
+Found while fixing: the first real run of the new composed case failed at `40758d58`. `Object.assign(client, {auth})` replaced the object supabase-js reads its access token through, so every read failed. The session resolved to **`unavailable`**, not onboarding or a fake balance, which is the fail-closed path working. The test now delegates `from`/`rpc` instead (`8264e104`).
+
+### Commands (worktree `codex-app-c0`, head `ffd5ba7c`)
+
+| Command | Exit | Result |
+|---|---|---|
+| `pnpm test` with reviewer mutant V-SV-AUTH-OUTAGE on `server.ts` at `5a152cdd` | 0 | 386 / 375 pass / 0 fail / 11 skip: **survives** (reproduced) |
+| `pnpm test` with reviewer mutant V-SV-CATCH on `server.ts` at `5a152cdd` | 0 | 386 / 375 pass / 0 fail / 11 skip: **survives** (reproduced) |
+| `node --test tests/c/consumer.test.ts` at `f2746f01` (tests only) | 1 | `SyntaxError … does not provide an export named 'consoleShell'` |
+| `pnpm test` | 0 | 393 tests: 381 pass, 0 fail, 12 skipped (the real-stack file, now 12 cases) |
+| `pnpm lint` | 0 | 0 errors, 2 pre-existing warnings |
+| `pnpm exec next typegen && pnpm exec tsc --noEmit` | 0 | clean |
+| `node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants` | 0 | 212 of 212 killed |
+| `node tests/v/run-mutants.mjs` | 0 | 40 of 40 killed |
+| `node tests/u/run-mutants.mjs` | 0 | 64 of 64 killed |
+| `node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs` | 0 | 4 self-tests; **142 of 142 killed** (9 new: C0-SES-01..04, C0-SHELL-01..05) |
+| `cd apps/infrx-api && INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/stack.py` at `8264e104` | 0 | **12 of 12** pass. Code under `lib/` and this file are unchanged since. `docker ps -a` / `docker network ls` show nothing `app-c0` left behind. |
+| WR-1 revised, applied temporarily: `next typegen && tsc --noEmit`, `eslint layout.tsx`, `pnpm test` | 0 / 0 / 0 | clean / clean / 393: 381 pass, 0 fail, 12 skip; reverted with `git checkout -- 'app/(console)/layout.tsx'` |
+| WR-1 as first written, applied temporarily: `node --test --test-name-pattern="never redirects to onboarding" tests/c/client-boundary.test.ts` | 1 | 0 pass, 1 fail: the guard catches the defect; reverted |
+
+Isolation is the same as before: `infrx-app-c0-*` containers and network on 127.0.0.1:55451. No hosted Supabase, pilot box, AWS or SSM was used.
+
+### Wiring requests (revised; supersede WR-1 and WR-4 above)
+
+- **WR-1 (revised): `apps/app/app/(console)/layout.tsx`, the whole file.** Proof: `tests/c/client-boundary.test.ts` "the console layout never redirects…", which is already committed and becomes unconditional once the layout reads `consumerSession()`. `tests/c/credits.test.ts` already accepts the `sidebarCredit` form. Also the unit and real-stack `consoleShell` cases. `tsc`, `eslint` and `pnpm test` are green with it applied.
+  ```tsx
+  import { redirect } from "next/navigation";
+  import { ConsoleDataUnavailable } from "@/components/console-data-state";
+  import { Sidebar } from "@/components/sidebar";
+  import { consoleShell } from "@/lib/services/console";
+  import { sidebarCredit } from "@/lib/services/credits";
+  import { consumerSession } from "@/lib/services/server";
+  import { getSession } from "@/lib/session"; // the operator flag only (WR-6)
+
+  // Every console page reads Supabase with the user's cookie: never prerender.
+  export const dynamic = "force-dynamic";
+
+  // Set each to its path in the commit that ships the route (A2: /verify-email; C3A/A2: /onboarding).
+  // Until then the state gets a fixed panel: a redirect to a missing route is a 404.
+  const ROUTES = { verifyEmail: null, onboarding: null };
+
+  export default async function ConsoleLayout({ children }: LayoutProps<"/">) {
+    const session = await consumerSession();
+    const { state } = session.context;
+    // Only a signed-in, verified user has an operator flag worth reading. An operator with no consumer
+    // wallet still gets the shell, so /admin (which checks the role itself) stays reachable.
+    const isOperator = state === "ready" || state === "onboarding" ? (await getSession()).isOperator : false;
+    const shell = consoleShell(session, isOperator, ROUTES);
+    if (shell.kind === "redirect") redirect(shell.to);
+    if (shell.kind === "panel") {
+      return (
+        <main className="px-4 py-6 md:px-8 md:py-8">
+          <div className="mx-auto max-w-6xl">
+            <ConsoleDataUnavailable title="Your account" />
+          </div>
+        </main>
+      );
+    }
+    // `null` when the wallet could not be read, or an operator has none: fixed copy, never a zero.
+    const balance = shell.reads === null ? null : sidebarCredit(await shell.reads.balance());
+
+    return (
+      <div className="flex min-h-svh flex-col md:flex-row">
+        <Sidebar email={shell.email} balance={balance} isOperator={isOperator} />
+        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
+          <div className="mx-auto max-w-6xl">{children}</div>
+        </main>
+      </div>
+    );
+  }
+  ```
+  Set `ROUTES.verifyEmail` in the same commit that ships A2's `/verify-email`, and `ROUTES.onboarding` in the one that ships C3A/A2's onboarding route. Until then those states show the fixed panel. `getSession()` is read only for `ready`/`onboarding` users, and only for the operator flag (WR-6). The 0001 signup trigger gives every user a membership, so its first-membership pick cannot throw here. The operator-flag read moves to U3/A2's explicit lookup once WR-6 lands.
+- **WR-4 (restated, exact): `Makefile`.** Add `console-c0-real` to `.PHONY`, and add:
+  ```make
+  # C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
+  # Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
+  console-c0-real:
+  	cd $(API) && INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/stack.py
+  ```
+  Proof: the table above, exit 0, 12 of 12. It is not added to `check`, because `check` must not need Docker beyond lists that skip visibly. The coordinator names it in the C0/APP-M1 and E3A gate commands instead (0-C0-V2).
+- WR-2, WR-3, WR-5, WR-6 and WR-7 are unchanged. WR-3 adds `ConsumerSession`, `ConsumerClient` and `ConsoleShell` to the types to promote.
+
+### Open after this round
+
+- 0-C0-V2 and 0-C0-V3 close only when the coordinator lands WR-4 in the gate and WR-1/WR-2 in the pages. C0/APP-M1 closure stays held until then.
+- The layout panel for `unverified` and `onboarding` reuses `ConsoleDataUnavailable` ("not available yet") until A2 and C3A ship their routes. That is honest but generic copy. It is A2/C3A's to replace by setting `ROUTES`.
+
+### Remaining effort (C0 to merged and wired)
+
+| | Hours |
+|---|---|
+| Optimistic | 1 |
+| Likely | 2 |
+| Pessimistic | 4 |
+
+Confidence is medium. The code, decisions and guards are done. What remains is the coordinator applying WR-1 (the file above) and WR-4, U1R/U4 applying WR-2, and a rerun of `console-c0-real` plus the App suites on the merged SHA with 0022.
+
+### Verification log (fix round)
+
+- 2026-09-25T22:40Z: fix round appended at code head `ffd5ba7c`; every command in the fix-round table rerun at that head (the real stack at `8264e104`, with the same `lib/` and stack test file).
