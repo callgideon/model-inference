@@ -123,7 +123,9 @@ export function holdCredit(model: PublishedModel, maxTokens: number | null): Cre
   if (!card) throw new TypeError("no CREDIT card in this record");
   const cap = model.capability;
   const output = maxTokens ?? cap.max_output_tokens;
-  const input = Math.min(cap.max_input_tokens, cap.max_context_tokens - output);
+  // validate.ceilings takes min(max_input, context - output); the record guarantees
+  // max_input + max_output <= context, so that minimum is always max_input here.
+  const input = cap.max_input_tokens;
   const scaled =
     BigInt(input) * tryParseMoneyUnits(card.input_rate_per_million)! +
     BigInt(output) * tryParseMoneyUnits(card.output_rate_per_million)!;

@@ -102,6 +102,11 @@ test("retention says what serving stores and for how long, and that trace-off is
   assert.match(facts, /processing cache for up to 7 days/);
   assert.match(facts, /does not delete the serving data/);
   assert.doesNotMatch(facts, /physically deleted/, "no deletion bound is claimed that the record does not state");
+  const shorter = structuredClone(CREDIT_DOC);
+  Object.assign(shorter.retention, { result_ttl_s: 3600, stream_journal_ttl_s: 600, idempotency_ttl_s: 7200, processing_cache_ttl_s: 86400, physical_deletion_bound_s: 172800 });
+  const changed = retentionFacts(parsePublishedModel(shorter).retention).join("\n");
+  assert.match(changed, /readable for 1 hour .* Last-Event-ID for 10 minutes/s, "the lifetimes are the record's");
+  assert.match(changed, /for 2 hours after the job finishes[\s\S]*up to 24 hours[\s\S]*deleted within 2 days/);
 });
 
 test("durations and sizes read as people say them", () => {

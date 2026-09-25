@@ -1,0 +1,293 @@
+{
+  "_comment": "A3 (R32): one single-edit mutant per invariant the A3 cases claim; node tests/a/run-mutants.mjs applies each to a copy and requires a DECLARED case to fail on an assertion.",
+  "mutants": [
+    {
+      "id": "CAT-NOCFG-FAKE",
+      "what": "no configured origin reads as an empty real catalog",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "if (baseUrl === null) return { status: \"unavailable\", reason: \"not_configured\" };",
+      "replace": "if (baseUrl === null) return { status: \"ok\", baseUrl: \"\", models: [] };",
+      "cases": [
+        "no configured origin is unavailable, and nothing is fetched"
+      ]
+    },
+    {
+      "id": "CAT-NON200",
+      "what": "an error reply is parsed as if it were the list",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "if (reply.status !== 200) return { status: \"unavailable\", reason: \"unreachable\" };",
+      "replace": "if (reply.status >= 600) return { status: \"unavailable\", reason: \"unreachable\" };",
+      "cases": [
+        "a gateway that cannot answer is unavailable, never a fixture or an empty catalog"
+      ]
+    },
+    {
+      "id": "CAT-PARTIAL",
+      "what": "a refused record is dropped and the rest shown",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "models = data.map(parsePublishedModel);",
+      "replace": "models = data.flatMap((d: unknown) => { try { return [parsePublishedModel(d)]; } catch { return []; } });",
+      "cases": [
+        "one record the contract refuses fails the whole read: a false ZDR claim is never shown",
+        "a gateway that cannot answer is unavailable, never a fixture or an empty catalog"
+      ]
+    },
+    {
+      "id": "CAT-KEY",
+      "what": "the catalog read sends a credential",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "headers: { accept: \"application/json\" },",
+      "replace": "headers: { accept: \"application/json\", authorization: \"Bearer server-key\" },",
+      "cases": [
+        "the catalog is the published list at <origin>/v1/models, asked without any credential"
+      ]
+    },
+    {
+      "id": "CAT-CACHED",
+      "what": "availability is served from a cache",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "cache: \"no-store\",",
+      "replace": "cache: \"force-cache\",",
+      "cases": [
+        "the catalog is the published list at <origin>/v1/models, asked without any credential"
+      ]
+    },
+    {
+      "id": "BASE-PLAIN-HTTP",
+      "what": "any plain-http origin is accepted",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "url.protocol === \"https:\" || (url.protocol === \"http:\" && LOOPBACK.has(url.hostname))",
+      "replace": "url.protocol === \"https:\" || url.protocol === \"http:\"",
+      "cases": [
+        "the API origin is https (loopback http for development), with no path, query or credentials"
+      ]
+    },
+    {
+      "id": "BASE-PATH",
+      "what": "an origin with a path is accepted",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "if (url.pathname !== \"/\" && url.pathname !== \"\") return null;",
+      "replace": "",
+      "cases": [
+        "the API origin is https (loopback http for development), with no path, query or credentials"
+      ]
+    },
+    {
+      "id": "PRICE-USD-AS-CREDIT",
+      "what": "a USD rate shown as the CREDIT input rate",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "input: card.input_rate_per_million,",
+      "replace": "input: (pricing.legacy_usd?.input_rate_per_million ?? card.input_rate_per_million) as Credit,",
+      "cases": [
+        "CREDIT-RATE: the credit regime shows the approved card in CREDIT only, never a USD figure"
+      ]
+    },
+    {
+      "id": "PRICE-PROVISIONAL-HIDDEN",
+      "what": "a provisional card presented as approved",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "provisional: card.provisional,",
+      "replace": "provisional: false,",
+      "cases": [
+        "CREDIT-RATE: the credit regime shows the approved card in CREDIT only, never a USD figure",
+        "a provisional card is reported as provisional, so no page can present it as approved"
+      ]
+    },
+    {
+      "id": "PRICE-LEGACY-CREDIT",
+      "what": "legacy USD figures labelled as CREDIT",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "return { unit: \"USD\", version: usd.price_version,",
+      "replace": "return { unit: \"CREDIT\" as \"USD\", version: usd.price_version,",
+      "cases": [
+        "SPLIT-CONTRACT: the legacy regime shows its USD price identity only, never a converted CREDIT"
+      ]
+    },
+    {
+      "id": "HOLD-ROUND-DOWN",
+      "what": "the hold truncates instead of rounding up",
+      "file": "app/(console)/models/catalog.ts",
+      "find": "const units = (scaled + PER_MILLION - BigInt(1)) / PER_MILLION;",
+      "replace": "const units = scaled / PER_MILLION;",
+      "cases": [
+        "the hold is P-01's arithmetic: 14.7456 at the caps, less with a smaller max_tokens, rounded up"
+      ]
+    },
+    {
+      "id": "DISC-RATE-CONST",
+      "what": "the disclosure hard-codes the input rate",
+      "file": "app/(console)/docs/content.ts",
+      "find": "${plainAmount(price.input)} CREDIT per million input",
+      "replace": "400 CREDIT per million input",
+      "cases": [
+        "P-01: the charge disclosure is the decided text, with the card's own rates"
+      ]
+    },
+    {
+      "id": "DISC-DROP-TIMEOUT",
+      "what": "platform timeouts drop out of the never-charged list",
+      "file": "app/(console)/docs/content.ts",
+      "find": "      \"requests that time out on our side;\",\n",
+      "replace": "",
+      "cases": [
+        "P-01: the charge disclosure is the decided text, with the card's own rates"
+      ]
+    },
+    {
+      "id": "REVOKE-OVERCLAIM",
+      "what": "revocation claims reads stop immediately",
+      "file": "app/(console)/docs/content.ts",
+      "find": "Reads and cancels by that key stop within 60 seconds",
+      "replace": "Reads and cancels by that key stop immediately",
+      "cases": [
+        "P-26: the revocation copy is the decided text"
+      ]
+    },
+    {
+      "id": "RET-ZDR",
+      "what": "retention copy claims zero data retention",
+      "file": "app/(console)/docs/content.ts",
+      "find": "This is not zero data retention.",
+      "replace": "We practice zero data retention.",
+      "cases": [
+        "retention says what serving stores and for how long, and that trace-off is not deletion",
+        "no rendered sentence carries a stale or false claim"
+      ]
+    },
+    {
+      "id": "RET-TTL-CONST",
+      "what": "the result lifetime is a constant, not the record's",
+      "file": "app/(console)/docs/content.ts",
+      "find": "A result stays readable for ${duration(r.result_ttl_s)}",
+      "replace": "A result stays readable for 24 hours",
+      "cases": [
+        "retention says what serving stores and for how long, and that trace-off is not deletion"
+      ]
+    },
+    {
+      "id": "RET-TRACE-DELETES",
+      "what": "trace-off claimed to delete serving data",
+      "file": "app/(console)/docs/content.ts",
+      "find": "Turning it off does not delete the serving data above",
+      "replace": "Turning it off deletes the serving data above",
+      "cases": [
+        "retention says what serving stores and for how long, and that trace-off is not deletion"
+      ]
+    },
+    {
+      "id": "VIDEO-LIVE",
+      "what": "live video claimed supported",
+      "file": "app/(console)/docs/content.ts",
+      "find": "v.live_stream\n      ? \"Live video streams are accepted.\"\n      : \"Live video streams are not supported: send a finished clip. Streaming applies to the text output only.\"",
+      "replace": "\"Live video streams are accepted.\"",
+      "cases": [
+        "the video contract is the record's: 82 s, one clip, 64 MiB, no live stream"
+      ]
+    },
+    {
+      "id": "VIDEO-CAP-CONST",
+      "what": "the duration cap is a constant",
+      "file": "app/(console)/docs/content.ts",
+      "find": "up to ${v.max_seconds} seconds",
+      "replace": "up to 82 seconds",
+      "cases": [
+        "the video contract is the record's: 82 s, one clip, 64 MiB, no live stream"
+      ]
+    },
+    {
+      "id": "ERR-STATUS",
+      "what": "insufficient_credit documented at the wrong status",
+      "file": "app/(console)/docs/content.ts",
+      "find": "[\"insufficient_credit\", 402,",
+      "replace": "[\"insufficient_credit\", 403,",
+      "cases": [
+        "every error row is the gateway's code at the gateway's HTTP status"
+      ]
+    },
+    {
+      "id": "ROUTE-UNSERVED",
+      "what": "a route the gateway does not serve is documented",
+      "file": "app/(console)/docs/content.ts",
+      "find": "[\"DELETE\", \"/v1/jobs/{handle}\", \"Cancel the job.\"],",
+      "replace": "[\"POST\", \"/v1/jobs/{handle}/cancel\", \"Cancel the job.\"],",
+      "cases": [
+        "every documented route is in the gateway's route table"
+      ]
+    },
+    {
+      "id": "EX-TOOLS",
+      "what": "an example sends an unsupported parameter",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "-d '${chatBody(model, null, \"In one sentence, what is dense video captioning?\").json()}'",
+      "replace": "-d '${chatBody(model, null, \"In one sentence, what is dense video captioning?\").json(', \"tools\": []')}'",
+      "cases": [
+        "every example runs as written in curl, Python and JavaScript and prints its answer",
+        "the three languages make exactly the same requests for each example",
+        "every chat body names only advertised parameters, an alias of the model and an in-cap max_tokens"
+      ]
+    },
+    {
+      "id": "EX-HEADER",
+      "what": "an example sends a header outside the API vocabulary",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "  -H \"Idempotency-Key: $KEY_ID\" \\\\\n",
+      "replace": "  -H \"X-Idempotency-Key: $KEY_ID\" \\\\\n",
+      "cases": [
+        "every example runs as written in curl, Python and JavaScript and prints its answer",
+        "the three languages make exactly the same requests for each example",
+        "every request is a route of the gateway's table with only its header vocabulary"
+      ]
+    },
+    {
+      "id": "EX-ROUTE",
+      "what": "an example calls a route that does not exist",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "status, _, done = api(\"POST\", f\"/v1/uploads/{handle}/complete\")",
+      "replace": "status, _, done = api(\"POST\", f\"/v1/uploads/{handle}/finalize\")",
+      "cases": [
+        "every example runs as written in curl, Python and JavaScript and prints its answer"
+      ]
+    },
+    {
+      "id": "EX-MODEL-CONST",
+      "what": "the examples name a model the catalog does not publish",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "const id = model.id;",
+      "replace": "const id = \"nemostation/marlin-2b-legacy\";",
+      "cases": [
+        "every example runs as written in curl, Python and JavaScript and prints its answer",
+        "every chat body names only advertised parameters, an alias of the model and an in-cap max_tokens"
+      ]
+    },
+    {
+      "id": "EX-STREAM-JOBS",
+      "what": "the async example asks /v1/jobs to stream",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "const accepted = await api(\"POST\", \"/v1/jobs\", { body: item, headers: { \"Idempotency-Key\": \"clip-0001\" } });\nif (accepted.status !== 202)",
+      "replace": "const accepted = await api(\"POST\", \"/v1/jobs\", { body: { ...item, stream: true }, headers: { \"Idempotency-Key\": \"clip-0001\" } });\nif (accepted.status !== 202)",
+      "cases": [
+        "every example runs as written in curl, Python and JavaScript and prints its answer"
+      ]
+    },
+    {
+      "id": "PAGE-NO-UNAVAILABLE",
+      "what": "the Docs page renders without an unavailable branch",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "if (catalog.status !== \"ok\") {",
+      "replace": "if (catalog.status === \"unavailable\" && catalog.reason === \"malformed\") {",
+      "cases": [
+        "an unavailable catalog renders its fixed copy and no figure"
+      ]
+    },
+    {
+      "id": "PAGE-PUBLIC-MODELS",
+      "what": "the Models page reads the old public.models table",
+      "file": "app/(console)/models/page.tsx",
+      "find": "const { data: keys } = await supabase",
+      "replace": "await supabase.from(\"models\").select(\"*\");\n  const { data: keys } = await supabase",
+      "cases": [
+        "the pages read only the published catalog: no public.models table, no USD columns, no stale copy"
+      ]
+    }
+  ]
+}

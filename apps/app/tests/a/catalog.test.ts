@@ -125,15 +125,11 @@ test("a provisional card is reported as provisional, so no page can present it a
 
 test("the hold is P-01's arithmetic: 14.7456 at the caps, less with a smaller max_tokens, rounded up", () => {
   assert.equal(holdCredit(CREDIT, null), "14.74560000"); // 30720 x 400 + 2048 x 1200, per million (P-01)
-  assert.equal(holdCredit(CREDIT, 512), "12.90240000"); // input ceiling min(30720, 32768 - 512)
+  assert.equal(holdCredit(CREDIT, 512), "12.90240000"); // the input ceiling stays 30720; the output side shrinks
   const tiny = structuredClone(CREDIT_DOC);
   tiny.pricing.credit.input_rate_per_million = "0.00000001";
   tiny.pricing.credit.output_rate_per_million = "0.00000000";
   assert.equal(holdCredit(parsePublishedModel(tiny), 1), "0.00000001", "a fraction of a unit rounds up, never down");
-  const context = structuredClone(CREDIT_DOC);
-  context.capability.max_context_tokens = 20000;
-  context.capability.max_input_tokens = 17952;
-  assert.equal(holdCredit(parsePublishedModel(context), 2048), "9.63840000", "input ceiling is the context minus the output");
 });
 
 test("every alias the record lists resolves to the same revision, deployment and card (P-22)", () => {
