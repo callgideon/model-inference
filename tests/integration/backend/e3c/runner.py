@@ -49,7 +49,8 @@ PY = "apps/infrx-api/.venv/bin/python"
 SCENARIOS = {
     "s01": {"title": "verified identity -> CLI grant -> CLI key -> text/video sync/SSE/async -> "
                      "result -> revoke", "row": 1,
-            "test_ids": ["BACKEND-JOURNEY", "CREDIT-CUTOVER"], "lanes": ["G8"], "seam": None},
+            "test_ids": ["BACKEND-JOURNEY", "CREDIT-CUTOVER"], "lanes": ["G8", "E1C"],
+            "seam": None},
     "s02": {"title": "two gateways, two tenants, repeated callback/idempotency/finalize",
             "row": 2, "test_ids": ["BACKEND-JOURNEY"], "lanes": [], "seam": None},
     "s03": {"title": "upload create/PUT/finalize/resolve across gateway processes and restarts",
