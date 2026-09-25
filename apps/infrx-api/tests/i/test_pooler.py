@@ -392,3 +392,22 @@ def test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pool
     for rows in (asyncio.run(run(connect, pool)), asyncio.run(run(jobstore.connector(dsn)))):
         assert len({r[0] for r in rows}) == 2
         assert {r[1:] for r in rows} == {("infrx_i8_login", "15s", "queued")}
+
+
+# --- 4. the stand-in's ports come from the task-local table only ----------------------
+def test_ops_continuous__the_stand_in_pooler_port_is_reserved_in_tasklocal():
+    """Oracle: a port literal back in pooler.py (unreserved, so another lane can take it),
+    or the i8 `pgbouncer` row gone from `infrx.contracts.tasklocal`, fails here."""
+    import ast
+
+    from infrx.contracts.tasklocal import all_host_ports, local_services
+
+    from . import pooler
+    bouncer = local_services("i8")["pgbouncer"]
+    assert (bouncer.container, bouncer.host_port) == (pooler.BOUNCER, 55496)
+    assert pooler.PORTS[pooler.BOUNCER] == bouncer.host_port
+    assert all_host_ports()[55496] == "i8/pgbouncer"
+    tree = ast.parse(Path(pooler.__file__).read_text())
+    literals = [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant)
+                and type(n.value) is int and 55000 <= n.value < 60000]
+    assert literals == [], f"host-port literals in pooler.py: {literals}"
