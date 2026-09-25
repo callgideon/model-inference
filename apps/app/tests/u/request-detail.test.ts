@@ -31,12 +31,42 @@ import {
   clientResultRead,
   expiryDelayMs,
   pollDelayMs,
+  pollLoop,
+  pollsFor,
+  readResult,
   requestDetailModel,
   resultAccessOf,
+  watchExpiry,
+  watchResult,
+  type Schedule,
+  type Shown,
 } from "../../app/(console)/usage/[requestId]/request-view-model.ts";
 
 const app = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const route = (file: string) => readFileSync(join(app, "app/(console)/usage/[requestId]", file), "utf8");
+/** A route file's code with its comments removed, so a source assertion never matches prose. */
+const code = (file: string) => route(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+/** A fake timer and clock: `fire` runs the earliest armed timer, moving the clock to it. */
+function fakeTimers(start = 0) {
+  let clock = start;
+  const armed: { at: number; ms: number; run: () => void; live: boolean }[] = [];
+  const schedule: Schedule = (run, ms) => {
+    const timer = { at: clock + ms, ms, run, live: true };
+    armed.push(timer);
+    return () => {
+      timer.live = false;
+    };
+  };
+  const live = () => armed.filter((t) => t.live).sort((a, b) => a.at - b.at);
+  const fire = () => {
+    const [next] = live();
+    next.live = false;
+    clock = next.at;
+    next.run();
+  };
+  return { schedule, now: () => clock, set: (at: number) => (clock = at), live, fire };
+}
 
 const USER = "c1000000-0000-4000-8000-000000000001";
 const ID = "b1000000-0000-4000-8000-000000000001";
@@ -108,9 +138,14 @@ const T = {
   poll: "U4-V05 polling backs off, is bounded, and runs only while the request (or a retryable read) is unfinished",
   client: "U4-V06 the browser trusts only a same-origin JSON answer; a redirect or 401 is a signed-out state",
   timer: "U4-V07 the browser drops content at the persisted expiry and never before it is due",
+  loop: "U4-V09 the poll loop refreshes on the backoff, stops after MAX_POLLS, and unmount cancels it",
+  watch: "U4-V10 an open page drops content when the persisted expiry is due, never before, re-arming past the timer ceiling",
+  reads: "U4-V11 the result is read on mount and again on a back/forward restore (content hidden first); navigation aborts it",
+  fetch: "U4-V12 the browser's result fetch is same-origin and no-store, and an abandoned read shows nothing",
   retry: "U4-V08 no control submits another inference; retry guidance says a rerun is a new, separately charged request",
   source: "U4-G01 the request fixture is reachable only through the development preview gate",
   surface: "U4-S01 content stays out of the page payload, browser storage and logs; the route answers no-store",
+  wiring: "U4-S02 the client components run the tested drivers, no fetch bypasses them, and the page mounts the poller only when it polls",
 };
 
 test(T.job, async () => {
@@ -338,10 +373,7 @@ test(T.poll, () => {
   const total = delays.reduce((a, b) => a + b, 0);
   assert.ok(total <= 15 * 60_000, `polls for ${total} ms`);
 
-  const poll = (value: Parameters<typeof requestDetailModel>[0]) => {
-    const m = requestDetailModel(value);
-    return m.kind === "ready" ? m.value.poll : m.kind === "error" ? m.poll : false;
-  };
+  const poll = (value: Parameters<typeof requestDetailModel>[0]) => pollsFor(requestDetailModel(value));
   assert.equal(poll({ ok: true, value: job({ state: "queued", outcomeCause: null, settlementState: null, resultAvailable: false }) }), true);
   assert.equal(poll({ ok: true, value: job({ state: "running", outcomeCause: null, settlementState: null, resultAvailable: false }) }), true);
   assert.equal(poll({ ok: true, value: job() }), false, "a finished request is not polled");
@@ -416,8 +448,6 @@ test(T.source, async () => {
 test(T.surface, () => {
   const panel = route("result-panel.tsx");
   assert.match(panel, /^"use client";/);
-  assert.match(panel, /cache: "no-store"/);
-  assert.match(panel, /credentials: "same-origin"/);
   assert.doesNotMatch(panel, /localStorage|sessionStorage|indexedDB|console\.|caches\.|navigator\.serviceWorker/);
   const page = route("page.tsx");
   // The page hands the client only the id and the persisted expiry, never content.
@@ -427,4 +457,160 @@ test(T.surface, () => {
   assert.match(handler, /export const dynamic = "force-dynamic"/);
   assert.match(handler, /resultResponse\(/);
   assert.doesNotMatch(handler, /console\./);
+});
+
+test(T.loop, () => {
+  const timers = fakeTimers();
+  let refreshes = 0;
+  let stops = 0;
+  pollLoop(timers.schedule, () => (refreshes += 1), () => (stops += 1));
+  const delays: number[] = [];
+  // Bounded, so a loop that never stops fails here instead of hanging the suite.
+  for (let n = 0; n < MAX_POLLS + 5 && timers.live().length > 0; n += 1) {
+    delays.push(timers.live()[0].ms);
+    timers.fire();
+  }
+  assert.deepEqual(delays, Array.from({ length: MAX_POLLS }, (_, n) => pollDelayMs(n)), "the backoff, in order");
+  assert.equal(refreshes, MAX_POLLS);
+  assert.equal(stops, 1, "the poller says it stopped");
+  assert.equal(timers.live().length, 0, "nothing is armed after the last poll");
+
+  const unmounted = fakeTimers();
+  let after = 0;
+  const cancel = pollLoop(unmounted.schedule, () => (after += 1), () => assert.fail("stopped on unmount"));
+  unmounted.fire();
+  unmounted.fire();
+  cancel();
+  assert.equal(unmounted.live().length, 0, "navigation away cancels the next poll");
+  assert.equal(after, 2);
+});
+
+test(T.watch, () => {
+  const at = Date.parse("2026-09-21T11:00:05Z");
+  const expires = "2026-09-21T11:00:05.000000Z";
+
+  const open = fakeTimers(at - 1500);
+  let dropped = 0;
+  watchExpiry(expires, open.now, open.schedule, () => (dropped += 1));
+  assert.equal(open.live()[0].ms, 1500, "armed for the persisted expiry");
+  assert.equal(dropped, 0, "not before it is due");
+  open.fire();
+  assert.equal(dropped, 1, "dropped at the instant");
+  assert.equal(open.live().length, 0);
+
+  // A timer that fires before the clock reaches the expiry (the setTimeout ceiling, a slept
+  // laptop) re-arms for what is left instead of dropping early.
+  const long = fakeTimers(at - 40 * 86_400_000);
+  let longDropped = 0;
+  watchExpiry(expires, long.now, long.schedule, () => (longDropped += 1));
+  assert.equal(long.live()[0].ms, 2 ** 31 - 1);
+  for (let n = 0; n < 5 && long.live().length > 0; n += 1) {
+    long.fire();
+    if (long.now() < at) assert.equal(longDropped, 0, "dropped before the expiry");
+  }
+  assert.equal(longDropped, 1, "dropped once, at the expiry");
+  assert.equal(long.now(), at);
+
+  const early = fakeTimers(at - 1000);
+  let earlyDropped = 0;
+  watchExpiry(expires, () => early.now() - 500, early.schedule, () => (earlyDropped += 1));
+  early.fire(); // the timer fired, but the clock says 500 ms remain
+  assert.equal(earlyDropped, 0, "never before it is due");
+  assert.equal(early.live()[0].ms, 500, "re-armed for the rest");
+
+  const due = fakeTimers(at + 10);
+  let dueDropped = 0;
+  watchExpiry(expires, due.now, due.schedule, () => (dueDropped += 1));
+  assert.equal(dueDropped, 1, "content that arrives already expired is dropped at once");
+
+  const gone = fakeTimers(at - 1500);
+  const cancel = watchExpiry(expires, gone.now, gone.schedule, () => assert.fail("dropped after unmount"));
+  cancel();
+  assert.equal(gone.live().length, 0, "unmount clears the timer");
+});
+
+test(T.reads, async () => {
+  const page = new EventTarget();
+  const signals: AbortSignal[] = [];
+  const answers: (ResultRead | null)[] = [{ state: "ready", text: "the verdict" }, { state: "expired" }];
+  const read = async (signal: AbortSignal) => {
+    signals.push(signal);
+    return answers.shift() ?? null;
+  };
+  const shown: Shown[] = [];
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  const restore = (persisted: boolean) => page.dispatchEvent(Object.assign(new Event("pageshow"), { persisted }));
+
+  const cancel = watchResult(read, (s) => shown.push(s), page);
+  await settle();
+  assert.deepEqual(shown, [{ state: "ready", text: "the verdict" }], "read on mount");
+
+  restore(false); // the first load's own pageshow is not a restore
+  await settle();
+  assert.equal(signals.length, 1);
+
+  restore(true); // back/forward cache: hide the old content, then read again
+  assert.deepEqual(shown.at(-1), { state: "loading" }, "the old content is not shown from memory");
+  await settle();
+  assert.equal(signals.length, 2, "re-read on a back/forward restore");
+  assert.deepEqual(shown.at(-1), { state: "expired" });
+
+  cancel();
+  assert.ok(signals.every((s) => s.aborted), "navigation away aborts the reads");
+  const count = shown.length;
+  restore(true);
+  await settle();
+  assert.equal(signals.length, 2, "no read after unmount");
+  assert.equal(shown.length, count);
+
+  // A read that answers after navigation shows nothing.
+  let answer: (value: ResultRead) => void = () => {};
+  const late: Shown[] = [];
+  const stop = watchResult(() => new Promise((resolve) => (answer = resolve)), (s) => late.push(s), new EventTarget());
+  stop();
+  answer({ state: "ready", text: "late" });
+  await settle();
+  assert.deepEqual(late, [], "an answer after navigation is dropped");
+});
+
+test(T.fetch, async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const json = (status: number, body: unknown) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  const fetcher = (answer: () => Promise<Response>) =>
+    (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return answer();
+    }) as unknown as typeof fetch;
+
+  const controller = new AbortController();
+  const ready = await readResult("b1/../x", controller.signal, fetcher(async () => json(200, { state: "ready", text: "v" })));
+  assert.deepEqual(ready, { state: "ready", text: "v" });
+  assert.equal(calls[0].url, "/usage/b1%2F..%2Fx/result", "the id is one path segment");
+  assert.equal(calls[0].init.cache, "no-store", "the browser never caches the result");
+  assert.equal(calls[0].init.credentials, "same-origin");
+  assert.equal(calls[0].init.signal, controller.signal, "navigation can abort it");
+  assert.equal(calls[0].init.method ?? "GET", "GET");
+
+  assert.deepEqual(await readResult(ID, undefined, fetcher(async () => json(410, { state: "expired" }))), { state: "expired" });
+  assert.deepEqual(await readResult(ID, undefined, fetcher(async () => new Response("<html>", { status: 502 }))), { state: "unavailable" });
+  assert.deepEqual(await readResult(ID, undefined, fetcher(() => Promise.reject(new TypeError("fetch failed")))), { state: "unavailable" });
+
+  const gone = new AbortController();
+  gone.abort();
+  const abandoned = await readResult(ID, gone.signal, fetcher(() => Promise.reject(new DOMException("aborted", "AbortError"))));
+  assert.equal(abandoned, null, "an abandoned read shows nothing");
+});
+
+test(T.wiring, () => {
+  const panel = code("result-panel.tsx");
+  assert.doesNotMatch(panel, /\bfetch\(|XMLHttpRequest|EventSource/, "every result read goes through the tested readResult");
+  assert.match(panel, /useEffect\(\(\) => watchResult\(\(signal\) => readResult\(requestId, signal\), setShown, window\), \[requestId\]\)/);
+  assert.match(panel, /if \(shown\.state !== "ready"\) return;\s+return watchExpiry\(expiresAt, Date\.now, browserTimer, \(\) => setShown\(\{ state: "expired" \}\)\);/);
+  const poller = code("status-poller.tsx");
+  assert.match(poller, /useEffect\(\(\) => pollLoop\(browserTimer, \(\) => router\.refresh\(\), \(\) => setStopped\(true\)\), \[router, round\]\)/);
+  assert.doesNotMatch(poller, /setTimeout|setInterval/, "the poller's timing is the tested loop");
+  const page = code("page.tsx");
+  assert.equal(page.match(/<StatusPoller\b/g)?.length, 1);
+  assert.match(page, /\{pollsFor\(model\) \? <StatusPoller \/> : null\}/, "mounted only when the model polls");
 });
