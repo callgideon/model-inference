@@ -19,7 +19,7 @@ traces = ["clickhouse-connect>=0.8,<1", "boto3>=1.35,<2"]
 judge = ["anthropic>=0.40,<1"]
 
 [dependency-groups]
-dev = ["pytest>=8.3,<9"]
+dev = ["pytest>=9.0.3,<10"]
 
 [tool.uv]
 # infrx/ is used from the source tree (pythonpath below), the
