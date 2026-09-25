@@ -318,7 +318,7 @@ def _login(i8_stack) -> str:
     return i8_stack.dsn(TXN, "infrx_i8_login")
 
 
-def test_ops_continuous__on_6543_the_runtime_sends_no_session_set():
+def test_ops_continuous__on_6543_the_runtime_sends_no_session_set(monkeypatch):
     """WR-I8-1: on the transaction pooler port the pool's hook sends nothing and neither the
     pool nor its probe connection auto-prepares; on the session port the SETs stay.
     Oracle: a hook that SETs on 6543, or a pool left on psycopg's default prepare."""
@@ -330,10 +330,27 @@ def test_ops_continuous__on_6543_the_runtime_sends_no_session_set():
     txn = "postgresql://u:p@pooler.example:6543/postgres"
     pool, _ = pilot.connection_pool(_settings(txn))
     asyncio.run(pool._configure(Connection()))
-    assert executed == [] and pool.kwargs["prepare_threshold"] is None
+    assert executed == [] and pool.kwargs.get("prepare_threshold", 0) is None
     pool, _ = pilot.connection_pool(_settings(txn.replace("6543", "5432")))
     asyncio.run(pool._configure(Connection()))
-    assert executed[0] == "set role service_role" and pool.kwargs["prepare_threshold"] is None
+    assert executed[0] == "set role service_role"
+    assert pool.kwargs.get("prepare_threshold", 0) is None
+    # the CLI's connector: same rule (its one-shot connections rarely reach psycopg's
+    # prepare threshold, so the kwargs are the oracle)
+    import psycopg
+    from infrx.state.jobstore import connector
+    seen = []
+
+    async def connect(dsn, **kw):
+        seen.append(kw)
+        return Connection()
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", connect)
+    executed.clear()
+    asyncio.run(connector(txn)())
+    assert executed == [] and seen[-1].get("prepare_threshold", 0) is None
+    asyncio.run(connector(txn.replace("6543", "5432"))())
+    assert executed == ["set role service_role"]
+    assert seen[-1].get("prepare_threshold", 0) is None
 
 
 def test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pooler(
