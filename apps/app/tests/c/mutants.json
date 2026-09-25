@@ -1367,8 +1367,8 @@
       "id": "C0-SES-02",
       "note": "a configuration or client failure reads as onboarding (0-C0-V1's V-SV-CATCH)",
       "file": "lib/services/console.ts",
-      "find": "  } catch {\n    return { context: { state: \"unavailable\" }, reads: null };\n  }\n}\n\n/** What the console shell",
-      "replace": "  } catch {\n    return { context: { state: \"onboarding\", userId: \"\", email: \"\" }, reads: null };\n  }\n}\n\n/** What the console shell",
+      "find": "  } catch {\n    return { context: { state: \"unavailable\" }, reads: null };\n  }\n}\n\n/**\n * The shell's decision.",
+      "replace": "  } catch {\n    return { context: { state: \"onboarding\", userId: \"\", email: \"\" }, reads: null };\n  }\n}\n\n/**\n * The shell's decision.",
       "cases": [
         "consumerSession: a configuration or client failure is unavailable, never onboarding or signed out"
       ]

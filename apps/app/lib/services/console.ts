@@ -77,12 +77,19 @@ import {
   unitOfRegime,
   type AccountingRegime,
   type Amount,
-  type BalanceV2,
-  type Credit,
   type LedgerEntryKindV2,
-  type LegacyUsdStatement,
   type ReadOutcome,
 } from "../contracts/v2/types.ts";
+import type {
+  AuthUser,
+  ConsoleShell,
+  ConsumerAccount,
+  ConsumerContext,
+  ConsumerReads,
+  ConsumerRequest,
+  ConsumerSession,
+  CreditLedgerEntry,
+} from "../contracts/v2/consumer.ts";
 import { creditBalanceOf } from "./credits.ts";
 import { cursorScope, decodeCursor, encodeCursor } from "./cursor.ts";
 import {
@@ -1227,30 +1234,17 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The part of a GoTrue user the context reads. `email_confirmed_at` is GoTrue's verification. */
-export type AuthUser = { id: string; email?: string | null; email_confirmed_at?: string | null };
-
-/** The individual's own consumer account: their wallet and the personal organization it funds. */
-export type ConsumerAccount = {
-  userId: string;
-  email: string;
-  walletId: string;
-  orgId: string;
-  /** R33: a suspended (or retired) individual keeps every read; new work is refused elsewhere. */
-  suspended: boolean;
+// The port types are contracts (C0 WR-3, lib/contracts/v2/consumer.ts); re-exported for existing importers.
+export type {
+  AuthUser,
+  ConsoleShell,
+  ConsumerAccount,
+  ConsumerContext,
+  ConsumerReads,
+  ConsumerRequest,
+  ConsumerSession,
+  CreditLedgerEntry,
 };
-
-/**
- * Where a request stands. `onboarding` is a verified individual whose grant has not been issued
- * (C3A/A2 own the retry); `unavailable` is any failure to find out - never read as onboarding, which
- * would offer a grant flow to someone who has one, nor as signed out.
- */
-export type ConsumerContext =
-  | { state: "signed_out" }
-  | { state: "unverified"; userId: string; email: string }
-  | { state: "onboarding"; userId: string; email: string }
-  | { state: "ready"; account: ConsumerAccount }
-  | { state: "unavailable" };
 
 type AuthAnswer = {
   data: { user: AuthUser | null } | null;
@@ -1302,55 +1296,6 @@ export type RpcClient = {
     fn: string,
     args: Record<string, SqlValue>,
   ): PromiseLike<{ data: unknown; error: { code?: string | null; message?: string | null } | null }>;
-};
-
-/** One consumer CREDIT ledger entry. The unit is CREDIT by construction (the view carries only it). */
-export type CreditLedgerEntry = {
-  entry_id: string;
-  created_at: string;
-  kind: LedgerEntryKindV2;
-  amount: Credit;
-  request_id: string | null;
-  reason: string;
-};
-
-/**
- * One of the individual's requests (D10 `consumer_jobs`). Money is in the row's OWN unit - CREDIT for
- * a credit job, USD for a legacy one - and is never summed across units or converted. `charged` is
- * `null` until the request is settled: an unsettled or uncertain charge is unknown, not zero.
- * `result` is F2C.b's ReadOutcome from the DB's persisted expiry, never the page's clock.
- */
-export type ConsumerRequest = {
-  request_id: string;
-  created_at: string;
-  model: string;
-  model_revision: string | null;
-  execution_mode: string | null;
-  state: string;
-  outcome_cause: string | null;
-  accounting_regime: AccountingRegime;
-  unit: "CREDIT" | "USD";
-  hold: Amount | null;
-  hold_state: string | null;
-  charged: Amount | null;
-  settlement_state: string | null;
-  usage_certainty: string | null;
-  usage: { prompt_tokens: number; completion_tokens: number } | null;
-  result: ReadOutcome;
-  result_expires_at: string | null;
-  settled_at: string | null;
-};
-
-export type ConsumerReads = {
-  balance(): Promise<Result<BalanceV2>>;
-  /** `null`: this personal organization has no legacy USD history. Never merged into `balance`. */
-  legacyUsd(): Promise<Result<LegacyUsdStatement | null>>;
-  ledger(query: PageQuery): Promise<Result<Page<CreditLedgerEntry>>>;
-  requests(query: PageQuery): Promise<Result<Page<ConsumerRequest>>>;
-  request(requestId: string): Promise<Result<ConsumerRequest>>;
-  /** The owned result body while the persisted expiry allows it. Never log or cache it. */
-  result(requestId: string): Promise<Result<string>>;
-  keys(): Promise<Result<ApiKeySummary[]>>;
 };
 
 /** The D10 refusals a consumer may see, each with fixed text (the DB's names identifiers). */
@@ -1561,9 +1506,6 @@ export function createConsumerReads(
   return out as ConsumerReads;
 }
 
-/** The consumer App's request context: who is asking, and - only for a ready account - their reads. */
-export type ConsumerSession = { context: ConsumerContext; reads: ConsumerReads | null };
-
 /** The Supabase server client as C0 uses it: GoTrue's `getUser()` plus PostgREST (the real one fits). */
 export type ConsumerClient = PostgrestClient & { auth: { getUser(): PromiseLike<AuthAnswer> } };
 
@@ -1593,12 +1535,6 @@ export async function consumerSessionFrom(
     return { context: { state: "unavailable" }, reads: null };
   }
 }
-
-/** What the console shell (`app/(console)/layout.tsx`, WR-1) does with a request. */
-export type ConsoleShell =
-  | { kind: "redirect"; to: string }
-  | { kind: "render"; email: string; reads: ConsumerReads | null }
-  | { kind: "panel"; state: "unverified" | "onboarding" | "unavailable" };
 
 /**
  * The shell's decision. An operator is not a consumer: operator access never waits on a consumer
