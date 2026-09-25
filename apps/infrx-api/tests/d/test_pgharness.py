@@ -53,11 +53,15 @@ needs_docker = pytest.mark.skipif(_reason is not None,
 # TASK's (`INFRX_D_TASK`), because every lane's sweep sharing one literal pair collided on it
 # twice. D1 keeps the original pair byte-identical (E2R's namespace, a port inside E's
 # 55500-55599 block that E2 does not publish); any other task gets its own namespace and a
-# port 40 above its PostgreSQL port (d4: 55475), clear of every reserved port and E's block.
+# port 30000 below its PostgreSQL port (d4: 25435), clear of every reserved port, E's block and
+# the kernel's ephemeral range (32768-60999). D10: it was 40 above until the wave-4
+# reservations (tasklocal, 79e4897e) put Valkey and S3 ports at 55469-55476, on d2-d5's old
+# decoys; and a decoy inside the ephemeral range lost its bind to an outgoing connection's
+# local port under load (measured: 127.0.0.1:56442 "address already in use", transiently).
 def decoy(task: str) -> tuple[str, int]:
     if task == "d1":
         return "infrx-e2r-dharness-postgres", 55598
-    return f"infrx-{task}-dharness-postgres", local_services(task)["postgres"].host_port + 40
+    return f"infrx-{task}-dharness-postgres", local_services(task)["postgres"].host_port - 30000
 
 
 DECOY, DECOY_PORT = decoy(os.environ.get("INFRX_D_TASK", "d1").lower())

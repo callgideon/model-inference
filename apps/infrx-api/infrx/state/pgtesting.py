@@ -279,9 +279,14 @@ def hooks(conn, store: PgJobStore, stream: PgStreamStore | None = None) -> dict[
 
 
 def make_jobstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[str], str],
-                          *, keep: int = 6) -> Callable[..., Harness]:
+                          *, keep: int = 6,
+                          connect_for: Callable[[str], Any] | None = None
+                          ) -> Callable[..., Harness]:
     """`factory(limits=None) -> Harness`, a fresh frozen database per call. The last `keep`
-    connections stay open (a case may hold two harnesses); older ones are closed."""
+    connections stay open (a case may hold two harnesses); older ones are closed.
+    `connect_for(database) -> Connect` is how the STORES connect (D10: the dedicated runtime
+    login, 0021 `infrx_runtime`); the hooks always act as the owner."""
+    connect_for = connect_for or (lambda name: connector(dsn_for(name)))
     import psycopg
     opened: deque = deque()
 
@@ -292,8 +297,8 @@ def make_jobstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[
         while len(opened) > keep:
             opened.popleft().close()
         clock = PgClock(conn)
-        store = WorkerResults(connector(dsn_for(name)), limits=limits or DEFAULTS)
-        stream = PgStreamStore(connector(dsn_for(name)), limits=limits or DEFAULTS)
+        store = WorkerResults(connect_for(name), limits=limits or DEFAULTS)
+        stream = PgStreamStore(connect_for(name), limits=limits or DEFAULTS)
         plan = FailurePlan()
         extra = hooks(conn, store, stream)
         extra["store"] = store
@@ -426,6 +431,62 @@ def make_credit_jobstore_factory(fresh_database: Callable[[], str],
     return factory
 
 
+def make_lifecycle_factory(fresh_database: Callable[[], str], dsn_for: Callable[[str], str],
+                           seed_sql: str, *, upload_window_s: float = 3600.0,
+                           grace_s: float = 60.0, claim_ttl_s: float = 30.0,
+                           retention_s: float = 600.0,
+                           connect_for: Callable[[str], Any] | None = None,
+                           **kw: Any) -> Callable[..., Harness]:
+    """D10: the F2C.a lifecycle suite's `Harness` (`conformance/lifecycle.py`) on a fresh
+    CREDIT-world database: `port` is a `PgLifecycle`, `reopen()` a NEW adapter over the same
+    database (another process), `jobs` the CREDIT `PgJobStore` whose `admit_credit` is the
+    previous runtime's `infrx.admit` (no marker), `credit_balance` and `set_capability` over
+    rows. The windows are the fake factory's test sizes (grace < upload window)."""
+    from ..contracts.v2 import fixtures as v2fix
+    from .lifecycle import PgLifecycle
+    connect_for = connect_for or (lambda name: connector(dsn_for(name)))
+    defaults = {"upload_window_s": upload_window_s, "grace_s": grace_s,
+                "claim_ttl_s": claim_ttl_s, "retention_s": retention_s}
+    credit_factory = make_credit_jobstore_factory(fresh_database, dsn_for, seed_sql, **kw)
+
+    def factory(limits: PilotSettings | None = None, *, upload_ttl_s: float | None = None,
+                grace_s: float | None = None, claim_ttl_s: float | None = None,
+                retention_s: float | None = None, **_: object) -> Harness:
+        """The window keywords are `conformance.acceptance.CONFIG`'s (F2C.d)."""
+        windows = {"upload_window_s": upload_ttl_s or defaults["upload_window_s"],
+                   "grace_s": grace_s or defaults["grace_s"],
+                   "claim_ttl_s": claim_ttl_s or defaults["claim_ttl_s"],
+                   "retention_s": retention_s or defaults["retention_s"]}
+        credit = credit_factory(limits)
+        name, conn = credit.extra["database"], credit.extra["credit_conn"]
+        # The suite's second tenant (its content rows need a real organization, R55).
+        conn.execute("insert into public.organizations (id, name, slug) values (%s, 'other', "
+                     "'other-fixture') on conflict (id) do nothing", (v2fix.IDS.other_org,))
+
+        def reopen() -> PgLifecycle:
+            return PgLifecycle(connect_for(name), limits=limits or DEFAULTS, **windows)
+
+        def set_capability(serving_version_id: str, input_modalities: tuple[str, ...],
+                           stream_output: bool = True) -> None:
+            from psycopg.types.json import Jsonb
+            _without_trigger(conn, "infrx.serving_versions", "serving_versions_immutable",
+                             "update infrx.serving_versions set capability = capability || "
+                             "%s where serving_version_id = %s",
+                             (Jsonb({"input_modalities": list(input_modalities),
+                                     "stream_output": stream_output}), serving_version_id))
+
+        # The legacy (USD) regime too, as the fake factory does: a USD balance for the
+        # consumer organization (the fixture model is priced by `seed`).
+        credit.extra["grant"](v2fix.IDS.consumer_org, "25.00")
+
+        extra = {**credit.extra, "reopen": reopen, "jobs": credit.port,
+                 "set_capability": set_capability}
+        return Harness(port=reopen(), clock=credit.clock, ids=credit.ids,
+                       failures=credit.failures, extra=extra)
+
+    return factory
+
+
 class JobsView:
     """TEST RIG (Q3 PostgreSQL mode, D3 request 5): the store-side read of a job the Q3 cases
     make of the fake's `jobs[job_id]` - `state`, `terminal`, `attempts` (prepublication
@@ -524,4 +585,5 @@ def make_streamstore_factory(fresh_database: Callable[[], str], dsn_for: Callabl
 __all__ = ["CrashAfterCommit", "FailingJobStore", "JobsView", "PgClock", "PgDispatchOutbox",
            "WorkerResults", "credit_hooks",
            "hooks", "make_credit_jobstore_factory", "make_jobstore_factory",
+           "make_lifecycle_factory",
            "make_streamstore_factory", "register_credential", "seed", "seed_credit_world"]

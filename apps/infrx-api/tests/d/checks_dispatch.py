@@ -407,8 +407,16 @@ def check_results_and_prompt_tokens(conn) -> str:
             "state_conflict", "a second writer replaced the stored result"
         assert outcome(conn, "put_result", {"job_id": str(__import__("uuid").uuid4()),
                                             "text": "x"})[0] == "not_found", 'failed: outcome(conn, "put_result", {"job_id": str(__import__("uuid").uuid4()), "text": "x"})[0] == "not_found"'
-        body_, = conn.execute("select infrx.read_result(%s, %s)", (b.ORG_A, ref)).fetchone()
-        assert body_ == "a clip of a cat", 'failed: body_ == "a clip of a cat"'
+        # D10 (0020): a stored result is read through its job's committed outcome and
+        # persisted expiry - before the outcome commits the owner's read is `result_pending`
+        # (the served read is tests/d/checks_content.py's, on a settled job)
+        try:
+            with conn.transaction():
+                conn.execute("select infrx.read_result(%s, %s)", (b.ORG_A, ref))
+        except psycopg.Error as failed:
+            assert getattr(domain_error(failed), "code", None) == "result_pending", failed
+        else:
+            raise AssertionError("an unsettled job's result was served")
         for org, bad in ((b.ORG_B, ref), (b.ORG_A, "infrx-result:../../etc"),
                          (b.ORG_A, f"infrx-result:{b.ORG_A}"),
                          (b.ORG_A, "infrx-result:" + "-" * 36)):

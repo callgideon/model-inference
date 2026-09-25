@@ -71,6 +71,12 @@ def _typed(failed: Exception) -> Exception:
     if state == "23503":
         return errors.InvalidRequest("the row names a model, endpoint, provider or card "
                                      "that is not registered")
+    if state == "23514":
+        # D10 (G8 F11 corollary): a registry row a CHECK refuses - e.g. a rate card version
+        # outside 0007's grammar - is the caller's invalid request, never a raw error.
+        constraint = getattr(getattr(failed, "diag", None), "constraint_name", None)
+        return errors.InvalidRequest(f"the row breaks the registry rule {constraint or ''}"
+                                     .rstrip())
     return domain_error(failed)
 
 

@@ -78,6 +78,17 @@ class RigCatalog(PgCatalogDirectory):
             (card.rate_card_version, card.model_id, card.deployment_revision_id,
              card.serving_version_id, card.input_rate_per_million.raw("CREDIT"),
              card.output_rate_per_million.raw("CREDIT"), card.effective_at, card.approved_by))
+        # D10 (F2C.c/S3 F11): the card the effective listing names is THE card, so publishing
+        # a public deployment's card is a new listing version naming it (G8 does both in one
+        # transaction; `pgtesting.credit_hooks.publish_rate_card` is the same step).
+        self.owner.execute(
+            "insert into infrx.catalog_listings (public_model_id, version, model_id, "
+            "deployment_revision_id, serving_version_id, rate_card_version, effective_at, "
+            "approved_by) select l.public_model_id, l.version + 1, l.model_id, "
+            "l.deployment_revision_id, l.serving_version_id, %s, infrx.now(), 'rig' "
+            "from infrx.catalog_listings l where l.deployment_revision_id = %s "
+            "order by l.version desc limit 1",
+            (card.rate_card_version, card.deployment_revision_id))
 
     def move_alias(self, requested_model: str, deployment_revision_id: str) -> None:
         public = self.owner.execute("select visibility = 'public' from "
@@ -173,6 +184,25 @@ def test_credit_rate__unpriced_answers_none() -> None:
     assert run(catalog.data_access_policy(IDS.prod_deployment)) == \
         v2fix.BUILDERS["data_access_policy.json"]()
     assert run(catalog.data_access_policy(str(uuid.uuid4()))) is None
+
+
+def test_usd_price__reads_the_row_admission_would_capture() -> None:
+    """G7 WR-3a: `usd_price` answers the effective USD row for the model string (typed,
+    exact decimals), None when unpriced or not yet effective at the DATABASE clock."""
+    catalog = RigCatalog(fresh())
+    assert run(catalog.usd_price("acme/unpriced")) is None
+    catalog.owner.execute(
+        "insert into infrx.price_versions (price_version, model_revision, "
+        "input_rate_per_million, output_rate_per_million, token_rules_version, "
+        "effective_from) values ('pv_wr3a', 'acme/pre-catalog', 0.10, 0.30, 'tr-1', "
+        "infrx.now()), ('pv_wr3a_next', 'acme/pre-catalog', 9, 9, 'tr-1', "
+        "infrx.now() + interval '1 hour')")
+    got = run(catalog.usd_price("acme/pre-catalog"))
+    assert (got.price_version, got.model_revision, str(got.input_rate_per_million),
+            str(got.output_rate_per_million)) == \
+        ("pv_wr3a", "acme/pre-catalog", "0.10000000", "0.30000000"), got
+    catalog.owner.execute("select infrx_test.advance(3600)")
+    assert run(catalog.usd_price("acme/pre-catalog")).price_version == "pv_wr3a_next"
 
 
 def test_credit_rate__alias_move_changes_resolve_not_an_admitted_job() -> None:

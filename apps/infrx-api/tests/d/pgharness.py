@@ -218,9 +218,21 @@ def ensure() -> None:
     env = ["-e", f"POSTGRES_PASSWORD={PASSWORD}"]
     if not ON_SUPABASE:
         env += ["-e", "POSTGRES_USER=postgres", "-e", "POSTGRES_DB=postgres"]
-    run = _docker("run", "-d", "--name", CONTAINER,
-                  "--label", f"{CHECKOUT_LABEL}={checkout()}",
-                  "-p", f"127.0.0.1:{PORT}:5432", *env, IMAGE, check=False)
+    # D10: every lane port lies in the kernel's ephemeral range (32768-60999), so another
+    # process's OUTGOING connection can hold ours as its local port for a while (measured:
+    # 127.0.0.1:55442 <-> another lane's 55444, then TIME-WAIT). That is a transient refusal,
+    # not a foreign container: the half-created container is ours, so it is removed and the
+    # bind retried for a bounded time. ponytail: a fixed back-off; lane ports below 32768
+    # (or `ip_local_reserved_ports`) remove the cause.
+    for attempt in range(12):
+        run = _docker("run", "-d", "--name", CONTAINER,
+                      "--label", f"{CHECKOUT_LABEL}={checkout()}",
+                      "-p", f"127.0.0.1:{PORT}:5432", *env, IMAGE, check=False)
+        if run.returncode == 0 or "address already in use" not in run.stderr \
+                or attempt == 11:
+            break
+        _docker("rm", "-f", "-v", CONTAINER, check=False)
+        time.sleep(10)
     if run.returncode != 0:
         raise RuntimeError(f"could not start {CONTAINER}: {run.stderr.strip()}")
     _created = True

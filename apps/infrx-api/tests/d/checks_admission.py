@@ -569,6 +569,13 @@ def check_admission_idempotency(conn) -> str:
         admit(conn, usd, crossed)                             # a USD job in C1's org
         got = refusal(conn, usd, crossed, regime="credit")
         assert got == "state_conflict", f"a CREDIT replay answered a USD admission: {got}"
+        # R6 on the CREDIT body too (0011 `admit_credit`): a CREDIT retry of an admitted
+        # request UUID without its key, or under a late key, is a typed 409, not a 23505.
+        cr = credit_request(world, C1_KEY, c1)
+        admit(conn, cr, b.idem(cr, "credit-r6"), regime="credit")
+        for late in (None, "credit-late-key"):
+            got = refusal(conn, cr, b.idem(cr, late), regime="credit")
+            assert got == "state_conflict", f"a CREDIT retry without its key: {got}"
         # the tombstone runs from the TERMINAL state (D5's settlement stands in as a row),
         # which here is an hour after admission
         ttl = DEFAULTS.idempotency_ttl_s

@@ -95,14 +95,17 @@ _JOB_COLUMNS = """
 
 def _job_values(request_id: str, handle: str, *, org: str = ORG_A, state: str = "queued",
                 extra: str = "") -> str:
-    return f"""insert into infrx.jobs ({_JOB_COLUMNS}{extra and ', ' + extra})
+    # D10 (0021): a success carries its persisted result expiry (every new row is checked).
+    expiry = state == "succeeded"
+    return f"""insert into infrx.jobs ({_JOB_COLUMNS}{', result_expires_at' if expiry else ''}{
+        extra and ', ' + extra})
     values ('{request_id}', '{handle}', '{org}',
       {f"'{KEY_A}'" if org == ORG_A else 'null'},
       'nemostation/marlin-2b', 'stream', '{state}', 'chat.completions',
       'infrx-payload:{request_id}', '{DIGEST}', 4096, 512,
       'pv-1', '{{"price_version":"pv-1"}}'::jsonb, 1.25000000, 1, 'full',
       '2026-09-21T00:00:00Z', '2026-09-21T00:10:00Z', 120, 10, 300, 60, 20,
-      '2026-09-21T00:02:00Z', 'legacy_usd'"""
+      '2026-09-21T00:02:00Z', 'legacy_usd'{", '2026-09-22T00:05:00Z'" if expiry else ''}"""
 
 
 # --- seeding -----------------------------------------------------------------
@@ -479,7 +482,8 @@ def seed_volume(conn, rows: int = 3000) -> None:
     update infrx.jobs set state = 'succeeded', result_ref = 'infrx-result:' || request_id,
            outcome_cause = 'completed', settlement_state = 'settled',
            usage_certainty = 'authoritative', debit = 0.00100000,
-           settled_at = admitted_at + interval '1 minute'
+           settled_at = admitted_at + interval '1 minute',
+           result_expires_at = admitted_at + interval '1 day 1 minute'
       where job_handle like 'job_bulk_%' and infrx_bulk_n(job_handle) % 10 <> 0;
 
     update infrx.jobs
@@ -612,7 +616,8 @@ def check_rpc_boundary(conn) -> str:
         # An aclitem is `grantee=privileges/grantor`; an empty grantee is PUBLIC, which
         # is what `create function` grants by default and what the migration revokes.
         grantees = {item.split("=", 1)[0] for item in acl.strip("{}").split(",") if item}
-        assert grantees <= {"postgres", "service_role"}, \
+        # D10 (0021): and the dedicated runtime login, whose list D10's checks assert.
+        assert grantees <= {"postgres", "service_role", "infrx_runtime"}, \
             f"infrx.{name}() is executable beyond the service role: {acl}"
         assert "service_role" in grantees, f"infrx.{name}() is not granted to service_role"
     # A body that is absent fails closed (feature_not_supported) until its task fills it;
@@ -1697,6 +1702,9 @@ EXPECTED_FUNCTION_CALLERS = {
     # D1R (0008): the CREDIT balance and the separate legacy USD statement.
     "public.console_wallet_summary(uuid)": {"authenticated", "service_role"},
     "public.console_legacy_usd_statement(uuid)": {"authenticated", "service_role"},
+    # D10 (0021): C0/U4's signed-in reads (auth.uid() is the tenant; none as service).
+    "public.consumer_jobs(text,integer,uuid)": {"authenticated", "service_role"},
+    "public.consumer_job_result(uuid)": {"authenticated", "service_role"},
 }
 
 

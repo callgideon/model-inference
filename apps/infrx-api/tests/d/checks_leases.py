@@ -772,7 +772,8 @@ def check_recover_unknown_release(conn) -> str:
         settled, _ = running(conn, world)
         conn.execute("update infrx.jobs set state = 'succeeded', outcome_cause = 'completed', "
                      "settlement_state = 'settled', usage_certainty = 'authoritative', "
-                     "result_ref = 'infrx-result:' || request_id, settled_at = infrx.now() "
+                     "result_ref = 'infrx-result:' || request_id, settled_at = infrx.now(), "
+                     "result_expires_at = infrx.now() + interval '1 day' "
                      "where request_id = %s", (settled.request_id,))
         for job, source in ((settled, "settled"), (cancelled, "released_free")):
             assert refused(job.request_id, "released_platform_absorbed"), \
