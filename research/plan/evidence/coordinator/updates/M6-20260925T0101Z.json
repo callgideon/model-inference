@@ -1,0 +1,44 @@
+{
+  "task": "M6",
+  "lane": "M6",
+  "slice": "phase-1 fix round (0-F1, 0-F2, 2-INT-1, 2-INT-2)",
+  "activity": "review",
+  "at": "2026-09-25T01:01:00Z",
+  "head": "188a7f01",
+  "base": "f764e396",
+  "merged": ["2d5e4743 (F2C.a)", "1b9c7411 (F2C final: slices a, b, d)"],
+  "worktree": ".claude/worktrees/codex-m6-retention",
+  "branch": "codex/m6-retention",
+  "owned_paths": ["apps/infrx-api/infrx/media/retention.py", "apps/infrx-api/infrx/media/gc.py (docstring only)", "apps/infrx-api/tests/m/test_retention.py", "apps/infrx-api/tests/m/test_lifecycle_standin.py", "apps/infrx-api/tests/m/test_retention_mutants.py", "research/plan/evidence/m/M6-7376024.md"],
+  "findings": {
+    "0-F1": {"fixed": true, "note": "before_tombstone race schedule + named broken stand-ins (no_reference_lock, recheck_outside, tombstone_unlocked); P1/P2 survive head (8 / 32 passed), die on the fix ([before_tombstone-row_lock] fails)"},
+    "0-F2": {"fixed": true, "note": "one collector through run() across passes; C21 -> 3 failed; mutant m6_instance_remembers_items"},
+    "2-INT-1": {"fixed": true, "note": "delete only with delete_timeout_s (75 s) of lease left, measured from before the claim (D10 0020 rule); lease_short; generation_key = defence in depth; wiring request 3 closed (scrub in ack everywhere)"},
+    "2-INT-2": {"fixed": false, "note": "d10 world over D10's PgLifecycle added (visible skip here); scratch merge with codex/d10-durable c70d5d21: 127 passed on 4 worlds (27 d10); point-2 cases on d10 and stand-in deletion wait for D10 to merge"}
+  },
+  "commands": [
+    {"cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py tests/m/test_lifecycle_standin.py", "exit": 0, "summary": "100 passed, 27 skipped (d10 world)"},
+    {"cmd": "same in a scratch merge with codex/d10-durable c70d5d21 (merge-tree 0 conflicts)", "exit": 0, "summary": "127 passed x3"},
+    {"cmd": "INFRX_D_TASK=m6 INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_retention_mutants.py", "exit": 0, "summary": "24 passed: 23/23 killed + well-formed"},
+    {"cmd": "INFRX_M6_ORACLE=local_only INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py", "exit": 1, "summary": "87 failed, 4 passed, 24 skipped (head reproduces as 71 failed / 4 passed, not the recorded 59/3)"},
+    {"cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m", "exit": 0, "summary": "532 passed, 45 skipped (18 S3 + 27 d10)"},
+    {"cmd": "uv run --frozen pytest -q tests/m/test_mutants.py", "exit": 0, "summary": "23 passed"},
+    {"cmd": "uv run --frozen pytest -q tests/m/test_gc.py", "exit": 0, "summary": "18 passed"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py", "exit": 0, "summary": "61 passed (same at head)"},
+    {"cmd": "replay(lifecycle_factory)", "exit": 0, "summary": "[] (also on a scratch merge with codex/f2c-lifecycle c4873027)"},
+    {"cmd": "git merge-tree --write-tree claude/consumer-v1 188a7f01 (047b37e2)", "exit": 0, "summary": "no conflicts; adds only M6 paths"},
+    {"cmd": "INFRX_D_TASK=m6 INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k d10_content_row_unlocked (scratch D10 mutant, merge with f44499ea)", "exit": 0, "summary": "killed by check_content_races"}
+  ],
+  "incidents": ["two early runs without INFRX_D_TASK reached the default d1 harness on 55432 through its lock (8 unexamined PG failures, then 1 pass); no foreign container touched, none left"],
+  "estimate": {"optimistic_h": 10, "likely_h": 15, "pessimistic_h": 24, "confidence": "medium", "basis": "phase 2 8/12/20 h unchanged; d10 integration after D10 merges 1/2/3 h (world exists, 27/27 port cases pass in a scratch merge); review 1/1/1 h", "at": "2026-09-25T01:01:00Z"},
+  "blockers": ["phase 2 waits for M5 to merge", "full integration waits for D10 to merge (d10 world then runs; point-2 hooks + stand-in deletion)", "P-25 retention/grace/claim TTL/interval unresolved (parameterized)"],
+  "wiring_requests": [
+    "composition (amended): RetentionCollector(delete_timeout_s consistent with the media S3 client, 75 s) over PgLifecycle(claim_ttl_s >= 300); metric retained{reason=lease_short}",
+    "D10: add d10_content_row_unlocked (content_row without FOR UPDATE) to tests/d/d10_mutants.py, killed by content_races (verified in a scratch merge)",
+    "D10: 0019 content_objects_key_in_tenant_prefix accepts a '..' segment inside the tenant prefix; refuse it in the CHECK or content_register",
+    "M6 after D10 merges: point-2 hooks on D10Runtime, then delete DraftLifecycle/PgLifecycleStandIn",
+    "Makefile api-mutants: add tests/m/test_retention_mutants.py (unchanged; now 24 passed)",
+    "closed: wiring request 3 (scrub in acknowledge_delete on F2C, D10 and M6)"
+  ],
+  "evidence": ["research/plan/evidence/m/M6-7376024.md"]
+}

@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 28,
-  "updated": "2026-09-25T00:56:03Z",
+  "revision": 29,
+  "updated": "2026-09-25T01:11:50Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -1090,12 +1090,12 @@
     {
       "id": "M6",
       "task": "M6",
-      "slice": "phase-1 (points 1, 2, 4; point 3 designed)",
+      "slice": "phase-1 fix round (0-F1, 0-F2, 2-INT-1, 2-INT-2)",
       "agent": "opus",
       "branch": "codex/m6-retention",
       "worktree": ".claude/worktrees/codex-m6-retention",
       "base": "f764e396",
-      "head": "73760244",
+      "head": "188a7f01",
       "isolation": {
         "ports": "55444 postgres, 55471 s3",
         "prefix": "infrx-m6-",
@@ -1103,16 +1103,16 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:59:30Z",
-      "updated": "2026-09-24T23:25:00Z",
-      "blocker": "phase 2 waits for M5 to merge (store/uploads/prepare ownership); integration waits for D10's 0020 (PgLifecycle content functions); P-25 approved retention/grace/claim TTL/interval unresolved (parameterized)",
+      "updated": "2026-09-25T01:01:00Z",
+      "blocker": "phase 2 waits for M5 to merge; full integration waits for D10 to merge (d10 world then runs; point-2 hooks + stand-in deletion); P-25 retention/grace/claim TTL/interval unresolved (parameterized)",
       "next_action": "durable candidates/claims/tombstones against the F2C-L port and D10.b adapter (fake until they land)",
       "estimate": {
         "optimistic_h": 10,
-        "likely_h": 16,
-        "pessimistic_h": 26,
+        "likely_h": 15,
+        "pessimistic_h": 24,
         "confidence": "medium",
-        "basis": "phase 2 (point 3 + writers on generation_key + gc.py reduction) 8/12/20 h over M5's rewritten files; d10 world once 0020 commits 2/3/5 h; review 0/1/1 h",
-        "at": "2026-09-24T23:25:00Z"
+        "basis": "phase 2 8/12/20 h unchanged; d10 integration after D10 merges 1/2/3 h (world exists, 27/27 port cases pass in a scratch merge); review 1/1/1 h",
+        "at": "2026-09-25T01:01:00Z"
       },
       "evidence": [
         "research/plan/evidence/m/M6-7376024.md"
@@ -1121,37 +1121,57 @@
         {
           "cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py tests/m/test_lifecycle_standin.py",
           "exit": 0,
-          "summary": "84 passed (f2c, fake and real-PG worlds)"
+          "summary": "100 passed, 27 skipped (d10 world)"
         },
         {
-          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_retention_mutants.py",
+          "cmd": "same in a scratch merge with codex/d10-durable c70d5d21 (merge-tree 0 conflicts)",
           "exit": 0,
-          "summary": "21 passed: 20/20 mutants killed + list well-formed"
+          "summary": "127 passed x3"
+        },
+        {
+          "cmd": "INFRX_D_TASK=m6 INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_retention_mutants.py",
+          "exit": 0,
+          "summary": "24 passed: 23/23 killed + well-formed"
+        },
+        {
+          "cmd": "INFRX_M6_ORACLE=local_only INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py",
+          "exit": 1,
+          "summary": "87 failed, 4 passed, 24 skipped (head reproduces as 71 failed / 4 passed, not the recorded 59/3)"
         },
         {
           "cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m",
           "exit": 0,
-          "summary": "516 passed, 18 skipped (S3 cases without an endpoint)"
+          "summary": "532 passed, 45 skipped (18 S3 + 27 d10)"
         },
         {
           "cmd": "uv run --frozen pytest -q tests/m/test_mutants.py",
           "exit": 0,
-          "summary": "23 passed (existing M subset; gc.py docstring edit moves no anchor)"
+          "summary": "23 passed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/m/test_gc.py",
+          "exit": 0,
+          "summary": "18 passed"
         },
         {
           "cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py",
           "exit": 0,
-          "summary": "48 passed"
+          "summary": "61 passed (same at head)"
         },
         {
-          "cmd": "replay(lifecycle_factory)  # F2C.d acceptance transcripts",
+          "cmd": "replay(lifecycle_factory)",
           "exit": 0,
-          "summary": "[] (also asserted for retention_durable__* in tests/m)"
+          "summary": "[] (also on a scratch merge with codex/f2c-lifecycle c4873027)"
         },
         {
-          "cmd": "INFRX_M6_ORACLE=local_only INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py  # pre-M6 collector",
-          "exit": 1,
-          "summary": "59 failed, 3 passed (the 3 = oracle cases asserting the old collector deletes a live job's source)"
+          "cmd": "git merge-tree --write-tree claude/consumer-v1 188a7f01 (047b37e2)",
+          "exit": 0,
+          "summary": "no conflicts; adds only M6 paths"
+        },
+        {
+          "cmd": "INFRX_D_TASK=m6 INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k d10_content_row_unlocked (scratch D10 mutant, merge with f44499ea)",
+          "exit": 0,
+          "summary": "killed by check_content_races"
         }
       ],
       "deviation": "phase 1 limited to gc.py + new modules (disjoint from M5); phase 2 (caches/process maps) after M5 merges; user asked for max parallel lanes (dispatch 3)",
@@ -1164,12 +1184,12 @@
         "research/plan/evidence/m/M6-7376024.md"
       ],
       "wiring_requests": [
-        "composition: one RetentionCollector.run task in the single root I8 picks, over PgLifecycle (claim_ttl_s >= 300) + the media S3ObjectStore; gated on D10.b conformance + phase-2 writers",
-        "D10: 0020 content functions; scrub inside acknowledge_delete for location=database (F2C.b) + the 0014 guard; confirm scrub-in-ack vs scrub-in-tombstone",
-        "Makefile api-mutants: add tests/m/test_retention_mutants.py",
-        "I8: bucket AbortIncompleteMultipartUpload rule; Report metrics + pending-delete-age / aborted-pass alerts",
-        "host: reserve the task ports from the ephemeral range (net.ipv4.ip_local_reserved_ports)",
-        "RV-03 probe: re-run reproduce.py after phase 2 reduces gc.py"
+        "composition (amended): RetentionCollector(delete_timeout_s consistent with the media S3 client, 75 s) over PgLifecycle(claim_ttl_s >= 300); metric retained{reason=lease_short}",
+        "D10: add d10_content_row_unlocked (content_row without FOR UPDATE) to tests/d/d10_mutants.py, killed by content_races (verified in a scratch merge)",
+        "D10: 0019 content_objects_key_in_tenant_prefix accepts a '..' segment inside the tenant prefix; refuse it in the CHECK or content_register",
+        "M6 after D10 merges: point-2 hooks on D10Runtime, then delete DraftLifecycle/PgLifecycleStandIn",
+        "Makefile api-mutants: add tests/m/test_retention_mutants.py (unchanged; now 24 passed)",
+        "closed: wiring request 3 (scrub in acknowledge_delete on F2C, D10 and M6)"
       ]
     },
     {
@@ -1285,12 +1305,6 @@
   ],
   "review_queue": [
     {
-      "since": "2026-09-24T23:25:00Z",
-      "lane": "M6",
-      "task": "M6",
-      "head": "73760244"
-    },
-    {
       "since": "2026-09-25T00:03:00Z",
       "lane": "E3C",
       "task": "E3C",
@@ -1325,6 +1339,12 @@
       "lane": "I8",
       "task": "I8",
       "head": "b55b3c5e"
+    },
+    {
+      "since": "2026-09-24T23:25:00Z",
+      "lane": "M6",
+      "task": "M6",
+      "head": "188a7f01"
     }
   ],
   "integration_queue": [],
@@ -2449,6 +2469,12 @@
       "at": "2026-09-25T00:56:03Z",
       "by": "tracker",
       "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4)"
+    },
+    {
+      "at": "2026-09-25T01:01:00Z",
+      "by": "M6",
+      "what": "review → review; head 188a7f01; estimate likely 16 → 15 h (phase 2 8/12/20 h unchanged; d10 integration after D10 merges 1/2/3 h (world exists, 27/27 port cases pass in a scratch merge); review 1/1/1 h)",
+      "source": "updates/M6-20260925T0101Z.json"
     }
   ],
   "history": {
@@ -2600,10 +2626,14 @@
     "D10-20260925T0053Z.json": {
       "status": "applied",
       "at": "2026-09-25T00:53:00Z"
+    },
+    "M6-20260925T0101Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T01:01:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T00:56:03Z",
+    "computed_at": "2026-09-25T01:11:50Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2613,12 +2643,12 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 01:32Z – 2026-09-28 15:08Z (likely 2026-09-26 22:50Z)",
+        "text": "2026-09-26 01:47Z – 2026-09-28 15:23Z (likely 2026-09-26 23:05Z)",
         "constraint": "dependency path E2C → D10 → M5 → W5 → I8 → E3C",
         "effort_h": [
           37.8,
-          71.6,
-          131.4
+          70.3,
+          128.8
         ],
         "wall_h": [
           24.6,
@@ -2626,9 +2656,9 @@
           86.2
         ],
         "finish": [
-          "2026-09-26T01:32:03Z",
-          "2026-09-26T22:50:03Z",
-          "2026-09-28T15:08:03Z"
+          "2026-09-26T01:47:50Z",
+          "2026-09-26T23:05:50Z",
+          "2026-09-28T15:23:50Z"
         ],
         "conditional": null,
         "confidence": "medium",
