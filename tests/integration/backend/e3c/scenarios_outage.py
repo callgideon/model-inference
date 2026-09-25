@@ -17,13 +17,14 @@ import world                                            # noqa: E402
 
 import stack                                            # noqa: E402
 
-# R130 (G7), per service: a request meeting one stalled PostgreSQL call answers a retryable
-# 503 within 40 s; the s3 case is a video request whose stall lands in media preparation
-# (the source write), which answers at the preparation bound (fetch + probe + 10 s = 40 s
-# by default) - R130's "a preparation ... followed by a stalled store call within 60 s"
-# clause is its ceiling. (E3C phase 1 had proposed one 45 s bound; interim run 1 measured
-# 20.0 s and 40.04 s, the latter the preparation bound plus the client's round trip.)
-BOUND_S = {"postgres": 40.0, "s3": 60.0}
+# R130 (G7): a request meeting ONE stalled call answers a retryable 503 within 40 s. Both
+# s08 paths make one stall: PostgreSQL (the store call, DEPENDENCY_BOUND_S = 20 s) and the
+# s3 video request (its stall lands in media preparation's source write, bounded at the
+# preparation bound fetch + probe + 10 s = 40 s; measured 40.0 s in both interim runs). The
+# 2 s on top is the client round trip past the server-side bound (loopback HTTP plus the
+# 503's serialization), not product slack: interim run 1 measured 40.04 s.
+CLIENT_MARGIN_S = 2.0
+BOUND_S = {"postgres": 40.0 + CLIENT_MARGIN_S, "s3": 40.0 + CLIENT_MARGIN_S}
 MEASURE_S = 180.0        # how long the client waits to measure a late answer
 
 
