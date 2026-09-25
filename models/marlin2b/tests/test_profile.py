@@ -836,3 +836,77 @@ def test_a_profiled_loopback_gateway_is_metered_and_its_blocks_refuse_the_run():
         code, v = e4c_validate(tmp, engine, 0.25, 3600, target="direct")
         assert code == 0 and v["runnable"] and v["blocks"] and \
             "blocks do not apply to a local or fake target" in v["warnings"], v
+
+
+# ------------------------------------------ E4C-RUNBOOK: the two-tenant journey profile (P-17 5)
+
+E4C_TWO_TENANT = os.path.join(PROFILES, "E4C-box.two-tenant.base.json")
+TENANT_B = "5e5e5e5e"                     # stands in for the P-05 second tenant's key prefix
+
+
+def journey_validate(tmp, profile, tenant_keys="INFRX_API_KEY,INFRX_API_KEY_B",
+                     active=("142c7d81", TENANT_B)):
+    """bench --validate-only as the runbook's journey command runs it: the external client
+    through the public edge, both tenants' key NAMES, 8 requests, closed loop."""
+    import test_bench
+    bench.load_corpus = test_bench.REAL_LOAD_CORPUS
+    path, inv = os.path.join(tmp, "p.json"), os.path.join(tmp, "keys.json")
+    for file, doc in ((path, profile), (inv, {"active_key_id_prefixes": list(active)})):
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(doc, f)
+    argv = ["--corpus", os.path.join(os.path.dirname(HERE), "corpus", "manifest.json"),
+            "--subset", "full", "--base-url", "https://marlin2b.callbill.ai/v1",
+            "--target", "gateway", "--model", "nemostation/marlin-2b", "-c", "2",
+            "--requests", "8", "--seed", "20260922", "--dataset-version", "e4c-journey-1",
+            "--forms", "upload,upload,video_b64,video_b64", "--max-tokens", "128",
+            "--retries", "0", "--out", os.path.join(tmp, "j.jsonl"),
+            "--raw", os.path.join(tmp, "j-raw.jsonl"), "--profile", path,
+            "--key-inventory", inv, "--validate-only"]
+    if tenant_keys:
+        argv += ["--tenant-keys", tenant_keys]
+    names = (*bench.KEY_ENV, "INFRX_API_KEY_B")
+    out, saved = io.StringIO(), {n: os.environ.pop(n, None) for n in names}
+    try:
+        with contextlib.redirect_stdout(out):
+            code = bench.main(argv)
+    finally:
+        os.environ.update({n: v for n, v in saved.items() if v is not None})
+    assert not os.path.exists(os.path.join(tmp, "j.jsonl")), "validation opened --out"
+    return code, json.loads(out.getvalue())
+
+
+def test_the_e4c_two_tenant_profile_refuses_until_frozen_then_bounds_the_journey():
+    """Oracle (P-17 check 5, P-05): the committed two-tenant journey profile validating
+    while any FILL remains (the second tenant's key prefix included), refusing the frozen
+    journey for anything else, running as ONE tenant, or projecting off the exact CREDIT
+    ceiling: 8 x (30,720 x 400 + 128 x 1,200) / 1e6 = 99.5328 CREDIT under its 100 cap."""
+    base = json.load(open(E4C_TWO_TENANT, encoding="utf-8"))
+    assert base["target"]["tenant_key_env"] == ["INFRX_API_KEY", "INFRX_API_KEY_B"]
+    assert base["workload"]["tenants"] == 2 and base["target"]["path"] == "public-edge"
+    with tempfile.TemporaryDirectory() as tmp:
+        code, v = journey_validate(tmp, base)
+        fills = {e.split(":")[0] for e in v["errors"] if "FILL placeholder" in e}
+        assert code == 2 and "$.target.test_key_ids[1]" in fills, v["errors"]
+        assert all(e.split(":")[0] in fills for e in v["errors"]), v["errors"]
+        frozen = json.load(open(E4C_TWO_TENANT, encoding="utf-8"))
+        frozen["identity"].update(E4C_FILLS["identity"])
+        frozen["target"].update(maintenance_window="mw-e4c-test",
+                                test_key_ids=["142c7d81", TENANT_B])
+        assert "FILL" not in json.dumps(frozen)
+        code, v = journey_validate(tmp, frozen)
+        assert code == 0 and v["runnable"] and not v["warnings"], v
+        b = frozen["bounds"]
+        per_request = (b["max_input_tokens_per_request"] * Decimal(400)
+                       + b["max_output_tokens_per_request"] * Decimal(1200)) / 10 ** 6
+        assert v["derived"]["spend_currency"] == "CREDIT" and Decimal(
+            v["derived"]["projected_spend"]) == 8 * per_request == Decimal("99.5328") \
+            <= Decimal(b["spend"]["max_spend"])
+        # one tenant is not the two-tenant journey
+        code, v = journey_validate(tmp, frozen, tenant_keys="")
+        assert code == 2 and "workload.tenants is 2, the run uses 1" in v["errors"], v
+        # the second tenant's key active but not declared: foreign traffic may exist
+        undeclared = json.loads(json.dumps(frozen))
+        undeclared["target"]["test_key_ids"] = ["142c7d81"]
+        code, v = journey_validate(tmp, undeclared)
+        assert code == 2 and any(e.startswith("key inventory: 1 active key(s)")
+                                 for e in v["errors"]), v

@@ -635,6 +635,15 @@ def profile_blocked(target: dict) -> str | None:
 
 
 RUN_PROFILE_SCHEMA = "infrx.run-profile/1"
+
+
+def edge_host(path) -> str | None:
+    """The first `target.allowlist` host of a readable --overload-profile, or None when it
+    has no target block or no host there (E4P-V7: never a KeyError in the load cells)."""
+    target = json.loads(Path(path).read_text()).get("target")
+    hosts = target.get("allowlist") if isinstance(target, dict) else None
+    return hosts[0] if isinstance(hosts, list) and hosts and isinstance(hosts[0], str) \
+        and hosts[0] else None
 BENCH_FORMS, BENCH_MAX_TOKENS = "video_b64", "128,512,1024"
 
 
@@ -1367,17 +1376,20 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                      owners=("BOX",), label=target["label"])
         return
     burst, edge = shape["overload"]["burst"], target.get("overload_profile")
-    if not local and (edge or target["scale"] == "box"):
+    if not local:
         # S3 F5 / E1B-protocol rule 11: the burst is P4 (cell_profile stamps it) and enters
-        # through the public edge under its own profile; the box never runs it as a P1 cell
+        # through the public edge under its own profile; no remote target (the box or any
+        # other, E4P-V8) runs it as a P1 cell
         why = profile_blocked({**target, "run_profile": edge}) if edge else (
-            "BLOCKED: the box overload burst is P4 and must enter through the public edge "
+            "BLOCKED: a remote overload burst is P4 and must enter through the public edge "
             "(S3 F5, E1B-protocol rule 11): pass --overload-profile <a public-edge profile>")
-        if why:
-            report.check("e4b.b.overload", PENDING, why, owners=("PROFILE",),
-                         label=target["label"])
+        host = None if why else edge_host(edge)
+        if not host:
+            report.check("e4b.b.overload", PENDING, why or (
+                "BLOCKED: --overload-profile names no public-edge host: it needs a target "
+                "block whose target.allowlist is a non-empty list of hosts (E4P-V7)"),
+                owners=("PROFILE",), label=target["label"])
             return
-        host = json.loads(Path(edge).read_text())["target"]["allowlist"][0]
         target = {**target, "run_profile": edge, "base_url": f"https://{host}/v1"}
     done = client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
                              dataset_version=f"{version}-overload",
