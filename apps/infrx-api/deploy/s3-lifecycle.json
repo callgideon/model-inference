@@ -1,0 +1,10 @@
+{
+  "Rules": [
+    {
+      "ID": "infrx-abort-incomplete-multipart",
+      "Status": "Enabled",
+      "Filter": {"Prefix": "infrx/"},
+      "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1}
+    }
+  ]
+}

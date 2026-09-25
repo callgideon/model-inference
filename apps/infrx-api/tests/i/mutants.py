@@ -1260,6 +1260,22 @@ MUTANTS += (
        "CANARY_KEY_PARAM=${CANARY_KEY_PARAM:-/model-inference/e4b_api_key}", INSTALL_OBSERVE),
 )
 
+# --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------
+DASH = "../../infra/alerts/dashboard.json"
+M6_PANELS = "test_ops_retention__every_m6_family_has_a_pending_panel_and_a_closed_vocabulary"
+M6_RULES = "test_ops_retention__each_rule_fires_on_its_fault_and_nothing_fires_when_healthy"
+BUCKET = "test_ops_retention__the_bucket_rule_aborts_stale_multipart_uploads_only"
+MUTANTS += (
+    _m("m6_panel_missing", "every retention/cache family has a panel", DASH,
+       '"unit": "1/s"},\n          {"title": "Oldest pending delete", "metric": '
+       '"infrx_retention_pending_delete_seconds", "unit": "s"}', '"unit": "1/s"}', M6_PANELS),
+    _m("m6_abort_rule_blunted", "three consecutive aborted passes page", OPS_RULES,
+       '"op": ">=",\n      "threshold": 3,', '"op": ">=",\n      "threshold": 30,', M6_RULES),
+    _m("bucket_rule_whole_bucket", "the bucket rule stays inside the media prefix",
+       "deploy/s3-lifecycle.json", '"Filter": {"Prefix": "infrx/"}', '"Filter": {"Prefix": ""}',
+       BUCKET),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in
