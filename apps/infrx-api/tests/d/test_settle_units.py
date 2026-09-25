@@ -15,7 +15,7 @@ import pytest
 from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.limits import DEFAULTS
-from infrx.contracts.records import TerminalOutcome, Usage
+from infrx.contracts.records import TerminalCause, TerminalOutcome, Usage
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.v2.records import SettlementV2
 
@@ -108,6 +108,23 @@ def test_cancel__sends_the_cause_and_defaults_to_the_clients_own() -> None:
     _ok(store.cancel(b.ORG_A, "job_x"))
     assert (_args(conn, 0)["cause"], _args(conn, 1)["cause"]) == \
         ("sync_deadline", "client_cancelled"), (_args(conn, 0), _args(conn, 1))
+
+
+def test_fail_preparation__sends_the_lease_the_cause_and_the_limits() -> None:
+    """W5 request 3 (0022): one `infrx.fail_preparation` call with the lease, the cause and
+    the store's own lease limits; the answer is the committed outcome; a refusal after an
+    R29 terminalization is raised as its type."""
+    ended = {**OUTCOME, "state": "failed", "cause": "invalid_media"}
+    limits = DEFAULTS.replace(unknown_usage_reconcile_s=66.0)
+    store, conn = _store({"outcome": ended}, REFUSED, limits=limits)
+    answer = _ok(store.fail_preparation(LEASE, TerminalCause.invalid_media))
+    assert "infrx.fail_preparation(" in conn.sent[0][0], conn.sent[0][0]
+    sent = _args(conn)
+    assert (sent["lease"], sent["cause"], sent["limits"]["unknown_usage_reconcile_s"]) == \
+        (LEASE.model_dump(mode="json"), "invalid_media", 66.0), sent
+    assert answer == TerminalOutcome(**ended), answer
+    _refused(errors.AlreadyTerminal,
+             store.fail_preparation(LEASE, TerminalCause.preparation_failed))
 
 
 def test_load_work_credit__the_admitted_work_and_a_legacy_job_refused() -> None:
