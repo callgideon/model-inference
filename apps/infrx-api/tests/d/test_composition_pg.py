@@ -84,6 +84,15 @@ def test_f_base__create_app_composes_the_pilot_from_settings_on_postgresql(regim
     assert pool.closed
 
 
+@pytest.fixture(autouse=True)
+def _nologin_after():
+    """The role is cluster-wide: leave it NOLOGIN, as 0021 made it (test_reads' privilege
+    check reads it; DOOR-REVOKE found the order dependence)."""
+    yield
+    with pgharness.connect("postgres") as admin:
+        admin.execute("alter role infrx_runtime nologin password null")
+
+
 def _runtime_login(database: str) -> str:
     """0021's `infrx_runtime` given LOGIN and a fresh random password, as the operator does
     out of band; the DSN (password inside) lives only in this process's memory."""
