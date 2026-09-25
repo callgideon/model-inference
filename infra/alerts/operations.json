@@ -9,19 +9,7 @@
       "reason": "the gateway container has no nvidia-smi, so its infrx_gpu_up is always 0 and would page every cycle; the host probe's reading is the GPU's (WR-I8-4: the gateway stops collecting GPU gauges)"
     }
   },
-  "pending_producers": {
-    "infrx_retention_pending_delete_seconds": "WR-I8-M6-1 (M6 phase 2 reports it in RetentionCollector's Report / ProcessingCache but records no metric; FAMILIES declares none)",
-    "infrx_retention_consecutive_aborted_passes": "WR-I8-M6-1",
-    "infrx_retention_last_success_timestamp_seconds": "WR-I8-M6-1",
-    "infrx_retention_delete_failed_total": "WR-I8-M6-1",
-    "infrx_retention_passes_total": "WR-I8-M6-1 (panel only)",
-    "infrx_retention_aborted_total": "WR-I8-M6-1 (panel only)",
-    "infrx_retention_deleted_total": "WR-I8-M6-1 (panel only)",
-    "infrx_retention_retained_total": "WR-I8-M6-1 (panel only)",
-    "infrx_retention_ack_lost_total": "WR-I8-M6-1 (panel only)",
-    "infrx_processing_cache_evicted_total": "WR-I8-M6-1 (panel only)",
-    "infrx_processing_cache_refused_total": "WR-I8-M6-1"
-  },
+  "pending_producers": {},
   "rules": [
     {
       "name": "DurableExporterDown",

@@ -1262,13 +1262,20 @@ MUTANTS += (
 
 # --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------
 DASH = "../../infra/alerts/dashboard.json"
-M6_PANELS = "test_ops_retention__every_m6_family_has_a_pending_panel_and_a_closed_vocabulary"
+M6_PANELS = "test_ops_retention__every_m6_family_is_declared_paneled_and_produced"
 M6_RULES = "test_ops_retention__each_rule_fires_on_its_fault_and_nothing_fires_when_healthy"
 BUCKET = "test_ops_retention__the_bucket_rule_aborts_stale_multipart_uploads_only"
 MUTANTS += (
     _m("m6_panel_missing", "every retention/cache family has a panel", DASH,
-       '"unit": "1/s"},\n          {"title": "Oldest pending delete", "metric": '
+       '"unit": "1/s"},\n        {"title": "Oldest pending delete", "metric": '
        '"infrx_retention_pending_delete_seconds", "unit": "s"}', '"unit": "1/s"}', M6_PANELS),
+    # M6-WIRING: the declared families live in `rows`; nothing is left pending
+    _m("m6_pending_section_left", "no pending dashboard section once the families landed",
+       DASH, '  "rows": [\n', '  "pending": {},\n  "rows": [\n', M6_PANELS),
+    _m("m6_family_undeclared", "every M6 family is declared in FAMILIES",
+       "infrx/observe/metrics.py", '    "infrx_processing_cache_refused_total": Spec(\n'
+       '        "counter", "Puts refused because what is left is pinned (retryable 503)."),\n',
+       "", M6_PANELS),
     _m("m6_abort_rule_blunted", "three consecutive aborted passes page", OPS_RULES,
        '"op": ">=",\n      "threshold": 3,', '"op": ">=",\n      "threshold": 30,', M6_RULES),
     _m("bucket_rule_whole_bucket", "the bucket rule stays inside the media prefix",

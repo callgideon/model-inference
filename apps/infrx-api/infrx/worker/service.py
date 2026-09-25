@@ -30,6 +30,10 @@ What it adds to the loop, each for a stated reason:
   drained with the inference pool. Its drain bound is `PREPARATION_LEASE_TTL_S`: an attempt
   still running then is released (its lease lapses and `recover` requeues the job, R93),
   so no job is left `preparing` behind a dead lease; it is logged on its own line.
+* **Housekeeping** (M6 wiring 1, E3C F-4): named background loops the composition root
+  hands over (retention, the cache keeper, the journal prune) - one task each, started
+  with the pools and cancelled after the drain. Each loop logs and survives its own
+  failures, so none of them is a death the service restarts for.
 """
 from __future__ import annotations
 
@@ -70,6 +74,7 @@ class WorkerService:
     pool: object | None = None                   # psycopg_pool, read into metrics at scrape
     preparation: WorkerLoop | None = None        # PREP-WORKER: the prepare_dispatch pool
     preparation_concurrency: int = 1
+    housekeeping: dict = field(default_factory=dict)   # name -> () -> coroutine, run forever
     reaped: int = 0
     reap_errors: int = 0
     last_drain: DrainReport | None = None
@@ -77,6 +82,7 @@ class WorkerService:
     _reaper: asyncio.Task | None = field(default=None, repr=False)
     _preparing: asyncio.Task | None = field(default=None, repr=False)
     _server: asyncio.AbstractServer | None = field(default=None, repr=False)
+    _housekeeping: list = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:
         self._check_loopback()
@@ -127,6 +133,8 @@ class WorkerService:
             self._preparing = asyncio.create_task(
                 self.preparation.run(concurrency=self.preparation_concurrency,
                                      stop_when_idle=False), name="preparation")
+        self._housekeeping = [asyncio.create_task(loop(), name=name)
+                              for name, loop in self.housekeeping.items()]
 
     async def stop(self) -> DrainReport:
         """Drain, then tear down. Returns (and logs) what the drain did to each job."""
@@ -140,9 +148,10 @@ class WorkerService:
         for pool in (self._pool, self._preparing):
             if pool is not None:
                 await asyncio.gather(pool, return_exceptions=True)
-        if self._reaper is not None:
-            self._reaper.cancel()
-            await asyncio.gather(self._reaper, return_exceptions=True)
+        for task in (self._reaper, *self._housekeeping):
+            if task is not None:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()

@@ -55,6 +55,7 @@ truncated answer:
 from __future__ import annotations
 
 import codecs
+import contextlib
 import hashlib
 import json
 import math
@@ -468,8 +469,15 @@ class VllmEngine:
     def __init__(self, client: httpx.AsyncClient, *, served_model: str, clock,
                  limits: PilotSettings = DEFAULTS, path: str = "/v1/chat/completions",
                  media_settings: Settings | None = None, require_version: str | None = None,
-                 local_uri=None, local_media_root: str | None = None) -> None:
+                 local_uri=None, local_media_root: str | None = None, pin=None,
+                 reprepare=None) -> None:
         self.client = client
+        # M6 wiring 2: `ProcessingCache.pin` (a context manager on a local path) and an
+        # `async (job_id, profile)` that prepares the job's media again (`MediaPreparation.
+        # prepare`). With `pin`, every file the engine opens is held from submit to
+        # terminal, so the cache keeper cannot remove it under the engine.
+        self.pin = pin
+        self.reprepare = reprepare
         # R61 (2): M2's `MediaPreparation.local_uri`, the one producer of the local path.
         # Without it a video request is refused (`dependency_unavailable`), never guessed.
         self.local_uri = local_uri
@@ -941,13 +949,38 @@ class VllmEngine:
             # the loop finalises an abandoned async generator. Delegating with `async for`
             # and leaving it is what kept the engine generating after `aclose()`.
             await inner.aclose()
+            stream.pins.close()                          # terminal: the media may go
             # Every exit path, including `upstream_body` refusing before a request was ever
             # sent: this generation is over, so its intent is spent and may be evicted.
             self._retire(key)
 
+    async def _hold_media(self, stream: "EngineStream") -> None:
+        """M6 wiring 2: pin every prepared file this attempt hands the engine. A file that is
+        not there (a cache miss, or a pin that lost its race with an eviction) is prepared
+        again once - the durable artifact is the record - and missing again is the refusal
+        (`not_found`), settled like any other media refusal."""
+        if self.pin is None or self.local_uri is None:
+            return
+        videos = [ref for ref in stream.prepared.media
+                  if ref.mime.startswith(VIDEO_MIME_PREFIX)]
+        for again in (False, True):
+            try:
+                for ref in videos:
+                    uri = str(self.local_uri(ref))
+                    path = uri[len(LOCAL_MEDIA_SCHEME):] \
+                        if uri.startswith(LOCAL_MEDIA_SCHEME) else ""
+                    stream.pins.enter_context(self.pin(path))
+                return
+            except errors.NotFound:
+                stream.pins.close()
+                if again or self.reprepare is None:
+                    raise
+                await self.reprepare(stream.lease.job_id, videos[0].profile_version)
+
     async def _attempt(self, stream: "EngineStream",
                        key: tuple[str, int]) -> AsyncIterator[EngineEvent]:
         lease, prepared = stream.lease, stream.prepared
+        await self._hold_media(stream)                   # released by `_generate`
         body = self.upstream_body(prepared)              # DomainError before anything runs
         ceiling = body["max_tokens"]
         if key in self.cancelled:
@@ -1185,6 +1218,7 @@ class EngineStream:
         self.split_passes = 0                    # line-splitting passes: one per chunk
         self.malformed_usage = False
         self.last_event_at: datetime | None = None
+        self.pins = contextlib.ExitStack()       # M6 wiring 2: the files held open
         self._iterator = engine._run(self)
 
     def usage_event(self, usage: Usage | None, reason: str | None) -> EngineEvent:

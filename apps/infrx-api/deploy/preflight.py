@@ -201,6 +201,9 @@ TUNABLE = (
     "S3_MEDIA_PREFIX", "S3_ENDPOINT_URL",
     # F2P wire-in: the admission regime, legacy_usd or credit (validate_deployment)
     "ACCOUNTING_REGIME",
+    # M6 wiring 1 + E3C F-4: the worker's cache high water and housekeeping cadences (P-25)
+    "PROCESSING_CACHE_MAX_BYTES", "RETENTION_INTERVAL_S", "CACHE_SWEEP_INTERVAL_S",
+    "JOURNAL_EXPIRE_INTERVAL_S",
     # the F1 names that keep theirs until G/W retire them (08 §5)
     "MAX_VIDEO_MB", "FETCH_TIMEOUT_S", "MAX_REDIRECTS", "ALLOWED_VIDEO_MIME",
     "USAGE_FAILED_LOG",

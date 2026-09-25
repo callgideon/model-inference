@@ -290,3 +290,24 @@ def test_an_eviction_that_loses_the_race_with_a_put_keeps_the_new_file(tmp_path,
     assert cache.sweep() == 0
     assert os.path.exists(entry.local_path)
     assert cache.get(ORG, digest(data), "v1") is not None
+
+
+def test_the_cache_counts_evictions_expiries_and_refusals(tmp_path):
+    """WR-I8-M6-1: each high-water eviction, each expiry the sweep removes and each refused
+    put is counted by reason on the registry the worker hands the cache."""
+    from infrx.observe.metrics import Registry
+    reg, clock = Registry("worker"), CacheClock()
+    cache = cache_at(tmp_path, clock, max_bytes=2000, metrics=reg)
+    for n in range(2):
+        put(cache, n)
+        clock.now += 1
+    kept = put(cache, 2)                          # 3000 > 2000: both old ones go (low water)
+    with cache.pin(kept.local_path):
+        with pytest.raises(errors.DependencyUnavailable):
+            put(cache, 3, size=1500)              # 2500, and the rest is pinned
+    clock.now += DAY
+    assert cache.sweep() == 1
+    counts = (reg.value("infrx_processing_cache_evicted_total", reason="high_water"),
+              reg.value("infrx_processing_cache_evicted_total", reason="expired"),
+              reg.value("infrx_processing_cache_refused_total"))
+    assert counts == (2, 1, 1), counts

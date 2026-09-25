@@ -218,8 +218,8 @@ MUTANTS = (
        MAIN, "pool=pool, preparation=preparation,",
        "pool=pool, preparation=None,", COMPOSE),
     _m("main_preparation_concurrency_ignored", "PREPARATION_CONCURRENCY sizes the pool",
-       MAIN, "preparation_concurrency=limits.preparation_concurrency)",
-       "preparation_concurrency=1)", COMPOSE),
+       MAIN, "preparation_concurrency=limits.preparation_concurrency,",
+       "preparation_concurrency=1,", COMPOSE),
     _m("main_preparation_bypasses_the_credit_doors", "preparation reads through the same "
        "work doors as inference (CreditWork in the CREDIT regime)",
        MAIN, "runner=PreparationRunner(jobs=jobs, media=media,",
