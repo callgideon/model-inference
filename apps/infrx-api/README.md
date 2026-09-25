@@ -25,7 +25,7 @@ client ─▶ Caddy :443 ─▶ create_app :8001 ─▶ vLLM :8000
 | `deploy/install.sh` | idempotent installer, run as root on the box |
 | `deploy/*.service`, `deploy/Caddyfile` | systemd units and TLS |
 | `deploy/replay_usage.py` | re-post rows from `usage_failed.jsonl` |
-| `openrouter/provider-models.json` | served at `/v1/models` (see `openrouter/PLAN.md`) |
+| `infrx/gateway/routes/models.py` | `/v1/models`: the published projection of what admission enforces (G7; no static document) |
 | `tests/<track>/` | one suite per track (`make api-test`) |
 | `client_example.py` | reference client |
 
@@ -47,7 +47,6 @@ inject the adapters.
 | `UPSTREAM`, `MAX_INFLIGHT`, `MAX_VIDEO_SECONDS`, `MAX_VIDEO_MB` | — | vLLM address, 429 threshold, video limits |
 | `FETCH_TIMEOUT_S`, `MAX_REDIRECTS`, `ALLOWED_VIDEO_MIME` | — | media fetch: total budget (30 s), redirect hops (3), content-type allowlist (`video/mp4,video/webm,video/quicktime`) |
 | `USAGE_LOG`, `USAGE_FAILED_LOG` | — | `/opt/dlami/nvme/logs/usage.jsonl`, and `usage_failed.jsonl` beside it |
-| `MODELS_DOC` | — | path to the provider document served by `/v1/models` |
 
 ## Auth
 

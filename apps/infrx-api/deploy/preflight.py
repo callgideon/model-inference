@@ -203,7 +203,7 @@ TUNABLE = (
     "ACCOUNTING_REGIME",
     # the F1 names that keep theirs until G/W retire them (08 §5)
     "MAX_VIDEO_MB", "FETCH_TIMEOUT_S", "MAX_REDIRECTS", "ALLOWED_VIDEO_MIME",
-    "USAGE_FAILED_LOG", "MODELS_DOC",
+    "USAGE_FAILED_LOG",
 )
 # Tunables with a shape of their own. The runtime reads 0 here as a valid count (it refuses
 # only negatives), and serve.sh hands it to vLLM, which does not start on it: refused

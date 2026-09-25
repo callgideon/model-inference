@@ -136,6 +136,16 @@ def pilot_app(config=None, routers=None):
             index=MemoryScheduler(world.clock.now))
 
 
+
+def test_f_base__pilot_refuses_to_start_past_the_approved_release_profile():
+    """G7 WR-1: `create_app` refuses a pilot whose enforced profile exceeds the approved
+    release profile (profile v1's 120 s > P-20's 82 s), naming the setting; the code
+    default (82 s) starts. Oracle: without the refusal a pilot at 120 s would admit
+    83-120 s clips the engine refuses while discovery publishes nothing."""
+    with pytest.raises(RuntimeMisconfigured, match="MAX_VIDEO_SECONDS"):
+        pilot_app(support.settings(max_video_seconds=120.0))
+    assert pilot_app(support.settings()).state.runtime.mode == "pilot"
+
 UPLOAD_ROUTES = {("POST", "/v1/uploads"), ("PUT", "/v1/uploads/{handle}"),
                  ("POST", "/v1/uploads/{handle}/complete")}
 

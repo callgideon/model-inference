@@ -43,6 +43,7 @@ from ...contracts.codec import canonical_bytes
 from ...contracts.limits import MAX_IDEMPOTENCY_KEY_CHARS
 from ...contracts.records import (Budgets, ConsentSnapshot, ExecutionMode, IdempotencyRef,
                                   NormalizedRequest, TraceMode)
+from ...contracts.v2.money_units import CREDIT_REGIME
 from .catalog import check_capability, resolve
 
 # Everything a pilot request may name. `messages` and `model` become record fields;
@@ -451,6 +452,16 @@ class Validator:
         """UTC from the app's injected clock - never a second clock of its own."""
         return datetime.fromtimestamp(self.rt.clock(), timezone.utc)
 
+    def check_card(self, card) -> None:
+        """S3 F11, before any hold: in the CREDIT regime the card a request resolves to must
+        be the one this deployment was approved to serve (`ACTIVE_RATE_CARD_VERSION`), or
+        the model is unpriced here (R69) - the relay's post-admission recheck, moved ahead
+        of the hold. Admission still re-resolves and pins, and the relay still refuses an
+        alias or card that moved in between."""
+        if (self.rt.settings.deployment.accounting_regime == CREDIT_REGIME
+                and card.rate_card_version != self.limits.active_rate_card_version):
+            raise errors.InvalidRequest("the model is not priced for this deployment")
+
     def ceilings(self, body: dict, deployment) -> tuple[int, int]:
         """(max_input_tokens, max_output_tokens), already range-checked, within both the
         pilot limits and the resolved deployment's validated limits."""
@@ -499,6 +510,7 @@ class Validator:
         # Only now, with every cheap check passed, the catalog: trusted rows, this
         # credential's audience, and the capabilities its serving revision declares.
         resolved = await resolve(self.catalog, auth, model)
+        self.check_card(resolved.rate_card)
         check_capability(resolved.serving, messages, mode)
         max_input, max_output = self.ceilings(body, resolved.deployment)
         now = self.now()

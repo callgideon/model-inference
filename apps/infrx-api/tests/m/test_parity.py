@@ -23,7 +23,7 @@ import json
 import pathlib
 
 import pytest
-from infrx.contracts.limits import DEFAULTS
+from infrx.contracts.limits import DEFAULTS as CODE_DEFAULTS
 from infrx.media import fetch, prepare, store
 
 from . import support
@@ -31,6 +31,9 @@ from .perf import harness
 
 ORG = "1a1a1a1a-0000-4000-8000-00000000000a"
 PX_PER_FRAME = 200_704
+# The corpora and the `frames_profile_v1` oracle are profile v1's (120 s, 240 frames at the
+# trained 2 fps); parity is measured there, not at the release's 82 s ceiling (P-20).
+DEFAULTS = CODE_DEFAULTS.replace(max_video_seconds=120.0)
 
 
 def _adapter(tmp: pathlib.Path, name: str, objects, body: bytes, clock):

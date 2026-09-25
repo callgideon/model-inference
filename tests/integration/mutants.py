@@ -1009,7 +1009,7 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("e3bm67", "E3B3 rc03: the same-key retry after a gateway restart answers the "
                      "committed result",
            "apps/infrx-api/infrx/gateway/routes/relay.py",
-           "        text = await self.results.read_result(job.org_id, outcome.result_ref)\n",
+           "        text = await _dependency(self.results.read_result(job.org_id, outcome.result_ref))\n",
            '        text = ""\n',
            "tests/integration/backend/recovery/test_recovery.py", "rc03", layer=2,
            cases=("test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_"

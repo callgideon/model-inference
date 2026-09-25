@@ -9,7 +9,7 @@ measures the clip *from the stored bytes* (`probe.py`). The caller's `Content-Ty
 extension and JSON are claims; `duration_s`, the frame size and the codec are measurements.
 The engine's frame budget is computed from `duration_s` (`worker/engine.py`
 `budget_kwargs`), so a duration nobody measured is a frame budget the customer chose - and
-`MAX_VIDEO_SECONDS` (120 s), which is what keeps every accepted clip at the trained 2 fps
+`MAX_VIDEO_SECONDS` (82 s, P-20), which is what keeps every accepted clip at the trained 2 fps
 (`research/workloads/marlin-sop.md` §1.5), would be unenforceable. S2M D2 and D9.
 
 **The rewrite.** The prepared record's messages carry `{"video_url": {"ref": <handle>}}`

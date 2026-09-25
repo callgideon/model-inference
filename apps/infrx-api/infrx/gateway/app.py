@@ -72,6 +72,8 @@ def create_app(settings=None, client=None, sb=None, clock=time.time, **adapters)
     """
     rt = Runtime(from_env() if settings is None else settings, client, sb, clock)
     rt.mode = validate_runtime(rt.settings)
+    if rt.mode == "pilot":
+        models.assert_release_profile(rt.settings)    # G7 WR-1: refuse past the approved release profile
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=pilot.lifespan)
     app.router.redirect_slashes = False
     app.state.runtime = rt

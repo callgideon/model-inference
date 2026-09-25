@@ -29,6 +29,7 @@ import certify                                          # noqa: E402  (infrx on 
 
 from infrx.contracts import errors, records, wire     # noqa: E402
 from infrx.contracts.limits import DEFAULTS            # noqa: E402
+from infrx.contracts.v2 import published_fixtures, published_model  # noqa: E402
 from infrx.gateway.routes import ingress, jobs, uploads, validate  # noqa: E402
 
 DOC = certify.harness.REPO_ROOT / "research" / "plan" / "evidence" / "e" / "E4B-endpoint.md"
@@ -119,8 +120,8 @@ DESCRIPTIONS = {
 }
 LIMITS = (("max_request_bytes", "request body, bytes"),
           ("max_media_bytes", "one video, decoded bytes (also an upload's ceiling)"),
-          ("max_video_seconds", "one video's duration, s (profile v1; the deployed cap is "
-                                "configuration: P-20 applies 72)"),
+          ("max_video_seconds", "one video's duration, s (the approved release ceiling, P-20; "
+                                "a pilot configured past it refuses to start)"),
           ("intake_timeout_s", "reading a request or upload body, s"),
           ("media_fetch_timeout_s", "fetching a video URL, s"),
           ("media_fetch_max_redirects", "redirects followed for a video URL"),
@@ -242,6 +243,17 @@ def examples(model: str) -> list[str]:
     ]
 
 
+def rate_rows(requested: str) -> list[tuple[str, str, str]]:
+    """The rate identity `published_model.price()` resolves in each regime over the
+    published records (F2C-C) - the card the effective listing names, not a local one."""
+    credit = published_model.price(requested, [published_fixtures.published("credit")])
+    usd = published_model.price(requested, [published_fixtures.published("legacy_usd")])
+    return [("rate card (CREDIT regime)", f"`{credit.rate_card_version}`",
+             "`published_model.price()`; provisional until P-01 decides the rates"),
+            ("USD price (legacy regime)", f"`{usd.price_version}`",
+             "`published_model.price()`; CREDIT and USD are never converted")]
+
+
 def pin_note(published: str, measured: str) -> str:
     """Review V6: whether the published release carries W3's measured pin - read, not typed."""
     if published == measured:
@@ -266,8 +278,7 @@ def render() -> str:
         *_table(("Field", "Value", "Source"), (
             ("requested model (pinned)", f"`{release['requested_model']}`",
              "G6B `marlin_release` / contracts v2 fixtures"),
-            ("rate card", f"`{release['rate_card_version']}`",
-             "provisional until P-01 decides the rates"),
+            *rate_rows(release["requested_model"]),
             ("serving revision's engine-options digest", f"`{release['engine_options_digest']}`",
              pin_note(release["engine_options_digest"], record["engine_options_digest"])),
             ("runtime image", f"`{release['runtime_image_ref']}`",

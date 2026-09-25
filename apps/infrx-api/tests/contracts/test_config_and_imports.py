@@ -23,7 +23,7 @@ EXPECTED = {
     # the legacy F1 behaviour; `dev` was a default that let a production host run in it.
     "INFRX_MODE": "", "DATABASE_URL": "",
     "MAX_REQUEST_BYTES": 100663296, "INTAKE_TIMEOUT_S": 30.0,
-    "MAX_MEDIA_BYTES": 67108864, "MAX_VIDEO_SECONDS": 120.0,
+    "MAX_MEDIA_BYTES": 67108864, "MAX_VIDEO_SECONDS": 82.0,
     # r1 R2: the pilot fetch limits are MEDIA_FETCH_*; F1's FETCH_TIMEOUT_S (30)
     # keeps its own name, default and reader in config.Settings.
     "MEDIA_FETCH_CONNECT_TIMEOUT_S": 3.0, "MEDIA_FETCH_TIMEOUT_S": 20.0,

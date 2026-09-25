@@ -24,6 +24,7 @@ from ...contracts.v2.money_units import CREDIT, Credit
 from ...contracts.v2.records import (AdmissionPins, AuthContextV2, CredentialAudience,
                                      DeploymentRevision, DeploymentState, RateCardSnapshot,
                                      ServingRevision, Visibility)
+from . import intake
 
 log = logging.getLogger("infrx.gateway")
 
@@ -62,16 +63,22 @@ async def resolve(catalog, auth: AuthContextV2, requested_model: str) -> Resolut
     callable_ = CALLABLE.get(auth.audience)
     if callable_ is None:
         raise errors.Forbidden("an operator credential does not run inference")
-    serving = card = policy = None
-    try:
+    async def rows():
         deployment = await catalog.resolve(requested_model, audience=auth.audience,
                                            endpoint_id=auth.endpoint_id)
         if deployment is not None and (deployment.visibility, deployment.state) != callable_:
-            deployment = None                        # the same answer as an unknown model
-        if deployment is not None:
-            serving = await catalog.serving_revision(deployment.serving_version_id)
-            card = await catalog.active_rate_card(deployment.deployment_revision_id)
-            policy = await catalog.data_access_policy(deployment.deployment_revision_id)
+            return None, None, None, None           # the same answer as an unknown model
+        if deployment is None:
+            return None, None, None, None
+        return (deployment,
+                await catalog.serving_revision(deployment.serving_version_id),
+                await catalog.active_rate_card(deployment.deployment_revision_id),
+                await catalog.data_access_policy(deployment.deployment_revision_id))
+
+    try:
+        # E3C s08: a catalog that stops answering is the same retryable 503 (bounded).
+        deployment, serving, card, policy = await intake.bounded(rows(),
+                                                                 intake.DEPENDENCY_BOUND_S)
     except errors.DomainError:
         raise
     except Exception:
