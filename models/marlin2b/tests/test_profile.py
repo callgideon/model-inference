@@ -701,7 +701,7 @@ def test_a_non_finite_spend_amount_is_a_refusal_not_an_open_cap():
                       ({"max_spend": float("nan")}, "max_spend"),
                       ({"outstanding_holds": float("nan")}, "outstanding_holds"),
                       ({"rates": {**CREDIT_SPEND["rates"], "input_per_mtok": float("inf")}},
-                       "input_per_mtok")):
+                       "rates.input_per_mtok")):
         got = runprofile.spend_projection(with_spend(CREDIT_SPEND, **over), 10 ** 9)
         assert got["projected"] is None and got["errors"] == [
             f"bounds.spend.{key}: must be finite"], (over, got)
@@ -712,3 +712,332 @@ def test_a_non_finite_spend_amount_is_a_refusal_not_an_open_cap():
         code, v = validate_only(argv_for(tmp, manifest, profile_for(
             clips, manifest, **{"bounds.spend": spend})))
         assert code == 2 and "$.bounds.spend.max_spend: must be finite" in v["errors"], v
+
+
+def test_a_huge_integer_spend_validates_and_only_float_inf_or_nan_is_refused():
+    """Oracle (PCC-V5): math.isfinite on a Python int above ~1.8e308 raises OverflowError,
+    so a well-formed integer cap crashed the validator (bench exits 'bench failed') instead
+    of validating. Ints are always finite; float Infinity/NaN must still be refused."""
+    spend_schema = runprofile.load_schema()["properties"]["bounds"]["properties"]["spend"]
+    assert runprofile.schema_errors({**CREDIT_SPEND, "max_spend": 10 ** 400}, spend_schema) == []
+    for bad in (float("inf"), float("nan")):
+        assert runprofile.schema_errors({**CREDIT_SPEND, "max_spend": bad}, spend_schema) == [
+            "$.max_spend: must be finite"], bad
+    with tempfile.TemporaryDirectory() as tmp:        # through bench: the literal in the file
+        clips, manifest = setup(tmp)
+        code, v = validate_only(argv_for(tmp, manifest, profile_for(
+            clips, manifest, **{"bounds.spend": {**CREDIT_SPEND, "max_spend": 10 ** 400}})))
+        assert code == 0 and v["runnable"] and v["derived"]["spend_currency"] == "CREDIT", v
+
+
+# ------------------------------------------------ E4C-PREP: the committed E4C base profile (P-24)
+
+E4C_BASE = os.path.join(PROFILES, "E4C-box.base.json")
+E4C_PATTERNED = {"source_sha": "c" * 40, "deployed_sha": "d" * 40,
+                 "image_digest": "sha256:" + SHA, "weights_sha256": "sha256:" + SHA,
+                 "processor_sha256": "sha256:" + SHA}
+E4C_FILLS = {"identity": {**E4C_PATTERNED, "migration_version": "0025",
+                          "config_version": "sha256:" + SHA},
+             "target": {"allowed_fault_targets": ["marlin2b-vllm", "infrx-worker", "infrx-valkey"],
+                        "maintenance_window": "mw-e4c-test"}}
+E4C_FILL_PATHS = {*(f"$.identity.{k}" for k in E4C_FILLS["identity"]),
+                  "$.target.allowed_fault_targets[1]", "$.target.allowed_fault_targets[2]",
+                  "$.target.maintenance_window"}
+
+
+def e4c_filled(groups=E4C_FILLS):
+    profile = json.load(open(E4C_BASE, encoding="utf-8"))
+    for group, values in groups.items():
+        profile[group].update(values)
+    return profile
+
+
+def e4c_validate(tmp, profile, rate, requests, target="gateway", inventory=True):
+    """bench --validate-only as certify runs a box cell: the licensed manifest, the frozen
+    seed and output mix, the profile stamped with the cell's rate (certify.cell_profile)."""
+    import test_bench
+    bench.load_corpus = test_bench.REAL_LOAD_CORPUS
+    profile = {**profile, "measurement": {**profile["measurement"], "rate_per_s": rate}}
+    path, inv = os.path.join(tmp, "p.json"), os.path.join(tmp, "keys.json")
+    for file, doc in ((path, profile), (inv, {"active_key_id_prefixes": ["142c7d81"]})):
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(doc, f)
+    argv = ["--corpus", os.path.join(os.path.dirname(HERE), "corpus", "manifest.json"),
+            "--subset", "full", "--base-url", "http://127.0.0.1:8001/v1", "--target", target,
+            "--model", "nemostation/marlin-2b", "--rate", str(rate), "--requests", str(requests),
+            "--seed", "20260922", "--dataset-version", "e4c-1", "--forms", "video_b64",
+            "--max-tokens", "128,512,1024", "--retries", "0", "--out", os.path.join(tmp, "b.jsonl"),
+            "--profile", path, *(["--key-inventory", inv] if inventory else []), "--validate-only"]
+    out, saved = io.StringIO(), {n: os.environ.pop(n, None) for n in bench.KEY_ENV}
+    try:
+        with contextlib.redirect_stdout(out):
+            code = bench.main(argv)
+    finally:
+        os.environ.update({n: v for n, v in saved.items() if v is not None})
+    return code, json.loads(out.getvalue())
+
+
+def test_the_e4c_base_profile_refuses_until_every_fill_is_frozen_then_bounds_the_soak():
+    """Oracle (P-24, E4P-V3): the committed E4C base validating while any value is still a
+    FILL placeholder (a paid run on an undeclared candidate, window or fault target - the
+    free-string ones pass the schema), refusing a soak or rung for any other reason once all
+    are filled, or projecting spend in another unit or off the exact figure:
+    3,600 x (30,720 x 400 + 1,024 x 1,200) / 1e6 = 48,660.48 CREDIT under the 50,000 cap."""
+    base = json.load(open(E4C_BASE, encoding="utf-8"))
+    assert len(base["workload"]["item_ids"]) == 64 and sorted(base["workload"][
+        "expected_invalid"]) == sorted(i for i in base["workload"]["item_ids"]
+                                       if i.split("-")[0] in ("c012", "c025", "c038", "c051"))
+    fill = lambda errors: {e.split(":")[0] for e in errors if "FILL placeholder" in e}
+    with tempfile.TemporaryDirectory() as tmp:
+        code, v = e4c_validate(tmp, base, 0.25, 3600)
+        patterned = {e.split(":")[0] for e in v["errors"] if "does not match" in e}
+        assert code == 2 and fill(v["errors"]) == E4C_FILL_PATHS, v["errors"]
+        assert patterned == {f"$.identity.{k}" for k in E4C_PATTERNED}, v["errors"]
+        assert len(v["errors"]) == len(E4C_FILL_PATHS) + len(E4C_PATTERNED), v["errors"]
+        # the five the schema's patterns catch are not enough: the free strings still refuse
+        code, v = e4c_validate(tmp, e4c_filled({"identity": E4C_PATTERNED}), 0.25, 3600)
+        assert code == 2 and fill(v["errors"]) == E4C_FILL_PATHS - {
+            f"$.identity.{k}" for k in E4C_PATTERNED} and len(v["errors"]) == 5, v["errors"]
+        filled = e4c_filled()
+        assert "FILL" not in json.dumps(filled)
+        b, spend = filled["bounds"], filled["bounds"]["spend"]
+        per_request = (b["max_input_tokens_per_request"] * Decimal(spend["rates"]["input_per_mtok"])
+                       + b["max_output_tokens_per_request"]
+                       * Decimal(spend["rates"]["output_per_mtok"])) / 10 ** 6
+        projected = {}
+        for rate, n in ((0.25, 3600), (0.5, 135)):     # the soak, and one 0.5 req/s rung
+            code, v = e4c_validate(tmp, filled, rate, n)
+            assert code == 0 and v["runnable"] and not v["warnings"], (rate, v)
+            projected[n] = Decimal(v["derived"]["projected_spend"])
+            assert v["derived"]["spend_currency"] == "CREDIT" and projected[n] == n * per_request
+            assert v["derived"]["media_bytes"] <= b["max_input_bytes"], v["derived"]
+        assert projected[3600] == Decimal("48660.48") < Decimal(spend["max_spend"]) == 50000
+        # one request more than the soak is over the profile's bounds: refused, not run
+        code, v = e4c_validate(tmp, filled, 0.25, 3601)
+        assert code == 2 and "bounds.max_requests 3600 < scheduled requests 3601" in v["errors"]
+
+
+def test_a_profiled_loopback_gateway_is_metered_and_its_blocks_refuse_the_run():
+    """Oracle (E4P, open issue 3): the box's gateway is loopback (127.0.0.1:8001) and
+    metered; a direct-gateway profile on it with no rates and no cap, or no key inventory,
+    validating as if it were a free local target. Loopback stays free for a direct-engine
+    profile (and with no profile at all: e1cf28's case)."""
+    unpriced = e4c_filled()
+    unpriced["bounds"]["spend"].update(max_spend=None, rates=None)
+    with tempfile.TemporaryDirectory() as tmp:
+        code, v = e4c_validate(tmp, unpriced, 0.25, 3600)
+        assert code == 2 and v["valid"] and not v["runnable"] and v["blocks"] == [
+            "no approved rates or spend budget: a paid run is refused"], v
+        code, v = e4c_validate(tmp, e4c_filled(), 0.25, 3600, inventory=False)
+        assert code == 2 and v["blocks"] == [
+            "no --key-inventory: the target's active keys are unknown (P-24)"], v
+        engine = json.loads(json.dumps(unpriced))
+        engine["target"]["path"] = "direct-engine"
+        code, v = e4c_validate(tmp, engine, 0.25, 3600, target="direct")
+        assert code == 0 and v["runnable"] and v["blocks"] and \
+            "blocks do not apply to a local or fake target" in v["warnings"], v
+
+
+# ------------------------------------------ E4C-RUNBOOK: the two-tenant journey profile (P-17 5)
+
+E4C_TWO_TENANT = os.path.join(PROFILES, "E4C-box.two-tenant.base.json")
+TENANT_B = "5e5e5e5e"                     # stands in for the P-05 second tenant's key prefix
+
+
+def journey_validate(tmp, profile, tenant_keys="INFRX_API_KEY,INFRX_API_KEY_B",
+                     active=("142c7d81", TENANT_B)):
+    """bench --validate-only as the runbook's journey command runs it: the external client
+    through the public edge, both tenants' key NAMES, 24 requests, closed loop."""
+    import test_bench
+    bench.load_corpus = test_bench.REAL_LOAD_CORPUS
+    path, inv = os.path.join(tmp, "p.json"), os.path.join(tmp, "keys.json")
+    for file, doc in ((path, profile), (inv, {"active_key_id_prefixes": list(active)})):
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(doc, f)
+    argv = ["--corpus", os.path.join(os.path.dirname(HERE), "corpus", "manifest.json"),
+            "--subset", "full", "--base-url", "https://marlin2b.callbill.ai/v1",
+            "--target", "gateway", "--model", "nemostation/marlin-2b", "-c", "2",
+            "--requests", "24", "--seed", "20260922", "--dataset-version", "e4c-journey-1",
+            "--forms", "upload,upload,video_b64,video_b64,video_url,text,text,video_url",
+            "--media-base-url", "https://media.invalid/e4c-corpus", "--max-tokens", "128",
+            "--retries", "0", "--out", os.path.join(tmp, "j.jsonl"),
+            "--raw", os.path.join(tmp, "j-raw.jsonl"), "--profile", path,
+            "--key-inventory", inv, "--validate-only"]
+    if tenant_keys:
+        argv += ["--tenant-keys", tenant_keys]
+    names = (*bench.KEY_ENV, "INFRX_API_KEY_B")
+    out, saved = io.StringIO(), {n: os.environ.pop(n, None) for n in names}
+    try:
+        with contextlib.redirect_stdout(out):
+            code = bench.main(argv)
+    finally:
+        os.environ.update({n: v for n, v in saved.items() if v is not None})
+    assert not os.path.exists(os.path.join(tmp, "j.jsonl")), "validation opened --out"
+    return code, json.loads(out.getvalue())
+
+
+def test_the_e4c_two_tenant_profile_refuses_until_frozen_then_bounds_the_journey():
+    """Oracle (P-17 check 5, P-05): the committed two-tenant journey profile validating
+    while any FILL remains (the second tenant's key prefix included), refusing the frozen
+    journey for anything else, running as ONE tenant, or projecting off the exact CREDIT
+    ceiling: 24 x (30,720 x 400 + 128 x 1,200) / 1e6 = 298.5984 CREDIT under its 299 cap."""
+    base = json.load(open(E4C_TWO_TENANT, encoding="utf-8"))
+    assert base["target"]["tenant_key_env"] == ["INFRX_API_KEY", "INFRX_API_KEY_B"]
+    assert base["workload"]["tenants"] == 2 and base["target"]["path"] == "public-edge"
+    with tempfile.TemporaryDirectory() as tmp:
+        code, v = journey_validate(tmp, base)
+        fills = {e.split(":")[0] for e in v["errors"] if "FILL placeholder" in e}
+        assert code == 2 and "$.target.test_key_ids[1]" in fills, v["errors"]
+        assert all(e.split(":")[0] in fills for e in v["errors"]), v["errors"]
+        frozen = json.load(open(E4C_TWO_TENANT, encoding="utf-8"))
+        frozen["identity"].update(E4C_FILLS["identity"])
+        frozen["target"].update(maintenance_window="mw-e4c-test",
+                                test_key_ids=["142c7d81", TENANT_B])
+        assert "FILL" not in json.dumps(frozen)
+        code, v = journey_validate(tmp, frozen)
+        assert code == 0 and v["runnable"] and not v["warnings"], v
+        b = frozen["bounds"]
+        per_request = (b["max_input_tokens_per_request"] * Decimal(400)
+                       + b["max_output_tokens_per_request"] * Decimal(1200)) / 10 ** 6
+        assert v["derived"]["spend_currency"] == "CREDIT" and Decimal(
+            v["derived"]["projected_spend"]) == 24 * per_request == Decimal("298.5984") \
+            <= Decimal(b["spend"]["max_spend"])
+        # one tenant is not the two-tenant journey
+        code, v = journey_validate(tmp, frozen, tenant_keys="")
+        assert code == 2 and "workload.tenants is 2, the run uses 1" in v["errors"], v
+        # the second tenant's key active but not declared: foreign traffic may exist
+        undeclared = json.loads(json.dumps(frozen))
+        undeclared["target"]["test_key_ids"] = ["142c7d81"]
+        code, v = journey_validate(tmp, undeclared)
+        assert code == 2 and any(e.startswith("key inventory: 1 active key(s)")
+                                 for e in v["errors"]), v
+
+
+# ------------------------------- E4C-RUNBOOK fix round: the runbook's commands, as written
+
+import re, shlex
+
+RUNBOOK = os.path.join(os.path.dirname(HERE), "results", "E4C-runbook.md")
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
+JOURNEY_FORMS = {"upload", "video_b64", "video_url", "text"}   # 04 BACKEND-JOURNEY, P-17 5
+FROZEN_BY_NAME = {"E4C-box.json": "E4C-box.base.json", "E4C-edge.json": "E4C-edge.overload.base.json",
+                  "E4C-two-tenant.json": "E4C-box.two-tenant.base.json"}
+
+
+def frozen(base):
+    """A committed base with every FILL replaced by a well-formed stand-in (the runbook's §2)."""
+    p = json.load(open(os.path.join(PROFILES, base), encoding="utf-8"))
+    p["identity"].update(E4C_FILLS["identity"])
+    t = p["target"]
+    t["maintenance_window"] = "mw-e4c-test"
+    if any(v.startswith("FILL") for v in t["allowed_fault_targets"]):
+        t["allowed_fault_targets"] = E4C_FILLS["target"]["allowed_fault_targets"]
+    t["test_key_ids"] = [TENANT_B if v.startswith("FILL") else v for v in t["test_key_ids"]]
+    assert "FILL" not in json.dumps(p), base
+    return p
+
+
+def runbook_commands():
+    """Every bench.py command the runbook prints (its `$M`/`$C` expanded, the operator's
+    `$MEDIA_BASE_URL` a stand-in), and every key inventory it writes, by file name."""
+    text = open(RUNBOOK, encoding="utf-8").read()
+    m, c = re.search(r'^M=(\S+); C="([^"]*)"', text, re.M).groups()
+    inventories = {}
+    for line in text.splitlines():
+        prefixes = re.search(r'"active_key_id_prefixes": (\[[^\]]*\])', line)
+        names = re.findall(r"\b(keys[\w-]*\.json)", line)
+        if prefixes and names:
+            inventories[names[-1]] = [TENANT_B if p.startswith("<") else p
+                                      for p in json.loads(prefixes.group(1))]
+    commands = []
+    for raw in re.findall(r"python (?:\$M|models/marlin2b)/bench\.py[^`\n]*", text):
+        line = raw.replace('"$MEDIA_BASE_URL"', "https://media.invalid/e4c-corpus").replace(
+            "$C", c).replace("$M", m)
+        projected = re.search(r"projected ([\d.]+)", line)
+        commands.append((shlex.split(line, comments=True)[2:],
+                         projected.group(1) if projected else None))
+    return text, inventories, commands
+
+
+def test_every_runbook_bench_command_validates_as_written_and_the_journey_covers_p17_5():
+    """Oracle (E4C-RUNBOOK review 0-RB-1/2/3, 1-RB-1/2/3): a runbook whose validate or
+    journey command, run exactly as printed against the filled bases and the key inventory
+    the runbook itself writes for it, is refused (the inventory naming a key outside a
+    profile's test_key_ids; a rate the profile does not declare); a journey that leaves a
+    P-17 check 5 mode out for a tenant (upload, inline video, video URL, text), cancels
+    nothing for a tenant (an empty replay leg), cancels a text or over-cap item, or whose
+    cancelled seqs are not the ones the runbook records."""
+    import test_bench
+    bench.load_corpus = test_bench.REAL_LOAD_CORPUS
+    text, inventories, commands = runbook_commands()
+    problems, journeys = [], []
+    assert len(commands) >= 3, commands
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, (argv, projected) in enumerate(commands):
+            argv = [a for a in argv if a != "--validate-only"]
+            opt = lambda flag: argv[argv.index(flag) + 1] if flag in argv else None
+            if opt("--resume"):
+                continue
+            profile, inv = os.path.basename(opt("--profile")), os.path.basename(opt("--key-inventory"))
+            if inv not in inventories:
+                problems.append(f"{profile}: the runbook writes no inventory {inv}")
+                continue
+            doc = frozen(FROZEN_BY_NAME[profile])
+            if sorted(inventories[inv]) != sorted(doc["target"]["test_key_ids"]):
+                # taken while exactly the run's test keys are active: a stale one hides a key
+                problems.append(f"{profile}: {inv} lists {inventories[inv]}, the run's keys are "
+                                f"{doc['target']['test_key_ids']}")
+            paths = {name: os.path.join(tmp, f"{i}-{name}") for name in ("p.json", "k.json")}
+            for name, doc in (("p.json", doc),
+                              ("k.json", {"active_key_id_prefixes": inventories[inv]})):
+                with open(paths[name], "w", encoding="utf-8") as f:
+                    json.dump(doc, f)
+            swap = {"--profile": paths["p.json"], "--key-inventory": paths["k.json"],
+                    "--corpus": os.path.join(REPO, opt("--corpus")),
+                    "--out": os.path.join(tmp, f"{i}.jsonl"), "--raw": os.path.join(tmp, f"{i}-raw.jsonl")}
+            argv = [swap.get(argv[j - 1], a) if j else a for j, a in enumerate(argv)]
+            argv += [x for flag in ("--out", "--raw") if flag not in argv for x in (flag, swap[flag])]
+            out, saved = io.StringIO(), {n: os.environ.pop(n, None)
+                                         for n in (*bench.KEY_ENV, "INFRX_API_KEY_B")}
+            try:
+                with contextlib.redirect_stdout(out):
+                    code = bench.main(argv + ["--validate-only"])
+            finally:
+                os.environ.update({n: v for n, v in saved.items() if v is not None})
+            v = json.loads(out.getvalue())
+            if code or not v["runnable"] or v["errors"] or v["blocks"] or v["warnings"]:
+                problems.append(f"{profile} with {inv}: exit {code}, errors {v['errors']}, "
+                                f"blocks {v['blocks']}, warnings {v['warnings']}")
+            elif projected and Decimal(v["derived"]["projected_spend"]) != Decimal(projected):
+                problems.append(f"{profile}: projects {v['derived']['projected_spend']}, the "
+                                f"runbook says {projected}")
+            assert not os.path.exists(swap["--out"]), "validation opened --out"
+            if "--tenant-keys" in argv:
+                journeys.append(argv)
+        assert len(journeys) == 1, problems or journeys
+        a = bench.parse_args(journeys[0])
+        clips = test_bench.REAL_LOAD_CORPUS(a.corpus, a.subset)[0]
+        schedule = bench.build_schedule(
+            a.requests, clips, [f.strip() for f in a.forms.split(",")], seed=a.seed,
+            max_tokens_mix=a.max_tokens_mix, tenants=len(a.tenant_env),
+            dataset_version=a.dataset_version, cancel_fraction=a.cancel_fraction,
+            cancel_after=a.cancel_after)
+        in_cap = lambda it: it["form"] == "text" or it["duration_s"] <= 82
+        cancelled = [it for it in schedule if it["cancel_at_s"] is not None]
+        for tenant in range(len(a.tenant_env)):
+            mine = [it for it in schedule if it["tenant"] == tenant]
+            served = {it["form"] for it in mine if it["cancel_at_s"] is None and in_cap(it)}
+            if JOURNEY_FORMS - served:
+                problems.append(f"tenant {tenant}: no accepted {sorted(JOURNEY_FORMS - served)}")
+            if not any(it["tenant"] == tenant for it in cancelled):
+                problems.append(f"tenant {tenant}: nothing cancelled, so nothing to replay")
+        problems += [f"seq {it['seq']}: a cancelled {it['form']} item that is text or over the "
+                     f"cap" for it in cancelled if it["form"] == "text" or not in_cap(it)]
+        stated = re.search(r"expected cancelled seqs: `([\d, ]+)`", text)
+        if [it["seq"] for it in cancelled] != (
+                [int(s) for s in stated.group(1).split(",")] if stated else None):
+            problems.append(f"cancelled seqs {[it['seq'] for it in cancelled]}; the runbook "
+                            f"records {stated.group(1) if stated else 'none'}")
+        if not (a.media_base_url or "").startswith("https://"):
+            problems.append("the journey passes no https --media-base-url for its video_url leg")
+    assert not problems, "\n".join(problems)

@@ -6,6 +6,9 @@
 # 2026-09-24). Optional: SET="DATABASE_POOL_MAX_SIZE=6 ..." evaluates a proposed change.
 set -euo pipefail
 repo=/home/ubuntu/model-inference
+for need in infra/runbooks/pool_budget.py; do  # absent at the pre-I8 known-good targets (bda1586, 4226315)
+  [ -e "$repo/$need" ] || { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }
+done
 env_file=/etc/marlin2b-gateway.env
 image=$(sed -n 's/^INFRX_IMAGE=//p' "$env_file")
 [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "no INFRX_IMAGE in $env_file" >&2; exit 2; }

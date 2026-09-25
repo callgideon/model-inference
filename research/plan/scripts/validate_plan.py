@@ -56,7 +56,12 @@ def consumer_closure_errors(manifest, tasks):
         if not mapped <= app:
             errors.append('Consumer release omits finding owners: ' + ', '.join(sorted(mapped - app)))
     for i in 'C0 C3A A2 A3 U1R U2 U3 U4 E3A I2A I3 E4'.split():
-        if i not in tasks or tasks[i].get('dispatch_after_gate') != 'BACKEND-READY':
+        t = tasks.get(i) or {}
+        # 2026-09-25: a recorded user decision may lift the dispatch gate (dispatch only; the
+        # APP gates keep their acceptance). The original rule stays on the record.
+        overridden = (t.get('dispatch_override') or {}).get('by') == 'user' \
+            and t.get('dispatch_after_gate_original') == 'BACKEND-READY'
+        if i not in tasks or (t.get('dispatch_after_gate') != 'BACKEND-READY' and not overridden):
             errors.append(f'App dispatch must wait for accepted BACKEND-READY: {i}')
     return errors
 

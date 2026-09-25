@@ -38,7 +38,10 @@ wait_up() { local deadline=$(( SECONDS + $2 )); until curl -fsS -o /dev/null --m
   [ "$SECONDS" -lt "$deadline" ] || return 1; sleep 2; done; }
 
 fetch() {
-  # the pins come from the release's own checkout
+  # the pins come from the release's own checkout (MODE=undo reads nothing from it)
+  for need in infra/runbooks/artifacts.py; do  # absent at the pre-I8 known-good targets (bda1586, 4226315)
+    [ -e "$repo/$need" ] || { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }
+  done
   [ "$(git -c safe.directory="$repo" -C "$repo" rev-parse HEAD)" = "$RELEASE" ] || { echo "the checkout is not $RELEASE" >&2; exit 2; }
   mkdir -p "$staged"
   local s; s=$(t)

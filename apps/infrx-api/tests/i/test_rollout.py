@@ -16,6 +16,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import tomllib
 
 from . import support
 
@@ -112,6 +113,27 @@ def test_backend_deploy__ssm_carries_a_step_byte_for_byte(tmp_path):
     assert done.returncode == 2 and calls == []
 
 
+def test_backend_deploy__ssm_refuses_what_is_not_a_step_before_any_aws_call(tmp_path):
+    """ROLLOUT-FIXES: `ssm.sh --help` used to hand `--help` to `cat`, base64-wrap cat's help
+    text and send it to the pilot instance. Oracle: --help/-h print the usage and exit 0, a
+    step that is not an existing file, or a bad pair after a real one, exit 2 - all with no
+    aws call at all; a good invocation still reaches aws exactly once with the payload."""
+    step = ROLLOUT / "steps" / "10-inventory.sh"
+    for flag in ("--help", "-h"):
+        done, calls = _ssm(tmp_path, flag)
+        assert done.returncode == 0 and "usage" in done.stdout and calls == [], (flag, done)
+    for args in (("--version",), (str(tmp_path / "missing.sh"),), (str(ROLLOUT / "steps"),),
+                 (str(step), "release abc123")):
+        done, calls = _ssm(tmp_path, *args)
+        assert done.returncode == 2 and calls == [], (args, done.stderr, calls)
+    done, calls = _ssm(tmp_path, str(step))
+    assert done.returncode == 0, done.stderr
+    sends = [call for call in calls if "send-command" in call]
+    assert len(sends) == 1
+    command = json.loads(sends[0][sends[0].index("--parameters") + 1])["commands"][0]
+    assert base64.b64decode(command.split()[1]) == step.read_bytes()
+
+
 def test_ops_recover__the_revert_restores_the_tree_before_the_runtime():
     """The monolith and the engine unit run from the working tree, so the revert checks
     out the previous HEAD before rollback.sh restarts the restored engine and gateway, and
@@ -128,12 +150,13 @@ def test_ops_recover__the_revert_restores_the_tree_before_the_runtime():
 
 
 def test_backend_deploy__the_cutover_keeps_the_engines_concurrency(tmp_path):
-    """The box's engine serves 32 sequences (its unit passes `--max-num-seqs 32`); the
-    release's serve.sh reads `ENGINE_MAX_NUM_SEQS` from the validated file and defaults
-    to 8, so the cutover step hands install.sh 32 as a schema setting unless the operator
-    names another value - a silent 4x cut otherwise. Runs the step's own bytes against a
-    stand-in checkout; without step 6's digest (64 hex, or exactly `nothing-pending`) it
-    does not reach install.sh at all."""
+    """The release's serve.sh reads `ENGINE_MAX_NUM_SEQS` from the validated file; the
+    cutover step hands install.sh the value the operator names (rollout.md §1 pins 8) as a
+    schema setting, and has no default of its own (ROLLOUT-FIXES: its old default of 32,
+    the pre-release box unit's value, silently overrode the §1 pin when the argument was
+    left out). Runs the step's own bytes against a stand-in checkout; without the value,
+    or without step 6's digest (64 hex, or exactly `nothing-pending`), it does not reach
+    install.sh at all."""
     box = tmp_path / "box"
     deploy = box / "apps" / "infrx-api" / "deploy"
     deploy.mkdir(parents=True)
@@ -152,15 +175,19 @@ def test_backend_deploy__the_cutover_keeps_the_engines_concurrency(tmp_path):
                               env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}",
                                    "RELEASE": "abc123", **env})
     done = cutover(MIGRATION_DIGEST="nothing-pending")
+    assert done.returncode != 0 and "install" not in done.stdout, done.stdout
+    assert "ENGINE_MAX_NUM_SEQS" in done.stderr
+    done = cutover(MIGRATION_DIGEST="nothing-pending", ENGINE_MAX_NUM_SEQS="8")
     assert done.returncode == 0, done.stderr
-    assert "install INFRX_SET=[ENGINE_MAX_NUM_SEQS=32 ] pilot restart" in done.stdout
+    assert "install INFRX_SET=[ENGINE_MAX_NUM_SEQS=8 ] pilot restart" in done.stdout
     done = cutover(MIGRATION_DIGEST="nothing-pending", ENGINE_MAX_NUM_SEQS="16")
     assert "INFRX_SET=[ENGINE_MAX_NUM_SEQS=16 ]" in done.stdout
-    done = cutover(MIGRATION_DIGEST="a" * 64)
+    done = cutover(MIGRATION_DIGEST="a" * 64, ENGINE_MAX_NUM_SEQS="8")
     assert done.returncode == 0 and "install INFRX_SET=" in done.stdout
     for statement in (None, "nothing-pendng", "x", "A" * 64, "a" * 63, "a" * 65,
                       "nothing-pending-x"):
-        done = cutover(**({} if statement is None else {"MIGRATION_DIGEST": statement}))
+        done = cutover(ENGINE_MAX_NUM_SEQS="8",
+                       **({} if statement is None else {"MIGRATION_DIGEST": statement}))
         assert done.returncode != 0 and "install" not in done.stdout, statement
 
 
@@ -364,3 +391,46 @@ def test_backend_deploy__the_real_bucket_check_runs_the_release_image_before_the
     assert _docker_calls(stub)[-1]["env"]["INFRX_M_S3_BUCKET"] == "another-bucket"
     red = check(RELEASE=release, DOCKER_FAIL="run")
     assert red.returncode != 0 and "passed" not in red.stdout
+
+
+def test_backend_deploy__the_bucket_check_installs_exactly_uv_locks_pytest_wheels():
+    """45-s3-check's header says its pytest and dependencies are uv.lock's wheels. Oracle
+    (ROLLOUT-FIXES): the heredoc pinned pytest 8.4.2 while uv.lock carries 9.1.1
+    (GHSA-6w46-j5rx-g56g / CVE-2025-71176). Every heredoc pin is uv.lock's version and wheel
+    hash, and the pinned set is exactly pytest plus its non-Windows dependencies."""
+    text = (ROLLOUT / "steps" / "45-s3-check.sh").read_text()
+    body = re.search(r"<<REQ\n(.*?)\nREQ\n", text, re.S)
+    assert body, "no requirements heredoc"
+    pins = {}
+    for line in body.group(1).splitlines():
+        m = re.fullmatch(r"([a-z0-9-]+)==(\S+) --hash=(sha256:[0-9a-f]{64})", line)
+        assert m, line
+        pins[m.group(1)] = (m.group(2), m.group(3))
+    lock = {p["name"]: p for p in tomllib.loads(
+        (support.REPO / "apps" / "infrx-api" / "uv.lock").read_text())["package"]}
+    wanted = {"pytest"} | {d["name"] for d in lock["pytest"]["dependencies"]
+                           if "win32" not in d.get("marker", "")}
+    assert set(pins) == wanted, (sorted(pins), sorted(wanted))
+    for name, (version, digest) in pins.items():
+        assert lock[name]["version"] == version, (name, version, lock[name]["version"])
+        assert digest in {w["hash"] for w in lock[name]["wheels"]}, name
+
+
+def test_backend_deploy__the_runbooks_install_args_fit_the_session_pooler():
+    """rollout.md §1's INSTALL_ARGS is what the operator pastes into W10. Oracle
+    (ROLLOUT-FIXES): DATABASE_POOL_MAX_SIZE=6 sat in a comment beside it, so the pasted
+    install ran the defaults - pool_budget.py FAIL, peak 21 + headroom 2 > 15 session slots
+    (the 2026-09-24 EMAXCONNSESSION). The block's settings pass the budget at peak 13, and
+    name ENGINE_MAX_NUM_SEQS=8, which 50-install now requires."""
+    text = (support.REPO / "infra" / "runbooks" / "rollout.md").read_text()
+    block = re.search(r"^INSTALL_ARGS=\((.*?)\)$", text, re.S | re.M)
+    assert block, "no INSTALL_ARGS block"
+    args = re.sub(r"#.*", "", block.group(1))
+    assert re.search(r"(?:^|\s)ENGINE_MAX_NUM_SEQS=8(?:\s|$)", args), args
+    infrx_set = re.search(r'INFRX_SET="([^"]*)"', args)
+    assert infrx_set, args
+    pairs = [*infrx_set.group(1).split(), "ENGINE_MAX_NUM_SEQS=8"]
+    done = subprocess.run([sys.executable, str(support.REPO / "infra" / "runbooks" / "pool_budget.py"),
+                           "--runtime-port", "5432", *[a for p in pairs for a in ("--set", p)]],
+                          capture_output=True, text=True)
+    assert done.returncode == 0 and "PASS session: peak 13 " in done.stdout, done.stdout

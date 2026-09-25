@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "4af8516e",
+ "integration_head": "6143058e",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 51,
- "updated": "2026-09-25T19:59:14Z",
+ "revision": 55,
+ "updated": "2026-09-25T22:42:57Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -618,9 +618,9 @@
    },
    "activity": "complete",
    "started": "2026-09-24T21:40:00Z",
-   "updated": "2026-09-25T19:59:14Z",
+   "updated": "2026-09-25T22:42:57Z",
    "blocker": "P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator)",
-   "next_action": "ALERT-SNS merged c1b74038 (SNS or https webhook delivery, fail-closed, alert kept; ASN-V1 low carried). Operator-held: SNS topic + subscription (or the Slack webhook SSM param), IAM sns:Publish, python3-boto3 on the box; O4–O15 in the rollout window",
+   "next_action": "ROLLOUT-FIXES merged a1e06236 (rehearsal G5 fixed → 48 PASS, ssm.sh help/step guard, INSTALL_ARGS pins, pytest re-pin, pre-I8 step guards, README refresh). KNOWN-GOOD-PROOF lane running (schema_proof for bda1586/4226315). Operator-held: SNS topic/webhook, IAM sns:Publish, boto3 on the box, hosted backup rehearsal.",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
@@ -702,9 +702,9 @@
    },
    "activity": "complete",
    "started": "2026-09-24T21:55:00Z",
-   "updated": "2026-09-25T08:19:39Z",
+   "updated": "2026-09-25T22:42:57Z",
    "blocker": null,
-   "next_action": "merged into claude/consumer-v1 at 8d20e115 via codex/d10-merge dfc4fa75; R122-R127 numbered; manifest D10 implemented; OPEN: revoke migration after W5/G7, fail_preparation SQL, runtime-login composition (E3C F-1), P-25 values",
+   "next_action": "DOOR-REVOKE verified ACCEPT_WITH_FIXES 273990a0 (0023 revokes admit/claim_preparation from infrx_runtime; RUNTIME_FUNCTIONS 41 by name; merge gate 'only with W5' satisfied on the union); the union lane merges it with wiring W-DR1 v2.",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
@@ -882,16 +882,16 @@
    },
    "activity": "review",
    "started": "2026-09-24T21:55:00Z",
-   "updated": "2026-09-25T03:03:00Z",
+   "updated": "2026-09-25T22:42:57Z",
    "blocker": "merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3",
-   "next_action": "rerun tests/w at 27afab76; apply W5-wiring-27afab7.patch with D10 PgLifecycle; fail_preparation port/adapter; G7 admit_ready; merged PG round trip; box warmup run after run3",
+   "next_action": "W5-ADMIT-WIRING f18c72f7 verification in its fix round; union carries it at 9d61d1e1. E3C early run closed F-3/F-4 and found F-5 (relay recheck after admit_ready can refuse a ran job) + F-6 (reconciliation reader on the runtime login) → W5-F5 micro-lane (wf_5e483fbc-a92) on codex/w5-f5. Then R134–R137, manifest implemented.",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 12,
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
     "confidence": "medium",
-    "basis": "unchanged: wiring 1-2, fail_preparation port/adapter, merged-tree PG round trip with MinIO, box warm-up run",
-    "at": "2026-09-25T03:03:04Z"
+    "basis": "verification third lens + possible fix round, then the union merge and E3C final run",
+    "at": "2026-09-25T21:06:43Z"
    },
    "evidence": [
     "research/plan/evidence/w/W5-27afab7.md",
@@ -1091,9 +1091,9 @@
    },
    "activity": "review",
    "started": "2026-09-24T21:59:30Z",
-   "updated": "2026-09-25T17:12:10Z",
+   "updated": "2026-09-25T21:06:43Z",
    "blocker": "P-25 unresolved; WR-3 (E3C world.py + s06 clock) gates the merge; WR-7 (D10 register refresh) for the refetch race; R114 amendment",
-   "next_action": "durable candidates/claims/tombstones against the F2C-L port and D10.b adapter (fake until they land)",
+   "next_action": "M6-WIRING verified ACCEPT_WITH_FIXES at 28dd1af2 (pins released on every exit path, housekeeping loop resilient, F-4 journal prune); merging via the union lane with WR-M6W-1",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -1167,16 +1167,16 @@
    },
    "activity": "review",
    "started": "2026-09-24T21:59:40Z",
-   "updated": "2026-09-25T18:20:00Z",
+   "updated": "2026-09-25T22:42:57Z",
    "blocker": "W5 (claim_preparation_ready, fail_preparation): s04 video/permanent, s05 admission; F-3 relay.py:167 admits via admit_credit; no caller of PgLifecycle.admit_ready (unowned: G7 deferred, W5 gate): s04 text/late, s05 readiness; F-4 PgStreamStore.expire (journal.py:121) has no caller; stream_chunks deltas kept past JOURNAL_CHUNK_TTL_S: s06 scrub, s11 scrub race",
-   "next_action": "scenario matrix red/blocked on f764e396",
+   "next_action": "Early full run on union 9d61d1e1 (43178b58 on codex/e3c-rerun): gate FAIL 5/76; after harness fixes H-1..H-6 (9107a5c6) the only red is F-5; controls pass for the right reasons. Final run on the union SHA that carries the W5 fix-round delta + W5-F5 + door-revoke; then the coordinator merges codex/e3c-rerun.",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
-    "pessimistic_h": 5,
+    "pessimistic_h": 4,
     "confidence": "medium",
-    "basis": "one ~13-min final INFRX_E3C_RUNTIME_LOGIN=1 rerun after F-3 (relay -> admit_ready) + W5 and F-4 (journal pruning composed) land, plus nc-admission-ready and nc-retention-durable revert controls on scratch trees",
-    "at": "2026-09-25T18:20:00+00:00"
+    "basis": "W5-F5 fix + union round 2 + one 13–25 min final matrix run",
+    "at": "2026-09-25T22:42:57Z"
    },
    "evidence": [
     "research/plan/evidence/e/E3C-8406c79.md",
@@ -1234,9 +1234,9 @@
    },
    "activity": "queued",
    "started": null,
-   "updated": "2026-09-25T19:59:14Z",
+   "updated": "2026-09-25T22:42:57Z",
    "blocker": "after E3C; needs an allocated GPU window",
-   "next_action": "Blocked on BACKEND-LOCAL (E3C final rerun after the W5/M6-wiring/0022 union) and the operator-held items (publish-card P-01, adjust +40,000 CREDIT, scoped key issue + P-02 dry-run inventory, hosted rehearsal). Prep landing via E4C-PREP: base profile, P-18 criteria, P-17 checklist",
+   "next_action": "E4C-RUNBOOK merged 2f2ca075 (window runbook, public-edge overload + two-tenant journey profile bases, certify edge-profile validation); E4C-PREP merged dafd4030 (R133). The run waits on BACKEND-LOCAL and the operator-held items (publish-card, adjust +40,000 CREDIT, tenant-2 + scoped keys via the P-02 dry-run, hosted rehearsal).",
    "estimate": {
     "optimistic_h": null,
     "likely_h": null,
@@ -1244,6 +1244,246 @@
     "confidence": "unknown",
     "basis": "not estimated at baseline (lane has not inspected its slice yet)",
     "at": null
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "C0",
+   "task": "C0",
+   "slice": "C0 real consumer context and read port (query/server/console/credits adapters; real RLS/RPC tests)",
+   "agent": "opus",
+   "branch": "codex/app-c0",
+   "worktree": ".claude/worktrees/codex-app-c0",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-c0 postgres 55451",
+    "prefix": "infrx-app-c0-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "U1R",
+   "task": "U1R",
+   "slice": "U1R CREDIT usage and balance views (exact decimal display, legacy USD separate, pagination, request-detail link)",
+   "agent": "opus",
+   "branch": "codex/app-u1r",
+   "worktree": ".claude/worktrees/codex-app-u1r",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-u1r postgres 55457",
+    "prefix": "infrx-app-u1r-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "A2",
+   "task": "A2",
+   "slice": "A2 verified onboarding and recovery (signup/verify/resend/sign-in/recovery, once-only grant, next-step)",
+   "agent": "opus",
+   "branch": "codex/app-a2",
+   "worktree": ".claude/worktrees/codex-app-a2",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-a2 postgres 55460",
+    "prefix": "infrx-app-a2-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "A3",
+   "task": "A3",
+   "slice": "A3 models, pricing and executable API docs (served version, CREDIT card, examples run in tests)",
+   "agent": "opus",
+   "branch": "codex/app-a3",
+   "worktree": ".claude/worktrees/codex-app-a3",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "fakes only",
+    "prefix": "infrx-app-a3-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "C3A",
+   "task": "C3A",
+   "slice": "C3A trusted consumer actions (keys, grant retry, settings, operator actions via narrow ports; idempotency/CSRF)",
+   "agent": "opus",
+   "branch": "codex/app-c3a",
+   "worktree": ".claude/worktrees/codex-app-c3a",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-c3a postgres 55452",
+    "prefix": "infrx-app-c3a-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "starts when C0 hands back (merges codex/app-c0)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "U4",
+   "task": "U4",
+   "slice": "U4 owned request detail and result lifecycle (bounded polling, expiry, two-tenant probes)",
+   "agent": "opus",
+   "branch": "codex/app-u4",
+   "worktree": ".claude/worktrees/codex-app-u4",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-u4 postgres 55456",
+    "prefix": "infrx-app-u4-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "starts when U1R hands back (merges codex/app-u1r)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "U2",
+   "task": "U2",
+   "slice": "U2 keys and supported settings (one-time plaintext, rotation, truthful privacy copy)",
+   "agent": "opus",
+   "branch": "codex/app-u2",
+   "worktree": ".claude/worktrees/codex-app-u2",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "fakes only",
+    "prefix": "infrx-app-u2-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "starts when U1R and C3A hand back",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "U3",
+   "task": "U3",
+   "slice": "U3 minimal operator controls (rate publication, reasoned adjust/grant, suspension, audited idempotent ops)",
+   "agent": "opus",
+   "branch": "codex/app-u3",
+   "worktree": ".claude/worktrees/codex-app-u3",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-u3 postgres 55453",
+    "prefix": "infrx-app-u3-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "starts when U1R and C3A hand back",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
    },
    "evidence": [],
    "commands": []
@@ -2686,6 +2926,57 @@
    "by": "coordinator",
    "what": "E4C-PREP dispatched (base 56c284cf) and handed back at 1acf85b4; one-lens recheck running. D10-FOLLOWUP / M6-WIRING / W5-ADMIT-WIRING verify workflows running; union merge lane brief ready (trial merges: one trivial worker/service.py field conflict)",
    "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-25T21:06:43Z",
+   "by": "coordinator",
+   "what": "E4C-PREP merged dafd4030 after fix round + ACCEPT; R133 numbered",
+   "source": "research/plan/evidence/e/E4C-prep-f30b281.md"
+  },
+  {
+   "at": "2026-09-25T21:06:43Z",
+   "by": "coordinator",
+   "what": "M6-WIRING (28dd1af2) and D10-FOLLOWUP (c584f54a) verified ACCEPT_WITH_FIXES with all rechecks fixed; union lane merging both with W5",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-25T21:06:43Z",
+   "by": "coordinator",
+   "what": "Rollout gates rehearsal at e607b705 (G1/G3/G4 PASS; G5 harness defect; no rollback target once 0019+ applied); ROLLOUT-FIXES, KNOWN-GOOD-PROOF, DOOR-REVOKE, E4C-RUNBOOK lanes running as self-verifying workflows; E3C final run pre-staged",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-25T21:11:40Z",
+   "by": "coordinator",
+   "what": "User decision: App completion tasks dispatched ahead of BACKEND-READY (dispatch only; gates unchanged). App wave workflow wf_77b93903-38d: C0/U1R/A2/A3 running, C3A/U4/U2/U3 queued behind their predecessors",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-25T22:42:57Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'ROLLOUT-FIXES'",
+   "source": "updates/ROLLOUT-FIXES-20260925T2125Z.json"
+  },
+  {
+   "at": "2026-09-25T22:42:57Z",
+   "by": "tracker",
+   "what": "forecast E3C: 2026-09-26 02:11Z – 2026-09-26 19:05Z (likely 2026-09-26 07:23Z) → 2026-09-26 02:18Z – 2026-09-26 11:24Z (likely 2026-09-26 04:54Z) (because: dependency path W5 → E3C)"
+  },
+  {
+   "at": "2026-09-25T22:42:57Z",
+   "by": "tracker",
+   "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E3A, E4C)"
+  },
+  {
+   "at": "2026-09-25T22:42:57Z",
+   "by": "tracker",
+   "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E3A, E4, E4C, I2A, I3)"
+  },
+  {
+   "at": "2026-09-25T22:42:57Z",
+   "by": "coordinator",
+   "what": "ROLLOUT-FIXES (a1e06236) and E4C-RUNBOOK (2f2ca075) merged after self-verifying workflows; DOOR-REVOKE verified 273990a0 (0023) → union lane; E3C early run on union 9d61d1e1: F-3/F-4 closed, F-5/F-6 new → W5-F5 lane",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
   }
  ],
  "history": {
@@ -2975,10 +3266,15 @@
    "status": "rejected",
    "at": "2026-09-25T19:32:00Z",
    "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+  },
+  "ROLLOUT-FIXES-20260925T2125Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T21:25:00Z",
+   "reason": "unknown task ID 'ROLLOUT-FIXES'"
   }
  },
  "eta": {
-  "computed_at": "2026-09-25T19:59:13Z",
+  "computed_at": "2026-09-25T22:42:57Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
@@ -2988,22 +3284,22 @@
    "E3C": {
     "gate": "BACKEND-LOCAL",
     "status": "forecast",
-    "text": "2026-09-26 02:11Z – 2026-09-26 19:05Z (likely 2026-09-26 07:23Z)",
+    "text": "2026-09-26 02:18Z – 2026-09-26 11:24Z (likely 2026-09-26 04:54Z)",
     "constraint": "dependency path W5 → E3C",
     "effort_h": [
+     3.6,
      6.2,
-     11.4,
-     23.1
+     12.7
     ],
     "wall_h": [
+     3.6,
      6.2,
-     11.4,
-     23.1
+     12.7
     ],
     "finish": [
-     "2026-09-26T02:11:13Z",
-     "2026-09-26T07:23:13Z",
-     "2026-09-26T19:05:13Z"
+     "2026-09-26T02:18:57Z",
+     "2026-09-26T04:54:57Z",
+     "2026-09-26T11:24:57Z"
     ],
     "conditional": null,
     "confidence": "medium",
@@ -3011,9 +3307,7 @@
      "W5",
      "E3C"
     ],
-    "stale": [
-     "W5"
-    ]
+    "stale": []
    },
    "E4C": {
     "gate": "BACKEND-READY",
@@ -3026,39 +3320,33 @@
     "conditional": null,
     "confidence": null,
     "critical_path": null,
-    "stale": [
-     "W5"
-    ]
+    "stale": []
    },
    "E3A": {
     "gate": "APP-LOCAL",
     "status": "blocked",
     "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26",
-    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4",
+    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E3A, E4C",
     "effort_h": null,
     "wall_h": null,
     "finish": null,
     "conditional": null,
     "confidence": null,
     "critical_path": null,
-    "stale": [
-     "W5"
-    ]
+    "stale": []
    },
    "E4": {
     "gate": "APP-PILOT",
     "status": "blocked",
     "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26",
-    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4",
+    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E3A, E4, E4C, I2A, I3",
     "effort_h": null,
     "wall_h": null,
     "finish": null,
     "conditional": null,
     "confidence": null,
     "critical_path": null,
-    "stale": [
-     "W5"
-    ]
+    "stale": []
    }
   }
  }
