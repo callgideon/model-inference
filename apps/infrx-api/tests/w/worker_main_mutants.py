@@ -48,6 +48,11 @@ GONE = "test_worker_main__a_gone_input_is_prepared_again_once_then_refused"
 EXITS = "test_worker_main__every_exit_path_releases_every_pin"
 EVERY = "test_worker_main__a_housekeeping_loop_outlives_a_failed_step"
 RELEASE = "                stream.pins.close()\n                # Every exit path"
+RECON_OFF = "test_worker_main__without_a_monitor_login_the_reconciliation_gauges_are_off"
+RECON_REFUSED = "test_worker_main__a_login_refused_the_views_disables_the_gauges_once"
+RECON_DOWN = "test_worker_main__a_database_that_is_down_is_still_retried_every_tick"
+RECON_MONITOR = "test_worker_main__the_reconciliation_gauges_are_read_on_the_monitor_login"
+RECON_PG = "test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not"
 
 MUTANTS = (
     _m("main_validate_runtime_skipped", "the worker refuses what the gateway refuses (R44)",
@@ -175,6 +180,24 @@ MUTANTS = (
     _m("pilotbox_worker_private_namespace", "the worker and the gateway share the pilot's "
        "index namespace", PB, "port: int, namespace: str = PILOT_NAMESPACE) -> None:",
        'port: int, namespace: str = "infrx_e2:{e3b3}") -> None:', PILOT_BOX),
+    # W5-F5 (E3C F-6): the reconciliation gauges on D10's monitor login, never per-tick errors
+    _m("main_reconciliation_on_the_runtime_pool",
+       "the reconciliation reader is never composed on the runtime pool (0021:550)",
+       MAIN, "reconciliation=reconciliation_reader(deployment),",
+       "reconciliation=PgReconciliation(connect),", RECON_OFF, RECON_MONITOR),
+    _m("main_reconciliation_off_unsaid", "gauges with no monitor login are said off, once",
+       MAIN, '        log.info("reconciliation gauges disabled: no monitor login")\n', "",
+       RECON_OFF),
+    _m("main_monitor_login_sets_a_role", "a dedicated monitor login sets no role (R127)",
+       MAIN, "connector(dsn, set_role=not pilot.dedicated_login(dsn))",
+       "connector(dsn, set_role=True)", RECON_MONITOR),
+    _m("service_privilege_refusal_every_tick",
+       "a login refused the views disables the gauges once, never an error per tick",
+       SERVICE, '            if getattr(failure, "sqlstate", None) == "42501":',
+       "            if False:", RECON_REFUSED),
+    _m("service_any_failure_disables", "a database that is down is retried every tick",
+       SERVICE, '            if getattr(failure, "sqlstate", None) == "42501":',
+       "            if True:", RECON_DOWN),
 )
 
 PG_MUTANTS = (
@@ -191,6 +214,14 @@ PG_MUTANTS = (
        "        pass\n", UNREACHABLE),
     _m("pilotbox_worker_not_awaited", "start returns once the worker process is ready",
        PB, "        self._wait_ready(role, ready, timeout)\n", "", PILOT_BOX_PG),
+    _m("pg_monitor_login_sets_a_role",
+       "on PostgreSQL the monitor login (member of no role) publishes the pass",
+       MAIN, "connector(dsn, set_role=not pilot.dedicated_login(dsn))",
+       "connector(dsn, set_role=True)", RECON_PG),
+    _m("pg_privilege_refusal_every_tick",
+       "on PostgreSQL 0021's monitor login is refused once and disabled, not every tick",
+       SERVICE, '            if getattr(failure, "sqlstate", None) == "42501":',
+       "            if False:", RECON_PG),
 )
 
 

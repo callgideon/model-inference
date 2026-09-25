@@ -156,6 +156,13 @@ class WorkerService:
         try:
             drift, unknown = await self.reconciliation()
         except Exception as failure:              # the database is down: the last pass stands
+            if getattr(failure, "sqlstate", None) == "42501":
+                # W5-F5 (E3C F-6): this login may not read the views, and no later tick
+                # will have the privilege either: off, said once (a restart re-reads it).
+                self.reconciliation = None
+                log.warning("reconciliation gauges disabled: the login may not read the "
+                            "reconciliation views (%s)", type(failure).__name__)
+                return
             self.reap_errors += 1
             log.warning("reconciliation read failed: %s", type(failure).__name__)
             return

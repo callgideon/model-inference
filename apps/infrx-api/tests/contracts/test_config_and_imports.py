@@ -483,6 +483,8 @@ DEPLOYMENT_EXPECTED = {
     # M6 wiring 1 + E3C F-4: the worker's cache high water and housekeeping cadences (P-25)
     "PROCESSING_CACHE_MAX_BYTES": 64424509440, "RETENTION_INTERVAL_S": 300.0,
     "CACHE_SWEEP_INTERVAL_S": 300.0, "JOURNAL_EXPIRE_INTERVAL_S": 300.0,
+    # W5-F5 (E3C F-6): D10's read-only monitor login for the worker's reconciliation gauges
+    "MONITOR_DATABASE_URL": "",
 }
 
 # Everything except the text values (the secret, the accounting regime).
