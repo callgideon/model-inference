@@ -1,0 +1,99 @@
+{
+  "task": "C0",
+  "slice": "fix round: 0-C0-V1 (consumerSession tested via consumerSessionFrom), 1-C0-V1 (consoleShell: operator bypass, route-gated redirects; WR-1 revised); 0-C0-V2/0-C0-V3 need coordinator WR-4/WR-1/WR-2",
+  "activity": "review",
+  "head": "ffd5ba7c",
+  "worktree": ".claude/worktrees/codex-app-c0",
+  "branch": "codex/app-c0",
+  "owned_paths": [
+    "apps/app/lib/services/query.ts",
+    "apps/app/lib/services/server.ts",
+    "apps/app/lib/services/console.ts",
+    "apps/app/lib/services/credits.ts",
+    "apps/app/tests/c/",
+    "research/plan/evidence/c/C0-acfd9a5.md"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/app && pnpm test (reviewer mutants V-SV-AUTH-OUTAGE, V-SV-CATCH on server.ts at 5a152cdd)",
+      "exit": 0,
+      "summary": "both survive: 386 tests, 375 pass, 0 fail, 11 skip (reproduced)"
+    },
+    {
+      "cmd": "cd apps/app && node --test tests/c/consumer.test.ts (at f2746f01, tests only)",
+      "exit": 1,
+      "summary": "fails before: no export consoleShell/consumerSessionFrom"
+    },
+    {
+      "cmd": "cd apps/app && pnpm test",
+      "exit": 0,
+      "summary": "393 tests: 381 pass, 0 fail, 12 skipped (real-stack file)"
+    },
+    {
+      "cmd": "cd apps/app && pnpm lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+      "exit": 0,
+      "summary": "212/212 killed"
+    },
+    {
+      "cmd": "cd apps/app && node tests/v/run-mutants.mjs",
+      "exit": 0,
+      "summary": "40/40 killed"
+    },
+    {
+      "cmd": "cd apps/app && node tests/u/run-mutants.mjs",
+      "exit": 0,
+      "summary": "64/64 killed"
+    },
+    {
+      "cmd": "cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs",
+      "exit": 0,
+      "summary": "4 self-tests; 142/142 killed (9 new: C0-SES-01..04, C0-SHELL-01..05)"
+    },
+    {
+      "cmd": "cd apps/infrx-api && INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/stack.py",
+      "exit": 0,
+      "summary": "12/12 at 8264e104 (lib/ and stack test unchanged since); new composed session/shell case: operator renders, ungranted redirects to /onboarding, c1 CREDIT balance = durable wallet"
+    },
+    {
+      "cmd": "WR-1 as first written applied temporarily; node --test client-boundary 'never redirects to onboarding'",
+      "exit": 1,
+      "summary": "guard fails the original WR-1 (bare redirect('/onboarding')); reverted"
+    },
+    {
+      "cmd": "WR-1 revised applied temporarily; typegen+tsc, eslint, pnpm test",
+      "exit": 0,
+      "summary": "clean/clean/393: 381 pass 0 fail 12 skip; reverted"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "code, decision and guards done; remaining = coordinator WR-1 (full file in evidence) + WR-4 gate, U1R/U4 WR-2, rerun console-c0-real and App suites on merged SHA with 0022",
+    "at": "2026-09-25T22:38:33Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-1 (revised) app/(console)/layout.tsx: whole file in evidence; consumerSession() -> consoleShell(session, isOperator, ROUTES) with ROUTES null until A2/C3A ship /verify-email and /onboarding; operator without consumer wallet renders (reaches /admin); sidebarCredit balance",
+    "WR-2 usage/billing pages (U1R/U4): replace fake consoleContext() with consumerSession().reads (unchanged)",
+    "WR-3 lib/contracts: promote ConsumerContext/ConsumerAccount/ConsumerReads/ConsumerRequest/CreditLedgerEntry/AuthUser + ConsumerSession/ConsumerClient/ConsoleShell",
+    "WR-4 Makefile: console-c0-real target (exact patch in evidence); name it in the C0/APP-M1 and E3A gate commands (0-C0-V2); not in check (Docker)",
+    "WR-5 D10 SQL: consumer_credit_ledger(p_after,p_limit) definer function (unchanged)",
+    "WR-6 lib/session.ts (A2/U3): first-membership pick; operator flag only after WR-1 (unchanged)",
+    "WR-7 rerun console-c0-real on the merged SHA with 0022 (unchanged)"
+  ],
+  "evidence": [
+    "research/plan/evidence/c/C0-acfd9a5.md"
+  ]
+}

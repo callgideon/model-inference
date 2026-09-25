@@ -14,6 +14,8 @@
  */
 
 import { displayMoney, parseMoney, subMoney, ZERO_MONEY, type Money } from "../contracts/money.ts";
+import type { Result } from "../contracts/types.ts";
+import { availableCredit, displayCredit, parseCredit, type BalanceV2 } from "../contracts/v2/types.ts";
 
 /** Server only, at module scope; see the note in `./query.ts`. */
 if (typeof window !== "undefined") throw new Error("lib/services/credits.ts is server-only");
@@ -82,4 +84,49 @@ export function balanceOutcome(
  */
 export function sidebarBalance(result: BalanceResult): string | null {
   return result.kind === "ok" ? displayMoney(result.money) : null;
+}
+
+// ---------------------------------------------------------------------------
+// C0: the individual's CREDIT balance (`public.console_wallet_summary`, 0008)
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of `console_wallet_summary(p_user)` as the exact CREDIT balance of THIS account's wallet,
+ * or a refusal. Refused, never defaulted:
+ * - `wallet_id` NULL is the summary's "no wallet yet" row of zeros. A context that resolved a wallet
+ *   and then reads that row has raced a change it cannot explain; a zero here would be a transient
+ *   answer shown as confirmed funds.
+ * - another wallet, a unit other than CREDIT, a JSON number (text is the contract, R59-9; a number
+ *   means the column changed type and eight digits can no longer be trusted), a missing column;
+ * - a stored `available` that differs from `ledger_total - reserved_total` (v2 `availableCredit`:
+ *   recomputed rather than trusted, because a drifted figure is an over-spend or a refused request).
+ */
+export function creditBalanceOf(row: unknown, walletId: string): Result<BalanceV2> {
+  const refuse = (message: string): Result<BalanceV2> => ({ ok: false, error: { code: "internal_error", message } });
+  if (typeof row !== "object" || row === null) return refuse("the wallet summary returned no row");
+  const r = row as Record<string, unknown>;
+  if (r.wallet_id !== walletId) return refuse("the wallet summary is not this account's wallet");
+  if (r.kind !== "consumer" || r.unit !== "CREDIT") return refuse("the wallet summary is not a consumer CREDIT wallet");
+  const amounts = [r.ledger_total, r.reserved_total, r.available];
+  if (!amounts.every((value) => typeof value === "string")) return refuse("a wallet amount is not a decimal string");
+  try {
+    const balance: BalanceV2 = {
+      schema_version: 2,
+      wallet_id: walletId,
+      kind: "consumer",
+      unit: "CREDIT",
+      ledger_total: parseCredit(r.ledger_total),
+      reserved_total: parseCredit(r.reserved_total),
+      available: parseCredit(r.available),
+    };
+    if (availableCredit(balance) !== balance.available) return refuse("the wallet's available balance has drifted");
+    return { ok: true, value: balance };
+  } catch {
+    return refuse("the wallet summary is not an exact CREDIT amount");
+  }
+}
+
+/** What the sidebar shows: exact credits, or `null` for fixed "balance unavailable" copy - never a zero. */
+export function sidebarCredit(result: Result<BalanceV2>): string | null {
+  return result.ok ? displayCredit(result.value.available) : null;
 }
