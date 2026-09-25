@@ -209,7 +209,8 @@ _d.MUTANTS = _d.MUTANTS + MIGRATION_MUTANTS
 
 # --- code mutants: infrx/state/signup.py, through the shared runner ------------------
 F = "state/signup.py"
-RUNNER = shared.Runner(name="a1", targets=("tests/d/test_signup.py",))
+RUNNER = shared.Runner(name="a1", targets=("tests/d/test_signup.py",),
+                       env=("INFRX_D_TASK", "INFRX_D2_VALKEY_PORT", "INFRX_D2_VALKEY_CONTAINER"))
 
 
 def _c(name, invariant, old, new, *cases, **kw) -> shared.Mutant:

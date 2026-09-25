@@ -7,6 +7,8 @@ fixture already has them.
 """
 from __future__ import annotations
 
+import re
+
 import json
 import threading
 import uuid
@@ -144,6 +146,25 @@ def _same_boundary(old: str, new: str | None) -> bool:
     return new is not None and old.split(" ", 1)[1] == new.split(" ", 1)[1]
 
 
+#: D10 (0021): the two dedicated logins' grants are D10's own surface, asserted exactly by
+#: `checks_reads.check_reads_privileges`; the inventory compares what every OTHER principal
+#: holds, so granting them never reads as a rewrite of an earlier migration.
+D10_ROLES = ("infrx_runtime=", "infrx_monitor=")
+_ACL = re.compile(r"\{[^{}]*\}")
+
+
+def _acl_items(value):
+    """An ACL is a set: its printed order moves when a re-run revokes and re-grants."""
+    if not isinstance(value, str):
+        return value
+    def items(match):
+        every = [i for i in match.group(0).strip("{}").split(",") if i]
+        kept = sorted(i for i in every if not i.startswith(D10_ROLES))
+        # a column only D10's logins were granted reads as one nobody was granted
+        return "" if every and not kept else "{" + ",".join(kept) + "}"
+    return _ACL.sub(items, value)
+
+
 def inventory(conn) -> dict:
     """Constraints, triggers, function bodies and ACLs, relation/column ACLs, RLS,
     policies, column shapes and view definitions of `public` and `infrx`. Read with an
@@ -153,7 +174,8 @@ def inventory(conn) -> dict:
         conn.execute("set local search_path = pg_catalog")
         for kind, sql in _INVENTORY:
             for a, b, value in conn.execute(sql).fetchall():
-                rows[(kind, a, b)] = value
+                rows[(kind, a, b)] = _acl_items(value) if kind in (
+                    "function", "relation", "column") else value
     return rows
 
 
@@ -715,7 +737,9 @@ def check_no_unit_conversion(conn) -> str:
     credit = ("credit_wallets", "infrx.credit_ledger", "credit_wallet_holds",
               "charged_credits", "signup_entitlements", "rate_card_versions")
     # Row-per-request projections that label each amount with its own unit.
-    side_by_side = {"public.console_usage", "infrx.usage_records", "infrx.active_holds"}
+    side_by_side = {"public.console_usage", "infrx.usage_records", "infrx.active_holds",
+                    # D10 (0021): C0/U4's own-jobs page, each amount in its job's unit
+                    "public.consumer_jobs"}
     found = []
     objects = conn.execute("""
         select n.nspname || '.' || p.proname, lower(p.prosrc) from pg_proc p

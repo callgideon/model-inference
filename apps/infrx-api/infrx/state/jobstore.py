@@ -38,6 +38,10 @@ OUTBOX_RETENTION_S = 7 * 86_400.0
 INT4_MAX = 2**31 - 1
 _OUTCOME_FIELDS = ("job_id", "state", "cause", "usage", "result_ref", "settlement_state",
                    "debit", "settled_at", "reconcile_after")
+# D10 (0021) / F2C.b: the outcome carries the PERSISTED `result_expires_at`; it reaches the
+# record once the contract field exists (F2C.b), and is never recomputed from configuration.
+if "result_expires_at" in TerminalOutcome.model_fields:
+    _OUTCOME_FIELDS = (*_OUTCOME_FIELDS, "result_expires_at")
 
 
 #: Supabase's transaction pooler (Supavisor): session state is lost between transactions
@@ -52,17 +56,24 @@ def session_state_allowed(dsn: str) -> bool:
     return urlsplit(dsn).port != TRANSACTION_POOLER_PORT
 
 
-def connector(dsn: str) -> Connect:
+def connector(dsn: str, *, set_role: bool | None = None) -> Connect:
     """The simplest `Connect`: a fresh connection per operation, `set role service_role`
     (0004: BYPASSRLS is not inherited, so the role must be SET, as PostgREST does) - only
     off the transaction pooler, where the login role carries its own defaults. No
     server-side prepared statements on any port (WR-I8-1).
+    `set_role` (D10) overrides the port rule: False sets nothing (D10's dedicated login,
+    0021 `infrx_runtime`, whose privileges and statement timeout are the role's own), True
+    always sets the role; None (the default) is I8's rule above.
     ponytail: one connection per call; a psycopg pool with the same `configure` hook
     when the gateway wires `DATABASE_POOL_*`."""
     async def connect():
         import psycopg
         conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True,
                                                      prepare_threshold=None)
+        if set_role is not None:
+            if set_role:
+                await conn.execute("set role service_role")
+            return conn
         if session_state_allowed(dsn):
             await conn.execute("set role service_role")
         return conn

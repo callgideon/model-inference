@@ -194,7 +194,19 @@ def test_catalog__a_private_deployment_only_for_its_provider_and_errors_raised()
         raise AssertionError("a database error was answered as None")
     card, conn = _with(cat.PgCatalogDirectory, [])
     assert _ok(card.active_rate_card(v2fix.IDS.dev_deployment)) is None
-    assert "effective_at <= infrx.now()" in conn.sent[0][0], conn.sent[0][0]
+    # D10: the card the listing names, itself effective on the database clock
+    assert "where c.effective_at <= infrx.now() and c.rate_card_version = coalesce(" in \
+        conn.sent[0][0], conn.sent[0][0]
+
+
+def test_typed__a_registry_check_violation_is_an_invalid_request() -> None:
+    """G8 F11: `marlin_release()`'s upper-case card version fails 0007's CHECK (23514); the
+    registry answers `invalid_request` naming the rule, never an untyped CheckViolation."""
+    from infrx.state.operations import _typed
+    failed = _db_error("23514", "new row violates check constraint")
+    mapped = _typed(failed)
+    assert isinstance(mapped, errors.InvalidRequest), mapped
+    assert _typed(_db_error("23505", "duplicate")).code == "state_conflict"
 
 
 if __name__ == "__main__":                              # pragma: no cover
