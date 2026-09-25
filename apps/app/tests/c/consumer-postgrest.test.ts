@@ -146,9 +146,13 @@ test("each session resolves to its own consumer account or a typed state - never
 test("the composed session and shell: an operator without a wallet reaches /admin; an individual is ready", { skip }, async () => {
   // consumerSession()'s own composition over this stack; only GoTrue (absent here) is stubbed.
   const sessionOf = (user: string) => {
-    const client = Object.assign(clientFor(user), {
+    // Delegation, not Object.assign: supabase-js reads its token through its own `auth` on every request.
+    const inner = clientFor(user);
+    const client = {
+      from: (relation: string) => inner.from(relation),
+      rpc: (fn: string, args: Parameters<Client["rpc"]>[1]) => inner.rpc(fn, args),
       auth: { getUser: async () => ({ data: { user: verifiedUser(user) }, error: null }) },
-    }) as unknown as ConsumerClient;
+    } as unknown as ConsumerClient;
     return consumerSessionFrom(async () => client, () => SECRET);
   };
   const routes = { verifyEmail: "/verify-email", onboarding: "/onboarding" };
