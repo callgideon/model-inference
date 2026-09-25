@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 20,
-  "updated": "2026-09-25T00:08:16Z",
+  "revision": 21,
+  "updated": "2026-09-25T00:12:28Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -266,12 +266,12 @@
     {
       "id": "E2C",
       "task": "E2C",
-      "slice": "1-4 (environment+preflight, RV-12 repairs, baseline+dependency triage, gate wrappers)",
+      "slice": "follow-up: E3C WR-1..3 (e3c namespace, MinIO repin, BACKEND-LOCAL stage) + P-21 reservation",
       "agent": "opus",
       "branch": "codex/e2c-verify",
       "worktree": ".claude/worktrees/codex-e2c-verify",
       "base": "dff31efc",
-      "head": "3a113dc9",
+      "head": "f61d2f0b",
       "isolation": {
         "ports": "postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-e2c-",
@@ -279,115 +279,60 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-25T00:04:00Z",
-      "blocker": "tests/d decoy collision from tasklocal patch efad43e0 (wiring 2); S3 endpoint / pinned MinIO image absent: m/w stages and integration-l2 BLOCKED; task-local ports inside the ephemeral range (host sysctl, wiring 4)",
+      "updated": "2026-09-25T00:10:00Z",
+      "blocker": "tests/d decoy collision from tasklocal efad43e0 (wiring 2, unchanged)",
       "next_action": "Linux environment manifest + preflight; RV-12 harness fixes; dependency triage; wrappers (Makefile lines as wiring requests).",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 3,
         "pessimistic_h": 6,
         "confidence": "medium",
-        "basis": "after coordinator wiring 1-4 (Makefile, tasklocal decoy fix, pytest bump, port-reservation sysctl), rerun make consumer-local with S3 + E2 layer 2 provided to reach PASS or name the next blocker",
-        "at": "2026-09-25T00:04Z"
+        "basis": "unchanged: rerun consumer-local after the tasklocal decoy fix, E3C runner merge and an S3 endpoint",
+        "at": "2026-09-25T00:10Z"
       },
       "evidence": [
         "research/plan/evidence/e/E2C-3a113dc.md",
         "tests/integration/ENVIRONMENT.md",
-        "tests/integration/environment.json"
+        "tests/integration/environment.json",
+        "research/plan/evidence/e/E2C-f61d2f0.md"
       ],
       "commands": [
         {
-          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q -rfEs --durations=40 --junitxml=... (make api-test) @ dff31efc",
-          "exit": 0,
-          "summary": "3686 passed, 0 failed, 27 skipped (24 S3 endpoint, 3 empty default mutant subsets), 5 strict xfail, 1810.9 s"
-        },
-        {
-          "cmd": "same @ 48e02236 (head apps tree)",
+          "cmd": "docker pull quay.io/minio/minio@sha256:14cea493...",
           "exit": 1,
-          "summary": "3679 passed, 8 failed, 27 skipped, 5 xfailed, 2705 s; 7 HarnessBusy on shared d2-valkey lock (rerun on e2c namespace: tests/d/test_outbox_relay.py 20 passed) + 1 test_pgharness decoy collision from coordinator patch efad43e0"
+          "summary": "401 UNAUTHORIZED (old pin unpullable)"
         },
         {
-          "cmd": "same @ 66fb1d38 (attempt 1)",
-          "exit": 2,
-          "summary": "invalid: infrx-d1-postgres failed to bind 55432 (ephemeral source port); 54 D failures; interrupted, leftover container removed"
-        },
-        {
-          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -rA tests/w/test_w4_mutants.py",
+          "cmd": "docker buildx imagetools inspect pgsty/minio@sha256:b6bfe723...",
           "exit": 0,
-          "summary": "109 passed; all five audit W4 ids killed; no survivor on Linux"
+          "summary": "OCI index; latest and RELEASE.2026-08-04T00-00-00Z resolve to it; minio --version commit d88f46cc"
         },
         {
-          "cmd": "INFRX_MUTANTS=all ... tests/i/test_mutants.py",
+          "cmd": "infrx-e2c-selftest-minio on 55512 + boto3 health/bucket/put/get/list/NoSuchKey",
           "exit": 0,
-          "summary": "226 passed"
+          "summary": "all as expected; container removed"
         },
         {
-          "cmd": "INFRX_MUTANTS=all ... tests/g/test_mutants.py",
-          "exit": 1,
-          "summary": "339 passed, 1 failed (new Linux case lacked a mutant) -> host_memory_not_read added a54ff914, killed"
-        },
-        {
-          "cmd": "INFRX_MUTANTS=all ... tests/w/test_w3_mutants.py",
+          "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/test_preflight.py tests/integration/test_harness.py tests/integration/test_run.py",
           "exit": 0,
-          "summary": "87 passed"
+          "summary": "108 passed"
         },
         {
-          "cmd": "make bench-test",
+          "cmd": "preflight.py consumer-local | integration-l2 | backend-certify",
           "exit": 0,
-          "summary": "68 passed"
-        },
-        {
-          "cmd": "make console-test console-lint console-typecheck (pnpm install --frozen-lockfile exit 0)",
-          "exit": 0,
-          "summary": "289 pass / 0 fail; lint 0 errors 2 warnings; typecheck pass"
-        },
-        {
-          "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/test_preflight.py",
-          "exit": 0,
-          "summary": "21 passed"
-        },
-        {
-          "cmd": "tests/integration/run.py --layer 1 --only-suites --no-mutants @ 3a113dc9",
-          "exit": 0,
-          "summary": "engine PASS, suites 232 passed 103 skipped"
-        },
-        {
-          "cmd": "tests/integration/consumer-local.sh (run 3)",
-          "exit": 1,
-          "summary": "FAIL: contracts PASS, d FAIL (decoy), m/w BLOCKED (S3 skips), g PASS, bench PASS, integration-l1 PASS, integration-l2 BLOCKED (MinIO pin absent)"
-        },
-        {
-          "cmd": "tests/integration/consumer-local.sh --break-seam readiness|expiry",
-          "exit": 1,
-          "summary": "FAIL, mutant killed (both)"
-        },
-        {
-          "cmd": "tests/integration/backend-certify.sh -- --box --target ...",
-          "exit": 4,
-          "summary": "INVALID without profile; with valid profile exit 3 NOT RUN, nothing started"
-        },
-        {
-          "cmd": "tests/integration/app-e2e.sh",
-          "exit": 3,
-          "summary": "NOT RUN: console PASS, browser journey NOT RUN (E3A)"
-        },
-        {
-          "cmd": "gh api .../dependabot/alerts; uv audit --frozen; pnpm audit --json",
-          "exit": 0,
-          "summary": "1 open alert: pytest<9.0.3 GHSA-6w46-j5rx-g56g medium, dev-only, not in runtime image; pnpm 0 vulns; relock trial pytest 9.1.1 only package change"
+          "summary": "PASS x3; e2 ports 55500-block reported as ephemeral-overlap risk"
         }
       ],
       "owned_paths": [
         "tests/integration/",
         "apps/infrx-api/tests/ (portability fixes only)",
-        "research/plan/evidence/e/E2C-3a113dc.md"
+        "research/plan/evidence/e/E2C-f61d2f0.md"
       ],
       "deviation": "Program 22 V0: E2C may begin environment inventory in parallel with S3.",
       "wiring_requests": [
-        "Makefile: consumer-local / backend-certify / app-e2e targets calling tests/integration/*.sh $(GATE_ARGS)",
-        "tasklocal.py: g8 valkey 55473->55483, e2c valkey 55474->55484, e2c s3 55475->55485, i8 valkey 55476->55486 (D decoys are postgres+40)",
-        "pyproject dev pytest>=9.0.3,<10 + uv lock (pytest 9.1.1 only)",
-        "host: sysctl net.ipv4.ip_local_reserved_ports=55400-55999,56700-56999"
+        "Makefile: backend-local target running tests/integration/backend/e3c/runner.py --out ${E3C_OUT:-${TMPDIR:-/tmp}/infrx-e3c} $(E3C_ARGS), plus consumer-local/backend-certify/app-e2e",
+        "host: add 55500-55599 to /etc/sysctl.d/60-infrx-task-ports.conf",
+        "apps/infrx-api/deploy/rehearse.sh:43 MINIO_IMAGE -> pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
       ]
     },
     {
@@ -1248,12 +1193,6 @@
       "head": "8406c798"
     },
     {
-      "since": "2026-09-25T00:04:00Z",
-      "lane": "E2C",
-      "task": "E2C",
-      "head": "3a113dc9"
-    },
-    {
       "since": "2026-09-25T00:05:00Z",
       "lane": "G7",
       "task": "G7",
@@ -1264,6 +1203,12 @@
       "lane": "M5",
       "task": "M5",
       "head": "35c401bd"
+    },
+    {
+      "since": "2026-09-25T00:04:00Z",
+      "lane": "E2C",
+      "task": "E2C",
+      "head": "f61d2f0b"
     }
   ],
   "integration_queue": [
@@ -2289,6 +2234,12 @@
       "at": "2026-09-25T00:08:16Z",
       "by": "tracker",
       "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-25T00:10:00Z",
+      "by": "E2C",
+      "what": "review → review; head f61d2f0b",
+      "source": "updates/E2C-20260925T0010Z.json"
     }
   ],
   "history": {
@@ -2395,10 +2346,14 @@
     "M5-20260924T2344Z.json": {
       "status": "applied",
       "at": "2026-09-24T23:44:54Z"
+    },
+    "E2C-20260925T0010Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:10:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T00:08:16Z",
+    "computed_at": "2026-09-25T00:12:28Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
