@@ -1745,6 +1745,17 @@ MUTANTS: tuple[Mutant, ...] = (
           "                    or expected.rate_card_version != card:",
        "            if False:",
        "test_w5_compose__a_relay_refuses_an_expectation_that_is_not_its_own"),
+    # --- W5-F5 (E3C F-5): past `admit_ready` the client is told the committed outcome ------
+    _m("w5_f5_late_recheck_restored",
+       "a job admit_ready made ready is never answered a post-admission refusal (E3C F-5)",
+       R, "            if self.regime == CREDIT and self.readiness is None:",
+       "            if self.regime == CREDIT:",
+       "test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal"),
+    _m("w5_f5_legacy_recheck_dropped",
+       "the pre-D10 door still rechecks the pinned revision before the refs (G1R Limit 2)",
+       R, "            if self.regime == CREDIT and self.readiness is None:",
+       "            if False:",
+       "test_w5_f5__the_pre_d10_door_still_rechecks_after_admission"),
 )
 
 
