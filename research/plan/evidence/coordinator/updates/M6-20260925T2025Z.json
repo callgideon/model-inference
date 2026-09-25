@@ -1,0 +1,22 @@
+{
+  "task": "M6",
+  "lane": "M6-WIRING",
+  "slice": "fix round 0-M6W-C1..C6: pins released on every exit path (C3 code fix), exit-path/multi-input/reprepare-job/loop-survival/drain-order oracles",
+  "activity": "review",
+  "at": "2026-09-25T20:25:00Z",
+  "head": "3ed20d23",
+  "base": "4959e10c",
+  "worktree": ".claude/worktrees/codex-m6-wiring",
+  "branch": "codex/m6-wiring",
+  "owned_paths": ["apps/infrx-api/infrx/worker/", "apps/infrx-api/tests/w/", "research/plan/evidence/m/", "research/plan/evidence/coordinator/updates/"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=m6 INFRX_M6_WORLDS=f2c,d10 .venv/bin/python -m pytest -q -p no:cacheprovider tests/w tests/m", "exit": 0, "summary": "821 passed, 36 skipped, 2 xfailed"},
+    {"cmd": "INFRX_D_TASK=m6 INFRX_MUTANTS=all .venv/bin/python -m pytest -q -p no:cacheprovider tests/w/test_worker_main_mutants.py", "exit": 0, "summary": "40 passed, 4 skipped: 36/36 service-free killed (9 new); PG list skipped, no lane MinIO"},
+    {"cmd": "INFRX_D_TASK=m6 .venv/bin/python -m tests.w.mutants", "exit": 0, "summary": "152/152 killed (inner_generator_not_closed re-anchored; its anchor was already missing at 2ae944f5)"},
+    {"cmd": "tests/w/test_worker_main.py -k 'every_exit_path and close_raises' at 2ae944f5 + new tests", "exit": 1, "summary": "failed first (pin still held), passes after the engine fix"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 3, "confidence": "medium", "basis": "fix round complete; WR-M6W-1, W5 union (WR-M6W-2), E3C rerun on the composed worker remain", "at": "2026-09-25T20:25:00Z"},
+  "blockers": ["P-25 values unresolved (placeholders)"],
+  "wiring_requests": ["WR-M6W-1..4 unchanged (see M6-wiring-2ae944f.md)"],
+  "evidence": ["research/plan/evidence/m/M6-wiring-2ae944f.md"]
+}

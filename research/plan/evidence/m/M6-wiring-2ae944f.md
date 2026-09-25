@@ -69,3 +69,29 @@ New mutants: W `main_retention_not_scheduled`, `main_retention_unrecorded`, `mai
 ## Remaining effort
 
 Optimistic 0.5 h, likely 1.5 h, pessimistic 3 h; confidence medium. Basis: code and proofs complete on this branch; remaining is the union with W5's compose (WR-M6W-2), WR-M6W-1, a review round, and the E3C rerun on the composed worker.
+
+## Fix round (0-M6W-C1..C6), code head `3ed20d23`
+
+One commit on `codex/m6-wiring` over `38876865`; not pushed. Paths: `infrx/worker/engine.py`, `tests/w/{test_worker_main,worker_main_mutants,mutants}.py` (all owned).
+
+| Finding | Fix | Failed first / oracle |
+|---|---|---|
+| C3 (major) pin leaked when the upstream close raised | `VllmEngine._generate`: `try: await inner.aclose() finally: stream.pins.close(); self._retire(key)`. Release stays **after** the upstream close (vLLM may read the file until then). This also fixes `_retire` being skipped by a raising close. | `every_exit_path_releases_every_pin[close_raises]` **failed** at `2ae944f5` (`assert [True] == [False]`, the file still LOCK_SH-held), passes now. |
+| C1 (blocking) no failure-path release oracle | New `test_worker_main__every_exit_path_releases_every_pin` over the composed engine, parametrized `engine_500`, `transport_error` (ConnectError), `cancelled` (consumer task cancelled after its first delta), `consumer_closed`, `close_raises`, `refused`. During: an expired input survives a sweep. After: no `LOCK_EX|LOCK_NB` conflict and the next sweep removes it. For closes: the input was still held when the upstream response closed. | Mutants `engine_pins_released_on_success_only`, `engine_close_raising_leaks_the_pins`, `engine_pins_released_before_the_upstream_close` (Q) are all killed. The reviewer's exact A (close moved after the `async for`) was run ad hoc: **killed**, 6 failed / 1 passed. |
+| C5 (major) one input only | The `refused` case uses **two** clips. The pilot refuses more than one video in `upstream_body`, but only after `_hold_media` has pinned them, so both are observed held and then released. | `engine_only_the_first_input_pinned` (L) is killed. |
+| C4 (major) reprepare job unchecked | GONE records `(job_id, profile)` and asserts `(lease.job_id, "v1")` for both the restore and the refusal. | `engine_reprepare_for_another_job` (F) is killed. |
+| C2 (blocking) loop survival untested | New `test_worker_main__a_housekeeping_loop_outlives_a_failed_step`: `every(7.0, step, sleep=)`, where step raises once, gives 3 runs and 3 naps. | `main_housekeeping_loop_dies_on_a_failed_step` (B) and `main_housekeeping_loop_stops_after_a_failure` (O) are killed. |
+| C6 (major) cancel-after-drain untested | OWNER wraps `service.loop.drain`: after 3 loop turns, every housekeeping task must still be running when the drain starts, and none may outlive `stop()`. | `main_housekeeping_cancelled_before_the_drain` (D) is killed. |
+
+Not done, deliberately: the `EngineStream.aclose` backstop `self.pins.close()`. It cannot be reached. `_run`'s `finally` always closes `_generate` first, and `_generate` now releases under `finally`. A stream whose generator never started holds no pin. With the backstop in place, `engine_close_raising_leaks_the_pins` survived every consumer-driven case, so it would only hide the real release. The optional per-loop last-run gauge was also skipped: `every` cannot die on a step's `Exception`, which the new case pins.
+
+Found in passing and fixed (it was already broken at `2ae944f5`): the W1 mutant `inner_generator_not_closed` (`tests/w/mutants.py`) anchored on `await inner.aclose()` directly followed by the `# Every exit path` comment. The lane's `stream.pins.close()` line split that anchor, so the count was 0 at `2ae944f5` and the full W1 list would report it misdeclared. It is re-anchored on the new `finally` and killed.
+
+| Command (`apps/infrx-api`, rerun by me at `3ed20d23`) | Exit | Result |
+|---|---|---|
+| `INFRX_D_TASK=m6 INFRX_M6_WORLDS=f2c,d10 .venv/bin/python -m pytest -q -p no:cacheprovider tests/w tests/m` | 0 | **821 passed, 36 skipped, 2 xfailed** (was 814: +6 exit-path params, +1 loop case) |
+| `INFRX_D_TASK=m6 INFRX_MUTANTS=all .venv/bin/python -m pytest -q -p no:cacheprovider tests/w/test_worker_main_mutants.py` | 0 | 40 passed, 4 skipped: **36/36 service-free killed** (27 + 9 new). The PG list was skipped because this lane has no local MinIO/Valkey (`INFRX_M_S3_ENDPOINT`); no fix-round edit touches a PG-list anchor or case |
+| `INFRX_D_TASK=m6 .venv/bin/python -m tests.w.mutants` (W1 engine list, full) | 0 | **152/152 killed** |
+| `docker ps -a` after the runs | 0 | no `infrx-m6-*` container left (the harness removed its `infrx-m6-postgres`) |
+
+Remaining effort: optimistic 0.5 h, likely 1.5 h, pessimistic 3 h; confidence medium. Unchanged basis: WR-M6W-1, the W5 union (WR-M6W-2) and the E3C rerun on the composed worker.
