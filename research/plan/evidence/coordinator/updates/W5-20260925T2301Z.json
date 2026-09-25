@@ -1,0 +1,30 @@
+{
+  "task": "W5",
+  "slice": "W5-ADMIT-WIRING fix round (0-W5AW-1, 0-W5AW-2, 2-W5W-A1)",
+  "activity": "review",
+  "head": "fba75f6e",
+  "worktree": ".claude/worktrees/codex-w5-merge",
+  "branch": "codex/w5-merge",
+  "owned_paths": ["apps/infrx-api/infrx/gateway/routes/relay.py", "apps/infrx-api/infrx/gateway/pilot.py", "apps/infrx-api/tests/g/", "research/plan/evidence/w/W5-admit-wiring-*", "research/plan/evidence/coordinator/updates/W5-*"],
+  "commands": [
+    {"cmd": "pytest -q tests/g/test_relay_readiness.py -k moment_its_marker (f18c72f7 + new case, before the World fix)", "exit": 1, "summary": "4 failed: upload not_found x2 (the attach race), fetched 404 x2 (pre-M6-phase-2)"},
+    {"cmd": "pytest -q tests/g/test_relay_readiness.py (after)", "exit": 0, "summary": "20 passed, 2 xfailed (fetched: strict conditional merge-order tripwire)"},
+    {"cmd": "INFRX_D_TASK=w5 +MinIO 55497 pytest -q tests/g/test_relay_readiness_pg.py", "exit": 0, "summary": "2 passed, 2 xfailed: worker PreparationRunner inside the admit_ready->attach window prepares; video round trip settles"},
+    {"cmd": "scratch oracle: job_media rows deleted inside the window", "exit": 1, "summary": "PreparationResult refusal=not_found (no staged media): the case fails"},
+    {"cmd": "scratch copy + w5_marker_skipped, PG file with w5 services", "exit": 1, "summary": "2 failed (by assertion), 2 xfailed"},
+    {"cmd": "python -m tests.g.mutants w5_marker_skipped", "exit": 0, "summary": "killed (16 failed, 4 skipped PG, 2 xfailed)"},
+    {"cmd": "INFRX_D_TASK=w5 +MinIO pytest -q -rxXs tests/w", "exit": 0, "summary": "308 passed, 3 skipped (empty mutant parameter sets)"},
+    {"cmd": "INFRX_D_TASK=w5 +MinIO INFRX_MUTANTS=all w5/prep_worker/worker_main mutants", "exit": 0, "summary": "145 passed (rerun; first run at load 80+ had 4 failed, not reproduced)"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/g/test_mutants.py", "exit": 0, "summary": "398 passed (all G mutants killed; list well-formed and covering)"},
+    {"cmd": "INFRX_D_TASK=w5 pytest -q tests/g tests/m tests/contracts", "exit": 0, "summary": "2552 passed, 31 skipped, 2 xfailed; no deselect"},
+    {"cmd": "INFRX_D_TASK=w5 pytest -q tests/d/test_ready.py tests/d/test_composition_pg.py tests/g/test_composition.py tests/g/test_relay_readiness.py", "exit": 1, "summary": "59 passed, 2 xfailed, 1 pre-existing failure (legacy_usd price_source)"},
+    {"cmd": "scratch merge f18c72f7+9e986016 (d588af2c) + the 3 test files: pytest tests/g/test_relay_readiness.py tests/g/test_relay_readiness_pg.py", "exit": 0, "summary": "26 passed (fetched included)"},
+    {"cmd": "git merge 9e986016 into codex/w5-merge", "exit": 1, "summary": "denied by the session permission system (Modify Shared Resources); not retried; merge-tree: 0 conflicts with 9e986016 and cd10f098"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "all owned suites and mutant lists rerun green; post-merge verified on a scratch merge; only the coordinator merge remains", "at": "2026-09-25T23:01Z"},
+  "next_action": "coordinator: merge codex/w5-merge together with or after an integration tip containing 25826ab9 (M6 phase 2), then rerun E3C",
+  "blockers": ["the merge with the integration tip was denied to this lane by the permission system; coordinator to merge"],
+  "wiring_requests": ["WR-F1 W5 infrx/worker/preparation.py:116: ATTACH_WAIT_S comment is pre-D10 only (comment patch)", "WR-F2 F2C contracts/fakes/lifecycle.py (optional): expose the manifest as the attach record, as relay_support.ManifestAttachments does", "merge order: codex/w5-merge with or after 25826ab9"],
+  "evidence": ["research/plan/evidence/w/W5-admit-wiring-f5784d0.md"]
+}

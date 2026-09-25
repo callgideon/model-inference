@@ -16,6 +16,7 @@ from typing import Any, Callable
 
 import httpx
 
+from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.lifecycle import FakeLifecycle
@@ -70,6 +71,30 @@ class Objects(InMemoryObjectStore):
         if self.down:
             raise OSError("object store unreachable at s3.internal:443")
         return await super().put_if_absent(key, data, content_type)
+
+
+class ManifestAttachments:
+    """The attach record `MediaPreparation.attached` reads, as 0019 makes it on PostgreSQL:
+    `admit_ready` writes the job's `job_media` rows (what `PgAttachments.get` answers) in
+    the marker's own transaction, so a worker that claims the moment the marker commits
+    reads the sources before the relay's attach lands. Here the fake's manifest is that
+    record. `put` is `PgAttachments.put` over rows already written: the same handles and
+    digests in order are a no-op, anything else a conflict (0-W5AW-1)."""
+
+    def __init__(self, lifecycle: FakeLifecycle) -> None:
+        self.lifecycle = lifecycle
+
+    async def get(self, job_id: str):
+        ready = self.lifecycle.d.readiness.get(job_id)
+        # 0003 has no row for no media: None for a text job, as `PgAttachments.get`.
+        return tuple(source.ref for source in ready.sources) if ready and ready.sources \
+            else None
+
+    async def put(self, job_id: str, refs) -> None:
+        bound = await self.get(job_id)
+        if refs and bound is not None and \
+                [(r.handle, r.digest) for r in bound] != [(r.handle, r.digest) for r in refs]:
+            raise errors.Conflict(f"job {job_id} is already attached to other media")
 
 
 @dataclasses.dataclass
@@ -127,7 +152,9 @@ class World:
         fetcher = MediaFetcher(self.limits, resolve=self._resolve, transport=clip_transport())
         self.media = MediaUploads(self.objects, limits=self.limits, fetcher=fetcher,
                                   probe=probe, job_org=self.relay.job_org,
-                                  uploads=self.lifecycle, content=self.lifecycle)
+                                  uploads=self.lifecycle, content=self.lifecycle,
+                                  attachments=None if self.lifecycle is None
+                                  else ManifestAttachments(self.lifecycle))
         self.relay.media = self.media
         # `PgJobStore.db_now` (the store clock every expiry is judged on), over the fake's.
         self.jobs.db_now = self.db_now

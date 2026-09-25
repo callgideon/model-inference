@@ -17,11 +17,20 @@ import pytest
 from infrx.config import RuntimeMisconfigured
 from infrx.contracts.v2.lifecycle import (AdmissionExpectation, LifecycleRefusal as R, refuse)
 from infrx.gateway.routes.relay import CREDIT, LEGACY, Relay
+from infrx.media.store import MediaStaging
 from infrx.state.jobstore import PgJobStore
 
 from . import relay_support as rs, support
 
 REGIMES = [LEGACY, CREDIT]
+# Merge-order tripwire (0-W5AW-2): before M6 phase 2 (25826ab9, "writers register every
+# object") `materialize` writes a fetched source with no content row, so `admit_ready`
+# refuses a URL-fetched video `not_found` (404). Strict both ways: it fails on a tree
+# without M6 phase 2 and must pass on one with it (then this marker can go).
+M6_PHASE2 = hasattr(MediaStaging, "_register")
+FETCHED = pytest.param("fetched", marks=pytest.mark.xfail(
+    not M6_PHASE2, strict=True, raises=AssertionError,
+    reason="needs M6 phase 2: a fetched source registers its content row"))
 
 
 def no_hold(world) -> bool:
@@ -177,6 +186,43 @@ def test_w5_admit__a_replay_admit_ready_answers_is_the_recorded_job(regime):
     assert again.headers["idempotency-replayed"] == "true"
     assert again.headers["inference-id"] == first.headers["inference-id"] == job.id
     assert list(world.jobs.jobs) == [job.id] and world.lifecycle.d.readiness[job.id] is marker
+
+
+@pytest.mark.parametrize("regime", REGIMES)
+@pytest.mark.parametrize("shape", ["upload", FETCHED])
+def test_w5_admit__the_worker_prepares_a_video_the_moment_its_marker_commits(regime, shape):
+    """0-W5AW-1 / 2-W5W-A1: the marker opens W5's barrier as `admit_ready` commits, BEFORE
+    the relay's attach. A claim in that window must still prepare the manifest: the job's
+    sources are the record `admit_ready` wrote with the marker (0019's `job_media`, which
+    `PgAttachments` - the worker's `MediaPreparation.attached` - reads), never the relay's
+    later attach. Uploaded and URL-fetched video (M6 phase 2 registers the fetched source).
+    Oracle: a world whose attach record is only the relay's attach answers `not_found`
+    here (the attempt's lease lapses and burns a prepublication retry)."""
+    world = rs.World(regime=regime, readiness=True)
+    admit_ready, seen = world.lifecycle.admit_ready, {}
+
+    async def then_the_worker(request, idem, expectation):
+        admission, ready = await admit_ready(request, idem, expectation)
+        try:                                    # W5's worker, before the relay goes on
+            await world.prepare(admission.request_id)
+            seen["prepared"] = [ref.handle for ref in world.jobs.jobs[
+                admission.request_id].prepared]
+        except Exception as refused:            # noqa: BLE001 - the case reports it
+            seen["prepared"] = getattr(refused, "code", repr(refused))
+        seen["manifest"] = [source.ref.handle for source in ready.sources]
+        return admission, ready
+
+    world.lifecycle.admit_ready = then_the_worker
+    world.during.append(lambda: world.clock.advance(3_600))    # the wait ends: 504
+
+    async def scenario():
+        messages = (await uploaded(world))[1] if shape == "upload" else rs.VIDEO
+        return await rs.call(world.app, rs.body(messages))
+
+    reply = rs.run(scenario())
+    assert reply.status == 504, reply.body
+    assert "manifest" in seen, "the relay did not admit through admit_ready"
+    assert len(seen["manifest"]) == 1 and seen["prepared"] == seen["manifest"], seen
 
 
 # --- the composition root ------------------------------------------------------------
