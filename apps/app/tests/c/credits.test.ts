@@ -133,10 +133,12 @@ test("a wallet amount that arrives as a number is bounded by what a double can h
  */
 test("the layout hands the sidebar a result it cannot turn into a number, and the copy states none", () => {
   const layout = code("app/(console)/layout.tsx");
+  // Legacy (USD org summary) until WR-1 lands, then the consumer's CREDIT wallet (C0); either way the
+  // wallet's own result goes through the sidebar mapper, and nothing else.
   assert.match(
     layout,
-    /const balance = sidebarBalance\(await getBalance\(session\.orgId\)\);/,
-    "the layout maps the wallet's own result through sidebarBalance, and nothing else",
+    /const balance = (sidebarBalance\(await getBalance\(session\.orgId\)\)|shell\.reads === null \? null : sidebarCredit\(await shell\.reads\.balance\(\)\));/,
+    "the layout maps the wallet's own result through sidebarBalance/sidebarCredit, and nothing else",
   );
   assert.match(layout, /balance=\{balance\}/, "and hands exactly that to the sidebar");
   assert.doesNotMatch(

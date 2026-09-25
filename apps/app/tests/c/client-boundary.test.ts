@@ -173,3 +173,18 @@ test("the server-only modules carry their run-time guard as well", () => {
     );
   }
 });
+
+/**
+ * 1-C0-V1. The console layout wraps /admin as well as the consumer pages, so a redirect to onboarding
+ * there locks out an operator with no consumer wallet, and a redirect to a route that has not shipped
+ * is a 404. `consoleShell` owns both decisions (operator bypass, route gates); the layout may not
+ * redirect to either route itself. Holds for today's legacy layout and for WR-1 as revised.
+ */
+test("the console layout never redirects to onboarding or verification itself; the consumer context goes through consoleShell", () => {
+  const layout = readFileSync(join(appRoot, "app", "(console)", "layout.tsx"), "utf8");
+  assert.doesNotMatch(layout, /redirect\(\s*["'`]\/(onboarding|verify-email)/, "those redirects are consoleShell's, gated on the route");
+  if (/consumerSession\(\)/.test(layout)) {
+    assert.match(layout, /consoleShell\(/, "the consumer context reaches the shell only through consoleShell");
+    assert.doesNotMatch(layout, /getBalance\(|sidebarBalance\(/, "and the sidebar shows CREDIT, not the legacy USD org summary");
+  }
+});
