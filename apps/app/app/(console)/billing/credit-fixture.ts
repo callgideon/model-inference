@@ -4,12 +4,14 @@
  * entry_id desc` (credit_ledger_wallet_created_idx) — and its numbers reconcile: the wallet total is
  * its ledger, reserved is its active holds, and every settled CREDIT charge is one debit.
  *
- * Development and tests only: the page reaches it through the same production-build gate as the
- * console preview (`../usage/fake-console-context.ts`), so a production build never serves it.
+ * Development and tests only: the pages reach it only through `creditSource` below, behind the same
+ * production-build gate as the console preview (`../usage/fake-console-context.ts`).
  */
 
 import { addCredit, subCredit, totalCredit, ZERO_CREDIT, type Credit } from "../../../lib/contracts/v2/money-units.ts";
 import type { Page, Result } from "../../../lib/contracts/types.ts";
+import orgsFixture from "../../../lib/contracts/fixtures/orgs.json" with { type: "json" };
+import { previewAllowed } from "../usage/fake-console-context.ts";
 import type {
   ConsumerJob,
   CreditLedgerEntry,
@@ -128,4 +130,21 @@ export function fixtureCreditReads(fixture: CreditFixture = defaultCreditFixture
     legacyUsd: () => ok(fixture.legacy),
     jobs: (request) => ok(page(jobs, (j) => `${j.createdAt}|${j.requestId}`, request)),
   };
+}
+
+export type CreditSource = { reads: CreditReads; preview: boolean; now: Date };
+
+/**
+ * The one place the Usage and Credits pages' data source is chosen: the fixture only while the
+ * console preview gate is open (development with an explicit opt-in, never a production build),
+ * otherwise the caller's real session reads. Pure, so the gate has tests (U1R-G01..G03).
+ */
+export async function creditSource(
+  real: () => Promise<CreditSource>,
+  env: { NODE_ENV?: string; INFRX_CONSOLE_PREVIEW?: string } = process.env,
+): Promise<CreditSource> {
+  if (previewAllowed(env)) {
+    return { reads: fixtureCreditReads(), preview: true, now: new Date(orgsFixture.clock) };
+  }
+  return real();
 }
