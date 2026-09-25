@@ -215,8 +215,8 @@ MUTANTS = (
        _WAIT + "                                },", DEAD),
     # --- item 1: the composition --------------------------------------------------------
     _m("main_preparation_pool_absent", "python -m infrx.worker runs the preparation pool",
-       MAIN, "metrics=rt.metrics, preparation=preparation,",
-       "metrics=rt.metrics, preparation=None,", COMPOSE),
+       MAIN, "pool=pool, preparation=preparation,",
+       "pool=pool, preparation=None,", COMPOSE),
     _m("main_preparation_concurrency_ignored", "PREPARATION_CONCURRENCY sizes the pool",
        MAIN, "preparation_concurrency=limits.preparation_concurrency)",
        "preparation_concurrency=1)", COMPOSE),
@@ -303,8 +303,8 @@ MUTANTS = (
 PG_MUTANTS = (
     _m("main_preparation_pool_absent_on_postgresql", "the worker process prepares the jobs "
        "the gateway admits (nothing else does)",
-       MAIN, "metrics=rt.metrics, preparation=preparation,",
-       "metrics=rt.metrics, preparation=None,", PG_RUN),
+       MAIN, "pool=pool, preparation=preparation,",
+       "pool=pool, preparation=None,", PG_RUN),
     _m("main_preparation_bypasses_the_credit_doors_on_postgresql", "a CREDIT job is prepared "
        "through load_work_credit in the worker process",
        MAIN, "runner=PreparationRunner(jobs=jobs, media=media,",

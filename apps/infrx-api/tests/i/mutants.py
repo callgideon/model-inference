@@ -630,6 +630,10 @@ MUTANTS += (
        '  mkdir -p "$CADDY_DIR/infrx"; put "$src/Caddyfile.maintenance" '
        '"$CADDY_DIR/infrx/Caddyfile.maintenance"\n  for f in Caddyfile Caddyfile.maintenance; do',
        "test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness"),
+    _m("rehearsal_minio_unpullable_pin", "rehearse.sh names the integration stack's pullable MinIO digest",
+       U + "rehearse.sh", "MINIO_IMAGE=pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372",
+       "MINIO_IMAGE=quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+       "test_the_rehearsal_minio_is_the_integration_stacks_pullable_pin"),
     _m("engine_restart_ignored", "the cutover can restart the engine onto its new pin",
        INSTALL, 'if [ "${ENGINE:-start}" = restart ]; then systemctl restart marlin2b-vllm', "if false; then systemctl restart marlin2b-vllm",
        "test_backend_deploy__a_dev_install_pins_the_image_it_probed"),
@@ -1279,6 +1283,11 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
                  ("apps", "app", "supabase", "migrations")):
         if REPO.joinpath(*part).exists():
             shutil.copytree(REPO.joinpath(*part), root.joinpath(*part), ignore=ignore)
+    # E2C wiring: the rehearsal pin case compares rehearse.sh with the integration compose file
+    compose = REPO / "tests" / "integration" / "compose.yaml"
+    if compose.exists():
+        (root / "tests" / "integration").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(compose, root / "tests" / "integration" / "compose.yaml")
     for name in ("pyproject.toml", "uv.lock"):
         shutil.copy2(API_DIR / name, api / name)
     return api
