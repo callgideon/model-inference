@@ -371,7 +371,7 @@ PRE_I8 = {
     "74-alert-test.sh": (["infra/observe/deliver.py"], {}),
     "80-mirror-artifacts.sh": (["infra/runbooks/artifacts.py"],
                                {"RELEASE": "c" * 40, "MIRROR_URL": "s3://bucket/prefix/"}),
-    "81-restore-artifacts.sh": (["infra/runbooks/artifacts.py", "infra/observe/canary.sh"],
+    "81-restore-artifacts.sh": (["infra/runbooks/artifacts.py"],
                                 {"RELEASE": "c" * 40, "MIRROR_URL": "s3://bucket/prefix/"}),
     "86-cleanup.sh": (["infra/rollout/known-good.json"], {}),
 }

@@ -880,8 +880,8 @@ MUTANTS += (
     _m("digest_unanchored", "the whole statement is the digest or the sentinel",
        STEP + "50-install.sh", "^([0-9a-f]{64}|nothing-pending)$", "([0-9a-f]{64}|nothing-pending)",
        "test_backend_deploy__the_cutover_keeps_the_engines_concurrency"),
-    _m("cutover_drops_engine_concurrency", "the cutover keeps the box's 32 engine sequences",
-       STEP + "50-install.sh", 'INFRX_SET="ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-32} ${INFRX_SET:-}"',
+    _m("cutover_drops_engine_concurrency", "the cutover hands install.sh the operator's engine concurrency",
+       STEP + "50-install.sh", 'INFRX_SET="ENGINE_MAX_NUM_SEQS=$ENGINE_MAX_NUM_SEQS ${INFRX_SET:-}"',
        'INFRX_SET="${INFRX_SET:-}"',
        "test_backend_deploy__the_cutover_keeps_the_engines_concurrency"),
     _m("step_without_release_guard", "a step never runs without its release",
@@ -1337,6 +1337,32 @@ MUTANTS += (
 # every copied tree whatever the edit - which reports `killed` for a mutant that changed
 # nothing (review r1 B1). `SELF_TESTS` pins that a no-op mutant naming that case is
 # `survived`.
+# ROLLOUT-FIXES: the tooling defects the rollout gates rehearsal at e607b705 found.
+RF_SSM = "test_backend_deploy__ssm_refuses_what_is_not_a_step_before_any_aws_call"
+RF_PRE_I8 = "test_ops_continuous__a_step_on_a_pre_i8_checkout_is_blocked_before_it_acts"
+RF_GUARD = '|| { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }'
+MUTANTS += (
+    _m("ssm_sends_a_non_step", "ssm.sh sends only an existing step file, never cat's output",
+       SSM, '[ -f "$step" ] || { usage >&2; exit 2; }\n', "", RF_SSM),
+    _m("cutover_engine_default_restored", "the cutover has no engine-concurrency default",
+       STEP + "50-install.sh",
+       ': "${ENGINE_MAX_NUM_SEQS:?rollout.md section 1 pins it (INSTALL_ARGS); no default}"',
+       ': "${ENGINE_MAX_NUM_SEQS:=32}"', "test_backend_deploy__the_cutover_keeps_the_engines_concurrency"),
+    _m("s3_check_stale_pytest", "the bucket check installs uv.lock's pytest wheel",
+       STEP + "45-s3-check.sh",
+       "pytest==9.1.1 --hash=sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c",
+       "pytest==8.4.2 --hash=sha256:872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79",
+       "test_backend_deploy__the_bucket_check_installs_exactly_uv_locks_pytest_wheels"),
+    _m("install_args_pool_pin_dropped", "the runbook's INSTALL_ARGS fit the session pooler",
+       "../../infra/runbooks/rollout.md", ' DATABASE_POOL_MAX_SIZE=6")', '")',
+       "test_backend_deploy__the_runbooks_install_args_fit_the_session_pooler"),
+    *(_m(f"pre_i8_guard_dropped_{step[:2]}", "a step on a pre-I8 checkout is BLOCKED before it acts",
+         STEP + step, RF_GUARD, "|| true", RF_PRE_I8)
+      for step in ("71-pool-budget.sh", "72-observe-install.sh", "74-alert-test.sh",
+                   "80-mirror-artifacts.sh", "81-restore-artifacts.sh", "86-cleanup.sh")),
+)
+
+
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 

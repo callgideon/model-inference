@@ -414,3 +414,23 @@ def test_backend_deploy__the_bucket_check_installs_exactly_uv_locks_pytest_wheel
     for name, (version, digest) in pins.items():
         assert lock[name]["version"] == version, (name, version, lock[name]["version"])
         assert digest in {w["hash"] for w in lock[name]["wheels"]}, name
+
+
+def test_backend_deploy__the_runbooks_install_args_fit_the_session_pooler():
+    """rollout.md §1's INSTALL_ARGS is what the operator pastes into W10. Oracle
+    (ROLLOUT-FIXES): DATABASE_POOL_MAX_SIZE=6 sat in a comment beside it, so the pasted
+    install ran the defaults - pool_budget.py FAIL, peak 21 + headroom 2 > 15 session slots
+    (the 2026-09-24 EMAXCONNSESSION). The block's settings pass the budget at peak 13, and
+    name ENGINE_MAX_NUM_SEQS=8, which 50-install now requires."""
+    text = (support.REPO / "infra" / "runbooks" / "rollout.md").read_text()
+    block = re.search(r"^INSTALL_ARGS=\((.*?)\)$", text, re.S | re.M)
+    assert block, "no INSTALL_ARGS block"
+    args = re.sub(r"#.*", "", block.group(1))
+    assert re.search(r"(?:^|\s)ENGINE_MAX_NUM_SEQS=8(?:\s|$)", args), args
+    infrx_set = re.search(r'INFRX_SET="([^"]*)"', args)
+    assert infrx_set, args
+    pairs = [*infrx_set.group(1).split(), "ENGINE_MAX_NUM_SEQS=8"]
+    done = subprocess.run([sys.executable, str(support.REPO / "infra" / "runbooks" / "pool_budget.py"),
+                           "--runtime-port", "5432", *[a for p in pairs for a in ("--set", p)]],
+                          capture_output=True, text=True)
+    assert done.returncode == 0 and "PASS session: peak 13 " in done.stdout, done.stdout
