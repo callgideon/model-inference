@@ -1,0 +1,20 @@
+{
+  "lane": "M5",
+  "task": "M5",
+  "at": "2026-09-25T08:19:23Z",
+  "activity": "complete",
+  "head": "c0c4ce25",
+  "next_action": "merged into claude/consumer-v1 via codex/m5-merge ccf37b55 (WR-1/WR-2 applied, xfail lifted); R128 numbered; manifest M5 implemented; box smoke after the merged release reaches the pilot",
+  "blocker": null,
+  "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged after the finish-verify fix round (ACCEPT_WITH_FIXES at c0c4ce25)",
+    "at": "2026-09-25T08:19:23Z"
+  },
+  "evidence": [
+    "research/plan/evidence/m/M5-35c401b.md"
+  ]
+}

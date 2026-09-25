@@ -4157,7 +4157,7 @@
       "track": "M",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4184,7 +4184,8 @@
       ],
       "acceptance": "Create/PUT/finalize/resolve works across different gateway processes with bounded ownership and expiry.",
       "failure_oracle": "Former in-memory adapter fails restart test; changed bytes/foreign handle never become accepted media.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "closure_note": "2026-09-25: merged on claude/consumer-v1 via codex/m5-merge ccf37b55 (--no-ff of c0c4ce25) after the finish-verify fix round (ACCEPT_WITH_FIXES); implemented = durable upload tickets (F2C UploadRepository over D10's PgLifecycle) composed in pilot.py (WR-1), cross-process restart drills on real PG + MinIO, 382 M/MPILOT/S3/G-upload mutants killed; ruling R128; OPEN: one box smoke after the merged release reaches the pilot (coordinator op); the minor findings deferred to a later pass (M5-35c401b.md)."
     },
     {
       "id": "M6",
