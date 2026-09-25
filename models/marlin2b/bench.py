@@ -2054,7 +2054,7 @@ def check_profile(a):
         except (OSError, ValueError) as e:
             inventory = {"unreadable": type(e).__name__}
     verdict = runprofile.validate(profile, a, schedule + schedule[:warmups], keys=keys,
-                                  carries_key=carries_key, local=runprofile.is_local(a),
+                                  carries_key=carries_key, local=runprofile.is_local(a, profile),
                                   key_env=KEY_ENV, inventory=inventory)
     if verdict["runnable"]:
         a.run_profile, a.profile_sha256 = profile, verdict["derived"]["profile_sha256"]

@@ -733,15 +733,26 @@ def test_a_huge_integer_spend_validates_and_only_float_inf_or_nan_is_refused():
 # ------------------------------------------------ E4C-PREP: the committed E4C base profile (P-24)
 
 E4C_BASE = os.path.join(PROFILES, "E4C-box.base.json")
-E4C_FILLS = {"identity": {"source_sha": "c" * 40, "deployed_sha": "d" * 40,
-                          "image_digest": "sha256:" + SHA, "weights_sha256": "sha256:" + SHA,
-                          "processor_sha256": "sha256:" + SHA, "migration_version": "0025",
+E4C_PATTERNED = {"source_sha": "c" * 40, "deployed_sha": "d" * 40,
+                 "image_digest": "sha256:" + SHA, "weights_sha256": "sha256:" + SHA,
+                 "processor_sha256": "sha256:" + SHA}
+E4C_FILLS = {"identity": {**E4C_PATTERNED, "migration_version": "0025",
                           "config_version": "sha256:" + SHA},
              "target": {"allowed_fault_targets": ["marlin2b-vllm", "infrx-worker", "infrx-valkey"],
                         "maintenance_window": "mw-e4c-test"}}
+E4C_FILL_PATHS = {*(f"$.identity.{k}" for k in E4C_FILLS["identity"]),
+                  "$.target.allowed_fault_targets[1]", "$.target.allowed_fault_targets[2]",
+                  "$.target.maintenance_window"}
 
 
-def e4c_validate(tmp, profile, rate, requests):
+def e4c_filled(groups=E4C_FILLS):
+    profile = json.load(open(E4C_BASE, encoding="utf-8"))
+    for group, values in groups.items():
+        profile[group].update(values)
+    return profile
+
+
+def e4c_validate(tmp, profile, rate, requests, target="gateway", inventory=True):
     """bench --validate-only as certify runs a box cell: the licensed manifest, the frozen
     seed and output mix, the profile stamped with the cell's rate (certify.cell_profile)."""
     import test_bench
@@ -752,11 +763,11 @@ def e4c_validate(tmp, profile, rate, requests):
         with open(file, "w", encoding="utf-8") as f:
             json.dump(doc, f)
     argv = ["--corpus", os.path.join(os.path.dirname(HERE), "corpus", "manifest.json"),
-            "--subset", "full", "--base-url", "http://127.0.0.1:8001/v1", "--target", "gateway",
+            "--subset", "full", "--base-url", "http://127.0.0.1:8001/v1", "--target", target,
             "--model", "nemostation/marlin-2b", "--rate", str(rate), "--requests", str(requests),
             "--seed", "20260922", "--dataset-version", "e4c-1", "--forms", "video_b64",
             "--max-tokens", "128,512,1024", "--retries", "0", "--out", os.path.join(tmp, "b.jsonl"),
-            "--profile", path, "--key-inventory", inv, "--validate-only"]
+            "--profile", path, *(["--key-inventory", inv] if inventory else []), "--validate-only"]
     out, saved = io.StringIO(), {n: os.environ.pop(n, None) for n in bench.KEY_ENV}
     try:
         with contextlib.redirect_stdout(out):
@@ -766,24 +777,28 @@ def e4c_validate(tmp, profile, rate, requests):
     return code, json.loads(out.getvalue())
 
 
-def test_the_e4c_base_profile_refuses_only_on_its_fill_identities_then_bounds_the_soak():
-    """Oracle (P-24): the committed E4C base validating while its frozen identities are FILL
-    placeholders (a paid run on an undeclared candidate), refusing a soak or rung for any other
-    reason once they are filled, or projecting spend in another unit or off the exact figure:
+def test_the_e4c_base_profile_refuses_until_every_fill_is_frozen_then_bounds_the_soak():
+    """Oracle (P-24, E4P-V3): the committed E4C base validating while any value is still a
+    FILL placeholder (a paid run on an undeclared candidate, window or fault target - the
+    free-string ones pass the schema), refusing a soak or rung for any other reason once all
+    are filled, or projecting spend in another unit or off the exact figure:
     3,600 x (30,720 x 400 + 1,024 x 1,200) / 1e6 = 48,660.48 CREDIT under the 50,000 cap."""
     base = json.load(open(E4C_BASE, encoding="utf-8"))
     assert len(base["workload"]["item_ids"]) == 64 and sorted(base["workload"][
         "expected_invalid"]) == sorted(i for i in base["workload"]["item_ids"]
                                        if i.split("-")[0] in ("c012", "c025", "c038", "c051"))
+    fill = lambda errors: {e.split(":")[0] for e in errors if "FILL placeholder" in e}
     with tempfile.TemporaryDirectory() as tmp:
         code, v = e4c_validate(tmp, base, 0.25, 3600)
-        assert code == 2 and v["errors"] and all(
-            e.startswith("$.identity.") and "does not match" in e
-            and base["identity"][e.split(":")[0].split(".")[-1]].startswith("FILL")
-            for e in v["errors"]), v["errors"]
-        filled = json.loads(json.dumps(base))
-        for group, values in E4C_FILLS.items():
-            filled[group].update(values)
+        patterned = {e.split(":")[0] for e in v["errors"] if "does not match" in e}
+        assert code == 2 and fill(v["errors"]) == E4C_FILL_PATHS, v["errors"]
+        assert patterned == {f"$.identity.{k}" for k in E4C_PATTERNED}, v["errors"]
+        assert len(v["errors"]) == len(E4C_FILL_PATHS) + len(E4C_PATTERNED), v["errors"]
+        # the five the schema's patterns catch are not enough: the free strings still refuse
+        code, v = e4c_validate(tmp, e4c_filled({"identity": E4C_PATTERNED}), 0.25, 3600)
+        assert code == 2 and fill(v["errors"]) == E4C_FILL_PATHS - {
+            f"$.identity.{k}" for k in E4C_PATTERNED} and len(v["errors"]) == 5, v["errors"]
+        filled = e4c_filled()
         assert "FILL" not in json.dumps(filled)
         b, spend = filled["bounds"], filled["bounds"]["spend"]
         per_request = (b["max_input_tokens_per_request"] * Decimal(spend["rates"]["input_per_mtok"])
@@ -800,3 +815,24 @@ def test_the_e4c_base_profile_refuses_only_on_its_fill_identities_then_bounds_th
         # one request more than the soak is over the profile's bounds: refused, not run
         code, v = e4c_validate(tmp, filled, 0.25, 3601)
         assert code == 2 and "bounds.max_requests 3600 < scheduled requests 3601" in v["errors"]
+
+
+def test_a_profiled_loopback_gateway_is_metered_and_its_blocks_refuse_the_run():
+    """Oracle (E4P, open issue 3): the box's gateway is loopback (127.0.0.1:8001) and
+    metered; a direct-gateway profile on it with no rates and no cap, or no key inventory,
+    validating as if it were a free local target. Loopback stays free for a direct-engine
+    profile (and with no profile at all: e1cf28's case)."""
+    unpriced = e4c_filled()
+    unpriced["bounds"]["spend"].update(max_spend=None, rates=None)
+    with tempfile.TemporaryDirectory() as tmp:
+        code, v = e4c_validate(tmp, unpriced, 0.25, 3600)
+        assert code == 2 and v["valid"] and not v["runnable"] and v["blocks"] == [
+            "no approved rates or spend budget: a paid run is refused"], v
+        code, v = e4c_validate(tmp, e4c_filled(), 0.25, 3600, inventory=False)
+        assert code == 2 and v["blocks"] == [
+            "no --key-inventory: the target's active keys are unknown (P-24)"], v
+        engine = json.loads(json.dumps(unpriced))
+        engine["target"]["path"] = "direct-engine"
+        code, v = e4c_validate(tmp, engine, 0.25, 3600, target="direct")
+        assert code == 0 and v["runnable"] and v["blocks"] and \
+            "blocks do not apply to a local or fake target" in v["warnings"], v

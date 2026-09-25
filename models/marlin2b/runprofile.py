@@ -97,6 +97,16 @@ def secret_paths(value, keys, carries_key, path="$"):
     return []
 
 
+def fill_paths(value, path="$"):
+    """Paths of the `FILL …` placeholders a base profile leaves for run time (E4P-V3): the
+    schema's patterns catch only some of them, and none may reach a run."""
+    if isinstance(value, dict):
+        return [p for k, v in value.items() for p in fill_paths(v, f"{path}.{k}")]
+    if isinstance(value, list):
+        return [p for i, v in enumerate(value) for p in fill_paths(v, f"{path}[{i}]")]
+    return [path] if isinstance(value, str) and value.startswith("FILL") else []
+
+
 def file_sha256(path):
     h = sha256()
     with open(path, "rb") as f:
@@ -121,7 +131,8 @@ def key_inventory_errors(inventory, allowed):
 def validate(profile, a, schedule, *, keys=(), carries_key=lambda v, k: False, local=False,
              key_env=("MARLIN_API_KEY", "INFRX_API_KEY"), inventory=None):
     """The profile against the run `a` (bench's parsed flags) and its declared `schedule`."""
-    errors = schema_errors(profile, load_schema())
+    errors = schema_errors(profile, load_schema()) + [
+        f"{p}: an unfilled FILL placeholder; freeze it before the run" for p in fill_paths(profile)]
     res = {"schema": SCHEMA_ID, "errors": errors, "blocks": [], "warnings": [], "derived": {}}
     if errors:                       # the cross-field checks below read what the schema holds
         return finish(res, local)
@@ -304,7 +315,13 @@ def finish(res, local):
     return res
 
 
-def is_local(a):
-    """A target that costs nothing: an injected transport, or loopback."""
-    return bool(a.dry_run_transport) or (urllib.parse.urlsplit(a.base_url).hostname or "") \
-        in LOOPBACK
+def is_local(a, profile=None):
+    """A target that costs nothing: an injected transport, or loopback that no run profile
+    names as a gateway or edge. The box's gateway is loopback (127.0.0.1:8001) and metered,
+    so a profiled direct-gateway run there has its blocks applied (E4P)."""
+    if a.dry_run_transport:
+        return True
+    if (urllib.parse.urlsplit(a.base_url).hostname or "") not in LOOPBACK:
+        return False
+    target = profile.get("target") if isinstance(profile, dict) else None
+    return profile is None or isinstance(target, dict) and target.get("path") == "direct-engine"
