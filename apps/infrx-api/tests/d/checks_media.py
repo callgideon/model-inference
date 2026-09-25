@@ -82,6 +82,12 @@ def check_media_uploads(conn) -> str:
         for label, sql in after:
             why = cc.attempt(conn, sql)
             assert why is not None and why.startswith("23514"), f"{label}: {why!r}"
+        # The guard's own line: columns no CHECK constraint covers (0019's receipt
+        # constraints refuse `bytes`/`digest` first, so they cannot prove the guard).
+        why = cc.attempt(conn, "update infrx.media_uploads set mime = 'video/webm', "
+                               f"duration_s = 99 where handle = '{HANDLE}'")
+        assert why is not None and why.startswith("23514") and "immutable" in why, \
+            f"a finalized upload's media facts were rewritten: {why!r}"
         conn.execute("select infrx_test.advance(%s)", (7 * 86400,))
         assert cc.attempt(conn, f"delete from infrx.media_uploads where handle = '{HANDLE}'") \
             is None, "an expired finalized record cannot be collected"

@@ -826,13 +826,15 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
        "upgrade05", "old_regime_preserved",
        "the upgrade turns USD history into CREDIT wallets (CREDIT-UNITS)"),
     # --- 0006: regimes, pins, admission guards ------------------------------------------
-    _m("d1r_usd_job_may_carry_pins", CREDIT,
-       "          and num_nulls(wallet_id, model_id, requested_model, deployment_revision_id,\n"
-       "                        serving_version_id, rate_card_version, policy_version) = 7",
-       "          and num_nulls(wallet_id, model_id, requested_model, deployment_revision_id,\n"
-       "                        serving_version_id, rate_card_version, policy_version) >= 0",
+    # D10: 0021 replaces 0006's constraint with `jobs_regime_fixes_provenance_v2`
+    # (requested_model may be carried verbatim by a USD job, P-22); the pins stay refused.
+    _m("d1r_usd_job_may_carry_pins", READS,
+       "          and num_nulls(wallet_id, model_id, deployment_revision_id, serving_version_id,\n"
+       "                        rate_card_version, policy_version) = 6",
+       "          and num_nulls(wallet_id, model_id, deployment_revision_id, serving_version_id,\n"
+       "                        rate_card_version, policy_version) >= 0",
        "credit", "credit_admission", "a USD job half-pinned to a CREDIT card"),
-    _m("d1r_credit_job_may_carry_usd_price", CREDIT,
+    _m("d1r_credit_job_may_carry_usd_price", READS,
        "        else price_version is null and price_snapshot is null\n",
        "        else price_snapshot is null\n",
        "credit", "credit_admission", "a CREDIT job also priced in USD"),
