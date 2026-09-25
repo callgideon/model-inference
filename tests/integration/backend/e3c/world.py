@@ -699,6 +699,38 @@ async def collect_once(grace_s: float = 0.0) -> dict:
 COLLECTOR_CONNECT_TIMEOUT_S = 5
 
 
+#: M6 wiring (E3C F-4): the worker - `python -m infrx.worker`, M6's entry - is the one process
+#: that runs retention, the cache keeper and the journal prune. The deployed cadence is 300 s
+#: (P-25 placeholder); a scenario that waits for them runs its worker at 2 s. A tree without
+#: the wiring ignores the names (deployment settings read only their own fields).
+HOUSEKEEPING = {"RETENTION_INTERVAL_S": "2", "CACHE_SWEEP_INTERVAL_S": "2",
+                "JOURNAL_EXPIRE_INTERVAL_S": "2"}
+
+
+def scrubbed_content(trip, request_id: str) -> dict:
+    """The content-bearing rows that must be gone past the persisted expiry and journal TTL
+    (0 each when scrubbed); the job's metadata is asserted by the caller."""
+    return {"job_results.body": trip.one("select count(*) from infrx.job_results where "
+                                         "request_id = %s and body <> ''", request_id)[0],
+            "jobs.request_record messages": trip.one(
+                "select count(*) from infrx.jobs where request_id = %s and "
+                "request_record::text like %s", request_id, "%Describe the van.%")[0],
+            "stream_chunks deltas": trip.one("select count(*) from infrx.stream_chunks where "
+                                             "job_id = %s and event_type = 'delta'",
+                                             request_id)[0]}
+
+
+def housekept(trip, request_id: str, timeout: float = 60.0) -> dict:
+    """Wait (bounded) for the running worker's housekeeping to scrub `request_id`'s content;
+    what is left when it did not (empty dict = scrubbed)."""
+    end = time.monotonic() + timeout
+    while True:
+        left = {k: v for k, v in scrubbed_content(trip, request_id).items() if v}
+        if not left or time.monotonic() > end:
+            return left
+        time.sleep(0.5)
+
+
 def grace_passed() -> float:
     """Seconds to move the store clock so content registered now is past its persisted
     grace (`PgLifecycle`'s GRACE_S, persisted as eligible_at), with a minute to spare."""
