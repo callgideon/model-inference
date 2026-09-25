@@ -4078,7 +4078,7 @@
       "track": "E",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4103,7 +4103,12 @@
       ],
       "acceptance": "A clean supported checkout reproduces checks; unavailable prerequisites never count as passed.",
       "failure_oracle": "Missing service and intentionally broken seam produce explicit non-pass; surviving mutation cannot be hidden.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/e/E2C-3a113dc.md",
+        "research/plan/evidence/e/E2C-f61d2f0.md"
+      ],
+      "closure_note": "2026-09-25: merged on claude/consumer-v1 at 5bef53bc after the three-lens verification and the completed fix round (ACCEPT_WITH_FIXES at 2de2133e: 15 blocking/major findings closed with 18 killed mutants); implemented = reproducible preflight/gate/composition on the e2c namespace; the consumer-local gate can PASS only after E2C-FR-1 (D10 signup mutant Runner env) and the Makefile targets (codex/e2c-wiring); a measured consumer-local PASS is recorded at the E2C wiring merge or stays NOT RUN."
     },
     {
       "id": "D10",

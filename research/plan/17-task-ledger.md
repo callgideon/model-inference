@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 78 planned; 44 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 77 planned; 45 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -49,7 +49,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | E4B | implemented / E | [Certify the robust and measured Marlin endpoint release candidate](18-marlin-backend-first.md) | E3B, F2P | I3B, E1B, M4, W4 |
 | S3 | implemented / S | [Reconcile post-wave implementation, release evidence and RV findings](consumer-v1/03-operations-and-verification.md) | S1 | — |
 | F2C | implemented / F | [Freeze durable lifecycle, expiry and public capability corrections](consumer-v1/01-contracts-and-data.md) | S3, F2P | — |
-| E2C | planned / E | [Make corrective verification reproducible on supported Linux](consumer-v1/03-operations-and-verification.md) | S3, E2R | — |
+| E2C | implemented / E | [Make corrective verification reproducible on supported Linux](consumer-v1/03-operations-and-verification.md) | S3, E2R | — |
 | D10 | planned / D | [Persist uploads, execution eligibility, safe cleanup and result read authority](consumer-v1/01-contracts-and-data.md) | F2C, D5 | E2C |
 | M5 | planned / M | [Persist upload lifecycle across gateway replacement](consumer-v1/02-runtime.md) | F2C, M3 | D10 |
 | M6 | planned / M | [Implement restart-safe content cleanup and bounded caches](consumer-v1/02-runtime.md) | F2C, M5 | D10 |
