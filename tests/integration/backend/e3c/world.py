@@ -608,7 +608,9 @@ def cli(trip, *args: str, secret: str | None = None) -> tuple[int, dict]:
     done = subprocess.run([sys.executable, "-m", "infrx.operations.cli", *args], env=env,
                           cwd=str(harness.API_ROOT), capture_output=True, text=True,
                           timeout=120)
-    text = (done.stdout if done.returncode == 0 else done.stderr).strip().splitlines()
+    # a report printed with a non-zero exit (a dry run's blockers) is still the answer
+    text = (done.stdout if done.returncode == 0 or not done.stderr.strip()
+            else done.stderr).strip().splitlines()
     try:
         return done.returncode, json.loads(text[-1]) if text else {}
     except json.JSONDecodeError:
