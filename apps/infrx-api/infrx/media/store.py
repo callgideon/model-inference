@@ -51,7 +51,11 @@ MAX_PROCESS_ENTRIES = 4096
 class Recent(OrderedDict):
     """A map keeping only its `limit` most recently written entries (M6: no per-process map
     grows with the tickets, jobs or requests a long-lived process has seen).
-    ponytail: evicts by write order, not reads; LRU-on-read if a hot entry ever matters."""
+    ponytail: evicts by write order, not reads; LRU-on-read if a hot entry ever matters.
+    ponytail (M6 R5): a hand-off inside one request (`refs`, `payloads`, `by_job`) lives here
+    too, so more than `limit` writes by other requests between its write and its read
+    evict it and that request loses its hand-off (the durable record stays). Unmeasured;
+    hold the hand-off in the request itself if in-flight requests ever approach `limit`."""
 
     def __init__(self, limit: int | None = None) -> None:
         super().__init__()

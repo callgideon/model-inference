@@ -57,6 +57,11 @@ EVICT_RACE = "test_an_eviction_that_loses_the_race_with_a_put_keeps_the_new_file
 RECORD = "test_the_registry_holds_what_each_report_says"
 RUN_METRICS = "test_run_records_every_pass_on_the_registry"
 CACHE_COUNTS = "test_the_cache_counts_evictions_expiries_and_refusals"
+PART_NOW = "test_a_part_being_written_now_is_not_swept"
+SLACK = "test_a_file_dated_inside_the_clock_step_slack_is_believed"
+REPUT = "test_putting_a_file_again_does_not_count_it_against_the_high_water"
+REWRITTEN = "test_a_rewritten_map_entry_is_the_newest"
+PREPARED_ROW = "test_the_prepared_artifact_is_registered_as_prepared_for_its_job"
 
 
 def _m(name, invariant, old, new, *cases, file=R, dies_by=()) -> Mutant:
@@ -266,6 +271,24 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("m6_metrics_refusal_uncounted", "a refused put is counted before it raises",
        'self.metrics.inc("infrx_processing_cache_refused_total")', "pass", CACHE_COUNTS,
        file=P),
+    # --- M6 phase-2 verification R6 (X6/X7/X11/X17/X19): the surviving mutants, pinned -------
+    _m("m6_x6_part_grace_zero", "a .part a writer holds is not swept",
+       "PART_GRACE_S = 3_600.0", "PART_GRACE_S = 0.0", PART_NOW, file=P),
+    _m("m6_x7_no_clock_step_slack", "a file dated inside the slack is believed and kept",
+       "FUTURE_MTIME_SLACK_S = 60.0", "FUTURE_MTIME_SLACK_S = 0.0", SLACK, file=P),
+    _m("m6_x11_keep_path_counted", "a re-put never counts the file it replaces",
+       "files = [f for f in self._files() if f[2] != keep and ",
+       "files = [f for f in self._files() if ", REPUT, file=P),
+    _m("m6_x17_rewrite_not_newest", "a rewritten map entry is the newest",
+       "        super().__setitem__(key, value)\n        self.move_to_end(key)\n",
+       "        super().__setitem__(key, value)\n", REWRITTEN, file=S),
+    _m("m6_x19_prepared_row_wrong_kind", "the prepared artifact's row is kind prepared",
+       "await self._register(ContentKind.prepared, ref.org_id, prepared_key,",
+       "await self._register(ContentKind.payload, ref.org_id, prepared_key,", PREPARED_ROW,
+       file=P),
+    _m("m6_x19_prepared_row_no_job", "the prepared artifact's row names its job",
+       "                                     len(body), job_id=job_id)",
+       "                                     len(body), job_id=None)", PREPARED_ROW, file=P),
 )
 
 RUNNER = Runner(name="m6", targets=("tests/m/test_retention.py", "tests/m/test_cache_bounds.py",

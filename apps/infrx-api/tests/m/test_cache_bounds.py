@@ -311,3 +311,67 @@ def test_the_cache_counts_evictions_expiries_and_refusals(tmp_path):
               reg.value("infrx_processing_cache_evicted_total", reason="expired"),
               reg.value("infrx_processing_cache_refused_total"))
     assert counts == (2, 1, 1), counts
+
+
+# --- M6 phase-2 verification (R6 X6/X7/X11/X17/X19): the guards no case pinned ------------
+# Failure oracles, one per surviving mutant: a sweep that takes a `.part` a writer is still
+# writing (X6), a file dated inside the clock-step slack removed or missed (X7), a re-put
+# that counts the file it replaces against the high water (X11), a map that evicts an entry
+# just re-written (X17), a prepared artifact registered as another kind or for no job (X19).
+def test_a_part_being_written_now_is_not_swept(tmp_path):
+    clock = CacheClock()
+    cache = cache_at(tmp_path, clock)
+    entry = put(cache, 1)
+    part = entry.local_path + ".4242.part"
+    with open(part, "wb") as handle:
+        handle.write(b"half")
+    os.utime(part, (clock.now, clock.now))
+    clock.now += 1
+    assert cache.sweep() == 0 and os.path.exists(part)
+
+
+def test_a_file_dated_inside_the_clock_step_slack_is_believed(tmp_path):
+    clock = CacheClock()
+    cache = cache_at(tmp_path, clock)
+    entry = put(cache, 1, size=0)
+    ahead = clock.now + 30                        # a clock step inside the 60 s slack
+    os.utime(entry.local_path, (ahead, ahead))
+    fresh = cache_at(tmp_path, clock)             # another process: finds it on disk
+    assert fresh.get(ORG, digest(clip(1)), "v1", "video/mp4") is not None
+    assert fresh.sweep() == 0 and os.path.exists(entry.local_path)
+
+
+def test_putting_a_file_again_does_not_count_it_against_the_high_water(tmp_path):
+    clock = CacheClock()
+    cache = cache_at(tmp_path, clock, max_bytes=2000)
+    first = put(cache, 1)
+    clock.now += 1
+    second = put(cache, 2)                        # exactly at the high water
+    clock.now += 1
+    put(cache, 1)                                 # the same path, replaced: no room needed
+    assert os.path.exists(first.local_path) and os.path.exists(second.local_path)
+
+
+def test_a_rewritten_map_entry_is_the_newest(monkeypatch):
+    recent = store.Recent(limit=2)
+    recent["a"], recent["b"] = 1, 2
+    recent["a"] = 3                               # rewritten: now the newest
+    recent["c"] = 4
+    assert dict(recent) == {"a": 3, "c": 4}
+
+
+def test_the_prepared_artifact_is_registered_as_prepared_for_its_job(tmp_path):
+    registered = []
+
+    class Content:
+        async def register(self, identity):
+            registered.append(identity)
+    adapter = adapter_for(tmp_path, content=Content())
+    ref = run(adapter.materialize(ORG, data_url(clip(3))))
+    job = "00000000-0000-4000-8000-00000000abcf"
+    adapter.jobs[job] = ORG
+    run(adapter.attach(job, (ref,)))
+    (prepared,) = run(adapter.prepare(job, "v1"))
+    (row,) = [i for i in registered if i.object_key == prepared.storage_ref]
+    assert (row.kind.value, row.job_id, row.digest, row.bytes) == \
+        ("prepared", job, ref.digest, prepared.bytes)
