@@ -351,6 +351,21 @@ class DeploymentSettings:
     # (`python -m infrx.worker`: /readyz, /livez, /metrics), the one install.sh's
     # `wait_ready` and 60-verify-local.sh probe. Never public: WorkerService binds loopback.
     worker_health_port: int = 8002
+    # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
+    # process that runs it; gateways run none). Every value is a P-25 placeholder,
+    # `⚠️ TO BE VERIFIED` against measured cache growth and pass durations:
+    # - the cache high water: the 60 GiB media budget of infra/README.md §2 (est.), the same
+    #   figure the ProcessingCacheLarge rule reads;
+    # - a retention pass every 300 s: what M6's evidence and the I8 alert thresholds assume
+    #   (pending delete > claim TTL 300 s + 2 x 300 s). The claim TTL (`PgLifecycle`,
+    #   300 s) stays above the 75 s object-store delete timeout whatever this is;
+    # - the cache sweep on the same cadence (expiry is 7 days; 300 s late is nothing);
+    # - the journal prune every 300 s: SSE deltas outlive `JOURNAL_CHUNK_TTL_S` (3600 s) by
+    #   at most one interval.
+    processing_cache_max_bytes: int = 64_424_509_440
+    retention_interval_s: float = 300.0
+    cache_sweep_interval_s: float = 300.0
+    journal_expire_interval_s: float = 300.0
 
     def replace(self, **changes):
         return dataclasses.replace(self, **changes)

@@ -73,6 +73,10 @@ COMPONENTS = frozenset({"engine", "database", "index", "object_store", "journal"
 RECOVERY_ACTIONS = frozenset({"requeued", "prepare_redispatched", "terminalized",
                               "hold_released"})
 RECONCILE_RESULTS = frozenset({"ok", "drift", "error"})
+RETENTION_ABORTS = frozenset({"dependency_unavailable", "object_store_unavailable"})
+RETENTION_RETAINED = frozenset({"claim_held", "claim_lost", "foreign_key", "lease_short",
+                                "not_claimable", "not_eligible", "not_found", "not_ready",
+                                "reference_live", "stale_lease"})
 _TENANT = re.compile(r"t_[0-9a-f]{12}")
 _DEVICE = re.compile(r"[0-9]{1,2}")
 _MOUNT = re.compile(r"[a-z][a-z_]{0,23}")
@@ -175,6 +179,34 @@ FAMILIES: dict[str, Spec] = {
         "counter", "Failed attempts to open a server connection."),
     "infrx_db_pool_connections_lost_total": Spec(
         "counter", "Pooled connections found broken."),
+    # --- retention and the processing cache (M6, WR-I8-M6-1; dashboard.json) ------------
+    "infrx_retention_passes_total": Spec(
+        "counter", "Retention passes run (RetentionCollector.sweep returned)."),
+    "infrx_retention_aborted_total": Spec(
+        "counter", "Passes that stopped early (Report.aborted).",
+        (("reason", RETENTION_ABORTS),)),
+    "infrx_retention_consecutive_aborted_passes": Spec(
+        "gauge", "Aborted passes since the last completed one."),
+    "infrx_retention_last_success_timestamp_seconds": Spec(
+        "gauge", "Unix time the last pass completed without aborting."),
+    "infrx_retention_deleted_total": Spec(
+        "counter", "Content deleted and acknowledged (Report.deleted), by where it lived.",
+        (("location", frozenset({"object_store", "database"})),)),
+    "infrx_retention_retained_total": Spec(
+        "counter", "Candidates kept this pass (Report.retained), by refusal.",
+        (("reason", RETENTION_RETAINED),)),
+    "infrx_retention_delete_failed_total": Spec(
+        "counter", "Object-store deletes that failed (Report.delete_failed)."),
+    "infrx_retention_ack_lost_total": Spec(
+        "counter", "Deletes done whose acknowledgement did not commit (Report.ack_lost)."),
+    "infrx_retention_pending_delete_seconds": Spec(
+        "gauge", "Oldest unfinished delete a pass took over (Report.max_pending_delete_s)."),
+    "infrx_processing_cache_bytes": Spec("gauge", "Bytes under PROCESSING_CACHE_DIR."),
+    "infrx_processing_cache_evicted_total": Spec(
+        "counter", "Cache files removed: above the high water (_make_room) or past their "
+                   "life (sweep).", (("reason", frozenset({"high_water", "expired"})),)),
+    "infrx_processing_cache_refused_total": Spec(
+        "counter", "Puts refused because what is left is pinned (retryable 503)."),
     "infrx_build_info": Spec("gauge", "1, labelled with the deployed git revision and image.",
                              (("revision", _REVISION), ("image", _IMAGE))),
 }

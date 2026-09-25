@@ -143,6 +143,11 @@ REFUSALS = {
     "INFRX_IMAGE": {"INFRX_IMAGE": None},
     "SUPABASE_URL": {"SUPABASE_URL": None},
     "ACTIVE_RATE_CARD_VERSION": {"ACCOUNTING_REGIME": "credit"},
+    # M6-WIRING: a zero high water or cadence disables the bound (or spins) - refused
+    "PROCESSING_CACHE_MAX_BYTES": {"PROCESSING_CACHE_MAX_BYTES": "0"},
+    "RETENTION_INTERVAL_S": {"RETENTION_INTERVAL_S": "0"},
+    "CACHE_SWEEP_INTERVAL_S": {"CACHE_SWEEP_INTERVAL_S": "0"},
+    "JOURNAL_EXPIRE_INTERVAL_S": {"JOURNAL_EXPIRE_INTERVAL_S": "0"},
 }
 
 
@@ -256,6 +261,333 @@ def test_worker_main__readyz_waits_for_the_engine_and_metrics_are_served(tmp_pat
     assert down[0] == 503 and json.loads(down[1])["engine"] == "down", down
     assert up[0] == 200 and json.loads(up[1])["engine"] == "up", up
     assert metrics[0] == 200 and f'revision="{RELEASE}"' in metrics[1], metrics
+
+
+# ------------------------------------------------------------------ M6-WIRING: housekeeping
+# Failure oracles: no collector, two collectors, a collector over another store, a cache
+# with no high water or no lifecycle, a journal nobody prunes, or a gateway that also
+# collects (wiring 1 + E3C F-4); an input the keeper can remove while the engine reads it,
+# a pin never released, or a gone input refused without the one re-preparation (wiring 2).
+HOUSEKEEPING = {"retention", "cache_keeper", "journal_expire"}
+
+
+def test_worker_main__the_worker_is_the_one_owner_of_housekeeping(tmp_path, monkeypatch):
+    """Exactly one task per loop, over the stores the worker composed and on the settings'
+    intervals; preparation registers into that lifecycle, the cache has its high water and
+    the worker's registry; no gateway module composes any of it."""
+    from infrx.media.retention import RetentionCollector
+    from infrx.state.lifecycle import PgLifecycle
+    started, port = [], free_port()
+    answers = [3, 2, 0, 5]                        # one prune pass drains until nothing is left
+    assert asyncio.run(worker_main.expire_journal(
+        type("J", (), {"expire": lambda self: asyncio.sleep(0, answers.pop(0))})())) == 5
+
+    async def held(what, *args):
+        started.append((what, *args))
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(RetentionCollector, "run",
+                        lambda self, interval_s, *, metrics=None: held(
+                            "retention", self.lifecycle, self.objects, interval_s, metrics))
+    monkeypatch.setattr(worker_main, "every", lambda interval_s, step, what: held(
+        what, interval_s, step))
+    monkeypatch.setattr(worker_main, "expire_journal", lambda journal: journal)
+    objects = InMemoryObjectStore()
+    service, _ = composed(environment(
+        tmp_path, INFRX_MODE="dev", WORKER_HEALTH_PORT=str(port),
+        PROCESSING_CACHE_MAX_BYTES="12345", RETENTION_INTERVAL_S="7",
+        CACHE_SWEEP_INTERVAL_S="8", JOURNAL_EXPIRE_INTERVAL_S="9"), objects=objects)
+    media = service.preparation.runner.media
+    assert type(media.content) is PgLifecycle and media.cache.max_bytes == 12345
+    assert media.cache.metrics is service.metrics
+    assert service.engine.pin == media.cache.pin and service.engine.reprepare is not None
+    assert set(service.housekeeping) == HOUSEKEEPING
+    draining, drain = [], service.loop.drain
+
+    async def held_drain(bound):
+        """In-flight attempts still finishing: the housekeeping must still be running."""
+        for _ in range(3):
+            await asyncio.sleep(0)                # a cancel requested before this has landed
+        draining.extend(task.get_name() for task in asyncio.all_tasks()
+                        if task.get_name() in HOUSEKEEPING and not task.done())
+        return await drain(bound)
+    service.loop.drain = held_drain
+
+    async def case():
+        await service.start()
+        try:
+            while len(started) < 3:
+                await asyncio.sleep(0)
+            names = [task.get_name() for task in asyncio.all_tasks()]
+        finally:
+            await service.stop()
+            await service.engine.client.aclose()
+        return names, [task.get_name() for task in asyncio.all_tasks()]
+
+    names, after = asyncio.run(case())
+    assert sorted(name for name in names if name in HOUSEKEEPING) == sorted(HOUSEKEEPING)
+    assert not HOUSEKEEPING & set(after), "housekeeping outlived the drain"
+    assert sorted(draining) == sorted(HOUSEKEEPING), f"cancelled before the drain: {draining}"
+    by = {entry[0]: entry[1:] for entry in started}
+    assert len(started) == 3 and by["retention"] == (media.content, objects, 7.0,
+                                                    service.metrics)
+    interval, step = by["cache sweep"]
+    assert interval == 8.0 and asyncio.run(step()) == 0            # media.cache.sweep()
+    interval, step = by["journal expire"]
+    assert interval == 9.0 and step() is service.loop.runner.stream
+    gateway = API / "infrx" / "gateway"
+    for path in gateway.rglob("*.py"):
+        text = path.read_text()
+        for owned in ("RetentionCollector", "cache.sweep", ".expire(", "housekeeping"):
+            assert owned not in text, f"{path.name} composes {owned}: the worker owns it"
+
+
+def test_worker_main__a_housekeeping_loop_outlives_a_failed_step():
+    """The keeper and the prune run under `every`: a step that raises (the store down for a
+    pass) is logged and the loop runs again after its interval. Oracle: a loop that dies,
+    or stops, on its first failure - nothing watches these tasks, so it would stop
+    silently until the process restarted."""
+    runs, naps = [], []
+
+    class Enough(Exception):
+        pass
+
+    async def step():
+        runs.append(1)
+        if len(runs) == 1:
+            raise RuntimeError("the store is down for one pass")
+
+    async def nap(seconds):
+        naps.append(seconds)
+        if len(runs) == 3:
+            raise Enough                          # three steps ran: stop the test here
+
+    with contextlib.suppress(Exception):          # Enough, or whatever ended the loop
+        asyncio.run(worker_main.every(7.0, step, "x", sleep=nap))
+    assert (len(runs), naps) == (3, [7.0] * 3), "the loop ended on a failed step"
+
+
+def _real_lease(job_id: str):
+    """A lease on the wall clock the composed engine reads (`Wall`)."""
+    from datetime import timedelta
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.contracts.records import Lease, LeaseKind
+    now = utc_now()
+    return Lease(job_id=job_id, kind=LeaseKind.inference, generation=1, worker_id="w",
+                 acquired_at=now, expires_at=now + timedelta(seconds=DEFAULTS.lease_ttl_s),
+                 generation_deadline_at=now + timedelta(seconds=DEFAULTS.generation_timeout_s),
+                 first_token_deadline_at=now + timedelta(seconds=DEFAULTS.ttft_timeout_s))
+
+
+def _pinned_world(tmp_path, handler, clips: int = 1):
+    """The composed engine over `handler`, and `clips` prepared clips of one request, as
+    `(path, bytes)` in the composed cache (not written: the caller places them)."""
+    from infrx.contracts.conformance import builders as b
+    from infrx.worker import prepared_request
+    from tests.w.test_engine import Box, video_work
+    service, _ = composed(environment(tmp_path))
+    media = service.preparation.runner.media
+    refs, files = [], []
+    for n in range(1, clips + 1):
+        data = b"\x00\x00\x00\x18ftypmp42" + os.urandom(64)
+        digest = digest_of(data)
+        files.append((media.cache.path_for(b.ORG_A, "v1", digest, "video/mp4"), data))
+        refs.append(MediaRef(org_id=b.ORG_A, handle=f"med_{str(n) * 40}", kind=MediaKind.url,
+                             digest=digest, bytes=len(data), mime="video/mp4",
+                             storage_ref=f"media/{b.ORG_A}/v1/source{n}", duration_s=10.0))
+    service.engine.client = httpx.AsyncClient(base_url="http://engine.invalid",
+                                              transport=httpx.MockTransport(handler))
+    prepared = prepared_request(video_work(Box(), refs=tuple(refs)), PROMPT_TOKENS)
+    return service, media, files, prepared
+
+
+def _place(path: str, data: bytes) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    pathlib.Path(path).write_bytes(data)
+
+
+def _held(path: str) -> bool:
+    """Whether some holder still pins `path`: its shared `flock` blocks an exclusive one.
+    A file that is gone is held by nobody."""
+    import fcntl
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except FileNotFoundError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    finally:
+        os.close(fd)
+    return False
+
+
+def _finish(engine, prepared, job_id: str | None = None) -> str:
+    async def drive():
+        async for _ in engine.generate(_real_lease(job_id or str(uuid.uuid4())), prepared):
+            pass                                  # to terminal; no aclose: the end releases
+    try:
+        asyncio.run(drive())
+    except Exception as ended:                    # noqa: BLE001 - the class is the answer
+        return getattr(ended, "code", type(ended).__name__)
+    return "completed"
+
+
+def _completion() -> bytes:
+    from infrx.worker.fakes import chunk, sse
+    return (sse(chunk("A clip.", role=True)) + sse(chunk(finish_reason="stop"))
+            + sse(chunk(usage={"prompt_tokens": PROMPT_TOKENS, "completion_tokens": 2,
+                               "total_tokens": PROMPT_TOKENS + 2})) + b"data: [DONE]\n\n")
+
+
+def test_worker_main__the_keeper_never_removes_an_input_the_engine_is_reading(tmp_path):
+    """Wiring 2: the file is past its life and the keeper sweeps while the request is at
+    the engine - it survives; once the attempt is terminal the next sweep removes it."""
+    seen = {}
+
+    def handler(request):
+        os.utime(path, (0, 0))                    # expired: only the pin keeps it
+        seen["swept"] = media.cache.sweep()
+        seen["there"] = os.path.exists(path)
+        return httpx.Response(200, content=_completion())
+
+    service, media, [(path, data)], prepared = _pinned_world(tmp_path, handler)
+    _place(path, data)
+    assert _finish(service.engine, prepared) == "completed"
+    assert seen == {"swept": 0, "there": True}, seen
+    assert media.cache.sweep() == 1 and not os.path.exists(path), "the pin outlived the attempt"
+
+
+class _Hanging(httpx.AsyncByteStream):
+    """An engine that sends its first delta and then nothing: the attempt is mid-stream
+    until the consumer cancels or closes it. `aclose` records whether the inputs were still
+    pinned when the upstream response closed (and raises, for `close_raises`)."""
+
+    def __init__(self, paths, closed_held: list, fail: bool) -> None:
+        self.paths, self.closed_held, self.fail = paths, closed_held, fail
+
+    async def __aiter__(self):
+        from infrx.worker.fakes import chunk, sse
+        yield sse(chunk("A clip.", role=True))
+        await asyncio.Event().wait()
+
+    async def aclose(self) -> None:
+        self.closed_held.append(all(_held(path) for path in self.paths))
+        if self.fail:
+            raise RuntimeError("the upstream close failed")
+
+
+EXITS = ("engine_500", "transport_error", "cancelled", "consumer_closed", "close_raises",
+         "refused")
+
+
+@pytest.mark.parametrize("exit_path", EXITS)
+def test_worker_main__every_exit_path_releases_every_pin(tmp_path, exit_path):
+    """Wiring 2, every way an attempt ends other than completion (KEEPER is that one): an
+    engine 500, a transport error, the consumer's task cancelled mid-stream, the consumer
+    closing the stream (and that close raising), and a refusal after the pins were taken
+    (two clips: the pilot refuses more than one video, but only once both are pinned).
+    While the attempt runs every input is held - expired, it survives a sweep; once the
+    attempt is terminal nothing holds any of them and the next sweep removes them all. A
+    closed stream releases only after the upstream response is closed: until then vLLM
+    may still be reading the file. Oracles: a release on the success path only, a close
+    that raises skipping the release, a release before the upstream close, a pin on the
+    first input only."""
+    from infrx.contracts.records import ChunkEventType
+    during, closed_held = [], []
+    fail = exit_path == "close_raises"
+
+    def handler(request):
+        if exit_path == "engine_500":
+            return httpx.Response(500, content=b"engine exploded")
+        if exit_path == "transport_error":
+            raise httpx.ConnectError("connection refused", request=request)
+        return httpx.Response(200, stream=_Hanging(paths, closed_held, fail))
+
+    service, media, files, prepared = _pinned_world(
+        tmp_path, handler, clips=2 if exit_path == "refused" else 1)
+    paths = [path for path, _ in files]
+    for path, data in files:
+        _place(path, data)
+    engine, body = service.engine, service.engine.upstream_body
+
+    def pinned_body(request):
+        """After the pins, before anything is sent: every input is held."""
+        for path in paths:
+            os.utime(path, (0, 0))                # expired: only a pin keeps it
+        during.append((media.cache.sweep(), [os.path.exists(path) for path in paths]))
+        return body(request)
+    engine.upstream_body = pinned_body
+
+    async def drive():
+        stream = engine.generate(_real_lease(str(uuid.uuid4())), prepared)
+        if exit_path == "cancelled":
+            first = asyncio.Event()
+
+            async def consume():
+                async for event in stream:
+                    if event.type is ChunkEventType.delta:
+                        first.set()
+            task = asyncio.create_task(consume())
+            await first.wait()
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        elif exit_path in ("consumer_closed", "close_raises"):
+            async for event in stream:
+                if event.type is ChunkEventType.delta:
+                    break
+            with contextlib.suppress(RuntimeError):
+                await stream.aclose()
+        else:
+            with contextlib.suppress(Exception):
+                async for _ in stream:
+                    pass
+        # checked while `stream` is alive: a leaked pin is only dropped when it is collected
+        return [_held(path) for path in paths], stream.pins
+
+    held_after, _ = asyncio.run(drive())
+    assert during == [(0, [True] * len(paths))], during
+    assert held_after == [False] * len(paths), f"{exit_path}: a pin outlived the attempt"
+    if exit_path in ("consumer_closed", "close_raises"):
+        assert closed_held == [True], "the pins were released before the upstream close"
+    assert media.cache.sweep() == len(paths)
+    assert not any(os.path.exists(path) for path in paths)
+
+
+def test_worker_main__a_gone_input_is_prepared_again_once_then_refused(tmp_path):
+    """Wiring 2: an input not in the cache (swept, evicted) is prepared again once - for
+    the attempt's own job, whose staged media `prepare` reads - and the attempt runs; gone
+    again, the attempt is refused `not_found` and nothing is sent."""
+    sent, asked, restored, gone = [], [], str(uuid.uuid4()), str(uuid.uuid4())
+    service, media, [(path, data)], prepared = _pinned_world(
+        tmp_path, lambda request: sent.append(1) or httpx.Response(200, content=_completion()))
+
+    async def restores(job_id, profile):
+        asked.append((job_id, profile))
+        _place(path, data)
+    service.engine.reprepare = restores
+    assert _finish(service.engine, prepared, restored) == "completed"
+    assert (asked, sent) == ([(restored, "v1")], [1])
+
+    os.remove(path)
+    asked.clear(), sent.clear()
+
+    async def fails(job_id, profile):
+        asked.append((job_id, profile))
+    service.engine.reprepare = fails
+    assert _finish(service.engine, prepared, gone) == "not_found"
+    assert (asked, sent) == ([(gone, "v1")], [])
+
+    calls = []
+    fake = type("Media", (), {"prepared_by_job": {"j": 1}})()
+
+    async def prepare(job_id, profile):
+        calls.append((job_id, profile))
+    fake.prepare = prepare
+    asyncio.run(worker_main.reprepare_with(fake)("j", "v1"))
+    assert calls == [("j", "v1")] and fake.prepared_by_job == {}
 
 
 # ------------------------------------------------------------------ the process

@@ -1088,3 +1088,93 @@ def test_pg_load_and_cleanup_together_never_delete_live_content(make_d10_world):
                       "max_batch": max(r.max_batch for r in reports),
                       "max_in_flight": max(r.max_in_flight for r in reports),
                       "max_pending_delete_s": pending, "load_phase_wall_s": round(loaded_s, 2)})
+
+
+# --- WR-I8-M6-1: every pass is on the worker's registry ------------------------------------
+# Failure oracles: a pass, a deletion, a retained candidate, a failed delete or a lost
+# acknowledgement not counted (or counted once whatever its number); an aborted pass that
+# stamps "last success"; a streak that does not reset on a completed pass or does not count
+# a pass that raised.
+def test_the_registry_holds_what_each_report_says():
+    from collections import Counter
+    from infrx.observe.metrics import Registry
+    reg = Registry("worker")
+    aborted = retention.Report(
+        deleted=[("object_store", key(1), 1), ("object_store", key(2), 1),
+                 ("database", "jobs/x", 1)],
+        retained=Counter(lease_short=3, foreign_key=1), delete_failed=2, ack_lost=1,
+        max_pending_delete_s=42.0, aborted="object_store_unavailable")
+    retention.record(reg, aborted, 4)
+    value = reg.value
+    assert (value("infrx_retention_passes_total"),
+            value("infrx_retention_deleted_total", location="object_store"),
+            value("infrx_retention_deleted_total", location="database"),
+            value("infrx_retention_retained_total", reason="lease_short"),
+            value("infrx_retention_retained_total", reason="foreign_key"),
+            value("infrx_retention_delete_failed_total"), value("infrx_retention_ack_lost_total"),
+            value("infrx_retention_pending_delete_seconds"),
+            value("infrx_retention_aborted_total", reason="object_store_unavailable"),
+            value("infrx_retention_consecutive_aborted_passes"),
+            value("infrx_retention_last_success_timestamp_seconds")) == \
+        (1, 2, 1, 3, 1, 2, 1, 42.0, 1, 4, None)
+    before = time.time()
+    retention.record(reg, retention.Report(), 0)
+    assert value("infrx_retention_passes_total") == 2
+    assert value("infrx_retention_consecutive_aborted_passes") == 0
+    assert value("infrx_retention_pending_delete_seconds") == 0
+    assert before <= value("infrx_retention_last_success_timestamp_seconds") <= time.time()
+    retention.record(reg, None, 1)                   # a pass that raised: no report
+    assert value("infrx_retention_passes_total") == 2
+    assert value("infrx_retention_consecutive_aborted_passes") == 1
+    assert value("infrx_metrics_label_rejected_total",
+                 family="infrx_retention_retained_total") is None
+
+
+def test_run_records_every_pass_on_the_registry(make_world):
+    """`run(metrics=)`: a pass that raised and one that aborted both extend the streak and
+    stamp no success; the completed pass resets it, stamps it and counts its deletion."""
+    from infrx.observe.metrics import Registry
+    world = make_world()
+    run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+    reg, failures, seen = Registry("worker"), [RuntimeError("a bug"),
+                                                errors.DependencyUnavailable("down")], []
+
+    async def flaky(*, after, limit):
+        if failures:
+            raise failures.pop(0)
+
+    async def sleep(seconds):
+        seen.append((reg.value("infrx_retention_consecutive_aborted_passes"),
+                     reg.value("infrx_retention_last_success_timestamp_seconds") is not None))
+        if len(seen) == 3:
+            raise asyncio.CancelledError
+    with pytest.raises(asyncio.CancelledError):
+        run(collector(world, port=Interpose(world.port, candidates=flaky)).run(
+            1.0, sleep=sleep, metrics=reg))
+    assert seen == [(1, False), (2, False), (0, True)], seen
+    assert reg.value("infrx_retention_passes_total") == 2
+    assert reg.value("infrx_retention_aborted_total", reason="dependency_unavailable") == 1
+    assert reg.value("infrx_retention_deleted_total", location="object_store") == 1
+
+
+# --- E3C F-4: the worker's journal prune -----------------------------------------------------
+def test_pg_one_journal_prune_pass_removes_only_chunks_past_their_ttl(make_d10_world):
+    """F-4: nothing pruned the stream journal, so SSE deltas outlived JOURNAL_CHUNK_TTL_S.
+    One pass of the worker's prune (`expire_journal` over the `PgStreamStore`, on the
+    database clock) removes every chunk of the job whose journal is past its TTL and none
+    of the job whose journal is not."""
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.worker.__main__ import expire_journal
+    world = make_d10_world()
+
+    def chunks(job) -> int:
+        return world.sql("select count(*) from infrx.stream_chunks where job_id = %s",
+                         job.request_id)[0]
+    old, _ = run(world.succeed(run(world.write("source", key(1)))))
+    world.clock.advance(DEFAULTS.journal_chunk_ttl_s)
+    new, _ = run(world.succeed(run(world.write("source", key(2)))))
+    written = chunks(old)
+    assert written > 0 and chunks(new) > 0
+    assert run(expire_journal(world.harness.extra["stream"].store)) == written
+    assert (chunks(old), chunks(new)) == (0, written)
