@@ -536,8 +536,10 @@ def test_w5_reconcile__each_reaper_tick_publishes_the_reconciliation_gauges():
 
 def test_w5_reconcile_pg__the_detector_views_count_drift_and_unknown_holds():
     """On PostgreSQL (the D harness, task w5): `PgReconciliation` reads 0003/0006's detector
-    views and the unknown-usage holds as the worker's `service_role` - zero drift on a
-    consistent database, one drift row once a wallet summary disagrees with its ledger."""
+    views and the unknown-usage holds as the worker's `service_role` - zero on a consistent
+    database; then each of its four terms counts on its own (fix round 0-W5-R3): a USD wallet
+    summary off its ledger, a CREDIT wallet summary off its ledger, and one unknown hold in
+    each regime (`reconcile_after` set, the 0003/0006 window check)."""
     from tests.d import pgharness, pgstore
     reason = pgharness.unavailable()
     if reason:
@@ -551,7 +553,26 @@ def test_w5_reconcile_pg__the_detector_views_count_drift_and_unknown_holds():
         conn.execute("insert into infrx.wallets (org_id, ledger_total, reserved_total) "
                      "values (gen_random_uuid(), 1, 0)")
     drifted = run(read())
-    assert clean == (0, 0) and drifted == (1, 0), (clean, drifted)
+    with pgharness.connect(name) as conn:
+        conn.execute("set session_replication_role = replica")      # past FKs and guards
+        conn.execute("insert into infrx.credit_wallets (kind, owner_provider_org_id, "
+                     "ledger_total) values ('provider_dev', gen_random_uuid(), 1)")
+    both = run(read())
+    with pgharness.connect(name) as conn:
+        conn.execute("set session_replication_role = replica")
+        conn.execute("insert into infrx.credit_holds (request_id, org_id, amount, state, "
+                     "reconcile_after) values (gen_random_uuid(), gen_random_uuid(), 0, "
+                     "'unknown', now())")
+    usd_unknown = run(read())
+    with pgharness.connect(name) as conn:
+        conn.execute("set session_replication_role = replica")
+        conn.execute("insert into infrx.credit_wallet_holds (request_id, org_id, wallet_id, "
+                     "rate_card_version, amount, state, reconcile_after) values "
+                     "(gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'w5', 0, "
+                     "'unknown', now())")
+    unknown = run(read())
+    assert (clean, drifted, both, usd_unknown, unknown) == (
+        (0, 0), (1, 0), (2, 0), (2, 1), (2, 2)), (clean, drifted, both, usd_unknown, unknown)
 
 
 # --------------------------------------------------------------------------- 3. refusals
@@ -620,6 +641,44 @@ def test_w5_refuse__a_permanent_refusal_ends_the_job_once(tmp_path, refusal):
     assert len(dispatches(prep.store, request, OutboxKind.prepare_dispatch)) == 1
     assert "file://" not in result.detail and prep.root not in result.detail
     assert len(prep.app.tokenized) == (0 if refusal == "over_the_cap" else 1)
+
+
+@pytest.mark.parametrize("refusal", ["over_the_cap", "over_the_context"])
+def test_w5_refuse__without_fail_preparation_a_permanent_refusal_lapses_within_its_bound(
+        tmp_path, refusal):
+    """Fix round (0-W5-R1, 2-W5-ACC-2): TODAY's path. The real stores (PgJobStore, CreditWork)
+    have no `fail_preparation` until wiring 3 lands, so a permanent refusal cannot end the job:
+    each attempt answers typed with `ended` None, the runner lives on (a crash-only worker
+    must not die on an over-cap or over-context job), the lease lapses and the reaper
+    requeues it within 1 + MAX_PREPUBLICATION_RETRIES, and the store then ends the job
+    `preparation_failed` with its hold released once. Plain fake store: no FailPreparation."""
+    prep = Prep(tmp_path)
+    assert not hasattr(prep.runner.jobs, "fail_preparation")
+
+    async def case():
+        if refusal == "over_the_cap":
+            request = await prep.admit(video=True, clip=mp4(seconds=100.0))   # admitted at 120
+            prep.media.profile = MediaProfile.pinned(CAP)
+        else:
+            request = await prep.admit()
+            prep.app.control({"tokenize_count": 40_000})      # past max_input_tokens 30,720
+        results = []
+        while job(prep, request).outcome is None and len(results) < 10:
+            results.append(await outcome(prep.runner.run(request.request_id)))
+            if not isinstance(results[-1], PreparationResult):
+                break                                   # the runner died: asserted below
+            await lapse(prep)
+        return request, results
+
+    request, results = run(case())
+    assert all(isinstance(r, PreparationResult) for r in results), results
+    code = {"over_the_cap": "unsupported_media",
+            "over_the_context": "context_length_exceeded"}[refusal]
+    bound = 1 + DEFAULTS.max_prepublication_retries
+    assert [(r.refusal, r.ended) for r in results] == [(code, None)] * bound, results
+    assert job(prep, request).outcome.cause is TerminalCause.preparation_failed
+    assert released_once(prep, request) and job(prep, request).preparation_attempts == bound
+    assert len(prep.app.tokenized) == (0 if refusal == "over_the_cap" else bound)
 
 
 def test_w5_refuse__a_temporary_failure_is_retried_within_its_bound_never_ended_early(tmp_path):
@@ -806,3 +865,49 @@ def test_w5_ready_pg__the_worker_prepares_only_what_admit_ready_marked(tmp_path)
     assert refused.refusal == "not_claimable" and len(prep.app.tokenized) == 1, refused
     # the previous runtime's job was never even claimed: the claim went through the marker
     assert rows == {marked.request_id: (COUNT, 1), previous.request_id: (None, 0)}, rows
+
+
+@pytest.mark.parametrize("credit", [False, True], ids=["legacy", "credit"])
+def test_w5_ready_pg__without_a_readiness_store_a_text_job_fails_closed(tmp_path, credit):
+    """Fix round (0-W5-R2, the merge-order hazard): on PostgreSQL WITHOUT D10's marker
+    (`readiness=None`, today's `compose()`), a text job admitted through the pre-D10 store and
+    "attached" with no media through `PgAttachments` (which records nothing for no refs) is
+    NOT prepared: claimed, refused `not_claimable` at the bounded wait, the engine never
+    asked, no count stored. This is why W5 merges only together with wiring 1, D10's 0019 /
+    PgLifecycle and G7's admit_ready (the coordinator gate in the evidence's fix round)."""
+    from tests.d import pgharness, pgstore
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"W5: the D harness is unavailable: {reason}")
+    from infrx.media.attachments import PgAttachments
+    from infrx.state import migrations, pgtesting
+    from infrx.state.jobstore import connector
+    if credit:
+        harness = pgtesting.make_credit_jobstore_factory(
+            pgstore.fresh_database, pgharness.dsn, migrations.SEED_MARLIN.read_text())()
+    else:
+        harness = pgstore.factory()
+        harness.extra["grant"](b.ORG_A, "25.00")
+    connect = connector(pgharness.dsn(harness.extra["database"]))
+    prep = Prep(tmp_path, credit=credit, attach_wait_s=0.2)
+    prep.runner.jobs = worker_main.CreditWork(harness.port) if credit else harness.port
+    prep.media.attachments = PgAttachments(connect)
+    assert prep.runner.readiness is None
+
+    async def case():
+        if credit:
+            request = b.request(harness, org_id=v2fix.IDS.consumer_org,
+                                key_id=v2fix.IDS.consumer_key, model_revision=v2fix.REQUESTED_MODEL)
+            await harness.port.admit_credit(request, b.idem(request, "w5-text"))
+        else:
+            request = b.request(harness)
+            await harness.port.admit(request, b.idem(request, "w5-text"), ())
+        await PgAttachments(connect).put(request.request_id, ())     # the gateway's attach
+        return request, await within(prep.runner.run(request.request_id), 10.0)
+
+    request, result = run(case())
+    with pgharness.connect(harness.extra["database"]) as conn:
+        row = conn.execute("select state, prepared_prompt_tokens from infrx.jobs "
+                           "where request_id = %s", (request.request_id,)).fetchone()
+    assert (result.cause, result.refusal) == (None, "not_claimable"), result
+    assert prep.app.tokenized == [] and row == ("preparing", None), row

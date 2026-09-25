@@ -54,6 +54,10 @@ ENCODER = "test_w5_refuse__a_clip_past_the_encoder_budget_is_refused_before_it_i
 PARITY = "test_w5_refuse__the_video_bound_is_the_processors_worst_case_at_every_duration"
 GEOMETRY = "test_w5_refuse__the_maximum_geometry_at_the_cap_is_prepared"
 RACE = "test_w5_refuse__a_permanent_refusal_racing_a_cancel_settles_once"
+NO_PORT = "test_w5_refuse__without_fail_preparation_a_permanent_refusal_lapses_within_its_bound"
+PG_CLOSED = "test_w5_ready_pg__without_a_readiness_store_a_text_job_fails_closed"
+NO_PORT_BRANCH = ("            return None\n        try:\n"
+                  "            ended = await fail(lease, cause)")
 
 MUTANTS = (
     # --- 1. the readiness barrier (RV-05, ADMISSION-READY) -------------------------------
@@ -166,6 +170,17 @@ MUTANTS = (
        "(already_terminal), never a dead runner or a second settlement", P,
        "        except errors.DomainError as lost:\n            return lost.code",
        "        except errors.StaleLease as lost:\n            return lost.code", RACE),
+    # --- fix round: TODAY's path, a store without fail_preparation (0-W5-R1, 2-W5-ACC-2) ---
+    _m("w5_fail_preparation_required", "a store without fail_preparation (every real store "
+       "until wiring 3) is not an untyped crash of the runner", P,
+       '        fail = getattr(self.jobs, "fail_preparation", None)',
+       "        fail = self.jobs.fail_preparation", NO_PORT),
+    _m("w5_no_port_crashes_the_runner", "no fail_preparation port: the refusal is logged and "
+       "the lease lapses, the runner lives on", P, NO_PORT_BRANCH,
+       NO_PORT_BRANCH.replace("return None", 'raise RuntimeError("no port")'), NO_PORT),
+    _m("w5_no_port_reports_an_end", "no fail_preparation port: nothing ended, so `ended` is "
+       "None", P, NO_PORT_BRANCH,
+       NO_PORT_BRANCH.replace("return None", 'return "invalid_media"'), NO_PORT),
 )
 
 PG_MUTANTS = (
@@ -173,6 +188,25 @@ PG_MUTANTS = (
        V, '    "select (select count(*) from infrx.wallet_reconciliation"\n'
           '    " where ledger_drift <> 0 or reserved_drift <> 0)"\n    " + (',
        '    "select (', PG_VIEWS),
+    _m("w5_reconciliation_ignores_the_credit_view", "drift counts the CREDIT detector view "
+       "(0006) as well", V,
+       '    " + (select count(*) from infrx.credit_wallet_reconciliation"\n'
+       '    " where ledger_drift <> 0 or reserved_drift <> 0),"', '    " + 0,"', PG_VIEWS),
+    _m("w5_reconciliation_ignores_usd_unknown_holds", "unknown holds count the USD regime's "
+       "credit_holds", V,
+       "    \" (select count(*) from infrx.credit_holds where state = 'unknown')\"",
+       "    \" 0\"", PG_VIEWS),
+    _m("w5_reconciliation_ignores_credit_unknown_holds", "unknown holds count the CREDIT "
+       "regime's credit_wallet_holds", V,
+       "    \" + (select count(*) from infrx.credit_wallet_holds where state = 'unknown')\")",
+       "    \" + 0\")", PG_VIEWS),
+    _m("w5_reconciliation_counts_known_holds", "only holds in the unknown state are counted",
+       V, "infrx.credit_holds where state = 'unknown'",
+       "infrx.credit_holds where state <> 'unknown'", PG_VIEWS),
+    _m("w5_text_job_prepared_without_a_marker_on_postgresql", "without a ReadinessStore a text "
+       "job on the pre-D10 PostgreSQL store fails closed (the merge-order gate)", P,
+       "        await self._ready(lease.job_id)\n",
+       "        if work.media_refs:\n            await self._ready(lease.job_id)\n", PG_CLOSED),
     # needs D10's `infrx.state.lifecycle` on the tree (skipped visibly without it)
     _m("w5_claim_bypasses_the_marker_gate_on_postgresql", "on PostgreSQL the worker claims "
        "through D10's marker-gated door: a job the previous runtime admitted is never prepared",
