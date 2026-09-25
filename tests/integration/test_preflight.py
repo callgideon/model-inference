@@ -602,3 +602,22 @@ def test_the_s3_endpoint_is_removed_when_a_suite_is_interrupted(tmp_path, monkey
     with pytest.raises(KeyboardInterrupt):
         composed.gate(tmp_path)
     assert composed.calls[-1][0] == "s3-down"
+
+
+@pytest.mark.parametrize("target,args,expected", [
+    ("consumer-local", "GATE_ARGS=--break-seam expiry",
+     "tests/integration/consumer-local.sh --break-seam expiry"),
+    ("backend-certify", "GATE_ARGS=--validate-only", "tests/integration/backend-certify.sh --validate-only"),
+    ("app-e2e", "GATE_ARGS=", "tests/integration/app-e2e.sh"),
+    ("backend-local", "E3C_ARGS=--scale tiny",
+     'apps/infrx-api/.venv/bin/python tests/integration/backend/e3c/runner.py --out '
+     '"${E3C_OUT:-${TMPDIR:-/tmp}/infrx-e3c}" --scale tiny'),
+])
+def test_each_gate_has_a_make_target_that_runs_its_wrapper(target, args, expected):
+    """Wiring (E2C-3a113dc request 1, E2C-f61d2f0 request 1): `make <gate>` runs exactly the
+    wrapper with the caller's arguments. Fails if a target is missing (make exits 2), points at
+    another script, drops GATE_ARGS/E3C_ARGS or loses the E3C_OUT default."""
+    out = subprocess.run(["make", "-n", "-C", str(HERE.parent.parent), target, args],
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert expected in [line.strip() for line in out.stdout.splitlines()], out.stdout
