@@ -1,0 +1,86 @@
+{
+  "task": "M5",
+  "slice": "1-4",
+  "activity": "review",
+  "at": "2026-09-24T23:44:54Z",
+  "head": "35c401bd",
+  "base": "dff31efc",
+  "worktree": ".claude/worktrees/codex-m5-uploads",
+  "branch": "codex/m5-uploads",
+  "owned_paths": [
+    "apps/infrx-api/infrx/media/",
+    "apps/infrx-api/tests/m/",
+    "research/plan/evidence/m/M5-35c401b.md"
+  ],
+  "merged": [
+    "118f310c (coordinator tasklocal patch)",
+    "2d5e4743, 3a21e0bf, 1b9c7411 (F2C)",
+    "dee59ed8 (D10.a)"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/m/test_upload_restart.py  # on the OLD adapter",
+      "exit": 1,
+      "summary": "red: 10 failed, 1 passed (negative control reproduces RV-02)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=m5 INFRX_M_S3_ENDPOINT=http://127.0.0.1:55470 INFRX_M_S3_LOCAL_CREDS=1 INFRX_M_S3_BUCKET=infrx-m5 uv run --frozen pytest -q -rxs tests/m tests/g/uploads/test_uploads.py -k 'not test_mutant_is_killed'",
+      "exit": 1,
+      "summary": "486 passed, 1 failed (G test awaiting wiring request 2), 2 skipped, 1 xfailed (D10 media_refused)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=m5 ... pytest -q tests/m/test_upload_restart_stack.py -rx",
+      "exit": 0,
+      "summary": "8 passed, 1 xfailed: MinIO + PgLifecycle + separate OS processes, crash after each durable step"
+    },
+    {
+      "cmd": "INFRX_D_TASK=m5 pytest -q tests/m/test_upload_restart.py",
+      "exit": 0,
+      "summary": "30 passed (reference + PostgreSQL authorities); memory +0 B durable vs +1,808,900 B process-local / 400 tickets"
+    },
+    {
+      "cmd": "scratch copy + wiring request 2: INFRX_MUTANTS=all pytest -q tests/g/uploads",
+      "exit": 0,
+      "summary": "69 passed"
+    },
+    {
+      "cmd": "scratch copy + wiring request 1: pytest -q tests/m/test_upload_wiring.py tests/m/test_pilot_media.py -k 'not pg and not composition'",
+      "exit": 0,
+      "summary": "22 passed"
+    },
+    {
+      "cmd": "pytest -q tests/g tests/w tests/i tests/m/perf tests/contracts -k 'not test_mutant_is_killed' (pre-D10 merge)",
+      "exit": 1,
+      "summary": "2033 passed, 2 failed (both the G test of wiring request 2), 2 skipped"
+    },
+    {
+      "cmd": "INFRX_D_TASK=m5 pytest -q tests/d -k 'not test_mutant_is_killed' (after the D10.a merge)",
+      "exit": 1,
+      "summary": "415 passed, 18 failed (11 D10.a lifecycle conformance vs F2C final cases; 7 outbox[valkey] HarnessBusy on d2's port, not run), 14 xfailed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=m5 INFRX_MUTANTS=all pytest -q tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py",
+      "exit": 0,
+      "summary": "321 passed, 18 skipped (S3-only mutants without an endpoint); with INFRX_M_S3_ENDPOINT on MinIO tests/m/test_s3_mutants.py 47 passed"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "med",
+    "basis": "all four points green on D10's real adapter, MinIO and separate OS processes; remaining: two wiring patches, D10 media_refused alignment (one xfail flips), review fixes, one box smoke",
+    "at": "2026-09-24T23:44:54Z"
+  },
+  "blockers": [
+    "D10: 0019 lacks F2C's media_refused / UPLOAD_ABORT_REASONS (probe refusal not final on PostgreSQL)",
+    "wiring request 1 needs D10's infrx/state/lifecycle.py on main"
+  ],
+  "wiring_requests": [
+    "WR-1 apps/infrx-api/infrx/gateway/pilot.py: adapters_from_env builds PgLifecycle(connect, limits) on the stores' pool as 'lifecycle'; build_ingress_deps(lifecycle=None) passes uploads=lifecycle, content=lifecycle to MediaUploads (patch in the evidence; proof tests/m/test_upload_wiring.py WIRED path + the pool-composition case)",
+    "WR-2 apps/infrx-api/tests/g/uploads/test_uploads.py:666: ref = asyncio.run(store.resolve_owned(ORG_A, handle)) instead of store.refs[(ORG_A, handle)] (proof: tests/g/uploads + G uploads mutants 69 passed)"
+  ],
+  "evidence": [
+    "research/plan/evidence/m/M5-35c401b.md"
+  ]
+}
