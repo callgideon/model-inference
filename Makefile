@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -56,3 +56,20 @@ check: api-test api-mutants console-test console-lint console-typecheck console-
 # Optional arguments: make integration INTEGRATION_ARGS="--layer 1 --no-mutants"
 integration:
 	$(API)/.venv/bin/python tests/integration/run.py $(INTEGRATION_ARGS)
+
+# E2C: the local verification gates (tests/integration/ENVIRONMENT.md). Each script exits
+# 0 PASS, 1 FAIL, 3 BLOCKED/NOT RUN, 4 INVALID and prints its verdict.json path; make turns
+# any nonzero into 2, so read the verdict (or run the script) for the exact class.
+# GATE_ARGS examples: "--out DIR", "--break-seam readiness", "--certify-profile P -- --scale tiny".
+consumer-local:
+	tests/integration/consumer-local.sh $(GATE_ARGS)
+
+backend-certify:
+	tests/integration/backend-certify.sh $(GATE_ARGS)
+
+app-e2e:
+	tests/integration/app-e2e.sh $(GATE_ARGS)
+
+# E3C: the local backend gate on its own namespace; verdict.json lands in E3C_OUT.
+backend-local:
+	$(API)/.venv/bin/python tests/integration/backend/e3c/runner.py --out "$${E3C_OUT:-$${TMPDIR:-/tmp}/infrx-e3c}" $(E3C_ARGS)

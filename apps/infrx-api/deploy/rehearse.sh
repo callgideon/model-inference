@@ -40,7 +40,9 @@ NS=${REHEARSAL_NS:-infrx-i2b}
 LABEL=ai.infrx.rehearsal=$NS
 export REHEARSAL_NS=$NS REHEARSAL_LABEL=$LABEL
 PG_IMAGE=supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd
-MINIO_IMAGE=quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e  # tests/integration/compose.yaml
+# Former pin quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+# answers 401 UNAUTHORIZED on pull (E2C-f61d2f0 WR-2); E2C/E3C/M5 verified the pgsty digest below.
+MINIO_IMAGE=pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372  # tests/integration/compose.yaml
 KEY=infrx-i2b-rehearsal-legacy-key-0123456789     # a local literal, dev mode only
 mkdir -p "$INFRX_ROOT/etc" "$BIN"
 step() { printf '\n=== %s\n' "$*"; }

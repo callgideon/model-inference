@@ -1267,3 +1267,29 @@ def test_a_suite_under_the_api_tree_runs_against_a_copied_infrx(monkeypatch):
     mutant = next(m for m in mutants.MUTANTS if m.id == "e2m64")
     mutants.run_one(mutant, stack_available=False)
     assert seen and all(root != harness.API_ROOT and has_infrx for root, has_infrx in seen), seen
+
+
+def test_layer_three_suites_leave_out_the_backend_suite_its_own_stage_ran(monkeypatch):
+    """E2C-FR-2: at layer 3 `backend()` runs tests/integration/backend and then tears PostgREST
+    down; a `suites()` rerun of it afterwards skips the journey cases that need PostgREST, so
+    integration-l3 was BLOCKED by construction. Fails if layer 3 reruns the backend suite, or
+    if a layer without a backend stage stops running it."""
+    seen = []
+
+    def fake_shell(argv, **kw):
+        seen.append(argv)
+        return {"argv": " ".join(argv), "exit": 0, "counts": {"passed": 5}, "skips": [],
+                "seconds": 1.0, "tail": ""}
+    monkeypatch.setattr(runner, "shell", fake_shell)
+    for name in ("preflight", "services"):
+        monkeypatch.setattr(runner, name, lambda report, **k: True)
+    monkeypatch.setattr(runner, "migrate", lambda report, seed: {})
+    for name in ("rls", "backend", "backend_teardown", "teardown", "engine"):
+        monkeypatch.setattr(runner, name, lambda *a, **k: None)
+    ignore = f"--ignore={runner.BACKEND_SUITE}"
+    for layer, left_out in (("3", True), ("all", False), ("1", False)):
+        seen.clear()
+        runner.main(["--layer", layer, "--only-suites", "--no-mutants"])
+        (argv,) = seen
+        assert argv[argv.index("-q") + 1] == "tests/integration"
+        assert (ignore in argv) is left_out, (layer, argv)

@@ -547,3 +547,14 @@ def test_backend_deploy__maintenance_answers_every_request_with_the_retry_envelo
     assert ('{"ok":false}', 503) in bodies
     envelopes = [json.loads(body) for body, status in bodies if body.startswith('{"error"')]
     assert envelopes == [_envelope("dependency_unavailable", retry_after_s=retry)]
+
+
+def test_the_rehearsal_minio_is_the_integration_stacks_pullable_pin():
+    """Wiring (E2C-f61d2f0 request 5): rehearse.sh names the same MinIO digest as
+    tests/integration/compose.yaml. Fails while it keeps the quay.io pin that answers 401."""
+    rehearse = re.search(r"^MINIO_IMAGE=(\S+)", (DEPLOY / "rehearse.sh").read_text(), re.M)
+    compose = re.search(r"^\s*image:\s*(\S*minio\S*)",
+                        (support.API_DIR.parent.parent / "tests/integration/compose.yaml")
+                        .read_text(), re.M)
+    assert rehearse and compose and rehearse.group(1) == compose.group(1), (rehearse, compose)
+    assert rehearse.group(1).startswith("pgsty/minio@sha256:b6bfe723")
