@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { pollDelayMs } from "./request-view-model";
+import { browserTimer, pollLoop } from "./request-view-model";
 
 /**
  * Re-reads the page while the request is unfinished (or its read hit an outage): bounded
@@ -14,21 +14,7 @@ export function StatusPoller() {
   const [stopped, setStopped] = useState(false);
   const [round, setRound] = useState(0);
 
-  useEffect(() => {
-    let attempt = 0;
-    let timer: ReturnType<typeof setTimeout>;
-    const arm = (delay: number) => {
-      timer = setTimeout(() => {
-        attempt += 1;
-        router.refresh();
-        const next = pollDelayMs(attempt);
-        if (next === null) setStopped(true);
-        else arm(next);
-      }, delay);
-    };
-    arm(pollDelayMs(0) as number);
-    return () => clearTimeout(timer);
-  }, [router, round]);
+  useEffect(() => pollLoop(browserTimer, () => router.refresh(), () => setStopped(true)), [router, round]);
 
   return (
     <p role="status" className="mt-4 text-xs text-muted-foreground">

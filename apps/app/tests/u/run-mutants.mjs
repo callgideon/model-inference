@@ -49,6 +49,8 @@ const RR = "app/(console)/usage/[requestId]/request-reads.ts";
 const RV = "app/(console)/usage/[requestId]/request-view-model.ts";
 const PANEL = "app/(console)/usage/[requestId]/result-panel.tsx";
 const ROUTE = "app/(console)/usage/[requestId]/result/route.ts";
+const PAGE = "app/(console)/usage/[requestId]/page.tsx";
+const POLLER = "app/(console)/usage/[requestId]/status-poller.tsx";
 
 const SUITE = [
   "tests/u/usage-view-model.test.ts",
@@ -133,8 +135,13 @@ const U4 = {
   poll: "U4-V05 polling backs off, is bounded, and runs only while the request (or a retryable read) is unfinished",
   client: "U4-V06 the browser trusts only a same-origin JSON answer; a redirect or 401 is a signed-out state",
   timer: "U4-V07 the browser drops content at the persisted expiry and never before it is due",
+  loop: "U4-V09 the poll loop refreshes on the backoff, stops after MAX_POLLS, and unmount cancels it",
+  watch: "U4-V10 an open page drops content when the persisted expiry is due, never before, re-arming past the timer ceiling",
+  reads: "U4-V11 the result is read on mount and again on a back/forward restore (content hidden first); navigation aborts it",
+  fetch: "U4-V12 the browser's result fetch is same-origin and no-store, and an abandoned read shows nothing",
   source: "U4-G01 the request fixture is reachable only through the development preview gate",
   surface: "U4-S01 content stays out of the page payload, browser storage and logs; the route answers no-store",
+  wiring: "U4-S02 the client components run the tested drivers, no fetch bypasses them, and the page mounts the poller only when it polls",
 };
 
 const MUTANTS = [
@@ -827,13 +834,54 @@ const MUTANTS = [
   { id: "U4-M22", what: "a platform failure shows its internal cause", file: RV,
     find: "  return { title: \"The request failed on our side.\", action: OURS };",
     replace: "  return { title: `The request failed: ${cause}.`, action: OURS };", cases: [U4.failure] },
-  { id: "U4-M23", what: "the browser may cache the result fetch", file: PANEL,
-    find: "    cache: \"no-store\",", replace: "    cache: \"force-cache\",", cases: [U4.surface] },
+  { id: "U4-M23", what: "the browser may cache the result fetch", file: RV,
+    find: "      cache: \"no-store\",", replace: "      cache: \"force-cache\",", cases: [U4.fetch] },
   { id: "U4-M24", what: "the result panel persists content in browser storage", file: PANEL,
     find: "    const text = shown.text;", replace: "    const text = shown.text;\n    localStorage.setItem(\"result\", text);",
     cases: [U4.surface] },
   { id: "U4-M25", what: "the result route may be prerendered or cached", file: ROUTE,
     find: "export const dynamic = \"force-dynamic\";", replace: "export const dynamic = \"auto\";", cases: [U4.surface] },
+  // U4 fix round (0-U4-V-01/02): the browser lifecycle drivers and the components' wiring of them.
+  // A, B, F, K, D and E are the review's surviving mutants, each in its driver and its wiring form.
+  { id: "U4-M26", what: "(A) an open page keeps content past its expiry", file: RV,
+    find: "    if (delay === 0) return onExpire();", replace: "    if (false) return onExpire();", cases: [U4.watch] },
+  { id: "U4-M27", what: "(A) the panel does not drop content when the expiry fires", file: PANEL,
+    find: "() => setShown({ state: \"expired\" })", replace: "() => {}", cases: [U4.wiring] },
+  { id: "U4-M28", what: "(B) a back/forward restore shows the old content without re-reading", file: RV,
+    find: "    if ((event as Event & { persisted?: boolean }).persisted) {", replace: "    if (false) {", cases: [U4.reads] },
+  { id: "U4-M29", what: "(B) the panel listens for restores on something other than the window", file: PANEL,
+    find: "setShown, window)", replace: "setShown, new EventTarget())", cases: [U4.wiring] },
+  { id: "U4-M30", what: "(F) navigation away does not abort the reads", file: RV,
+    find: "    controller.abort();\n", replace: "", cases: [U4.reads] },
+  { id: "U4-M31", what: "(F) the panel drops the driver's cleanup, so nothing is aborted", file: PANEL,
+    find: "useEffect(() => watchResult(", replace: "useEffect(() => void watchResult(", cases: [U4.wiring] },
+  { id: "U4-M32", what: "(K) the retry button fetches without no-store", file: PANEL,
+    find: "            readResult(requestId).then((read) => {",
+    replace: "            fetch(`/usage/${requestId}/result`).then((r) => r.json()).then((read) => {", cases: [U4.wiring] },
+  { id: "U4-M33", what: "(E) the poll loop never stops", file: RV,
+    find: "    const delay = pollDelayMs(attempt);", replace: "    const delay = pollDelayMs(attempt) ?? FIRST_POLL_MS;", cases: [U4.loop] },
+  { id: "U4-M34", what: "(E) the poller never says it stopped", file: POLLER,
+    find: "() => setStopped(true)", replace: "() => {}", cases: [U4.wiring] },
+  { id: "U4-M35", what: "(D) the page polls whatever the model says", file: PAGE,
+    find: "{pollsFor(model) ? <StatusPoller /> : null}", replace: "{true ? <StatusPoller /> : null}", cases: [U4.wiring] },
+  { id: "U4-M36", what: "(D) a not-found request or a refused read is polled", file: RV,
+    find: "model.kind === \"error\" && model.poll;", replace: "true;", cases: [U4.poll] },
+  { id: "U4-M37", what: "unmount does not cancel the next poll", file: RV,
+    find: "  arm(0);\n  return () => cancel();", replace: "  arm(0);\n  return () => {};", cases: [U4.loop] },
+  { id: "U4-M38", what: "an early timer drops content before its expiry", file: RV,
+    find: "    cancel = schedule(arm, delay);", replace: "    cancel = schedule(onExpire, delay);", cases: [U4.watch] },
+  { id: "U4-M39", what: "unmount does not clear the expiry timer", file: RV,
+    find: "  arm();\n  return () => cancel();", replace: "  arm();\n  return () => {};", cases: [U4.watch] },
+  { id: "U4-M40", what: "a read answering after navigation is shown", file: RV,
+    find: "if (answer !== null && !controller.signal.aborted) show(answer);", replace: "if (answer !== null) show(answer);",
+    cases: [U4.reads] },
+  { id: "U4-M41", what: "a restore keeps the old content on screen while it re-reads", file: RV,
+    find: "      show({ state: \"loading\" });\n", replace: "", cases: [U4.reads] },
+  { id: "U4-M42", what: "the result fetch sends credentials cross-origin", file: RV,
+    find: "      credentials: \"same-origin\",", replace: "      credentials: \"include\",", cases: [U4.fetch] },
+  { id: "U4-M43", what: "an abandoned read shows 'unavailable'", file: RV,
+    find: "return signal?.aborted ? null : { state: \"unavailable\" };", replace: "return { state: \"unavailable\" };",
+    cases: [U4.fetch] },
 ];
 
 /**

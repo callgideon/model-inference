@@ -470,10 +470,10 @@ test(T.loop, () => {
     delays.push(timers.live()[0].ms);
     timers.fire();
   }
-  assert.deepEqual(delays, Array.from({ length: MAX_POLLS }, (_, n) => pollDelayMs(n)), "the backoff, in order");
   assert.equal(refreshes, MAX_POLLS);
   assert.equal(stops, 1, "the poller says it stopped");
   assert.equal(timers.live().length, 0, "nothing is armed after the last poll");
+  assert.deepEqual(delays, Array.from({ length: MAX_POLLS }, (_, n) => pollDelayMs(n)), "the backoff, in order");
 
   const unmounted = fakeTimers();
   let after = 0;
@@ -513,8 +513,11 @@ test(T.watch, () => {
 
   const early = fakeTimers(at - 1000);
   let earlyDropped = 0;
-  watchExpiry(expires, () => early.now() - 500, early.schedule, () => (earlyDropped += 1));
-  early.fire(); // the timer fired, but the clock says 500 ms remain
+  watchExpiry(expires, early.now, early.schedule, () => (earlyDropped += 1));
+  const [timer] = early.live();
+  timer.live = false;
+  early.set(at - 500);
+  timer.run(); // the timer fired, but the clock says 500 ms remain
   assert.equal(earlyDropped, 0, "never before it is due");
   assert.equal(early.live()[0].ms, 500, "re-armed for the rest");
 

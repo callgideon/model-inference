@@ -16,7 +16,7 @@ import test from "node:test";
 import { credits } from "../../lib/format.ts";
 import type { Answer, CreditClient } from "../../app/(console)/billing/credit-reads.ts";
 import { postgrestRequestReads, resultResponse } from "../../app/(console)/usage/[requestId]/request-reads.ts";
-import { expiryDelayMs, requestDetailModel, type RequestDetail } from "../../app/(console)/usage/[requestId]/request-view-model.ts";
+import { requestDetailModel, watchExpiry, type RequestDetail } from "../../app/(console)/usage/[requestId]/request-view-model.ts";
 
 const DSN = process.env.U4_PG_DSN;
 const skip = DSN === undefined ? "U4_PG_DSN is not set: run tests/u/request_world.py (task-local PostgreSQL)" : false;
@@ -141,11 +141,15 @@ const T = {
   agree: "U4-P01 at every store-clock instant the page's result access and result read agree with the API's owned-result read",
   content: "U4-P02 an available result is the stored body, exactly, and the charge shown is the durable debit",
   expiry: "U4-P03 the persisted expiry decides: a changed TTL moves only later results, and expiry removes content but keeps metadata and charge",
-  open: "U4-P04 a page open across the expiry: its reload reads expired, the browser timer is due, and the route answers without content",
+  open: "U4-P04 a page open across the expiry: its expiry driver drops content at the store instant, a reload reads expired, the route answers without content",
   tenant: "U4-P05 another individual, a provider, an ungranted user, a role change and a guessed link all read 'not found'",
   anon: "U4-P06 without a JWT subject nothing is read: the job read is refused and the result read is signed out",
-  gate: "U4-P07 an unknown-usage success is withheld by the App as by the API, though consumer_job_result alone would return it (WR-U4-2)",
+  gate: "U4-P07 an unknown-usage success is withheld by the App as by the API",
+  direct: "U4-P08 consumer_job_result alone refuses what the API withholds: an unknown-usage success is result_pending",
 };
+
+/** P08 stays a TODO until D10 applies WR-U4-2; that migration's patch removes this line. */
+const WR_U4_2 = "WR-U4-2 (D10 SQL) not applied: consumer_job_result returns an unknown-usage success's body";
 
 test(T.agree, { skip }, async () => {
   try {
@@ -232,13 +236,21 @@ test(T.open, { skip }, async () => {
     const id = WORLD.jobs.short;
     const open = await detail(WORLD.user, id);
     assert.equal((await as(WORLD.user).result(id)).state, "ready");
-    const [clock] = durable<{ now: string }>(`select to_json(infrx.now())#>>'{}' as now`);
-    const expiresIn = expiryDelayMs(open.result.expiresAt as string, Date.parse(clock.now));
-    assert.equal(expiresIn, WORLD.short_ttl * 1000, "the browser timer is armed for the persisted expiry");
+    // The open page's expiry driver, run on the store clock with its timer fired by hand.
+    const storeNow = () => Date.parse(durable<{ now: string }>(`select to_json(infrx.now())#>>'{}' as now`)[0].now);
+    const armed: { ms: number; run: () => void }[] = [];
+    let dropped = false;
+    watchExpiry(open.result.expiresAt as string, storeNow, (run, ms) => (armed.push({ ms, run }), () => {}), () => (dropped = true));
+    assert.deepEqual(armed.map((t) => t.ms), [WORLD.short_ttl * 1000], "the browser timer is armed for the persisted expiry");
+
+    at(WORLD.short_ttl - 1); // the timer fires a second early
+    armed.shift()?.run();
+    assert.equal(dropped, false, "content is not dropped before the persisted expiry");
+    assert.deepEqual(armed.map((t) => t.ms), [1000], "re-armed for the second left");
 
     at(WORLD.short_ttl); // exactly at the expiry: equality has passed
-    const [later] = durable<{ now: string }>(`select to_json(infrx.now())#>>'{}' as now`);
-    assert.equal(expiryDelayMs(open.result.expiresAt as string, Date.parse(later.now)), 0, "the open page's timer is due");
+    armed.shift()?.run();
+    assert.equal(dropped, true, "the open page drops the content at the store instant");
     const reload = await as(WORLD.user).result(id);
     assert.deepEqual(reload, { state: "expired" }, "a reload or reconnect reads expired, never the cached body");
     const response = resultResponse(reload);
@@ -311,7 +323,20 @@ test(T.gate, { skip }, async () => {
     `select state, settlement_state, result_expires_at::text as expires from infrx.jobs where request_id = ${lit(id)}`,
   );
   assert.equal(row.settlement_state, "held_unknown");
-  // Recorded, not required: what the D10 RPC alone answers for this request (WR-U4-2).
-  const direct = sql({ user: WORLD.user }, `select to_json(public.consumer_job_result(${lit(id)}))`);
-  console.log(`# U4-P07 consumer_job_result(unknown-usage success) alone: ${direct.error === null ? "returns the body" : `refuses ${direct.error.code}`} (state ${row.state}, expiry ${row.expires === null ? "none" : "set"})`);
+  assert.equal(row.state, "succeeded", "the case the RPC must withhold (P08) is a stored success");
+  assert.notEqual(row.expires, null);
+});
+
+// The grant to `authenticated` is a real PostgREST endpoint: the anon key plus the user's JWT
+// reaches it without the App, so the RPC itself must withhold what `read_outcome` withholds.
+test(T.direct, { skip, todo: WR_U4_2 }, () => {
+  at(0);
+  const direct = sql({ user: WORLD.user }, `select to_json(public.consumer_job_result(${lit(WORLD.jobs.unknown)}))`);
+  assert.equal(direct.data, null, "consumer_job_result served an unknown-usage result");
+  assert.equal(direct.error?.code, "P0001");
+  assert.match(direct.error?.message ?? "", /^result_pending:/);
+  // Its settled sibling is still served, so the refusal is the usage gate, not a broken RPC.
+  const kept = sql({ user: WORLD.user }, `select to_json(public.consumer_job_result(${lit(WORLD.jobs.kept)}))`);
+  assert.equal(kept.error, null);
+  assert.equal(typeof kept.data, "string");
 });

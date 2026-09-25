@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { clientResultRead, expiryDelayMs, type ResultRead } from "./request-view-model";
-
-type Shown = ResultRead | { state: "loading" };
+import { browserTimer, readResult, watchExpiry, watchResult, type Shown } from "./request-view-model";
 
 const MESSAGES: Record<Exclude<Shown["state"], "ready" | "signed_out">, string> = {
   loading: "Loading the result…",
@@ -17,22 +15,6 @@ const MESSAGES: Record<Exclude<Shown["state"], "ready" | "signed_out">, string> 
   unavailable: "The result could not be loaded right now.",
 };
 
-/** One read of the no-store result route; `null` when the read was abandoned (navigation). */
-async function readResult(requestId: string, signal?: AbortSignal): Promise<ResultRead | null> {
-  try {
-    const response = await fetch(`/usage/${encodeURIComponent(requestId)}/result`, {
-      cache: "no-store",
-      credentials: "same-origin",
-      signal,
-    });
-    const json = (response.headers.get("content-type") ?? "").startsWith("application/json");
-    const body: unknown = json ? await response.json() : null;
-    return clientResultRead({ status: response.status, redirected: response.redirected, json }, body);
-  } catch {
-    return signal?.aborted ? null : { state: "unavailable" };
-  }
-}
-
 /**
  * The owned result's content (U4). Held only in this component's memory: fetched from the no-store
  * result route on mount and on a back/forward restore, dropped at the persisted expiry, and never
@@ -42,36 +24,13 @@ export function ResultPanel({ requestId, expiresAt }: { requestId: string; expir
   const [shown, setShown] = useState<Shown>({ state: "loading" });
   const [copied, setCopied] = useState(false);
 
-  // Read on mount; stop on navigation away. A page restored from the back/forward cache reads
-  // again, so content that expired meanwhile is not shown from memory.
-  useEffect(() => {
-    const controller = new AbortController();
-    const show = (read: ResultRead | null) => {
-      if (read !== null) setShown(read);
-    };
-    readResult(requestId, controller.signal).then(show);
-    const onShow = (event: PageTransitionEvent) => {
-      if (event.persisted) readResult(requestId, controller.signal).then(show);
-    };
-    window.addEventListener("pageshow", onShow);
-    return () => {
-      controller.abort();
-      window.removeEventListener("pageshow", onShow);
-    };
-  }, [requestId]);
+  // Read on mount and again on a back/forward restore; abort on navigation away.
+  useEffect(() => watchResult((signal) => readResult(requestId, signal), setShown, window), [requestId]);
 
-  // Drop the content at the persisted expiry (re-armed past setTimeout's ceiling).
+  // Drop the content at the persisted expiry.
   useEffect(() => {
     if (shown.state !== "ready") return;
-    let timer: ReturnType<typeof setTimeout>;
-    const arm = () => {
-      timer = setTimeout(() => {
-        if (expiryDelayMs(expiresAt, Date.now()) === 0) setShown({ state: "expired" });
-        else arm();
-      }, expiryDelayMs(expiresAt, Date.now()));
-    };
-    arm();
-    return () => clearTimeout(timer);
+    return watchExpiry(expiresAt, Date.now, browserTimer, () => setShown({ state: "expired" }));
   }, [shown.state, expiresAt]);
 
   if (shown.state === "ready") {

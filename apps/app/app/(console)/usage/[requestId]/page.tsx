@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requestDetailHref } from "../../billing/credit-view-model";
 import { EmptyPanel, ErrorPanel } from "../states";
 import { consumerRequestReads } from "./request-context";
-import { PHASE_LABELS, RETRY_GUIDANCE, requestDetailModel, type RequestDetail } from "./request-view-model";
+import { PHASE_LABELS, RETRY_GUIDANCE, pollsFor, requestDetailModel, type RequestDetail } from "./request-view-model";
 import { ResultPanel } from "./result-panel";
 import { StatusPoller } from "./status-poller";
 
@@ -49,9 +49,7 @@ export default async function RequestPage({ params }: PageProps<"/usage/[request
       ) : null}
       {model.kind === "ready" ? <Detail detail={model.value} /> : null}
 
-      {(model.kind === "ready" && model.value.poll) || (model.kind === "error" && model.poll) ? (
-        <StatusPoller />
-      ) : null}
+      {pollsFor(model) ? <StatusPoller /> : null}
     </>
   );
 }

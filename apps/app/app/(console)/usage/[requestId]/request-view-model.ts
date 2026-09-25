@@ -1,8 +1,8 @@
 /**
  * Request detail view model (U4): one owned request from `consumer_jobs` — phase, status, exact
  * charge state in the job's own unit, a sanitized failure explanation, and whether its result can
- * be read — plus the pure rules the browser pieces follow (poll backoff, the result fetch answer,
- * the expiry timer).
+ * be read — plus the rules the browser pieces follow (poll backoff and loop, the result fetch and
+ * its answer, the expiry timer, the back/forward re-read), with timers, clock and events injected.
  *
  * Result access is the contract's read classification (`ReadOutcome`, F2C.b), applied to the
  * persisted fields `consumer_jobs` returns; "available vs expired" is the database's own
@@ -173,6 +173,11 @@ export function requestDetailModel(read: Result<ConsumerJob | null>): RequestDet
   return state.kind === "error" ? { ...state, poll: state.recovery === "retry" } : state;
 }
 
+/** Whether the page mounts the poller: an unfinished request, or a read that hit an outage. */
+export function pollsFor(model: RequestDetailModel): boolean {
+  return model.kind === "ready" ? model.value.poll : model.kind === "error" && model.poll;
+}
+
 // ---------------------------------------------------------------------------
 // Polling: bounded exponential backoff
 // ---------------------------------------------------------------------------
@@ -187,6 +192,29 @@ export function pollDelayMs(attempt: number): number | null {
   return Math.min(FIRST_POLL_MS * 2 ** attempt, MAX_POLL_MS);
 }
 
+/** Arms `run` after `ms` milliseconds; the answer cancels it. */
+export type Schedule = (run: () => void, ms: number) => () => void;
+
+export const browserTimer: Schedule = (run, ms) => {
+  const id = setTimeout(run, ms);
+  return () => clearTimeout(id);
+};
+
+/** Calls `refresh` on the backoff, then `onStop` after the last poll. The answer cancels (unmount). */
+export function pollLoop(schedule: Schedule, refresh: () => void, onStop: () => void): () => void {
+  let cancel = () => {};
+  const arm = (attempt: number) => {
+    const delay = pollDelayMs(attempt);
+    if (delay === null) return onStop();
+    cancel = schedule(() => {
+      refresh();
+      arm(attempt + 1);
+    }, delay);
+  };
+  arm(0);
+  return () => cancel();
+}
+
 // ---------------------------------------------------------------------------
 // The browser's result fetch
 // ---------------------------------------------------------------------------
@@ -194,6 +222,9 @@ export function pollDelayMs(attempt: number): number | null {
 export type ResultRead =
   | { state: "ready"; text: string }
   | { state: "pending" | "withheld" | "no_result" | "expired" | "unavailable" | "not_found" | "signed_out" };
+
+/** What the result panel shows: a read, or nothing yet. */
+export type Shown = ResultRead | { state: "loading" };
 
 /** The status the result route answers each state with; the browser checks the two agree. */
 export const RESULT_STATUS: Record<ResultRead["state"], number> = {
@@ -228,6 +259,56 @@ export function clientResultRead(
   return { state } as ResultRead;
 }
 
+/** One read of the no-store result route; `null` when the read was abandoned (navigation). */
+export async function readResult(
+  requestId: string,
+  signal?: AbortSignal,
+  fetcher: typeof fetch = fetch,
+): Promise<ResultRead | null> {
+  try {
+    const response = await fetcher(`/usage/${encodeURIComponent(requestId)}/result`, {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal,
+    });
+    const json = (response.headers.get("content-type") ?? "").startsWith("application/json");
+    const body: unknown = json ? await response.json() : null;
+    return clientResultRead({ status: response.status, redirected: response.redirected, json }, body);
+  } catch {
+    return signal?.aborted ? null : { state: "unavailable" };
+  }
+}
+
+/**
+ * Reads the result now, and again when the page is restored from the back/forward cache — hiding
+ * the old content first, so content that expired meanwhile is never shown from memory. The answer
+ * aborts the reads and stops listening (navigation away); a read answering after that shows nothing.
+ */
+export function watchResult(
+  read: (signal: AbortSignal) => Promise<ResultRead | null>,
+  show: (shown: Shown) => void,
+  page: Pick<EventTarget, "addEventListener" | "removeEventListener">,
+): () => void {
+  const controller = new AbortController();
+  const load = () => {
+    read(controller.signal).then((answer) => {
+      if (answer !== null && !controller.signal.aborted) show(answer);
+    });
+  };
+  const onShow = (event: Event) => {
+    if ((event as Event & { persisted?: boolean }).persisted) {
+      show({ state: "loading" });
+      load();
+    }
+  };
+  load();
+  page.addEventListener("pageshow", onShow);
+  return () => {
+    controller.abort();
+    page.removeEventListener("pageshow", onShow);
+  };
+}
+
 /** setTimeout's ceiling; a longer wait is re-armed when it fires. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -236,6 +317,18 @@ export function expiryDelayMs(expiresAt: string, nowMs: number): number {
   const at = Date.parse(expiresAt);
   if (Number.isNaN(at)) return 0;
   return Math.min(Math.max(at - nowMs, 0), MAX_TIMER_MS);
+}
+
+/** Calls `onExpire` once `now` reaches the persisted expiry, re-arming past the timer ceiling. */
+export function watchExpiry(expiresAt: string, now: () => number, schedule: Schedule, onExpire: () => void): () => void {
+  let cancel = () => {};
+  const arm = () => {
+    const delay = expiryDelayMs(expiresAt, now());
+    if (delay === 0) return onExpire();
+    cancel = schedule(arm, delay);
+  };
+  arm();
+  return () => cancel();
 }
 
 // ---------------------------------------------------------------------------
