@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "130e948b",
+  "integration_head": "9a5acf79",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -1853,8 +1853,8 @@
     {
       "id": "P-01",
       "status": "open",
-      "what": "Approved CREDIT rate card (unit, rounding, failed-execution disclosure)",
-      "owner": "operator; G8/D10/I8 inventory",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Approved CREDIT rate card (unit, rounding, failed-execution disclosure)",
+      "owner": "coordinator (publish-card)",
       "blocks": [
         "E4C"
       ]
@@ -1862,8 +1862,8 @@
     {
       "id": "P-02",
       "status": "open",
-      "what": "Re-opened by S3: inventory the pilot's USD 5.00 test grant and legacy_usd usage (W12, E1B, E4B) read-only before CREDIT activation; no conversion",
-      "owner": "operator; G8 inventory (with D10)",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Re-opened by S3: inventory the pilot's USD 5.00 test grant and legacy_usd usage (W12, E1B, E4B) read-only before CREDIT activation; no conversion",
+      "owner": "coordinator (read-only dry-run)",
       "blocks": [
         "E4C"
       ]
@@ -1871,8 +1871,8 @@
     {
       "id": "P-05",
       "status": "open",
-      "what": "Verified signup email/callback/recovery and abuse bounds on the target; also a second verified hosted test tenant (E1B --tenant-keys, E4C two-tenant/fairness cells) per S3",
-      "owner": "operator/coordinator; A2/I2A",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Verified signup email/callback/recovery and abuse bounds on the target; also a second verified hosted test tenant (E1B --tenant-keys, E4C two-tenant/fairness cells) per S3",
+      "owner": "operator-held (confirm 2nd user, verified-count read); then coordinator (grant/issue-key); A2/I2A public onboarding",
       "blocks": [
         "E1B",
         "E4C",
@@ -1883,8 +1883,8 @@
     {
       "id": "P-06",
       "status": "open",
-      "what": "Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10)",
-      "owner": "I8 slice 5 + wiring request for serving-version.json",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10)",
+      "owner": "coordinator (SSM inventory.sh); I8 (record + PINNED)",
       "blocks": [
         "E4C"
       ]
@@ -1892,8 +1892,8 @@
     {
       "id": "P-17",
       "status": "open",
-      "what": "Final operator decision accepting the backend candidate (then App before Lab)",
-      "owner": "coordinator/user; E4C",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab)",
+      "owner": "coordinator at E4C handback",
       "blocks": [
         "E4C"
       ]
@@ -1901,8 +1901,8 @@
     {
       "id": "P-18",
       "status": "open",
-      "what": "Predeclared workload/SLO/error/recovery limits for E4C",
-      "owner": "workload owner; S3/E4C",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Predeclared workload/SLO/error/recovery limits for E4C",
+      "owner": "E4C lane (protocol §5 + certify.py thresholds before first qualifying run)",
       "blocks": [
         "E4C"
       ]
@@ -1910,16 +1910,16 @@
     {
       "id": "P-19",
       "status": "open",
-      "what": "Sourced infrastructure price row or actual bill for cost-per-unit figures",
-      "owner": "pricing owner/user; E1C",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Sourced infrastructure price row or actual bill for cost-per-unit figures",
+      "owner": "research lane (cloud-pricing.md row)",
       "blocks": [
         "E4C"
       ]
     },
     {
       "id": "P-22",
-      "status": "open",
-      "what": "Canonical alias/legacy price identity decision (resolve before pricing vs per-string rows)",
+      "status": "resolved",
+      "what": "CLOSED: decided 2026-09-24 as R109 (resolve, then price); Canonical alias/legacy price identity decision (resolve before pricing vs per-string rows)",
       "owner": "F2C-C/D10/G7 (D/G decision)",
       "blocks": [
         "E4C"
@@ -1928,8 +1928,8 @@
     {
       "id": "P-24",
       "status": "open",
-      "what": "Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run",
-      "owner": "E1C/E4C; coordinator op (key inventory)",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run",
+      "owner": "E4C lane (profile); E1C micro-lane (CREDIT spend schema); operator-held (+40,000 CREDIT adjust)",
       "blocks": [
         "E4C"
       ]
@@ -1937,8 +1937,8 @@
     {
       "id": "P-25",
       "status": "open",
-      "what": "Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle",
-      "owner": "I8/D10/M6",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle",
+      "owner": "M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read)",
       "blocks": [
         "E4C"
       ]
@@ -1946,8 +1946,8 @@
     {
       "id": "P-26",
       "status": "open",
-      "what": "Key revocation during an identity-source outage: a key cached before the outage is served past KEY_TTL (60 s) until PostgREST answers again; decide bounded staleness (state it in the U2/A3 copy) vs fail-closed 503s (G7 verification / G8 0-G8-R3)",
-      "owner": "user/product; G7 implements",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Key revocation during an identity-source outage: a key cached before the outage is served past KEY_TTL (60 s) until PostgREST answers again; decide bounded staleness (state it in the U2/A3 copy) vs fail-closed 503s (G7 verification / G8 0-G8-R3)",
+      "owner": "A3/U2 (copy only)",
       "blocks": [
         "E4C"
       ]
@@ -2629,6 +2629,12 @@
       "by": "E2C",
       "what": "review → review; head 8a94a855; estimate likely 2 → 0.25 h (layer-3 rls green at head; only 0022 will need a re-baseline)",
       "source": "updates/L3-REBASE-20260925T1812Z.json"
+    },
+    {
+      "at": "2026-09-25T19:00:36Z",
+      "by": "coordinator",
+      "what": "inputs P-01..P-26 decided under the operator's authorization; P-22 closed; the rest decided with enactment pending",
+      "source": "research/plan/15-pending-inputs.md#decisions-2026-09-25-coordinator-under-the-operators-authorization"
     }
   ],
   "history": {
