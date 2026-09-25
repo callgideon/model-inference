@@ -1,0 +1,20 @@
+{
+  "task": "E1C",
+  "slice": "PROFILE-CREDIT-CAP (P-24 amendment: spend cap in USD or CREDIT)",
+  "activity": "review",
+  "head": "54b3733",
+  "worktree": ".claude/worktrees/codex-profile-credit-cap",
+  "branch": "codex/profile-credit-cap",
+  "owned_paths": ["models/marlin2b/runprofile.py", "models/marlin2b/profiles/", "models/marlin2b/tests/", "tests/integration/backend/test_certify.py", "research/plan/evidence/e/"],
+  "commands": [
+    {"cmd": "make bench-test", "exit": 0, "summary": "110 passed"},
+    {"cmd": "apps/infrx-api/.venv/bin/python models/marlin2b/tests/mutants.py", "exit": 0, "summary": "112 mutants, 109 killed, 3 controls survived, 0 problems"},
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py tests/integration/test_run.py", "exit": 0, "summary": "96 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 1, "confidence": "high", "basis": "implementation complete, suites green; review only", "at": "2026-09-25T19:10Z"},
+  "next_action": "coordinator review/merge; then commit the E4C base profile in CREDIT (max_spend 50000, rates 400/1200) after P-01 ratification",
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/e/E1C-credit-cap-54b3733.md"]
+}
