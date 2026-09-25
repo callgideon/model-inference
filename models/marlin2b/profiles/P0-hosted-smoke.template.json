@@ -36,9 +36,9 @@
     "max_drain_s": 600,
     "spend": {
       "currency": "USD",
-      "max_usd": 0.05,
-      "outstanding_holds_usd": null,
-      "rates": {"input_usd_per_mtok": 0.10, "output_usd_per_mtok": 0.30,
+      "max_spend": 0.05,
+      "outstanding_holds": null,
+      "rates": {"input_per_mtok": 0.10, "output_per_mtok": 0.30,
                 "source": "P-22 pv_marlin2b_usd_2026_09 (plan 20 section 14.1)",
                 "as_of": "2026-09-24"}
     },

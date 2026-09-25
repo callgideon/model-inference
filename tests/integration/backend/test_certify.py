@@ -1556,7 +1556,7 @@ def _base_profile(tmp_path, host="gw.example"):
     profile["bounds"].update({"max_requests": 10000, "max_duration_s": 100000,
                               "max_input_bytes": 10 ** 12, "max_output_tokens_per_request": 1024,
                               "max_output_tokens": 10 ** 8, "max_concurrency": 64})
-    profile["bounds"]["spend"].update({"max_usd": 1000.0, "outstanding_holds_usd": 0.0})
+    profile["bounds"]["spend"].update({"max_spend": 1000.0, "outstanding_holds": 0.0})
     profile["workload"].update({"item_ids": [c["id"] for c in clips], "expected_invalid": [
         c["id"] for c in clips if c["derived"]["duration_s"] > CAP]})
     profile["measurement"].update({"profile_class": "P1", "client": {
