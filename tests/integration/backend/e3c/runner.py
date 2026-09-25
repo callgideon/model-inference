@@ -189,6 +189,8 @@ REQUIRED = {
             "test_s12_a_collector_that_cannot_run_is_blocked_not_passed",
             "test_s12_the_dedicated_runtime_login_is_a_real_box_database",
             "test_s12_a_revert_control_tree_claims_this_checkouts_stack",
+            "test_s12_a_reverted_tree_that_does_not_start_is_invalid_not_a_detection",
+            "test_s12_a_control_writes_its_cases_apart_from_the_main_run",
             *(f"test_s12_every_bypass_installs_on_this_tree[{n}]" for n in (
                 "upload-local", "expiry-recompute", "revoke-ignored", "tenant-blind"))),
 }
@@ -279,6 +281,22 @@ def classify(junit_xml: str, only: set[str] | None = None,
     return {"scenarios": scenarios, "controls": controls}
 
 
+#: A box process that could not start (pilotbox's RuntimeError): on a reverted tree this is
+#: the tree failing to boot, not the corrective oracle detecting the reverted fix.
+NO_START = re.compile(r"RuntimeError: the (?:worker|gateway) (?:exited|was not ready)")
+
+
+def reverted_status(entry: dict) -> tuple[str, list[str]]:
+    """The status a revert-type control's scenario had on its tree, and why. A case that
+    failed because a box process did not start makes it INVALID[harness]: a tree that cannot
+    run proves nothing about the oracle (E3C early run: a revert that dropped a shared import
+    killed the worker, and every s04 case "failed")."""
+    dead = [reason for reason in entry["reasons"] if NO_START.search(reason)]
+    if dead:
+        return INVALID, [f"INVALID[harness] the reverted tree does not start: {dead[0][:300]}"]
+    return entry["status"], []
+
+
 def control_verdict(reverted: str) -> str:
     """A revert-type control: its scenario on the tree with the fix reverted must be red.
     FAIL there -> the control PASSES; PASS there -> it FAILS; anything else propagates."""
@@ -343,13 +361,21 @@ def run_env(out: Path, tree: Path | None = None) -> dict:
     return env
 
 
+def case_out(out: Path, name: str, tree: Path | None) -> Path:
+    """Where a pytest session's box logs go: the main run's under `out`, a revert-type
+    control's under `out/<control>` (its cases carry the main run's names)."""
+    return out / name if tree is not None else out
+
+
 def pytest_run(out: Path, name: str, files: list[str], keyword: str | None,
                tree: Path | None = None) -> tuple[dict, str]:
     """pytest in its own session, the whole output to `<out>/<name>.log`, JUnit beside it."""
     import subprocess
     junit, log = out / f"{name}.xml", out / f"{name}.log"
     import world
-    env = run_env(out, tree)
+    # A control's cases (same names as the main run's) write under `<out>/<control>/cases`,
+    # never over the main run's evidence.
+    env = run_env(case_out(out, name, tree), tree)
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
             "-o", "junit_family=xunit1", f"--junitxml={junit}", *files,
             *(["-k", keyword] if keyword else [])]
@@ -453,11 +479,13 @@ def main(argv: list[str] | None = None) -> int:
                     done, junit = pytest_run(out, nc, scenario_files(Path(tree)),
                                              control["scenario"], Path(tree))
                     runs[nc] = done
-                    scenario = classify(junit or "<testsuites/>")["scenarios"][
-                        control["scenario"]]["status"]
+                    on_tree = classify(junit or "<testsuites/>")["scenarios"][
+                        control["scenario"]]
+                    scenario, why = reverted_status(on_tree)
                     result["controls"][nc].update(
-                        status=control_verdict(scenario),
-                        reasons=[f"{control['scenario']} on {tree} (fix reverted): {scenario}"])
+                        status=control_verdict(scenario), cases=on_tree["cases"],
+                        reasons=[f"{control['scenario']} on {tree} (fix reverted): {scenario}",
+                                 *why, *on_tree["reasons"]])
             elif held:
                 blocked_all(result, why)
     except run.Interrupted as stop:

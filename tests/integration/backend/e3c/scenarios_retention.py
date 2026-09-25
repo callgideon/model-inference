@@ -81,9 +81,11 @@ def test_s06_a_collector_that_cannot_reach_the_database_deletes_nothing(workdir)
 
 
 def test_s06_past_expiry_content_is_scrubbed_and_metadata_kept(workdir):
-    """A settled text job; the store clock past its persisted result expiry and its journal
-    TTL. The WORKER's housekeeping (M6's entry: retention + journal prune, at a 2 s cadence
-    here) removes the content-bearing rows; the job, its usage and its debit stay; the API
+    """A settled text job. The WORKER's housekeeping (M6's entry: retention + journal prune,
+    at a 2 s cadence here) removes each content-bearing row when ITS persisted life ends:
+    past the result expiry and the journal TTL the result body and the SSE deltas go while
+    the request record stays (inside the job's content retention, 0020); past that
+    retention the request record goes too. The job, its usage and its debit stay; the API
     answers 410 and a replay resurrects nothing."""
     with world.composed(workdir, RESULT_TTL_S=str(TTL_S), **world.HOUSEKEEPING) as trip:
         alpha = trip.world.alpha
@@ -93,9 +95,13 @@ def test_s06_past_expiry_content_is_scrubbed_and_metadata_kept(workdir):
         request_id = answer.headers["inference-id"]
         handle = trip.handle_of(request_id)
         world.set_clock(trip.world.database, 4000.0)     # past the result TTL and the journal's
-        left = world.housekept(trip, request_id)
+        left = world.housekept(trip, request_id, rows=world.RESULT_AND_JOURNAL)
         assert not left, f"content kept past its persisted expiry by the worker's " \
                          f"housekeeping: {left} (worker log: {trip.box.tail('worker')})"
+        remaining = world.retention_left_s(trip, request_id)
+        if remaining > 0:
+            assert world.scrubbed_content(trip, request_id)[world.REQUEST_RECORD[0]], \
+                f"the request record went {remaining:.0f} s before its persisted retention"
         assert trip.db("select state from infrx.jobs where request_id = %s",
                        request_id) == [("succeeded",)]
         assert trip.db("select count(*) from public.usage_events where id = %s",
@@ -105,6 +111,11 @@ def test_s06_past_expiry_content_is_scrubbed_and_metadata_kept(workdir):
         assert (gone.status_code, world.code(gone)) == (410, "result_expired"), gone.text
         replay = trip.send(alpha, "sync", world.TEXT, "e3c-s06-scrub")
         assert text not in replay.text, "a replay resurrected expired content"
+        # last: past the idempotency TTL a same-key request is a new job, not a replay
+        world.set_clock(trip.world.database, 4000.0 + max(remaining, 0.0) + 60.0)
+        left = world.housekept(trip, request_id, rows=world.REQUEST_RECORD)
+        assert not left, f"the request record kept past its persisted retention " \
+                         f"({remaining:.0f} s after +4000 s): {left}"
 
 
 # ------------------------------------------------------------------ s07

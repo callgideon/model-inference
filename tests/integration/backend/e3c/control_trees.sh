@@ -7,9 +7,12 @@
 #
 # nc-admission-ready (ADMISSION-READY, s04): the readiness barrier's product commits
 # reverse-applied newest first - the relay admitting through ReadinessStore.admit_ready
-# (W5-ADMIT-WIRING d58139f3 + its pilot anchor f5784d0c), the worker composing the marker-gated
-# door (W5 wiring 1 fa446ae7) and W5 item 1 itself (16ff5771, 245dcb75, 53dc95ae). The
-# schema (D10 0019) stays: nothing calls it. Only apps/infrx-api/infrx is reverted.
+# (W5-ADMIT-WIRING d58139f3 + its pilot anchor f5784d0c) and W5 item 1 itself (16ff5771,
+# 245dcb75, 53dc95ae) - then the worker's `readiness=PgLifecycle(...)` argument (W5 wiring 1,
+# fa446ae7) removed by hand: that commit also composed the reconciliation gauges and the
+# `PgLifecycle` import M6-WIRING now shares, so reverting it whole kills the worker (E3C
+# early run on 9d61d1e1). The schema (D10 0019) stays: nothing calls it. Only
+# apps/infrx-api/infrx changes; the tree must pass ruff's undefined-name check (F821).
 #
 # nc-retention-durable (RETENTION-DURABLE, s06): D10.b's durable liveness rule is ONE
 # function, `infrx.content_referenced` (0020, 13aeb6d3, which also creates everything M5,
@@ -22,7 +25,8 @@ want=" ${*:-nc-admission-ready nc-retention-durable} "
 args=()
 repo=$(git rev-parse --show-toplevel)
 short=$(git -C "$repo" rev-parse --short=8 "$sha")
-ADMISSION_READY=(f5784d0c d58139f3 fa446ae7 16ff5771 245dcb75 53dc95ae)
+ADMISSION_READY=(f5784d0c d58139f3 16ff5771 245dcb75 53dc95ae)
+WIRING_1="readiness=PgLifecycle(connect, limits=limits)"
 
 tree() {                                  # tree <name>: a fresh archive of <sha>
   local dir="$out/$1-$short"
@@ -40,9 +44,24 @@ for commit in "${ADMISSION_READY[@]}"; do
     | patch -R -p1 -d "$ready" --no-backup-if-mismatch --forward --silent || {
       echo "nc-admission-ready: reverting $commit does not apply on $sha" >&2; exit 1; }
 done
-if grep -rq "admit_ready" "$ready/apps/infrx-api/infrx/gateway"; then
-  echo "nc-admission-ready: the gateway still admits through admit_ready" >&2; exit 1
+main="$ready/apps/infrx-api/infrx/worker/__main__.py"
+[[ $(grep -c "$WIRING_1" "$main") == 1 ]] || {
+  echo "nc-admission-ready: W5 wiring 1's argument is not exactly once in $main" >&2; exit 1; }
+python3 - "$main" "$WIRING_1" <<'PY'
+import re, sys
+path, arg = sys.argv[1], sys.argv[2]
+text = open(path).read()
+text, n = re.subn(r",\s*" + re.escape(arg), "", text)
+assert n == 1, n
+open(path, "w").write(text)
+PY
+if grep -rq "admit_ready\|readiness=" "$ready/apps/infrx-api/infrx/gateway" \
+     "$ready/apps/infrx-api/infrx/worker"; then
+  echo "nc-admission-ready: the tree still composes the readiness barrier" >&2; exit 1
 fi
+command -v ruff >/dev/null || { echo "nc-admission-ready: ruff is needed for F821" >&2; exit 1; }
+ruff check --no-cache --quiet --select F821 "$ready/apps/infrx-api/infrx" >&2 || {
+  echo "nc-admission-ready: the reverted tree has undefined names" >&2; exit 1; }
 args+=(--control "nc-admission-ready=$ready")
 fi
 

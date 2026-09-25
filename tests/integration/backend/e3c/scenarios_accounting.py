@@ -218,6 +218,9 @@ def test_s09_a_transition_meeting_a_parked_admission_refuses_within_its_bound(wo
 # ------------------------------------------------------------------ s11
 
 
+LIVE_GAP_S = 3.0          # seconds per streamed delta while a job must stay live
+
+
 def running(trip, request_id: str) -> None:
     world.wait_for(lambda: world.attempts(trip, request_id) > 0, 30, "the inference attempt")
 
@@ -225,7 +228,10 @@ def running(trip, request_id: str) -> None:
 def test_s11_reconcile_of_a_live_job_is_typed_and_moves_no_money(workdir):
     with world.composed(workdir) as trip:
         alpha = trip.world.alpha
-        trip.engine.control(delta_gap_s=0.2)
+        # LIVE_GAP_S per delta keeps the generation running across the CLI's own process
+        # start (E3C early run: at 0.2 s a loaded host let the job settle first, and the
+        # wallet then moved by the job's own debit, not the reconcile's)
+        trip.engine.control(delta_gap_s=LIVE_GAP_S)
         accepted = trip.send(alpha, "async", world.TEXT, "e3c-s11-live")
         request_id = accepted.json()["request_id"]
         running(trip, request_id)
@@ -233,9 +239,16 @@ def test_s11_reconcile_of_a_live_job_is_typed_and_moves_no_money(workdir):
         status, answer = world.cli(trip, "reconcile", "--org", alpha.org_id, "--request",
                                    request_id, "--idempotency-key", "rc-live",
                                    "--reason", "e3c reconcile a live job")
+        after = trip.wallet(alpha)
+        unsettled, = trip.one("select settled_at is null from infrx.jobs where request_id = %s",
+                              request_id)
+        if not unsettled:
+            raise world.harness.HarnessError(
+                "premise: the job settled before the reconcile's wallet check - not a live "
+                f"job any more (raise LIVE_GAP_S); wallet {before} -> {after}")
         assert status in (0, 1) and ("settlement" in answer or "error" in answer), \
             f"reconcile of a live job answered untyped: {status} {answer}"
-        assert trip.wallet(alpha) == before, "a reconcile of a live job moved money"
+        assert after == before, "a reconcile of a live job moved money"
         trip.engine.control(delta_gap_s=0.0)
         assert world.terminal(trip, request_id, timeout=90.0) == "succeeded"
         world.settled_once(trip, request_id)
@@ -309,7 +322,9 @@ def test_s11_reconcile_never_recreates_scrubbed_content(workdir):
             (status, typed), answers = reconciled.result(), collected.result()
         assert status == 0 or typed.get("error") == "state_conflict", \
             f"reconcile racing the scrub answered untyped: {status} {typed}"
-        left = world.housekept(trip, request_id)
+        # what the race scrubs at +4000 s (the request record lives to the job's retention:
+        # s06 judges that one)
+        left = world.housekept(trip, request_id, rows=world.RESULT_AND_JOURNAL)
         assert not left, f"content present after the race: {left} (pass: {answers})"
         assert trip.wallet(alpha) == settled, "the race moved money"
         world.settled_once(trip, request_id)

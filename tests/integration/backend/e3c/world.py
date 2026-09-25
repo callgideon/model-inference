@@ -720,12 +720,31 @@ def scrubbed_content(trip, request_id: str) -> dict:
                                              request_id)[0]}
 
 
-def housekept(trip, request_id: str, timeout: float = 60.0) -> dict:
-    """Wait (bounded) for the running worker's housekeeping to scrub `request_id`'s content;
-    what is left when it did not (empty dict = scrubbed)."""
+#: What each content row's life ends at (0020 `content_referenced`): the result at the
+#: persisted `result_expires_at`, journal deltas at `JOURNAL_CHUNK_TTL_S`, the request record
+#: (like the job's sources) at `settled_at + job_readiness.retention_s` - the content
+#: retention the admission persisted (R43), which is longer than the result's.
+RESULT_AND_JOURNAL = ("job_results.body", "stream_chunks deltas")
+REQUEST_RECORD = ("jobs.request_record messages",)
+
+
+def retention_left_s(trip, request_id: str) -> float:
+    """Seconds (store clock) until the job's persisted content retention ends."""
+    left, = trip.one("select extract(epoch from (j.settled_at + make_interval(secs => "
+                     "coalesce(r.retention_s, 0))) - infrx.now()) from infrx.jobs j left join "
+                     "infrx.job_readiness r on r.job_id = j.request_id "
+                     "where j.request_id = %s", request_id)
+    return float(left)
+
+
+def housekept(trip, request_id: str, timeout: float = 60.0,
+              rows: tuple[str, ...] = RESULT_AND_JOURNAL + REQUEST_RECORD) -> dict:
+    """Wait (bounded) for the running worker's housekeeping to scrub `rows` of
+    `request_id`'s content; what is left when it did not (empty dict = scrubbed)."""
     end = time.monotonic() + timeout
     while True:
-        left = {k: v for k, v in scrubbed_content(trip, request_id).items() if v}
+        left = {k: v for k, v in scrubbed_content(trip, request_id).items()
+                if v and k in rows}
         if not left or time.monotonic() > end:
             return left
         time.sleep(0.5)

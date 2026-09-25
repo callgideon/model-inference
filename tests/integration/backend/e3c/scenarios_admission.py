@@ -144,22 +144,31 @@ def test_s04_late_rejection_refuses_before_any_execution(workdir):
 
 
 def test_s04_a_permanent_preparation_refusal_ends_the_job_on_its_first_refusal(workdir):
-    """A video job whose staged source is gone before preparation: the refusal is permanent,
-    so the job fails on the first preparation attempt with its hold released - not after
-    lapsed preparation leases (D-19)."""
+    """A job whose preparation meets a PERMANENT refusal - the engine counts its prompt past
+    the job's context (`context_length_exceeded`, W5 item 3's `PERMANENT` class) - fails on
+    the first preparation attempt, `preparation_failed`, its hold released once: not after
+    lapsed preparation leases (D-19). (Phase 1-2 deleted the staged object instead; W5 rules
+    a vanished object `not_found`, TEMPORARY - retried within `preparation_deadline_at` -
+    so that premise no longer names a permanent refusal.)"""
     with world.composed(workdir, start=("gateway",)) as trip:
         alpha = trip.world.alpha
-        accepted = trip.send(alpha, "async", world.video_url("s04-gone"), "e3c-s04-gone")
+        accepted = trip.send(alpha, "async", world.TEXT, "e3c-s04-context")
         assert accepted.status_code == 202, accepted.text
         request_id = accepted.json()["request_id"]
-        s3, prefix = stack.harness.s3_client(), trip.box.env["S3_MEDIA_PREFIX"]
-        for key in world.objects(trip):
-            s3.delete_object(Bucket=stack.harness.S3_BUCKET, Key=prefix + key)
+        trip.engine.control(tokenize_count=OVER_CONTEXT)
         trip.box.start("worker")
         began = time.monotonic()
         state = world.terminal(trip, request_id, timeout=45.0)
         assert state == "failed", state
+        cause, = trip.one("select outcome_cause from infrx.jobs where request_id = %s",
+                          request_id)
+        assert cause == "preparation_failed", cause
         assert world.attempts(trip, request_id, "preparation") == 1, \
             f"a permanent refusal took {world.attempts(trip, request_id, 'preparation')} " \
             f"preparation attempts ({time.monotonic() - began:.0f} s)"
+        assert world.attempts(trip, request_id) == 0, "a refused preparation reached inference"
         world.settled_once(trip, request_id)
+
+
+#: Past every context the pilot serves (`MAX_CONTEXT_TOKENS` 32,768).
+OVER_CONTEXT = 1_000_000
