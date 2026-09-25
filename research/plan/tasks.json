@@ -2072,12 +2072,17 @@
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
       "amendment": "Reuse the independently deployed I2B endpoint; this task adds App hosting, auth callbacks/signup and browser journey. Do not duplicate runtime infrastructure.",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04): dispatch ahead of BACKEND-READY (start dependencies I1/F2P met); preparation only until the backend is accepted; original rule kept in dispatch_after_gate_original.",
       "owned_paths": [
         "apps/app/ (deployment config only)",
         "infra/ (App deploy only)"
-      ]
+      ],
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; the hosted deploy itself still needs the accepted backend and operator inputs; gates unchanged"
+      }
     },
     {
       "id": "I2L",
