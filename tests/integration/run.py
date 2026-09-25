@@ -442,12 +442,13 @@ def make_env() -> dict[str, str]:
     return env
 
 
-def suites(report: Report, *, own_only: bool) -> None:
+def suites(report: Report, *, own_only: bool, leave_out: tuple[str, ...] = ()) -> None:
     """Cross-module discovery, measured. The canonical targets are the root Makefile's
     (08 §7); this suite has none yet, so it is invoked directly and `make integration` is
-    an integration request."""
+    an integration request. `leave_out`: suites another stage already ran (E2C-FR-2)."""
     runs = [shell([sys.executable, "-m", "pytest", "-q", "tests/integration",
-                   "-p", "no:cacheprovider"], cwd=harness.REPO_ROOT,
+                   "-p", "no:cacheprovider", *(f"--ignore={path}" for path in leave_out)],
+                  cwd=harness.REPO_ROOT,
                   env={"INFRX_E2_CANARY": "off"})]
     if not own_only:
         for target in ("api-test", "console-test", "bench-test"):
@@ -708,7 +709,10 @@ def _run(report: Report, args, want_services: bool) -> int:
                 report.add("backend", PENDING, "no services: the backend gate cannot run")
         if args.layer != "2":
             engine(report)
-            suites(report, own_only=args.only_suites)
+            # E2C-FR-2: at layer 3 the backend stage ran BACKEND_SUITE with PostgREST up and
+            # then tore it down; rerunning it here would only skip its journey cases.
+            suites(report, own_only=args.only_suites,
+                   leave_out=(BACKEND_SUITE,) if args.layer == "3" else ())
             if not args.no_mutants:
                 mutation(report, layer="all" if have_services else "1")
             if args.canary:
