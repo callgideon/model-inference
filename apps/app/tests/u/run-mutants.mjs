@@ -51,7 +51,17 @@ const SUITE = [
   "tests/u/credits-view-model.test.ts",
   "tests/u/usage-credits-view-model.test.ts",
   "tests/u/credit-preview-gate.test.ts",
+  // U2
+  "tests/u/keys-view-model.test.ts",
+  "tests/u/keys-source.test.ts",
+  "tests/u/settings-view-model.test.ts",
 ];
+
+// U2: the API Keys and Settings page models and the two key controls (read as source by keys-source).
+const KEYS_VM = "app/(console)/api-keys/view-model.ts";
+const DIALOG = "app/(console)/api-keys/create-key-dialog.tsx";
+const SETTINGS_VM = "app/(console)/settings/view-model.ts";
+const SETTINGS_PAGE = "app/(console)/settings/page.tsx";
 
 const T = {
   url: "U1-T01 the URL is untrusted: an unrecognised range falls back, `all` means no filter",
@@ -110,6 +120,20 @@ const T = {
   gGate: "U1R-G01 the CREDIT fixture gate opens only on an explicit development opt-in",
   gSource: "U1R-G02 with the gate closed the pages get the real session reads, never the fixture",
   gBuild: "U1R-G03 a production build never serves the CREDIT fixture whatever environment it is handed",
+  // U2
+  kGate: "U2-K01 only a ready, unsuspended individual is offered key creation, and every other state says why",
+  kFailed: "U2-K02 a failed or missing key read is an unavailable state with a retry, never 'No keys yet'",
+  kRows: "U2-K03 a row shows the stored prefix only, UTC times and whether it is revoked; only an active key is revocable",
+  kSuspended: "U2-K04 a suspended individual keeps the list and can still revoke (R33)",
+  kOnce: "U2-K05 the plaintext is shown only for a first, non-replayed creation; a replay or a failure never shows one",
+  kCopy: "U2-K06 revocation and lost-key copy is the decided public text (P-26), never 'within a minute'",
+  sSecret: "U2-S01 the plaintext secret is never stored, logged, put in a URL or sent anywhere but the screen",
+  sActions: "U2-S02 the keys controls call the shared C3A actions; the leaky page-local actions are gone",
+  sSettings: "U2-S04 settings has no fake controls: nothing on it saves, toggles or posts",
+  pFacts: "U2-P01 every privacy row is a fixed fact with its availability, and none is a control",
+  pTruthful: "U2-P02 privacy copy states real serving retention and makes no zero-retention, never-stored or 120-second claim",
+  pConsent: "U2-P03 sharing, annotation, evaluation and training are not offered, and signup grants no such permission",
+  pAccount: "U2-P04 the account block shows the session's own e-mail and state; a failed load says so",
 };
 
 /** One single edit each, and one named invariant each. */
@@ -746,6 +770,69 @@ const MUTANTS = [
   { id: "U1R-M33", what: "the sidebar shows the balance, ignoring holds", file: CREDITS,
     find: "? \"No credits yet\" : credits(wallet.value.available);", replace: "? \"No credits yet\" : credits(wallet.value.ledgerTotal);",
     cases: [T.bSidebar] },
+
+  // --- U2: keys ------------------------------------------------------------------------------
+  { id: "U2-M01", what: "a failed key read is shown as an empty list ('No keys yet')", file: KEYS_VM,
+    find: '  if (keys === null || !keys.ok) return { create, list: { kind: "unavailable", message: LIST_FAILED, retry: true } };',
+    replace: '  if (keys === null || !keys.ok) return { create, list: { kind: "empty" } };', cases: [T.kFailed] },
+  { id: "U2-M02", what: "a suspended individual is offered key creation (R33)", file: KEYS_VM,
+    find: '  const create: KeysModel["create"] = context.account.suspended', replace: '  const create: KeysModel["create"] = false',
+    cases: [T.kGate, T.kSuspended] },
+  { id: "U2-M03", what: "every not-ready state collapses into one retryable outage", file: KEYS_VM,
+    find: "Object.hasOwn(NOT_READY, context.state) ? NOT_READY[context.state] : UNAVAILABLE", replace: "UNAVAILABLE",
+    cases: [T.kGate, T.kFailed] },
+  { id: "U2-M04", what: "the not-ready table is read off the prototype chain", file: KEYS_VM,
+    find: "Object.hasOwn(NOT_READY, context.state) ? NOT_READY[context.state] : UNAVAILABLE",
+    replace: "NOT_READY[context.state] ?? UNAVAILABLE", cases: [T.kFailed] },
+  { id: "U2-M05", what: "a revoked key offers a second revoke", file: KEYS_VM,
+    find: "    revocable: key.revoked_at === null,", replace: "    revocable: true,", cases: [T.kRows] },
+  { id: "U2-M06", what: "the row shows the key id where the stored prefix belongs", file: KEYS_VM,
+    find: "    prefix: `${key.prefix}…`,", replace: "    prefix: key.id,", cases: [T.kRows] },
+  { id: "U2-M07", what: "key times follow the server locale instead of UTC", file: KEYS_VM,
+    find: "  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;", replace: '  return new Date(iso).toLocaleString("en-US");',
+    cases: [T.kRows] },
+  { id: "U2-M08", what: "a replayed creation shows a secret again (R16)", file: KEYS_VM,
+    find: '  if (result.value.replayed || result.value.secret === null) return { kind: "notice", message: REPLAYED_COPY };',
+    replace: '  if (result.value.secret === null) return { kind: "notice", message: REPLAYED_COPY };', cases: [T.kOnce] },
+  { id: "U2-M09", what: "a refused creation hides why behind the replay text", file: KEYS_VM,
+    find: '  if (!result.ok) return { kind: "notice", message: result.error.message };',
+    replace: '  if (!result.ok) return { kind: "notice", message: REPLAYED_COPY };', cases: [T.kOnce] },
+  { id: "U2-M10", what: "the revocation copy stops being P-26's", file: KEYS_VM,
+    find: "Revoking a key stops new requests immediately.", replace: "Revoking a key stops requests within a minute.",
+    cases: [T.kCopy] },
+  { id: "U2-M11", what: "the confirmation says revocation takes a minute", file: KEYS_VM,
+    find: "New requests with this key are refused immediately. This cannot be undone.",
+    replace: "Calls using it start failing within a minute.", cases: [T.kCopy] },
+  { id: "U2-M12", what: "the plaintext is kept in sessionStorage for later redisplay", file: DIALOG,
+    find: '    if (outcome.kind === "secret") setSecret(outcome.secret);',
+    replace: '    if (outcome.kind === "secret") { sessionStorage.setItem("infrx:key", outcome.secret); setSecret(outcome.secret); }',
+    cases: [T.sSecret] },
+  { id: "U2-M13", what: "a reopened dialog reuses the last idempotency key, so a new key replays the old one", file: DIALOG,
+    find: "      setAttempt(crypto.randomUUID());\n", replace: "", cases: [T.sActions] },
+  { id: "U2-M14", what: "creation is sent without an idempotency key, so a double submit mints twice", file: DIALOG,
+    find: "createConsumerKey({ name, idempotency_key: attempt })", replace: "createConsumerKey({ name })", cases: [T.sActions] },
+
+  // --- U2: settings --------------------------------------------------------------------------
+  { id: "U2-M15", what: "consumer trace capture is presented as on", file: SETTINGS_VM,
+    find: '    status: "Off",', replace: '    status: "On" as "Off",', cases: [T.pFacts] },
+  { id: "U2-M16", what: "the page claims zero data retention", file: SETTINGS_VM,
+    find: "This is not zero data retention.", replace: "We keep zero data retention.", cases: [T.pTruthful] },
+  { id: "U2-M17", what: "the retention row stops pointing at the published periods", file: SETTINGS_VM,
+    find: '    href: "/docs#retention",', replace: "    href: null,", cases: [T.pTruthful] },
+  { id: "U2-M18", what: "trace-off is presented as deleting what serving stores", file: SETTINGS_VM,
+    find: "It does not change what we store to run a request (above).", replace: "Turning it off deletes your data.",
+    cases: [T.pTruthful] },
+  { id: "U2-M19", what: "signup is presented as granting data-use permission", file: SETTINGS_VM,
+    find: "Signing up grants no permission for any of these", replace: "Signing up grants these permissions", cases: [T.pConsent] },
+  { id: "U2-M20", what: "a failed account load renders as a blank verified account", file: SETTINGS_VM,
+    find: '  return { account: { kind: "unavailable", message: "Your account could not be loaded right now. Reload the page to try again." }, privacy };',
+    replace: '  return { account: { kind: "ready", email: "", status: "Verified", suspended: false }, privacy };', cases: [T.pAccount] },
+  { id: "U2-M21", what: "a suspended account is shown as in good standing", file: SETTINGS_VM,
+    find: 'status: "Verified", suspended: context.account.suspended }', replace: 'status: "Verified", suspended: false }',
+    cases: [T.pAccount] },
+  { id: "U2-M22", what: "a privacy fact is rendered as a checkbox that saves nothing", file: SETTINGS_PAGE,
+    find: '<Badge variant="outline">{row.status}</Badge>',
+    replace: '<input type="checkbox" defaultChecked={row.status === "Off"} aria-label={row.title} />', cases: [T.sSettings] },
 ];
 
 /**

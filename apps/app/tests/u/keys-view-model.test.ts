@@ -75,6 +75,10 @@ test(T.failed, () => {
     assert.equal(list.kind, "unavailable");
     if (list.kind === "unavailable") assert.equal(list.retry, false);
   }
+  // A state outside the vocabulary is unavailable, never a prototype member's "reason".
+  const odd = keysPageModel({ state: "toString" }, null);
+  assert.equal(odd.create.allowed ? "" : typeof odd.create.reason, "string");
+  assert.deepEqual(odd.list, keysPageModel(NOT_READY[3], null).list);
   const empty = keysPageModel(READY, ok([])).list;
   assert.equal(empty.kind, "empty");
 });
