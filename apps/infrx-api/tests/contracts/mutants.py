@@ -1608,7 +1608,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "split_contract__the_v1_model_revision_string_is_unchanged_r62"),
     _m("two_surface_versions",
        "the whole changed surface carries ONE reviewed version identifier",
-       V2_INIT, 'SURFACE_VERSION = "contracts-v2.0"', 'SURFACE_VERSION = "contracts-v2.1"',
+       V2_INIT, 'SURFACE_VERSION = "contracts-v2.1"', 'SURFACE_VERSION = "contracts-v2.2"',
        "split_contract__the_surface_carries_one_reviewed_version"),
 
     # --- CREDIT-UNITS --------------------------------------------------------
