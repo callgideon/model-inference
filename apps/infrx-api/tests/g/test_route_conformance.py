@@ -217,6 +217,82 @@ def test_api_stream__a_sync_wait_over_a_stalled_store_still_ends_at_its_deadline
     assert took < ANSWER_WITHIN_S
 
 
+def test_api_stream__an_sse_poll_over_a_stalled_journal_still_ends_at_its_deadline(
+        monkeypatch):
+    """The journal stops answering while an SSE caller waits: a stalled read is retried at
+    the next poll, never taken for the end of the stream, and the stream still ends at the
+    job's deadline (`deadline_exceeded`, then `[DONE]`) inside the bound."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", BOUND_S)
+    world = world_for()
+    world.stream.read_owned = pause = Pause(world.stream.read_owned)
+    world.during += [lambda: None, lambda: world.clock.advance(3_600)]
+    reply, took = timed(rs.call(world.app, rs.body(stream=True)))
+    assert reply.status == 200 and took < ANSWER_WITHIN_S, reply.body
+    codes = [event["error"]["code"] for event in reply.data() if isinstance(event, dict)
+             and "error" in event]
+    assert codes == ["deadline_exceeded"] and reply.data()[-1] == "[DONE]", reply.data()
+    assert pause.stalled >= 2                  # the stalled read was retried, not the end
+
+
+def test_api_stream__an_unconfirmed_delete_is_a_503_that_claims_no_state(monkeypatch):
+    """The store does not confirm a DELETE's cancel within the bound: a retryable 503 with
+    `Retry-After` - never a 200 showing the row before the cancel - and nothing is claimed
+    (the shielded cancel goes on; the retried DELETE answers what is committed then)."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", BOUND_S)
+    world = world_for()
+    assert rs.run(jw.send(world.app, "POST", "/v1/jobs", body=rs.body())).status == 202
+    job = world.only_job()
+    world.jobs.cancel = pause = Pause(world.jobs.cancel)
+    reply, took = timed(jw.send(world.app, "DELETE", f"/v1/jobs/{world.handle(job)}"))
+    assert reply.status == 503, reply.body      # never the pre-cancel row as a 200
+    status, code, infrx = envelope(reply)
+    assert (status, code) == (503, "dependency_unavailable"), reply.body
+    assert int(reply.headers["retry-after"]) == infrx["retry_after_s"] > 0
+    assert took < ANSWER_WITHIN_S and job.outcome is None and pause.stalled == 1
+
+
+def test_api_stream__each_bound_sits_where_the_ruling_puts_it():
+    """The store bound is past the pool's own refusals (connect + statement timeout), so a
+    slow statement gets PostgreSQL's answer, not ours; a slow answer followed by a stall
+    (two store calls at their bound) still answers inside the declared 45 s."""
+    deployment = support.settings(**DEPLOYED).deployment
+    pool_s = deployment.database_pool_connect_timeout_s \
+        + deployment.database_pool_statement_timeout_ms / 1000
+    assert pool_s <= intake.DEPENDENCY_BOUND_S
+    assert 2 * intake.DEPENDENCY_BOUND_S < ANSWER_WITHIN_S
+
+
+def test_api_stream__a_preparation_slower_than_a_store_call_is_still_admitted(monkeypatch):
+    """Preparation has its own bound (fetch + probe + write), not the store call's: a
+    preparation that takes longer than a store call may, but less than preparation may,
+    is admitted."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", BOUND_S)
+    monkeypatch.setattr(intake, "preparation_bound", lambda limits: 3.0)
+    world = world_for()
+    prepare = world.media.prepare_request
+
+    async def slow(*args, **kw):
+        await asyncio.sleep(2 * BOUND_S)
+        return await prepare(*args, **kw)
+
+    world.media.prepare_request = slow
+    reply, _ = timed(jw.send(world.app, "POST", "/v1/jobs", body=rs.body(rs.VIDEO)))
+    assert reply.status == 202, reply.body
+    assert len(world.jobs.jobs) == 1
+
+
+def test_api_stream__a_stalled_result_read_on_a_sync_answer_is_a_typed_503(monkeypatch):
+    """The job succeeded and the object store stops answering while its result is read
+    for the sync answer: a retryable 503 within the bound, not an answer left hanging."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", BOUND_S)
+    world = world_for()
+    world.read_result = Pause(world.read_result)
+    world.during.append(world.work)
+    reply, took = timed(rs.call(world.app, rs.body()))
+    assert envelope(reply)[:2] == (503, "dependency_unavailable"), reply.body
+    assert took < ANSWER_WITHIN_S and world.only_job().state.value == "succeeded"
+
+
 # --- same-host authenticated uploads (E1C's client sequence) ---------------------------
 def e1c_upload(world, data=CLIP, mime="video/mp4", headers=None):
     """`bench.upload` (E1C f928103a), request for request, with its own acceptance checks:

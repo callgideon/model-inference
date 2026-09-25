@@ -342,9 +342,12 @@ def register(app, rt):
             raise errors.InvalidRequest("DELETE /v1/jobs/{handle} takes no body")
         admission, _ = await jobs.owned(org, handle)
         # Never a 200 without the committed cancel: an outage is a retryable 503 (the job is
-        # untouched), and the retried DELETE answers what is committed then.
+        # untouched), and the retried DELETE answers what is committed then. `relay.cancel`
+        # bounds itself (its unconfirmed branch is that 503); the outer bound is only a
+        # backstop, set past it so the relay's own answer is the one that fires.
         outcome = await _dependency(
-            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))
+            relay.cancel(org, handle, cause=TerminalCause.client_cancelled),
+            2 * intake.DEPENDENCY_BOUND_S)
         return _answer(jobs.status_of(admission, outcome, await jobs.now()), admission)
 
     # The guard's wrapper is defined in `intake`; the route table names this module

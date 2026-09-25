@@ -1663,6 +1663,46 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "            return await asyncio.wait_for(asyncio.shield(task), intake.DEPENDENCY_BOUND_S)",
        "            return await asyncio.shield(task)",
        "test_api_stream__a_sync_wait_over_a_stalled_store_still_ends_at_its_deadline"),
+    # G7 fix round (review CM-1..4): the SSE poll, the DELETE branch, the bound values,
+    # the preparation's own bound, the sync result read, and the discovery cache window
+    _m("stalled_sse_read_ends_the_stream", "a stalled journal read is retried, not the end",
+       R, "                chunks = None                   # a stalled read: retried at the next poll",
+       "                raise",
+       "test_api_stream__an_sse_poll_over_a_stalled_journal_still_ends_at_its_deadline"),
+    _m("sse_read_unbounded", "a journal that stops answering does not hold the stream",
+       R, "                chunks, cursor = await intake.bounded(\n"
+          "                    self.stream.read_owned(job.org_id, job.handle, cursor, self.page),\n"
+          "                    intake.DEPENDENCY_BOUND_S)",
+       "                chunks, cursor = await self.stream.read_owned(\n"
+       "                    job.org_id, job.handle, cursor, self.page)",
+       "test_api_stream__an_sse_poll_over_a_stalled_journal_still_ends_at_its_deadline"),
+    _m("unconfirmed_delete_claims_none", "an unconfirmed DELETE is a 503, never a 200",
+       R, '                raise errors.DependencyUnavailable("the cancel is not confirmed yet") from None',
+       "                return None",
+       "test_api_stream__an_unconfirmed_delete_is_a_503_that_claims_no_state"),
+    _m("dependency_bound_1s", "the store bound is past the pool's own refusals",
+       I, "DEPENDENCY_BOUND_S = 20.0", "DEPENDENCY_BOUND_S = 1.0",
+       "test_api_stream__each_bound_sits_where_the_ruling_puts_it"),
+    _m("dependency_bound_44s", "a slow answer then a stall still answers inside 45 s",
+       I, "DEPENDENCY_BOUND_S = 20.0", "DEPENDENCY_BOUND_S = 44.0",
+       "test_api_stream__each_bound_sits_where_the_ruling_puts_it"),
+    _m("prep_uses_dependency_bound", "preparation is bounded by its own bound, not a store call's",
+       R, "            prepared = await _dependency(self.media.prepare_request(auth.org_id, request),\n"
+          "                                         intake.preparation_bound(self.limits))",
+       "            prepared = await _dependency(self.media.prepare_request(auth.org_id, request))",
+       "test_api_stream__a_preparation_slower_than_a_store_call_is_still_admitted"),
+    _m("sync_result_read_unbounded", "a stalled result read on a sync answer is a 503",
+       R, "        text = await _dependency(self.results.read_result(job.org_id, outcome.result_ref))",
+       "        text = await self.results.read_result(job.org_id, outcome.result_ref)",
+       "test_api_stream__a_stalled_result_read_on_a_sync_answer_is_a_typed_503"),
+    _m("cat_cache_forever", "a catalog change reaches discovery once the cache window passes",
+       M, "            if at is None or not 0 <= rt.clock() - at < rt.settings.price_ttl:",
+       "            if at is None:",
+       "test_catalog_truth__a_catalog_change_reaches_discovery_within_the_cache_window"),
+    _m("cat_cache_never", "discovery reads the catalog at most once per cache window",
+       M, "            if at is None or not 0 <= rt.clock() - at < rt.settings.price_ttl:",
+       "            if True:",
+       "test_catalog_truth__a_catalog_change_reaches_discovery_within_the_cache_window"),
 )
 
 

@@ -169,6 +169,24 @@ def test_catalog_truth__an_unreachable_catalog_is_a_retryable_503_not_a_claim():
     assert "pw@db" not in response.text
 
 
+def test_catalog_truth__a_catalog_change_reaches_discovery_within_the_cache_window():
+    """The rows are cached for `price_ttl` seconds, no longer: a deployment retired after
+    the first read is still listed inside the window (the cache holds - an anonymous caller
+    cannot turn discovery into database load) and gone once it passes (a stale capability
+    is never published past the window)."""
+    catalog = priced()
+    tc, _ = discovery_app(catalog=catalog)
+    rt, now = tc.app.state.runtime, [1_790_000_000.0]
+    rt.clock = lambda: now[0]
+    assert len(listed(tc)) == 1
+    catalog.deployments[IDS.prod_deployment] = catalog.deployments[
+        IDS.prod_deployment].model_copy(update={"state": DeploymentState.retired})
+    now[0] += rt.settings.price_ttl - 1
+    assert len(listed(tc)) == 1, "the cache did not hold inside its window"
+    now[0] += 1
+    assert listed(tc) == [], "a retired deployment published past the cache window"
+
+
 def test_catalog_truth__availability_follows_readiness_not_a_file():
     tc, _ = discovery_app(checks={"price_source": lambda: True, "journal": lambda: False},
                           config=support.settings("dev", **DEPLOYED))
