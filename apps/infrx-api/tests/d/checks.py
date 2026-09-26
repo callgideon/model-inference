@@ -1674,7 +1674,9 @@ EXPECTED_PRIVILEGES = {
            ("public.calibration_labels", ""), ("public.console_judge_runs", ""),
            ("public.console_admin_orgs", ""), ("public.operator_audit", ""),
            # D1R (0008): the CREDIT wallet and ledger pages.
-           ("public.console_credit_wallets", ""), ("public.console_credit_ledger", ""))},
+           ("public.console_credit_wallets", ""), ("public.console_credit_ledger", ""),
+           # D10-0025 (U3 WR-U3-1): the operator-only drift and unknown-usage reads.
+           ("public.operator_wallet_drift", ""), ("public.operator_unknown_usage", ""))},
 }
 
 #: Relations whose whole point is that nothing is ever removed (0003's trigger list).
@@ -1723,6 +1725,11 @@ EXPECTED_FUNCTION_CALLERS = {
     # (evaluated by the api_keys INSERT policy as the caller, so the caller executes it).
     "public.consumer_credit_ledger(text,integer)": {"authenticated", "service_role"},
     "public.consumer_may_create_key()": {"authenticated", "service_role"},
+    # D10-0025 (U3 WR-U3-1, R143): the operator console's writes, with the operator's own
+    # JWT (is_operator() inside); never the platform key - service_role holds no EXECUTE.
+    "public.operator_adjust_credit(uuid,text,text,text)": {"authenticated"},
+    "public.operator_set_suspension(uuid,boolean,text,text)": {"authenticated"},
+    "public.operator_revoke_key(uuid,text,text)": {"authenticated"},
 }
 
 
@@ -1773,10 +1780,13 @@ def check_function_privileges(conn) -> str:
                 problems.append(f"{role} may NOT execute {signature}, which it needs")
         # The platform side: the documented `infrx` surface must be callable, because that
         # is what D2-D6 reach the store through.
+        # D10-0025: a browser function the map gives no service_role (the operator
+        # console's writes) must NOT be the platform's either.
         if signature in INFRX_CALLABLE or schema == "public" and browser:
+            service = signature in INFRX_CALLABLE or "service_role" in browser
             assert conn.execute("select has_function_privilege('service_role', %s, "
-                                "'execute')", (oid,)).fetchone()[0], \
-                f"service_role may not execute {signature}"
+                                "'execute')", (oid,)).fetchone()[0] == service, \
+                f"service_role execute {signature}: expected {service}"
     assert not problems, "the EXECUTE surface is not the enumerated one:\n  " + \
         "\n  ".join(problems)
 

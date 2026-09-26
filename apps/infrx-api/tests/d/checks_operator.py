@@ -523,6 +523,11 @@ def race(owner, conns, calls) -> list[tuple]:
     return out
 
 
+def applied_once(out) -> None:
+    assert all(code is None for code, _a in out), f"a racing retry was refused: {out}"
+    assert sorted(a["replayed"] for _c, a in out) == [False] + [True] * (len(out) - 1), out
+
+
 def check_operator_races(connect, database: str) -> str:
     """DUR-CAP under real transactions (8 connections): the SAME console change racing 8
     ways applies exactly once (one `replayed: false`, 7 replays, one ledger/audit row) for
@@ -541,17 +546,17 @@ def check_operator_races(connect, database: str) -> str:
         start = totals(owner, w1)[0]
         key = f"race-{uuid.uuid4()}"
         out = race(owner, conns, [(_ADJUST, (c1, "1", "race", key))] * 8)
-        assert sorted(a["replayed"] for _c, a in out) == [False] + [True] * 7, out
+        applied_once(out)
         assert totals(owner, w1)[0] - start == 1 and owner.execute(
             "select count(*) from infrx.credit_ledger where operation_id = %s",
             (op_id(key),)).fetchone()[0] == 1, "a racing adjustment applied twice"
         key = f"race-{uuid.uuid4()}"
         out = race(owner, conns, [(_SUSPEND, (org2, True, "race", key))] * 8)
-        assert sorted(a["replayed"] for _c, a in out) == [False] + [True] * 7, out
+        applied_once(out)
         assert len(audits(owner, f"app-operator:suspension:{key}")) == 1
         key = f"race-{uuid.uuid4()}"
         out = race(owner, conns, [(_REVOKE, (k1, "race", key))] * 8)
-        assert sorted(a["replayed"] for _c, a in out) == [False] + [True] * 7, out
+        applied_once(out)
         assert owner.execute("select count(*) from infrx.audit_entries where action = "
                              "'admin_key_revoke' and after->>'key_id' = %s",
                              (k1,)).fetchone()[0] == 1
