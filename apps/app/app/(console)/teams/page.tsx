@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { providerRoute } from "@/lib/services/console";
 import { getSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,6 +18,7 @@ export const metadata = { title: "Teams · infrx" };
 
 export default async function TeamsPage() {
   const session = await getSession();
+  providerRoute(session, notFound);
   const supabase = await createClient();
   const { data } = await supabase
     .from("org_members")

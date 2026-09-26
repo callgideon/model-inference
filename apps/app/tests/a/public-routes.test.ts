@@ -1,9 +1,9 @@
 // node --test "tests/**/*.test.ts"
 //
 // A2 wiring: the middleware lets an anonymous visitor reach signup and verify-email, still guards
-// onboarding and set-a-new-password, and sends a signed-in visitor away from signup. The middleware
-// imports next/server, which `node --test` cannot load, so its route table is read from source and
-// the decision it makes is replayed here exactly (`path === p || path.startsWith(p + "/")`).
+// onboarding and set-a-new-password. The route table is read from source and the decision it makes is
+// replayed here exactly (`path === p || path.startsWith(p + "/")`); the redirects themselves run on
+// real requests in middleware.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -28,9 +28,8 @@ test("A2-ROUTE-01 signup and verify-email are public; onboarding and password ch
   }
 });
 
-test("A2-ROUTE-02 a signed-in visitor is sent away from sign-in and signup", () => {
-  assert.match(source, /if \(user && \(path === "\/login" \|\| path === "\/signup"\)\)/);
-});
+// A2-ROUTE-02 (a signed-in visitor is sent away from sign-in and signup) is now behavioural, on real
+// requests: tests/a/middleware.test.ts A2-MW-01..03 (E3A F-1).
 
 // app-union (C0 WR-1 follow-up): the console shell redirects unverified and onboarding individuals to
 // A2's routes. Each target must be a shipped page outside the console layout (no redirect loop, no 404).
