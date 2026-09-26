@@ -126,6 +126,8 @@ class ScriptedStore:
     calls: list = dataclasses.field(default_factory=list)
     #: The transactions open in the database per `open_transactions` call (the last repeats).
     open: list = dataclasses.field(default_factory=lambda: [frozenset()])
+    #: The regime the scripted jobs in flight belong to (a reversal drains `credit`).
+    regime: str = "legacy_usd"
 
     async def open_transactions(self) -> frozenset:
         now = frozenset(self.open.pop(0) if len(self.open) > 1 else self.open[0])
@@ -135,7 +137,7 @@ class ScriptedStore:
     async def inventory(self, alias: str = v2fix.PUBLIC_MODEL_ID) -> dict:
         n = self.flying.pop(0) if len(self.flying) > 1 else self.flying[0]
         self.calls.append(("inventory", n))
-        inv = inventory(flying={"legacy_usd": {"running": n}} if n else {})
+        inv = inventory(flying={self.regime: {"running": n}} if n else {})
         inv["flags"] = {f: {"enabled": on} for f, on in self.flags.items()}
         return copy.deepcopy(inv)
 

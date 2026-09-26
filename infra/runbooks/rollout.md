@@ -77,7 +77,7 @@ Each row: what runs, what proves it, and the way back. Box rows are
 | W7c | host | **USD price version** (first pilot install only; idempotent): `infrx.price_versions` has no product writer (R45: the store's price source); insert `pv_<model>_usd_<yyyy_mm>` for `model_revision` = the request's model string (`nemostation/marlin-2b`), currency USD, the rates of `public.models` (the monolith's live USD prices - no new pricing decision), `token_rules_version` as the test stack's (`tr-1`), `effective_from infrx.now()`, `created_by operator-seed` - else the legacy_usd admission refuses every request with the sanitized `invalid_request` "no price snapshot for the requested model" (2026-09-24) | one row; `select * from infrx.price_versions` | `effective_to = now()` on the row |
 | W7d | host | **Consumer keys need the signup grant**: `infrx.feature_flags.signup_grant` must be `true` (A1's grant provisions the personal wallet that `issue-key` requires; CREDIT admission stays off), and in the legacy_usd regime a tenant needs a USD balance: a `grant` row in `public.credit_ledger` (R103: the legacy writer; `infrx.ledger_moves_wallet` applies it). The operator key: `infrx.bootstrap_operator_key(org, name, prefix, sha256hex, actor, reason)` with the secret in SSM `/model-inference/operator_key` only (2026-09-24) | `grant`/`issue-key` succeed through `python -m infrx.operations.cli` with `OPERATIONS_DATABASE_URL` exported (`read -rs`; the owner or broad login - the CLI refuses the dedicated `infrx_runtime`/`infrx_monitor` logins, OPS-CLI-DSN) | `revoke-key`; a negative `adjustment` row; the flag back to false |
 | W7e | host | **One price version per model string the clients send** (first pilot install only; idempotent): the USD admission keys `infrx.price_versions` by the request's literal model string (R45; not by the resolved revision), so a client that sends the labelled alias (`nemostation/marlin-2b@2026-09-01` - the E4B certify client, the E1B bench with `--model`) is refused `400` with no price version even though the unlabelled alias has one. Seed a row per alias form the pilot's clients use, same rates and `token_rules_version` as W7c. Better: D/G key the lookup on the resolved revision (ruling pending; 2026-09-24 box certification, run1) | 
-| W7f | host | **CREDIT activation** (after W7: it calls 0022's `infrx.set_feature_flag`; before W10, which installs `ACCOUNTING_REGIME=credit`, §1): [E4C-runbook §1a](../../models/marlin2b/results/E4C-runbook.md#1a-after-the-hosted-apply-before-w8) H1 `publish-card` (P-01), H2 `credit-transition --dry-run` then `credit-transition --card` (P-02, G8). The edge has served maintenance since W5, so no admission falls between the flag flip and the install (`--freeze-only` is not needed) | H2's dry-run `drift == []`; the flags `credit_admission` t, `legacy_usd_admission` f, `signup_grant` t (`transition.py` `ENABLE`) | `credit-transition --to legacy_usd` (PI P-02); the card is immutable (P-01) |
+| W7f | host | **CREDIT activation** (after W7: it calls 0022's `infrx.set_feature_flag`; before W10, which installs `ACCOUNTING_REGIME=credit`, §1): [E4C-runbook §1a](../../models/marlin2b/results/E4C-runbook.md#1a-after-the-hosted-apply-before-w8) H1 `publish-card` (P-01), H2 `credit-transition --dry-run` then `credit-transition --card` (P-02, G8). The edge has served maintenance since W5, so no admission falls between the flag flip and the install (`--freeze-only` is not needed) | H2's dry-run `drift == []`; the flags `credit_admission` t, `legacy_usd_admission` f, `signup_grant` t (`transition.py` `ENABLE`) | `credit-transition --to legacy_usd` (PI P-02; §3: its keys and its drill); the card is immutable (P-01) |
 | W8 | box | `40-checkout.sh RELEASE=$RELEASE` - from here to W10 no engine restart | HEAD = `RELEASE` | the W7f reversal (§3), then `91-abort.sh` returns the previous checkout |
 | W9 | box | **Real-bucket check**: `45-s3-check.sh RELEASE=$RELEASE` (tests/m/test_s3.py, instance role, image built from `RELEASE`) - before the install, because install.sh opens the edge itself once ready. The role needs Get/Put/Delete on `<bucket>/test/m1l2/*` (and `s3:ListBucket` for that prefix: the cases list); the bootcamp role allows the whole bucket | `passed`, no failure; `test/m1l2/` empty afterwards | red → the W7f reversal (§3), then `91-abort.sh` + `93-restore-edge.sh` (nothing installed) |
 | W10 | box | **Install**: `TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh "${INSTALL_ARGS[@]}" MIGRATION_DIGEST=<W7 digest>` - image, preflight (SSM + host HeadBucket), units, engine restart (start-to-ready meas. 168-181 s on this box, `ENGINE_READY_S` 900), gateway + worker `/readyz`, **then the edge goes live** | exit 0, `deployed …`, backup dir recorded | the W7f reversal (§3) first, then exit 2 → R1; exit 4 → R2 |
@@ -222,6 +222,31 @@ credit-transition --to legacy_usd --drain-timeout-s 900 --idempotency-key revert
 at 0018); nothing converts, and a CREDIT job already accepted settles in CREDIT. Then the
 row's step, which reopens the edge. Before W7f (the W6 and W7 rows) there is nothing to reverse.
 
+Its keys: one per reversal (`revert-<window id>`). A run stopped at the drain bound (exit 1,
+`in_flight` or `open_transactions`) has frozen `credit_admission`, left `legacy_usd_admission`
+off and audited nothing, so neither regime admits: rerun it under the **same** key once the
+CREDIT job has ended (it settles in CREDIT, at its card). A finished key's replay prints the
+recorded result (no `replayed` field on this verb) and writes nothing, so W7f's own key never
+re-activates CREDIT: a roll-forward reruns W7f's `credit-transition --card …` under a **new**
+key. `--dry-run` writes nothing and needs no operator key. Proof on PostgreSQL:
+`apps/infrx-api/tests/g/ops/test_reversal_pg.py::test_reversal_pg__credit_back_to_legacy_usd_drains_keeps_credit_exact_and_replays_nothing`,
+with the mutants `reversal_skips_the_drain`, `reversal_audits_as_forward` and
+`replay_reruns_the_freeze` (`tests/g/ops/mutants.py`, case `test_reversal.py`). The box half,
+putting a `legacy_usd` release back (`85-known-good-box.sh`, its checkout and 50-install, or a
+backup/snapshot restore), stays an operator step that no test runs.
+
+**The reinstall rule.** Every 50-install rewrites `/etc/marlin2b-gateway.env` from SSM
+(`preflight.py apply`, one rename): `DATABASE_URL` is `pg_journal_url`, the owner login, again,
+and `MONITOR_DATABASE_URL` comes only from the SSM leaf `monitor_database_url`, which no step
+creates, so it is dropped and the worker reports no reconciliation gauges. So every 50-install of a release that carries R127's
+dedicated logins (this release and later: W10, the drill's roll-forward in
+[rollback.md](rollback.md#known-good-rollback-drill)) is followed by `55-runtime-login.sh` (W10b).
+A release before R127, such as the known-good targets 4226315 and bda1586, stays on
+`pg_journal_url`: never run 55 after installing one. Its pool runs `set role service_role` on
+every connection, which `infrx_runtime` may not (0021: a member of no role); 55's exit 4
+would then put the file back (inferred from the code, not run). A restore that puts a saved env file back (`rollback.sh` through
+90-revert or R2, 55's exit 4, R4's snapshot) needs no rerun: the file comes back as it was.
+
 | Trigger | Action |
 |---|---|
 | W6 check not equal, or the copy's apply fails | Stop before any hosted write: `91-abort.sh`, `93-restore-edge.sh` |
@@ -257,8 +282,8 @@ predates it refuses (meas. local, `--applied 0023` without `--bundles`: 4226315 
 bda1586 pass `config` with these six names and fail it with `--set RETENTION_GRACE_S`; with the
 eight names above, full SHAs, `--applied 0023`, both exit 0 KNOWN-GOOD, meas. 2026-09-26
 E4C-RUNBOOK-2). Both targets only ever served `legacy_usd`: after W7f, returning to one first
-needs the W7f reversal (above) and that release's own env file (R2 restores it), a path no
-drill has run.
+needs the W7f reversal (above) and that release's own env file (R2 restores it). The database
+half of that path is drilled (`test_reversal_pg.py`, above); the box half is not.
 The `schema_proof` for bda1586 and 4226315 reaches 0023 (`infra/rollout/known-good.json`,
 research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md); a migration beyond 0023 needs the
 proof extended before `--applied` may name it.
@@ -329,3 +354,9 @@ Nothing here has run; every row's output goes into the I8 evidence record.
   every legacy admission; W10b also writes `/etc/infrx-observe.env` (the monitor login), so O4
   needs no `MONITOR_DSN_PARAM` and O5's `infrx_durable_up 1` reads through `infrx_monitor`.
   Tests: rb12 (`test_runbooks.py`), the step-55 case (observe cycle). Not run on the box or hosted.
+- 2026-09-26 (RUNBOOK-3): §3 states the reversal's keys (same key to resume a stopped run, a
+  new key to re-activate; a replay writes nothing) and its proof, the PostgreSQL drill
+  `test_reversal_pg.py` (K1 activation, CREDIT settled and in flight, K2 stopped at the bound,
+  drained, finished, replays) with three new `tests/g/ops` mutants; the reinstall rule (55
+  after every 50-install of an R127 release, never after a pre-R127 target). Tests:
+  `tests/integration/ops/test_runbook_reversal.py`. Not run on the box or hosted.

@@ -41,6 +41,8 @@ F = "tests/g/ops/fakes.py"           # the port contract D5 must match
 V2FIX = "infrx/contracts/v2/fixtures.py"     # the release's pins (E4B certification)
 OPS_ROOT = "test_api_ops__the_operator_tool_builds_the_postgres_adapters_from_the_environment"
 MEASURED = "test_api_ops__the_published_release_pins_the_measured_image_and_engine_options"
+REVERSAL = ("test_reversal__credit_is_frozen_drained_then_legacy_enabled_audited_once_as_the_"
+            "reversal")
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -486,6 +488,22 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("flag_write_without_a_direction", "a write needs --on or --off (1-G8FLAG-R6)",
        C, "        if a.cmd == \"flag\" and a.enabled is None:", "        if False:",
        "test_flag__the_dry_run_reads_without_a_key_and_writes_nothing"),
+    # --- RUNBOOK-3: the W7f reversal (credit-transition --to legacy_usd) ------------
+    _m("reversal_skips_the_drain",
+       "the reversal enables legacy_usd only once no CREDIT job is in flight",
+       T, "        while in_flight(inv := await store.inventory(), source):",
+       "        while target == CREDIT and in_flight(inv := await store.inventory(), source):",
+       REVERSAL),
+    _m("reversal_audits_as_forward", "the reversal is audited as a transition to legacy_usd",
+       T, "{\"target\": target, **rates, \"freeze_only\": freeze_only}, write)",
+       "{\"target\": CREDIT, **rates, \"freeze_only\": freeze_only}, write)", REVERSAL),
+    _m("replay_reruns_the_freeze",
+       "a transition key's replay answers the recorded result and never re-runs the write",
+       S, "        if prior is not None:\n            return _recorded(prior, operation, request), True\n"
+          "        operation_id",
+       "        if prior is not None and operation != \"transition\":\n"
+       "            return _recorded(prior, operation, request), True\n        operation_id",
+       REVERSAL),
     # --- G8 point 4: races and retries ---------------------------------------------
     _m("same_key_race_surfaces_the_raw_conflict", "a same-key race answers the recorded row",
        S, "        except errors.Conflict:\n            # G8:",
