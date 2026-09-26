@@ -36,7 +36,7 @@
      "summary": "PASS through 0026 for both known-good targets (their lease-less result writes on 0001-0026)"},
     {"cmd": "scratch export of c353227f + WR-D10F-1..3: tests/g tests/m; tests/integration/test_harness.py; recovery rc01/rc05/rc07", "exit": 0,
      "summary": "1266 passed, 32 skipped (75 failed without WR-D10F-1); harness 26 passed + the base's own production-string failure (2 failed without WR-D10F-3); rc 2 passed, 1 skipped (2 failed without WR-D10F-2)"},
-    {"cmd": "git merge-tree --write-tree claude/consumer-v1 HEAD", "exit": 0, "summary": "clean against the moved tip 5015909d"},
+    {"cmd": "git merge-tree --write-tree claude/consumer-v1 HEAD", "exit": 0, "summary": "clean against the moved tip 67559472 (no 0026 there)"},
     {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
   ],
   "estimate": {"optimistic_h": 0.2, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "high",
