@@ -165,6 +165,22 @@ def test_the_cells_e3c_now_carries_pass_only_on_their_own_scenario_rows():
     assert {c["id"]: c["verdict"] for c in red}["DUR-FENCE"] == runner.FAIL
 
 
+def test_a_scenario_whose_rows_disagree_is_not_a_reference():
+    """Oracle (E3A-RUN-RV-3): the binding kept the LAST `| sNN ... | STATUS |` row anywhere in
+    the document, so another run's table decided it - a PASS row after the accepted run's FAIL
+    passed the cell. Rows that agree (the same PASS twice) still bind."""
+    failed_then_passed = EVIDENCE.replace("| s05 crash at each step | PASS | 9/9 |",
+                                          "| s05 crash at each step | FAIL | 0/9 |") + \
+        "| s05 crash at each step (another run) | PASS | 9/9 |\n"
+    passed_then_failed = EVIDENCE + "| **s05** crash at each step (run 1) | **FAIL** | 0/9 |\n"
+    green = runner.classify(all_passed())
+    for evidence in (failed_then_passed, passed_then_failed):
+        cell = {c["id"]: c for c in runner.cells(green, evidence)}["DUR-OUTBOX"]
+        assert cell["verdict"] == runner.NOT_RUN, cell
+        assert "s05: FAIL/PASS" in cell["reasons"][0], cell["reasons"][0]
+    assert runner.delegated_reference(EVIDENCE + "| s05 again | PASS | 9/9 |\n", ("s05", "s08")) is None
+
+
 def test_an_oracle_no_e3c_scenario_carries_is_not_run_even_with_the_reference(monkeypatch):
     """Oracle (0-E3A-RUN-RV-1, 1-S-1, 1-S-2): a cell no E3C scenario carries (`()`) read as
     PASS[delegated] on a green journey and the accepted reference, turning the gate APP-LOCAL

@@ -140,7 +140,7 @@ SCENARIO_ROW = re.compile(r"^\|\s*\**(s\d\d)\**[^|]*\|\s*\**([A-Z][A-Z ]*?)\**\s
 
 def delegated_reference(evidence: str | None, scenarios) -> str | None:
     """Why the E3C-FINAL reference does not carry `scenarios` (None: it does). It must be the
-    evidence of the accepted run - gate PASS at the run head - with each scenario's row PASS."""
+    evidence of the accepted run - gate PASS at the run head - with each scenario's rows all PASS."""
     if not scenarios:
         return "NOT carried by E3C-FINAL"
     if not evidence:
@@ -149,8 +149,13 @@ def delegated_reference(evidence: str | None, scenarios) -> str | None:
             evidence:
         return f"{E3C_FINAL['evidence']} does not record BACKEND-LOCAL PASS at " \
                f"{E3C_FINAL['run_head']}"
-    rows = dict(SCENARIO_ROW.findall(evidence))
-    bad = [f"{sid}: {rows.get(sid, 'no row')}" for sid in scenarios if rows.get(sid) != PASS]
+    # Every row of a scenario anywhere in the document counts (E3A-RUN-RV-3): rows that disagree -
+    # another run's table beside the accepted one - are not a reference, whichever comes last.
+    rows: dict[str, set[str]] = {}
+    for sid, status in SCENARIO_ROW.findall(evidence):
+        rows.setdefault(sid, set()).add(status)
+    bad = [f"{sid}: {'/'.join(sorted(rows.get(sid, {'no row'})))}" for sid in scenarios
+           if rows.get(sid) != {PASS}]
     return f"reference missing: {', '.join(bad)} in {E3C_FINAL['evidence']}" if bad else None
 
 
