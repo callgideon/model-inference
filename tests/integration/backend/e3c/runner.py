@@ -152,6 +152,7 @@ REQUIRED = {
             "test_s09_a_transition_meeting_a_parked_admission_refuses_within_its_bound"),
     "s10": ("test_s10_the_runtime_login_cannot_become_an_owner_or_rewrite_money",
             "test_s10_the_browser_roles_reach_nothing_outside_the_console_surface",
+            "test_s10_a_signed_in_consumer_reads_its_own_jobs_and_no_others",
             "test_s10_operator_and_consumer_credentials_stay_in_their_lane"),
     "s11": ("test_s11_reconcile_of_a_live_job_is_typed_and_moves_no_money",
             "test_s11_cancel_racing_completion_and_reconcile_ends_once",

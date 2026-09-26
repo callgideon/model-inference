@@ -112,10 +112,12 @@ def unserve_text(trip) -> None:
 
 
 def test_s04_late_rejection_refuses_before_any_execution(workdir):
-    """A text request whose capability is withdrawn between admission and the acceptance's
-    recheck: refused, cancelled, nothing prepared, run or charged, hold released. On a tree
-    that admits in one phase the capability is checked in the admission transaction, so the
-    same withdrawal before the request admits nothing at all."""
+    """A text request whose capability is withdrawn. Before the request: refused, nothing
+    admitted. After admit_ready's marker (held at `readiness`): the admission transaction
+    already checked it, so the job is answered its committed outcome - 202, never cancelled,
+    run and settled once (W5-F5/W5-F5B ruling R139, WR-W5F5B-3 option (b)). A late refusal
+    exists only on the pre-D10 door (no marker), which no pilot composition uses: there it is
+    still refused, cancelled, nothing run or charged."""
     with world.composed(workdir, start=("worker",)) as trip:
         alpha = trip.world.alpha
         if not world.has_point("readiness"):
@@ -130,6 +132,9 @@ def test_s04_late_rejection_refuses_before_any_execution(workdir):
         trip.box.reached("gateway")
         (request_id, _), = world.wait_for(lambda: world.job_of(trip, alpha.org_id,
                                                                "e3c-s04-late"), 10, "admission")
+        # Which door admitted it: admit_ready's marker is committed (the readiness door,
+        # every pilot composition) or not (the pre-D10 door).
+        marked = world.durably_ready(trip, request_id)
         unserve_text(trip)
         try:
             not_executed_while_held(trip, request_id)
@@ -137,9 +142,16 @@ def test_s04_late_rejection_refuses_before_any_execution(workdir):
             trip.box.release("gateway")
             thread.join(timeout=60)
         response = answer.get("response")
-        assert response is not None and response.status_code in (400, 404, 415), answer
-        assert world.terminal(trip, request_id) == "cancelled"
-        assert not any(world.executed(trip, request_id).values()), world.executed(trip, request_id)
+        if marked:
+            assert response is not None and response.status_code == 202, answer
+            assert world.terminal(trip, request_id, timeout=90.0) == "succeeded"
+        else:
+            # the pre-D10 door keeps its late rejection: refused, cancelled, nothing ran
+            assert response is not None and response.status_code in (400, 404, 409, 415), \
+                answer
+            assert world.terminal(trip, request_id) == "cancelled"
+            assert not any(world.executed(trip, request_id).values()), \
+                world.executed(trip, request_id)
         world.settled_once(trip, request_id)
 
 

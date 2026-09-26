@@ -103,8 +103,12 @@ def invalid(why: str):
 
 
 def need_stack():
-    if harness.NAMESPACE != NAMESPACE:
-        invalid(f"namespace {harness.NAMESPACE!r}, not {NAMESPACE!r}: run through e3c/runner.py")
+    # E3A-WR-1: the namespace the harness loaded (INFRX_E2_NAMESPACE) - e3c under this
+    # lane's runner, e4b under E3A's - never a constant another runner must shim.
+    expected = os.environ.get("INFRX_E2_NAMESPACE", NAMESPACE)
+    if harness.NAMESPACE != expected:
+        invalid(f"namespace {harness.NAMESPACE!r}, not {expected!r}: run through a runner "
+                "that sets INFRX_E2_NAMESPACE (e3c/runner.py)")
     if not stack.has_stack():
         import pytest
         pytest.skip(f"BLOCKED[E2C] no {harness.PROJECT} stack: run "
