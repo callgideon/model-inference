@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "01be4ccf",
+  "integration_head": "b967a033",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 122,
-  "updated": "2026-09-26T17:54:00Z",
+  "revision": 123,
+  "updated": "2026-09-26T18:25:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 3,
+    "active": 6,
     "reserved": 2,
-    "note": "Session 03 (18:05Z): workflows G2-FIX (e2c + i8) and the main-merge analysis (read-only); NEEDLE-1 agent; 2 slots reserved for verify-lane workflows."
+    "note": "Session 03 (18:20Z): workflows G2-FIX (e2c + i8), RUNBOOK-4, E1B-PREP, APP-MINORS-2 (app-*), BACKEND-MINORS (d10/g8/w5 + e3c); MAIN-MERGE blocked on B-01; 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -279,9 +279,9 @@
       },
       "activity": "complete",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-26T03:36:54Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": null,
-      "next_action": "coordinator review + merge; D10-FOLLOWUP's 0022 re-baselines the migration pin and RUNTIME_FUNCTIONS; G7/I8 add panels for the four intake metric families (ob10)",
+      "next_action": "implemented; the consumer-local gate (make consumer-local) is recorded at RELEASE after G2-FIX frees e2c (X-13); the closure note's measured PASS follows",
       "estimate": {
         "optimistic_h": 0,
         "likely_h": 0.25,
@@ -618,9 +618,9 @@
       },
       "activity": "complete",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-25T23:50:01Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": "P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator)",
-      "next_action": "ROLLOUT-FIXES merged; KNOWN-GOOD-PROOF verified f5293057 (both targets proven through 0023) → via the union; ALERT-SNS merged; operator-held items unchanged",
+      "next_action": "implemented; known-good proof reaches 0026 (KNOWN-GOOD-PROOF-3); the runtime-login step 55 + the SSM parameters are in place; replacement-instance restore stays uncovered (P-25)",
       "estimate": {
         "optimistic_h": 0,
         "likely_h": 0,
@@ -702,9 +702,9 @@
       },
       "activity": "complete",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T22:42:57Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": null,
-      "next_action": "DOOR-REVOKE verified ACCEPT_WITH_FIXES 273990a0 (0023 revokes admit/claim_preparation from infrx_runtime; RUNTIME_FUNCTIONS 41 by name; merge gate 'only with W5' satisfied on the union); the union lane merges it with wiring W-DR1 v2.",
+      "next_action": "implemented through 0026 (fenced put_result, R147); hosted at 0018 — 0019–0026 apply at W7; the R147 follow-up migration waits for the known-good targets to leave the record",
       "estimate": {
         "optimistic_h": 0,
         "likely_h": 0,
@@ -882,9 +882,9 @@
       },
       "activity": "complete",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-26T03:36:54Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": null,
-      "next_action": "union round 2 landed (door-revoke, w5-merge delta, tip, known-good-proof) at 74183655; W5-F5 lenses running; then union merge → R134–R137, W5 implemented",
+      "next_action": "implemented; ADMISSION-READY and DUR-FENCE PASS; the box warmup (W5-box-warmup.sh) runs inside the window (it restarts the engine)",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 2,
@@ -946,9 +946,9 @@
       },
       "activity": "complete",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T23:50:01Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": "merge gate: codex/d10-durable WR-3c (PgJobStore result_expires_at) must merge before or with G7, else PG successes read 410 and G8's tests/g/ops/test_acceptance_pg.py regresses",
-      "next_action": "G7-PROVISIONAL merged 2b112a05 (provisional flag from the approval record); G mutant list needs one entry for A3 WR-1's tests/g/test_app_examples.py (follow-up in flight)",
+      "next_action": "implemented; CATALOG-TRUTH PASS (s13); the 82 s cap copy is on the tip (RV-01) and reaches production with the App release",
       "estimate": {
         "optimistic_h": 0,
         "likely_h": 0,
@@ -1005,9 +1005,9 @@
       },
       "activity": "complete",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T00:44:22Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": "P-01 approved launch rates (live activation only); coordinator box dry-run window (read-only)",
-      "next_action": "merged e309b3fa (--no-ff; tasklocal kept on the integration side); R117-R118 numbered; manifest G8 implemented; merged-tree checks: tests/g minus ops 527 passed, tests/g/ops + test_operations_pg + test_signup 116 passed on g8; ops mutants rerun was in flight at the session handoff - confirm on resume; remaining = merged-SHA rerun with D10 (0019/0020), G7 revocation-bound ruling, coordinator box dry-run after run3, post-P-01 activation window",
+      "next_action": "implemented; the flag verb (G8-FLAG/-2) and the reversal drill (RUNBOOK-3) landed; the activation dry-run ran read-only against hosted 2026-09-26 (X-08b)",
       "estimate": {
         "optimistic_h": 0,
         "likely_h": 0,
@@ -1091,9 +1091,9 @@
       },
       "activity": "complete",
       "started": "2026-09-24T21:59:30Z",
-      "updated": "2026-09-26T03:36:54Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": null,
-      "next_action": "M6-WIRING verified ACCEPT_WITH_FIXES at 28dd1af2 (pins released on every exit path, housekeeping loop resilient, F-4 journal prune); merging via the union lane with WR-M6W-1",
+      "next_action": "implemented; RETENTION-DURABLE PASS end to end (E3C s06 + control); collector lag / pending-delete age on the box are measured during the E4C soak",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 2,
@@ -1226,9 +1226,9 @@
       },
       "activity": "queued",
       "started": null,
-      "updated": "2026-09-26T05:34:56Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": "after E3C; needs an allocated GPU window",
-      "next_action": "E4C-RUNBOOK-2 merged 0b97c7cd: the window sequence is W1–W5, W6 (operator dump) / W7 hosted apply 0019–0025, W7f card + CREDIT activation, W8–W10 install with ACCOUNTING_REGIME=credit + ACTIVE_RATE_CARD_VERSION, W10b runtime logins (SSM password parameters first), W11–W13, O3–O6, freeze, certify via infra/rollout/e4c-certify.sh, journey, drills; prerequisites still open: P-06 inventory (operator), known-good proof to 0025 (lane running), MEDIA_BASE_URL, SNS/webhook, PITR token, tenant-2 email confirmation, key revocations, verified dump, needle guard.",
+      "next_action": "prerequisites: P-06 enacted (2026-09-26), known-good proof through 0026, SNS topic + role grant (subscription pending the user), SSM parameters created, hosted confirmed at 0018 with 0019–0026 pending; left: G2 green at RELEASE (G2-FIX), the operator items B-03..B-11, the window itself",
       "estimate": {
         "optimistic_h": null,
         "likely_h": null,
@@ -1806,9 +1806,9 @@
       },
       "activity": "queued",
       "started": "2026-09-25T23:50:01Z",
-      "updated": "2026-09-26T05:48:32Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": "E3A proper needs BACKEND-LOCAL (E3C) and a rerun on the merged SHA; still NOT RUN: operator-controls (operator identity + one U3 action with a reason), the four delegated cells, the expired-content display on /usage/<id>; E3A-WR-1/WR-2 with the E3C final run (overlay keeps the lane queued: the gate dispatches after BACKEND-READY)",
-      "next_action": "E3A-RUN merged a53a194d: journey 20/20 checks PASS on the merged tree (operator-controls on 0025, expired-display, both seam controls detected); 14/17 cells PASS, 3 NOT RUN[delegated: oracle not carried by E3C] (DUR-FENCE stale-generation race, DUR-CAP concurrent admissions across keys/orgs, CREDIT-RATE rate change while jobs run — need an E3C case or a journey injection); E3A proper (the APP-LOCAL decision) after BACKEND-READY per the manifest gate",
+      "next_action": "APP-LOCAL 17/17 PASS on 400a7e94 (candidate recorded); the decision is recorded when E3A dispatches after BACKEND-READY",
       "estimate": {
         "optimistic_h": 2,
         "likely_h": 5,
@@ -3165,16 +3165,16 @@
       },
       "activity": "running",
       "started": "2026-09-26T10:50:00Z",
-      "updated": "2026-09-26T10:50:00Z",
+      "updated": "2026-09-26T18:20:00Z",
       "blocker": null,
       "next_action": "handback → merge → the G2 row green on the tip → tracker + push",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 3.5,
-        "pessimistic_h": 6,
+        "optimistic_h": 1.5,
+        "likely_h": 2.5,
+        "pessimistic_h": 4,
         "confidence": "medium",
-        "basis": "a harness rule + a gate port + four mutant items + a make check run (~45 min) + tests/i and its mutant list on i8",
-        "at": "2026-09-26T10:50:00Z"
+        "basis": "run started 17:17Z; api-test 4566/0 by 18:00Z; api-mutants, console and tests/i on i8 remain (~2.5 h)",
+        "at": "2026-09-26T18:20:00Z"
       },
       "evidence": [],
       "commands": [],
@@ -3235,222 +3235,301 @@
         "research/plan/evidence/coordinator/NEEDLE-1-*.md"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "RUNBOOK-4",
+      "task": null,
+      "slice": "(support lane; before the RELEASE freeze) window documents consistent: known-good proof 0026 in rollout.md/E4C-runbook.md, the E4C-RUNBOOK-2 carried minors as checklist lines, /api/version public, readiness-brief log; docs + text tests only",
+      "agent": "opus",
+      "branch": "codex/runbook-4",
+      "worktree": ".claude/worktrees/codex-runbook-4",
+      "base": "b967a033",
+      "head": null,
+      "isolation": {
+        "ports": "none (no docker; never i8)",
+        "prefix": "",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T18:20:00Z",
+      "blocker": null,
+      "next_action": "handback → merge before the freeze",
+      "estimate": {
+        "optimistic_h": 0.5,
+        "likely_h": 1,
+        "pessimistic_h": 2,
+        "confidence": "high",
+        "basis": "docs only",
+        "at": "2026-09-26T18:20:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "infra/runbooks/rollout.md",
+        "models/marlin2b/results/E4C-runbook.md",
+        "infra/app/README.md (one line)",
+        "research/plan/evidence/coordinator/E4C-readiness-2026-09-26.md (one log line)",
+        "text tests that pin these documents",
+        "research/plan/evidence/i/RUNBOOK-4-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "E1B-PREP",
+      "task": "E1B",
+      "slice": "(preparation for E1B, no measurement) map slices a–c and PERF-ENVELOPE / MARLIN-SOP / MEDIA-PARITY onto the E4C certify run; name the extra box cells so one GPU window covers E1B; cost per successful video / video-second formula (est.; CREDIT and USD separate); D-13 disposition proposal",
+      "agent": "opus",
+      "branch": "codex/e1b-prep",
+      "worktree": ".claude/worktrees/codex-e1b-prep",
+      "base": "b967a033",
+      "head": null,
+      "isolation": {
+        "ports": "none",
+        "prefix": "",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T18:20:00Z",
+      "blocker": null,
+      "next_action": "handback → merge; the window cells join the E4C window plan",
+      "estimate": {
+        "optimistic_h": 1,
+        "likely_h": 2,
+        "pessimistic_h": 3,
+        "confidence": "medium",
+        "basis": "mapping + formulas; the cells run in the window",
+        "at": "2026-09-26T18:20:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "research/plan/evidence/e/E1B-prep-*.md",
+        "models/marlin2b/results/E1B-protocol.md (window cells)",
+        "research/models/marlin2b/README.md (one Planned line)"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "APP-MINORS-2",
+      "task": null,
+      "slice": "(App follow-up under the App-ahead overrides) C0 WR-6 (no first-membership pick in lib/session.ts), U1R WR-6 (one shared credit port: getUser once per render), A2 WR-A2-3 (dead safeNext), E3A-RUN S-5/RV-3, AM1-L2/L3",
+      "agent": "opus",
+      "branch": "codex/app-minors-2",
+      "worktree": ".claude/worktrees/codex-app-minors-2",
+      "base": "b967a033",
+      "head": null,
+      "isolation": {
+        "ports": "app-c0 55451 / app-u1r 55457 / app-u4 55456",
+        "prefix": "infrx-app-c0-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T18:20:00Z",
+      "blocker": null,
+      "next_action": "handback → merge after the RELEASE freeze (so G2 is not reset); APP-LOCAL reruns on the App release SHA",
+      "estimate": {
+        "optimistic_h": 2,
+        "likely_h": 3,
+        "pessimistic_h": 5,
+        "confidence": "medium",
+        "basis": "five items with fails-before tests and mutants on the real-PG stacks",
+        "at": "2026-09-26T18:20:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/app/lib/session.ts",
+        "the credit port files U1R WR-6 names",
+        "apps/app/lib/utils.ts + test",
+        "apps/app/tests/",
+        "tests/integration/app/ (S-5, RV-3 only)",
+        "research/plan/evidence/app/APP-MINORS-2-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "BACKEND-MINORS",
+      "task": null,
+      "slice": "(support lane; after the freeze) RV-D10F-3 assertion / PG-backed runner case + the W5 mutant runner lock, G8F2-M1/M2 cases, CC-1 per-scope cap burst (+ E3C final run), ASN-V1 int() on HTTPStatusCode, RF-C1 ssm.sh usage header, the 55496 literal → tasklocal; no migrations",
+      "agent": "opus",
+      "branch": "codex/backend-minors",
+      "worktree": ".claude/worktrees/codex-backend-minors",
+      "base": "b967a033",
+      "head": null,
+      "isolation": {
+        "ports": "d10 55442/55469, g8 55447/55492, w5 55445/55491, e3c block; never e2c/i8",
+        "prefix": "",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T18:20:00Z",
+      "blocker": null,
+      "next_action": "handback → merge after the RELEASE freeze",
+      "estimate": {
+        "optimistic_h": 2,
+        "likely_h": 4,
+        "pessimistic_h": 6,
+        "confidence": "medium",
+        "basis": "six small items + one E3C final run; 2 lenses",
+        "at": "2026-09-26T18:20:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/infrx-api/tests/w/",
+        "apps/infrx-api/tests/g/ops/",
+        "tests/integration/backend/e3c/scenarios_capacity.py + reverts.py",
+        "infra/observe/deliver.py (ASN-V1)",
+        "infra/rollout/ssm.sh (usage header)",
+        "apps/infrx-api/tests/i/test_observe.py (55496)",
+        "research/plan/evidence/coordinator/BACKEND-MINORS-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "PREWINDOW-CHECKS",
+      "task": null,
+      "slice": "(coordinator, read-only) X-06/X-07/X-08 before the window: box hairpin to the public edge, the env-file key rule, 85-known-good-box for both targets, O1 pool budget, known-good listing at --applied 0026 with the bundle check, the alert subscription state, hosted migrate.py plan, the P-02 credit-transition dry run",
+      "agent": "opus",
+      "branch": "—",
+      "worktree": ".claude/worktrees/infrx-impl",
+      "base": "b967a033",
+      "head": null,
+      "isolation": {
+        "ports": "SSM + hosted read-only; no local ports",
+        "prefix": "",
+        "db": null
+      },
+      "activity": "complete",
+      "started": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T18:25:00Z",
+      "blocker": null,
+      "next_action": "DONE 2026-09-26: hairpin 200; MARLIN_API_KEY lines 0; 85-known-good-box: both target images cached; O1 PASS session (13+2 ≤ 15; WARN worker pool max 6 < 13 — runners wait ≤ 5 s); hosted migrate.py plan (read-only): applied 0001–0018, pending 0019–0026; known-good.py bda1586 --applied 0026 with the eight --set names and --bundles: KNOWN-GOOD (commit/preparation/migrations/config/record/bundle all ok — an earlier NOT-KNOWN-GOOD was a truncated --set name in the coordinator's call); alert subscription PendingConfirmation (user); the P-02 credit-transition --dry-run against hosted was refused by the tool policy (\"Production Reads\") → user runs it (B-07 key prefixes)",
+      "estimate": {
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "done",
+        "at": "2026-09-26T18:20:00Z"
+      },
+      "evidence": [],
+      "commands": [
+        {
+          "cmd": "infra/rollout/ssm.sh box-prewindow-readonly.sh; 85-known-good-box.sh TARGET=bda1586 / 4226315",
+          "exit": 0,
+          "summary": "hairpin 200; key lines 0; both images cached"
+        },
+        {
+          "cmd": "pool_budget.py --runtime-port 5432 --set DATABASE_POOL_MAX_SIZE=6",
+          "exit": 0,
+          "summary": "PASS session 13+2 ≤ 15; PASS transaction; WARN worker pool max 6 < 13"
+        },
+        {
+          "cmd": "hosted migrate.py plan (read-only, PGPASSWORD from SSM, never printed)",
+          "exit": 0,
+          "summary": "applied 0001–0018; pending 0019–0026 with digests"
+        },
+        {
+          "cmd": "known-good.py bda1586 --applied 0026 --set ×8 --bundles s3://llm-bootcamp-641134885443/releases/",
+          "exit": 0,
+          "summary": "KNOWN-GOOD; bundle present"
+        }
+      ],
+      "owned_paths": [
+        "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "MAIN-MERGE",
+      "task": null,
+      "slice": "(blocked on the user's B-01 decision) merge claude/consumer-v1 into main — git is clean (origin/main dff31efc is an ancestor; no conflicts) but a push to main deploys the production App through Vercel while hosted is at 0018 and the production variables are unconfirmed → 500s; route A (after BACKEND-READY + the W7 hosted apply + the App inputs) or route B (Vercel production Git deploys for main disabled by the operator; no Supabase Git integration; written go)",
+      "agent": "opus",
+      "branch": "—",
+      "worktree": ".claude/worktrees/main-merge (to be created off origin/main)",
+      "base": "b967a033",
+      "head": null,
+      "isolation": {
+        "ports": "none",
+        "prefix": "",
+        "db": null
+      },
+      "activity": "blocked",
+      "started": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T18:20:00Z",
+      "blocker": "B-01: a push to main deploys the production App (Vercel production branch main) while hosted is at 0018 — user decides route A (wait for APP-MERGE after BACKEND-READY) or route B (operator disables production Git deploys for main first)",
+      "next_action": "BLOCKED: user decision B-01 (route A or B); then the merge commands recorded in the analysis",
+      "estimate": {
+        "optimistic_h": 0.3,
+        "likely_h": 0.5,
+        "pessimistic_h": 1,
+        "confidence": "high",
+        "basis": "one --no-ff merge + push once authorized",
+        "at": "2026-09-26T18:20:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "main (merge commit only)"
+      ],
+      "wiring_requests": []
     }
   ],
-  "review_queue": [
-    {
-      "since": "2026-09-24T23:25:00Z",
-      "lane": "M6",
-      "task": "M6",
-      "head": "dea32507"
-    },
-    {
-      "since": "2026-09-25T00:04:00Z",
-      "lane": "E2C",
-      "task": "E2C",
-      "head": "8a94a855"
-    },
-    {
-      "since": "2026-09-25T21:27:00Z",
-      "lane": "A2",
-      "task": "A2",
-      "head": "ed6a282d"
-    },
-    {
-      "since": "2026-09-25T21:46:26Z",
-      "lane": "U1R",
-      "task": "U1R",
-      "head": "d199fffe"
-    },
-    {
-      "since": "2026-09-25T22:10:00Z",
-      "lane": "A3",
-      "task": "A3",
-      "head": "fdd9e1f5"
-    },
-    {
-      "since": "2026-09-25T22:03:00Z",
-      "lane": "C0",
-      "task": "C0",
-      "head": "ffd5ba7c"
-    },
-    {
-      "since": "2026-09-26T05:12:00Z",
-      "lane": "G8-FLAG-2",
-      "task": "G8-FLAG-2",
-      "head": "223a3bd5"
-    },
-    {
-      "since": "2026-09-26T04:51:00Z",
-      "lane": "E4C-RUNBOOK-2",
-      "task": "E4C-RUNBOOK-2",
-      "head": "13a30bb5"
-    },
-    {
-      "since": "2026-09-26T05:24:00Z",
-      "lane": "APP-0024-WIRE",
-      "task": "APP-0024-WIRE",
-      "head": "d5e90cee"
-    }
-  ],
+  "review_queue": [],
   "integration_queue": [],
   "resource_locks": [
     {
-      "id": "gpu-box",
-      "kind": "gpu",
-      "label": "GPU box (pilot, single L40S)",
-      "holder": "E4B run3 (historical run on bda1586)",
-      "since": "2026-09-24T20:29:00Z",
-      "until": "2026-09-25T01:20:00Z",
-      "tasks": [
-        "E1B",
-        "E4C",
-        "I2A",
-        "E4"
-      ],
-      "windows": [],
-      "note": "One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C."
-    },
-    {
-      "id": "sql-writer",
-      "kind": "sql",
-      "label": "SQL writer (migrations)",
-      "holder": "D10",
-      "since": "2026-09-24T21:55:00Z",
-      "tasks": [
-        "D10"
-      ],
-      "note": "D10 alone writes migrations (0001–0018 immutable)."
-    },
-    {
-      "id": "runner-backend",
-      "kind": "runner",
-      "label": "runner dir tests/integration/backend",
-      "holder": "E2C",
-      "tasks": [
-        "E2C",
-        "E3C",
-        "E4C"
-      ],
-      "note": "One owner per runner directory; E2C → E3C → E4C."
-    },
-    {
-      "id": "integration",
-      "kind": "integration",
-      "label": "integration queue (claude/consumer-v1)",
-      "holder": null,
+      "id": "ports-e2c-i8",
+      "kind": "ports",
+      "label": "e2c (55448/55493) + i8 (55450/55495/55496)",
+      "holder": "G2-FIX",
+      "since": "2026-09-26T17:17:00Z",
+      "until": "2026-09-26T21:00:00Z",
       "tasks": [],
-      "note": "Serial coordinator merges; empty."
-    },
-    {
-      "id": "ports-d10",
-      "kind": "ports",
-      "label": "task-local services D10",
-      "holder": "D10",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "D10"
-      ],
-      "note": "postgres 55442, valkey 55469 reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
-    },
-    {
-      "id": "ports-m5",
-      "kind": "ports",
-      "label": "task-local services M5",
-      "holder": "M5",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "M5"
-      ],
-      "note": "postgres 55443, s3 55470 reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
-    },
-    {
-      "id": "ports-m6",
-      "kind": "ports",
-      "label": "task-local services M6",
-      "holder": "M6",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "M6"
-      ],
-      "note": "postgres 55444, s3 55471 reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
-    },
-    {
-      "id": "ports-w5",
-      "kind": "ports",
-      "label": "task-local services W5",
-      "holder": "W5",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "W5"
-      ],
-      "note": "postgres 55445, valkey 55472 reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
-    },
-    {
-      "id": "ports-g7",
-      "kind": "ports",
-      "label": "task-local services G7",
-      "holder": "G7",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "G7"
-      ],
-      "note": "postgres 55446 reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
-    },
-    {
-      "id": "ports-g8",
-      "kind": "ports",
-      "label": "task-local services G8",
-      "holder": "G8",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "G8"
-      ],
-      "note": "postgres 55447, valkey 55473 reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
-    },
-    {
-      "id": "ports-e2c",
-      "kind": "ports",
-      "label": "task-local services E2C",
-      "holder": "E2C",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "E2C"
-      ],
-      "note": "postgres 55448, valkey 55474, s3 55475 (dispatch range 55510–55519 replaced: 555xx is the E compose block) reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
-    },
-    {
-      "id": "ports-e1c",
-      "kind": "ports",
-      "label": "task-local services E1C",
-      "holder": "E1C",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "E1C"
-      ],
-      "note": "postgres 55449 reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
-    },
-    {
-      "id": "ports-i8",
-      "kind": "ports",
-      "label": "task-local services I8",
-      "holder": "I8",
-      "since": "2026-09-24T21:58:00Z",
-      "tasks": [
-        "I8"
-      ],
-      "note": "postgres 55450, valkey 55476 reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
+      "windows": [],
+      "note": "exclusive for the whole make check + tests/i run; no other user of either until the verdict"
     },
     {
       "id": "ports-e3c",
       "kind": "ports",
-      "label": "task-local services E3C",
-      "holder": "E3C",
-      "since": "2026-09-24T21:58:00Z",
+      "label": "e3c compose block 56900–56999",
+      "holder": "BACKEND-MINORS",
+      "since": "2026-09-26T18:20:00Z",
+      "until": null,
+      "tasks": [],
+      "windows": [],
+      "note": "one E3C run at a time"
+    },
+    {
+      "id": "ports-app",
+      "kind": "ports",
+      "label": "app-c0 55451 / app-u1r 55457 / app-u4 55456",
+      "holder": "APP-MINORS-2",
+      "since": "2026-09-26T18:20:00Z",
+      "until": null,
+      "tasks": [],
+      "windows": [],
+      "note": "App real-PG worlds"
+    },
+    {
+      "id": "gpu-box",
+      "kind": "gpu",
+      "label": "pilot box i-0e8449a4ffca29bab (single GPU)",
+      "holder": null,
+      "since": null,
+      "until": null,
       "tasks": [
-        "E3C"
+        "E1B",
+        "E4C",
+        "E4"
       ],
-      "note": "compose block 56900–56999 (postgres mirror 56932) reserved in apps/infrx-api/infrx/contracts/tasklocal.py (bfb3a8af)"
+      "windows": [],
+      "note": "no window allocated; the E4C window pauses production admission (W5) and is operator-scheduled (B-11)"
     }
   ],
   "gates": {
@@ -3569,7 +3648,7 @@
       ],
       "decision": null,
       "decided_at": null,
-      "note": "Pending. Open list: RV-01…RV-12, all OPEN at dff31efc (S3); see findings."
+      "note": "All six cells NOT RUN: only the E4C window can run them (BACKEND-JOURNEY, LOAD-CLOSEDLOOP, PERF-ENVELOPE, OPS-CONTINUOUS, CREDIT-CUTOVER, MARLIN-SOP). RV-04/08/09/10 stay open until then (P-17 check 8); RV-01/02/03/05/06/07/11/12 are fixed on the candidate. Pre-window checks done 2026-09-26 (hairpin, env rule, known-good-box, O1, hosted at 0018); P-06 enacted; G2 red until G2-FIX lands and the G2 row is rerun at RELEASE."
     },
     "APP-LOCAL": {
       "candidate": {
@@ -3764,75 +3843,111 @@
   "findings": [
     {
       "id": "RV-01",
-      "status": "open",
-      "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "status": "fixed",
+      "at": "2026-09-26T18:20:00Z",
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)",
+      "evidence": [
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+        "research/plan/evidence/e/E3A-run-555355d.md"
+      ]
     },
     {
       "id": "RV-02",
-      "status": "open",
-      "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "status": "fixed",
+      "at": "2026-09-26T18:20:00Z",
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)",
+      "evidence": [
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+        "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md",
+        "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+      ]
     },
     {
       "id": "RV-03",
-      "status": "open",
-      "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "status": "fixed",
+      "at": "2026-09-26T18:20:00Z",
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)",
+      "evidence": [
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+        "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md",
+        "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+      ]
     },
     {
       "id": "RV-04",
       "status": "open",
       "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)"
     },
     {
       "id": "RV-05",
-      "status": "open",
-      "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "status": "fixed",
+      "at": "2026-09-26T18:20:00Z",
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)",
+      "evidence": [
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+        "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md",
+        "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+      ]
     },
     {
       "id": "RV-06",
-      "status": "open",
-      "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "status": "fixed",
+      "at": "2026-09-26T18:20:00Z",
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)",
+      "evidence": [
+        "research/plan/evidence/e/E3A-run-555355d.md"
+      ]
     },
     {
       "id": "RV-07",
-      "status": "open",
-      "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "status": "fixed",
+      "at": "2026-09-26T18:20:00Z",
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)",
+      "evidence": [
+        "research/plan/evidence/e/E1C-2531dc4.md",
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+      ]
     },
     {
       "id": "RV-08",
       "status": "open",
       "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)"
     },
     {
       "id": "RV-09",
       "status": "open",
       "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)"
     },
     {
       "id": "RV-10",
       "status": "open",
       "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)"
     },
     {
       "id": "RV-11",
-      "status": "open",
-      "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "status": "fixed",
+      "at": "2026-09-26T18:20:00Z",
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)",
+      "evidence": [
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+        "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md",
+        "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+      ]
     },
     {
       "id": "RV-12",
-      "status": "open",
-      "at": "dff31efc",
-      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      "status": "fixed",
+      "at": "2026-09-26T18:20:00Z",
+      "source": "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)",
+      "evidence": [
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+        "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md",
+        "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+      ]
     }
   ],
   "historical_runs": [
@@ -4092,7 +4207,7 @@
     {
       "id": "P-24",
       "status": "open",
-      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run [2026-09-26: profile + CREDIT cap enacted; left: the operator's +40,000 adjust (H5) and the two key revocations (H3)]",
       "owner": "E4C lane (profile); E1C micro-lane (CREDIT spend schema); operator-held (+40,000 CREDIT adjust)",
       "blocks": [
         "E4C"
@@ -4101,7 +4216,7 @@
     {
       "id": "P-25",
       "status": "open",
-      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle [2026-09-26: known-good schema_proof reaches 0025 for both targets (KNOWN-GOOD-PROOF-2); extend at 0026] [2026-09-26 09:00Z: SNS topic arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts created (no subscription yet; the box role's sns:Publish grant is user-run — classifier)]",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle [2026-09-26: known-good schema_proof reaches 0025 for both targets (KNOWN-GOOD-PROOF-2); extend at 0026] [2026-09-26 09:00Z: SNS topic arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts created (no subscription yet; the box role's sns:Publish grant is user-run — classifier)] [2026-09-26 18:20Z: known-good proof through 0026; alert subscription PendingConfirmation (user); role grant done; SSM parameters ×3 created; left: PITR token, verified dump, backup rehearsal, image mirror / replacement-instance restore]",
       "owner": "M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read)",
       "blocks": [
         "E4C"
@@ -5731,6 +5846,12 @@
       "by": "coordinator (NEEDLE-1)",
       "what": "NEEDLE-1 merged (3/4 guard offenders assembled from parts); the test_certify.py hunk was refused to the lane by the classifier (\"Security Test Removal\") and stays user-applied — not taken over by the coordinator",
       "source": "research/plan/evidence/coordinator/NEEDLE-1-dae4635.md"
+    },
+    {
+      "at": "2026-09-26T18:20:00Z",
+      "by": "coordinator (analysis)",
+      "what": "plan-vs-work analysis (wf_3e4a9ff9-b59): 20/26 program-22 tasks implemented; BACKEND-LOCAL accepted and re-proven on 400a7e94, APP-LOCAL 17/17 candidate; main merge HELD — a push to main deploys the production App via Vercel while hosted is at 0018 (B-01 → user); executable items launched: RUNBOOK-4, E1B-PREP, APP-MINORS-2, BACKEND-MINORS; R148 numbered; pre-window checks done; tracker corrections applied (locks, findings RV-01/02/03/05/06/07/11/12 fixed, inputs, stale next_actions)",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     }
   ],
   "history": {
