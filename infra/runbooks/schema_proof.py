@@ -42,7 +42,8 @@ DSN_ENV = "SCHEMA_PROOF_DSN"
 # Cases of the target's own tests/d that cannot hold on a newer catalog for a reason that is
 # not the old runtime's SQL. Each is deselected BY NAME and printed as SKIP with its reason;
 # anything else that fails is a FAIL. Measured at bda1586/4226315 on 0001-0023 (every one
-# passes on the target's own 0001-0018): KNOWN-GOOD-PROOF evidence.
+# passes on the target's own 0001-0018): KNOWN-GOOD-PROOF evidence; the last three on 0001-0025
+# (each passes on 0001-0023): KNOWN-GOOD-PROOF-2 evidence.
 SHAPE = {
     # the old tree's catalog enumerations: the schema grew (0019-0023 objects, grants to the
     # runtime/monitor logins, consumer read functions); not SQL the old runtime runs
@@ -61,6 +62,18 @@ SHAPE = {
         "reads a result before the job's outcome (0020: result_pending); the runtime reads only a committed outcome's result_ref - the probe proves that path",
     "tests/d/test_store_requests.py::test_put_result__write_once_reference_and_owner_read":
         "the same pre-outcome read through the adapter; the probe proves the post-outcome read",
+    # 0024/0025: the browser key insert and the browser surface; not the old runtime's SQL
+    "tests/d/test_schema_postgres.py::test_dur_rls__browser_roles_cannot_reach_protected_state":
+        "its browser positive control 'owner creates a key' uses an unverified owner; 0024 (C3A WR-C3A-4) "
+        "admits a browser api_keys INSERT only for a verified individual - the App's path; the old runtime "
+        "inserts keys only through PgTenantStore on the service seam (test_operations_pg)",
+    "tests/d/test_credit_schema.py::test_operator_seams__audit_keys_suspension_usage_holds":
+        "its 'deployed console's own insert' is a browser api_keys INSERT by an unverified consumer, which "
+        "0024 (C3A WR-C3A-4) refuses by design - the App's path; the old runtime's key/suspension SQL "
+        "(PgTenantStore, set_suspension) is walked by test_operations_pg",
+    "tests/d/test_schema_postgres.py::test_dur_rls__the_browser_privilege_surface_is_enumerated":
+        "enumerates the old browser surface (0025 grants authenticated SELECT on operator_wallet_drift / "
+        "operator_unknown_usage)",
 }
 # The one path none of the target's suites walks end to end on PostgreSQL: its runtime's
 # admit -> prepare -> claim -> complete (its own terminalize SQL) -> the gateway's result read
