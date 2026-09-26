@@ -43,6 +43,15 @@ const JOBS = "app/(console)/usage/credit-view-model.ts";
 const GATE = "app/(console)/usage/fake-console-context.ts";
 const SOURCE = "app/(console)/billing/credit-fixture.ts";
 
+// U4: the owned request detail — reads, view model, and the three route files the cases read as
+// source (request-pg.test.ts needs a database and skips here; request_world.py is its oracle).
+const RR = "app/(console)/usage/[requestId]/request-reads.ts";
+const RV = "app/(console)/usage/[requestId]/request-view-model.ts";
+const PANEL = "app/(console)/usage/[requestId]/result-panel.tsx";
+const ROUTE = "app/(console)/usage/[requestId]/result/route.ts";
+const PAGE = "app/(console)/usage/[requestId]/page.tsx";
+const POLLER = "app/(console)/usage/[requestId]/status-poller.tsx";
+
 const SUITE = [
   "tests/u/usage-view-model.test.ts",
   "tests/u/billing-view-model.test.ts",
@@ -51,6 +60,7 @@ const SUITE = [
   "tests/u/credits-view-model.test.ts",
   "tests/u/usage-credits-view-model.test.ts",
   "tests/u/credit-preview-gate.test.ts",
+  "tests/u/request-detail.test.ts",
 ];
 
 const T = {
@@ -113,6 +123,27 @@ const T = {
 };
 
 /** One single edit each, and one named invariant each. */
+const U4 = {
+  job: "U4-R01 the job read asks consumer_jobs for exactly this request, as the session's own user",
+  foreign: "U4-R02 a foreign, unknown, mismatched or malformed id is 'not found', and a malformed one never reaches the database",
+  gate: "U4-R04 the result is served only when the API would serve it: the job read gates the content read",
+  result: "U4-R05 each content refusal keeps its meaning: not found, not ready, expired, signed out, unavailable",
+  response: "U4-R06 every result response is private and no-store, and only a ready one carries content",
+  access: "U4-V01 result access is the contract's read classification of the persisted fields",
+  failure: "U4-V03 a failure is explained with sanitized, actionable copy; the phase is waiting, running or finished",
+  expiry: "U4-V04 content expiry keeps the request's metadata and charge but removes content access",
+  poll: "U4-V05 polling backs off, is bounded, and runs only while the request (or a retryable read) is unfinished",
+  client: "U4-V06 the browser trusts only a same-origin JSON answer; a redirect or 401 is a signed-out state",
+  timer: "U4-V07 the browser drops content at the persisted expiry and never before it is due",
+  loop: "U4-V09 the poll loop refreshes on the backoff, stops after MAX_POLLS, and unmount cancels it",
+  watch: "U4-V10 an open page drops content when the persisted expiry is due, never before, re-arming past the timer ceiling",
+  reads: "U4-V11 the result is read on mount and again on a back/forward restore (content hidden first); navigation aborts it",
+  fetch: "U4-V12 the browser's result fetch is same-origin and no-store, and an abandoned read shows nothing",
+  source: "U4-G01 the request fixture is reachable only through the development preview gate",
+  surface: "U4-S01 content stays out of the page payload, browser storage and logs; the route answers no-store",
+  wiring: "U4-S02 the client components run the tested drivers, no fetch bypasses them, and the page mounts the poller only when it polls",
+};
+
 const MUTANTS = [
   // --- money formatting -----------------------------------------------------
   {
@@ -746,6 +777,111 @@ const MUTANTS = [
   { id: "U1R-M33", what: "the sidebar shows the balance, ignoring holds", file: CREDITS,
     find: "? \"No credits yet\" : credits(wallet.value.available);", replace: "? \"No credits yet\" : credits(wallet.value.ledgerTotal);",
     cases: [T.bSidebar] },
+  // U4: owned request detail and result lifecycle.
+  { id: "U4-M01", what: "the job read is not narrowed to the requested id", file: RR,
+    find: "rpc: (fn, args) => client.rpc(fn, { ...args, p_request_id: id }),", replace: "rpc: (fn, args) => client.rpc(fn, args),",
+    cases: [U4.job] },
+  { id: "U4-M02", what: "a row for another request is shown as this one", file: RR,
+    find: "found !== undefined && found.requestId === id ? found : null", replace: "found ?? null", cases: [U4.foreign] },
+  { id: "U4-M03", what: "a malformed id reaches the database", file: RR,
+    find: "  return REQUEST_ID.test(id) ? id : null;", replace: "  return id;", cases: [U4.foreign] },
+  { id: "U4-M04", what: "content is read whatever the API would answer (held_unknown, expired, pending)", file: RR,
+    find: "      if (access !== \"available\") return WITHHELD[access];", replace: "", cases: [U4.gate] },
+  { id: "U4-M05", what: "an expired result reads as not ready", file: RR,
+    find: "if (message.startsWith(\"result_expired:\")) return { state: \"expired\" };",
+    replace: "if (message.startsWith(\"result_expired:\")) return { state: \"pending\" };", cases: [U4.result] },
+  { id: "U4-M06", what: "a refused JWT is an outage, not a signed-out session", file: RR,
+    find: "if (error.code === \"42501\" || /^PGRST30\\d$/.test(error.code ?? \"\")) return { state: \"signed_out\" };",
+    replace: "if (false) return { state: \"signed_out\" };", cases: [U4.result] },
+  { id: "U4-M07", what: "the result response may be cached", file: RR,
+    find: "\"Cache-Control\": \"private, no-store, max-age=0\"", replace: "\"Cache-Control\": \"private, max-age=60\"",
+    cases: [U4.response] },
+  { id: "U4-M08", what: "a non-text body is served as content", file: RR,
+    find: "typeof answer.data === \"string\" ? { state: \"ready\", text: answer.data }",
+    replace: "answer.data !== null ? { state: \"ready\", text: answer.data as string }", cases: [U4.result] },
+  { id: "U4-M09", what: "the request fixture ignores the preview gate", file: RR,
+    find: "  if (previewAllowed(env)) return { reads: fixtureRequestReads(), preview: true };",
+    replace: "  if (true) return { reads: fixtureRequestReads(), preview: true };", cases: [U4.source] },
+  { id: "U4-M10", what: "a job read refused for a missing JWT subject is an outage", file: RR,
+    find: "read.error.code === \"forbidden\" ? \"signed_out\" : \"unavailable\"", replace: "\"unavailable\"",
+    cases: [U4.gate] },
+  { id: "U4-M11", what: "available vs expired ignores the database's persisted-expiry verdict", file: RV,
+    find: "  return job.resultAvailable ? \"available\" : \"expired\";", replace: "  return \"available\";",
+    cases: [U4.access, U4.expiry] },
+  { id: "U4-M12", what: "an unknown-usage request's result is served", file: RV,
+    find: "  if (job.settlementState === \"held_unknown\") return \"held_unknown\";", replace: "", cases: [U4.access] },
+  { id: "U4-M13", what: "a success without authoritative usage is served", file: RV,
+    find: "if (job.state !== \"succeeded\" || job.usageCertainty !== \"authoritative\") return \"no_result\";",
+    replace: "if (job.state !== \"succeeded\") return \"no_result\";", cases: [U4.access] },
+  { id: "U4-M14", what: "a success with no persisted expiry is treated as expiring", file: RV,
+    find: "  if (job.resultExpiresAt === null) return \"unavailable\";", replace: "", cases: [U4.access] },
+  { id: "U4-M15", what: "polling never stops", file: RV,
+    find: "attempt >= MAX_POLLS) return null;", replace: "attempt >= Infinity) return null;", cases: [U4.poll] },
+  { id: "U4-M16", what: "polling does not back off", file: RV,
+    find: "Math.min(FIRST_POLL_MS * 2 ** attempt, MAX_POLL_MS)", replace: "FIRST_POLL_MS", cases: [U4.poll] },
+  { id: "U4-M17", what: "a finished request keeps polling", file: RV,
+    find: "    poll: phase === \"waiting\" || phase === \"running\",", replace: "    poll: true,", cases: [U4.poll] },
+  { id: "U4-M18", what: "a refusal is re-polled like an outage", file: RV,
+    find: "poll: state.recovery === \"retry\"", replace: "poll: true", cases: [U4.poll] },
+  { id: "U4-M19", what: "a redirected fetch (sent to /login) is trusted", file: RV,
+    find: "if (response.redirected || response.status === 401)", replace: "if (response.status === 401)", cases: [U4.client] },
+  { id: "U4-M20", what: "a body whose state disagrees with its status is trusted", file: RV,
+    find: "  if (RESULT_STATUS[state as ResultRead[\"state\"]] !== response.status) return { state: \"unavailable\" };",
+    replace: "", cases: [U4.client] },
+  { id: "U4-M21", what: "content outlives the persisted expiry instant", file: RV,
+    find: "return Math.min(Math.max(at - nowMs, 0), MAX_TIMER_MS);", replace: "return Math.min(Math.max(at - nowMs + 1, 0), MAX_TIMER_MS);",
+    cases: [U4.timer] },
+  { id: "U4-M22", what: "a platform failure shows its internal cause", file: RV,
+    find: "  return { title: \"The request failed on our side.\", action: OURS };",
+    replace: "  return { title: `The request failed: ${cause}.`, action: OURS };", cases: [U4.failure] },
+  { id: "U4-M23", what: "the browser may cache the result fetch", file: RV,
+    find: "      cache: \"no-store\",", replace: "      cache: \"force-cache\",", cases: [U4.fetch] },
+  { id: "U4-M24", what: "the result panel persists content in browser storage", file: PANEL,
+    find: "    const text = shown.text;", replace: "    const text = shown.text;\n    localStorage.setItem(\"result\", text);",
+    cases: [U4.surface] },
+  { id: "U4-M25", what: "the result route may be prerendered or cached", file: ROUTE,
+    find: "export const dynamic = \"force-dynamic\";", replace: "export const dynamic = \"auto\";", cases: [U4.surface] },
+  // U4 fix round (0-U4-V-01/02): the browser lifecycle drivers and the components' wiring of them.
+  // A, B, F, K, D and E are the review's surviving mutants, each in its driver and its wiring form.
+  { id: "U4-M26", what: "(A) an open page keeps content past its expiry", file: RV,
+    find: "    if (delay === 0) return onExpire();", replace: "    if (false) return onExpire();", cases: [U4.watch] },
+  { id: "U4-M27", what: "(A) the panel does not drop content when the expiry fires", file: PANEL,
+    find: "() => setShown({ state: \"expired\" })", replace: "() => {}", cases: [U4.wiring] },
+  { id: "U4-M28", what: "(B) a back/forward restore shows the old content without re-reading", file: RV,
+    find: "    if ((event as Event & { persisted?: boolean }).persisted) {", replace: "    if (false) {", cases: [U4.reads] },
+  { id: "U4-M29", what: "(B) the panel listens for restores on something other than the window", file: PANEL,
+    find: "setShown, window)", replace: "setShown, new EventTarget())", cases: [U4.wiring] },
+  { id: "U4-M30", what: "(F) navigation away does not abort the reads", file: RV,
+    find: "    controller.abort();\n", replace: "", cases: [U4.reads] },
+  { id: "U4-M31", what: "(F) the panel drops the driver's cleanup, so nothing is aborted", file: PANEL,
+    find: "useEffect(() => watchResult(", replace: "useEffect(() => void watchResult(", cases: [U4.wiring] },
+  { id: "U4-M32", what: "(K) the retry button fetches without no-store", file: PANEL,
+    find: "            readResult(requestId).then((read) => {",
+    replace: "            fetch(`/usage/${requestId}/result`).then((r) => r.json()).then((read) => {", cases: [U4.wiring] },
+  { id: "U4-M33", what: "(E) the poll loop never stops", file: RV,
+    find: "    const delay = pollDelayMs(attempt);", replace: "    const delay = pollDelayMs(attempt) ?? FIRST_POLL_MS;", cases: [U4.loop] },
+  { id: "U4-M34", what: "(E) the poller never says it stopped", file: POLLER,
+    find: "() => setStopped(true)", replace: "() => {}", cases: [U4.wiring] },
+  { id: "U4-M35", what: "(D) the page polls whatever the model says", file: PAGE,
+    find: "{pollsFor(model) ? <StatusPoller /> : null}", replace: "{true ? <StatusPoller /> : null}", cases: [U4.wiring] },
+  { id: "U4-M36", what: "(D) a not-found request or a refused read is polled", file: RV,
+    find: "model.kind === \"error\" && model.poll;", replace: "true;", cases: [U4.poll] },
+  { id: "U4-M37", what: "unmount does not cancel the next poll", file: RV,
+    find: "  arm(0);\n  return () => cancel();", replace: "  arm(0);\n  return () => {};", cases: [U4.loop] },
+  { id: "U4-M38", what: "an early timer drops content before its expiry", file: RV,
+    find: "    cancel = schedule(arm, delay);", replace: "    cancel = schedule(onExpire, delay);", cases: [U4.watch] },
+  { id: "U4-M39", what: "unmount does not clear the expiry timer", file: RV,
+    find: "  arm();\n  return () => cancel();", replace: "  arm();\n  return () => {};", cases: [U4.watch] },
+  { id: "U4-M40", what: "a read answering after navigation is shown", file: RV,
+    find: "if (answer !== null && !controller.signal.aborted) show(answer);", replace: "if (answer !== null) show(answer);",
+    cases: [U4.reads] },
+  { id: "U4-M41", what: "a restore keeps the old content on screen while it re-reads", file: RV,
+    find: "      show({ state: \"loading\" });\n", replace: "", cases: [U4.reads] },
+  { id: "U4-M42", what: "the result fetch sends credentials cross-origin", file: RV,
+    find: "      credentials: \"same-origin\",", replace: "      credentials: \"include\",", cases: [U4.fetch] },
+  { id: "U4-M43", what: "an abandoned read shows 'unavailable'", file: RV,
+    find: "return signal?.aborted ? null : { state: \"unavailable\" };", replace: "return { state: \"unavailable\" };",
+    cases: [U4.fetch] },
 ];
 
 /**
