@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 90,
-  "updated": "2026-09-26T05:23:13Z",
+  "revision": 91,
+  "updated": "2026-09-26T05:29:35Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -2459,9 +2459,9 @@
       },
       "activity": "complete",
       "started": "2026-09-26T05:02:17Z",
-      "updated": "2026-09-26T05:23:13Z",
+      "updated": "2026-09-26T05:29:35Z",
       "blocker": null,
-      "next_action": "merged --no-ff at 15f499b3 (ACCEPT; minors G8F2-M1/M2 carried); fixed-clone check running",
+      "next_action": "merged at 15f499b3; fixed-clone checks green",
       "estimate": {
         "optimistic_h": 0.1,
         "likely_h": 0.2,
@@ -2475,39 +2475,19 @@
       ],
       "commands": [
         {
-          "cmd": "pytest -q tests/g/ops/test_flag.py tests/g/ops/test_flag_pg.py (new tests, base code)",
-          "exit": 1,
-          "summary": "2 failed, 5 passed (R6 fails-before)"
-        },
-        {
-          "cmd": "python -m tests.g.ops.mutants flag_audits_as_transition flag_lock_bound_hardcoded flag_cli_lock_bound_constant (base code+tests)",
-          "exit": 1,
-          "summary": "0/3 killed, survived (R2/R3 fails-before)"
-        },
-        {
-          "cmd": "python -m tests.g.ops.mutants <13 flag mutants>",
-          "exit": 0,
-          "summary": "13/13 killed"
-        },
-        {
-          "cmd": "pytest -q tests/g/ops (INFRX_D_TASK=g8)",
+          "cmd": "INFRX_D_TASK=g8 pytest tests/g/ops (fixed clone dea9604f)",
           "exit": 0,
           "summary": "94 passed"
         },
         {
-          "cmd": "INFRX_MUTANTS=all pytest -q tests/g/ops/test_mutants.py",
+          "cmd": "INFRX_D_TASK=g8 INFRX_MUTANTS=all pytest tests/g/ops/test_mutants.py",
           "exit": 0,
-          "summary": "115 passed (109 mutants killed)"
+          "summary": "115 passed (109/109 killed)"
         },
         {
-          "cmd": "ruff check infrx/operations tests/g/ops",
+          "cmd": "pytest recovery/test_observe.py tests/i/test_observe.py -k 'not pooler'",
           "exit": 0,
-          "summary": "All checks passed"
-        },
-        {
-          "cmd": "python3 research/plan/scripts/validate_plan.py",
-          "exit": 0,
-          "summary": "PASS"
+          "summary": "33 passed, 1 xfailed"
         }
       ],
       "owned_paths": [
