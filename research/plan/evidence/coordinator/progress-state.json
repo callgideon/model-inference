@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 86,
-  "updated": "2026-09-26T05:11:43Z",
+  "revision": 88,
+  "updated": "2026-09-26T05:16:45Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -1154,68 +1154,61 @@
     {
       "id": "E3C",
       "task": "E3C",
-      "slice": "rerun on the 0024/0025 tree (D10-MERGE-2 head 9e4e34ca) via final-run.sh, harness only (E3C agent)",
+      "slice": "harness-only rerun on the 0024/0025 tree (codex/d10-merge-2 9e4e34ca, merged as 8b824cd0) with both revert-type controls",
       "agent": "opus",
       "branch": "codex/e3c-rerun",
       "worktree": ".claude/worktrees/codex-e3c-rerun",
-      "base": "04ae5e21",
-      "head": "5c4f6d7b",
+      "base": "9e4e34ca",
+      "head": "1bfc327d",
       "isolation": {
         "ports": "compose block 56900-56999 (postgres 56932)",
         "prefix": "infrx-e3c-",
         "db": "infrx_e3c"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-24T21:59:40Z",
-      "updated": "2026-09-26T05:02:17Z",
+      "updated": "2026-09-26T05:16:45Z",
       "blocker": null,
-      "next_action": "verdict → evidence E3C-RERUN-0025-<head>.md; merge codex/e3c-rerun after D10-MERGE-2; BACKEND-LOCAL candidate refreshed to the 0025 tree",
+      "next_action": "rerun on 9e4e34ca merged; BACKEND-LOCAL candidate refreshed to the 0025 tree; E3C stays implemented",
       "estimate": {
         "optimistic_h": 0,
         "likely_h": 0,
         "pessimistic_h": 0.5,
         "confidence": "high",
-        "basis": "gate passed on the integration tip; left is the coordinator merge of codex/e3c-rerun",
-        "at": "2026-09-26T04:06:00+00:00"
+        "basis": "gate passed on the 0024/0025 tree; left is the coordinator merge",
+        "at": "2026-09-26T05:16:00+00:00"
       },
       "evidence": [
         "research/plan/evidence/e/E3C-8406c79.md",
         "research/plan/evidence/e/E3C-phase2-60ab757.md",
         "research/plan/evidence/e/E3C-rerun-7d0d3d7.md",
-        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+        "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
       ],
       "commands": [
         {
-          "cmd": "pytest -q tests/integration/backend/e3c (no stack, 27a69619)",
+          "cmd": "git merge --no-ff --no-edit 9e4e34ca",
+          "exit": 0,
+          "summary": "8b824cd0, no conflicts, no harness change needed"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend/e3c (no stack)",
           "exit": 0,
           "summary": "38 passed"
         },
         {
-          "cmd": "INFRX_E3C_RUNTIME_LOGIN=1 runner.py --only s10 (before / after E3A-WR-2)",
-          "exit": 1,
-          "summary": "before 3/4: signed-in consumer_jobs 403 'not signed in' (tenant-scoped denies vacuous); after 4/4: own rows 200, other tenant [] / not_found, anon 401; browser denials by privilege both times"
-        },
-        {
-          "cmd": "final-run.sh 04ae5e21 at 7c4101af (final run 1)",
+          "cmd": "final-run.sh 9e4e34ca (INFRX_E3C_RUNTIME_LOGIN=1 make backend-local + both revert controls)",
           "exit": 0,
-          "summary": "gate PASS but REJECTED: nc-admission-ready tree could not admit on infrx_runtime (permission denied for function admit; 3 INVALID + 1 503) - runner fixed at 27a69619"
-        },
-        {
-          "cmd": "final-run.sh 04ae5e21 at 27a69619 (final run 2, evidence)",
-          "exit": 0,
-          "summary": "BACKEND-LOCAL PASS: 13/13 scenarios (85 cases), 9/9 controls; nc-admission-ready detected (RV-05 executed+debited on the reverted tree), nc-retention-durable detected (live media deleted); s08 20.0 s / 40.0 s; 11:55 wall; teardown clean"
+          "summary": "BACKEND-LOCAL PASS: 13/13 scenarios (85 cases), 9/9 controls; s10 4/4 with 0024/0025 surface; nc-admission-ready and nc-retention-durable detected for the right reason; s08 20.0 s / 40.0 s; 12:16 wall; teardown clean"
         }
       ],
       "deviation": "phase 1 = red harness in a new subdirectory only; E2C's top-level runner files read-only; phase 2 runs on the merged SHA (dispatch 3)",
       "owned_paths": [
         "tests/integration/backend/e3c/",
-        "tests/integration/backend/stack.py (E3A-WR-2, assigned)",
-        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
-        "research/plan/evidence/coordinator/updates/E3C-FINAL-20260926T0406Z.json"
+        "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md",
+        "research/plan/evidence/coordinator/updates/E3C-RERUN-20260926T0516Z.json"
       ],
-      "wiring_requests": [
-        "E3A: drop tests/integration/app/runner.py's world.NAMESPACE shim (E3A-WR-1) and per-clone HOSTED_AUTH_UID (now in stack._template, E3A-WR-2)"
-      ]
+      "wiring_requests": []
     },
     {
       "id": "E4C",
@@ -2688,8 +2681,8 @@
   "gates": {
     "BACKEND-LOCAL": {
       "candidate": {
-        "source": "04ae5e21",
-        "deployed": "task-local e3c stack (docker; gateway+worker built from the run head 27a69619 = 04ae5e21 + harness) — nothing on the box",
+        "source": "9e4e34ca (= tip 7e0b7b95's code: 04ae5e21 + 0024/0025 + G8-FLAG)",
+        "deployed": "task-local e3c stack (docker; gateway+worker built from the run head 8b824cd0 = 9e4e34ca + harness) — nothing on the box",
         "config": "task-local harness e3c, INFRX_E3C_RUNTIME_LOGIN=1, ports 56900–56999"
       },
       "cells": [
@@ -2697,62 +2690,69 @@
           "id": "BACKEND-JOURNEY",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+            "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
           ],
-          "note": "scenarios s01, s02, s05, s08 on 04ae5e21 (run head 27a69619)"
+          "note": "scenarios s01, s02, s05, s08 on 04ae5e21 (run head 27a69619); re-proven on the 0024/0025 tree 9e4e34ca (run head 8b824cd0)"
         },
         {
           "id": "UPLOAD-RESTART",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+            "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
           ],
-          "note": "scenarios s03, s05 on 04ae5e21 (run head 27a69619)"
+          "note": "scenarios s03, s05 on 04ae5e21 (run head 27a69619); re-proven on the 0024/0025 tree 9e4e34ca (run head 8b824cd0)"
         },
         {
           "id": "RETENTION-DURABLE",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+            "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
           ],
-          "note": "scenarios s06, s11 on 04ae5e21 (run head 27a69619)"
+          "note": "scenarios s06, s11 on 04ae5e21 (run head 27a69619); re-proven on the 0024/0025 tree 9e4e34ca (run head 8b824cd0)"
         },
         {
           "id": "ADMISSION-READY",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+            "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
           ],
-          "note": "scenarios s04, s05 on 04ae5e21 (run head 27a69619)"
+          "note": "scenarios s04, s05 on 04ae5e21 (run head 27a69619); re-proven on the 0024/0025 tree 9e4e34ca (run head 8b824cd0)"
         },
         {
           "id": "RESULT-EXPIRY",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+            "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
           ],
-          "note": "scenarios s06, s07 on 04ae5e21 (run head 27a69619)"
+          "note": "scenarios s06, s07 on 04ae5e21 (run head 27a69619); re-proven on the 0024/0025 tree 9e4e34ca (run head 8b824cd0)"
         },
         {
           "id": "CREDIT-CUTOVER",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+            "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
           ],
-          "note": "scenarios s01, s09, s10, s11 on 04ae5e21 (run head 27a69619)"
+          "note": "scenarios s01, s09, s10, s11 on 04ae5e21 (run head 27a69619); re-proven on the 0024/0025 tree 9e4e34ca (run head 8b824cd0)"
         },
         {
           "id": "VERIFY-REPRO",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+            "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
           ],
-          "note": "scenarios s12 on 04ae5e21 (run head 27a69619)"
+          "note": "scenarios s12 on 04ae5e21 (run head 27a69619); re-proven on the 0024/0025 tree 9e4e34ca (run head 8b824cd0)"
         }
       ],
       "decision": "accepted",
       "decided_at": "2026-09-26T04:07:41Z",
-      "note": "Accepted at the E3C final run on the integration tip 04ae5e21 (run head 27a69619, merged as dcce7775): 13/13 scenarios (85 cases) PASS, 9/9 negative controls detected for the right reason (both revert controls on the owner login), 11:55 wall, task-local e3c harness with INFRX_E3C_RUNTIME_LOGIN=1; evidence research/plan/evidence/e3c/E3C-FINAL-27a6961.md. Local gate only: the box window (E4C) remains."
+      "note": "Accepted at the E3C final run on the integration tip 04ae5e21 (run head 27a69619, merged as dcce7775): 13/13 scenarios (85 cases) PASS, 9/9 negative controls detected for the right reason (both revert controls on the owner login), 11:55 wall, task-local e3c harness with INFRX_E3C_RUNTIME_LOGIN=1; evidence research/plan/evidence/e3c/E3C-FINAL-27a6961.md. Local gate only: the box window (E4C) remains. Re-proven 2026-09-26 on the 0024/0025 tree (E3C rerun 8b824cd0, merged with codex/e3c-rerun 1bfc327d): 13/13 scenarios, 9/9 controls, s10 with the 0024/0025 surface; evidence research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md."
     },
     "BACKEND-READY": {
       "candidate": {
@@ -4538,6 +4538,18 @@
       "by": "coordinator",
       "what": "L3-RERUN-0025 dispatched: E2 layer-3 role matrix on the merged tip 7e0b7b95 (e2c namespace, read-only clone); eight parallel runs active",
       "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+    },
+    {
+      "at": "2026-09-26T05:16:00Z",
+      "by": "E3C",
+      "what": "running → review; head 8b824cd0",
+      "source": "updates/E3C-RERUN-20260926T0516Z.json"
+    },
+    {
+      "at": "2026-09-26T05:16:45Z",
+      "by": "coordinator (E3C)",
+      "what": "E3C rerun on the 0024/0025 tree 9e4e34ca: BACKEND-LOCAL PASS (85 cases, 9/9 controls, s10 with the new surface); codex/e3c-rerun 1bfc327d merged; gate candidate refreshed",
+      "source": "research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md"
     }
   ],
   "history": {
@@ -5087,10 +5099,14 @@
       "status": "rejected",
       "at": "2026-09-26T05:08:00Z",
       "reason": "malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']"
+    },
+    "E3C-RERUN-20260926T0516Z.json": {
+      "status": "applied",
+      "at": "2026-09-26T05:16:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T05:11:02Z",
+    "computed_at": "2026-09-26T05:16:44Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
