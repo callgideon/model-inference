@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "8a285b58",
+  "integration_head": "529249d0",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 99,
-  "updated": "2026-09-26T05:48:32Z",
+  "revision": 100,
+  "updated": "2026-09-26T05:56:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 7,
+    "active": 4,
     "reserved": 2,
-    "note": "Session 04 after the 08:50–16:43Z login outage (16:55Z): lanes W5 PART B, M6-P2 verify (fix round), RUNTIME-LOGIN recheck, E3C-RERUN, D10-FOLLOWUP, CERTIFY-WIRING, I8 M6-wiring-4; detached gate+mutants on e1c/e2c; 2 slots reserved for verify-lane workflows."
+    "note": "Session 03 (05:56Z): workflows KNOWN-GOOD-PROOF-2 (i8), APP-0024-WIRE-2 (app-u1r), E3C-CELLS (e3c block); coordinator fixed-clone suite on 529249d0 (e1c); 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -2421,7 +2421,7 @@
       },
       "activity": "complete",
       "started": "2026-09-26T05:02:17Z",
-      "updated": "2026-09-26T05:41:50Z",
+      "updated": "2026-09-26T05:56:00Z",
       "blocker": null,
       "next_action": "merged --no-ff at c1b7fcb4 (ACCEPT); R146 App clause (WR-0024W-1) at cf977a4c; minors carried: CM-1 (U1R adapter limit+1 unclamped at the 100 edge — page sizes 25; C0's rpcPage clamps; follow-up: reuse C0's rule in credit-reads), CM-2 (controls test greps the source), CM-3 (billing/page.tsx + credit-fixture edits, declared); fixed-clone console checks running",
       "estimate": {
@@ -2500,6 +2500,11 @@
           "cmd": "python3 research/plan/scripts/validate_plan.py",
           "exit": 0,
           "summary": "PASS"
+        },
+        {
+          "cmd": "coordinator: console checks on the fixed clone of cf977a4c",
+          "exit": 0,
+          "summary": "console-test 606 pass; lint 0 errors (2 pre-existing warnings); typecheck clean; console-built 22; console-mutants 46/46 killed; console-c0-real 15 pass; validate_plan PASS; console-pg deferred: app-u1r harness 55457 held by the APP-0024-WIRE-2 lane (HarnessBusy) → rerun when free"
         }
       ],
       "owned_paths": [
@@ -2540,9 +2545,9 @@
       },
       "activity": "complete",
       "started": "2026-09-26T05:02:17Z",
-      "updated": "2026-09-26T05:48:32Z",
+      "updated": "2026-09-26T05:56:00Z",
       "blocker": null,
-      "next_action": "merged --no-ff at a53a194d; WR-E3A-1 (hermetic gate unit test) at 8a285b58; APP-LOCAL cells: 13 journey PASS + DUR-OUTBOX PASS[delegated E3C-FINAL s05+s08]; DUR-FENCE / DUR-CAP / CREDIT-RATE NOT RUN[delegated, oracle not carried] → gate NOT RUN by design; confirming with make app-e2e on the merged tip (fixed clone); minors carried: reference pinned to 27a69619 (rebind to the 0025 rerun 8b824cd0 at the next E3A run), delegated_reference parses anywhere in the doc",
+      "next_action": "DONE: merged a53a194d + WR-E3A-1 8a285b58; APP-LOCAL cells recorded from the fixed-clone rerun (14 PASS, 3 NOT RUN[delegated]); the E3C-CELLS lane carries DUR-FENCE/DUR-CAP/CREDIT-RATE, then one app-e2e rerun on that tip; minors carried: reference pinned to 27a69619 → rebind to 8b824cd0 with the E3C-CELLS evidence",
       "estimate": {
         "optimistic_h": 3,
         "likely_h": 5,
@@ -2554,7 +2559,13 @@
       "evidence": [
         "research/plan/evidence/e/E3A-run-555355d.md"
       ],
-      "commands": [],
+      "commands": [
+        {
+          "cmd": "coordinator: make app-e2e on the fixed clone of 8a285b58 (unit tests before pnpm install)",
+          "exit": 3,
+          "summary": "76 unit tests pass before any install (WR-E3A-1 hermetic); preflight/console-test/lint/typecheck PASS; browser-journey 20/20 checks PASS, 14 cells PASS, 3 NOT RUN[delegated] → gate NOT RUN (exit 3) by design; 108 s; teardown clean"
+        }
+      ],
       "owned_paths": [
         "tests/integration/app/",
         "apps/app/tests/e2e/",
@@ -2665,27 +2676,50 @@
       "branch": "codex/lint-1",
       "worktree": ".claude/worktrees/codex-lint-1",
       "base": "6c390bda",
-      "head": null,
+      "head": "e93439d9",
       "isolation": {
         "ports": "e1c postgres 55449 if a test needs PG",
         "prefix": "infrx-e1c-",
         "db": null
       },
-      "activity": "running",
+      "activity": "integration",
       "started": "2026-09-26T05:44:01Z",
-      "updated": "2026-09-26T05:44:01Z",
+      "updated": "2026-09-26T05:56:00Z",
       "blocker": null,
-      "next_action": "handback → coordinator merges after a fixed-clone contracts run",
+      "next_action": "merged --no-ff at e81ddd3b; the 13th finding applied as WR-LINT-1 at 529249d0 (ruff check infrx clean); fixed-clone suite (api-test on e1c, worker mutant lists, integration unit tests) running → complete when green",
       "estimate": {
-        "optimistic_h": 0.5,
-        "likely_h": 1,
-        "pessimistic_h": 2,
-        "confidence": "medium",
-        "basis": "7 files, unused imports + one duplicate-key decision",
-        "at": "2026-09-26T05:44:01Z"
+        "optimistic_h": 0,
+        "likely_h": 0.2,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "merged; one fixed-clone suite run left",
+        "at": "2026-09-26T05:56:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/LINT-1-893c978.md"
+      ],
+      "commands": [
+        {
+          "cmd": "ruff check infrx (base 6c390bda → 893c978f)",
+          "exit": 1,
+          "summary": "13 findings → 1 (worker/engine.py:987 F841, outside the brief)"
+        },
+        {
+          "cmd": "pytest -q tests/contracts",
+          "exit": 0,
+          "summary": "1296 passed, 1 skipped"
+        },
+        {
+          "cmd": "INFRX_D_TASK=e1c pytest tests/d/test_pgharness.py tests/d/test_reads.py tests/g/jobs tests/d/test_operations_units.py",
+          "exit": 0,
+          "summary": "49 passed 3 xfailed; 74 passed; 9 passed"
+        },
+        {
+          "cmd": "coordinator: git diff --stat 6c390bda..893c978f",
+          "exit": 0,
+          "summary": "7 files, +10/−9; TASK_PORTS and all_host_ports identical to the base (449 ports); PLATFORM_ACTOR kept as a documented re-export"
+        }
+      ],
       "owned_paths": [
         "apps/infrx-api/infrx/contracts/conformance/jobs.py, services.py",
         "apps/infrx-api/infrx/contracts/fakes/media.py",
@@ -2694,6 +2728,42 @@
         "apps/infrx-api/infrx/contracts/wire.py",
         "apps/infrx-api/infrx/state/operations.py",
         "research/plan/evidence/coordinator/LINT-1-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "E3C-CELLS",
+      "task": null,
+      "slice": "(support lane for E3C; BACKEND-LOCAL stays accepted) three new E3C scenarios that carry the App-gate oracles no scenario covers — s14 DUR-FENCE (expired lease, stale generation refused at append/renew/settle/second capacity), s15 DUR-CAP (concurrent admissions across two orgs/keys at the cap: no negative balance, no oversubscription, no deadlock), s16 CREDIT-RATE (rate card / deployment publish while jobs wait and run: settlement at the admitted revision; unknown/private/unpriced model refused) — each with a negative control in control_trees.sh; final run on the e3c block; tests/integration/app/runner.py DELEGATED rebound to s14/s15/s16 and the new evidence; workflow wf_04200c8d-182 (Opus implementer, 2 lenses, one fix round)",
+      "agent": "opus",
+      "branch": "codex/e3c-cells",
+      "worktree": ".claude/worktrees/codex-e3c-cells",
+      "base": "ea29c1f1",
+      "head": null,
+      "isolation": {
+        "ports": "e3c compose block 56900–56999 (one run at a time)",
+        "prefix": "infrx-e3c-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T05:56:00Z",
+      "updated": "2026-09-26T05:56:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merges; then one make app-e2e rerun on the merged tip fills DUR-FENCE/DUR-CAP/CREDIT-RATE",
+      "estimate": {
+        "optimistic_h": 3,
+        "likely_h": 5,
+        "pessimistic_h": 9,
+        "confidence": "medium",
+        "basis": "three real-process scenarios with injections and controls (~12 min per final run), two lenses, one fix round; a product defect exposed stays a finding",
+        "at": "2026-09-26T05:56:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "tests/integration/backend/e3c/",
+        "tests/integration/app/runner.py (DELEGATED + tests)",
+        "research/plan/evidence/e3c/E3C-CELLS-*.md"
       ],
       "wiring_requests": []
     }
@@ -3034,100 +3104,152 @@
     },
     "APP-LOCAL": {
       "candidate": {
-        "source": null,
-        "deployed": null,
-        "config": null
+        "source": "8a285b58 (claude/consumer-v1 with E3A-RUN a53a194d + WR-E3A-1)",
+        "deployed": "task-local e4b stack on the fixed clone (App 56870, edge 56860, control 56861); fixed shared clone of 8a285b58 (dirty false), make app-e2e → tests/integration/app/runner.py on the e4b block, run /tmp/infrx-e2c-app-e2e-7vwjus7i (05:49–05:51Z; browser journey 108 s; teardown clean: no infrx-e4b container, 56860/56861/56870 free)",
+        "config": "harness e4b, controlled engine, runtime login; unit tests hermetic before pnpm install (76 passed)"
       },
       "cells": [
         {
           "id": "DUR-ADMIT",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "DUR-CAP",
           "verdict": "NOT RUN",
-          "evidence": []
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "NOT RUN[delegated: no E3C scenario carries the concurrent cross-key/org admission race → E3C-CELLS s15]"
         },
         {
           "id": "DUR-FENCE",
           "verdict": "NOT RUN",
-          "evidence": []
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "NOT RUN[delegated: no E3C scenario carries the stale/new generation race at every mutation → E3C-CELLS s14]"
         },
         {
           "id": "DUR-OUTPUT",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "DUR-SETTLE",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "DUR-OUTBOX",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+          ],
+          "note": "PASS[delegated to E3C-FINAL 27a69619 s05,s08]; journey PASS on the fixed clone"
         },
         {
           "id": "DUR-RLS",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "MEDIA-SEC",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "API-MODES",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "API-STREAM",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "CONSOLE-FLOWS",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "CREDIT-GRANT",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "CREDIT-IDENTITY",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "CREDIT-UNITS",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "CREDIT-RATE",
           "verdict": "NOT RUN",
-          "evidence": []
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "NOT RUN[delegated: no E3C scenario carries a rate/deployment publish while jobs wait/run → E3C-CELLS s16]"
         },
         {
           "id": "CREDIT-SPEND",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         },
         {
           "id": "APP-JOURNEY",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3A-run-555355d.md"
+          ],
+          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
         }
       ],
       "decision": null,
       "decided_at": null,
-      "note": "Pending; no decision recorded."
+      "note": "Cells from the coordinator rerun of make app-e2e on the fixed clone of 8a285b58: 14 PASS (13 journey + DUR-OUTBOX delegated to E3C-FINAL s05,s08), 3 NOT RUN (delegated with no carrying E3C scenario); the gate exits 3 = NOT RUN by design. Decision pending: BACKEND-READY (manifest gate) and the three cells carried by the E3C-CELLS lane, then one more app-e2e rerun on that tip."
     },
     "APP-PILOT": {
       "candidate": {
@@ -3353,6 +3475,20 @@
         "result": "7 tests OK",
         "at": "2026-09-24T21:30:00Z",
         "candidate": "dff31efc"
+      },
+      {
+        "name": "app-e2e (APP-LOCAL gate)",
+        "cmd": "make app-e2e (fixed clone; unit tests before pnpm install)",
+        "result": "NOT RUN by design (exit 3): journey 20/20, 14 cells PASS, 3 NOT RUN[delegated]; 76 hermetic unit tests pass",
+        "at": "2026-09-26T05:51:31Z",
+        "candidate": "8a285b58"
+      },
+      {
+        "name": "console (test/lint/typecheck/built/mutants/c0-real)",
+        "cmd": "make console-test console-lint console-typecheck console-built console-mutants console-c0-real (fixed clone)",
+        "result": "green: 606 pass; 46/46 mutants killed; console-pg deferred (app-u1r harness busy)",
+        "at": "2026-09-26T05:48:44Z",
+        "candidate": "cf977a4c"
       }
     ]
   },
@@ -4846,6 +4982,24 @@
       "by": "coordinator (E3A-RUN)",
       "what": "E3A-RUN ACCEPT_WITH_FIXES a166963a merged at a53a194d (+ WR-E3A-1 8a285b58): journey 20/20 on the merged tree; 3 delegated cells honestly NOT RUN (oracle not carried by E3C); make app-e2e rerun on the merged tip running",
       "source": "research/plan/evidence/e/E3A-run-555355d.md"
+    },
+    {
+      "at": "2026-09-26T05:56:00Z",
+      "by": "coordinator (E3A-RUN)",
+      "what": "make app-e2e on the fixed clone of 8a285b58: 76 hermetic unit tests pass before install; journey 20/20; APP-LOCAL cells recorded 14 PASS / 3 NOT RUN[delegated]; gate NOT RUN by design; decision pending BACKEND-READY + E3C-CELLS",
+      "source": "/tmp/infrx-e2c-app-e2e-7vwjus7i/verdict.json"
+    },
+    {
+      "at": "2026-09-26T05:56:00Z",
+      "by": "coordinator (LINT-1)",
+      "what": "LINT-1 e93439d9 merged --no-ff at e81ddd3b (12 ruff findings, no behaviour change; TASK_PORTS identical); WR-LINT-1 529249d0 drops the unused lease binding in worker/engine._attempt; ruff check infrx clean; fixed-clone suite running",
+      "source": "research/plan/evidence/coordinator/LINT-1-893c978.md"
+    },
+    {
+      "at": "2026-09-26T05:56:00Z",
+      "by": "coordinator (E3C-CELLS)",
+      "what": "E3C-CELLS launched from ea29c1f1 on the e3c block: s14 DUR-FENCE, s15 DUR-CAP, s16 CREDIT-RATE with negative controls; DELEGATED rebinding; workflow wf_04200c8d-182",
+      "source": "research/plan/consumer-v1/06-progress-tracker.md"
     }
   ],
   "history": {
