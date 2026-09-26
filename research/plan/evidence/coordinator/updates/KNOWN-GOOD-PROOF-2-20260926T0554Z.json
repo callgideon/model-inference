@@ -1,0 +1,37 @@
+{
+  "task": "KNOWN-GOOD-PROOF-2",
+  "slice": "I8 / E4C prerequisite (P-25, RR:51): both rollback targets (bda1586, 4226315) carry a schema_proof through 0025, rerun whole on plain PostgreSQL + shim and on the Supabase image; known-good.py <t> --applied 0025 exits 0, --applied 0026 exits 1",
+  "activity": "review",
+  "head": "3f7df77",
+  "worktree": ".claude/worktrees/codex-known-good-proof-2",
+  "branch": "codex/known-good-proof-2",
+  "owned_paths": [
+    "infra/rollout/known-good.json",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py",
+    "research/plan/evidence/i/KNOWN-GOOD-PROOF-2-3f7df77.md",
+    "research/plan/evidence/coordinator/updates/KNOWN-GOOD-PROOF-2-20260926T0554Z.json"
+  ],
+  "commands": [
+    {"cmd": "migrate.py plan/apply 0001-0018 then 0019-0025 on task-local stand-ins (plain + shim; supabase/postgres@7768d0d1)", "exit": 0, "summary": "digests 6995aef8 (0001-0018) and c21cb7b2 (0019-0025) on both images"},
+    {"cmd": "schema_proof.py (unmodified) 4226315 --candidate 9e4e34ca --task i8, plain", "exit": 1, "summary": "24/26: 3 failed - browser key INSERT by an unverified owner/consumer (0024 C3A WR-C3A-4, by design) x2, browser surface enumeration (0025 operator views); same 3 on bda1586 (2-suite rerun)"},
+    {"cmd": "schema_proof.py + the 3 SHAPE cases (WR-KGP2-1) bda1586 / 4226315, plain", "exit": 0, "summary": "PASS schema; 26/26 suites: 384 passed, 0 skipped, 13 SHAPE deselected, 5 xfailed; PASS through 0025 (both)"},
+    {"cmd": "the same, INFRX_D1_IMAGE=supabase", "exit": 0, "summary": "PASS schema; 26/26 suites: 384 passed, 0 skipped, 13 deselected, 5 xfailed; PASS through 0025 (both)"},
+    {"cmd": "grant inventory 0001-0023 vs 0001-0025", "exit": 0, "summary": "infrx_runtime unchanged; infrx_monitor + credit_wallet_holds.state; nothing revoked from any role"},
+    {"cmd": "pytest -q tests/i/test_known_good_proof.py with the OLD record", "exit": 1, "summary": "2 failed, 4 passed: fails before"},
+    {"cmd": "pytest -q tests/i/test_known_good_proof.py", "exit": 0, "summary": "6 passed"},
+    {"cmd": "INFRX_D_TASK=i8 pytest -q tests/i", "exit": 0, "summary": "237 passed, 1 xfailed"},
+    {"cmd": "shared run_mutant, 14 KNOWN-GOOD mutants, baseline narrowed to their cases", "exit": 0, "summary": "14/14 killed (2 new)"},
+    {"cmd": "known-good.py <bda1586|4226315> --applied 0025 / 0026", "exit": 0, "summary": "0025 KNOWN-GOOD exit 0; 0026 NOT-KNOWN-GOOD (migrations) exit 1; --list --applied 0025: 4226315 + bda1586 KNOWN-GOOD"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.2, "likely_h": 0.3, "pessimistic_h": 0.5, "confidence": "high", "basis": "lane done; coordinator applies WR-KGP2-1 (driver SHAPE), WR-KGP2-2 (rollout README RR:51), WR-KGP2-3 (P-25 row) and reruns the driver once per target", "at": "2026-09-26T05:54Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-KGP2-1 infra/runbooks/schema_proof.py: add the three 0024/0025 SHAPE cases (exact text in the evidence)",
+    "WR-KGP2-2 infra/rollout/README.md RR:51 + paragraph: through 0025, Supabase image proven, beyond 0025 none qualifies",
+    "WR-KGP2-3 research/plan/15-pending-inputs.md P-25 row: schema_proof reaches 0025",
+    "WR-KGP2-4 lanes: tests/i/pooler.py and tests/d/pgharness.py lock i8's port through different lock files; do not give i8 to two concurrent runs"
+  ],
+  "evidence": ["research/plan/evidence/i/KNOWN-GOOD-PROOF-2-3f7df77.md"]
+}
