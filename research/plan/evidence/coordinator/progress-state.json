@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "cf977a4c",
+  "integration_head": "8a285b58",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 97,
-  "updated": "2026-09-26T05:44:01Z",
+  "revision": 99,
+  "updated": "2026-09-26T05:48:32Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -1806,9 +1806,9 @@
       },
       "activity": "queued",
       "started": "2026-09-25T23:50:01Z",
-      "updated": "2026-09-26T02:24:04Z",
+      "updated": "2026-09-26T05:48:32Z",
       "blocker": "E3A proper needs BACKEND-LOCAL (E3C) and a rerun on the merged SHA; still NOT RUN: operator-controls (operator identity + one U3 action with a reason), the four delegated cells, the expired-content display on /usage/<id>; E3A-WR-1/WR-2 with the E3C final run (overlay keeps the lane queued: the gate dispatches after BACKEND-READY)",
-      "next_action": "F-1/F-2 fixed and merged (APP-E3A-FIX 97dce397): journey 18 PASS / 0 FAIL / 1 NOT RUN at the head; E3A proper after BACKEND-LOCAL on the merged SHA",
+      "next_action": "E3A-RUN merged a53a194d: journey 20/20 checks PASS on the merged tree (operator-controls on 0025, expired-display, both seam controls detected); 14/17 cells PASS, 3 NOT RUN[delegated: oracle not carried by E3C] (DUR-FENCE stale-generation race, DUR-CAP concurrent admissions across keys/orgs, CREDIT-RATE rate change while jobs run — need an E3C case or a journey injection); E3A proper (the APP-LOCAL decision) after BACKEND-READY per the manifest gate",
       "estimate": {
         "optimistic_h": 2,
         "likely_h": 5,
@@ -2532,17 +2532,17 @@
       "branch": "codex/e3a-run",
       "worktree": ".claude/worktrees/codex-e3a-run",
       "base": "9e4e34ca",
-      "head": null,
+      "head": "a166963a",
       "isolation": {
         "ports": "e4b compose block 56800–56899 (edge 56860, control 56861, App 56870; one runner)",
         "prefix": "infrx-e4b-",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T05:02:17Z",
-      "updated": "2026-09-26T05:02:34Z",
+      "updated": "2026-09-26T05:48:32Z",
       "blocker": null,
-      "next_action": "verdict → merge after D10-MERGE-2; APP-LOCAL cells from the runner's verdict; gate decision after BACKEND-READY per the manifest",
+      "next_action": "merged --no-ff at a53a194d; WR-E3A-1 (hermetic gate unit test) at 8a285b58; APP-LOCAL cells: 13 journey PASS + DUR-OUTBOX PASS[delegated E3C-FINAL s05+s08]; DUR-FENCE / DUR-CAP / CREDIT-RATE NOT RUN[delegated, oracle not carried] → gate NOT RUN by design; confirming with make app-e2e on the merged tip (fixed clone); minors carried: reference pinned to 27a69619 (rebind to the 0025 rerun 8b824cd0 at the next E3A run), delegated_reference parses anywhere in the doc",
       "estimate": {
         "optimistic_h": 3,
         "likely_h": 5,
@@ -2551,7 +2551,9 @@
         "basis": "two new checks + wirings + a journey run of ~2 min; 2 lenses, one fix round",
         "at": "2026-09-26T05:02:17Z"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E3A-run-555355d.md"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/app/",
@@ -4826,6 +4828,24 @@
       "by": "coordinator",
       "what": "Dispatched APP-0024-WIRE-2 (minors CM-1/CM-2) and LINT-1 (12 pre-existing ruff findings incl. tasklocal.py duplicate keys) from 6c390bda; running: KNOWN-GOOD-PROOF-2, E3A-RUN, console checks on cf977a4c",
       "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+    },
+    {
+      "at": "2026-09-26T05:48:32Z",
+      "by": "tracker",
+      "what": "rejected update: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']",
+      "source": "updates/E3A-20260926T0521Z.json"
+    },
+    {
+      "at": "2026-09-26T05:48:32Z",
+      "by": "tracker",
+      "what": "rejected update: malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']",
+      "source": "updates/E3A-20260926T0540Z.json"
+    },
+    {
+      "at": "2026-09-26T05:48:32Z",
+      "by": "coordinator (E3A-RUN)",
+      "what": "E3A-RUN ACCEPT_WITH_FIXES a166963a merged at a53a194d (+ WR-E3A-1 8a285b58): journey 20/20 on the merged tree; 3 delegated cells honestly NOT RUN (oracle not carried by E3C); make app-e2e rerun on the merged tip running",
+      "source": "research/plan/evidence/e/E3A-run-555355d.md"
     }
   ],
   "history": {
@@ -5391,10 +5411,20 @@
     "APP-0024-WIRE-20260926T0524Z.json": {
       "status": "applied",
       "at": "2026-09-26T05:24:00Z"
+    },
+    "E3A-20260926T0521Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T05:21:06Z",
+      "reason": "malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']"
+    },
+    "E3A-20260926T0540Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T05:40:00Z",
+      "reason": "malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T05:41:50Z",
+    "computed_at": "2026-09-26T05:48:32Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
