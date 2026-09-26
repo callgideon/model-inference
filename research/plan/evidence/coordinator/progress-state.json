@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 131,
-  "updated": "2026-09-26T19:35:00Z",
+  "revision": 132,
+  "updated": "2026-09-26T19:37:00Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -6093,6 +6093,12 @@
       "by": "tracker",
       "what": "rejected update: unknown activity 'fix'",
       "source": "updates/APP-MINORS-2-20260926T1930Z.json"
+    },
+    {
+      "at": "2026-09-26T19:37:00Z",
+      "by": "coordinator (STEP55-FIX-2)",
+      "what": "STEP55-FIX-2 merged: the runtime-login step makes no failed pooler auth on a first run or a rerun (rolcanlogin read first); WR-S55F2-1 applied to the W10b cell",
+      "source": "research/plan/evidence/i/STEP55-FIX-2-0a7dde4.md"
     }
   ],
   "history": {
