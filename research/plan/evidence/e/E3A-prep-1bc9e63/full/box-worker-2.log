@@ -1,0 +1,5 @@
+2026-09-26 00:36:56,184 INFO botocore.credentials Found credentials in environment variables.
+2026-09-26 00:36:56,480 INFO infrx.worker prepared 72e2d790-bd28-44e4-8bb4-261d793027e3: 1337 prompt tokens (engine /tokenize, 14 ms)
+2026-09-26 00:36:56,492 INFO infrx.worker prepared 2e92d18c-b92b-494e-9e5b-5c8669d25bb6: 1337 prompt tokens (engine /tokenize, 19 ms)
+2026-09-26 00:37:04,815 WARNING infrx.worker drained: 10 finished, 0 released [], ended []
+2026-09-26 00:37:04,815 WARNING infrx.worker drained preparation: 2 finished, 0 released [], ended []

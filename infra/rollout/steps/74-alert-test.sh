@@ -7,6 +7,9 @@
 # 72-observe-install.sh). The URL is never printed; the SNS topic name is.
 set -euo pipefail
 repo=${REPO:-/home/ubuntu/model-inference}
+for need in infra/observe/deliver.py; do  # absent at the pre-I8 known-good targets (bda1586, 4226315)
+  [ -e "$repo/$need" ] || { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }
+done
 conf=${ALERT_ENV:-/etc/infrx-alert.env}
 [ -f "$conf" ] || { echo "BLOCKED: no $conf (P-25: destination, owner, escalation)" >&2; exit 3; }
 while IFS='=' read -r name value; do

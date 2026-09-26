@@ -1,0 +1,42 @@
+{
+  "task": "U4",
+  "lane": "U4",
+  "slice": "all three slices: safe request/result/usage states via trusted ports; bounded polling + expiry/outage/retry without resubmission; cross-tenant denial, persisted expiry and no client-cache resurrection (real PostgreSQL)",
+  "activity": "review",
+  "at": "2026-09-25T22:49:10Z",
+  "head": "5bf1bc2a",
+  "base": "46776646",
+  "predecessors": {"U1R": "7482c21a (merged as bd6ff5d2)"},
+  "worktree": ".claude/worktrees/codex-app-u4",
+  "branch": "codex/app-u4",
+  "owned_paths": [
+    "apps/app/app/(console)/usage/[requestId]/",
+    "apps/app/tests/u/ (request-detail.test.ts, request-pg.test.ts, request_world.py, U4 entries in run-mutants.mjs)",
+    "research/plan/evidence/u/U4-5bf1bc2.md",
+    "research/plan/evidence/coordinator/updates/U4-20260925T2249Z.json"
+  ],
+  "isolation": {
+    "ports": "postgres 55456 (INFRX_D_TASK=app-u4)",
+    "prefix": "infrx-app-u4-",
+    "db": "infrx_app-u4_request"
+  },
+  "commands": [
+    {"cmd": "node --test tests/u/request-detail.test.ts (tests first, da9d7265)", "exit": 1, "summary": "ERR_MODULE_NOT_FOUND request-reads.ts; after implementation 16/16"},
+    {"cmd": "make console-test", "exit": 0, "summary": "411 tests: 398 pass, 0 fail, 13 skipped (credit-pg 6 + request-pg 7, run via their world scripts); +23 cases"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "typegen + tsc clean"},
+    {"cmd": "make console-mutants", "exit": 0, "summary": "contracts 14/14 self-test, 212/212; V 40/40; U 2/2 self-checks, 122/122 killed (+25 U4); C 4/4, 104/104"},
+    {"cmd": "cd apps/infrx-api && INFRX_D_TASK=app-u4 uv run --frozen python ../app/tests/u/request_world.py", "exit": 0, "summary": "7/7: page vs API read_outcome at +0/+120/+86401 s; changed TTL moves only later results; expiry keeps metadata; tenant/provider/ungranted/role-change/guessed probes not found; anon signed out; unknown-usage withheld (consumer_job_result alone returns it: WR-U4-2)"},
+    {"cmd": "request_world.py against scratch mutants M01 / M04 / M11", "exit": 1, "summary": "killed: 5, 2 and 3 PG cases fail respectively"},
+    {"cmd": "cd apps/app && pnpm build", "exit": 0, "summary": "/usage/[requestId] and /usage/[requestId]/result dynamic; no fixture/secret/RPC strings in .next/static; server fixture gate compiles to constant real path"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 4, "confidence": "medium", "basis": "lane complete with unit, mutant and real-PostgreSQL API-agreement evidence; remaining is review plus written SQL/Makefile wiring", "at": "2026-09-25T22:49:10Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-U4-1 Makefile: console-pg target running credit_world.py (app-u1r) and request_world.py (app-u4)",
+    "WR-U4-2 D10 SQL: consumer_job_result refuses result_pending for held_unknown / usage-less successes (currently returns the body; App already gates); proving P07 assertion supplied",
+    "WR-U4-3 optional U1R credit-reads.ts: expose job_handle and settled_at on ConsumerJob",
+    "WR-U4-4 C0 overlap: only request-context.ts changes if C0's port subsumes the reads"
+  ],
+  "evidence": ["research/plan/evidence/u/U4-5bf1bc2.md"]
+}

@@ -1,0 +1,61 @@
+{
+  "task": "I3",
+  "slice": "I3-PREP: App operations runbook (combined checks, auth/credit cutover, error monitoring, alert delivery, App rollback), offline rollback-target tool, browser/server error reporting, AppDown rule; preparation only, no gate claimed, manifest stays planned",
+  "activity": "review",
+  "head": "bf29b92b",
+  "base": "6badd4e1",
+  "worktree": ".claude/worktrees/codex-i3-prep",
+  "branch": "codex/i3-prep",
+  "owned_paths": [
+    "infra/app/operations.md",
+    "infra/app/rollback.py",
+    "infra/app/README.md (one link line)",
+    "infra/runbooks/README.md (one index row)",
+    "infra/alerts/app.json",
+    "apps/app/instrumentation.ts",
+    "apps/app/app/error.tsx",
+    "apps/app/app/global-error.tsx",
+    "apps/app/app/api/client-errors/route.ts",
+    "apps/app/lib/deploy/report.ts",
+    "apps/app/lib/deploy/release.ts",
+    "apps/app/lib/deploy/error-view.ts",
+    "apps/app/tests/i3/",
+    "tests/integration/ops/",
+    "research/plan/evidence/i/I3-prep-bf29b92.md",
+    "research/plan/evidence/coordinator/updates/I3-20260926T0146Z.json"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/i3/*.test.ts and pytest tests/integration/ops on the base 6badd4e1 tree", "exit": 1, "summary": "fails-before: report.ts module missing; operations.md missing (collection error)"},
+    {"cmd": "make console-test", "exit": 0, "summary": "646 tests: 595 pass, 0 fail, 51 skip (pre-existing task-local stack/DSN skips)"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && pnpm build && node --test tests/i3/*.test.ts tests/i2a/*.test.ts", "exit": 0, "summary": "31/31 incl. I2A-BUILT-01/02 (no server-only name in .next/static)"},
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest tests/integration/ops -q", "exit": 0, "summary": "21 passed (rollback tool incl. the <= to < mutant; runbook discipline; WR-I3-2/3 composed)"},
+    {"cmd": "manual console mutants (9)", "exit": 0, "summary": "9/9 killed"},
+    {"cmd": "WR-I3-2/3 applied temporarily: uv run pytest tests/i/test_observe.py; INFRX_MUTANTS=all tests/i/test_mutants.py (14 observe-backed mutants)", "exit": 0, "summary": "18 passed 1 xfailed; 14/14 mutants killed; restored"},
+    {"cmd": "WR-I3-1 applied temporarily: tests/a/public-routes.test.ts; rebuilt next start probe on 55461", "exit": 0, "summary": "5/5; POST 204, GET 405, 415, 413, 403; redacted line logged; restored"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "4 PASS"}
+  ],
+  "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 14,
+    "confidence": "low",
+    "basis": "build done; remaining: merge WR-I3-1..3, then the operator cutover X0-X9 and drills OPS-APP-08..12 once BACKEND-READY, P-01, P-05, P-24, P-25 and the I2A live half exist",
+    "at": "2026-09-26T01:46Z"
+  },
+  "blockers": [
+    "I3 proper is an operator run: needs BACKEND-READY (E4C), the I2A live half (Vercel variables, APP-MERGE deploy, first known-good App record), P-01, P-05, P-24 (canary timer), P-25 (alert destination)"
+  ],
+  "wiring_requests": [
+    "WR-I3-1 apps/app/lib/supabase/middleware.ts PUBLIC += \"/api/client-errors\" (+ I3-ROUTE-03 in tests/a/public-routes.test.ts)",
+    "WR-I3-2 infra/observe/canary.sh: anonymous App /api/version probe writing infrx_app_up (text = CANARY_PROBE in tests/integration/ops/test_i3_operations.py); drop app.json pending_producers in the same merge",
+    "WR-I3-3 infra/observe/rules.py merges infra/alerts/app.json when present (RULES_OLD/RULES_NEW in the ops test) + tests/i/test_observe.py version a1+o2+p1 + tests/i/mutants.py _layout copies infra/app",
+    "WR-I3-4 (optional) Makefile ops-test target for tests/integration/ops",
+    "GAP-I3-1 (G8 owner): an audited CLI verb to turn signup_grant off alone"
+  ],
+  "evidence": [
+    "research/plan/evidence/i/I3-prep-bf29b92.md",
+    "infra/app/operations.md"
+  ]
+}

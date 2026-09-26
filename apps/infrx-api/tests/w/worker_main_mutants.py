@@ -47,7 +47,19 @@ KEEPER = "test_worker_main__the_keeper_never_removes_an_input_the_engine_is_read
 GONE = "test_worker_main__a_gone_input_is_prepared_again_once_then_refused"
 EXITS = "test_worker_main__every_exit_path_releases_every_pin"
 EVERY = "test_worker_main__a_housekeeping_loop_outlives_a_failed_step"
+GRACE = "test_worker_main__the_lifecycle_grace_is_the_deployments"
+P25_CACHE = "test_worker_main__the_cache_high_water_and_its_alert_are_p25s"
+CONFIG = "config.py"
+OPS = "../../../infra/alerts/operations.json"                # from `infrx/`
+GATEWAY_GRACE = "test_worker_main__the_gateways_content_grace_is_the_deployments"
+GATEWAY_GRACE_PG = ("test_worker_main_pg__a_source_the_gateway_registers_is_eligible_"
+                    "after_p25s_grace")
 RELEASE = "                stream.pins.close()\n                # Every exit path"
+RECON_OFF = "test_worker_main__without_a_monitor_login_the_reconciliation_gauges_are_off"
+RECON_REFUSED = "test_worker_main__a_login_refused_the_views_disables_the_gauges_once"
+RECON_DOWN = "test_worker_main__a_database_that_is_down_is_still_retried_every_tick"
+RECON_MONITOR = "test_worker_main__the_reconciliation_gauges_are_read_on_the_monitor_login"
+RECON_PG = "test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not"
 
 MUTANTS = (
     _m("main_validate_runtime_skipped", "the worker refuses what the gateway refuses (R44)",
@@ -109,6 +121,27 @@ MUTANTS = (
        "media = MediaPreparation(objects, limits=limits,", OWNER),
     _m("main_cache_unbounded", "the cache's high water is PROCESSING_CACHE_MAX_BYTES",
        MAIN, "max_bytes=deployment.processing_cache_max_bytes,", "max_bytes=None,", OWNER),
+    # --- P25-ENACT (P-25, decided 2026-09-25) ----------------------------------------------
+    _m("main_retention_grace_dropped", "the worker's lifecycle carries the deployment's grace",
+       MAIN, "    lifecycle = PgLifecycle(connect, limits=limits,       # claim TTL 300 s > the 75 s delete\n"
+             "                            grace_s=deployment.retention_grace_s)     # P-25: 3,600 s\n",
+       "    lifecycle = PgLifecycle(connect, limits=limits)\n", GRACE),
+    _m("main_retention_grace_fixed", "the grace is read from RETENTION_GRACE_S",
+       MAIN, "grace_s=deployment.retention_grace_s)", "grace_s=3600.0)", GRACE),
+    _m("config_retention_grace_a_week", "the deployed grace is P-25's 3,600 s",
+       CONFIG, "    retention_grace_s: float = 3600.0\n",
+       "    retention_grace_s: float = 604_800.0\n", GRACE),
+    _m("config_cache_high_water_60gib", "the cache high water is P-25's 50 GiB",
+       CONFIG, "    processing_cache_max_bytes: int = 53_687_091_200\n",
+       "    processing_cache_max_bytes: int = 64_424_509_440\n", P25_CACHE),
+    _m("alert_cache_threshold_drifts", "ProcessingCacheLarge fires above the same high water",
+       OPS, '"threshold": 53687091200,', '"threshold": 64424509440,', P25_CACHE),
+    # --- P25-ENACT fix round (0-P25R-1/1-P25R-1); the runbook cases: tests/w/test_p25_runbooks.py
+    # WR-P25-1 (coordinator wiring): the gateway's lifecycle takes the deployment's grace
+    _m("gateway_grace_dropped", "the gateway's content lifecycle stamps RETENTION_GRACE_S",
+       PILOT, "    return PgLifecycle(connect, limits=settings.pilot,\n"
+              "                       grace_s=settings.deployment.retention_grace_s)\n",
+       "    return PgLifecycle(connect, limits=settings.pilot)\n", GATEWAY_GRACE),
     _m("main_housekeeping_started_twice", "exactly one task per housekeeping loop",
        SERVICE, "for name, loop in self.housekeeping.items()]",
        "for name, loop in [*self.housekeeping.items()] * 2]", OWNER),
@@ -175,6 +208,24 @@ MUTANTS = (
     _m("pilotbox_worker_private_namespace", "the worker and the gateway share the pilot's "
        "index namespace", PB, "port: int, namespace: str = PILOT_NAMESPACE) -> None:",
        'port: int, namespace: str = "infrx_e2:{e3b3}") -> None:', PILOT_BOX),
+    # W5-F5 (E3C F-6): the reconciliation gauges on D10's monitor login, never per-tick errors
+    _m("main_reconciliation_on_the_runtime_pool",
+       "the reconciliation reader is never composed on the runtime pool (0021:550)",
+       MAIN, "reconciliation=reconciliation_reader(deployment),",
+       "reconciliation=PgReconciliation(connect),", RECON_OFF, RECON_MONITOR),
+    _m("main_reconciliation_off_unsaid", "gauges with no monitor login are said off, once",
+       MAIN, '        log.info("reconciliation gauges disabled: no monitor login")\n', "",
+       RECON_OFF),
+    _m("main_monitor_login_sets_a_role", "a dedicated monitor login sets no role (R127)",
+       MAIN, "connector(dsn, set_role=not pilot.dedicated_login(dsn))",
+       "connector(dsn, set_role=True)", RECON_MONITOR),
+    _m("service_privilege_refusal_every_tick",
+       "a login refused the views disables the gauges once, never an error per tick",
+       SERVICE, '            if getattr(failure, "sqlstate", None) == "42501":',
+       "            if False:", RECON_REFUSED),
+    _m("service_any_failure_disables", "a database that is down is retried every tick",
+       SERVICE, '            if getattr(failure, "sqlstate", None) == "42501":',
+       "            if True:", RECON_DOWN),
 )
 
 PG_MUTANTS = (
@@ -191,6 +242,19 @@ PG_MUTANTS = (
        "        pass\n", UNREACHABLE),
     _m("pilotbox_worker_not_awaited", "start returns once the worker process is ready",
        PB, "        self._wait_ready(role, ready, timeout)\n", "", PILOT_BOX_PG),
+    _m("pg_monitor_login_sets_a_role",
+       "on PostgreSQL the monitor login (member of no role) publishes the pass",
+       MAIN, "connector(dsn, set_role=not pilot.dedicated_login(dsn))",
+       "connector(dsn, set_role=True)", RECON_PG),
+    _m("pg_privilege_refusal_every_tick",
+       "on PostgreSQL 0021's monitor login is refused once and disabled, not every tick",
+       SERVICE, '            if getattr(failure, "sqlstate", None) == "42501":',
+       "            if False:", RECON_PG),
+    _m("pg_gateway_grace_dropped",
+       "on PostgreSQL a source the gateway registers is eligible after RETENTION_GRACE_S",
+       PILOT, "    return PgLifecycle(connect, limits=settings.pilot,\n"
+              "                       grace_s=settings.deployment.retention_grace_s)\n",
+       "    return PgLifecycle(connect, limits=settings.pilot)\n", GATEWAY_GRACE_PG),
 )
 
 
@@ -204,6 +268,10 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     api = w3_mutants._layout(root)
     shutil.copytree(API_DIR.parents[1] / "tests" / "integration", root / "tests" / "integration",
                     dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    # P25-ENACT: the cache alert and R's disk budget the P-25 case reads
+    for name in ("apps/infrx-api/deploy/preflight.py", "infra/alerts/operations.json"):
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(API_DIR.parents[1] / name, root / name)
     return api
 
 

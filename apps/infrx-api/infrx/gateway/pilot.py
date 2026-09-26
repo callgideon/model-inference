@@ -219,7 +219,7 @@ def adapters_from_env(settings, **injected):
             # from it - an empty DSN is libpq's defaults, some other database.
             raise RuntimeMisconfigured(runtime_mode(settings), ("DATABASE_URL",))
         pool, connect = connection_pool(settings)
-        lifecycle = _pg_lifecycle(connect, settings.pilot)
+        lifecycle = _pg_lifecycle(connect, settings)
         adapters = {"catalog": PgCatalogDirectory(connect),
                     "stream": PgStreamStore(connect, limits=settings.pilot),
                     # MPILOT gap 2: M's attach, durable where the worker reads it
@@ -234,10 +234,13 @@ def adapters_from_env(settings, **injected):
     return adapters
 
 
-def _pg_lifecycle(connect, limits):
-    """D10's `PgLifecycle`: the upload ticket authority and the content lifecycle (M5)."""
+def _pg_lifecycle(connect, settings):
+    """D10's `PgLifecycle`: the upload ticket authority and the content lifecycle (M5).
+    WR-P25-1: `upload_complete` and every source/payload `MediaUploads` registers take the
+    deployment's collection grace (P-25: `RETENTION_GRACE_S`), as the worker's do."""
     from ..state.lifecycle import PgLifecycle
-    return PgLifecycle(connect, limits=limits)
+    return PgLifecycle(connect, limits=settings.pilot,
+                       grace_s=settings.deployment.retention_grace_s)
 
 
 def valkey_index(pilot):

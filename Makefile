@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -33,13 +33,35 @@ console-typecheck:
 	cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit
 
 # R32/R36: exported console conformance must kill every declared mutant.
-# Track runners join here as their task merges (V1, U1, C1). Each exits non-zero on a survivor.
+# Track runners join here as their task merges (V1, U1, C1, A2, A3). Each exits non-zero on a survivor.
 # The contracts runner covers both entries (v1 conformance and the v2 suites, F2P wire-in item 11).
 console-mutants:
 	cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants
 	cd apps/app && node tests/v/run-mutants.mjs
 	cd apps/app && node tests/u/run-mutants.mjs
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
+	cd apps/app && node tests/a/run-mutants.mjs
+	cd apps/app && node tests/a/run-catalog-mutants.mjs
+
+# C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
+# Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
+console-c0-real:
+	cd $(API) && INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/stack.py
+
+# C3A DUR-RLS / CONSOLE-FLOWS: the trusted actions through real Supabase PostgreSQL + PostgREST
+# (Docker; fails visibly without it). Gate for C3A / APP-M1 and E4.
+console-c3a-real:
+	cd $(API) && INFRX_D_TASK=app-c3a INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/actions_stack.py
+
+# U3 DUR-RLS / DUR-CAP / CONSOLE-FLOWS: operator console over real Supabase PostgreSQL + PostgREST (Docker).
+console-u3-real:
+	cd $(API) && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/u/operator_stack.py
+
+# U1R/U4: the App's read adapters against real PostgreSQL as the browser principal, each on its
+# own task-local instance (D harness). A missing Docker prints SKIP and exits 0, as tests/d does.
+console-pg:
+	cd $(API) && INFRX_D_TASK=app-u1r uv run --frozen python ../app/tests/u/credit_world.py
+	cd $(API) && INFRX_D_TASK=app-u4 uv run --frozen python ../app/tests/u/request_world.py
 
 # E1 owns models/marlin2b/tests. Until it exists this target reports "not run"
 # rather than pretending a pass.
@@ -50,7 +72,11 @@ bench-test:
 		echo "bench-test: not run - models/marlin2b/tests does not exist yet (E1 owns it)"; \
 	fi
 
-check: api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
+# I2A WR-I2A-2: the built-bundle cases (I2A-BUILT-01/02) need .next; without a build they skip visibly.
+console-built:
+	cd apps/app && pnpm build && node --test tests/i2a/*.test.ts
+
+check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test
 
 # Real service evidence is separate from unit checks; Docker absence must fail visibly.
 # Optional arguments: make integration INTEGRATION_ARGS="--layer 1 --no-mutants"

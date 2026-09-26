@@ -1,0 +1,127 @@
+{
+ "task": "W5-F5B",
+ "slice": "0-W5F5-R2 post-marker attach + union F3 one PgLifecycle + WR-W5F5-3 fake capability",
+ "activity": "review (fix round 1-F5B-R1 done)",
+ "head": "cf2881ff",
+ "worktree": ".claude/worktrees/codex-w5-f5b",
+ "branch": "codex/w5-f5b",
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/routes/relay.py",
+  "apps/infrx-api/infrx/worker/__main__.py",
+  "apps/infrx-api/infrx/contracts/fakes/lifecycle.py",
+  "apps/infrx-api/tests/g/",
+  "apps/infrx-api/tests/w/",
+  "apps/infrx-api/tests/contracts/"
+ ],
+ "commands": [
+  {
+   "cmd": "pytest -q tests/g/test_relay_readiness.py -k f5 (base relay)",
+   "exit": 1,
+   "summary": "4 failed, 5 passed: 409/503 for a succeeded, settled job (fails-before)"
+  },
+  {
+   "cmd": "pytest -q tests/w/test_prep_worker.py -k composes_the_preparation_pool (base worker)",
+   "exit": 1,
+   "summary": "1 failed: two PgLifecycle objects (fails-before)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/contracts/v2/test_lifecycle_capability.py (base fake)",
+   "exit": 1,
+   "summary": "2 failed, 1 passed (PG passes; fake admitted text / AttributeError)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/g",
+   "exit": 0,
+   "summary": "700 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/w",
+   "exit": 0,
+   "summary": "322 passed, 10 skipped (MinIO box)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/contracts",
+   "exit": 0,
+   "summary": "1292 passed"
+  },
+  {
+   "cmd": "python -m tests.g.mutants <97 relay.py mutants>",
+   "exit": 0,
+   "summary": "97/97 killed"
+  },
+  {
+   "cmd": "python -m tests.w.worker_main_mutants",
+   "exit": 0,
+   "summary": "40/40 killed"
+  },
+  {
+   "cmd": "python -m tests.w.prep_worker_mutants",
+   "exit": 0,
+   "summary": "71/71 killed"
+  },
+  {
+   "cmd": "python -m tests.contracts.mutants <61 fakes/lifecycle.py mutants>",
+   "exit": 1,
+   "summary": "60/61 killed; lc_reregistration_resets_the_grace misdeclared on base 1ea5047f (not this lane)"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py",
+   "exit": 0,
+   "summary": "PASS"
+  },
+  {
+   "cmd": "pytest -q tests/g/test_relay_readiness.py -k s04 (recheck restored on the readiness door)",
+   "exit": 1,
+   "summary": "1 failed: assert 400 == 202 (fails-before, fix round)"
+  },
+  {
+   "cmd": "python -m tests.g.mutants <97 relay.py mutants> (fix round)",
+   "exit": 0,
+   "summary": "97/97 killed; w5_f5_late_recheck_restored now 3 failed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/g (fix round)",
+   "exit": 0,
+   "summary": "701 passed (+ the s04 late case)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/w (fix round)",
+   "exit": 0,
+   "summary": "322 passed, 10 skipped"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/contracts (fix round)",
+   "exit": 0,
+   "summary": "1292 passed"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py (fix round)",
+   "exit": 0,
+   "summary": "PASS"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.2,
+  "likely_h": 0.5,
+  "pessimistic_h": 1.5,
+  "confidence": "medium",
+  "basis": "code done and green; coordinator applies WR-W5F5B-1 and WR-W5F5B-3 (E3C s04 readiness-branch tail), ratifies the fake edit and the revised ruling, then an E3C --only s04 run on the merged SHA (expected FAIL on s04 late until WR-W5F5B-3 lands)",
+  "at": "2026-09-26T02:40Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-W5F5B-1: observe/metrics.py FAMILIES entry infrx_post_marker_refusals_total{code}",
+  "WR-W5F5B-2 (optional): move the capability case into contracts/conformance/lifecycle.py cases()",
+  "WR-W5F5B-3: E3C harness tests/integration/backend/e3c/scenarios_admission.py s04 late readiness branch asserts the committed outcome (202, succeeded, settled once), not the pre-D10 refusal+cancel (1-F5B-R1)"
+ ],
+ "evidence": [
+  "research/plan/evidence/w/W5-F5B-406cd93.md"
+ ],
+ "findings": [
+  {
+   "id": "1-F5B-R1",
+   "fixed": true,
+   "by": "WR-W5F5B-3 + revised ruling text + tests/g in-process s04 case (cf2881ff)"
+  }
+ ]
+}

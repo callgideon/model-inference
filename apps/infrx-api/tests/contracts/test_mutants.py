@@ -22,7 +22,7 @@ from infrx.contracts.conformance import SUITES, V2_SUITES
 
 from . import mutants as mutation_list
 from . import test_cancel_cause, test_config_and_imports, test_fixtures, test_money
-from .v2 import test_conformance_v2, test_lifecycle
+from .v2 import test_conformance_v2, test_lifecycle, test_lifecycle_capability
 
 ALL = mutation_list.MUTANTS
 # F2P wire-in item 6: the v2 cases are named by the same list and killed by the same runner.
@@ -30,7 +30,8 @@ CASE_NAMES = {case.__name__ for suites in (SUITES, V2_SUITES)
               for _name, (cases, _runner) in suites.items() for case in cases()}
 # F2R: record and config invariants die in these modules, which the runner also targets.
 RECORD_TESTS = {name for module in (test_fixtures, test_money, test_config_and_imports,
-                                    test_conformance_v2, test_cancel_cause, test_lifecycle)
+                                    test_conformance_v2, test_cancel_cause, test_lifecycle,
+                                    test_lifecycle_capability)
                 for name in vars(module) if name.startswith("test_")}
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # The default suite runs one mutant per fake plus every mutant of the money path, so a

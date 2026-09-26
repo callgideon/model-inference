@@ -1,0 +1,102 @@
+TAP version 13
+# (node:2023421) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/app/tests/c/provider-routes.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: C-PROV-01 a consumer gets a 404 from the provider-route guard; an operator is let through
+ok 1 - C-PROV-01 a consumer gets a 404 from the provider-route guard; an operator is let through
+  ---
+  duration_ms: 0.922677
+  type: 'test'
+  ...
+# Subtest: C-PROV-02 each provider page runs the guard first, before any read
+not ok 2 - C-PROV-02 each provider page runs the guard first, before any read
+  ---
+  duration_ms: 0.712428
+  type: 'test'
+  location: '<worktree>/apps/app/tests/c/provider-routes.test.ts:43:1'
+  failureType: 'testCodeFailure'
+  error: 'traces: notFound from next/navigation'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    import { ConsoleDataUnavailable, ConsolePreviewNotice } from "@/components/console-data-state";
+    import { PageHeader } from "@/components/page-header";
+    import { consoleContext } from "../usage/fake-console-context";
+    import { parseTraceParams } from "./query.ts";
+    import { TraceFilters } from "./trace-filters";
+    import { RejectedFilters, TraceTable } from "./trace-table";
+    import { buildTraceListView } from "./view-model.ts";
+    
+    export const metadata = { title: "Traces · infrx" };
+    
+    /** V1 preview retained for migration to apps/lab after L1/L2. No provider content is served here. */
+    export default async function TracesPage({ searchParams }: PageProps<"/traces">) {
+      const params = await searchParams;
+    
+      const context = consoleContext();
+      if (context === null) return <ConsoleDataUnavailable title="Traces" />;
+      const { services, session, now } = context;
+    
+      const keysResult = await services.keys.list(session);
+      // A failed key read is not "this organization has no keys": it costs the key names and the
+      // "is anything captured?" fact, and the list says so rather than inventing either.
+      const keys = keysResult.ok ? keysResult.value : [];
+      const parsed = parseTraceParams(params, { now: now.getTime(), keyIds: keys.map((key) => key.id) });
+      const result = await services.traces(session, parsed.query);
+      const view = buildTraceListView(result, {
+        filters: parsed.filters,
+        keys,
+        narrowed: parsed.narrowed,
+        keysUnavailable: !keysResult.ok,
+      });
+    
+      // The list row carries an opaque model id and nothing enumerates the catalogue, so the filter
+      // offers the models this window actually contains (plus whatever is already selected).
+      const models = [
+        ...new Set([
+          ...(view.kind === "rows" ? view.rows.map((row) => row.model) : []),
+          ...(parsed.filters.model === null ? [] : [parsed.filters.model]),
+        ]),
+      ].sort();
+    
+      return (
+        <>
+          <ConsolePreviewNotice />
+          <PageHeader
+            title="Traces"
+            subtitle={`Per-request traces for keys with tracing on. Last ${parsed.filters.range}.`}
+            action={
+              <TraceFilters
+                filters={parsed.filters}
+                keys={keys.map((key) => ({ id: key.id, name: key.name }))}
+                models={models}
+              />
+            }
+          />
+          <RejectedFilters rejected={parsed.rejected} ignored={parsed.ignored} />
+          <TraceTable view={view} />
+        </>
+      );
+    }
+    
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (file://<worktree>/apps/app/tests/c/provider-routes.test.ts:46:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 1
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 154.995511

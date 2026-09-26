@@ -1,0 +1,98 @@
+{
+  "task": "A2",
+  "lane": "A2",
+  "slice": "fix round: 0-A2-CM-01..04, 1-A2-V-RS-01/02 — /welcome read, emailSettled, form wiring, grant RPC pin, sign-in claim + routing",
+  "activity": "review",
+  "at": "2026-09-25T21:54:00Z",
+  "head": "ed6a282d",
+  "base": "46776646",
+  "worktree": ".claude/worktrees/codex-app-a2",
+  "branch": "codex/app-a2",
+  "owned_paths": [
+    "apps/app/app/(auth)/",
+    "apps/app/app/auth/callback/route.ts",
+    "apps/app/tests/a/",
+    "research/plan/evidence/a/A2-16fe503.md",
+    "research/plan/evidence/coordinator/updates/A2-20260925T2154Z.json"
+  ],
+  "isolation": {
+    "ports": "postgres 55460 (INFRX_D_TASK=app-a2), container removed at end",
+    "prefix": "infrx-app-a2-",
+    "db": "infrx_app-a2"
+  },
+  "commands": [
+    {
+      "cmd": "node --test tests/a/onboarding-flow.test.ts tests/a/auth-surface.test.ts @2f72d116",
+      "exit": 1,
+      "summary": "fails before: missing exports afterSignIn / CLAIM_RPC"
+    },
+    {
+      "cmd": "cd apps/app && pnpm test",
+      "exit": 0,
+      "summary": "393 tests: 388 pass, 0 fail, 5 skipped (real-PG without DSN)"
+    },
+    {
+      "cmd": "INFRX_APP_A2_DSN=<local harness DSN> node --test tests/a/grant-pg.test.ts",
+      "exit": 0,
+      "summary": "5/5 pass on task-local PostgreSQL"
+    },
+    {
+      "cmd": "pnpm lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "pnpm exec next typegen && pnpm exec tsc --noEmit",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "node tests/a/run-mutants.mjs",
+      "exit": 0,
+      "summary": "45/45 killed (22 new)"
+    },
+    {
+      "cmd": "node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+      "exit": 0,
+      "summary": "14/14 self-tests; 212/212 killed"
+    },
+    {
+      "cmd": "node tests/v/run-mutants.mjs",
+      "exit": 0,
+      "summary": "40/40"
+    },
+    {
+      "cmd": "node tests/u/run-mutants.mjs; node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs",
+      "exit": 0,
+      "summary": "u 64/64; c 4/4 self-tests, 104/104"
+    }
+  ],
+  "findings": {
+    "0-A2-CM-01": "fixed",
+    "0-A2-CM-02": "fixed",
+    "0-A2-CM-03": "fixed (flow/port split + static wiring; no browser tooling)",
+    "0-A2-CM-04": "fixed",
+    "1-A2-V-RS-01": "fixed",
+    "1-A2-V-RS-02": "fixed"
+  },
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "lane code and tests green after the fix round; remaining WR-A2-1/2/3 application and the P-05 hosted auth configuration + staging fresh-email run",
+    "at": "2026-09-25T21:54:00Z"
+  },
+  "blockers": [
+    "P-05 hosted auth configuration and staging fresh-email journey",
+    "WR-A2-1 middleware public paths (without it /signup redirects to /login)"
+  ],
+  "wiring_requests": [
+    "WR-A2-1 apps/app/lib/supabase/middleware.ts: PUBLIC += /signup, /verify-email; signed-in redirect also for /signup (patch + test in A2-16fe503.md)",
+    "WR-A2-2 Makefile console-mutants: add `cd apps/app && node tests/a/run-mutants.mjs` (now 45/45)",
+    "WR-A2-3 (low) apps/app/lib/utils.ts safeNext has no production caller; delete or re-export app/(auth)/flow.ts safeNext"
+  ],
+  "evidence": [
+    "research/plan/evidence/a/A2-16fe503.md"
+  ]
+}

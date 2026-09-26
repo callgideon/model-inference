@@ -1,0 +1,25 @@
+
+Running 19 tests using 1 worker
+
+  ✓   1 [chromium] › tests/e2e/journey.e2e.ts:223:5 › signup-verify-grant: a fresh individual verifies once and is granted 10,000 CREDIT exactly once (1.5s)
+  ✓   2 [chromium] › tests/e2e/journey.e2e.ts:270:5 › signin-claim: signing in runs A2's first-login grant claim (answered replayed, no second grant) (475ms)
+  ✓   3 [chromium] › tests/e2e/journey.e2e.ts:282:5 › create-key: the individual creates a key in the App; its plaintext is shown once (1.0s)
+  ✓   4 [chromium] › tests/e2e/journey.e2e.ts:301:5 › text-sync: an external text request is answered and settled exactly once (318ms)
+  ✓   5 [chromium] › tests/e2e/journey.e2e.ts:315:5 › sse-stream: an external streamed request sends identity, deltas, usage and [DONE] (296ms)
+  ✓   6 [chromium] › tests/e2e/journey.e2e.ts:339:5 › async-poll: an external async job is accepted, polled to its end and its result read (384ms)
+  ✓   7 [chromium] › tests/e2e/journey.e2e.ts:355:5 › video-upload: an uploaded finite video is processed as an async job and its result read (453ms)
+  ✓   8 [chromium] › tests/e2e/journey.e2e.ts:384:5 › retry: the same request retried with its idempotency key is replayed, never charged twice (176ms)
+  ✓   9 [chromium] › tests/e2e/journey.e2e.ts:397:5 › usage-balance: the console shows every request and the balance exactly as the ledger records them (634ms)
+  ✓  10 [chromium] › tests/e2e/journey.e2e.ts:419:5 › refresh: a reload and an expiring session mid-journey keep the individual's exact state (12.7s)
+  ✓  11 [chromium] › tests/e2e/journey.e2e.ts:439:5 › request-detail: the owner reads a request's detail, charge and result from Usage (662ms)
+  ✓  12 [chromium] › tests/e2e/journey.e2e.ts:451:5 › accounting-uncertainty: usage the engine did not report is held for reconciliation, never shown as a charge (944ms)
+  ✓  13 [chromium] › tests/e2e/journey.e2e.ts:477:5 › rate-rejection: past the per-key active job cap the next request is refused 429 and admits nothing; the rest settle once after a worker replacement (1.6s)
+  ✓  14 [chromium] › tests/e2e/journey.e2e.ts:506:5 › low-funds: with almost nothing left the API refuses 402 and admits nothing; the console says so exactly (1.5s)
+  ✓  15 [chromium] › tests/e2e/journey.e2e.ts:528:5 › provider-route-denial: provider and operator routes are not served to a consumer (920ms)
+  -  16 [chromium] › tests/e2e/journey.e2e.ts:540:5 › operator-controls: operator actions are reachable only by an operator, with a reason, once
+  ✓  17 [chromium] › tests/e2e/journey.e2e.ts:549:5 › isolation: a second individual gets their own one grant and sees none of the first's requests, keys or results (1.8s)
+  ✓  18 [chromium] › tests/e2e/journey.e2e.ts:589:5 › expired-result: past its persisted expiry a result is gone (410), its metadata kept (48ms)
+  ✓  19 [chromium] › tests/e2e/journey.e2e.ts:606:5 › revoke-key: a key revoked in the App fails admission within the revocation bound (39.0s)
+
+  1 skipped
+  18 passed (1.1m)

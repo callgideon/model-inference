@@ -1,0 +1,27 @@
+{
+  "task": "WAVE4B-UNION",
+  "slice": "rounds 1-2: d10-followup+W1-W4, m6-wiring+WR-M6W-1, w5-merge (service.py union), door-revoke+W-DR1 v2, w5-merge delta, consumer-v1@1a14c2b8, known-good-proof",
+  "activity": "review",
+  "head": "74183655",
+  "worktree": ".claude/worktrees/codex-wave4b-union",
+  "branch": "codex/wave4b-union",
+  "owned_paths": ["research/plan/evidence/coordinator/wave4b-union-7418365.md"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=union pytest -q tests/d (5b7eb5e8)", "exit": 0, "summary": "845 passed, 1 skipped, 8 xfailed"},
+    {"cmd": "layer-3 rls driver on union Supabase-image PG (5b7eb5e8, a5a08519)", "exit": 0, "summary": "886 cases, 0 failed; completeness clean"},
+    {"cmd": "pytest -q tests/w (9d61d1e1, PG+Valkey+MinIO)", "exit": 0, "summary": "322 passed, 3 skipped"},
+    {"cmd": "INFRX_MUTANTS=all tests/m/test_retention_mutants.py (9d61d1e1)", "exit": 0, "summary": "62/62 killed"},
+    {"cmd": "INFRX_MUTANTS=all prep_worker + worker_main + w5 mutants (9d61d1e1)", "exit": 0, "summary": "167 passed (152 killed)"},
+    {"cmd": "tests/integration/backend/e3c/test_e3c_runner.py", "exit": 0, "summary": "34 passed"},
+    {"cmd": "door-revoke focused list (a5a08519)", "exit": 0, "summary": "101 passed, 3 xfailed"},
+    {"cmd": "privilege_probe.py as infrx_runtime, 0001-0023", "exit": 0, "summary": "PASS 62 checks with DOOR-REVOKE list; old D10 list fails on admit/claim_preparation only"},
+    {"cmd": "tests/g/test_relay_readiness.py + _pg.py (9c4dcf9c)", "exit": 0, "summary": "22 passed; 4 passed (M6 phase 2 present, strict xfails do not apply)"},
+    {"cmd": "known-good.py bda1586 --applied 0023 / 0024", "exit": 0, "summary": "KNOWN-GOOD / NOT-KNOWN-GOOD exit 1"},
+    {"cmd": "make api-test (74183655)", "exit": 2, "summary": "44 failed, 4437 passed, 5 skipped, 9 xfailed: all F1 (test_observe KNOWN_UNPRODUCED + 43 broken_runner cascades)"},
+    {"cmd": "pytest -q tests/i with WR-UNION-1 applied temporarily (74183655)", "exit": 0, "summary": "236 passed, 1 xfailed"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 3, "confidence": "medium", "basis": "all lists green on the union except F1 (pre-existing on w5-merge, one-line fix proven); round 3 queued", "at": "2026-09-26T00:55Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-UNION-1 tests/i/test_observe.py KNOWN_UNPRODUCED drops UnsettleableJobs (= queued WR-P25-4)"],
+  "evidence": ["research/plan/evidence/coordinator/wave4b-union-7418365.md"]
+}

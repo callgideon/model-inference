@@ -93,6 +93,26 @@ Reuse E4B's runner/protocol and valid E1B evidence. The old software task remain
 
 Acceptance: BACKEND-READY is accepted on a pinned target within measured limits, with no unresolved launch-path security/accounting/lifecycle defects and all required evidence present. Source status `implemented` alone cannot release App dispatch. Public cutover still follows the documented account/traffic transition and launch authorization.
 
+### Acceptance checklist (P-17, decided 2026-09-25)
+
+Decided by the coordinator under the operator's authorization ([15 P-17](../15-pending-inputs.md#decisions-2026-09-25-coordinator-under-the-operators-authorization); draft §P-17 in `research/plan/evidence/coordinator/2026-09-25-inputs-decisions-draft.md`). Acceptance is mechanical:
+
+1. **Gate schema** (`research/plan/evidence/coordinator/updates/README.md`:62): E4C is `implemented`; `gates.BACKEND-READY.candidate.source` and `.deployed` are recorded; the cells cover every E4C `test_id` (BACKEND-JOURNEY, LOAD-CLOSEDLOOP, PERF-ENVELOPE, OPS-CONTINUOUS, CREDIT-CUTOVER, MARLIN-SOP; `tasks.json`:4501-4508), each PASS with evidence; reuse of a historical candidate is explained in `candidate.note`.
+2. **Frozen identities** (step 1 above): source, image, weights and processor digests (P-06 filled), capability and price snapshots, migration hashes, rollout bundle, workload manifest and the run-profile sha (P-24, `models/marlin2b/profiles/E4C-box.base.json` as stamped per cell).
+3. **CREDIT regime** (S3 note above): the ledger half ran in CREDIT, not `legacy_usd`; the active card is the P-01 card `rc_marlin2b_20260925_launch`; the P-02 dry-run exited 0 before activation.
+4. **P-18 limits committed before the first qualifying run's start timestamp** (`models/marlin2b/results/E4B-protocol.md` §5, amendment 6; [05 §3](05-client-and-load-testing.md)); every PERF-ENVELOPE and LOAD-CLOSEDLOOP threshold row is PASS on the final combined configuration (step 2 above).
+5. **Two-tenant headless journey passed** ([04](../04-verification.md) BACKEND-JOURNEY): an external CREDIT journey passed with two tenants (P-05) over sync/SSE/async, upload/URL, cancel, replay and dataset resume; public discovery and retention claims match behavior (step 1 above; R109).
+6. **Exact reconciliation within the P-24 cap** (step 3 above): every accepted item, hold and terminal record reconciles exactly with `drift == []`, and actual test spend is within the profile's 50,000 CREDIT per-cell cap.
+7. **Alert, expiry, restore and known-good rollback proven** ([04](../04-verification.md) OPS-CONTINUOUS; R119): `74-alert-test.sh` delivered to the P-25 destination; result/source expiry and cleanup observed; a restore and a rollback to a known-good target (`infra/rollout/known-good.py` exit 0 with `--bundles`, plus `infra/rollout/steps/85-known-good-box.sh`, P-25) executed.
+8. **No open launch-path P1** security, accounting or lifecycle defect (`tasks.json`:4521); RV-04, RV-08, RV-09 and RV-10 (`tasks.json`:4719-4756) are `fixed` with evidence.
+9. **Published limitations** (step 4 above): limitations, uncovered modalities (no live video, no actuation, no clips over 82 s), the accepted P-18 envelope, rollback triggers and "single-GPU recovery is not high availability"; no aggregate p95 labelled as video p95.
+10. **Cutover separate** (Acceptance above): the public account/traffic cutover is a separately recorded authorized action; acceptance releases App dispatch ([22](../22-consumer-v1-implementation.md)), not public launch.
+
+BACKEND-READY is accepted only when all ten hold. The coordinator records the decision, its date and the SHA in the E4C evidence under `research/plan/evidence/e/` and in `gates.BACKEND-READY`; a false item is `rejected` or pending with the item named, and a later FAIL on the same candidate sets `rejected`.
+
+Runbook: the box shell that runs certify exports only `INFRX_API_KEY` (the profile's `tenant_key_env`); bench prefers `MARLIN_API_KEY` when both are set, and the cell is then refused.
+Window runbook: [models/marlin2b/results/E4C-runbook.md](../../../models/marlin2b/results/E4C-runbook.md) (freeze, FILL sources, key inventory, the certify and two-tenant journey invocations with `E4C-edge.overload.base.json` and `E4C-box.two-tenant.base.json`, drill record, evidence layout, P-17 tick-off).
+
 ## Evidence format and ownership
 
 Use append-only dated directories under the established track evidence roots. Include base/head/deployed identity, dependency versions, redacted effective configuration, input/profile hashes, authorization/resource bounds, commands/exit codes, per-cell attempt/fresh/replay/reject/error counts, telemetry windows, ledger reconciliation, operator decision and cleanup confirmation. Raw private media/prompts/keys stay in their approved protected store, linked by opaque IDs/hashes only. Re-run a failed cell after repair and retain both versions; never overwrite failure evidence with a final green summary.

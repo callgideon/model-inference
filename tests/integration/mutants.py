@@ -348,11 +348,11 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/test_services.py", "role_matrix_holds",
            layer=2, cases=("test_the_role_matrix_holds_for_every_role",)),
     Mutant("e2m75", "L3-REBASE: the runtime login's execute surface is read, not assumed "
-           "(dropping admit from 0021's list must fail its row)",
+           "(0023 revoked admit; re-adding it to the expected set must fail its row)",
            "tests/integration/pgstate.py",
+           '    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)",\n',
            '    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit(jsonb)", '
-           '"infrx.admit_ready(jsonb)",',
-           '    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)",',
+           '"infrx.admit_ready(jsonb)",\n',
            "tests/integration/test_services.py", "role_matrix_holds",
            layer=2, cases=("test_the_role_matrix_holds_for_every_role",)),
     Mutant("e2m76", "L3-REBASE: a 0019 relation without a matrix row fails completeness",

@@ -1,0 +1,81 @@
+{
+  "task": "A3",
+  "slice": "fix round: 0-A3-V1 page render guard (+18 page/copy mutants, refill/top-up/expiry bans); 1-A3-RSI-1 runner/list renamed to run-catalog-mutants.mjs / catalog-mutants.json (no A2 collision)",
+  "activity": "review",
+  "head": "fdd9e1f5",
+  "head_note": "code head; the evidence/update commit follows it on the branch",
+  "base": "46776646",
+  "worktree": ".claude/worktrees/codex-app-a3",
+  "branch": "codex/app-a3",
+  "owned_paths": [
+    "apps/app/app/(console)/models/",
+    "apps/app/app/(console)/docs/",
+    "apps/app/tests/a/",
+    "research/plan/evidence/a/A3-19f8467.md",
+    "research/plan/evidence/coordinator/updates/A3-20260925T2230Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/app && pnpm test",
+      "exit": 0,
+      "summary": "383 tests, 383 pass"
+    },
+    {
+      "cmd": "pnpm lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "pnpm exec next typegen && pnpm exec tsc --noEmit",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+      "exit": 0,
+      "summary": "self-tests ok; 212/212 killed"
+    },
+    {
+      "cmd": "node tests/v/run-mutants.mjs",
+      "exit": 0,
+      "summary": "40/40 killed"
+    },
+    {
+      "cmd": "node tests/a/run-catalog-mutants.mjs",
+      "exit": 0,
+      "summary": "2 self-checks ok; 46/46 killed (28 prior + 18 page/copy)"
+    },
+    {
+      "cmd": "node tests/a/run-catalog-mutants.mjs --only <16 PAGE-* ids> / COPY-TOPUP,COPY-EXPIRES against the pre-fix content.test.ts",
+      "exit": 1,
+      "summary": "fails before: 0/16 and 0/2 killed (all SURVIVED)"
+    },
+    {
+      "cmd": "git merge-tree --write-tree --name-only codex/app-a2 HEAD (and consumer-v1, c0, u1r, c3a, u2, u3, u4)",
+      "exit": 0,
+      "summary": "no conflicts (was rc=1 add/add vs A2 at 9de62aaa)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.25,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "both findings closed and green; remaining = coordinator WR-1..WR-4, C0 merge, re-review",
+    "at": "2026-09-25T22:30:00Z"
+  },
+  "blockers": [],
+  "findings_closed": [
+    "0-A3-V1",
+    "1-A3-RSI-1"
+  ],
+  "wiring_requests": [
+    "WR-1 unchanged (apps/infrx-api/tests/g/test_app_examples.py; content in the evidence)",
+    "WR-2 (replaces earlier) Makefile console-mutants: add '\\tcd apps/app && node tests/a/run-catalog-mutants.mjs' (46/46 killed); independent of A2's tests/a/run-mutants.mjs line",
+    "WR-3 unchanged (server-only INFRX_API_BASE_URL + README env line)",
+    "WR-4 unchanged (G7 PROVISIONAL constant -> derived from card approval)"
+  ],
+  "evidence": [
+    "research/plan/evidence/a/A3-19f8467.md"
+  ]
+}

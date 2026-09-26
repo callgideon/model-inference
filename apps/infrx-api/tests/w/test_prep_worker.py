@@ -819,9 +819,16 @@ def test_prep_worker__the_worker_composes_the_preparation_pool(tmp_path):
                                                           PgAttachments)
     assert runner.media.cache.root == str(tmp_path / "cache")
     assert worker.engine.local_uri == runner.media.local_uri
-    # W5: the marker-gated claim and manifest (D10), and S3 F4's reconciliation reader
+    # W5: the marker-gated claim and manifest (D10); S3 F4's reconciliation reader only on
+    # D10's monitor login (W5-F5, E3C F-6: 0021 grants the views to infrx_monitor alone)
     assert isinstance(runner.readiness, PgLifecycle), runner.readiness
-    assert isinstance(worker.reconciliation, PgReconciliation), worker.reconciliation
+    # W5-F5B (union F3): ONE lifecycle - the marker the claim reads is M6's lifecycle, the
+    # one preparation registers into and the collector retains by (same connect and grace).
+    assert runner.readiness is runner.media.content, (runner.readiness, runner.media.content)
+    assert worker.reconciliation is None, worker.reconciliation
+    monitored, _ = composed({**env, "MONITOR_DATABASE_URL":
+                             "postgresql://infrx_monitor@127.0.0.1:9/infrx"}, objects=objects)
+    assert isinstance(monitored.reconciliation, PgReconciliation), monitored.reconciliation
 
 
 def test_prep_worker__a_media_root_the_worker_cannot_write_refuses_startup(tmp_path):

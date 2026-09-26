@@ -806,8 +806,8 @@ MUTANTS += (
 SSM, STEP = "../../infra/rollout/ssm.sh", "../../infra/rollout/steps/"
 MUTANTS += (
     _m("ssm_drops_arguments", "a step runs with the arguments it was given",
-       SSM, """b64=$( { printf '%s' "$header"; cat "$step"; } | base64 -w0)""",
-       """b64=$( { cat "$step"; } | base64 -w0)""",
+       SSM, """b64=$( { printf '%s' "$header"; cat -- "$step"; } | base64 -w0)""",
+       """b64=$( { cat -- "$step"; } | base64 -w0)""",
        "test_backend_deploy__ssm_carries_a_step_byte_for_byte"),
     _m("ssm_ignores_status", "a failed invocation is a failed step",
        SSM, '[ "$status" = Success ]', "true",
@@ -880,8 +880,8 @@ MUTANTS += (
     _m("digest_unanchored", "the whole statement is the digest or the sentinel",
        STEP + "50-install.sh", "^([0-9a-f]{64}|nothing-pending)$", "([0-9a-f]{64}|nothing-pending)",
        "test_backend_deploy__the_cutover_keeps_the_engines_concurrency"),
-    _m("cutover_drops_engine_concurrency", "the cutover keeps the box's 32 engine sequences",
-       STEP + "50-install.sh", 'INFRX_SET="ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-32} ${INFRX_SET:-}"',
+    _m("cutover_drops_engine_concurrency", "the cutover hands install.sh the operator's engine concurrency",
+       STEP + "50-install.sh", 'INFRX_SET="ENGINE_MAX_NUM_SEQS=$ENGINE_MAX_NUM_SEQS ${INFRX_SET:-}"',
        'INFRX_SET="${INFRX_SET:-}"',
        "test_backend_deploy__the_cutover_keeps_the_engines_concurrency"),
     _m("step_without_release_guard", "a step never runs without its release",
@@ -1260,6 +1260,47 @@ MUTANTS += (
        "CANARY_KEY_PARAM=${CANARY_KEY_PARAM:-/model-inference/e4b_api_key}", INSTALL_OBSERVE),
 )
 
+# --- KNOWN-GOOD-PROOF: a schema proof reaches its `through` and no further ---------------
+PROOF_PY = "../../infra/runbooks/schema_proof.py"
+MUTANTS += (
+    _m("known_good_proof_ignores_through", "a schema_proof proves the schema only through its `through`",
+       KG, 'proven = (proof.get("through", "0000") >= applied and bool(proof.get("evidence"))',
+       'proven = (bool(proof.get("evidence"))',
+       "test_ops_recover__a_schema_proof_reaches_exactly_its_through"),
+    _m("known_good_record_unproven", "both known-good targets carry their schema proof",
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0023", "result": "bda1586',
+       '"schema_proof_withdrawn": {"through": "0023", "result": "bda1586',
+       "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
+    _m("schema_proof_trusts_moved_statements", "a migrated history that differs from the files is refused",
+       PROOF_PY, "if parts != [files[v]] and not covers(", "if False and not covers(",
+       "test_ops_recover__the_proof_driver_refuses_a_bad_target_and_a_moved_history"),
+    # fix round (0-KGP-1, 0-KGP-2, 1-KGP-1)
+    _m("schema_proof_passes_a_skipped_suite", "a suite that skipped a case did not run the old SQL",
+       PROOF_PY, r'and not re.search(r"\bskipped\b", tail[0])', "",
+       "test_ops_recover__the_proof_driver_counts_a_skipped_suite_as_a_fail"),
+    _m("schema_proof_passes_a_suite_that_ran_nothing", "a suite with no pass proves nothing",
+       PROOF_PY, r'ran = re.search(r"\b[1-9]\d* passed\b", tail[0]) and', "ran = True and",
+       "test_ops_recover__the_proof_driver_counts_a_skipped_suite_as_a_fail"),
+    _m("schema_proof_accepts_a_partial_history", "a CLI-split history must cover the whole file",
+       PROOF_PY, "    return GAP.fullmatch(text, pos) is not None", "    return True",
+       "test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order"),
+    _m("schema_proof_reads_sql_inside_a_comment", "a statement starts only where the file's SQL does",
+       PROOF_PY, "and GAP.fullmatch(text, pos, i)", "and True",
+       "test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order"),
+    _m("schema_proof_accepts_a_cut_statement", "each CLI row is a whole statement, ended by its `;`",
+       PROOF_PY, 'or END.match(text, at + len(part))', "or True",
+       "test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order"),
+    _m("known_good_proof_ignores_its_bytes", "a schema_proof proves only the migration bytes it ran on",
+       KG, "and all((repo / p).exists() for p in proof[\"evidence\"]) and not drift)",
+       "and all((repo / p).exists() for p in proof[\"evidence\"]))",
+       "test_ops_recover__a_schema_proof_reaches_exactly_its_through"),
+    _m("known_good_record_proves_other_bytes", "the record's proof hashes are this tree's migrations",
+       "../../apps/app/supabase/migrations/0023_runtime_unmarked_door_revoke.sql",
+       "revoke execute on function infrx.claim_preparation(jsonb) from infrx_runtime;",
+       "revoke execute on function infrx.claim_preparation(jsonb) from infrx_runtime; ",
+       "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
+)
+
 # --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------
 DASH = "../../infra/alerts/dashboard.json"
 M6_PANELS = "test_ops_retention__every_m6_family_is_declared_paneled_and_produced"
@@ -1344,6 +1385,32 @@ MUTANTS += (
 # every copied tree whatever the edit - which reports `killed` for a mutant that changed
 # nothing (review r1 B1). `SELF_TESTS` pins that a no-op mutant naming that case is
 # `survived`.
+# ROLLOUT-FIXES: the tooling defects the rollout gates rehearsal at e607b705 found.
+RF_SSM = "test_backend_deploy__ssm_refuses_what_is_not_a_step_before_any_aws_call"
+RF_PRE_I8 = "test_ops_continuous__a_step_on_a_pre_i8_checkout_is_blocked_before_it_acts"
+RF_GUARD = '|| { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }'
+MUTANTS += (
+    _m("ssm_sends_a_non_step", "ssm.sh sends only an existing step file, never cat's output",
+       SSM, '[ -f "$step" ] || { usage >&2; exit 2; }\n', "", RF_SSM),
+    _m("cutover_engine_default_restored", "the cutover has no engine-concurrency default",
+       STEP + "50-install.sh",
+       ': "${ENGINE_MAX_NUM_SEQS:?rollout.md section 1 pins it (INSTALL_ARGS); no default}"',
+       ': "${ENGINE_MAX_NUM_SEQS:=32}"', "test_backend_deploy__the_cutover_keeps_the_engines_concurrency"),
+    _m("s3_check_stale_pytest", "the bucket check installs uv.lock's pytest wheel",
+       STEP + "45-s3-check.sh",
+       "pytest==9.1.1 --hash=sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c",
+       "pytest==8.4.2 --hash=sha256:872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79",
+       "test_backend_deploy__the_bucket_check_installs_exactly_uv_locks_pytest_wheels"),
+    _m("install_args_pool_pin_dropped", "the runbook's INSTALL_ARGS fit the session pooler",
+       "../../infra/runbooks/rollout.md", ' DATABASE_POOL_MAX_SIZE=6")', '")',
+       "test_backend_deploy__the_runbooks_install_args_fit_the_session_pooler"),
+    *(_m(f"pre_i8_guard_dropped_{step[:2]}", "a step on a pre-I8 checkout is BLOCKED before it acts",
+         STEP + step, RF_GUARD, "|| true", RF_PRE_I8)
+      for step in ("71-pool-budget.sh", "72-observe-install.sh", "74-alert-test.sh",
+                   "80-mirror-artifacts.sh", "81-restore-artifacts.sh", "86-cleanup.sh")),
+)
+
+
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 
@@ -1362,6 +1429,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
     # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
     for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "alerts"),
+                 ("infra", "app"),              # I3 (WR-I3-3): AppDown's runbook section
                  ("apps", "app", "supabase", "migrations")):
         if REPO.joinpath(*part).exists():
             shutil.copytree(REPO.joinpath(*part), root.joinpath(*part), ignore=ignore)

@@ -107,7 +107,7 @@ def rule_metrics(rules) -> dict[str, set[str]]:
 # exporters): W5 (worker: queue, reaper, reconciliation), G (rejections) and the component
 # probes own the producers. Pinned so a NEW rule without a producer fails here.
 KNOWN_UNPRODUCED = {"ComponentDown", "QueueStalled", "QueueSaturated", "RejectionsHigh",
-                    "PlatformFailureRate", "LeaseLost", "ReaperTerminalized", "UnsettleableJobs"}
+                    "PlatformFailureRate", "LeaseLost", "ReaperTerminalized"}
 
 
 def _unproduced(rules) -> set[str]:
@@ -207,7 +207,7 @@ def test_ops_continuous__the_gateway_exports_no_gpu_gauge():
 
 def test_ops_continuous__the_merged_rule_set_is_versioned_and_well_formed():
     names = [rule["name"] for rule in RULES["rules"]]
-    assert len(names) == len(set(names)) and RULES["version"] == "a1+o2"
+    assert len(names) == len(set(names)) and RULES["version"] == "a1+o2+p1"
     anchors = {}
     for rule in RULES["rules"]:
         assert rule["op"] in evaluator.OPS and rule["severity"] in ("page", "ticket")
@@ -618,7 +618,8 @@ def test_ops_retention__each_rule_fires_on_its_fault_and_nothing_fires_when_heal
         spec = families[rule["metric"]]
         for label, value in rule.get("match", {}).items():
             assert value in dict(spec.labels)[label], rule["name"]
-        assert "⚠️ TO BE VERIFIED (P-25)" in rule["threshold_status"] or \
+        # every threshold is exact or rests on P-25 (open, or decided 2026-09-25: WR-P25-3)
+        assert "(P-25" in rule["threshold_status"] or \
             rule["threshold_status"].startswith("exact"), rule["name"]
     now = time.time()
     healthy = evaluator.parse(_healthy_m6(now))

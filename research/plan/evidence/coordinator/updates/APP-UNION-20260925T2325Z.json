@@ -1,0 +1,72 @@
+{
+  "task": "APP-UNION",
+  "slice": "integrated App candidate: merge C0, U1R, A2, A3 (--no-ff, in order) and apply their coordinator wiring",
+  "activity": "review",
+  "head": "1cc03146",
+  "head_note": "code head; the evidence/update commit follows it on the branch",
+  "base": "ca226130",
+  "worktree": ".claude/worktrees/codex-app-union",
+  "branch": "codex/app-union",
+  "owned_paths": [
+    "apps/app/app/(console)/layout.tsx",
+    "apps/app/components/sidebar.tsx",
+    "apps/app/lib/supabase/middleware.ts",
+    "apps/app/lib/contracts/v2/consumer.ts",
+    "apps/app/lib/contracts/v2/types.ts",
+    "apps/app/tests/u/sidebar-credits.test.ts",
+    "apps/app/tests/a/public-routes.test.ts",
+    "apps/infrx-api/tests/g/test_app_examples.py",
+    "Makefile",
+    "research/plan/evidence/coordinator/app-union-1cc0314.md"
+  ],
+  "commands": [
+    {
+      "cmd": "make console-test console-lint console-typecheck console-mutants",
+      "exit": 0,
+      "summary": "508 tests/485 pass/0 fail/23 skip; lint 0 errors 2 pre-existing warnings; tsc clean; mutants contracts 212/212 (14 self-tests), V 40/40, U 97/97, C 142/142 (0 stale), A2 45/45, A3 catalog 46/46"
+    },
+    {
+      "cmd": "make console-c0-real",
+      "exit": 0,
+      "summary": "12/12 (real Supabase PG + PostgREST, app-c0 block 55451; nothing left behind)"
+    },
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen --no-sync pytest -q tests/g/test_app_examples.py tests/contracts",
+      "exit": 0,
+      "summary": "1267 passed"
+    },
+    {
+      "cmd": "test_app_examples.py negative controls (tools: [] / idempotency-key dropped)",
+      "exit": 1,
+      "summary": "400 unsupported_parameter tools / AssertionError resume; restored"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    },
+    {
+      "cmd": "git merge-tree --write-tree --name-only codex/app-union codex/wave4b-union",
+      "exit": 0,
+      "summary": "no conflicts (tree 806b2360); C0 stack on that tree (0001-0022, scratch export): 12/12"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.25,
+    "likely_h": 0.75,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "all named checks green at 1cc03146, backend-union merge conflict-free; remaining is review of 3 compositions + ROUTES follow-up, merge, WR-7 rerun on merged SHA",
+    "at": "2026-09-25T23:25Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "C0 WR-2/WR-5/WR-6/WR-7 open",
+    "U1R WR-3(a)(b)(c)/WR-4/WR-5/WR-6 open",
+    "A2 WR-A2-3 open",
+    "A3 WR-3 (Vercel INFRX_API_BASE_URL)/WR-4 (G7 PROVISIONAL) open"
+  ],
+  "evidence": [
+    "research/plan/evidence/coordinator/app-union-1cc0314.md"
+  ]
+}

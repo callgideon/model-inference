@@ -263,6 +263,7 @@ def check_profile(a):
                 inventory = json.load(f)
     except (OSError, ValueError) as e:
         return [f"--profile or --key-inventory unreadable: {type(e).__name__}"]
+    local = runprofile.is_local(a, profile)       # a profiled loopback gateway is metered
     # ponytail: one small dict per item in memory; aggregate the manifest instead if a
     # dataset ever outgrows that (the profile lists every item id already).
     schedule = [{"clip_id": item["id"], "form": a.form if item["video"] else "text",

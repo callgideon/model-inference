@@ -1,0 +1,98 @@
+{
+  "task": "A3",
+  "slice": "all brief items 1-3 + acceptance CI (published catalog, CREDIT price/hold/disclosure, 8 executed examples x 3 languages, limits/retention/errors/routes/support copy, A3 mutant runner, mounted-route replay as WR-1)",
+  "activity": "review",
+  "head": "19f84679",
+  "head_note": "code head; the evidence/update commit follows it on the branch",
+  "base": "46776646",
+  "worktree": ".claude/worktrees/codex-app-a3",
+  "branch": "codex/app-a3",
+  "owned_paths": [
+    "apps/app/app/(console)/models/",
+    "apps/app/app/(console)/docs/",
+    "apps/app/tests/a/",
+    "research/plan/evidence/a/A3-19f8467.md",
+    "research/plan/evidence/coordinator/updates/A3-20260925T2210Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/app && pnpm test",
+      "exit": 0,
+      "summary": "382 tests, 382 pass (base 351; +31 A3)"
+    },
+    {
+      "cmd": "pnpm lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "pnpm exec next typegen && pnpm exec tsc --noEmit",
+      "exit": 0,
+      "summary": "clean at 19f84679"
+    },
+    {
+      "cmd": "pnpm exec next build",
+      "exit": 0,
+      "summary": "compiled (at 8fc23f9c; later change test-only)"
+    },
+    {
+      "cmd": "node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+      "exit": 0,
+      "summary": "14 self-tests; 212/212 killed"
+    },
+    {
+      "cmd": "node tests/v/run-mutants.mjs; node tests/u/run-mutants.mjs; node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs",
+      "exit": 0,
+      "summary": "40/40, 64/64, 104/104 killed"
+    },
+    {
+      "cmd": "node tests/a/run-mutants.mjs",
+      "exit": 0,
+      "summary": "2 self-checks ok; 28/28 killed by declared cases"
+    },
+    {
+      "cmd": "(scratch placement) apps/infrx-api: pytest -q tests/g/test_app_examples.py",
+      "exit": 0,
+      "summary": "1 passed: 15 recorded example calls replayed on mounted routes (CREDIT); negative controls (tools; dropped Idempotency-Key) fail as expected; file not committed (WR-1)"
+    },
+    {
+      "cmd": "content.test.ts against base pages",
+      "exit": 1,
+      "summary": "fails before: pages read public.models, no unavailable branch; old docs carry 120-second / never-stores / metadata-only copy"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "A3 code/tests complete and green; remaining = coordinator WR-1..WR-4, merge with C0 session context, one review round, hosted E4 check of INFRX_API_BASE_URL",
+    "at": "2026-09-25T22:10:00Z"
+  },
+  "blockers": [],
+  "open_inputs": [
+    "support address (hello@callbill.ai used; no P-xx decides it)",
+    "P-01 card publication + WR-4 so the launch card is not shown Provisional"
+  ],
+  "findings": [
+    {
+      "id": "A3-F1",
+      "route": "G7/D10",
+      "summary": "legacy-regime G world refuses the listed bare alias nemostation/marlin-2b with 400 'no price snapshot' (fakes/state.py:651); CREDIT regime admits it"
+    },
+    {
+      "id": "A3-F2",
+      "route": "G tests",
+      "summary": "harness observation: unknown-bearer POST via jobs/world.send hangs (receive never disconnects)"
+    }
+  ],
+  "wiring_requests": [
+    "WR-1 add apps/infrx-api/tests/g/test_app_examples.py (content in the evidence): replays apps/app/tests/a/example-calls.json on the mounted routes in the CREDIT regime; scratch proof 1 passed",
+    "WR-2 Makefile console-mutants: add '\\tcd apps/app && node tests/a/run-mutants.mjs' (28/28 killed)",
+    "WR-3 set server-only INFRX_API_BASE_URL (https origin, no path) in the App's Vercel env + one README env line; without it /models and /docs show the unavailable state",
+    "WR-4 G7 routes/models.py PROVISIONAL=True constant -> derive from card approval so the P-01 launch card publishes provisional:false; test in tests/g/test_catalog_truth.py"
+  ],
+  "evidence": [
+    "research/plan/evidence/a/A3-19f8467.md"
+  ]
+}

@@ -16,7 +16,7 @@ from infrx.contracts.conformance.lifecycle import cases as lifecycle_cases
 from infrx.contracts.conformance.v2_contracts import credit_jobstore_cases
 from infrx.state import migrations, pgtesting
 from infrx.state.catalog import PgCatalogDirectory
-from infrx.state.jobstore import connector
+from infrx.state.jobstore import PgJobStore, connector
 
 from . import checks_admission as ca
 from . import checks_credit as cc
@@ -114,9 +114,27 @@ def _login_runtime() -> None:
 _LIFECYCLE = pgtesting.make_lifecycle_factory(
     pgstore.fresh_database, pgharness.dsn, migrations.SEED_MARLIN.read_text(),
     connect_for=_runtime_connect)
-_CREDIT = pgtesting.make_credit_jobstore_factory(
+_CREDIT_RUNTIME = pgtesting.make_credit_jobstore_factory(
     pgstore.fresh_database, pgharness.dsn, migrations.SEED_MARLIN.read_text(),
     connect_for=_runtime_connect)
+#: 0023 (DOOR-REVOKE, R123): the two unmarked doors are no longer the runtime login's.
+OWNER_DOORS = frozenset({"admit", "claim_preparation"})
+
+
+def _CREDIT(limits=None, **kw):
+    """The suite's admissions and preparation claims (the pre-D10 doors) go through the
+    owner, as the lifecycle suite's `jobs` does; every other operation runs on the runtime
+    login. The runtime's own doors for those two (`admit_ready`, `claim_preparation_ready`)
+    are the lifecycle suite's, on the runtime login above."""
+    harness = _CREDIT_RUNTIME(limits, **kw)
+    store = harness.extra["store"]
+    owner = PgJobStore(connector(pgharness.dsn(harness.extra["database"])), limits=store.limits)
+    runtime_call = store._call
+
+    async def call(function, args):
+        return await (owner._call if function in OWNER_DOORS else runtime_call)(function, args)
+    store._call = call
+    return harness
 # The same pending cases as tests/d/test_credit_jobstore_conformance.py (G1R and a contract
 # delta, neither a privilege).
 from .test_credit_jobstore_conformance import PENDING as _CREDIT_PENDING  # noqa: E402
@@ -137,8 +155,9 @@ def test_runtime_role_runs_the_lifecycle_ports(case) -> None:
         raises=_CREDIT_RAISES[case.__name__])] if case.__name__ in _CREDIT_PENDING else [])
     for case in credit_jobstore_cases()])
 def test_runtime_role_runs_the_credit_jobstore(case) -> None:
-    """The CREDIT JobStore/StreamStore suite as `infrx_runtime`: admission, preparation,
-    leases, journal, settlement and reads with only the runtime's grants."""
+    """The CREDIT JobStore/StreamStore suite as `infrx_runtime`: preparation, leases,
+    journal, settlement and reads with only the runtime's grants (admission and the
+    preparation claim through the owner, 0023)."""
     _login_runtime()
     asyncio.run(case(_CREDIT))
 
@@ -169,6 +188,24 @@ def test_runtime_role_is_refused_what_it_was_not_granted() -> None:
         finally:
             await conn.close()
     asyncio.run(run())
+
+
+def test_the_runtime_login_lost_exactly_the_unmarked_doors() -> None:
+    """DOOR-REVOKE (0023, R123): as the runtime LOGIN, `infrx.admit` and
+    `infrx.claim_preparation` are refused by name; `admit_ready`, `claim_preparation_ready`
+    and `fail_preparation` still run; `service_role` keeps the old doors; the cutover gate's
+    `runtime_unmarked_doors` is []. Oracle: without 0023 the first assertion fails."""
+    import psycopg
+    owner = _db()
+    _login_runtime()
+    try:
+        with psycopg.connect(pgharness.dsn(DB).replace(
+                f"postgres:{pgharness.PASSWORD}@", f"infrx_runtime:{RUNTIME_PASSWORD}@"),
+                autocommit=True) as runtime:
+            print(cd.check_door_revoke(owner, runtime))
+    finally:
+        with pgharness.connect("postgres") as admin:   # 0021's NOLOGIN, as test_reads reads it
+            admin.execute("alter role infrx_runtime nologin password null")
 
 
 def test_the_connector_carries_no_session_state_on_the_transaction_port(monkeypatch) -> None:

@@ -36,6 +36,8 @@ export * from "./money-units.ts";
 export * from "./published-model.ts";
 // F2C.a: the browser-safe lifecycle half (vocabularies, upload ticket, readiness view).
 export * from "./lifecycle.ts";
+// C0 WR-3: the consumer context and read port types (type-only).
+export * from "./consumer.ts";
 
 // ---------------------------------------------------------------------------
 // Vocabulary — mirrors of the v2 StrEnums, string values frozen.

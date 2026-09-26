@@ -125,6 +125,11 @@ FAMILIES: dict[str, Spec] = {
     "infrx_jobs_accepted_total": Spec(
         "counter", "Jobs durably accepted, by execution mode.",
         (("mode", _values(ExecutionMode)), (TENANT_LABEL, _TENANT))),
+    # W5-F5B: a refusal after admit_ready's marker (relay `POST_MARKER_REFUSED`), by code.
+    "infrx_post_marker_refusals_total": Spec(
+        "counter", "Refusals after admit_ready's execution-ready marker, logged and never "
+                   "answered: the job's committed outcome is the answer.",
+        (("code", frozenset(errors.ALL_CODES)),)),
     "infrx_jobs_terminal_total": Spec(
         "counter", "Jobs that reached a terminal state, by state and cause.",
         (("state", frozenset(state.value for state in TERMINAL_STATES)),

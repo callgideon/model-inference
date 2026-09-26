@@ -39,8 +39,14 @@ const SUITE = [
   "tests/c/projection.test.ts",
   "tests/c/credits.test.ts",
   "tests/c/client-boundary.test.ts",
+  // C0: the consumer context and read port (the real-PostgREST twin skips without its stack).
+  "tests/c/consumer.test.ts",
+  // C3A: the trusted consumer actions (the real-PostgREST twin skips without its stack).
+  "tests/c/actions.test.ts",
   // S1-fix B2: the production preview gate is a module-level constant, so its case lives with the module.
   "app/(console)/usage/preview-context.test.ts",
+  // E3A F-2: the provider-route guard and its wiring in /traces, /dedicated, /teams.
+  "tests/c/provider-routes.test.ts",
 ];
 
 function prepareCopy() {

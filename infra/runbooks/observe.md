@@ -186,7 +186,7 @@ a later claim deletes it. One is noise from the store; repeated ones become
 ## Processing cache high water
 
 `ProcessingCacheRefusing`: a preparation found `PROCESSING_CACHE_DIR` above its high water
-(`PROCESSING_CACHE_MAX_BYTES`, ⚠️ TO BE VERIFIED (P-25)) with everything left pinned by
+(`PROCESSING_CACHE_MAX_BYTES`, 50 GiB, P-25 decided 2026-09-25) with everything left pinned by
 in-flight attempts, and refused with a retryable 503. Check `infrx_processing_cache_bytes`
 (host probe) against the setting, and in-flight attempts against the worker's concurrency;
 a cache full of pins with nothing running is a pin leak (the worker engine's, M6 wiring 2).

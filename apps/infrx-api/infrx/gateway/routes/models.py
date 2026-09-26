@@ -46,6 +46,7 @@ from ...contracts.v2 import published_model as pm
 from ...contracts.v2.published_fixtures import deployed_profile
 from ...contracts.v2.records import CredentialAudience
 from ...media.prepare import MediaProfile
+from ...operations.transition import unapproved
 from . import intake, validate
 from .catalog import CALLABLE
 from .ingress import OK, component_state
@@ -58,9 +59,6 @@ OWNED_BY = "nemostation"
 # The approved release profile: Marlin-2B as release bda1586 deploys it (F2C.c's record of
 # `/etc/marlin2b-gateway.env`: 82 s). A runtime past it advertises nothing.
 APPROVED = deployed_profile()
-# ponytail: P-01 has approved no launch rate, so every card is provisional; a card flag
-# from D10/G8 replaces this constant once one is approved.
-PROVISIONAL = True
 # ponytail: the catalog port does not return the listing version resolution landed on
 # (D10 wiring); one served model is one listing.
 LISTING_VERSION = 1
@@ -149,6 +147,16 @@ async def catalog_rows(rt):
     return deployment, serving, card, usd
 
 
+def provisional(card) -> bool:
+    """A card is provisional unless its approval record is an operator approval (P-01),
+    judged by G8's own rule (`transition.unapproved`, the check `publish-card` and the
+    CREDIT transition refuse by): an absent, blank or marked approval is provisional (fail
+    closed - a provisional rate is never published as approved). ponytail: the record
+    carries `approved_by` only; D10 writes `rate_card_versions.provisional` from the same
+    text, so reading the column too adds no case today."""
+    return unapproved(card.approved_by) is not None
+
+
 def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
     """The published entry of `rows`, or nothing: unpriced, not this deployment's card,
     not publishable (`project`'s refusal) or past a profile."""
@@ -164,7 +172,7 @@ def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
     try:
         published = pm.project(
             serving=serving, deployment=deployment, listing_version=LISTING_VERSION,
-            regime=regime, credit_card=card, credit_provisional=PROVISIONAL, usd_price=usd,
+            regime=regime, credit_card=card, credit_provisional=provisional(card), usd_price=usd,
             capability=profile.capability, profile=profile, owned_by=OWNED_BY,
             available=available, as_of=now)
     except (errors.NotFound, errors.InvalidRequest):

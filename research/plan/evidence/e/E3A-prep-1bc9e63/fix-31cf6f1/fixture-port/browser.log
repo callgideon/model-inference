@@ -1,0 +1,29 @@
+
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › tests/e2e/journey.e2e.ts:222:5 › signup-verify-grant: a fresh individual verifies once and is granted 10,000 CREDIT exactly once (1.5s)
+  ✓  2 [chromium] › tests/e2e/journey.e2e.ts:298:5 › text-sync: an external text request is answered and settled exactly once (915ms)
+  ✘  3 [chromium] › tests/e2e/journey.e2e.ts:394:5 › usage-balance: the console shows every request and the balance exactly as the ledger records them (589ms)
+
+
+  1) [chromium] › tests/e2e/journey.e2e.ts:394:5 › usage-balance: the console shows every request and the balance exactly as the ledger records them 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "9999.4592"
+    Received: "10000"
+
+      399 |   expect(books.jobs.length, "the journey made requests").toBeGreaterThanOrEqual(1);
+      400 |   expect(books.conserved, "every charge = the admitted card x its usage; ledger = grant - charges").toEqual({ ok: true });
+    > 401 |   expect(await figure(page, "Available")).toBe(exact(books.wallet!.available));
+          |                                           ^
+      402 |   expect(await figure(page, "Reserved")).toBe(exact(books.wallet!.reserved));
+      403 |   expect(await figure(page, "Balance")).toBe(exact(books.wallet!.ledger));
+      404 |   expect(exact(books.wallet!.ledger)).not.toBe("10000");
+        at /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-e3a-prep/apps/app/tests/e2e/journey.e2e.ts:401:43
+
+    Error Context: ../../../../../../../../../../../tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/own-fixture-port/playwright-artifacts/journey.e2e.ts-usage-balan-8b43f--as-the-ledger-records-them-chromium/error-context.md
+
+  1 failed
+    [chromium] › tests/e2e/journey.e2e.ts:394:5 › usage-balance: the console shows every request and the balance exactly as the ledger records them 
+  2 passed (3.6s)

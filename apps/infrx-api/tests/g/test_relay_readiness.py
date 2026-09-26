@@ -15,13 +15,28 @@ from __future__ import annotations
 import pytest
 
 from infrx.config import RuntimeMisconfigured
+from infrx.contracts import errors
 from infrx.contracts.v2.lifecycle import (AdmissionExpectation, LifecycleRefusal as R, refuse)
-from infrx.gateway.routes.relay import CREDIT, LEGACY, Relay
+from infrx.contracts.conformance import builders as b
+from infrx.contracts.records import JobState, SettlementState, Usage
+from infrx.contracts.v2.money_units import CREDIT as CREDIT_UNIT
+from infrx.gateway.routes.relay import CREDIT, ERROR_EVENT, LEGACY, POST_MARKER_REFUSED, Relay
+from infrx.media.store import MediaStaging
+from infrx.observe import metrics
 from infrx.state.jobstore import PgJobStore
 
 from . import relay_support as rs, support
+from .jobs import world as jw
 
 REGIMES = [LEGACY, CREDIT]
+# Merge-order tripwire (0-W5AW-2): before M6 phase 2 (25826ab9, "writers register every
+# object") `materialize` writes a fetched source with no content row, so `admit_ready`
+# refuses a URL-fetched video `not_found` (404). Strict both ways: it fails on a tree
+# without M6 phase 2 and must pass on one with it (then this marker can go).
+M6_PHASE2 = hasattr(MediaStaging, "_register")
+FETCHED = pytest.param("fetched", marks=pytest.mark.xfail(
+    not M6_PHASE2, strict=True, raises=AssertionError,
+    reason="needs M6 phase 2: a fetched source registers its content row"))
 
 
 def no_hold(world) -> bool:
@@ -179,6 +194,43 @@ def test_w5_admit__a_replay_admit_ready_answers_is_the_recorded_job(regime):
     assert list(world.jobs.jobs) == [job.id] and world.lifecycle.d.readiness[job.id] is marker
 
 
+@pytest.mark.parametrize("regime", REGIMES)
+@pytest.mark.parametrize("shape", ["upload", FETCHED])
+def test_w5_admit__the_worker_prepares_a_video_the_moment_its_marker_commits(regime, shape):
+    """0-W5AW-1 / 2-W5W-A1: the marker opens W5's barrier as `admit_ready` commits, BEFORE
+    the relay's attach. A claim in that window must still prepare the manifest: the job's
+    sources are the record `admit_ready` wrote with the marker (0019's `job_media`, which
+    `PgAttachments` - the worker's `MediaPreparation.attached` - reads), never the relay's
+    later attach. Uploaded and URL-fetched video (M6 phase 2 registers the fetched source).
+    Oracle: a world whose attach record is only the relay's attach answers `not_found`
+    here (the attempt's lease lapses and burns a prepublication retry)."""
+    world = rs.World(regime=regime, readiness=True)
+    admit_ready, seen = world.lifecycle.admit_ready, {}
+
+    async def then_the_worker(request, idem, expectation):
+        admission, ready = await admit_ready(request, idem, expectation)
+        try:                                    # W5's worker, before the relay goes on
+            await world.prepare(admission.request_id)
+            seen["prepared"] = [ref.handle for ref in world.jobs.jobs[
+                admission.request_id].prepared]
+        except Exception as refused:            # noqa: BLE001 - the case reports it
+            seen["prepared"] = getattr(refused, "code", repr(refused))
+        seen["manifest"] = [source.ref.handle for source in ready.sources]
+        return admission, ready
+
+    world.lifecycle.admit_ready = then_the_worker
+    world.during.append(lambda: world.clock.advance(3_600))    # the wait ends: 504
+
+    async def scenario():
+        messages = (await uploaded(world))[1] if shape == "upload" else rs.VIDEO
+        return await rs.call(world.app, rs.body(messages))
+
+    reply = rs.run(scenario())
+    assert reply.status == 504, reply.body
+    assert "manifest" in seen, "the relay did not admit through admit_ready"
+    assert len(seen["manifest"]) == 1 and seen["prepared"] == seen["manifest"], seen
+
+
 # --- the composition root ------------------------------------------------------------
 class Store:
     """Shaped like a `ReadinessStore` (the protocol's three methods); never called here."""
@@ -227,3 +279,187 @@ def test_w5_compose__a_relay_refuses_an_expectation_that_is_not_its_own():
             Relay(jobs=object(), stream=None, media=None, regime=CREDIT,
                   active_rate_card_version="rc_approved", readiness=object(),
                   expectation=expectation)
+
+
+# --- E3C F-5: past the point of no return ------------------------------------------------
+def withdraw_text(world) -> None:
+    """The pinned serving revision stops accepting text (E3C s04 `late`: the operator
+    withdraws a modality after the admission transaction checked it)."""
+    serving = world.catalog.servings[support.IDS.serving_version]
+    capability = serving.capability.model_copy(update={"input_modalities": ["video"]})
+    world.catalog.servings[serving.serving_version_id] = serving.model_copy(
+        update={"capability": capability})
+
+
+def refuse_attach(world) -> None:
+    """The gateway's attach after `admit_ready` is refused (0-W5F5-R2: an upload that expired
+    between stage and attach, or a durable binding that does not match)."""
+    async def refused(job_id, refs):
+        raise errors.Conflict("the durable binding does not match")
+    world.media.attach = refused
+
+
+def attach_down(world) -> None:
+    """The gateway's attach after `admit_ready` meets an outage (PgAttachments unreachable)."""
+    async def down(job_id, refs):
+        raise errors.DependencyUnavailable("attachments unreachable")
+    world.media.attach = down
+
+
+LATE = {"recheck": withdraw_text, "attach": refuse_attach, "attach_down": attach_down}
+# W5-F5B: what `observe.metrics.FAMILIES` declares once WR-W5F5B-1 is applied (verbatim).
+POST_MARKER_SPEC = metrics.Spec(
+    "counter", "Refusals after admit_ready's execution-ready marker, logged and never "
+               "answered: the job's committed outcome is the answer.",
+    (("code", frozenset(errors.ALL_CODES)),))
+
+
+def counting(world, monkeypatch) -> metrics.Registry:
+    """The gateway's registry on the world's relay, with the post-marker family declared."""
+    monkeypatch.setitem(metrics.FAMILIES, POST_MARKER_REFUSED, POST_MARKER_SPEC)
+    world.relay.registry = metrics.Registry("gateway")
+    return world.relay.registry
+
+
+def post_marker_refusals(registry) -> dict:
+    return {key[0]: value for key, value in
+            registry._samples.get(POST_MARKER_REFUSED, {}).items()}
+
+
+@pytest.mark.parametrize("late", ["recheck", "attach", "attach_down"])
+@pytest.mark.parametrize("mode", ["sync", "stream"])
+def test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal(
+        mode, late, monkeypatch):
+    """E3C F-5. `admit_ready` checked the pinned card and capability inside the admission
+    transaction (0019 `check_pinned_capability`) and wrote the marker: from then on the
+    worker may claim, run and settle the job before the relay takes its next step. A
+    capability withdrawn after that commit is not this job's refusal: the client is told the
+    committed outcome, and the job is charged exactly once. Oracle: the legacy
+    post-admission recheck (`_admitted` -> `check_capability`) answered 415
+    `unsupported_media` for a job that had succeeded and settled its debit (E3C f61b82d3).
+    `attach`/`attach_down` (0-W5F5-R2, W5-F5B): the attach that follows the marker is
+    refused, or meets an outage - logged and counted by its code, never the answer (the
+    oracle: 409 `state_conflict` / 503 for a job that succeeded and settled)."""
+    world = rs.World(regime=CREDIT, readiness=True)
+    registry = counting(world, monkeypatch)
+    admit_ready, ran = world.lifecycle.admit_ready, []
+
+    async def ran_then_withdrawn(request, idem, expectation):
+        admitted = await admit_ready(request, idem, expectation)
+        # The worker reads the manifest the transaction committed (a text job's is empty),
+        # never the gateway's attach - so it can run before the relay's next step.
+        world.media.by_job[admitted[0].request_id] = ()
+        lease = await world.lease()             # the worker got there first: ran, settled
+        await world.commit(lease, "Two people")
+        ref = await world.put_result(lease.job_id, "Two people")
+        ran.append(await world.jobs.complete_credit(lease, b.outcome(
+            lease.job_id, world, tokens=Usage.of(1200, 5), result_ref=ref)))
+        LATE[late](world)
+        return admitted
+
+    world.lifecycle.admit_ready = ran_then_withdrawn
+    world.during.append(lambda: world.clock.advance(3_600))    # a wait would end, not hang
+    ledgers = {w: world.jobs.credit_wallet(w).ledger_total for w in world.seeded}
+    reply = rs.run(rs.call(world.app, rs.body(stream=mode == "stream")))
+    job = world.only_job()
+    assert ran and job.state is JobState.succeeded, (job.state, reply.body)
+    assert reply.status == 200, reply.body
+    if mode == "stream":
+        assert ERROR_EVENT not in reply.events() and reply.data()[-1] == "[DONE]"
+        assert reply.text() == "Two people", reply.body
+    else:
+        assert reply.json()["choices"][0]["message"]["content"] == "Two people"
+    # Charged exactly once, in CREDIT: the one settlement at the admitted card, the hold off
+    # the wallet and the ledger down by exactly that debit - never a refund or a second one.
+    after = {w: world.jobs.credit_wallet(w).ledger_total for w in world.seeded}
+    charged = job.settlement.charged.raw(CREDIT_UNIT)
+    assert job.outcome.settlement_state is SettlementState.settled and world.released(job)
+    assert {w: ledgers[w] - after[w] for w in ledgers} == \
+        {w: charged if w == job.credit.wallet_id else 0 for w in ledgers} and charged > 0
+    # The swallowed refusal is visible to the operator: counted once, by its code.
+    expected = {"attach": {"state_conflict": 1.0},
+                "attach_down": {"dependency_unavailable": 1.0}}.get(late, {})
+    assert post_marker_refusals(registry) == expected
+
+
+def test_w5_f5b__e3c_s04_late_is_202_and_runs_on_the_readiness_door():
+    """E3C s04 `late` in process (1-F5B-R1): `POST /v1/jobs` (text) held after admit_ready's
+    marker, the pinned revision's text withdrawn, then released. The job was checked and
+    made ready by the admission transaction, so the answer is its handle (202), never a
+    refusal or a cancel; the worker claims it behind the marker, runs it and settles it
+    once. Oracle: the recheck restored on this door answers 400 `unsupported_media` and
+    cancels - what s04's readiness branch still asserts (a pre-D10 door expectation)."""
+    world = jw.JobsWorld(regime=CREDIT, readiness=True)
+    admit_ready = world.lifecycle.admit_ready
+
+    async def withdrawn_after_the_marker(request, idem, expectation):
+        admitted = await admit_ready(request, idem, expectation)
+        withdraw_text(world)
+        return admitted
+
+    world.lifecycle.admit_ready = withdrawn_after_the_marker
+    world.during.append(lambda: world.clock.advance(3_600))
+    ledgers = {w: world.jobs.credit_wallet(w).ledger_total for w in world.seeded}
+    reply = rs.run(jw.send(world.app, "POST", "/v1/jobs", body=rs.body(), key="e3c-s04-late"))
+    assert reply.status == 202, reply.body
+    job = world.only_job()
+    assert not job.terminal and not world.released(job), job.state
+
+    async def runs():
+        lease = await world.lease()
+        ref = await world.put_result(job.id, "Two people")
+        await world.jobs.complete_credit(lease, b.outcome(job.id, world, tokens=Usage.of(1200, 5),
+                                                          result_ref=ref))
+
+    rs.run(runs())
+    assert job.state is JobState.succeeded and world.released(job)
+    after = {w: world.jobs.credit_wallet(w).ledger_total for w in world.seeded}
+    charged = job.settlement.charged.raw(CREDIT_UNIT)
+    assert job.outcome.settlement_state is SettlementState.settled
+    assert {w: ledgers[w] - after[w] for w in ledgers} == \
+        {w: charged if w == job.credit.wallet_id else 0 for w in ledgers} and charged > 0
+
+
+@pytest.mark.parametrize("fault", ["attach", "attach_down"])
+def test_w5_f5b__the_pre_d10_door_still_answers_a_post_admission_attach_failure(
+        fault, monkeypatch):
+    """The legacy door (no marker: nothing is claimable until the refs are bound) keeps its
+    rules. A refused attach cancels the job unbilled and answers the refusal; an outage is
+    the retryable 503 with the job left for the same-key retry (money-B2). Neither is a
+    post-marker refusal. Oracle: a relay that swallowed them on every door answers a job
+    that can never be prepared as accepted."""
+    world = rs.World(regime=CREDIT)
+    registry = counting(world, monkeypatch)
+    LATE[fault](world)
+    world.during.append(lambda: world.clock.advance(3_600))
+    reply = rs.run(rs.call(world.app, rs.body()))
+    job = world.only_job()
+    if fault == "attach":
+        assert (reply.status, reply.json()["error"]["code"]) == (409, "state_conflict"), \
+            reply.body
+        assert job.state is JobState.cancelled and world.released(job)
+    else:
+        assert (reply.status, reply.json()["error"]["code"]) == \
+            (503, "dependency_unavailable"), reply.body
+        assert job.outcome is None, job.outcome
+    assert post_marker_refusals(registry) == {}
+
+
+def test_w5_f5__the_pre_d10_door_still_rechecks_after_admission():
+    """The legacy door (`jobs.admit_credit`, no marker, nothing claimable until the refs
+    are bound) keeps G1R Limit 2's recheck: a revision that stopped accepting text by
+    admission time cancels the job unbilled and answers the refusal."""
+    world = rs.World(regime=CREDIT)
+    admit = world.jobs.admit_credit
+
+    async def withdrawn(request, idem):
+        withdraw_text(world)
+        return await admit(request, idem)
+
+    world.jobs.admit_credit = withdrawn
+    world.during.append(lambda: world.clock.advance(3_600))
+    reply = rs.run(rs.call(world.app, rs.body()))
+    assert (reply.status, reply.json()["error"]["code"]) == (400, "unsupported_media"), \
+        reply.body
+    job = world.only_job()
+    assert job.state is JobState.cancelled and world.released(job)

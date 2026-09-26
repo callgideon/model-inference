@@ -1,7 +1,10 @@
 import { Mail } from "lucide-react";
+import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { providerRoute } from "@/lib/services/console";
+import { getSession } from "@/lib/session";
 
 export const metadata = { title: "Dedicated · infrx" };
 
@@ -13,7 +16,8 @@ const MAILTO =
     "Model:\nExpected requests per second:\nRegion:\nLatency target:\nAnything else:\n",
   );
 
-export default function DedicatedPage() {
+export default async function DedicatedPage() {
+  providerRoute(await getSession(), notFound);
   return (
     <>
       <PageHeader

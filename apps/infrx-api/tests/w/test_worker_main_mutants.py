@@ -19,7 +19,9 @@ MEMORY, PG = mutation_list.MUTANTS, mutation_list.PG_MUTANTS
 ALL = MEMORY + PG
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
-SUBSET = ("main_store_defaulted_to_in_memory", "main_readiness_before_the_engine_check")
+SUBSET = ("main_store_defaulted_to_in_memory", "main_readiness_before_the_engine_check",
+          # W5-F5 (E3C F-6): the reader on the runtime pool; a refusal logged every tick
+          "main_reconciliation_on_the_runtime_pool", "service_privilege_refusal_every_tick")
 SELECTED = MEMORY if FULL_RUN else tuple(m for m in MEMORY if m.name in SUBSET)
 SELECTED_PG = PG if FULL_RUN else ()
 

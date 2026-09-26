@@ -24,6 +24,16 @@ trap 'rm -rf "$work" "$prom"' EXIT
 m() { printf '%s{process="canary"%s} %s\n' "$1" "${3:+,$3}" "$2" >> "$prom"; }
 publish() { chmod 0644 "$prom"; mv -f "$prom" "$OUT"; }
 
+# I3 (WR-I3-2): the App's public release identity, anonymous (WR-I2A-1): no key, no body.
+# 1 only for a 200 naming production and a full commit. Before the key check: needs no key.
+APP=${APP:-https://app.callbill.ai}
+app_up=0
+if curl -sf --max-time 15 -o "$work/app" "$APP/api/version" \
+   && grep -q '"environment":"production"' "$work/app" \
+   && grep -Eq '"commit":"[0-9a-f]{40}"' "$work/app"; then app_up=1; fi
+m infrx_app_up "$app_up"
+echo "canary app up=$app_up"
+
 if [ -z "${INFRX_CANARY_KEY:-}" ]; then
   m infrx_canary_configured 0
   m infrx_canary_last_run_timestamp_seconds "$(date +%s)"

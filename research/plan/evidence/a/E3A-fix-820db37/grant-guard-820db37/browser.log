@@ -1,0 +1,37 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 [chromium] › tests/e2e/journey.e2e.ts:223:5 › signup-verify-grant: a fresh individual verifies once and is granted 10,000 CREDIT exactly once (1.3s)
+
+
+  1) [chromium] › tests/e2e/journey.e2e.ts:223:5 › signup-verify-grant: a fresh individual verifies once and is granted 10,000 CREDIT exactly once 
+
+    Error: one grant despite the repeated callback
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 3
+    + Received  + 3
+
+      Array [
+    -   1,
+    -   1,
+    -   "10000",
+    +   2,
+    +   2,
+    +   "20000",
+      ]
+
+      255 |   expect(after["rpc/claim_signup_grant:200"] ?? 0, "the recovery callback claimed again").toBe((claims["rpc/claim_signup_grant:200"] ?? 0) + 1);
+      256 |   books = await facts(email);
+    > 257 |   expect([books.entitlements, books.grant_rows, exact(books.grant_total)], "one grant despite the repeated callback").toEqual([1, 1, "10000"]);
+          |                                                                                                                       ^
+      258 |   await page.goto("/welcome");
+      259 |   expect(await welcomeBalance(page)).toBe("10000");
+      260 |
+        at <worktree>/apps/app/tests/e2e/journey.e2e.ts:257:119
+
+    Error Context: ../../../../../../../../../../..<scratchpad>/seam-grant-guard/playwright-artifacts/journey.e2e.ts-signup-veri-04e95--10-000-CREDIT-exactly-once-chromium/error-context.md
+
+  1 failed
+    [chromium] › tests/e2e/journey.e2e.ts:223:5 › signup-verify-grant: a fresh individual verifies once and is granted 10,000 CREDIT exactly once 

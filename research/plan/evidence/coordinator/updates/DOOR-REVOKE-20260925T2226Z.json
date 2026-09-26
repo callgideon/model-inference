@@ -1,0 +1,15 @@
+{"task": "D10", "slice": "DOOR-REVOKE fix round (1-DR-1 wiring v2; 0-DR-CM-1/1-DR-2 merge gate verified on union 9d61d1e1)",
+ "activity": "review", "head": "see git log codex/door-revoke (evidence-only commit on acc53094)", "worktree": ".claude/worktrees/codex-door-revoke", "branch": "codex/door-revoke",
+ "owned_paths": ["apps/app/supabase/migrations/0023_runtime_unmarked_door_revoke.sql", "apps/infrx-api/tests/d/",
+                 "research/plan/evidence/d/DOOR-REVOKE-1d0a418.md", "research/plan/evidence/d/DOOR-REVOKE-wiring-v2.patch"],
+ "commands": [
+  {"cmd": "union 9d61d1e1 + acc53094 + wiring v1: pytest -q tests/integration/test_run.py -k anchor_occurs", "exit": 1, "summary": "fails before: stale anchors {'e2m75': 0}"},
+  {"cmd": "same + v2 mutants.py hunk", "exit": 0, "summary": "1 passed"},
+  {"cmd": "pytest -q tests/integration/test_run.py test_harness.py test_services.py (v2 applied)", "exit": 0, "summary": "81 passed, 24 skipped"},
+  {"cmd": "lane-local e2m75 proof on PG 55459 (0001-0023): L3-LOGIN-infrx_runtime-functions SQL, patched vs mutated", "exit": 0, "summary": "patched PASS; e2m75 killed (expects infrx.admit(jsonb), absent)"},
+  {"cmd": "INFRX_D_TASK=revoke pytest -q tests/d/test_composition_pg.py test_reads.py test_ready.py test_schema_postgres.py tests/g/test_composition.py (union merge)", "exit": 0, "summary": "101 passed, 3 xfailed"},
+  {"cmd": "same on branch head acc53094 alone", "exit": 1, "summary": "100 passed, 1 failed (composition_pg dedicated login: W5 merge gate, by design), 3 xfailed"}],
+ "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 1.0, "confidence": "medium", "basis": "clean union merge measured; apply W-DR1 v2; one e2 layer-2 run for e2m75", "at": "2026-09-25T22:26Z"},
+ "blockers": [],
+ "wiring_requests": ["W-DR1 v2 (DOOR-REVOKE-wiring-v2.patch): pgstate.py RUNTIME_FUNCTIONS -2 + test_harness.py 0023 pin + mutants.py e2m75 re-anchored/inverted; apply after D10F W4; supersedes v1", "W-DR2 unchanged", "ORDER: merge only into wave4b-union >= 9d61d1e1; deploy 0023 only after the W5 release runs; rollback grant before any pre-W5 rollback"],
+ "evidence": ["research/plan/evidence/d/DOOR-REVOKE-1d0a418.md", "research/plan/evidence/d/DOOR-REVOKE-wiring-v2.patch"]}

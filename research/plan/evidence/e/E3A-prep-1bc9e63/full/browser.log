@@ -1,0 +1,76 @@
+
+Running 19 tests using 1 worker
+
+  ✓   1 [chromium] › tests/e2e/journey.e2e.ts:221:5 › signup-verify-grant: a fresh individual verifies once and is granted 10,000 CREDIT exactly once (4.1s)
+  ✘   2 [chromium] › tests/e2e/journey.e2e.ts:268:5 › signin-claim: signing in runs A2's first-login grant claim (answered replayed, no second grant) (1.1s)
+  -   3 [chromium] › tests/e2e/journey.e2e.ts:278:5 › create-key: the individual creates a key in the App; its plaintext is shown once
+  ✓   4 [chromium] › tests/e2e/journey.e2e.ts:297:5 › text-sync: an external text request is answered and settled exactly once (1.7s)
+  ✓   5 [chromium] › tests/e2e/journey.e2e.ts:311:5 › sse-stream: an external streamed request sends identity, deltas, usage and [DONE] (431ms)
+  ✓   6 [chromium] › tests/e2e/journey.e2e.ts:335:5 › async-poll: an external async job is accepted, polled to its end and its result read (649ms)
+  ✓   7 [chromium] › tests/e2e/journey.e2e.ts:351:5 › video-upload: an uploaded finite video is processed as an async job and its result read (719ms)
+  ✓   8 [chromium] › tests/e2e/journey.e2e.ts:380:5 › retry: the same request retried with its idempotency key is replayed, never charged twice (378ms)
+  ✓   9 [chromium] › tests/e2e/journey.e2e.ts:393:5 › usage-balance: the console shows every request and the balance exactly as the ledger records them (1.5s)
+  ✓  10 [chromium] › tests/e2e/journey.e2e.ts:415:5 › refresh: a reload and an expiring session mid-journey keep the individual's exact state (14.0s)
+  -  11 [chromium] › tests/e2e/journey.e2e.ts:435:5 › request-detail: the owner reads a request's detail, charge and result from Usage
+  ✓  12 [chromium] › tests/e2e/journey.e2e.ts:446:5 › accounting-uncertainty: usage the engine did not report is held for reconciliation, never shown as a charge (1.5s)
+  ✓  13 [chromium] › tests/e2e/journey.e2e.ts:472:5 › rate-rejection: past the per-key active job cap the next request is refused 429 and admits nothing; the rest settle once after a worker replacement (1.9s)
+  ✓  14 [chromium] › tests/e2e/journey.e2e.ts:501:5 › low-funds: with almost nothing left the API refuses 402 and admits nothing; the console says so exactly (2.2s)
+  ✘  15 [chromium] › tests/e2e/journey.e2e.ts:523:5 › provider-route-denial: provider and operator routes are not served to a consumer (1.4s)
+  -  16 [chromium] › tests/e2e/journey.e2e.ts:535:5 › operator-controls: operator actions are reachable only by an operator, with a reason, once
+  ✓  17 [chromium] › tests/e2e/journey.e2e.ts:543:5 › isolation: a second individual gets their own one grant and sees none of the first's requests, keys or results (2.6s)
+  -  18 [chromium] › tests/e2e/journey.e2e.ts:578:5 › revoke-key: a key revoked in the App fails admission within the revocation bound
+  ✓  19 [chromium] › tests/e2e/journey.e2e.ts:595:5 › expired-result: past its persisted expiry a result is gone (410), its metadata kept (74ms)
+
+
+  1) [chromium] › tests/e2e/journey.e2e.ts:268:5 › signin-claim: signing in runs A2's first-login grant claim (answered replayed, no second grant) 
+
+    Error: the sign-in claim reached the database
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 3
+    Received: 2
+
+      271 |   await signIn(page, email); // returns once the form navigated, i.e. after its claim settled
+      272 |   const after = await control<Record<string, number>>("/stats");
+    > 273 |   expect(after["rpc/claim_signup_grant:200"] ?? 0, "the sign-in claim reached the database").toBe((before["rpc/claim_signup_grant:200"] ?? 0) + 1);
+          |                                                                                              ^
+      274 |   const books = await facts(email);
+      275 |   expect([books.entitlements, books.grant_rows]).toEqual([1, 1]);
+      276 | });
+        at /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-e3a-prep/apps/app/tests/e2e/journey.e2e.ts:273:94
+
+    Error Context: ../../../../../../../../../../../tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/final-full/playwright-artifacts/journey.e2e.ts-signin-clai-a368c-d-replayed-no-second-grant--chromium/error-context.md
+
+  2) [chromium] › tests/e2e/journey.e2e.ts:523:5 › provider-route-denial: provider and operator routes are not served to a consumer 
+
+    Error: provider routes a consumer reached
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 5
+
+    - Array []
+    + Array [
+    +   "/traces (200)",
+    +   "/dedicated (200)",
+    +   "/teams (200)",
+    + ]
+
+      530 |     if (reply?.status() !== 404 && landed === route) served.push(`${route} (${reply?.status()})`);
+      531 |   }
+    > 532 |   expect(served, "provider routes a consumer reached").toEqual([]);
+          |                                                        ^
+      533 | });
+      534 |
+      535 | test("operator-controls: operator actions are reachable only by an operator, with a reason, once", async ({ page }) => {
+        at /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-e3a-prep/apps/app/tests/e2e/journey.e2e.ts:532:56
+
+    Error Context: ../../../../../../../../../../../tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/final-full/playwright-artifacts/journey.e2e.ts-provider-ro-befe5-re-not-served-to-a-consumer-chromium/error-context.md
+
+  2 failed
+    [chromium] › tests/e2e/journey.e2e.ts:268:5 › signin-claim: signing in runs A2's first-login grant claim (answered replayed, no second grant) 
+    [chromium] › tests/e2e/journey.e2e.ts:523:5 › provider-route-denial: provider and operator routes are not served to a consumer 
+  4 skipped
+  13 passed (38.7s)

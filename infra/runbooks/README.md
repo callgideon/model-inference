@@ -15,6 +15,7 @@ procedure is backed by an executable drill in `tests/integration/backend/recover
 | [index-loss.md](index-loss.md) — queue index loss, stall, saturation | QueueStalled, QueueSaturated, ComponentDown (index) | `test_i3b_rc06`, `rc09`; E3B `dr13` | pending coordinator |
 | [reconcile.md](reconcile.md) — money drift, unknown usage, unsettleable jobs | ReconciliationDrift, ReconciliationStale, UnsettleableJobs, UnknownUsageBacklog, SettlementSlow, MetricsSanitizerRejections | `reconcile()` after every drill | pending D5/Q3 |
 | [observe.md](observe.md) — continuous monitoring, the canary, alert delivery (I8) | every `infra/alerts/operations.json` rule; ScrapeFailed | `tests/i/test_observe.py`, `test_ops_steps.py` | steps 72/73/74, coordinator; delivery BLOCKED on P-25 |
+| [../app/operations.md](../app/operations.md) — the App: combined checks, auth/credit cutover, browser error monitoring, App rollback (I3) | AppDown (`infra/alerts/app.json`, once WR-I3-3 merges it) | `tests/integration/ops/`, `apps/app/tests/i3/` | pending operator (Vercel, hosted) |
 
 I8's tools beside the runbooks (each read-only unless its runbook says otherwise):
 [`pool_budget.py`](pool_budget.py) (the pooler budget from the deployed knobs; step 71),

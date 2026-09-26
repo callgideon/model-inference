@@ -207,15 +207,14 @@ class FakeLifecycle:
                 if pins.rate_card_version != expectation.rate_card_version:
                     raise refuse(R.expectation_mismatch, "the pinned card is not this runtime's")
                 serving = await self.jobs.catalog.serving_revision(pins.serving_version_id)
-                capability = serving.capability
-                if sources and "video" not in capability.input_modalities:
-                    raise errors.UnsupportedMedia("the pinned revision takes no video",
-                                                  param="messages")
-                if request.execution_mode is ExecutionMode.stream and not capability.stream_output:
-                    raise errors.UnsupportedParameter("the pinned revision does not stream",
-                                                      param="stream")
+                if serving is None:
+                    raise errors.NotFound("the pinned serving revision is not in the catalog")
+                _check_pinned_capability(serving.capability, request)
                 admission = await self.jobs.admit_credit(request, idem)
             else:
+                serving = self._legacy_serving(request.model_revision)
+                if serving is not None:             # a pre-catalog model: nothing to check
+                    _check_pinned_capability(serving.capability, request)
                 admission = await self.jobs.admit(request, idem, ())
             if admission.replayed:
                 return self._replayed(admission, credit)
@@ -228,6 +227,15 @@ class FakeLifecycle:
                     content_id=source.content_id, generation=source.generation,
                     job_id=admission.request_id, org_id=admission.org_id, referenced_at=now))
             return admission, readiness
+
+    def _legacy_serving(self, model_revision: str):
+        """0019: a legacy job's `<alias>@<label>` names the serving revision of that label,
+        if the catalog has one. ponytail: a scan of the v2 fake catalog's rows; a catalog
+        without `servings` models no revision, so nothing is checked (a pre-catalog model)."""
+        servings = getattr(getattr(self.jobs, "catalog", None), "servings", {})
+        return next((serving for serving in servings.values()
+                     if f"{serving.public_model_id}@{serving.revision_label}" == model_revision),
+                    None)
 
     def _replayed(self, admission, credit: bool):
         if isinstance(admission, AdmissionV2) is not credit:
@@ -438,3 +446,24 @@ def _decode(cursor: object) -> tuple[datetime, str]:
         return datetime.fromisoformat(at), ids.require_request_id(content_id)
     except (ValueError, TypeError):
         raise errors.InvalidCursor("not a content cursor this store issued") from None
+
+
+def _check_pinned_capability(capability, request) -> None:
+    """0019 `check_pinned_capability`, part for part: a string content is text, a
+    `video_url` part video, any other part its own type, and media present needs video - all
+    within the PINNED revision's `input_modalities` (`unsupported_media`, `param=messages`);
+    a stream needs `stream_output` (`unsupported_parameter`, `param=stream`)."""
+    needed = {"video"} if request.media else set()
+    for message in request.messages:
+        content = message.get("content")
+        if isinstance(content, str):
+            needed.add("text")
+        elif isinstance(content, (list, tuple)):
+            needed.update("video" if part.get("type") == "video_url" else part.get("type")
+                          for part in content if isinstance(part, dict) and part.get("type"))
+    if not needed <= set(capability.input_modalities):
+        raise errors.UnsupportedMedia("the model does not accept this input modality",
+                                      param="messages")
+    if request.execution_mode is ExecutionMode.stream and not capability.stream_output:
+        raise errors.UnsupportedParameter("the model does not stream its output",
+                                          param="stream")

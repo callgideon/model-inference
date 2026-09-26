@@ -225,10 +225,15 @@ MUTANTS = (
        MAIN, "runner=PreparationRunner(jobs=jobs, media=media,",
        "runner=PreparationRunner(jobs=store, media=media,", COMPOSE),
     _m("main_readiness_not_wired", "W5: preparation claims through D10's marker-gated "
-       "ReadinessStore", MAIN, "limits=limits, readiness=PgLifecycle(connect, limits=limits)),",
+       "ReadinessStore", MAIN, "limits=limits, readiness=lifecycle),",
        "limits=limits),", COMPOSE),
+    _m("main_readiness_a_second_lifecycle", "W5-F5B (union F3): the marker the claim reads "
+       "is M6's one lifecycle, not a second PgLifecycle over the same connect",
+       MAIN, "limits=limits, readiness=lifecycle),",
+       "limits=limits, readiness=PgLifecycle(connect, limits=limits)),", COMPOSE),
     _m("main_reconciliation_not_wired", "S3 F4: the reaper publishes the reconciliation gauges",
-       MAIN, "                            reconciliation=PgReconciliation(connect),\n", "",
+       MAIN, "                            reconciliation=reconciliation_reader(deployment),\n",
+       "",
        COMPOSE),
     _m("main_attach_not_durable", "preparation reads the attach D2's tables record",
        MAIN, "    media.attachments = PgAttachments(connect)", "    pass", COMPOSE),
@@ -347,14 +352,14 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     """I2B-R4's copy (W3's package and tests, E3B's integration tree) plus `deploy/`, whose
     preflight the zero-pool case loads (`tests/i/support.py`)."""
     api = worker_main_mutants._layout(root)
-    shutil.copytree(API_DIR / "deploy", api / "deploy",
+    shutil.copytree(API_DIR / "deploy", api / "deploy", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__"))
     return api
 
 
 def _pg_layout(root: pathlib.Path) -> pathlib.Path:
     api = worker_main_mutants._pg_layout(root)
-    shutil.copytree(API_DIR / "deploy", api / "deploy",
+    shutil.copytree(API_DIR / "deploy", api / "deploy", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__"))
     return api
 

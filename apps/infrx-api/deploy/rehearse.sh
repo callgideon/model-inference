@@ -419,9 +419,13 @@ step "4b. the worker unit on this env file: python -m infrx.worker, loopback rea
 systemctl start infrx-worker
 set +e; READY_S=60 bash -c ". '$here/lib.sh'; wait_http \"\$WORKER_READY\" 60"; code=$?; set -e
 check "the worker's /readyz on 127.0.0.1:8002 answers 200 (engine up, pool running) ($code)" '[ "$code" = 0 ]'
-out=$(http GET http://127.0.0.1:8002/metrics)
+# The whole body (http() keeps 300 characters), compared as a variable: a body is never
+# eval'd (its HELP text carries an apostrophe - "this process's database pool").
+out=$(/usr/bin/docker exec "$NS-box" python -c 'import urllib.request
+print(urllib.request.urlopen("http://127.0.0.1:8002/metrics", timeout=30).read().decode())' 2>&1 || true)
+want="infrx_build_info{process=\"worker\",revision=\"$RELEASE\",image=\"$REHEARSAL_IMAGE\"} 1"
 check "the worker's /metrics carries infrx_build_info for this release and image" \
-  "[[ '$out' == *'infrx_build_info{process=\"worker\",revision=\"$RELEASE\",image=\"$REHEARSAL_IMAGE\"} 1'* ]]"
+  '[[ $out == *"$want"* ]]'
 w=$(/usr/bin/docker inspect --format 'user={{.Config.User}} ro={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}} image={{.Image}}' "$NS-infrx-worker")
 echo "worker container: $w"
 check "the worker runs the pinned image as 10002, read-only, no capabilities" \

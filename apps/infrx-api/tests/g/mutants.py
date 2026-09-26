@@ -1532,6 +1532,15 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "    if regime == CREDIT and card.rate_card_version != settings.pilot.active_rate_card_version:",
        "    if False:",
        "test_catalog_truth__credit_discovery_advertises_only_the_approved_card"),
+    # A3 WR-4 / P-01: `provisional` is the card's approval record, fail closed.
+    _m("provisional_flag_constant", "an approved card is not published as provisional",
+       M, "    return unapproved(card.approved_by) is not None",
+       "    return True",
+       "test_catalog_truth__an_approved_card_is_not_published_as_provisional"),
+    _m("provisional_flag_fails_open", "an absent approval publishes provisional, never approved",
+       M, "    return unapproved(card.approved_by) is not None",
+       "    return bool(card.approved_by) and unapproved(card.approved_by) is not None",
+       "test_catalog_truth__an_unapproved_or_unreadable_approval_publishes_provisional"),
     _m("unpriced_model_published", "an unpriced model is not advertised (R69)",
        M, "    if serving is None or card is None:\n        return None",
        "    if serving is None:\n        return None",
@@ -1727,7 +1736,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_w5_admit__a_card_this_runtime_did_not_approve_admits_nothing",
        "test_w5_admit__an_upload_past_its_window_at_admission_admits_nothing",
        "test_w5_admit__a_refusal_is_its_wire_error_and_admits_nothing",
-       "test_w5_admit__a_replay_admit_ready_answers_is_the_recorded_job"),
+       "test_w5_admit__a_replay_admit_ready_answers_is_the_recorded_job",
+       "test_w5_admit__the_worker_prepares_a_video_the_moment_its_marker_commits",
+       # PostgreSQL (skipped in the runner's copy, which inherits no service env; killed
+       # with the w5 services in the fix-round evidence of W5-admit-wiring-f5784d0.md)
+       "test_w5_pg__the_worker_process_runs_a_video_admit_ready_admitted",
+       "test_w5_pg__a_claim_the_moment_the_marker_commits_prepares_the_manifest"),
     _m("w5_expectation_without_card", "a CREDIT runtime expects its approved card (R69)",
        P, 'accounting_regime=regime, rate_card_version=card if regime == "credit" else None)',
        "accounting_regime=regime, rate_card_version=None)",
@@ -1745,6 +1759,40 @@ MUTANTS: tuple[Mutant, ...] = (
           "                    or expected.rate_card_version != card:",
        "            if False:",
        "test_w5_compose__a_relay_refuses_an_expectation_that_is_not_its_own"),
+    # --- W5-F5 (E3C F-5): past `admit_ready` the client is told the committed outcome ------
+    _m("w5_f5_late_recheck_restored",
+       "a job admit_ready made ready is never answered a post-admission refusal (E3C F-5)",
+       R, "            if self.regime == CREDIT and self.readiness is None:",
+       "            if self.regime == CREDIT:",
+       "test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal",
+       "test_w5_f5b__e3c_s04_late_is_202_and_runs_on_the_readiness_door"),
+    _m("w5_f5_legacy_recheck_dropped",
+       "the pre-D10 door still rechecks the pinned revision before the refs (G1R Limit 2)",
+       R, "            if self.regime == CREDIT and self.readiness is None:",
+       "            if False:",
+       "test_w5_f5__the_pre_d10_door_still_rechecks_after_admission"),
+    # --- A3 WR-1: the Docs examples replayed on the mounted routes (resume is a replay) ---
+    _m("docs_resume_not_replayed", "the Docs resume example is answered as a replay of its job",
+       "gateway/routes/jobs.py", "                                idempotency_replayed=replayed)",
+       "                                idempotency_replayed=False)",
+       "test_app_journey__every_docs_example_is_served_by_the_mounted_routes"),
+    # --- W5-F5B (0-W5F5-R2): no refusal after the marker is the answer or a cancel -------
+    _m("w5_f5b_post_marker_refusal_cancels",
+       "a refusal after admit_ready's marker never cancels the job nor is its answer",
+       R, "                if self.readiness is None:\n                    raise\n",
+       "                raise\n",
+       "test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal"),
+    _m("w5_f5b_post_marker_refusal_uncounted",
+       "a refusal swallowed after the marker is counted by its code (the operator sees it)",
+       R, '                intake.record(self.registry, "inc", POST_MARKER_REFUSED, '
+          'code=refused.code)',
+       "                pass",
+       "test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal"),
+    _m("w5_f5b_pre_d10_attach_refusal_swallowed",
+       "the pre-D10 door still cancels a refused attach and answers it (and 503s an outage)",
+       R, "                if self.readiness is None:\n                    raise\n",
+       "                if False:\n                    raise\n",
+       "test_w5_f5b__the_pre_d10_door_still_answers_a_post_admission_attach_failure"),
 )
 
 
@@ -1785,6 +1833,8 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     for name in ("pyproject.toml", "client_example.py"):
         shutil.copy2(API_DIR / name, api / name)
     (root / "models").symlink_to(API_DIR.parents[1] / "models")
+    # A3 WR-1: `test_app_examples` reads the App's recorded Docs calls (read only).
+    (root / "apps" / "app").symlink_to(API_DIR.parent / "app")
     return api
 
 

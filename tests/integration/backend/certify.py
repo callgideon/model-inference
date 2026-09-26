@@ -101,7 +101,9 @@ CRITERIA = {
     "ttft_p95_short_s": 6.0,
     "short_clip_max_s": 30.0,
     "short_clip_max_edge_px": 1280,
-    "e2e_p95_s_per_clip_minute": 45.0,
+    "e2e_p95_s_per_clip_minute": 90.0,
+    "latency_p95_s": 9.0,
+    "declared_rate_per_s": 0.5,        # box: the only rate the certificate supports (P-18)
     "max_host_growth_mib": decide.MAX_HOST_GROWTH_MIB,
     "max_gpu_growth_mib": decide.MAX_GPU_GROWTH_MIB,
     "soak_latency_drift": 1.5,
@@ -120,7 +122,7 @@ MATRIX = {
              "overload": {"burst": 32},
              "dataset": {"items": 12, "interrupt_after": 4, "rate": 4.0}},
     "box": {"envelope": {"rates": (0.5, 1.0, 2.0), "requests": 120},
-            "soak": {"rate_fraction": 0.5, "seconds": 14400, "sample_s": 30},
+            "soak": {"rate": 0.25, "seconds": 14400, "sample_s": 30},       # P-18, fixed
             "overload": {"burst": 32},
             "dataset": {"items": 24, "interrupt_after": 8, "rate": 1.0}},
 }
@@ -633,13 +635,23 @@ def profile_blocked(target: dict) -> str | None:
 
 
 RUN_PROFILE_SCHEMA = "infrx.run-profile/1"
+
+
+def edge_host(path) -> str | None:
+    """The first `target.allowlist` host of a readable --overload-profile, or None when it
+    has no target block or no host there (E4P-V7: never a KeyError in the load cells)."""
+    target = json.loads(Path(path).read_text()).get("target")
+    hosts = target.get("allowlist") if isinstance(target, dict) else None
+    return hosts[0] if isinstance(hosts, list) and hosts and isinstance(hosts[0], str) \
+        and hosts[0] else None
 BENCH_FORMS, BENCH_MAX_TOKENS = "video_b64", "128,512,1024"
 
 
 def cell_profile(target: dict, workdir: Path, name: str, *, rate: float,
                  dataset_version: str, corpus: Path) -> Path:
     """The coordinator's base profile stamped with this cell's run shape - run id, dataset
-    version, arrival, the manifest this runner hands bench, seed, forms and output mix.
+    version, arrival, the manifest this runner hands bench, seed, forms and output mix; the
+    overload cell's profile class is P4.
     Identity, target, bounds, spend and item ids stay the coordinator's: bench refuses the
     cell (exit 2, a FAIL) when they do not cover it."""
     profile = json.loads(Path(target["run_profile"]).read_text())
@@ -649,6 +661,8 @@ def cell_profile(target: dict, workdir: Path, name: str, *, rate: float,
                                forms=[BENCH_FORMS],
                                max_tokens_mix=[int(t) for t in BENCH_MAX_TOKENS.split(",")])
     profile["measurement"].update(arrival="open-loop", rate_per_s=rate)
+    if name == "overload":                 # S3 F5: bench refuses a P4 cell off the public edge
+        profile["measurement"]["profile_class"] = "P4"
     path = workdir / f"{name}-profile.json"
     path.write_text(json.dumps(profile, indent=2))
     return path
@@ -1181,7 +1195,9 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float,
              and short_clip(clips.get(r.get("clip_id"), {}))]
     per_minute = [r["latency_s"] / (_duration(r, clips) / 60) for r in accepted
                   if r.get("latency_s") is not None and _duration(r, clips) > 0]
+    latency = [r["latency_s"] for r in accepted if r.get("latency_s") is not None]
     for name, values, limit in (("ttft_p95_short", short, CRITERIA["ttft_p95_short_s"]),
+                                ("latency_p95", latency, CRITERIA["latency_p95_s"]),
                                 ("e2e_p95_per_clip_minute", per_minute,
                                  CRITERIA["e2e_p95_s_per_clip_minute"])):
         tail = decide.p95(values)
@@ -1193,17 +1209,23 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float,
     return out
 
 
-def envelope_summary(rungs: list[tuple[float, list[tuple]]]) -> tuple[str, tuple, float | None]:
+def envelope_summary(rungs: list[tuple[float, list[tuple]]],
+                     declared: float | None = None) -> tuple[str, tuple, float | None]:
     """The supported rate is the highest rung, climbing from the lowest, whose failures and
-    refusals pass; the check is that rung's verdicts plus every rung's duration cap."""
+    refusals pass; the check is that rung's verdicts plus every rung's duration cap. With a
+    declared rate (the box, P-18) the climb stops there: the declared rung is supported and
+    judged when it and every rung below pass, and a rung above it is measured, never
+    supported; when it fails, nothing is supported."""
     supported, chosen = None, None
     for rate, verdicts in sorted(rungs):
+        if declared is not None and rate > declared:
+            break
         core = [v for name, v, _, _ in verdicts
                 if name in ("failure_rate", "answered", "rejections", "client_exit")]
         if any(v != decide.PASS for v in core):
             break
         supported, chosen = rate, verdicts
-    if chosen is None:
+    if chosen is None or (declared is not None and supported != declared):
         return FAIL, (), None
     caps = [row for _, verdicts in rungs for row in verdicts
             if row[0] in ("duration_cap", "bench_validity")]
@@ -1321,13 +1343,17 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                                           gateway=gateway, cap_s=cap_s, local=local,
                                           summary=bench_summary(workdir / f"{name}.jsonl"))
                       + [client_exit(runs[name])]))
-    status, owners, supported = envelope_summary(rungs)
+    declared = CRITERIA["declared_rate_per_s"] if target["scale"] == "box" else None
+    status, owners, supported = envelope_summary(rungs, declared)
     report.check("e4b.b.envelope", status,
-                 {"supported_rate_per_s": supported, "client_exits": runs,
+                 {"supported_rate_per_s": supported,
+                  "measured_passing_rate_per_s": envelope_summary(rungs)[2],
+                  "client_exits": runs,
                   "rungs": {str(rate): verdicts for rate, verdicts in rungs}},
                  owners=owners, label=target["label"])
     soak = shape["soak"]
-    rate = soak.get("rate") or (supported * soak["rate_fraction"] if supported else None)
+    # the box soaks at P-18's fixed rate, and only once the declared rung is supported
+    rate = None if declared is not None and supported is None else soak["rate"]
     if rate is None:
         report.check("e4b.b.soak", FAIL, "no supported envelope rate to soak at",
                      label=target["label"])
@@ -1349,7 +1375,22 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                      "target is the engine: it has no admission to refuse with",
                      owners=("BOX",), label=target["label"])
         return
-    burst = shape["overload"]["burst"]
+    burst, edge = shape["overload"]["burst"], target.get("overload_profile")
+    if not local:
+        # S3 F5 / E1B-protocol rule 11: the burst is P4 (cell_profile stamps it) and enters
+        # through the public edge under its own profile; no remote target (the box or any
+        # other, E4P-V8) runs it as a P1 cell
+        why = profile_blocked({**target, "run_profile": edge}) if edge else (
+            "BLOCKED: a remote overload burst is P4 and must enter through the public edge "
+            "(S3 F5, E1B-protocol rule 11): pass --overload-profile <a public-edge profile>")
+        host = None if why else edge_host(edge)
+        if not host:
+            report.check("e4b.b.overload", PENDING, why or (
+                "BLOCKED: --overload-profile names no public-edge host: it needs a target "
+                "block whose target.allowlist is a non-empty list of hosts (E4P-V7)"),
+                owners=("PROFILE",), label=target["label"])
+            return
+        target = {**target, "run_profile": edge, "base_url": f"https://{host}/v1"}
     done = client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
                              dataset_version=f"{version}-overload",
                              extra=("--burst", str(burst))), env)
@@ -1382,7 +1423,8 @@ def remote_target(args) -> dict:
             "model": published_release()["requested_model"], "scale": args.scale or "box",
             "label": UNVERIFIED, "namespace": None,
             "run_profile": getattr(args, "run_profile", None),
-            "key_inventory": getattr(args, "key_inventory", None)}
+            "key_inventory": getattr(args, "key_inventory", None),
+            "overload_profile": getattr(args, "overload_profile", None)}
 
 
 def target_label(target: dict, box: bool, preconditions: str) -> str:
@@ -1434,6 +1476,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--key-inventory", type=Path,
                         help="remote target: the sanitized active key-id prefixes (the "
                              "coordinator's read-only op), passed to every bench cell")
+    parser.add_argument("--overload-profile", type=Path,
+                        help="remote target: the public-edge infrx.run-profile/1 JSON the "
+                             "overload burst runs under, stamped P4, at https://<its first "
+                             "allowlist host>/v1; without it the box overload cell is BLOCKED "
+                             "(S3 F5, E1B-protocol rule 11)")
     parser.add_argument("--box", action="store_true",
                         help="the maintenance-window preconditions (E4B_WINDOW_OK=1 etc.)")
     parser.add_argument("--release-sha", help="the release under test, the FULL 40-character "

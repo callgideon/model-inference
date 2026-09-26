@@ -1,0 +1,42 @@
+TAP version 13
+# (node:2058902) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/app/tests/c/provider-routes.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: C-PROV-01 a consumer gets a 404 from the provider-route guard; an operator is let through
+ok 1 - C-PROV-01 a consumer gets a 404 from the provider-route guard; an operator is let through
+  ---
+  duration_ms: 0.960446
+  type: 'test'
+  ...
+# Subtest: C-PROV-02 each provider page runs the guard first, before any read
+not ok 2 - C-PROV-02 each provider page runs the guard first, before any read
+  ---
+  duration_ms: 0.882004
+  type: 'test'
+  location: '<worktree>/apps/app/tests/c/provider-routes.test.ts:43:1'
+  failureType: 'testCodeFailure'
+  error: 'traces: no loading boundary above the guard'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file://<worktree>/apps/app/tests/c/provider-routes.test.ts:59:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 1
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 153.174712
