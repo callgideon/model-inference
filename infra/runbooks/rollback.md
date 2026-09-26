@@ -46,7 +46,11 @@ old gateway.
    changes are never rolled back to roll back code: 0003-0009 are additive and the older
    runtime runs on them (`bk02`, restore.md A7).
 5. **Rebuild the index** from PostgreSQL ([index-loss.md](index-loss.md#index-loss)).
-6. **Resume admission** only after `/readyz` is ready: [maintenance](#maintenance), exit.
+6. **Resume admission** only after `/readyz` is ready: [maintenance](#maintenance), exit. After a
+   W7f reversal (step 2) leave maintenance for `legacy_usd_admission` only — the reversal already
+   enabled it — and keep `credit_admission` false: never run the `enabled = true` statement over
+   `credit_admission` after a reversal; CREDIT comes back only through a new-key
+   `credit-transition --card …` (RB3-RS-1).
 7. **Reconcile** ([reconcile.md](reconcile.md#drift)) and append to the record: durable state
    before and after, and whether any accepted job changed state.
 

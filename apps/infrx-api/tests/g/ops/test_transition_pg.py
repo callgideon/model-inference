@@ -205,7 +205,8 @@ def test_credit_cutover__freeze_drain_enable_never_converts_usd_and_history_keep
     assert w.one("select count(*) from infrx.audit_entries where idempotency_key = 'switch-1' "
                  "and action = 'admin_set_entitlements'") == 1
     again_code, again, _ = cli_run(w, argv, capsys)               # the key's replay
-    assert (again_code, again) == (0, result)
+    assert (again_code, again) == (0, {**result, "replayed": True})   # WR-RB3-1
+    assert result["replayed"] is False
     code, fresh, _ = cli_run(w, [*ACTIVATE, "--idempotency-key", "switch-2", "--reason", R],
                              capsys)
     assert code == 0 and fresh["applied"] == [], fresh            # nothing left to change

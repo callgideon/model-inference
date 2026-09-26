@@ -53,7 +53,9 @@ def test_reversal_pg__credit_back_to_legacy_usd_drains_keeps_credit_exact_and_re
     card. Replays of K2 and of K1 answer the recorded results and write nothing, so a
     roll-forward re-activates only under a NEW key.
     Oracle: a reversal without the drain reopens USD with CREDIT work running; one audited as
-    the forward move, or a replay that re-ran the write, differs in the audit or the flags."""
+    the forward move, or a replay that re-ran the write, differs in the audit or the flags.
+    WR-RB3-1: each replay also answers `replayed: true` (the K1 replay is the assertion that kills
+    `replay_reruns_the_freeze`; K2's target state is already reached, so only the flag tells)."""
     w, usd_request, _ = pilot("rv_drill")
     run(settle(w, usd_request, "legacy_usd"))
     publish_fixture_card(w, capsys)
@@ -135,11 +137,14 @@ def test_reversal_pg__credit_back_to_legacy_usd_drains_keeps_credit_exact_and_re
     assert k2_before["flags"] == {"legacy_usd_admission": False, "credit_admission": False,
                                   "signup_grant": True}          # the blocked run's freeze
     assert (k2["request"]["target"], k2["request"]["card"]) == ("legacy_usd", None)
-    assert k2["result"] == down
+    assert k2["result"] == {k: v for k, v in down.items() if k != "replayed"}   # audited: the write
+    assert down["replayed"] is False                                            # WR-RB3-1
 
     before = footprint(w)
     code, replay, _ = cli_run(w, K2, capsys)
-    assert (code, replay) == (0, down) and footprint(w) == before, "K2's replay wrote"
+    assert (code, replay) == (0, {**down, "replayed": True}) and footprint(w) == before, \
+        "K2's replay wrote"                                                     # WR-RB3-1: says so
     code, again, _ = cli_run(w, [*ACTIVATE, "--idempotency-key", "K1", "--reason", R], capsys)
-    assert (code, again) == (0, up) and footprint(w) == before, "K1's replay re-activated"
+    assert (code, again) == (0, {**up, "replayed": True}) and footprint(w) == before, \
+        "K1's replay re-activated"
     assert flags(w)["credit_admission"] is False

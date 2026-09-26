@@ -205,7 +205,7 @@ For the E4C candidate hosted goes from 0001-0018 to **0001-0025**: 0019-0023 are
 integration tip, 0024/0025 land from `codex/d10-merge-2`, and this page is written for a
 release tree that has them. On a tree that stops at 0023 the applied set ends there and E4C's
 freeze refuses (`migration_version` 0025 or newer, E4C-runbook §2). The known-good proof
-reaches 0023 only (§3 Known-good record): extend it to 0025 before relying on R2 after W7.
+reaches 0025 (KNOWN-GOOD-PROOF-2; §3 Known-good record): extend it to 0026 before relying on R2 after a 0026 apply.
 
 ## 3. Rollback triggers
 
@@ -236,8 +236,10 @@ finish: the host stays in maintenance.
 Its keys: one per reversal (`revert-<window id>`). A run stopped at the drain bound (exit 1,
 `in_flight` or `open_transactions`) has frozen `credit_admission`, left `legacy_usd_admission`
 off and audited nothing, so neither regime admits: rerun it under the **same** key while that
-worker runs, until the CREDIT job has ended (it settles in CREDIT, at its card). A finished key's replay prints the
-recorded result (no `replayed` field on this verb) and writes nothing, so W7f's own key never
+worker runs, until the CREDIT job has ended (it settles in CREDIT, at its card). A run resumed
+after exit 1 audits the frozen flags as its `before`; the freeze itself is attributed on the
+`credit_admission` row (`updated_by`, `reason`) and on the blocked run's output (RV3-4). A finished key's replay prints the
+recorded result with `replayed: true` (WR-RB3-1) and writes nothing, so W7f's own key never
 re-activates CREDIT: a roll-forward reruns W7f's `credit-transition --card …` under a **new**
 key. `--dry-run` writes nothing and needs no operator key. Proof on PostgreSQL:
 `apps/infrx-api/tests/g/ops/test_reversal_pg.py::test_reversal_pg__credit_back_to_legacy_usd_drains_keeps_credit_exact_and_replays_nothing`,
@@ -256,7 +258,9 @@ A release before R127, such as the known-good targets 4226315 and bda1586, stays
 `pg_journal_url`: never run 55 after installing one. Its pool runs `set role service_role` on
 every connection, which `infrx_runtime` may not (0021: a member of no role); 55's exit 4
 would then put the file back (inferred from the code, not run). A restore that puts a saved env file back (`rollback.sh` through
-90-revert or R2, 55's exit 4, R4's snapshot) needs no rerun: the file comes back as it was.
+90-revert or R2, 55's exit 4, R4's snapshot) needs no rerun: the file comes back as it was —
+unless the runtime/monitor passwords were rotated (a later 55 run) after that backup was taken:
+the restored DSNs then fail the login check, so rerun 55 (an R127 target) after the restore (RV3-2).
 
 | Trigger | Action |
 |---|---|
@@ -295,8 +299,8 @@ eight names above, full SHAs, `--applied 0023`, both exit 0 KNOWN-GOOD, meas. 20
 E4C-RUNBOOK-2). Both targets only ever served `legacy_usd`: after W7f, returning to one first
 needs the W7f reversal (above) and that release's own env file (R2 restores it). The database
 half of that path is drilled (`test_reversal_pg.py`, above); the box half is not.
-The `schema_proof` for bda1586 and 4226315 reaches 0023 (`infra/rollout/known-good.json`,
-research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md); a migration beyond 0023 needs the
+The `schema_proof` for bda1586 and 4226315 reaches 0025 (`infra/rollout/known-good.json`,
+research/plan/evidence/i/KNOWN-GOOD-PROOF-2-3f7df77.md); a migration beyond 0025 needs the
 proof extended before `--applied` may name it.
 
 ## 4. Continuous operations (I8) — after the release that carries I8

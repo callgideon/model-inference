@@ -183,7 +183,8 @@ def test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last():
     assert store.calls.index(sets[1]) > first_zero > store.calls.index(sets[0])
     assert result["applied"] == [{"flag": f, "enabled": e} for _, f, e in sets]
     assert [e.after["operation"] for e in w.audit.entries] == ["transition"]
-    assert apply(w, store) == result and len(w.audit.entries) == 1          # the key's replay
+    assert result["replayed"] is False                                       # WR-RB3-1
+    assert apply(w, store) == {**result, "replayed": True} and len(w.audit.entries) == 1   # the key's replay
 
     stuck = ScriptedStore(flying=[2])
     with pytest.raises(transition.TransitionBlocked) as blocked:

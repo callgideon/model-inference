@@ -412,9 +412,10 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
                  "public_card": final["public_card"],
                  "flags": {f: v["enabled"] for f, v in final["inventory"]["flags"].items()}})
 
-    result, _ = await op._once("transition", idempotency_key, reason, None,
-                               {"target": target, **rates, "freeze_only": freeze_only}, write)
-    return result
+    result, replayed = await op._once("transition", idempotency_key, reason, None,
+                                      {"target": target, **rates, "freeze_only": freeze_only}, write)
+    # WR-RB3-1: a finished key's replay says so, as `flag` does (RUNBOOK-3 F-1).
+    return {**result, "replayed": replayed}
 
 
 # --------------------------------------------------------------------- one flag
