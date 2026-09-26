@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 
 from infrx.config import RuntimeMisconfigured
+from infrx.contracts import errors
 from infrx.contracts.v2.lifecycle import (AdmissionExpectation, LifecycleRefusal as R, refuse)
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.records import JobState, SettlementState, Usage
@@ -242,15 +243,32 @@ def withdraw_text(world) -> None:
         update={"capability": capability})
 
 
+def refuse_attach(world) -> None:
+    """The gateway's attach after `admit_ready` is refused (0-W5F5-R2: an upload that expired
+    between stage and attach, or a durable binding that does not match)."""
+    async def refused(job_id, refs):
+        raise errors.Conflict("the durable binding does not match")
+    world.media.attach = refused
+
+
+LATE = {"recheck": withdraw_text, "attach": refuse_attach}
+
+
+@pytest.mark.parametrize("late", ["recheck", pytest.param("attach", marks=pytest.mark.xfail(
+    strict=True, raises=AssertionError,
+    reason="0-W5F5-R2, follow-up outside W5-F5's recheck path: `_admitted` re-raises an "
+           "attach refusal after cancel answered the committed outcome (409 for a job that "
+           "succeeded and settled); drop this mark with that fix"))])
 @pytest.mark.parametrize("mode", ["sync", "stream"])
-def test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal(mode):
+def test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal(mode, late):
     """E3C F-5. `admit_ready` checked the pinned card and capability inside the admission
     transaction (0019 `check_pinned_capability`) and wrote the marker: from then on the
     worker may claim, run and settle the job before the relay takes its next step. A
     capability withdrawn after that commit is not this job's refusal: the client is told the
     committed outcome, and the job is charged exactly once. Oracle: the legacy
     post-admission recheck (`_admitted` -> `check_capability`) answered 415
-    `unsupported_media` for a job that had succeeded and settled its debit (E3C f61b82d3)."""
+    `unsupported_media` for a job that had succeeded and settled its debit (E3C f61b82d3).
+    `attach`: the same shape from the attach that follows (0-W5F5-R2, strict xfail)."""
     world = rs.World(regime=CREDIT, readiness=True)
     admit_ready, ran = world.lifecycle.admit_ready, []
 
@@ -264,7 +282,7 @@ def test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refus
         ref = await world.put_result(lease.job_id, "Two people")
         ran.append(await world.jobs.complete_credit(lease, b.outcome(
             lease.job_id, world, tokens=Usage.of(1200, 5), result_ref=ref)))
-        withdraw_text(world)
+        LATE[late](world)
         return admitted
 
     world.lifecycle.admit_ready = ran_then_withdrawn
