@@ -1,0 +1,34 @@
+{
+  "task": "RUNBOOK-3",
+  "slice": "E4C window prerequisites (support lane): the W7f reversal drilled on PostgreSQL with 3 mutants and pinned in rollout.md §3 / rollback.md; the reinstall rule (55 after every R127 50-install, never after a pre-R127 target), option (b)",
+  "activity": "review",
+  "head": "fb681526",
+  "worktree": ".claude/worktrees/codex-runbook-3",
+  "branch": "codex/runbook-3",
+  "owned_paths": [
+    "infra/runbooks/rollout.md",
+    "infra/runbooks/rollback.md",
+    "infra/rollout/steps/55-runtime-login.sh",
+    "apps/infrx-api/tests/g/ops/",
+    "tests/integration/ops/test_runbook_reversal.py",
+    "research/plan/evidence/i/RUNBOOK-3-fb68152.md",
+    "research/plan/evidence/coordinator/updates/RUNBOOK-3-20260926T0730Z.json"
+  ],
+  "commands": [
+    {"cmd": "pytest -q tests/integration/ops/test_runbook_reversal.py (base runbooks)", "exit": 1, "summary": "2 failed (fails-before: rollback.md step 4 without the reversal; no reinstall rule)"},
+    {"cmd": "INFRX_D_TASK=revoke uv run --frozen --no-sync pytest -q tests/g/ops", "exit": 0, "summary": "96 passed"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen --no-sync pytest -q tests/g/ops/test_mutants.py", "exit": 0, "summary": "118 passed; 3 new mutants killed (also killed by hand on the PG drill)"},
+    {"cmd": "pytest -q tests/integration/ops tests/integration/backend/recovery/test_runbooks.py", "exit": 0, "summary": "40 passed"},
+    {"cmd": "uv run --frozen --no-sync pytest -q tests/i", "exit": 0, "summary": "238 passed, 1 xfailed (i8 free at 07:19Z)"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k login_", "exit": 0, "summary": "7 passed"},
+    {"cmd": "bash -n infra/rollout/steps/55-runtime-login.sh", "exit": 0, "summary": "parses"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.1, "likely_h": 0.3, "pessimistic_h": 1.0, "confidence": "medium", "basis": "all committed and green; review and any fix loop remain", "at": "2026-09-26T07:30Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "infrx/operations/transition.py apply: return {**result, \"replayed\": replayed} like set_flag (F-1); update test_transition_pg/test_transition replay equalities and rollout.md §3's 'no replayed field' note",
+    "coordinator: SSM /model-inference/monitor_database_url (infrx_monitor DSN, 0600 file) so a reinstall keeps MONITOR_DATABASE_URL without step 55; also serves O4's MONITOR_DSN_PARAM"
+  ],
+  "evidence": ["research/plan/evidence/i/RUNBOOK-3-fb68152.md"]
+}
