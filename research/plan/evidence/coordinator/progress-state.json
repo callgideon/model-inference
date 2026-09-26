@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "34f0ed28",
+  "integration_head": "dcce7775",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 71,
-  "updated": "2026-09-26T03:36:19Z",
+  "revision": 74,
+  "updated": "2026-09-26T04:07:41Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -277,9 +277,9 @@
         "prefix": "infrx-e2c-",
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-25T18:12:00Z",
+      "updated": "2026-09-26T03:36:54Z",
       "blocker": null,
       "next_action": "coordinator review + merge; D10-FOLLOWUP's 0022 re-baselines the migration pin and RUNTIME_FUNCTIONS; G7/I8 add panels for the four intake metric families (ob10)",
       "estimate": {
@@ -287,8 +287,8 @@
         "likely_h": 0.25,
         "pessimistic_h": 1,
         "confidence": "high",
-        "basis": "layer-3 rls green at head; only 0022 will need a re-baseline",
-        "at": "2026-09-25T18:12Z"
+        "basis": "layer-3 rls green at head; only 0022 will need a re-baseline (refreshed at the 2026-09-26 03:40Z checkpoint)",
+        "at": "2026-09-26T03:36:54Z"
       },
       "evidence": [
         "research/plan/evidence/e/E2C-3a113dc.md",
@@ -880,18 +880,18 @@
         "prefix": "infrx-w5-",
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T23:50:01Z",
-      "blocker": "merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3",
+      "updated": "2026-09-26T03:36:54Z",
+      "blocker": null,
       "next_action": "union round 2 landed (door-revoke, w5-merge delta, tip, known-good-proof) at 74183655; W5-F5 lenses running; then union merge → R134–R137, W5 implemented",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 2,
         "pessimistic_h": 4,
         "confidence": "medium",
-        "basis": "verification third lens + possible fix round, then the union merge and E3C final run",
-        "at": "2026-09-25T21:06:43Z"
+        "basis": "verification third lens + possible fix round, then the union merge and E3C final run (refreshed at the 2026-09-26 03:40Z checkpoint)",
+        "at": "2026-09-26T03:36:54Z"
       },
       "evidence": [
         "research/plan/evidence/w/W5-27afab7.md",
@@ -1089,18 +1089,18 @@
         "prefix": "infrx-m6-",
         "db": "infrx_m6*"
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:59:30Z",
-      "updated": "2026-09-25T21:06:43Z",
-      "blocker": "P-25 unresolved; WR-3 (E3C world.py + s06 clock) gates the merge; WR-7 (D10 register refresh) for the refetch race; R114 amendment",
+      "updated": "2026-09-26T03:36:54Z",
+      "blocker": null,
       "next_action": "M6-WIRING verified ACCEPT_WITH_FIXES at 28dd1af2 (pins released on every exit path, housekeeping loop resilient, F-4 journal prune); merging via the union lane with WR-M6W-1",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 2,
         "pessimistic_h": 5,
         "confidence": "medium",
-        "basis": "lane code complete; remaining is WR-1/2/3/7 composition outside the lane, the R114 ruling, and P-25",
-        "at": "2026-09-25T17:12:10Z"
+        "basis": "lane code complete; remaining is WR-1/2/3/7 composition outside the lane, the R114 ruling, and P-25 (refreshed at the 2026-09-26 03:40Z checkpoint)",
+        "at": "2026-09-26T03:36:54Z"
       },
       "evidence": [
         "research/plan/evidence/m/M6-7376024.md",
@@ -1154,69 +1154,68 @@
     {
       "id": "E3C",
       "task": "E3C",
-      "slice": "final BACKEND-LOCAL run on the tip 04ae5e21 (backend union d9e72c9c + W5-F5B) with the harness wirings E3A-WR-1/WR-2 and WR-W5F5B-3 (s04 readiness-branch tail: 202, run, settled once), INFRX_E3C_RUNTIME_LOGIN=1",
+      "slice": "final BACKEND-LOCAL on integration tip 04ae5e21 (merged as 601f4c1d) with E3A-WR-1, E3A-WR-2, WR-W5F5B-3 (R139) and both revert-type controls",
       "agent": "opus",
       "branch": "codex/e3c-rerun",
       "worktree": ".claude/worktrees/codex-e3c-rerun",
-      "base": "19670a8c",
-      "head": "7d0d3d7b",
+      "base": "04ae5e21",
+      "head": "5c4f6d7b",
       "isolation": {
         "ports": "compose block 56900-56999 (postgres 56932)",
         "prefix": "infrx-e3c-",
         "db": "infrx_e3c"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-24T21:59:40Z",
-      "updated": "2026-09-26T03:35:23Z",
+      "updated": "2026-09-26T04:07:41Z",
       "blocker": null,
-      "next_action": "verdict.json → merge codex/e3c-rerun → E3C implemented; BACKEND-LOCAL cells from the verdict; a rerun on the 0024/0025 tip follows the D10-MERGE-2 merge",
+      "next_action": "merged at dcce7775; E3C implemented; BACKEND-LOCAL accepted; a rerun on the 0024/0025 tip follows the D10-MERGE-2 merge (harness only)",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 2,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "W5-F5 fix + union round 2 + one 13–25 min final matrix run",
-        "at": "2026-09-25T22:42:57Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "gate passed on the integration tip; left is the coordinator merge of codex/e3c-rerun",
+        "at": "2026-09-26T04:06:00+00:00"
       },
       "evidence": [
         "research/plan/evidence/e/E3C-8406c79.md",
         "research/plan/evidence/e/E3C-phase2-60ab757.md",
-        "research/plan/evidence/e/E3C-rerun-7d0d3d7.md"
+        "research/plan/evidence/e/E3C-rerun-7d0d3d7.md",
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
       ],
       "commands": [
         {
-          "cmd": "pytest -q tests/integration/backend/e3c (no stack)",
+          "cmd": "pytest -q tests/integration/backend/e3c (no stack, 27a69619)",
           "exit": 0,
-          "summary": "34 passed; new bypass-install regression fails on the phase-2 world.py (expiry-recompute)"
+          "summary": "38 passed"
         },
         {
-          "cmd": "make backend-local (run 1, interim, G7 head 5b38ab08, owner login)",
-          "exit": 2,
-          "summary": "runner exit 1, gate FAIL; 9 failed, 68 passed, 3 skipped in 760 s; s07 s13 PASS (former G7); non-passes W5 3, M6 4, harness 1 (s08 s3 zero-margin oracle), F-3 3, F-1 1"
-        },
-        {
-          "cmd": "consumer-local.sh --break-seam readiness / expiry",
+          "cmd": "INFRX_E3C_RUNTIME_LOGIN=1 runner.py --only s10 (before / after E3A-WR-2)",
           "exit": 1,
-          "summary": "both seams FAIL (mutants killed) as required"
+          "summary": "before 3/4: signed-in consumer_jobs 403 'not signed in' (tenant-scoped denies vacuous); after 4/4: own rows 200, other tenant [] / not_found, anon 401; browser denials by privilege both times"
         },
         {
-          "cmd": "scratch mutant: content_referenced -> NULL, runner.py --only s06",
-          "exit": 1,
-          "summary": "s06-live FAIL (live media deleted): WR-3 s06-live oracle not vacuous; reverted"
+          "cmd": "final-run.sh 04ae5e21 at 7c4101af (final run 1)",
+          "exit": 0,
+          "summary": "gate PASS but REJECTED: nc-admission-ready tree could not admit on infrx_runtime (permission denied for function admit; 3 INVALID + 1 503) - runner fixed at 27a69619"
         },
         {
-          "cmd": "INFRX_E3C_RUNTIME_LOGIN=1 make backend-local (run 2, merged tree 7d0d3d7b)",
-          "exit": 2,
-          "summary": "runner exit 1, gate FAIL; 8 failed, 72 passed, 0 skipped in 727 s; s08 s10 PASS (F-1, F-2 closed); non-passes W5 3, F-3 3 (relay admits via admit_credit, no admit_ready), F-4 2 (stream journal never pruned); harness 0, M6 0; teardown clean"
+          "cmd": "final-run.sh 04ae5e21 at 27a69619 (final run 2, evidence)",
+          "exit": 0,
+          "summary": "BACKEND-LOCAL PASS: 13/13 scenarios (85 cases), 9/9 controls; nc-admission-ready detected (RV-05 executed+debited on the reverted tree), nc-retention-durable detected (live media deleted); s08 20.0 s / 40.0 s; 11:55 wall; teardown clean"
         }
       ],
       "deviation": "phase 1 = red harness in a new subdirectory only; E2C's top-level runner files read-only; phase 2 runs on the merged SHA (dispatch 3)",
       "owned_paths": [
         "tests/integration/backend/e3c/",
-        "research/plan/evidence/e/E3C-rerun-7d0d3d7.md",
-        "research/plan/evidence/coordinator/updates/E3C-20260925T1820Z.json"
+        "tests/integration/backend/stack.py (E3A-WR-2, assigned)",
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+        "research/plan/evidence/coordinator/updates/E3C-FINAL-20260926T0406Z.json"
       ],
-      "wiring_requests": []
+      "wiring_requests": [
+        "E3A: drop tests/integration/app/runner.py's world.NAMESPACE shim (E3A-WR-1) and per-clone HOSTED_AUTH_UID (now in stack._template, E3A-WR-2)"
+      ]
     },
     {
       "id": "E4C",
@@ -2246,12 +2245,6 @@
       "head": "dea32507"
     },
     {
-      "since": "2026-09-25T00:03:00Z",
-      "lane": "E3C",
-      "task": "E3C",
-      "head": "7d0d3d7b"
-    },
-    {
       "since": "2026-09-25T00:04:00Z",
       "lane": "E2C",
       "task": "E2C",
@@ -2445,50 +2438,71 @@
   "gates": {
     "BACKEND-LOCAL": {
       "candidate": {
-        "source": null,
+        "source": "04ae5e21",
         "deployed": null,
-        "config": null
+        "config": "task-local harness e3c (INFRX_E3C_RUNTIME_LOGIN=1)"
       },
       "cells": [
         {
           "id": "BACKEND-JOURNEY",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+          ],
+          "note": "scenarios s01, s02, s05, s08 on 04ae5e21 (run head 27a69619)"
         },
         {
           "id": "UPLOAD-RESTART",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+          ],
+          "note": "scenarios s03, s05 on 04ae5e21 (run head 27a69619)"
         },
         {
           "id": "RETENTION-DURABLE",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+          ],
+          "note": "scenarios s06, s11 on 04ae5e21 (run head 27a69619)"
         },
         {
           "id": "ADMISSION-READY",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+          ],
+          "note": "scenarios s04, s05 on 04ae5e21 (run head 27a69619)"
         },
         {
           "id": "RESULT-EXPIRY",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+          ],
+          "note": "scenarios s06, s07 on 04ae5e21 (run head 27a69619)"
         },
         {
           "id": "CREDIT-CUTOVER",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+          ],
+          "note": "scenarios s01, s09, s10, s11 on 04ae5e21 (run head 27a69619)"
         },
         {
           "id": "VERIFY-REPRO",
-          "verdict": "NOT RUN",
-          "evidence": []
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+          ],
+          "note": "scenarios s12 on 04ae5e21 (run head 27a69619)"
         }
       ],
-      "decision": null,
-      "decided_at": null,
-      "note": "Not declared. E3B's harness is green at 95fbb90 (historical, predecessor root); E3C cells not run."
+      "decision": "accepted",
+      "decided_at": "2026-09-26T04:07:41Z",
+      "note": "Accepted at the E3C final run on the integration tip 04ae5e21 (run head 27a69619, merged as dcce7775): 13/13 scenarios (85 cases) PASS, 9/9 negative controls detected for the right reason (both revert controls on the owner login), 11:55 wall, task-local e3c harness with INFRX_E3C_RUNTIME_LOGIN=1; evidence research/plan/evidence/e3c/E3C-FINAL-27a6961.md. Local gate only: the box window (E4C) remains."
     },
     "BACKEND-READY": {
       "candidate": {
@@ -4150,6 +4164,28 @@
       "at": "2026-09-26T03:35:23Z",
       "lane": "COORD",
       "event": "full api-test + g/contracts/i/w mutants running on the fixed clone of 34f0ed28 (scratchpad/wave4b/checks-04ae5e21)"
+    },
+    {
+      "at": "2026-09-26T04:07:07Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-25T22:30:00Z is not newer than lane E3C state 2026-09-26T03:35:23Z",
+      "source": "updates/E3C-20260925T2230Z.json"
+    },
+    {
+      "at": "2026-09-26T04:06:00Z",
+      "by": "E3C",
+      "what": "running → review; head 27a69619; estimate likely 2 → 0 h (gate passed on the integration tip; left is the coordinator merge of codex/e3c-rerun)",
+      "source": "updates/E3C-FINAL-20260926T0406Z.json"
+    },
+    {
+      "at": "2026-09-26T04:07:07Z",
+      "by": "tracker",
+      "what": "forecast E3C: 2026-09-26 05:23Z – 2026-09-26 09:17Z (likely 2026-09-26 06:41Z) → 2026-09-26 04:37Z – 2026-09-26 05:13Z (likely 2026-09-26 04:37Z) (because: dependency path E3C)"
+    },
+    {
+      "at": "2026-09-26T04:07:41Z",
+      "lane": "E3C",
+      "event": "E3C final BACKEND-LOCAL PASS on 04ae5e21 (run head 27a69619; 85 cases, 9/9 controls); codex/e3c-rerun 5c4f6d7b merged at dcce7775; gate BACKEND-LOCAL accepted; E3C → implemented"
     }
   ],
   "history": {
@@ -4660,10 +4696,19 @@
       "status": "rejected",
       "at": "2026-09-26T03:24:00Z",
       "reason": "unknown task ID 'WAVE4B-UNION'"
+    },
+    "E3C-20260925T2230Z.json": {
+      "status": "rejected",
+      "at": "2026-09-25T22:30:00Z",
+      "reason": "stale: at 2026-09-25T22:30:00Z is not newer than lane E3C state 2026-09-26T03:35:23Z"
+    },
+    "E3C-FINAL-20260926T0406Z.json": {
+      "status": "applied",
+      "at": "2026-09-26T04:06:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T03:35:22Z",
+    "computed_at": "2026-09-26T04:07:07Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -4673,25 +4718,25 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 05:23Z – 2026-09-26 09:17Z (likely 2026-09-26 06:41Z)",
+        "text": "2026-09-26 04:37Z – 2026-09-26 05:13Z (likely 2026-09-26 04:37Z)",
         "constraint": "dependency path E3C",
         "effort_h": [
-          1.8,
-          3.1,
-          5.7
+          0.5,
+          0.5,
+          1.1
         ],
         "wall_h": [
-          1.8,
-          3.1,
-          5.7
+          0.5,
+          0.5,
+          1.1
         ],
         "finish": [
-          "2026-09-26T05:23:22Z",
-          "2026-09-26T06:41:22Z",
-          "2026-09-26T09:17:22Z"
+          "2026-09-26T04:37:07Z",
+          "2026-09-26T04:37:07Z",
+          "2026-09-26T05:13:07Z"
         ],
         "conditional": null,
-        "confidence": "medium",
+        "confidence": "high",
         "critical_path": [
           "E3C"
         ],

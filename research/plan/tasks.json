@@ -4495,7 +4495,7 @@
       "track": "E",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4534,7 +4534,12 @@
       ],
       "acceptance": "BACKEND-LOCAL passes on combined SHA; every required skipped/failing case keeps gate open.",
       "failure_oracle": "Fake-only substitution, missing service or inconsistent durable/API/object/accounting state is a non-pass.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/e/E3C-rerun-7d0d3d7.md",
+        "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+      ],
+      "closure_note": "2026-09-26: BACKEND-LOCAL PASS on the integration tip 04ae5e21 (backend union + W5-F5B; run head 27a69619 of codex/e3c-rerun, merged at dcce7775): 13/13 scenarios (85 cases), 9/9 negative controls incl. both revert controls, s04 under R139 option (b), s10 with the runtime login and a signed-in own-rows read; harness wirings E3A-WR-1/WR-2 and WR-W5F5B-3 applied. Implemented = the local gate on the task-local harness; E4C (box) remains."
     },
     {
       "id": "E4C",
