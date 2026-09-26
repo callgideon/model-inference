@@ -726,7 +726,7 @@ def test_perf_pilot__an_attempt_times_its_phases_in_the_bench_vocabulary():
             return await append(lease, events)
         world.stream.append = slow_append
 
-        async def slow_result(job_id, text):
+        async def slow_result(job_id, text, lease):
             world.clock.advance(0.25)
             return f"infrx-result:{job_id}"
 

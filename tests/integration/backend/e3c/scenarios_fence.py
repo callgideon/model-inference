@@ -13,10 +13,10 @@ While generation 2 streams, the held process is released to race on its own path
 generation 1's token - the attempt row its claim minted, `infrx.lease_doc` - is presented at
 every door the worker mutates through, through the product's own adapters on the box's own
 login: append output, renew, load the work (R46), take a second inference or preparation
-slot, settle. Oracle (04 DUR-FENCE): each refused (`stale_lease` by the fence,
-`not_claimable` by the claims); generation 2 completes and settles exactly once; the journal
-and the result are generation 2's alone; the engine served one generation; the reservations
-are released once and the wallet reconciles."""
+slot, write the result object (R147, D10 0026), settle. Oracle (04 DUR-FENCE): each refused
+(`stale_lease` by the fence, `not_claimable` by the claims); generation 2 completes and
+settles exactly once; the journal and the result are generation 2's alone; the engine served
+one generation; the reservations are released once and the wallet reconciles."""
 from __future__ import annotations
 
 import asyncio
@@ -36,10 +36,12 @@ from scenarios_crash import LEASES                      # noqa: E402
 TEXT = "The van is red. " * 15
 GAP_S = 0.5
 STALE = "output of a generation that lost its lease"
-#: Each door the stale generation tries, and the refusal the product owes it there.
+#: Each door the stale generation tries, and the refusal the product owes it there. The
+#: result door writes STALE, a text that differs from generation 2's (E3C-CELLS F-1: an
+#: unfenced write of it ended generation 2 `platform_error`).
 REFUSED = {"append": "stale_lease", "renew": "stale_lease", "load_work": "stale_lease",
            "claim": "not_claimable", "claim_preparation": "not_claimable",
-           "settle": "stale_lease"}
+           "result": "stale_lease", "settle": "stale_lease"}
 
 
 def lease(trip, request_id: str, generation: int):
@@ -80,6 +82,7 @@ def stale_probes(trip, stale) -> dict[str, str]:
         "load_work": lambda: jobs.load_work_credit(stale),
         "claim": lambda: jobs.claim(stale.job_id, stale.worker_id),
         "claim_preparation": lambda: lifecycle.claim_preparation(stale.job_id, stale.worker_id),
+        "result": lambda: jobs.put_result(stale.job_id, STALE, stale),
         "settle": lambda: jobs.complete_credit(stale, proposal),
     }
 

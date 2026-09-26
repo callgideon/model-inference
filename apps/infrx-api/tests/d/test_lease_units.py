@@ -70,6 +70,23 @@ def test_fenced_calls__a_committed_refusal_is_raised_as_its_type() -> None:
     _refused(errors.AlreadyTerminal, store.complete(LEASE, TerminalOutcome(**OUTCOME)))
 
 
+def test_put_result__the_workers_lease_is_sent_and_null_is_already_terminal() -> None:
+    """R147 (0026): the worker's result write carries its lease and the store's own limits
+    (the fence's R29 window), as `append` does; without a lease it is 0014's `{job_id, text}`;
+    the NULL answer (the fence ended the job, committed - R39) is `AlreadyTerminal`, never
+    a NULL reference."""
+    limits = DEFAULTS.replace(unknown_usage_reconcile_s=9.0)
+    store, conn = _store("infrx-result:r", "infrx-result:r", None, limits=limits)
+    assert asyncio.run(store.put_result(b.ORG_A, "text", LEASE)) == "infrx-result:r"
+    assert _args(conn) == {"job_id": b.ORG_A, "text": "text",
+                           "lease": LEASE.model_dump(mode="json"),
+                           "limits": store._lease_limits()}, _args(conn)
+    assert _args(conn)["limits"]["unknown_usage_reconcile_s"] == 9.0
+    assert asyncio.run(store.put_result(b.ORG_A, "text")) == "infrx-result:r"
+    assert _args(conn, 1) == {"job_id": b.ORG_A, "text": "text"}, _args(conn, 1)
+    _refused(errors.AlreadyTerminal, store.put_result(b.ORG_A, "text", LEASE))
+
+
 def _work_doc(regime: str = "legacy_usd"):
     request = b.request(_harness(), refs=(b.media(b.ORG_A),))
     prepared = b.media(b.ORG_A, kind=MediaKind.upload)

@@ -11,6 +11,7 @@ from decimal import Decimal
 
 import threading
 import time
+import uuid
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -930,3 +931,97 @@ def check_lease_privileges(conn) -> str:
         for role in ("service_role", "anon", "authenticated"):
             assert not may(role, fn), f"{role} may execute the internal {fn}"
     return f"{len(callable_)} service operations, {len(internal)} internal functions"
+
+
+# ------------------------------------------------ D10-0026 (R147): the fenced result write
+def check_result_fence(conn) -> str:
+    """R147 (E3C-CELLS F-1): `put_result` with the worker's lease is fenced like `append`,
+    before anything is stored. A generation that lapsed and was claimed again by the SAME
+    worker id, a foreign worker, a preparation token (also a live one: R46), an expired
+    lease, another job's live lease and a null lease store nothing; an unknown job is
+    `not_found`, an ended one `already_terminal`. Past R29's instant (lease live) the job is
+    terminalized in that call and the answer is NULL - committed (R39), no result stored.
+    The live generation writes once: its retry replays, another text is `state_conflict`,
+    and a lapsed generation arriving after it still gets its fence's `stale_lease`, never
+    the comparison. Without a lease the call is 0014's: the known-good rollback targets'
+    runtime sends `{job_id, text}` (P-25)."""
+    world = ca.World(conn)
+
+    def put(job_id, text, lease) -> tuple:
+        token = lease.model_dump(mode="json") if isinstance(lease, Lease) else lease
+        return d3(conn, "put_result", job_id=str(job_id), text=text, lease=token)
+
+    def stored(job_id) -> list[str]:
+        return [t for t, in conn.execute("select body from infrx.job_results "
+                                         "where request_id = %s", (job_id,))]
+
+    def body():
+        request, stale = running(conn, world, worker="w1")
+        job = request.request_id
+        advance(conn, TTL)
+        reaped(_recover(conn), "index_event")
+        live = lease_of(d3(conn, "claim", job_id=job, worker_id="w1")[1])
+        assert live.generation == stale.generation + 1, live
+        code, _ = put(job, "stale", stale)
+        assert code == "stale_lease", \
+            f"a lapsed generation wrote the result while the next one ran (F-1): {code}"
+        other, elsewhere = running(conn, world, worker="w9")
+        preparing = gateway_request(world)
+        ca.admit(conn, preparing, b.idem(preparing, preparing.request_id))
+        _, prep = claim(conn, preparing.request_id)
+        doors = {
+            "a foreign worker": (job, dump(live, worker_id="w2"), "stale_lease"),
+            "a preparation token": (job, dump(live, kind=LeaseKind.preparation,
+                                               first_token_deadline_at=None), "stale_lease"),
+            "a live preparation lease": (preparing.request_id, prep["lease"], "stale_lease"),
+            "another job's live lease": (job, elsewhere, "invalid_request"),
+            "a null lease": (job, None, "invalid_request")}
+        for label, (target, token, expected) in doors.items():
+            code, _ = put(target, "forged", token)
+            assert code == expected, f"{label}: {code}"
+        assert stored(job) == stored(other.request_id) == stored(preparing.request_id) == [], \
+            "a refused write stored a result"
+        ghost = str(uuid.uuid4())
+        assert put(ghost, "x", dump(live, job_id=ghost))[0] == "not_found"
+        code, ref = put(job, "live", live)
+        assert code is None and ref == f"infrx-result:{job}", (code, ref)
+        assert put(job, "live", live) == (None, ref), "the live generation's retry did not replay"
+        assert put(job, "another answer", live)[0] == "state_conflict", \
+            "a second text replaced the stored result"
+        code, _ = put(job, "stale", stale)
+        assert code == "stale_lease", \
+            f"after the live write a lapsed generation met the comparison, not its fence: {code}"
+        assert stored(job) == ["live"] and row(conn, job)["state"] == "running", stored(job)
+        # an ended job
+        done, done_lease = running(conn, world, worker="w-done")
+        assert d3(conn, "cancel", org_id=done.org_id,
+                  job_handle=row(conn, done.request_id)["job_handle"])[0] is None
+        assert put(done.request_id, "after the end", done_lease)[0] == "already_terminal"
+        # 0014's call, as a pre-0026 runtime makes it while holding its live lease (P-25)
+        old, _ = running(conn, world, worker="old-runtime")
+        code, ref = outcome(conn, "put_result", {"job_id": old.request_id, "text": "old"})
+        assert (code, ref) == (None, f"infrx-result:{old.request_id}"), \
+            f"the known-good rollback targets' result write was refused: {code}"
+        # expired, exactly at expires_at (no deadline passed): stale, nothing stored
+        expired, expired_lease = running(conn, world, worker="w-exp")
+        advance(conn, TTL)
+        assert put(expired.request_id, "late", expired_lease)[0] == "stale_lease"
+        assert stored(expired.request_id) == [] and \
+            row(conn, expired.request_id)["state"] == "running"
+        # R29: past the generation instant, lease live - terminalized here, answer NULL
+        late, late_lease = running(conn, world, worker="w-late")
+        conn.execute("update infrx.attempts set expires_at = expires_at + interval '1 day' "
+                     "where job_id = %s", (late.request_id,))
+        before = reserved(conn)
+        advance(conn, DEFAULTS.generation_timeout_s)
+        assert put(late.request_id, "too late", late_lease) == (None, None), \
+            "R29: not the committed NULL answer"
+        ended = row(conn, late.request_id)
+        assert (ended["state"], ended["outcome_cause"], ended["settlement_state"]) == \
+            ("failed", "deadline_exceeded", "released_platform_absorbed"), ended
+        assert stored(late.request_id) == [], "a result was stored for the job R29 ended"
+        assert reserved(conn) == before - ended["maximum_hold"], "R29: the hold stayed"
+        assert put(late.request_id, "too late", late_lease)[0] == "already_terminal"
+        return ("stale/foreign/wrong-kind/expired/other-job leases write nothing; live writes "
+                "once; R29 terminalizes with a NULL answer; 0014's call unchanged")
+    return ca._in_rollback(conn, body)
