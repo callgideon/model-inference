@@ -1,0 +1,8 @@
+2026-09-26 00:36:21,390 botocore.credentials Found credentials in environment variables.
+2026-09-26 00:36:55,397 infrx.gateway /v1/jobs: capacity_exhausted on request ac440038-69fe-4255-8e7d-a0cfde6b54ac
+2026-09-26 00:36:58,020 infrx.gateway /v1/chat/completions: insufficient_credit on request fe98aa37-461d-4aea-b44c-9eb21bf669b7
+2026-09-26 00:37:03,851 infrx.gateway /v1/jobs/job_30a354e7b78543229812a734e2d369f5: not_found on request 5e71080c-9661-47fc-bb09-3e189c28a349
+2026-09-26 00:37:03,856 infrx.gateway /v1/jobs/job_30a354e7b78543229812a734e2d369f5/result: not_found on request 94ed3c3b-9f4c-4b0d-a7aa-89ada1fba69d
+2026-09-26 00:37:03,861 infrx.gateway /v1/jobs/job_30a354e7b78543229812a734e2d369f5/events: not_found on request 27b78ccf-9916-4f42-b7c9-2da9fada4748
+2026-09-26 00:37:03,874 infrx.gateway /v1/jobs: not_found on request 45e43872-f89c-40be-bd71-00b03f250b04
+2026-09-26 00:37:04,075 infrx.gateway /v1/jobs/job_30a354e7b78543229812a734e2d369f5/result: result_expired on request 50e473bc-eb0b-4b55-a9ce-810d5cf9101d
