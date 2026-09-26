@@ -1065,6 +1065,8 @@ def launcher_plan(box, cells=None):
             json.dump(frozen(base), f)
     with open(os.path.join(e4c, "keys-certify.json"), "w", encoding="utf-8") as f:
         json.dump({"active_key_id_prefixes": ["142c7d81"]}, f)
+    with open(os.path.join(box, "e4b", "key.env"), "w", encoding="utf-8") as f:
+        f.write("INFRX_API_KEY=not-a-key\n")
     script = open(E1B_LAUNCHER, encoding="utf-8").read().replace("/opt/dlami/nvme", box)
     env = {"PATH": "/usr/bin:/bin", "RELEASE": "c" * 40, "DRY_RUN": "1",
            **({"CELLS": cells} if cells else {})}

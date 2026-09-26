@@ -61,7 +61,8 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
                                        "90-revert.sh", "91-abort.sh",
                                        "93-restore-edge.sh", "95-maintenance.sh"]
     for path in [*STEPS, ROLLOUT / "ssm.sh", ROLLOUT / "verify-external.sh",
-                 ROLLOUT / "verify-journey.sh", ROLLOUT / "e4c-certify.sh"]:
+                 ROLLOUT / "verify-journey.sh", ROLLOUT / "e4c-certify.sh",
+                 ROLLOUT / "e1b-window.sh"]:
         text = path.read_text()
         done = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
         assert done.returncode == 0, (path.name, done.stderr)
@@ -536,3 +537,130 @@ def test_e4c_certify__the_launcher_passes_exactly_certify_s_box_flags_and_no_sec
     done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
     assert done.returncode == 2 and "E4C-edge.json" in done.stderr
     assert not (stub / "docker.log").exists()
+
+
+# --- E1B-WIRE WR-2: the window launcher runs §7.2's cells, one container each, never overlapping --
+
+E1B_WINDOW = ROLLOUT / "e1b-window.sh"
+MARLIN = support.REPO / "models" / "marlin2b"
+DOCKER_E1B = '''#!{python}
+import json, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+with (here / "docker.log").open("a") as log:
+    log.write(json.dumps(args) + "\\n")
+if args[0] == "ps":
+    print((here / "ps.txt").read_text(), end="")
+elif args[0] == "inspect":                   # only the engine exists; a cell's container is gone
+    if args[-1] != "marlin2b-8000":
+        sys.exit(1)
+    print((here / "engine-args.txt").read_text())
+elif args[0] == "kill":
+    sys.exit(1)
+'''
+
+
+def _e1b_box(tmp_path, *, ps="", seqs="8"):
+    nvme = tmp_path / "nvme"
+    e4c = nvme / "e4b" / "e4c"
+    e4c.mkdir(parents=True)
+    (nvme / "w3-checkout").symlink_to(support.REPO)
+    for name, base in (("E1B-direct.json", "E1B-direct.base.json"), ("E1B-box.json", "E1B-box.base.json"),
+                       ("E1B-box-forms.json", "E1B-box.forms.base.json"), ("E1B-sop.json", "E1B-sop.base.json"),
+                       ("keys-certify.json", None)):
+        (e4c / name).write_text((MARLIN / "profiles" / base).read_text() if base else
+                                '{"active_key_id_prefixes": ["142c7d81"]}')
+    (nvme / "e4b" / "key.env").write_text(f"INFRX_API_KEY={support.MARKER}\n")
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (stub / "docker").write_text(DOCKER_E1B.format(python=sys.executable))
+    (stub / "docker").chmod(0o755)
+    (stub / "ps.txt").write_text(ps)
+    (stub / "engine-args.txt").write_text(json.dumps(["--model", "/w", "--max-num-seqs", seqs],
+                                                          separators=(",", ":")))   # docker's {{json}}
+    script = E1B_WINDOW.read_text().replace("/opt/dlami/nvme", str(nvme))
+    return nvme, stub, script
+
+
+def _e1b_run(stub, script, **env):
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                          env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}",
+                               "RELEASE": "c" * 40, **env})
+
+
+def _parser_flags(path: pathlib.Path) -> set[str]:
+    return {f for pair in re.findall(r'add_argument\("(-[\w-]+)"(?:, "(--[\w-]+)")?', path.read_text())
+            for f in pair if f}
+
+
+def test_e1b_window__cells_run_in_order_one_container_each_with_only_parser_flags(tmp_path):
+    """E1B-PREP WR-2 (E1B-protocol §7.1 rules 1-2, §7.2 order). Oracle: a cell out of §7.2's
+    order (WC-1, WC-2, WC-3, WC-4, WC-5, WC-8) or WC-7 run with any other cell (its cold start
+    is WC-6a's restore); a bench or dataset flag the client's parser does not define (a
+    renamed flag would be refused on the box); a cell container that is not infrx-e1b-<cell>,
+    not --rm, or whose profile is not its own stamped copy; the tenant key handed to the
+    engine (direct cells) or put on a command line; DRY_RUN touching docker."""
+    nvme, stub, script = _e1b_box(tmp_path)
+    done = _e1b_run(stub, script, DRY_RUN="1")
+    assert done.returncode == 0, done.stderr
+    assert not (stub / "docker.log").exists(), "DRY_RUN called docker"
+    done = _e1b_run(stub, script)
+    assert done.returncode == 0, done.stderr
+    assert support.MARKER not in done.stdout + done.stderr
+    calls = [json.loads(line) for line in (stub / "docker.log").read_text().splitlines()]
+    assert not any(support.MARKER in a for call in calls for a in call)
+    runs = [c for c in calls if c[0] == "run"]
+    names = [r[r.index("--name") + 1] for r in runs]
+    assert names == [f"infrx-e1b-{n}" for n in ("L1-c1", "L1-c2", "L1-c4", "L1-c8", "pair-r0.5",
+                                                "pair-r2.0", "L3", "L5", "forms", "sop", "sop", "sop")]
+    bench_flags, dataset_flags = _parser_flags(MARLIN / "bench.py"), _parser_flags(MARLIN / "dataset.py")
+    for r in runs:
+        name = r[r.index("--name") + 1].removeprefix("infrx-e1b-")
+        image = r.index(f"infrx-certify:{'c' * 40}")
+        docker, client = r[:image], r[image + 1:]
+        assert "--rm" in docker and "--network" in docker and "-e" in docker
+        assert docker[docker.index("-e") + 1] == "CORPUS_CACHE"                # a name, never a value
+        assert all(v.endswith(":ro") for i, v in enumerate(docker) if docker[i - 1] == "-v"
+                   and not v.endswith(":/out")), docker
+        direct = "direct" in client
+        assert ("--env-file" in docker) is (not direct and "export" not in client), (name, docker)
+        flags = {a for a in client if a.startswith("-")}
+        if client[1].endswith("bench.py"):
+            assert flags <= bench_flags, flags - bench_flags
+            assert client[client.index("--profile") + 1] == f"/out/profiles/{name}.json"
+            assert client[client.index("--key-inventory") + 1] == "/e4c/keys-certify.json"
+        else:
+            assert flags <= dataset_flags, flags - dataset_flags
+    out = pathlib.Path(re.search(r"^out=(\S+)$", done.stdout, re.M).group(1))
+    assert [line.split()[0] for line in (out / "cells.tsv").read_text().splitlines()] == \
+        ["WC-1"] * 4 + ["WC-2"] * 2 + ["WC-3", "WC-4", "WC-5", "WC-8"]
+    stamped = json.loads((out / "profiles" / "pair-r2.0.json").read_text())
+    assert stamped["measurement"]["rate_per_s"] == 2.0 and stamped["measurement"]["arrival"] == "open-loop"
+    assert stamped["workload"]["dataset_version"] == "e1b-w1-pair-r2.0"
+    assert stamped["identity"]["run_id"] == "e1b-w1-direct-pair-r2.0"
+    stamped = json.loads((out / "profiles" / "L1-c4.json").read_text())
+    assert stamped["measurement"]["concurrency"] == 4 and stamped["measurement"]["rate_per_s"] is None
+    (stub / "docker.log").unlink()
+    done = _e1b_run(stub, script, CELLS="WC-7")                  # alone: its own invocation
+    assert done.returncode == 0, done.stderr
+    assert [c[c.index("--name") + 1] for c in map(json.loads, (stub / "docker.log").read_text()
+            .splitlines()) if c[0] == "run"] == ["infrx-e1b-cold"]
+    for cells in ("WC-7 WC-3", "WC-6a", "WC-9"):
+        done = _e1b_run(stub, script, CELLS=cells, DRY_RUN="1")
+        assert done.returncode == 2 and "plan " not in done.stdout, cells
+
+
+def test_e1b_window__refuses_a_cell_that_would_overlap_or_run_off_the_pinned_engine(tmp_path):
+    """E1B-protocol §7.1 rule 1: one engine, so a window cell never shares it. Oracle: a cell
+    started while a certify container exists (any name), while a previous cell's
+    infrx-e1b-* container is left, or on an engine whose --max-num-seqs is not the filled
+    profile's pin (the ladder's top rung would not be the served concurrency) - each must be
+    refused before any container runs."""
+    for ps, seqs, why in (("sharp_hopper infrx-certify:" + "c" * 40 + "\n", "8", "a certify run is live"),
+                          ("infrx-e1b-L1-c1 infrx-certify:" + "c" * 40 + "\n", "8", "a previous cell left"),
+                          ("", "32", "not at the pinned max_num_seqs 8")):
+        _, stub, script = _e1b_box(tmp_path / why.replace(" ", "-"), ps=ps, seqs=seqs)
+        done = _e1b_run(stub, script)
+        assert done.returncode == 2 and why in done.stderr, (why, done.stderr)
+        calls = [json.loads(line) for line in (stub / "docker.log").read_text().splitlines()]
+        assert not [c for c in calls if c[0] == "run"], why

@@ -26,6 +26,8 @@ fi
 for f in E1B-direct.json E1B-box.json E1B-box-forms.json E1B-sop.json keys-certify.json; do
   test -s "$e4c/$f" || { echo "missing $e4c/$f (E1B-protocol §7.1 rule 2)" >&2; exit 2; }
 done
+[ "$(cut -d= -f1 "$e4b/key.env" 2>/dev/null)" = INFRX_API_KEY ] \
+  || { echo "$e4b/key.env must name exactly INFRX_API_KEY (e4c-certify.sh rule 1)" >&2; exit 2; }
 seqs=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["identity"]["engine_options"]["max_num_seqs"])' "$e4c/E1B-direct.json")
 out=$e4b/e1b-$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$out/profiles" "$out/raw"; chmod 777 "$out" "$out/raw"
 echo "out=$out"
