@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 96,
-  "updated": "2026-09-26T05:41:50Z",
+  "revision": 97,
+  "updated": "2026-09-26T05:44:01Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -2617,6 +2617,83 @@
         "research/plan/evidence/coordinator/updates/G8-FLAG-2-20260926T0512Z.json"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "APP-0024-WIRE-2",
+      "task": null,
+      "slice": "APP-0024-WIRE carried minors: the U1R adapter clamps its look-ahead like C0 (CM-1), the usage-controls test renders the component (CM-2), dead credit_ledger_page/cursorSecret removed if unreferenced; workflow wf_ed73c041-0d5",
+      "agent": "opus",
+      "branch": "codex/app-0024-wire-2",
+      "worktree": ".claude/worktrees/codex-app-0024-wire-2",
+      "base": "6c390bda",
+      "head": null,
+      "isolation": {
+        "ports": "app-u1r postgres 55457 (console-c0-real waits on app-c0's flock)",
+        "prefix": "infrx-app-u1r-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T05:44:01Z",
+      "updated": "2026-09-26T05:44:01Z",
+      "blocker": null,
+      "next_action": "verdict → merge onto the tip",
+      "estimate": {
+        "optimistic_h": 1,
+        "likely_h": 2,
+        "pessimistic_h": 4,
+        "confidence": "medium",
+        "basis": "two small App changes + tests; 1 lens",
+        "at": "2026-09-26T05:44:01Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/app/app/(console)/billing/credit-reads.ts (rpcPage)",
+        "apps/app/lib/services/query.ts, console.ts (dead read only)",
+        "apps/app/tests/u/, tests/c/",
+        "research/plan/evidence/app/APP-0024-WIRE-2-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "LINT-1",
+      "task": null,
+      "slice": "clear the 12 pre-existing ruff findings in apps/infrx-api/infrx without behaviour change; tasklocal.py's repeated d2–d5 keys analysed (dead reservations); plain Opus agent with test proof",
+      "agent": "opus",
+      "branch": "codex/lint-1",
+      "worktree": ".claude/worktrees/codex-lint-1",
+      "base": "6c390bda",
+      "head": null,
+      "isolation": {
+        "ports": "e1c postgres 55449 if a test needs PG",
+        "prefix": "infrx-e1c-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T05:44:01Z",
+      "updated": "2026-09-26T05:44:01Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merges after a fixed-clone contracts run",
+      "estimate": {
+        "optimistic_h": 0.5,
+        "likely_h": 1,
+        "pessimistic_h": 2,
+        "confidence": "medium",
+        "basis": "7 files, unused imports + one duplicate-key decision",
+        "at": "2026-09-26T05:44:01Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/infrx-api/infrx/contracts/conformance/jobs.py, services.py",
+        "apps/infrx-api/infrx/contracts/fakes/media.py",
+        "apps/infrx-api/infrx/contracts/tasklocal.py",
+        "apps/infrx-api/infrx/contracts/v2/fixtures.py",
+        "apps/infrx-api/infrx/contracts/wire.py",
+        "apps/infrx-api/infrx/state/operations.py",
+        "research/plan/evidence/coordinator/LINT-1-*.md"
+      ],
+      "wiring_requests": []
     }
   ],
   "review_queue": [
@@ -4743,6 +4820,12 @@
       "by": "coordinator (APP-0024-WIRE)",
       "what": "APP-0024-WIRE ACCEPT at 14bf8327 merged at c1b7fcb4: C0 ledger on consumer_credit_ledger, U1R filters + P02/P07; R146 App clause; C0/U1R closure notes",
       "source": "research/plan/evidence/app/APP-0024-WIRE-d5e90ce.md"
+    },
+    {
+      "at": "2026-09-26T05:44:01Z",
+      "by": "coordinator",
+      "what": "Dispatched APP-0024-WIRE-2 (minors CM-1/CM-2) and LINT-1 (12 pre-existing ruff findings incl. tasklocal.py duplicate keys) from 6c390bda; running: KNOWN-GOOD-PROOF-2, E3A-RUN, console checks on cf977a4c",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     }
   ],
   "history": {
