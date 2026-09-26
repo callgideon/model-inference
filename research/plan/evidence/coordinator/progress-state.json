@@ -1988,6 +1988,67 @@
     "apps/app/tests/e2e/ (selector fitting only)",
     "research/plan/evidence/a/E3A-fix-*"
    ]
+  },
+  {
+   "id": "D10-APP-SQL",
+   "task": null,
+   "slice": "D10 App-support SQL (0024 console read port): consumer_credit_ledger keyset RPC (C0 WR-5), credits-in partial index (U1R WR-3b), consumer_jobs filters (U1R WR-3a), addenda WR-U4-2, WR-C3A-4 (key insert = verified individual), WR-W5F5-1 (monitor grant on credit_wallet_holds); verified ACCEPT_WITH_FIXES",
+   "agent": "opus",
+   "branch": "codex/d10-app-sql",
+   "worktree": ".claude/worktrees/codex-d10-app-sql",
+   "base": "273990a0",
+   "head": "8f453b98",
+   "isolation": {
+    "ports": "revoke postgres 55459",
+    "prefix": "infrx-revoke-",
+    "db": null
+   },
+   "activity": "review",
+   "started": "2026-09-25T23:20:00Z",
+   "updated": "2026-09-26T01:54:50Z",
+   "blocker": "merge order: after the backend union (0022/0023 are on the union, not yet on the tip); then W-D10A-1 wirings (pgstate rows, e3c SIGNED_IN_FUNCTIONS, test_harness migration list), ruling for the key-insert predicate (1-D10R-2), C0/U1R App wirings, C3A/U4 known-gap flips",
+   "next_action": "merge --no-ff after the union round 3 lands; number the 1-D10R-2 ruling; APP-0024-WIRE lane (C0 rpc consumer_credit_ledger, U1R filters + P02 lines); D10-0025 (WR-U3-1 operator RPCs) branches from 8f453b98 now",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the ordered merge, three coordinator wirings and the App follow-up lane",
+    "at": "2026-09-26T01:54:50Z"
+   },
+   "evidence": [
+    "research/plan/evidence/d/D10-APP-SQL-b6c0156.md"
+   ],
+   "commands": [
+    {
+     "cmd": "INFRX_D_TASK=revoke pytest -q tests/d/test_port_d10.py tests/d/test_reads.py tests/d/test_upgrade_d10.py tests/d/test_followup_d10.py (plain PG16, 5055aae5)",
+     "exit": 0,
+     "summary": "60 passed, 3 xfailed (twice)"
+    },
+    {
+     "cmd": "INFRX_D_TASK=revoke INFRX_D1_IMAGE=supabase pytest -q tests/d/test_port_d10.py tests/d/test_postgrest_d10.py tests/d/test_schema_postgres.py tests/d/test_credit_schema.py (8f453b98)",
+     "exit": 0,
+     "summary": "GoTrue columns created before every email_confirmed_at fixture; the two regressed D suites pass again (rechecked with the fix reverted: fail)"
+    },
+    {
+     "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k 'd10_ or well_formed or superseded'",
+     "exit": 0,
+     "summary": "six new 0024 mutants killed; d10_ledger_page_sorts declared plain-image only (auto_explain cannot LOAD on Supabase's postgres)"
+    }
+   ],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0024_console_read_port.sql",
+    "apps/infrx-api/tests/d/ (checks_port.py, test_port_d10.py, d10_mutants.py, privilege tables)",
+    "research/plan/evidence/d/D10-APP-SQL-*"
+   ],
+   "wiring_requests": [
+    "W-D10A-1 tests/integration/pgstate.py: consumer_jobs(text,integer,uuid,text,uuid,timestamptz,timestamptz) BROWSER; consumer_credit_ledger(text,integer) BROWSER; consumer_may_create_key(); infrx_monitor/credit_wallet_holds grant row",
+    "W-D10A-1 tests/integration/backend/e3c/scenarios_surface.py: SIGNED_IN_FUNCTIONS += public.consumer_credit_ledger",
+    "W-D10A-1 tests/integration/test_harness.py: migration list += 0024_console_read_port.sql after 0022/0023",
+    "C0 console.ts creditLedger → rpc consumer_credit_ledger (p_limit ≤ 100)",
+    "U1R: WR-3(b) P02 lines in tests/u/credit-pg.test.ts; wire p_model/p_key_id/p_from/p_to",
+    "ORDER: after DOOR-REVOKE (273990a0); deploy 0024 before the App build that calls it"
+   ]
   }
  ],
  "review_queue": [
@@ -3711,6 +3772,11 @@
    "at": "2026-09-26T01:46:03Z",
    "by": "tracker",
    "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C)"
+  },
+  {
+   "at": "2026-09-26T01:54:50Z",
+   "lane": "D10-APP-SQL",
+   "event": "D10-APP-SQL verified ACCEPT_WITH_FIXES at 8f453b98 (0-CM-1/1-R1 GoTrue columns, 1-R2 key insert = verified individual without a wallet; minors carried); merges after the union; D10-0025 branches from it"
   }
  ],
  "history": {
