@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 19:23Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 128, updated 2026-09-26 19:09Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 19:35Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 131, updated 2026-09-26 19:35Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -8,7 +8,7 @@ Generated 2026-09-26 19:23Z UTC by `python3 research/plan/scripts/progress.py` f
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V4, V5, V6.
 - Agent slots: 16 total, 6 active lanes, 2 reserved.
-- Validation: 0 error(s), 25 warning(s).
+- Validation: 0 error(s), 26 warning(s).
 
 ### Actionable blockers
 
@@ -93,7 +93,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (46.6 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (46.8 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -161,16 +161,16 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | NEEDLE-1 | support (support lane) the production-needle guard's four offenders (env var NAME in the E3A runner, a fake supabase URL in its test, the public-edge hostname in test_certify, the App URL in a runbook snippet test) assembled from string parts as the guard itself does — no guard change, no exception; plain Opus agent | complete | codex/needle-1 | 139ffeae → 6ad1df49 | ports none | 2026-09-26 17:54Z | merged --no-ff; 3/4 offenders fixed; the test_certify.py hunk (EDGE_HOST = "marlin2b.callbill" ".ai"; EDGE_BASE; lines 1898/1905/1927/1932/1936/1953) is user-applied — a permission hand-off the coordinator does not take | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 17:54Z; basis: merged; the remaining hunk is the user's |
 | RUNBOOK-4 | support (support lane; before the RELEASE freeze) window documents consistent: known-good proof 0026 in rollout.md/E4C-runbook.md, the E4C-RUNBOOK-2 carried minors as checklist lines, /api/version public, readiness-brief log; docs + text tests only | complete | codex/runbook-4 | b967a033 → f81e55c9 | ports none (no docker; never i8) | 2026-09-26 18:49Z | DONE: merged --no-ff at 647adce8; WR-RB4-1..5 at 88cb89eb (resume via ssm.sh local file, never 91-abort; a rerun is never a verification; the edge stays in maintenance after a put-back; freeze floor 0026 with 0026's source named; the F2 note; README row 8b order); the script-side fixes go to STEP55-FIX | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 18:49Z; basis: merged and wired |
 | E1B-PREP | E1B (preparation for E1B, no measurement) map slices a–c and PERF-ENVELOPE / MARLIN-SOP / MEDIA-PARITY onto the E4C certify run; name the extra box cells so one GPU window covers E1B; cost per successful video / video-second formula (est.; CREDIT and USD separate); D-13 disposition proposal | complete | codex/e1b-prep | b967a033 → c57de96a | ports none | 2026-09-26 19:03Z | DONE: merged --no-ff at 387cac69 (E1B-protocol §7 window cells WC-0..WC-9, the cost formula, D-13 proposal A); lens majors E1BP-1/2 fixed in the round; minors E1BP-3..11 carried (WC-5 oracle field, unassigned commands, WC-6 alert silence, canary timing, single-tenant cells vs §1 tenants ≥ 2, MEDIA-PARITY corrupt-media/pixel-area oracle, estimate basis, the P-01 est. label, WC-2(b) batch nondeterminism); WR-1..4 → E1B-WIRE | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 19:03Z; basis: merged; the cells run in the window |
-| APP-MINORS-2 | support (App follow-up under the App-ahead overrides) C0 WR-6 (no first-membership pick in lib/session.ts), U1R WR-6 (one shared credit port: getUser once per render), A2 WR-A2-3 (dead safeNext), E3A-RUN S-5/RV-3, AM1-L2/L3 | running | codex/app-minors-2 | b967a033 → — | ports app-c0 55451 / app-u1r 55457 / app-u4 55456, prefix infrx-app-c0- | 2026-09-26 18:20Z | handback → merge after the RELEASE freeze (so G2 is not reset); APP-LOCAL reruns on the App release SHA | 2–5 h remaining (likely 3 h), confidence medium, estimated 2026-09-26 18:20Z; basis: five items with fails-before tests and mutants on the real-PG stacks |
+| APP-MINORS-2 | support (App follow-up under the App-ahead overrides) C0 WR-6 (no first-membership pick in lib/session.ts), U1R WR-6 (one shared credit port: getUser once per render), A2 WR-A2-3 (dead safeNext), E3A-RUN S-5/RV-3, AM1-L2/L3 | integration | codex/app-minors-2 | b967a033 → 3e969ce9 | ports app-c0 55451 / app-u1r 55457 / app-u4 55456, prefix infrx-app-c0- | 2026-09-26 19:35Z | merged --no-ff at 4db24c49 (merged before the freeze: the App release SHA carries it); WR-AM2-1/2 applied; fixed-clone console checks running → complete when green; minors carried: AM2-L-2 (getSession throws where it redirected for a user without exactly one owned org — fail-closed, no product path reaches it), AM2-L-3 (personalOrg vs grant rule wording), AM1-L2 → an E3A journey check | 0–0.5 h remaining (likely 0.2 h), confidence high, estimated 2026-09-26 19:35Z; basis: merged and wired; one console check left |
 | BACKEND-MINORS | support (support lane; after the freeze) RV-D10F-3 assertion / PG-backed runner case + the W5 mutant runner lock, G8F2-M1/M2 cases, CC-1 per-scope cap burst (+ E3C final run), ASN-V1 int() on HTTPStatusCode, RF-C1 ssm.sh usage header, the 55496 literal → tasklocal; no migrations | running | codex/backend-minors | b967a033 → — | ports d10 55442/55469, g8 55447/55492, w5 55445/55491, e3c block; never e2c/i8 | 2026-09-26 18:20Z | handback → merge after the RELEASE freeze | 2–6 h remaining (likely 4 h), confidence medium, estimated 2026-09-26 18:20Z; basis: six small items + one E3C final run; 2 lenses |
 | PREWINDOW-CHECKS | support (coordinator, read-only) X-06/X-07/X-08 before the window: box hairpin to the public edge, the env-file key rule, 85-known-good-box for both targets, O1 pool budget, known-good listing at --applied 0026 with the bundle check, the alert subscription state, hosted migrate.py plan, the P-02 credit-transition dry run | complete | — | b967a033 → — | ports SSM + hosted read-only; no local ports | 2026-09-26 18:25Z | DONE 2026-09-26: hairpin 200; MARLIN_API_KEY lines 0; 85-known-good-box: both target images cached; O1 PASS session (13+2 ≤ 15; WARN worker pool max 6 < 13 — runners wait ≤ 5 s); hosted migrate.py plan (read-only): applied 0001–0018, pending 0019–0026; known-good.py bda1586 --applied 0026 with the eight --set names and --bundles: KNOWN-GOOD (commit/preparation/migrations/config/record/bundle all ok — an earlier NOT-KNOWN-GOOD was a truncated --set name in the coordinator's call); alert subscription PendingConfirmation (user); the P-02 credit-transition --dry-run against hosted was refused by the tool policy ("Production Reads") → user runs it (B-07 key prefixes) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 18:20Z; basis: done |
 | MAIN-MERGE | support (GO-LIVE, user decision 2026-09-26: "skip the window, complete everything, get live, then keep running the test window on the side") the App release (merge to main) and the backend install proceed ahead of BACKEND-READY: freeze RELEASE → gates → a short install maintenance (W1–W5, W6 verified dump, W7 hosted apply 0019–0026, W7f activation, W8–W13) → App inputs (X3/X4) → merge main → smoke; E4C certify runs afterwards on the live system as the test window; the manifest gates record the reordering as a user decision (dispatch override), not as evidence | queued | — | b967a033 → — | ports none | 2026-09-26 19:09Z | GO-LIVE order: after G2-FIX + RELEASE gates: (1) hosted verified dump (user/operator), (2) W1–W5 + W7/W7f + W8–W13 install maintenance (~30–45 min; coordinator with the migrate.py / operations.cli allow rules), (3) Vercel production variables + P-05 auth settings (operator), (4) merge main (--no-ff, tree == APP_RELEASE) → Vercel deploy → smoke S1–S6 → known-good App release recorded, (5) E4C certify + E1B cells on the side | 0.3–1 h remaining (likely 0.5 h), confidence high, estimated 2026-09-26 18:20Z; basis: one --no-ff merge + push once authorized |
-| STEP55-FIX | support (support lane; before the freeze) the script-side fixes E4C-RUNBOOK-2 carried and RUNBOOK-4 documented — 55-runtime-login.sh: CS-4 a rerun is a true no-op, CS-5 a distinct exit for the DSN-count check + a put-back after a failed restart, F2 SSM reads exit 2 naming the parameter, F4 curl --max-time + a /readyz wait after a put-back, F5 a trap removes the staged file; e4c-certify.sh F2; a new 56-resume.sh (RB4-1); the W10b/8b sentences follow; tests first with the fake-aws pattern; workflow (Opus implementer, 2 lenses, one fix round) | running | codex/step55-fix | 88cb89eb → — | ports e1c postgres 55449 (PG-backed cases); never i8/e2c, prefix infrx-e1c-, db e1c | 2026-09-26 18:49Z | handback → merge before the RELEASE freeze (window scripts) | 1.5–4 h remaining (likely 2.5 h), confidence medium, estimated 2026-09-26 18:49Z; basis: five script behaviours with fails-before tests and mutants; one new step |
+| STEP55-FIX | support E4C window scripts (support lane; before the RELEASE freeze) | review | codex/step55-fix | 88cb89eb → 0f369aa96223383c2576332a34a0fe3658f28fd4 | ports e1c postgres 55449 (PG-backed cases); never i8/e2c, prefix infrx-e1c-, db e1c | 2026-09-26 19:07Z | handback → merge before the RELEASE freeze (window scripts) | 0.1–1 h remaining (likely 0.3 h), confidence high, estimated 2026-09-26 19:07Z; basis: committed, suites and mutants green; review remains |
 | E1B-WIRE | E1B (window wiring; no measurement) WR-3 bench --target direct sends the worker's stop_token_ids; WR-4 the worker publishes AttemptResult.timings as phase metrics; WR-1 the E1B window profile bases validate as §7 writes them; WR-2 a committed e1b-window.sh runs WC-1..WC-8 in order with the no-overlap preconditions; workflow (Opus implementer, 2 lenses, one fix round) | running | codex/e1b-wire | 387cac69 → — | ports w5 postgres 55445 / valkey 55491; never i8/e2c, prefix infrx-w5-, db w5 | 2026-09-26 19:03Z | handback → merge before the RELEASE freeze (bench/worker code + profiles + launcher) | 2–6 h remaining (likely 3.5 h), confidence medium, estimated 2026-09-26 19:03Z; basis: two one-line code wirings with tests/mutants, four profile bases, one launcher with flag tests |
 
 ### Queues and locks
 
-- Review queue: empty.
+- Review queue: STEP55-FIX.
 - Integration queue: empty.
 - e2c (55448/55493) + i8 (55450/55495/55496): G2-FIX until ≈2026-09-26 21:00Z. exclusive for the whole make check + tests/i run; no other user of either until the verdict
 - e3c compose block 56900–56999: BACKEND-MINORS. one E3C run at a time
@@ -188,22 +188,23 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E4C (queued) and E1B-WIRE (running) both own research/plan/evidence/e/ / research/plan/evidence/e/E1B-wire-*.md
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and G2-FIX (running) both own infra/ / infra/rollout/README.md §0
-- warning: overlapping writers: I2A (review) and APP-MINORS-2 (running) both own apps/app/ / apps/app/lib/session.ts (+2 more)
+- warning: overlapping writers: I2A (review) and APP-MINORS-2 (integration) both own apps/app/ / apps/app/lib/session.ts (+2 more)
 - warning: overlapping writers: I2A (review) and BACKEND-MINORS (running) both own infra/ / infra/observe/deliver.py (+1 more)
-- warning: overlapping writers: I2A (review) and STEP55-FIX (running) both own infra/ / infra/rollout/steps/55-runtime-login.sh (+4 more)
+- warning: overlapping writers: I2A (review) and STEP55-FIX (review) both own infra/ / infra/rollout/steps/55-runtime-login.sh (+4 more)
 - warning: overlapping writers: I2A (review) and E1B-WIRE (running) both own infra/ / infra/rollout/e1b-window.sh
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and G2-FIX (running) both own tests/integration/ / tests/integration/gates.py
-- warning: overlapping writers: E3A (queued) and APP-MINORS-2 (running) both own tests/integration/ / tests/integration/app/ (+1 more)
+- warning: overlapping writers: E3A (queued) and APP-MINORS-2 (integration) both own tests/integration/ / tests/integration/app/ (+1 more)
 - warning: overlapping writers: E3A (queued) and BACKEND-MINORS (running) both own tests/integration/ / tests/integration/backend/e3c/scenarios_capacity.py + reverts.py
 - warning: overlapping writers: I3 (queued) and G2-FIX (running) both own infra/ / infra/rollout/README.md §0 (+1 more)
-- warning: overlapping writers: I3 (queued) and APP-MINORS-2 (running) both own tests/integration/ / tests/integration/app/
+- warning: overlapping writers: I3 (queued) and APP-MINORS-2 (integration) both own tests/integration/ / tests/integration/app/
 - warning: overlapping writers: I3 (queued) and BACKEND-MINORS (running) both own infra/ / infra/observe/deliver.py (+2 more)
-- warning: overlapping writers: I3 (queued) and STEP55-FIX (running) both own infra/ / infra/rollout/steps/55-runtime-login.sh (+4 more)
+- warning: overlapping writers: I3 (queued) and STEP55-FIX (review) both own infra/ / infra/rollout/steps/55-runtime-login.sh (+4 more)
 - warning: overlapping writers: I3 (queued) and E1B-WIRE (running) both own infra/ / infra/rollout/e1b-window.sh
 - warning: overlapping writers: G2-FIX (running) and BACKEND-MINORS (running) both own apps/infrx-api/tests/i/test_observe.py / apps/infrx-api/tests/i/test_observe.py
+- warning: overlapping writers: G2-FIX (running) and STEP55-FIX (review) both own apps/infrx-api/tests/i/mutants.py / apps/infrx-api/tests/i/mutants.py
 - warning: overlapping writers: BACKEND-MINORS (running) and E1B-WIRE (running) both own apps/infrx-api/tests/w/ / apps/infrx-api/tests/w/
-- warning: 1 update file(s) not applied yet: STEP55-FIX-20260926T1907Z.json (run apply-updates)
+- warning: overlapping writers: STEP55-FIX (review) and E1B-WIRE (running) both own apps/infrx-api/tests/i/test_rollout.py / apps/infrx-api/tests/i/test_rollout.py
 
 ## Pending inputs
 
@@ -295,6 +296,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `G-GATES-20260926T1121Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
 - `RUNBOOK-4-20260926T1836Z.json`: stale: at 2026-09-26T18:36:00Z is not newer than lane RUNBOOK-4 state 2026-09-26T18:49:00Z
 - `E1B-20260926T1842Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- `APP-MINORS-2-20260926T1859Z.json`: stale: at 2026-09-26T18:59:00Z is not newer than lane APP-MINORS-2 state 2026-09-26T19:35:00Z
+- `APP-MINORS-2-20260926T1930Z.json`: unknown activity 'fix'
 
 ## All manifest tasks
 
@@ -436,6 +439,10 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 19:35Z UTC, tracker: rejected update: unknown activity 'fix'
+- 2026-09-26 19:07Z UTC, STEP55-FIX: running → review; head 0f369aa96223383c2576332a34a0fe3658f28fd4; estimate likely 2.5 → 0.3 h (committed, suites and mutants green; review remains)
+- 2026-09-26 19:35Z UTC, tracker: rejected update: stale: at 2026-09-26T18:59:00Z is not newer than lane APP-MINORS-2 state 2026-09-26T19:35:00Z
+- 2026-09-26 19:35Z UTC, coordinator (APP-MINORS-2): APP-MINORS-2 ACCEPT_WITH_FIXES 3e969ce9 merged at 4db24c49 (no first-membership pick; getUser once per render; dead safeNext gone; RV-3; AM1-L3); WR-AM2-1/2 applied; merged before the freeze so the App release carries it
 - 2026-09-26 19:09Z UTC, coordinator: user: "skip the window, we shall complete everything, get live, then keep running the test window on the side" — recorded as a dispatch decision: the backend install and the App release (main) proceed ahead of BACKEND-READY; E4C certify/E1B cells run afterwards on the live system; the irreversible steps keep their safety gates (verified dump before the hosted apply; the RELEASE gates green first); the short install maintenance (W5 pause → W10 → resume) remains
 - 2026-09-26 19:06Z UTC, coordinator (X-14): box staged for the current tip a434e2a8 outside the window: release-bundle.sh uploaded <sha>.bundle/.sha256 to s3://llm-bootcamp-641134885443/releases/, the box fetched and verified it (SSM dd7fe2ab; working tree untouched), 20-prepull pulled the pinned engine image vllm/vllm-openai@sha256:4cbfd34a… (SSM 2ce71e28); the final RELEASE repeats the ~14 MB bundle step only
 - 2026-09-26 19:05Z UTC, coordinator: user: "let's go with A, but warp up immediately" — MAIN-MERGE = route A (APP-MERGE after BACKEND-READY, the W7 hosted apply and the App inputs); the coordinator compresses its side: staging the box for RELEASE now (bundle/fetch/prepull), the release-gate run scripted to start on the G2-FIX merge, both gate candidates re-proven at RELEASE; the window itself and the hosted items stay operator-scheduled

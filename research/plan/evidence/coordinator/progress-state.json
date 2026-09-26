@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 128,
-  "updated": "2026-09-26T19:09:00Z",
+  "revision": 131,
+  "updated": "2026-09-26T19:35:05Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -3335,27 +3335,35 @@
       "branch": "codex/app-minors-2",
       "worktree": ".claude/worktrees/codex-app-minors-2",
       "base": "b967a033",
-      "head": null,
+      "head": "3e969ce9",
       "isolation": {
         "ports": "app-c0 55451 / app-u1r 55457 / app-u4 55456",
         "prefix": "infrx-app-c0-",
         "db": null
       },
-      "activity": "running",
+      "activity": "integration",
       "started": "2026-09-26T18:20:00Z",
-      "updated": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T19:35:00Z",
       "blocker": null,
-      "next_action": "handback → merge after the RELEASE freeze (so G2 is not reset); APP-LOCAL reruns on the App release SHA",
+      "next_action": "merged --no-ff at 4db24c49 (merged before the freeze: the App release SHA carries it); WR-AM2-1/2 applied; fixed-clone console checks running → complete when green; minors carried: AM2-L-2 (getSession throws where it redirected for a user without exactly one owned org — fail-closed, no product path reaches it), AM2-L-3 (personalOrg vs grant rule wording), AM1-L2 → an E3A journey check",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 3,
-        "pessimistic_h": 5,
-        "confidence": "medium",
-        "basis": "five items with fails-before tests and mutants on the real-PG stacks",
-        "at": "2026-09-26T18:20:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0.2,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "merged and wired; one console check left",
+        "at": "2026-09-26T19:35:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/app/APP-MINORS-2-65528fe.md"
+      ],
+      "commands": [
+        {
+          "cmd": "make console-test/lint/typecheck/built/mutants/pg/c0-real; tests/integration/app",
+          "exit": 0,
+          "summary": "614 pass; contracts 212 / V 40 / U 218 / C 195 / A 47+46; pg 8/8 + 8/8; c0-real 16/16; 20 passed"
+        }
+      ],
       "owned_paths": [
         "apps/app/lib/session.ts",
         "the credit port files U1R WR-6 names",
@@ -3498,42 +3506,90 @@
     {
       "id": "STEP55-FIX",
       "task": null,
-      "slice": "(support lane; before the freeze) the script-side fixes E4C-RUNBOOK-2 carried and RUNBOOK-4 documented — 55-runtime-login.sh: CS-4 a rerun is a true no-op, CS-5 a distinct exit for the DSN-count check + a put-back after a failed restart, F2 SSM reads exit 2 naming the parameter, F4 curl --max-time + a /readyz wait after a put-back, F5 a trap removes the staged file; e4c-certify.sh F2; a new 56-resume.sh (RB4-1); the W10b/8b sentences follow; tests first with the fake-aws pattern; workflow (Opus implementer, 2 lenses, one fix round)",
+      "slice": "E4C window scripts (support lane; before the RELEASE freeze)",
       "agent": "opus",
       "branch": "codex/step55-fix",
       "worktree": ".claude/worktrees/codex-step55-fix",
       "base": "88cb89eb",
-      "head": null,
+      "head": "0f369aa96223383c2576332a34a0fe3658f28fd4",
       "isolation": {
         "ports": "e1c postgres 55449 (PG-backed cases); never i8/e2c",
         "prefix": "infrx-e1c-",
         "db": "e1c"
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-26T18:49:00Z",
-      "updated": "2026-09-26T18:49:00Z",
+      "updated": "2026-09-26T19:07:00Z",
       "blocker": null,
       "next_action": "handback → merge before the RELEASE freeze (window scripts)",
       "estimate": {
-        "optimistic_h": 1.5,
-        "likely_h": 2.5,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "five script behaviours with fails-before tests and mutants; one new step",
-        "at": "2026-09-26T18:49:00Z"
+        "optimistic_h": 0.1,
+        "likely_h": 0.3,
+        "pessimistic_h": 1.0,
+        "confidence": "high",
+        "basis": "committed, suites and mutants green; review remains",
+        "at": "2026-09-26T19:07Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/i/STEP55-FIX-0f369aa.md"
+      ],
+      "commands": [
+        {
+          "cmd": "bash -n infra/rollout/steps/*.sh infra/rollout/e4c-certify.sh",
+          "exit": 0,
+          "summary": "all parse"
+        },
+        {
+          "cmd": "apps/infrx-api: pytest -q tests/i/test_ops_steps.py -k login (new tests, base script)",
+          "exit": 1,
+          "summary": "3 failed: CS-4 verifier moved, F4 put-back unprobed, CS-5 exit 3"
+        },
+        {
+          "cmd": "apps/infrx-api: pytest -q tests/i/test_ops_steps.py tests/i/test_rollout.py",
+          "exit": 0,
+          "summary": "25 passed, 1 skipped (PG case without INFRX_D_TASK)"
+        },
+        {
+          "cmd": "apps/infrx-api: INFRX_D_TASK=e1c pytest -q tests/i/test_ops_steps.py",
+          "exit": 0,
+          "summary": "14 passed (PG 16 case: rerun leaves rolpassword; failed on base)"
+        },
+        {
+          "cmd": "apps/infrx-api: INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'login_ or launcher_ or well_formed or every_case'",
+          "exit": 0,
+          "summary": "22 passed: 16 login_ + 4 launcher_ killed"
+        },
+        {
+          "cmd": "apps/infrx-api: pytest -q tests/i --deselect tests/i/test_mutants.py",
+          "exit": 0,
+          "summary": "192 passed, 1 skipped, 1 xfailed"
+        },
+        {
+          "cmd": "apps/infrx-api: pytest -q ../../tests/integration/backend/recovery/test_runbooks.py ../../tests/integration/ops",
+          "exit": 0,
+          "summary": "13 + 34 passed"
+        },
+        {
+          "cmd": "python3 research/plan/scripts/validate_plan.py",
+          "exit": 0,
+          "summary": "PASS"
+        }
+      ],
       "owned_paths": [
         "infra/rollout/steps/55-runtime-login.sh",
-        "infra/rollout/e4c-certify.sh (SSM read exit)",
-        "infra/rollout/steps/56-resume.sh (new)",
-        "infra/runbooks/rollout.md (W10b sentences)",
-        "infra/rollout/README.md (rows 8b/8c)",
-        "apps/infrx-api/tests/i/test_ops_steps.py, test_rollout.py, mutants.py (login_ entries)",
-        "research/plan/evidence/i/STEP55-FIX-*.md"
+        "infra/rollout/steps/56-resume.sh",
+        "infra/rollout/e4c-certify.sh",
+        "infra/rollout/README.md",
+        "infra/runbooks/rollout.md",
+        "apps/infrx-api/tests/i/test_ops_steps.py",
+        "apps/infrx-api/tests/i/test_rollout.py",
+        "apps/infrx-api/tests/i/mutants.py",
+        "research/plan/evidence/i/STEP55-FIX-0f369aa.md",
+        "research/plan/evidence/coordinator/updates/STEP55-FIX-20260926T1907Z.json"
       ],
-      "wiring_requests": []
+      "wiring_requests": [
+        "WR-S55-1 models/marlin2b/results/E4C-runbook.md:148-149: the missing pg_journal_url now exits 2 naming the parameter (e4c-certify.sh:33-36), container start at :45; exact text in the evidence"
+      ]
     },
     {
       "id": "E1B-WIRE",
@@ -3577,7 +3633,14 @@
       "wiring_requests": []
     }
   ],
-  "review_queue": [],
+  "review_queue": [
+    {
+      "since": "2026-09-26T19:07:00Z",
+      "lane": "STEP55-FIX",
+      "task": "STEP55-FIX",
+      "head": "0f369aa96223383c2576332a34a0fe3658f28fd4"
+    }
+  ],
   "integration_queue": [],
   "resource_locks": [
     {
@@ -6006,6 +6069,30 @@
       "by": "coordinator",
       "what": "user: \"skip the window, we shall complete everything, get live, then keep running the test window on the side\" — recorded as a dispatch decision: the backend install and the App release (main) proceed ahead of BACKEND-READY; E4C certify/E1B cells run afterwards on the live system; the irreversible steps keep their safety gates (verified dump before the hosted apply; the RELEASE gates green first); the short install maintenance (W5 pause → W10 → resume) remains",
       "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+    },
+    {
+      "at": "2026-09-26T19:35:00Z",
+      "by": "coordinator (APP-MINORS-2)",
+      "what": "APP-MINORS-2 ACCEPT_WITH_FIXES 3e969ce9 merged at 4db24c49 (no first-membership pick; getUser once per render; dead safeNext gone; RV-3; AM1-L3); WR-AM2-1/2 applied; merged before the freeze so the App release carries it",
+      "source": "research/plan/evidence/app/APP-MINORS-2-65528fe.md"
+    },
+    {
+      "at": "2026-09-26T19:35:05Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T18:59:00Z is not newer than lane APP-MINORS-2 state 2026-09-26T19:35:00Z",
+      "source": "updates/APP-MINORS-2-20260926T1859Z.json"
+    },
+    {
+      "at": "2026-09-26T19:07:00Z",
+      "by": "STEP55-FIX",
+      "what": "running → review; head 0f369aa96223383c2576332a34a0fe3658f28fd4; estimate likely 2.5 → 0.3 h (committed, suites and mutants green; review remains)",
+      "source": "updates/STEP55-FIX-20260926T1907Z.json"
+    },
+    {
+      "at": "2026-09-26T19:35:05Z",
+      "by": "tracker",
+      "what": "rejected update: unknown activity 'fix'",
+      "source": "updates/APP-MINORS-2-20260926T1930Z.json"
     }
   ],
   "history": {
@@ -6663,10 +6750,24 @@
       "status": "rejected",
       "at": "2026-09-26T18:42:00Z",
       "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "APP-MINORS-2-20260926T1859Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T18:59:00Z",
+      "reason": "stale: at 2026-09-26T18:59:00Z is not newer than lane APP-MINORS-2 state 2026-09-26T19:35:00Z"
+    },
+    "STEP55-FIX-20260926T1907Z.json": {
+      "status": "applied",
+      "at": "2026-09-26T19:07:00Z"
+    },
+    "APP-MINORS-2-20260926T1930Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T19:30:00Z",
+      "reason": "unknown activity 'fix'"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T19:03:37Z",
+    "computed_at": "2026-09-26T19:35:05Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
