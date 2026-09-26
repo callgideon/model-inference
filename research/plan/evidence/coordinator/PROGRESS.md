@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 05:40Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 94, updated 2026-09-26 05:40Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 05:41Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 96, updated 2026-09-26 05:41Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `3773f38f`), base `dff31efc`, main `dff31efc`.
+- Integration branch `claude/consumer-v1` (head `cf977a4c`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 4 active lanes, 2 reserved.
-- Validation: 0 error(s), 12 warning(s).
+- Agent slots: 16 total, 3 active lanes, 2 reserved.
+- Validation: 0 error(s), 10 warning(s).
 
 ### Actionable blockers
 
@@ -157,13 +157,13 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | G8-FLAG | support G8 micro-lane (GAP-I3-1, I3R-7, R144): an audited `flag` CLI verb that sets one non-regime feature flag (signup_grant off alone) only through 0022 infrx.set_feature_flag; the cutover rollback runbook points at it; self-verifying workflow wf_3b2a85e9-f9d | complete | codex/g8-flag | 34f0ed28 → 5e45b79e | ports g8 postgres 55447, prefix infrx-g8- | 2026-09-26 04:27Z | merged a30631a8 + wirings e7b1c272; fixed-clone checks green; minors carried (session record 05:05Z) | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 04:20Z; basis: one verb + tests + two doc pointers; 2 lenses, one fix round |
 | E4C-RUNBOOK-2 | support E4C window runbook corrections: W6 seed, CREDIT regime settings, hosted-order of card/activation, certify launcher flags, runtime-login step; fix round: W7f reversal on every rollback after it (0-CS-1), README step 6b (0-CS-2), observe on the monitor login (0-CS-3) | complete | codex/e4c-runbook-2 | 6cbb6a45 → f49d1be3 | ports none (e1c 55449 only if a test needs PostgreSQL), prefix infrx-e4c-runbook-2- | 2026-09-26 05:40Z | merged 0b97c7cd + wirings 3773f38f; checks green except the i8-harness mutant list (rerun when 55450 frees) | 0.1–1 h remaining (likely 0.25 h), confidence medium, estimated 2026-09-26 05:25Z; basis: three review findings fixed and tested; remaining: coordinator rerun of the tests/i mutant list once 55450 is free, and review |
 | KNOWN-GOOD-PROOF-2 | support P-25 / E4C prerequisite: extend both rollback targets' schema_proof from 0023 to 0025 on the D harness (i8), known-good.py --applied 0025 KNOWN-GOOD; from the D10-MERGE-2 head 9e4e34ca; workflow wf_13c39cc6-5bd | running | codex/known-good-proof-2 | 9e4e34ca → — | ports i8 postgres 55450 / valkey 55495 / pgbouncer 55496, prefix infrx-i8- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; 15-pending-inputs P-25 row | 1.5–4 h remaining (likely 2.5 h), confidence medium, estimated 2026-09-26 05:02Z; basis: the last proof lane took 128 min; two targets × 0024/0025 |
-| APP-0024-WIRE | support C0/U1R consume 0024: creditLedger via rpc consumer_credit_ledger (limit+1 ≤ 100), U1R P02 lines + usage filters via consumer_jobs parameters; from the D10-MERGE-2 head 9e4e34ca; workflow wf_26299e6f-6a4 | running | codex/app-0024-wire | 9e4e34ca → — | ports app-c0 postgres 55451, prefix infrx-app-c0- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; C0/U1R closure notes updated | 2–6 h remaining (likely 4 h), confidence medium, estimated 2026-09-26 05:02Z; basis: two App files + tests + mutants; real-PG stacks; 2 lenses, one fix round |
+| APP-0024-WIRE | support C0 WR-5 + U1R WR-3(a)/(b)/(c): the App's consumers of 0024 (consumer_credit_ledger, consumer_jobs filters, credits-in index P02 lines) | complete | codex/app-0024-wire | 9e4e34ca → 14bf8327 | ports app-c0 postgres 55451, prefix infrx-app-c0- | 2026-09-26 05:41Z | merged --no-ff at c1b7fcb4 (ACCEPT); R146 App clause (WR-0024W-1) at cf977a4c; minors carried: CM-1 (U1R adapter limit+1 unclamped at the 100 edge — page sizes 25; C0's rpcPage clamps; follow-up: reuse C0's rule in credit-reads), CM-2 (controls test greps the source), CM-3 (billing/page.tsx + credit-fixture edits, declared); fixed-clone console checks running | 0.25–1.5 h remaining (likely 0.5 h), confidence medium, estimated 2026-09-26 05:25Z; basis: all named checks green at d5e90cee; remaining is merge after D10-MERGE-2 (disjoint paths) and the ruling number |
 | E3A-RUN | support (support lane for E3A, like E3A-PREP: the manifest gate BACKEND-READY is unchanged) E3A journey gate run on the merged SHA after BACKEND-LOCAL: E3C's two E3A wirings, operator-controls check on 0025, expired-content display, the four delegated cells bound to E3C-FINAL, runner + seam controls on the e4b block; from the D10-MERGE-2 head 9e4e34ca (dispatched ahead of BACKEND-READY under the user's App-ahead decision; the APP-LOCAL decision stays the coordinator's); workflow wf_9ffa037f-60d | running | codex/e3a-run | 9e4e34ca → — | ports e4b compose block 56800–56899 (edge 56860, control 56861, App 56870; one runner), prefix infrx-e4b- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; APP-LOCAL cells from the runner's verdict; gate decision after BACKEND-READY per the manifest | 3–8 h remaining (likely 5 h), confidence medium, estimated 2026-09-26 05:02Z; basis: two new checks + wirings + a journey run of ~2 min; 2 lenses, one fix round |
 | G8-FLAG-2 | support flag verb minors 0-G8FLAG-R2, 0-G8FLAG-R3, 1-G8FLAG-R6 | complete | codex/g8-flag-2 | 44ba44a9 → b108556f | ports g8 postgres 55447 / valkey 55492, prefix infrx-g8- | 2026-09-26 05:29Z | merged at 15f499b3; fixed-clone checks green | 0.1–0.5 h remaining (likely 0.2 h), confidence high, estimated 2026-09-26 05:12Z; basis: 4 owned files, no wiring, checks green |
 
 ### Queues and locks
 
-- Review queue: M6, E2C, A2, U1R, A3, C0, G8-FLAG-2, E4C-RUNBOOK-2.
+- Review queue: M6, E2C, A2, U1R, A3, C0, G8-FLAG-2, E4C-RUNBOOK-2, APP-0024-WIRE.
 - Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -187,10 +187,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E4C (queued) and E3A-RUN (running) both own research/plan/evidence/e/ / research/plan/evidence/e/E3A-run-*.md
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and KNOWN-GOOD-PROOF-2 (running) both own infra/ / infra/rollout/known-good.json
-- warning: overlapping writers: I2A (review) and APP-0024-WIRE (running) both own apps/app/ / apps/app/lib/services/console.ts (+3 more)
 - warning: overlapping writers: I2A (review) and E3A-RUN (running) both own apps/app/ / apps/app/tests/e2e/
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
-- warning: overlapping writers: E3A (queued) and APP-0024-WIRE (running) both own apps/app/tests/ / apps/app/tests/c/, tests/u/
 - warning: overlapping writers: E3A (queued) and E3A-RUN (running) both own tests/integration/ / tests/integration/app/ (+1 more)
 - warning: overlapping writers: I3 (queued) and KNOWN-GOOD-PROOF-2 (running) both own infra/ / infra/rollout/known-good.json
 - warning: overlapping writers: I3 (queued) and E3A-RUN (running) both own tests/integration/ / tests/integration/app/
@@ -414,6 +412,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 05:41Z UTC, coordinator (APP-0024-WIRE): APP-0024-WIRE ACCEPT at 14bf8327 merged at c1b7fcb4: C0 ledger on consumer_credit_ledger, U1R filters + P02/P07; R146 App clause; C0/U1R closure notes
+- 2026-09-26 05:24Z UTC, APP-0024-WIRE: running → review; head d5e90cee; estimate likely 4 → 0.5 h (all named checks green at d5e90cee; remaining is merge after D10-MERGE-2 (disjoint paths) and the ruling number)
 - 2026-09-26 05:34Z UTC, coordinator (E4C-RUNBOOK-2): E4C-RUNBOOK-2 ACCEPT_WITH_FIXES f49d1be3 merged at 0b97c7cd; wirings at 3773f38f; the window runbook now carries the corrected sequence (W7f activation, W10b runtime logins, rollback reversal first)
 - 2026-09-26 04:51Z UTC, E4C-RUNBOOK-2: running → review; head 13a30bb5; estimate likely 3 → 0.25 h (three review findings fixed and tested; remaining: coordinator rerun of the tests/i mutant list once 55450 is free, and review)
 - 2026-09-26 05:23Z UTC, coordinator: L3-RERUN-0025 on 7e0b7b95: rls 916/0 (all 0024/0025 rows as expected); ob10 → WR-W5F5B-4 dashboard panel applied at 7eb9e69b; G8-FLAG-2 ACCEPT b108556f merged at 15f499b3
