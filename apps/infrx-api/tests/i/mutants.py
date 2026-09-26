@@ -1311,6 +1311,12 @@ MUTANTS += (
        "-- Re-runnable: `create or replace`, and the grants restated. ",
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
        "test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond"),
+    # fix round (0-KGP2-RV-1): the committed driver alone reproduces the record's SHAPE set
+    _m("schema_proof_drops_a_0025_shape_case", "the driver deselects every SHAPE case the record counts",
+       PROOF_PY, '    "tests/d/test_schema_postgres.py::test_dur_rls__the_browser_privilege_surface_is_enumerated":\n'
+       '        "enumerates the old browser surface (0025 grants authenticated SELECT on operator_wallet_drift / "\n'
+       '        "operator_unknown_usage)",\n', "",
+       "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
 )
 
 # --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------

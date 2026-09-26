@@ -70,6 +70,8 @@ def test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema():
         assert any("KNOWN-GOOD-PROOF-" in p for p in proof["evidence"])
         # the bytes it ran on, beyond both targets' 0001-0018: a revised 0022/0023 fails here
         assert proof["files"] == {v: h for v, h in tree.items() if "0018" < v <= proof["through"]}
+        # the committed driver deselects the SHAPE cases the record counts (0-KGP2-RV-1: it named 10)
+        assert f"{len(PROOF['SHAPE'])} SHAPE cases" in proof["result"], len(PROOF["SHAPE"])
 
 
 def test_ops_recover__the_proof_driver_refuses_a_bad_target_and_a_moved_history():
