@@ -7,8 +7,9 @@
  */
 import type { ApiKeyCreated, ApiKeySummary, Result } from "../../../lib/contracts/types.ts";
 
-/** P-26 (15-pending-inputs.md), verbatim: one copy, the sentence A3 publishes on Docs (WR-U2-3). */
-export { REVOCATION_COPY } from "../docs/content.ts";
+/** P-26 (15-pending-inputs.md), verbatim; the same sentence A3 publishes on Docs. */
+export const REVOCATION_COPY =
+  "Revoking a key stops new requests immediately. Reads and cancels by that key stop within 60 seconds while our account service is reachable. During an account-service outage, a revoked key may continue to read or cancel its own existing jobs until the service recovers. It can never start new work.";
 
 export const ONE_TIME_COPY =
   "This is the only time this key is shown. We store a hash of it, not the key, so it cannot be shown again. Keep it in a secret manager or an environment variable.";

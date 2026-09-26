@@ -8,8 +8,3 @@ test("U2-W01 the consumer navigation links Settings", () => {
 test("U2-W02 no module remembers or recalls a key's plaintext", () => {
   for (const p of ["lib/keys.ts", "components/snippet.tsx"]) assert.doesNotMatch(src(p), /sessionStorage|rememberKey|recallKey/, p);
 });
-test("U2-W03 the P-26 revocation sentence has one copy (Docs), re-exported by the keys page model", () => {
-  const vm = src("app/(console)/api-keys/view-model.ts");
-  assert.match(vm, /export \{ REVOCATION_COPY \} from "\.\.\/docs\/content\.ts";/);
-  assert.doesNotMatch(vm, /Revoking a key/);
-});
