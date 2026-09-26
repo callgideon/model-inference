@@ -382,19 +382,48 @@ def test_worker_main__the_cache_high_water_and_its_alert_are_p25s():
     assert dict(preflight.DISK_BUDGET)["/opt/dlami/nvme/processing"] == 60 * 2**30 > high
 
 
-@pytest.mark.xfail(strict=True, reason="WR-P25-1: the gateway's PgLifecycle keeps the "
-                   "library's 604,800 s grace; its patch makes this pass and removes the mark")
 def test_worker_main__the_gateways_content_grace_is_the_deployments(tmp_path):
-    """P-25's grace for what the gateway registers: `upload_complete` and every source and
-    payload `MediaUploads._register` writes go through the one `PgLifecycle`
-    `adapters_from_env` builds (`uploads=` and `content=` in `build_ingress_deps`). Until
-    WR-P25-1 lands it stamps `lifecycle.GRACE_S`, and 0022's `greatest(eligible_at, ...)`
-    keeps the worker's later 3,600 s registration from shortening it: P-25's grace holds
-    only for worker-registered content. Strict, so the gap cannot close unrecorded."""
+    """P-25's grace for what the gateway registers (WR-P25-1): `upload_complete` and every
+    source and payload `MediaUploads._register` writes go through the one `PgLifecycle`
+    `adapters_from_env` builds (`uploads=` and `content=` in `build_ingress_deps`). Oracle:
+    an adapter built without `grace_s` stamps the library's 604,800 s, and 0022's
+    `greatest(eligible_at, ...)` then keeps the worker's later registration from shortening
+    it - P-25's grace would hold only for worker-registered content."""
     from infrx.gateway import pilot
     settings = from_env(environment(tmp_path, INFRX_MODE="dev", RETENTION_GRACE_S="11"))
     lifecycle = pilot.adapters_from_env(settings, objects=InMemoryObjectStore())["lifecycle"]
     assert lifecycle.grace_s == settings.deployment.retention_grace_s == 11.0
+
+
+def test_worker_main_pg__a_source_the_gateway_registers_is_eligible_after_p25s_grace(
+        tmp_path):
+    """WR-P25-1 on PostgreSQL: a source registered through the pilot's own lifecycle adapter
+    (`adapters_from_env`, the deployment's default `RETENTION_GRACE_S`) becomes eligible for
+    collection exactly 3,600 s after its registration. Oracle: the adapter without the
+    deployment's grace gives 604,800 s (the library default)."""
+    from infrx.contracts.v2.lifecycle import (ContentIdentity, ContentKind, ContentLocation,
+                                              ContentOrigin)
+    from infrx.gateway import pilot
+
+    from ..d import pgharness
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"WR-P25-1: the D harness is unavailable: {reason}")
+    from ..d.test_catalog_pg import fresh
+    database = fresh()
+    org = str(uuid.uuid4())
+    with pgharness.connect(database) as owner:
+        owner.execute("insert into public.organizations (id, name, slug) values (%s, 'grace', "
+                      "%s)", (org, f"grace-{org[:8]}"))
+    settings = from_env(environment(tmp_path, INFRX_MODE="dev",
+                                    DATABASE_URL=pgharness.dsn(database)))
+    lifecycle = pilot.adapters_from_env(settings, objects=InMemoryObjectStore())["lifecycle"]
+    row = asyncio.run(lifecycle.register(ContentIdentity(
+        org_id=org, kind=ContentKind.source, location=ContentLocation.object_store,
+        object_key=f"media/{org}/p25-grace", digest="sha256:" + "a" * 64, bytes=5,
+        origin=ContentOrigin.written)))
+    assert settings.deployment.retention_grace_s == 3600.0
+    assert (row.eligible_at - row.registered_at).total_seconds() == 3600.0
 
 
 def test_worker_main__a_housekeeping_loop_outlives_a_failed_step():
