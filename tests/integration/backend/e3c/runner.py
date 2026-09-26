@@ -141,6 +141,13 @@ CONTROLS = {
     "nc-dur-cap": {"oracle": "DUR-CAP", "scenario": "s15",
                    "mechanism": "admission_checks's active-job cap comparisons off by one (0011)",
                    "revert": True},
+    # WR-BM-2 (CM-1): one scope's comparison alone, detected by s15's scoped burst.
+    "nc-dur-cap-org": {"oracle": "DUR-CAP", "scenario": "s15",
+                       "mechanism": "admission_checks's per-organization cap comparison off by "
+                                    "one (0011)", "revert": True},
+    "nc-dur-cap-key": {"oracle": "DUR-CAP", "scenario": "s15",
+                       "mechanism": "admission_checks's per-key cap comparison off by one "
+                                    "(0011)", "revert": True},
     "nc-credit-rate": {"oracle": "CREDIT-RATE", "scenario": "s16",
                        "mechanism": "settlement debits at the current listing's card, not the "
                                     "admitted one (0018 terminalize)",
@@ -231,7 +238,9 @@ REQUIRED = {
             *(f"test_s12_a_cell_scenario_passes_only_with_every_required_case[{c}]"
               for c in ("cap", "fence", "rate")),
             *(f"test_s12_every_sql_revert_applies_to_this_tree[{nc}]"
-              for nc in ("nc-dur-fence", "nc-dur-cap", "nc-credit-rate")),
+              for nc in ("nc-dur-fence", "nc-dur-cap", "nc-dur-cap-org", "nc-dur-cap-key",
+                         "nc-credit-rate")),
+            "test_s12_each_per_scope_cap_control_removes_only_its_own_comparison",
             "test_s12_every_revert_control_has_a_tree_builder"),
 }
 # 2-ACC-2: infrastructure that broke under a case (never a product gap): INVALID[harness].

@@ -3,7 +3,7 @@
 #   tests/integration/backend/e3c/control_trees.sh <sha> <outdir> [nc-id ...]
 # Prints `--control NC=TREE` arguments. Each tree is `git archive <sha>` with ONE fix removed;
 # nothing touches a ref, an index or a worktree. A patch that does not apply is a hard stop
-# (exit 1), never a partially reverted tree. Default: all five controls below.
+# (exit 1), never a partially reverted tree. Default: all seven controls below.
 #
 # nc-admission-ready (ADMISSION-READY, s04): the readiness barrier's product commits
 # reverse-applied newest first - W5-F5B's post-marker attach (0a230353), W5-F5's
@@ -26,11 +26,13 @@
 # one check removed from one SQL function by a last migration holding that function's latest
 # definition in the tree with the check changed - fence_lease's generation check,
 # admission_checks's three active-job cap comparisons off by one, terminalize's debit read at
-# the alias's current listing instead of the admitted card. `reverts.py` holds each anchor
+# the alias's current listing instead of the admitted card. nc-dur-cap-org / nc-dur-cap-key
+# (WR-BM-2): the per-organization, resp. per-key comparison alone, caught by s15's scoped
+# burst at MAX_ACTIVE_JOBS 16. `reverts.py` holds each anchor
 # and refuses (exit 1) a tree where it does not occur exactly as often as written.
 set -euo pipefail
 sha=${1:?sha}; out=${2:?outdir}; shift 2
-want=" ${*:-nc-admission-ready nc-retention-durable nc-dur-fence nc-dur-cap nc-credit-rate} "
+want=" ${*:-nc-admission-ready nc-retention-durable nc-dur-fence nc-dur-cap nc-dur-cap-org nc-dur-cap-key nc-credit-rate} "
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 args=()
 repo=$(git rev-parse --show-toplevel)
@@ -89,7 +91,7 @@ SQL
 args+=(--control "nc-retention-durable=$durable")
 fi
 
-for nc in nc-dur-fence nc-dur-cap nc-credit-rate; do
+for nc in nc-dur-fence nc-dur-cap nc-dur-cap-org nc-dur-cap-key nc-credit-rate; do
   [[ $want == *" $nc "* ]] || continue
   dir=$(tree "$nc")
   python3 "$here/reverts.py" "$dir" "$nc" || {

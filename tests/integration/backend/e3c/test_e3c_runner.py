@@ -434,8 +434,12 @@ def test_s12_the_dedicated_runtime_login_is_a_real_box_database():
 
 # ------------------------------------------------------------------ E3C-CELLS (App gate cells)
 
-CELLS = {"fence": ("DUR-FENCE", "nc-dur-fence"), "cap": ("DUR-CAP", "nc-dur-cap"),
-         "rate": ("CREDIT-RATE", "nc-credit-rate")}
+#: WR-BM-2 (CM-1): DUR-CAP carries three revert controls - every comparison at once, then the
+#: per-organization and the per-key comparison alone, each caught by s15's scoped burst.
+CAP_CONTROLS = ("nc-dur-cap", "nc-dur-cap-org", "nc-dur-cap-key")
+CELLS = {"fence": ("DUR-FENCE", ("nc-dur-fence",)), "cap": ("DUR-CAP", CAP_CONTROLS),
+         "rate": ("CREDIT-RATE", ("nc-credit-rate",))}
+SQL_REVERTS = ("nc-dur-fence", *CAP_CONTROLS, "nc-credit-rate")
 
 
 def cell_scenario(oracle: str) -> str:
@@ -450,18 +454,19 @@ def test_s12_the_cells_carry_their_04_oracles_and_revert_controls():
     claiming the cell, or a control that is missing, not revert-type, or guards another
     scenario - each would let the App cell read a run that never judged it."""
     import reverts
-    for oracle, nc in CELLS.values():
+    for oracle, ncs in CELLS.values():
         sid = cell_scenario(oracle)
-        assert [n for n, c in runner.CONTROLS.items() if c["oracle"] == oracle] == [nc]
-        assert runner.CONTROLS[nc]["scenario"] == sid and runner.CONTROLS[nc].get("revert")
-        assert nc in reverts.REVERTS and runner.REQUIRED[sid], (nc, sid)
+        assert [n for n, c in runner.CONTROLS.items() if c["oracle"] == oracle] == list(ncs)
+        for nc in ncs:
+            assert runner.CONTROLS[nc]["scenario"] == sid and runner.CONTROLS[nc].get("revert")
+            assert nc in reverts.REVERTS and runner.REQUIRED[sid], (nc, sid)
 
 
 @pytest.mark.parametrize("cell", sorted(CELLS))
 def test_s12_a_cell_scenario_passes_only_with_every_required_case(cell):
     """Oracle: a cell scenario read PASS with a red, skipped, missing or harness-broken case,
     or its revert-type control counted without its reverted tree."""
-    oracle, nc = CELLS[cell]
+    oracle, ncs = CELLS[cell]
     sid = cell_scenario(oracle)
     names = runner.REQUIRED[sid]
     rest = [(name, "pass", "") for name in names[1:]]
@@ -475,11 +480,12 @@ def test_s12_a_cell_scenario_passes_only_with_every_required_case(cell):
     assert status((names[0], "error", "harness.HarnessError: premise: generation 2 ended"),
                   *rest) == "INVALID"
     green = runner.classify(junit((names[0], "pass", ""), *rest))
-    assert green["controls"][nc]["status"] == "NOT RUN", "a revert control needs its tree"
+    assert [green["controls"][nc]["status"] for nc in ncs] == ["NOT RUN"] * len(ncs), \
+        "a revert control needs its tree"
     assert (runner.control_verdict("FAIL"), runner.control_verdict("PASS")) == ("PASS", "FAIL")
 
 
-@pytest.mark.parametrize("nc", ["nc-dur-fence", "nc-dur-cap", "nc-credit-rate"])
+@pytest.mark.parametrize("nc", SQL_REVERTS)
 def test_s12_every_sql_revert_applies_to_this_tree(nc, tmp_path, monkeypatch):
     """The three SQL reverts (reverts.py) on this tree's migrations: the check's anchor occurs
     exactly as often as written, the last migration changes exactly those occurrences and
@@ -505,6 +511,26 @@ def test_s12_every_sql_revert_applies_to_this_tree(nc, tmp_path, monkeypatch):
     monkeypatch.setitem(reverts.REVERTS, nc, (function, "no such check", replacement, 1, "x"))
     with pytest.raises(SystemExit, match="anchor 0 times"):
         reverts.redefined(root, nc)
+
+
+def test_s12_each_per_scope_cap_control_removes_only_its_own_comparison():
+    """WR-BM-2 (CM-1): nc-dur-cap-org and nc-dur-cap-key each change exactly ONE line of
+    admission_checks - the per-organization, resp. per-key comparison - and nc-dur-cap all
+    three. Oracle: a per-scope control that also moved the total cap (the first burst would
+    then detect it and the scoped burst would prove nothing), or one scope's control
+    reverting the other scope's comparison."""
+    import reverts
+    root = HERE.parents[3]
+    source = reverts.latest(root, "admission_checks").splitlines()
+
+    def changed(nc):
+        text = reverts.redefined(root, nc).split("\n", 1)[1].splitlines()
+        assert len(text) == len(source), nc
+        return [old.strip() for old, new in zip(source, text) if old != new]
+    compare = "if v_count >= (p_limits->>'max_active_jobs{}')::int then"
+    assert changed("nc-dur-cap-org") == [compare.format("_per_org")]
+    assert changed("nc-dur-cap-key") == [compare.format("_per_key")]
+    assert changed("nc-dur-cap") == [compare.format(s) for s in ("", "_per_org", "_per_key")]
 
 
 def test_s12_every_revert_control_has_a_tree_builder():
