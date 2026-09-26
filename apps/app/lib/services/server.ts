@@ -10,8 +10,7 @@
  */
 
 import { cache } from "react";
-import { getSession } from "../session.ts";
-import { createClient } from "../supabase/server.ts";
+import { getSession, requestClient } from "../session.ts";
 import type { SessionContext } from "../contracts/types.ts";
 import {
   consumerSessionFrom,
@@ -72,10 +71,11 @@ export function createServerConsoleServices(ports: Omit<ConsoleServicesConfig, "
 
 /**
  * C0: the signed-in individual's consumer account and read port, once per request. The logic is
- * `consumerSessionFrom` (tested in tests/c/consumer.test.ts); this only supplies the cookie client and
- * the cursor secret, both read inside its guard.
+ * `consumerSessionFrom` (tested in tests/c/consumer.test.ts); this only supplies the request's one
+ * cookie client (`requestClient`, one `getUser()` per request) and the cursor secret, both read inside
+ * its guard.
  */
 export const consumerSession = cache((): Promise<ConsumerSession> => {
   assertServer("consumerSession()");
-  return consumerSessionFrom(async () => (await createClient()) as unknown as ConsumerClient, consoleCursorSecret);
+  return consumerSessionFrom(async () => (await requestClient()) as unknown as ConsumerClient, consoleCursorSecret);
 });

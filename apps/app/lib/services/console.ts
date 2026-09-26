@@ -1503,6 +1503,46 @@ export function createConsumerReads(
 export type ConsumerClient = PostgrestClient & { auth: { getUser(): PromiseLike<AuthAnswer> } };
 
 /**
+ * U1R WR-6: one GoTrue round trip per request. Every later `getUser()` on this client gets the
+ * first call's answer (an outage included), so the layout's session, operator flag and credit
+ * reads and the page's own reads agree on one verified user. `lib/session.ts` `requestClient()`
+ * applies it to the request's one cookie client.
+ */
+export function onceGetUser<C extends { auth: { getUser(): Promise<unknown> } }>(client: C): C {
+  const getUser = client.auth.getUser.bind(client.auth);
+  let answer: ReturnType<typeof getUser> | undefined;
+  client.auth.getUser = () => (answer ??= getUser());
+  return client;
+}
+
+type OrgFilter = PromiseLike<{ data: unknown; error: unknown }> & {
+  eq(column: string, value: string): OrgFilter;
+  limit(count: number): OrgFilter;
+};
+
+/**
+ * C0 WR-6 (04-app C0.1, R66): the individual's personal organization - the one they created and
+ * own, as `grant_signup_credit` binds it - never whichever membership sorts first. `null` when
+ * there is none, or more than one to guess between; a failed read throws.
+ */
+export async function personalOrg(
+  client: { from(relation: string): { select(columns: string): OrgFilter } },
+  userId: string,
+): Promise<{ orgId: string; orgName: string } | null> {
+  const { data, error } = await client
+    .from("org_members")
+    .select("org_id, organizations!inner(name, created_by)")
+    .eq("user_id", userId)
+    .eq("role", "owner")
+    .eq("organizations.created_by", userId)
+    .limit(2);
+  if (error !== null || !Array.isArray(data)) throw new Error("the personal organization could not be read");
+  if (data.length !== 1) return null;
+  const row = data[0] as { org_id: string; organizations: { name: string } | null };
+  return { orgId: row.org_id, orgName: row.organizations?.name ?? "Personal" };
+}
+
+/**
  * `consumerSession()` without React's `cache` or the Next cookie client, so it is testable (R48).
  *
  * Everything runs as the individual: the client carries their cookie JWT, so RLS, the views' guards

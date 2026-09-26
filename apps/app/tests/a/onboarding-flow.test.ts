@@ -5,6 +5,9 @@
 // auth failure is allowed to say) live in `app/(auth)/flow.ts` as pure functions with injected
 // ports, so they run here without Next or Supabase. Each case names the broken behaviour it catches.
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -151,6 +154,27 @@ test("A2-NEXT-01 safeNext refuses protocol-relative, backslash and absolute targ
     assert.equal(safeNext(evil as string | null | undefined), "/models", String(evil));
   }
   assert.equal(safeNext("//evil", "/welcome"), "/welcome");
+});
+
+test("A2-NEXT-02 safeNext has one definition, the strict one in app/(auth)/flow.ts (WR-A2-3)", () => {
+  // Catches: a second, looser same-site check (the old `lib/utils` one let `/\\evil` through)
+  // coming back for a new caller to import by mistake.
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+  const sources = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+      entry.name === "node_modules" || entry.name.startsWith(".")
+        ? []
+        : entry.isDirectory()
+          ? sources(join(dir, entry.name))
+          : /\.(ts|tsx|mjs)$/.test(entry.name) && !entry.name.endsWith(".test.ts")
+            ? [join(dir, entry.name)]
+            : [],
+    );
+  const defining = ["app", "lib", "components"]
+    .flatMap((dir) => sources(join(root, dir)))
+    .filter((file) => /\b(?:function\s+safeNext\b|(?:const|let|var)\s+safeNext\s*=)/.test(readFileSync(file, "utf8")))
+    .map((file) => relative(root, file));
+  assert.deepEqual(defining, [join("app", "(auth)", "flow.ts")]);
 });
 
 // --------------------------------------------------------------------------- the claim ---
