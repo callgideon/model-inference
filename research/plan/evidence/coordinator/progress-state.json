@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 67,
-  "updated": "2026-09-26T02:11:41Z",
+  "revision": 68,
+  "updated": "2026-09-26T02:24:04Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -1814,16 +1814,16 @@
       },
       "activity": "queued",
       "started": "2026-09-25T23:50:01Z",
-      "updated": "2026-09-26T01:45:09Z",
-      "blocker": "E3A proper needs BACKEND-LOCAL (E3C) and the merged C3A/U2/U3/U4 pages fitted (create-key/revoke-key/request-detail NOT RUN at the lane base); product findings F-1 (sign-in claim never runs: middleware 307 on the server-action POST) and F-2 (/traces, /dedicated, /teams served to a consumer) are open on the tip → APP-E3A-FIX lane (overlay keeps the E3A lane queued: the gate dispatches after BACKEND-READY; the prep work is merged and recorded in head/evidence/commands)",
-      "next_action": "merged 6d55c5e0 (E3A-PREP); E3A-WR-3/WR-4 applied by the coordinator; E3A-WR-1/WR-2 routed to the E3C final run; F-1/F-2 + selector fitting → APP-E3A-FIX lane; E3A proper runs after BACKEND-LOCAL on the merged SHA",
+      "updated": "2026-09-26T02:24:04Z",
+      "blocker": "E3A proper needs BACKEND-LOCAL (E3C) and a rerun on the merged SHA; still NOT RUN: operator-controls (operator identity + one U3 action with a reason), the four delegated cells, the expired-content display on /usage/<id>; E3A-WR-1/WR-2 with the E3C final run (overlay keeps the lane queued: the gate dispatches after BACKEND-READY)",
+      "next_action": "F-1/F-2 fixed and merged (APP-E3A-FIX 97dce397): journey 18 PASS / 0 FAIL / 1 NOT RUN at the head; E3A proper after BACKEND-LOCAL on the merged SHA",
       "estimate": {
-        "optimistic_h": 3,
-        "likely_h": 6,
-        "pessimistic_h": 12,
+        "optimistic_h": 2,
+        "likely_h": 5,
+        "pessimistic_h": 10,
         "confidence": "medium",
-        "basis": "lane handback: harness done; E3A proper = fit the lane-gated checks to the merged pages, F-1/F-2 fixed, one run on the merged SHA after BACKEND-LOCAL",
-        "at": "2026-09-26T01:45:09Z"
+        "basis": "lane handback after F-1/F-2: one merged-SHA rerun after BACKEND-LOCAL, operator-controls, delegated cells, expired-content display, WR-1/WR-2",
+        "at": "2026-09-26T02:24:04Z"
       },
       "evidence": [
         "research/plan/evidence/e/E3A-prep-1bc9e63.md"
@@ -1981,27 +1981,55 @@
       "branch": "codex/app-e3a-fix",
       "worktree": ".claude/worktrees/codex-app-e3a-fix",
       "base": "6d55c5e0",
-      "head": null,
+      "head": "97dce397",
       "isolation": {
         "ports": "E3A runner inside the e4b block (56860/56861/56870; one runner at a time)",
         "prefix": "infrx-e4b-",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T01:46:03Z",
-      "updated": "2026-09-26T01:46:03Z",
+      "updated": "2026-09-26T02:24:04Z",
       "blocker": null,
-      "next_action": "workflow wf_6b1a3b25-9ee (implement → 2 lenses → one fix round → rechecks); merge --no-ff onto claude/consumer-v1 after shared-clone checks; E3A stays planned (gate needs BACKEND-LOCAL)",
+      "next_action": "merged --no-ff onto claude/consumer-v1 (ACCEPT; minors carried: plain-POST pass-through on /login,/signup, /admin keeps its own operator decision, ancestor loading.tsx assertion, update JSON exit codes)",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 2,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "two small App fixes with unit tests + selector fitting + one runner pass (~95 s)",
-        "at": "2026-09-26T01:46:03Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged after the in-workflow verification (ACCEPT)",
+        "at": "2026-09-26T02:24:04Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/a/E3A-fix-820db37.md"
+      ],
+      "commands": [
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python tests/integration/app/runner.py --out <scratch> (base 6d55c5e0 → head 820db37e, e4b block)",
+          "exit": 3,
+          "summary": "base: FAIL 16/2/1 in 106 s; head: NOT RUN (exit 3) 18 PASS / 0 FAIL / 1 NOT RUN (operator-controls), cells 11 PASS / 6 NOT RUN / 0 FAIL in 94 s; seams fixture-port and grant-guard both FAIL (detected); teardown clean"
+        },
+        {
+          "cmd": "node --test tests/a/middleware.test.ts tests/c/provider-routes.test.ts (fails-before recorded)",
+          "exit": 0,
+          "summary": "A2-MW-02 failed before F-1, 3/3 after; C-PROV-01/02 fail before F-2 for all three states, pass after"
+        },
+        {
+          "cmd": "make console-test / console-lint / console-typecheck; pnpm build; node --test tests/i2a",
+          "exit": 0,
+          "summary": "643 tests, 594 pass, 0 fail, 49 env-gated skips; lint 0 errors; tsc clean; build ok (/traces, /dedicated, /teams dynamic); i2a 22/22"
+        },
+        {
+          "cmd": "mutant lists a / c / contracts / v / u / a-catalog",
+          "exit": 0,
+          "summary": "46/46 (MW-POST), 183/183 (PROV-01..07), 212/212, 40/40, 204/204, 46/46"
+        },
+        {
+          "cmd": "lens: head with both fixes behaviourally reverted, runner on e4b",
+          "exit": 1,
+          "summary": "signin-claim FAIL (2 claims, expected 3), provider-route-denial FAIL [/traces, /dedicated, /teams 200]; an operator still gets 200 on all three at the head"
+        }
+      ],
       "owned_paths": [
         "apps/app/lib/supabase/middleware.ts",
         "apps/app/app/(console)/traces/",
@@ -3860,6 +3888,17 @@
       "by": "tracker",
       "what": "rejected update: stale: at 2026-09-26T02:06:00Z is not newer than lane I3 state 2026-09-26T02:11:40Z",
       "source": "updates/I3-20260926T0206Z.json"
+    },
+    {
+      "at": "2026-09-26T02:24:04Z",
+      "lane": "APP-E3A-FIX",
+      "event": "APP-E3A-FIX verified ACCEPT at 97dce397 (F-1 sign-in claim runs; F-2 provider routes 404 for consumers) and merged; journey 18/0/1 on e4b"
+    },
+    {
+      "at": "2026-09-26T02:24:04Z",
+      "by": "tracker",
+      "what": "rejected update: lane APP-E3A-FIX belongs to None, not E3A",
+      "source": "updates/E3A-20260926T0208Z.json"
     }
   ],
   "history": {
@@ -4270,10 +4309,15 @@
       "status": "rejected",
       "at": "2026-09-26T02:06:00Z",
       "reason": "stale: at 2026-09-26T02:06:00Z is not newer than lane I3 state 2026-09-26T02:11:40Z"
+    },
+    "E3A-20260926T0208Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T02:08:32Z",
+      "reason": "lane APP-E3A-FIX belongs to None, not E3A"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T02:11:41Z",
+    "computed_at": "2026-09-26T02:24:04Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -4283,7 +4327,7 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 05:47Z – 2026-09-26 13:35Z (likely 2026-09-26 08:23Z)",
+        "text": "2026-09-26 06:00Z – 2026-09-26 13:48Z (likely 2026-09-26 08:36Z)",
         "constraint": "dependency path W5 → E3C",
         "effort_h": [
           3.6,
@@ -4296,9 +4340,9 @@
           11.4
         ],
         "finish": [
-          "2026-09-26T05:47:41Z",
-          "2026-09-26T08:23:41Z",
-          "2026-09-26T13:35:41Z"
+          "2026-09-26T06:00:04Z",
+          "2026-09-26T08:36:04Z",
+          "2026-09-26T13:48:04Z"
         ],
         "conditional": null,
         "confidence": "medium",
