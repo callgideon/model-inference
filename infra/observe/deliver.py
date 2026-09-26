@@ -89,7 +89,7 @@ def publish(topic: str, text: str) -> tuple[int, str]:
     try:
         answer = boto3.client("sns", region_name=topic.split(":")[3]).publish(
             TopicArn=topic, Subject=subject, Message=text)
-        status = answer.get("ResponseMetadata", {}).get("HTTPStatusCode", -1)
+        status = int(answer.get("ResponseMetadata", {}).get("HTTPStatusCode", -1))
     except Exception as failed:        # the type only: the text may carry anything
         return -1, f"sns={type(failed).__name__} topic={name}"
     return status, f"sns={status} topic={name}"

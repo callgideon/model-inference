@@ -1404,6 +1404,11 @@ MUTANTS += (
     _m("sns_missing_metadata_is_success", "an SNS answer without an explicit 2xx is a failed send",
        OBS + "deliver.py", '.get("HTTPStatusCode", -1)', '.get("HTTPStatusCode", 200)',
        SNS + "a_failed_publish_is_kept_and_retried"),
+    _m("sns_status_not_a_number", "ASN-V1: a non-numeric SNS status is a kept failed send "
+       "(declared: main() compares it and raises)",
+       OBS + "deliver.py", 'status = int(answer.get("ResponseMetadata", {}).get("HTTPStatusCode", -1))',
+       'status = answer.get("ResponseMetadata", {}).get("HTTPStatusCode", -1)',
+       SNS + "a_failed_publish_is_kept_and_retried", dies_by=("TypeError",)),
     _m("observe_install_owner_multiline", "the owner/escalation literals stay one line each",
        STEP + "72-observe-install.sh", "  [[ ! $literal =~ [[:cntrl:]] ]] \\\n", "  true \\\n",
        "test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination"),
