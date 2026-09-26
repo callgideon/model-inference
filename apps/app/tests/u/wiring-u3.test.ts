@@ -10,3 +10,9 @@ test("U3-W02 the shared operator action runs through the audited RPC port as the
   assert.match(actions, /operator: operatorRpcPort\(async \(\) => \(await createClient\(\)\) as unknown as OperatorRpcClient\),/);
   assert.doesNotMatch(actions, /createAdminClient|SERVICE_ROLE/, "the operator port must use the operator's own session");
 });
+
+test("U3-W04 the operator's navigation entry is labelled as its page is titled (Operator)", () => {
+  const sidebar = src("components/sidebar.tsx");
+  assert.match(sidebar, /<NavLink href="\/admin"[^>]*>\s*<ShieldCheck className="size-4" \/>\s*Operator\s*<\/NavLink>/);
+  assert.match(src("app/(console)/admin/page.tsx"), /title="Operator"/);
+});

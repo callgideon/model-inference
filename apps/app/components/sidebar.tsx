@@ -102,7 +102,7 @@ export function Sidebar({
           {isOperator ? (
             <NavLink href="/admin" active={pathname.startsWith("/admin")} onClick={close}>
               <ShieldCheck className="size-4" />
-              Admin
+              Operator
             </NavLink>
           ) : null}
         </nav>
