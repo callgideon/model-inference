@@ -51,7 +51,7 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
     read on the box by preflight.py, from SSM, and never travel."""
     assert [p.name for p in STEPS] == ["10-inventory.sh", "20-prepull.sh", "25-save-edge.sh",
                                        "30-pause.sh", "40-checkout.sh", "45-s3-check.sh",
-                                       "50-install.sh", "55-runtime-login.sh",
+                                       "50-install.sh", "55-runtime-login.sh", "56-resume.sh",
                                        "60-verify-local.sh", "71-pool-budget.sh",
                                        "72-observe-install.sh", "73-observe-status.sh",
                                        "74-alert-test.sh", "78-e4b-report.sh", "79-evidence-export.sh",
@@ -536,3 +536,10 @@ def test_e4c_certify__the_launcher_passes_exactly_certify_s_box_flags_and_no_sec
     done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
     assert done.returncode == 2 and "E4C-edge.json" in done.stderr
     assert not (stub / "docker.log").exists()
+    (e4c / "E4C-edge.json").write_text("{}\n")                  # F2: the owner DSN unreadable
+    (stub / "aws").write_text("#!/bin/sh\necho 'ParameterNotFound' >&2; exit 254\n")
+    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                          env={**env, "OPS_DSN_PARAM": "/model-inference/ops-dsn"})
+    assert done.returncode == 2 and "/model-inference/ops-dsn" in done.stderr, done.stderr
+    assert not [line for line in (stub / "docker.log").read_text().splitlines()
+                if json.loads(line)["argv"][:1] in (["run"], ["ps"])], "a container after a failed read"

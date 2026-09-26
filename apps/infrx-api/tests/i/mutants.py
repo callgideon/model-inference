@@ -1446,13 +1446,18 @@ LOGIN_STEP = STEP + "55-runtime-login.sh"
 LOGIN = "test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only"
 LAUNCHER_SH = "../../infra/rollout/e4c-certify.sh"
 LAUNCH = "test_e4c_certify__the_launcher_passes_exactly_certify_s_box_flags_and_no_secret"
+# STEP55-FIX: CS-4 (a rerun touches no role), CS-5, F2, F4, F5 and RB4-1's resume step
+LOGIN_RERUN = "test_ops_login__a_rerun_touches_no_role_and_a_rotated_password_is_set_again"
+LOGIN_PG = "test_ops_login__on_postgresql_the_first_run_sets_both_and_a_rerun_neither"
+LOGIN_FAILS = "test_ops_login__each_failure_has_its_exit_and_leaves_the_file_and_no_staged_copy"
+RESUME = "test_ops_resume__the_w10b_resume_runs_the_release_s_drain_and_checks_nothing_out"
 MUTANTS += (
     _m("login_value_printed", "an SSM value never reaches the output",
        LOGIN_STEP, """printf '%s=%s\\n' "${spec%%=*}" "$value" >> "$work/secrets.env\"""",
        """printf '%s=%s\\n' "${spec%%=*}" "$value" | tee -a "$work/secrets.env\"""", LOGIN),
     _m("login_envcheck_ignored", "a staged file envcheck refuses never replaces the env file",
        LOGIN_STEP,
-       '  || { rm -f "$staged"; echo "envcheck refused the staged env file; nothing replaced" >&2; exit 3; }',
+       '  || { echo "envcheck refused the staged env file; nothing replaced" >&2; exit 3; }',
        "  || true", LOGIN),
     _m("login_env_world_readable", "the env file stays root 0600",
        LOGIN_STEP, 'chown --reference="$env_file" "$staged"; chmod 0600 "$staged"',
@@ -1460,12 +1465,37 @@ MUTANTS += (
     _m("login_restarts_when_unchanged", "a rerun on an unchanged file restarts nothing",
        LOGIN_STEP, 'if cmp -s "$staged" "$env_file"; then', "if false; then", LOGIN),
     _m("login_unready_kept", "not ready on the logins puts the previous env file back",
-       LOGIN_STEP, '    cp -p "$saved" "$env_file"; systemctl restart', "    systemctl restart", LOGIN),
+       LOGIN_STEP, '  cp -p "$saved" "$env_file"\n', "", LOGIN, LOGIN_FAILS),
     _m("login_observe_gets_runtime_dsn", "observe's durable exporter reads the monitor login, not infrx_runtime",
        LOGIN_STEP, "grep '^MONITOR_DATABASE_URL=' \"$work/logins.env\" > \"$tmp\"",
        "grep '^DATABASE_URL=' \"$work/logins.env\" > \"$tmp\"", LOGIN),
     _m("login_observe_not_written", "a successful move also hands observe the monitor login",
        LOGIN_STEP, 'monitor_for_observe\necho "runtime on', 'echo "runtime on', LOGIN),
+    _m("login_rerun_realters", "a rerun whose logins work sets no password (CS-4)",
+       LOGIN_STEP, "        if current != role:\n            verifier",
+       "        if True:\n            verifier", LOGIN_RERUN, LOGIN_PG),
+    _m("login_probe_failure_escapes", "a failing login probe leads to the ALTER, not a crash (CS-4)",
+       LOGIN_STEP, "except psycopg.OperationalError:", "except ValueError:", LOGIN_RERUN, LOGIN_PG),
+    _m("login_dsn_count_is_exit_3", "one DSN back has its own exit, 5, not envcheck's 3 (CS-5)",
+       LOGIN_STEP, 'nothing staged" >&2; exit 5; }', 'nothing staged" >&2; exit 3; }', LOGIN_FAILS),
+    _m("login_failed_restart_not_put_back", "a failed restart puts the previous file back (CS-5)",
+       LOGIN_STEP, '  || put_back "systemctl restart failed on the dedicated logins"', "  || exit 1",
+       LOGIN_FAILS),
+    _m("login_ssm_read_unchecked", "an unreadable parameter exits 2 naming it (F2)",
+       LOGIN_STEP, '    || { echo "cannot read SSM parameter ${spec#*=}; nothing changed" >&2; exit 2; }',
+       "    || exit", LOGIN, LOGIN_FAILS),
+    _m("login_probe_unbounded", "every /readyz probe is bounded by --max-time 5 (F4)",
+       LOGIN_STEP, "curl -fsS -o /dev/null --max-time 5 ", "curl -fsS -o /dev/null ", LOGIN, LOGIN_FAILS),
+    _m("login_put_back_unprobed", "after a put-back both /readyz are probed before the exit (F4)",
+       LOGIN_STEP, "  elif port=$(unready); then", "  elif false; then", LOGIN, LOGIN_FAILS),
+    _m("login_staged_left", "no staged copy (both DSNs) outlives a failed run (F5)",
+       LOGIN_STEP, """trap 'rm -rf "$work"; [ -z "$staged" ] || rm -f "$staged"' EXIT""",
+       """trap 'rm -rf "$work"' EXIT""", LOGIN_FAILS),
+    _m("login_w10b_resume_pauses", "56 is W10b's resume: the release's drain.sh resume, nothing else (RB4-1)",
+       STEP + "56-resume.sh", "deploy/drain.sh resume", "deploy/drain.sh pause", RESUME),
+    _m("launcher_ssm_read_unchecked", "an unreadable owner DSN exits 2 naming it before any container (F2)",
+       LAUNCHER_SH, '  || { echo "cannot read SSM parameter $ops_param; no container started" >&2; exit 2; }',
+       "  || exit", LAUNCH),
     _m("launcher_overload_profile_dropped", "the launcher passes certify's whole E4C flag set",
        LAUNCHER_SH, "    --overload-profile /e4b/e4c/E4C-edge.json \\\n", "", LAUNCH),
     _m("launcher_ledger_on_the_runtime_login", "the ledger half runs on the owner login, not infrx_runtime",

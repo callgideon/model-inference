@@ -28,6 +28,9 @@ with (here / "calls.log").open("a") as log:
 answer = here / (pathlib.Path(sys.argv[0]).name + ".out")
 if answer.exists():
     sys.stdout.write(answer.read_text())
+once = here / (pathlib.Path(sys.argv[0]).name + ".fail-once")      # fail this call only
+if once.exists():
+    once.unlink(); sys.exit(1)
 sys.exit(int(os.environ.get("STUB_EXIT_" + pathlib.Path(sys.argv[0]).name.replace("-", "_"), "0")))
 '''
 
@@ -445,9 +448,96 @@ with (here / "calls.log").open("a") as log:
     log.write(json.dumps(record) + "\\n")
 if "envcheck" in args:
     sys.exit(int(os.environ.get("STUB_ENVCHECK_EXIT", "0")))
-if args[-2:] == ["python", "-"]:
+if args[-2:] == ["python", "-"] and (here / "dsns.out").exists():
     sys.stdout.write((here / "dsns.out").read_text())
+elif args[-2:] == ["python", "-"]:           # the step's own program, on FAKE_PSYCOPG's roles
+    import subprocess
+    given = dict(line.split("=", 1) for body in record["env_files"].values()
+                 for line in body.splitlines())
+    done = subprocess.run([sys.executable, "-"], input=stdin, capture_output=True, text=True,
+                          env={{**os.environ, **given, "PYTHONPATH": str(here / "fakepg"),
+                               "FAKE_PG_ROLES": str(here / "roles.json")}})
+    sys.stdout.write(done.stdout), sys.stderr.write(done.stderr)
+    sys.exit(done.returncode)
 '''
+
+#: psycopg as 55's program uses it, over a roles file: the owner (postgres.*) always connects;
+#: a role logs in only with LOGIN and the password its verifier was made from; ALTER ROLE
+#: stores a freshly salted verifier (as PostgreSQL's SCRAM does), so an unchanged verifier
+#: means no ALTER ran.
+FAKE_PSYCOPG = {
+    "__init__.py": '''import json, os, pathlib, secrets
+from . import conninfo, sql
+
+ROLES = pathlib.Path(os.environ["FAKE_PG_ROLES"])
+
+
+class OperationalError(Exception):
+    pass
+
+
+class _PgConn:
+    def encrypt_password(self, password, user, algorithm):
+        assert algorithm == b"scram-sha-256"
+        return f"SCRAM-SHA-256${secrets.token_hex(4)}:{password.decode()}".encode()
+
+
+class _Conn:
+    def __init__(self, user):
+        self.user, self.pgconn = user, _PgConn()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, query):
+        if isinstance(query, sql.Composed):
+            role, verifier = query.args
+            roles = json.loads(ROLES.read_text())
+            roles[role] = {"login": True, "verifier": verifier}
+            ROLES.write_text(json.dumps(roles))
+            return None
+        assert query == "select current_user", query
+        return type("Cursor", (), {"fetchone": lambda _: (self.user,)})()
+
+
+def connect(dsn, autocommit=False):
+    where = conninfo.conninfo_to_dict(dsn)
+    user = where["user"].split(".")[0]
+    role = json.loads(ROLES.read_text()).get(user)
+    if role is not None and not (role["login"] and role["verifier"].endswith(":" + where["password"])):
+        raise OperationalError(f"password authentication failed for user {user}")
+    return _Conn(user)
+''',
+    "sql.py": '''class Identifier(str):
+    pass
+
+
+class Literal(str):
+    pass
+
+
+class Composed:
+    def __init__(self, args):
+        self.args = args
+
+
+class SQL(str):
+    def format(self, *args):
+        assert self == "alter role {} with login password {}", self
+        return Composed(tuple(str(a) for a in args))
+''',
+    "conninfo.py": '''from urllib.parse import parse_qsl, unquote, urlsplit
+
+
+def conninfo_to_dict(dsn):
+    url = urlsplit(dsn)
+    return {"user": unquote(url.username or ""), "password": unquote(url.password or ""),
+            "host": url.hostname, "dbname": url.path.lstrip("/"), **dict(parse_qsl(url.query))}
+''',
+}
 
 RUNTIME_PASSWORD_PARAM = "/model-inference/infrx_runtime_password"
 MONITOR_PASSWORD_PARAM = "/model-inference/infrx_monitor_password"
@@ -516,7 +606,8 @@ def test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only(tmp_p
     for needle in ("alter role {} with login password {}", "encrypt_password", "scram-sha-256",
                    ":6543/", "select current_user", "infrx_runtime", "infrx_monitor"):
         assert needle in program, needle
-    assert "except" not in program                   # any SQL error stops it (ON_ERROR_STOP)
+    # any SQL error stops it (ON_ERROR_STOP); only the login probe may fail, and only to connect
+    assert program.count("except") == 1 and "except psycopg.OperationalError:" in program
     (check,) = [c for c in made if c["tool"] == "docker" and "envcheck" in c["argv"]]
     assert check["argv"][:5] == ["run", "--rm", "-i", "--network", "none"]
     assert check["stdin"] == before.replace(before.split("\n")[3] + "\n", "") + new
@@ -565,14 +656,182 @@ def test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only(tmp_p
     assert done.returncode == 4 and env_file.read_text() == before, done.stderr
     assert [c["argv"] for c in made if c["tool"] == "systemctl"] == [
         ["restart", "marlin2b-gateway", "infrx-worker"]] * 2
+    # F4: every probe is bounded, and the put-back is probed again before the step exits
+    tools = [c["tool"] for c in made]
+    assert "curl" in tools[len(tools) - tools[::-1].index("systemctl"):], tools
+    probes = [" ".join(c["argv"]) for c in made if c["tool"] == "curl"]
+    assert all("--max-time 5 " in c for c in probes), probes
 
     ssm_values = json.loads((stub / "ssm.json").read_text())      # a parameter missing: refused
     del ssm_values[MONITOR_PASSWORD_PARAM]
     (stub / "ssm.json").write_text(json.dumps(ssm_values))
-    done, made = run()
-    assert done.returncode != 0 and env_file.read_text() == before
+    done, made = run()                                            # F2: exit 2 naming the parameter
+    assert done.returncode == 2 and MONITOR_PASSWORD_PARAM in done.stderr, done.stderr
+    assert env_file.read_text() == before
     assert not [c for c in made if c["tool"] in ("docker", "systemctl")]
 
     env_file.write_text("# INFRX_ENV_SCHEMA 1:abc\nINFRX_MODE=pilot\n")   # no install yet
     done, made = run()
     assert done.returncode == 2 and "50-install" in done.stderr and made == []
+
+
+def _login_world(tmp_path, **roles):
+    """55's inputs with the step's own program run on FAKE_PSYCOPG: the env file as W10
+    leaves it, the SSM parameters, and the two roles as 0021 created them (NOLOGIN)."""
+    image = "sha256:" + "a" * 64
+    before = (f"INFRX_MODE=pilot\nINFRX_IMAGE={image}\n"
+              f"DATABASE_URL=postgresql://postgres.ref:{support.MARKER}-owner@pooler:5432/postgres?sslmode=require\n")
+    env_file = tmp_path / "marlin2b-gateway.env"
+    env_file.write_text(before)
+    env_file.chmod(0o600)
+    stub = stubs(tmp_path, "systemctl", "curl", "sleep")
+    for tool, body in (("aws", AWS_BY_NAME), ("docker", DOCKER_LOGIN)):
+        (stub / tool).write_text(body.format(python=sys.executable))
+        (stub / tool).chmod(0o755)
+    (stub / "fakepg" / "psycopg").mkdir(parents=True)
+    for name, body in FAKE_PSYCOPG.items():
+        (stub / "fakepg" / "psycopg" / name).write_text(body)
+    (stub / "roles.json").write_text(json.dumps(
+        {r: {"login": False, "verifier": ""} for r in ("infrx_runtime", "infrx_monitor")}))
+    (stub / "ssm.json").write_text(json.dumps({
+        OWNER_DSN_PARAM: before.split("DATABASE_URL=")[1].strip(),
+        RUNTIME_PASSWORD_PARAM: f"{support.MARKER}-rt", MONITOR_PASSWORD_PARAM: f"{support.MARKER}-mon"}))
+    env = {"ENV_FILE": str(env_file), "BACKUPS": str(tmp_path / "backups"), "TMPDIR": str(tmp_path),
+           "OBSERVE_ENV": str(tmp_path / "infrx-observe.env")}
+    step = (STEPS / "55-runtime-login.sh").read_text()
+
+    def run(**extra):
+        (stub / "calls.log").unlink(missing_ok=True)
+        done = run_step(step, stub, env={**env, **extra})
+        assert support.MARKER not in done.stdout + done.stderr, "a value in the output"
+        return done, calls(stub)
+    return stub, env_file, before, run
+
+
+def _verifiers(stub):
+    return {r: v["verifier"] for r, v in json.loads((stub / "roles.json").read_text()).items()}
+
+
+def test_ops_login__a_rerun_touches_no_role_and_a_rotated_password_is_set_again(tmp_path):
+    """E4C-RUNBOOK-2 CS-4: the step ran ALTER ROLE ... PASSWORD before its `unchanged` check,
+    so every rerun re-set both SCRAM verifiers on hosted (a new salt each time) and "never
+    rerun to verify" was a runbook rule. Now each role is first tried with the SSM password on
+    :6543 and ALTERed only when that login fails (first run: NOLOGIN; a rotated password).
+    Oracle: a rerun changes a verifier or restarts a unit; a rotated password is not set, or
+    the other role is re-set with it."""
+    stub, env_file, before, run = _login_world(tmp_path)
+    done, made = run()                                            # first run: both set
+    assert done.returncode == 0, done.stderr
+    first = _verifiers(stub)
+    assert all(first.values()) and "infrx_runtime.ref" in env_file.read_text()
+    done, made = run()                                            # rerun: a true no-op
+    assert done.returncode == 0 and "unchanged" in done.stdout, done.stderr
+    assert _verifiers(stub) == first, "a rerun re-set a role's verifier"
+    assert not [c for c in made if c["tool"] == "systemctl"]
+    ssm = json.loads((stub / "ssm.json").read_text())             # the monitor password rotated
+    ssm[MONITOR_PASSWORD_PARAM] = f"{support.MARKER}-mon2"
+    (stub / "ssm.json").write_text(json.dumps(ssm))
+    done, made = run()
+    assert done.returncode == 0, done.stderr
+    now = _verifiers(stub)
+    assert now["infrx_runtime"] == first["infrx_runtime"] and now["infrx_monitor"] != first["infrx_monitor"]
+    assert f"{support.MARKER}-mon2@" in env_file.read_text()
+    assert [c["argv"] for c in made if c["tool"] == "systemctl"] == [["restart", "marlin2b-gateway", "infrx-worker"]]
+
+
+def test_ops_login__each_failure_has_its_exit_and_leaves_the_file_and_no_staged_copy(tmp_path):
+    """E4C-RUNBOOK-2 CS-5/F2/F4/F5. CS-5: a login check that returns one DSN shared exit 3
+    with envcheck red; a failed `systemctl restart` exited after the rename with no put-back.
+    F2: a missing SSM parameter exited with the aws CLI's code. F5: a failure after the
+    staged copy was made (it holds both DSNs) left it beside the env file. Oracles: exit 5
+    for the DSN count, exit 2 naming the parameter (never its value) for a failed read; a
+    failed restart puts the previous file back, restarts on it and probes both /readyz
+    before exiting 4; no `marlin2b-gateway.env.*` survives any exit."""
+    stub, env_file, before, run = _login_world(tmp_path)
+    staged = lambda: sorted(p.name for p in tmp_path.glob("marlin2b-gateway.env.*"))  # noqa: E731
+
+    (stub / "dsns.out").write_text("DATABASE_URL=postgresql://infrx_runtime.ref:x@pooler:6543/postgres\n")
+    done, made = run()                                            # CS-5: one DSN back
+    assert done.returncode == 5 and "both DSNs" in done.stderr, done.stderr
+    assert env_file.read_text() == before and not staged()
+    (stub / "dsns.out").unlink()
+
+    (stub / "systemctl.fail-once").touch()                        # CS-5: the restart fails
+    done, made = run()
+    assert done.returncode == 4 and env_file.read_text() == before, done.stderr
+    assert "previous env file is back" in done.stderr and not staged()
+    tools = [c["tool"] for c in made]
+    assert tools.count("systemctl") == 2, tools
+    after = [" ".join(c["argv"]) for c in made[len(tools) - tools[::-1].index("systemctl"):]]
+    for port in ("8001", "8002"):                                 # F4: the put-back is probed
+        assert any(f"127.0.0.1:{port}/readyz" in a and "--max-time 5" in a for a in after), after
+
+    (tmp_path / "a-file").touch()                                 # F5: a failure after staging
+    done, made = run(BACKUPS=str(tmp_path / "a-file" / "backups"))
+    assert done.returncode != 0 and env_file.read_text() == before
+    assert not staged(), "the staged env file (both DSNs) outlived the failure"
+
+    ssm = json.loads((stub / "ssm.json").read_text())             # F2: exit 2, the name only
+    del ssm[OWNER_DSN_PARAM]
+    (stub / "ssm.json").write_text(json.dumps(ssm))
+    done, made = run()
+    assert done.returncode == 2 and OWNER_DSN_PARAM in done.stderr, done.stderr
+    assert not [c for c in made if c["tool"] in ("docker", "systemctl")] and not staged()
+
+
+def test_ops_login__on_postgresql_the_first_run_sets_both_and_a_rerun_neither(tmp_path):
+    """CS-4 against a real server (task-local PostgreSQL 16; INFRX_D_TASK, skipped without
+    it): the program's login probe fails with OperationalError on a NOLOGIN role and on a
+    wrong password, so the first run ALTERs both; a rerun leaves pg_authid.rolpassword (a
+    freshly salted SCRAM verifier on every ALTER) unchanged. Oracle: a verifier that moves on
+    the rerun, or a probe whose exception escapes and stops the first run."""
+    import os
+    import pytest
+    if not os.environ.get("INFRX_D_TASK"):
+        pytest.skip("PostgreSQL only on an explicit task-local block (INFRX_D_TASK)")
+    from tests.d import pgharness
+    if (reason := pgharness.unavailable()) is not None:
+        pytest.skip(f"task-local PostgreSQL unavailable: {reason}")
+    pgharness.ensure()
+    step = (STEPS / "55-runtime-login.sh").read_text()
+    program = step.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0].replace(
+        ":6543/", f":{pgharness.PORT}/")
+    roles = ("infrx_runtime", "infrx_monitor")
+    with pgharness.connect("postgres") as db:
+        for role in roles:
+            db.execute(f"do $$ begin create role {role}; exception when duplicate_object then null; end $$")
+            db.execute(f"alter role {role} nologin password null")
+    secrets = {"OWNER_DSN": pgharness.dsn("postgres") + "&sslmode=disable",
+               "RUNTIME_PASSWORD": "rt-local-1", "MONITOR_PASSWORD": "mon-local-1"}
+
+    def run():
+        done = subprocess.run([sys.executable, "-"], input=program, capture_output=True, text=True,
+                              env={**os.environ, **secrets})
+        assert done.returncode == 0, done.stderr
+        with pgharness.connect("postgres") as db:
+            rows = db.execute("select rolname, rolpassword from pg_authid where rolname = any(%s)"
+                              " order by rolname", [list(roles)]).fetchall()
+        return done.stdout, dict(rows)
+
+    out, first = run()
+    assert out.count("\n") == 2 and all(v and v.startswith("SCRAM-SHA-256$") for v in first.values())
+    again, second = run()
+    assert again == out and second == first, "the rerun ALTERed a role"
+
+
+def test_ops_resume__the_w10b_resume_runs_the_release_s_drain_and_checks_nothing_out(tmp_path):
+    """RB4-1: W10b's resume had no ssm.sh-runnable step (91-abort.sh also checks out the
+    previous HEAD). Oracle: 56 runs without RELEASE, runs another release's drain.sh, or does
+    anything but `drain.sh resume` (a checkout, a git call)."""
+    root = tmp_path / "root"
+    drain = root / f"infrx-deploy-{'c' * 40}" / "apps" / "infrx-api" / "deploy" / "drain.sh"
+    drain.parent.mkdir(parents=True)
+    drain.write_text(f'#!/bin/sh\necho "drain $*" >> {tmp_path}/drain.log\n')
+    drain.chmod(0o755)
+    stub = stubs(tmp_path, "git", "systemctl")
+    step = (STEPS / "56-resume.sh").read_text().replace("/root/", f"{root}/")
+    refused = run_step(step, stub)
+    assert refused.returncode != 0 and not (tmp_path / "drain.log").exists()
+    done = run_step(step, stub, env={"RELEASE": "c" * 40})
+    assert done.returncode == 0, done.stderr
+    assert (tmp_path / "drain.log").read_text() == "drain resume\n" and calls(stub) == []
