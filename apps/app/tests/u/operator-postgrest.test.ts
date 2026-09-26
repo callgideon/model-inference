@@ -80,10 +80,11 @@ async function accountOf(user: string) {
 }
 
 /** Exact CREDIT arithmetic in 1e-8 units: no float touches a balance. */
+const ZERO = BigInt(0);
 const units = (value: string) => BigInt(value.replace(".", ""));
 const text = (u: bigint) => {
-  const s = (u < 0n ? -u : u).toString().padStart(9, "0");
-  return `${u < 0n ? "-" : ""}${s.slice(0, -8)}.${s.slice(-8)}`;
+  const s = (u < ZERO ? -u : u).toString().padStart(9, "0");
+  return `${u < ZERO ? "-" : ""}${s.slice(0, -8)}.${s.slice(-8)}`;
 };
 
 test("U3-DB01 the operator reads every section through its own JWT: exact CREDIT, the unknown-usage queue, no drift", { skip }, async () => {
@@ -169,7 +170,7 @@ test("U3-DB05 DUR-CAP: concurrent retries apply once; concurrent corrections nev
   assert.equal(units(mid.ledgerTotal) - units(before.ledgerTotal), units("1.00000000"));
 
   // Each correction takes more than half of what is available: at most one can fit.
-  const take = text(-(units(mid.available) / 2n + units("1.00000000")));
+  const take = text(-(units(mid.available) / BigInt(2) + units("1.00000000")));
   const corrections = await Promise.all(
     Array.from({ length: 5 }, () => port.run({ ...same, amount: take as Credit, idempotency_key: `take-${randomUUID()}` })),
   );
@@ -177,7 +178,7 @@ test("U3-DB05 DUR-CAP: concurrent retries apply once; concurrent corrections nev
   assert.equal(codes.filter((c) => c === "ok").length, 1, `one correction fits: ${codes.join(",")}`);
   assert.ok(codes.every((c) => c === "ok" || c === "invalid_request"), codes.join(","));
   const after = await accountOf(S.users.c1);
-  assert.ok(units(after.available) >= 0n, `available ${after.available}`);
+  assert.ok(units(after.available) >= ZERO, `available ${after.available}`);
   assert.equal(units(after.ledgerTotal), units(mid.ledgerTotal) + units(take));
   // Restore the room the later cases (and the unknown-usage hold) rely on.
   valueOf(await port.run({ ...same, amount: text(-units(take)) as Credit, idempotency_key: `restore-${randomUUID()}` }), "restore");

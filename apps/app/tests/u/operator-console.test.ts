@@ -346,7 +346,8 @@ test("U3-R05 an unknown-usage hold keeps its own unit: CREDIT for a credit job, 
   });
   const world = WORLD();
   world.operator_unknown_usage = { data: [heldRow({ hold: null })], error: null };
-  assert.equal((await operatorReads(readClient(world))).unknownUsage.ok && (await operatorReads(readClient(world))).unknownUsage.value[0].hold, null);
+  const released = (await operatorReads(readClient(world))).unknownUsage;
+  assert.ok(released.ok && released.value[0].hold === null, "a released hold is null, not a zero");
   for (const bad of [heldRow({ hold: 14.7456 }), heldRow({ unit: "barter" }), heldRow({ reconcile_after: null })]) {
     world.operator_unknown_usage = { data: [bad], error: null };
     assert.equal((await operatorReads(readClient(world))).unknownUsage.ok, false, JSON.stringify(bad));
