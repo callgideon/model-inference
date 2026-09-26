@@ -564,6 +564,9 @@ def check_reads_privileges(conn) -> str:
                                 ("infrx.jobs", "request_record", "select"),
                                 ("infrx.job_results", "body", "select"),
                                 ("infrx.credit_holds", "amount", "select"),
+                                # 0024 (WR-W5F5-1): the CREDIT holds' state, never money
+                                ("infrx.credit_wallet_holds", "state", "select"),
+                                ("infrx.credit_wallet_holds", "amount", "select"),
                                 ("infrx.jobs", "state", "update")):
         has, = conn.execute("select has_column_privilege('infrx_monitor', %s, %s, %s)",
                             (table, column, verb)).fetchone()

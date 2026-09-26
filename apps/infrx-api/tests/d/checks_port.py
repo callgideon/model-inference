@@ -11,12 +11,16 @@
     withholds - usage never reported (`held_unknown`) - after the ownership check.
   - C3A WR-C3A-4: a browser `api_keys` INSERT needs a verified individual (the claim path's
     predicate) who holds a consumer wallet, besides 0001's owner/creator check.
+  - W5-F5 WR-W5F5-1: I8's read-only `infrx_monitor` login counts CREDIT unknown-usage holds
+    (`infrx.credit_wallet_holds.state`, grant + RLS policy), so the worker's reconciliation
+    gauges run on it.
 
 Same contract as `checks_reads.py`: the "admission" scenario, each check in a transaction it
 rolls back, the consumer reads as the real browser principal (`checks._jwt`).
 """
 from __future__ import annotations
 
+import contextlib
 import re
 import uuid
 from decimal import Decimal
@@ -30,6 +34,7 @@ from . import checks_credit as cc
 from . import checks_leases as cl
 from . import checks_ready as cr
 from . import checks_settle as cs
+from . import pgharness
 from .checks_reads import _copy_jobs, as_user
 
 LEDGER = "public.consumer_credit_ledger(text,integer)"
@@ -398,6 +403,66 @@ def check_key_insert_needs_verified_wallet(conn) -> str:
     return ca._in_rollback(conn, body)
 
 
+#: W5-F5's reconciliation read (`worker/service.py` RECONCILIATION_SQL on codex/w5-f5),
+#: verbatim: the detector views' drift rows and both regimes' unknown-usage holds.
+RECONCILIATION_SQL = (
+    "select (select count(*) from infrx.wallet_reconciliation"
+    " where ledger_drift <> 0 or reserved_drift <> 0)"
+    " + (select count(*) from infrx.credit_wallet_reconciliation"
+    " where ledger_drift <> 0 or reserved_drift <> 0),"
+    " (select count(*) from infrx.credit_holds where state = 'unknown')"
+    " + (select count(*) from infrx.credit_wallet_holds where state = 'unknown')")
+#: A local test credential for the lane's own container (as test_reads.RUNTIME_PASSWORD).
+MONITOR_PASSWORD = "infrx-d10-monitor-local"
+
+
+@contextlib.contextmanager
+def monitor_login(database: str):
+    """A connection AS the `infrx_monitor` login (its role defaults apply: read-only), given
+    LOGIN in the lane's own container only and put back to NOLOGIN after."""
+    import psycopg
+    with pgharness.connect("postgres") as admin:
+        admin.execute(f"alter role infrx_monitor login password '{MONITOR_PASSWORD}'")
+    try:
+        with psycopg.connect(pgharness.dsn(database).replace(
+                f"postgres:{pgharness.PASSWORD}@", f"infrx_monitor:{MONITOR_PASSWORD}@"),
+                autocommit=True) as monitor:
+            yield monitor
+    finally:
+        with pgharness.connect("postgres") as admin:
+            admin.execute("alter role infrx_monitor nologin password null")
+
+
+def check_monitor_reads_unknown_holds(conn, database: str) -> str:
+    """WR-W5F5-1 on the monitor LOGIN itself (no `set role`): W5-F5's reconciliation read
+    answers, and counts the CREDIT unknown-usage hold this check commits (so a grant with no
+    policy - RLS answering zero rows - is caught, not only a refusal); the monitor still
+    cannot read a hold's amount. COMMITS one held_unknown job: run it last on its database."""
+    world = ca.World(conn)
+    request, lease = cl.credit_running(conn, world, worker="w-monitor")
+    cl.publish(conn, lease)
+    code, doc = cs.settle(conn, lease, cs.propose(request.request_id, "client_disconnected",
+                                                  "failed"), "credit")
+    assert code is None and doc["outcome"]["settlement_state"] == "held_unknown", doc
+    expected, = conn.execute("select (select count(*) from infrx.credit_holds where state = "
+                             "'unknown') + (select count(*) from infrx.credit_wallet_holds "
+                             "where state = 'unknown')").fetchone()
+    assert expected >= 1, expected
+    import psycopg
+    with monitor_login(database) as monitor:
+        who, = monitor.execute("select session_user").fetchone()
+        assert who == "infrx_monitor", who
+        drift, unknown = monitor.execute(RECONCILIATION_SQL).fetchone()
+        assert (drift, unknown) == (0, expected), (drift, unknown, expected)
+        try:
+            monitor.execute("select amount from infrx.credit_wallet_holds limit 1")
+            raise AssertionError("the monitor login reads a hold's amount")
+        except psycopg.Error as refused:
+            assert refused.sqlstate == "42501", refused.sqlstate
+    return f"monitor login: drift {drift}, unknown holds {unknown} (all of them); no amounts"
+
+
 __all__ = ["check_consumer_credit_ledger", "check_consumer_jobs_filters",
            "check_credits_in_index", "check_key_insert_needs_verified_wallet",
-           "check_ledger_page_plan", "check_port_privileges", "check_result_withheld"]
+           "check_ledger_page_plan", "check_monitor_reads_unknown_holds",
+           "check_port_privileges", "check_result_withheld", "monitor_login"]
