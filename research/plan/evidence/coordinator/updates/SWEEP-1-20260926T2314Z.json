@@ -1,0 +1,18 @@
+{"task": "SWEEP-1", "slice": "post-freeze minors: WR-BM-1/2, WR-G2FIX-1/2/3, SC-3/4, E1BP-3..11, AM2-L-2/L-3, AM1-L2, G8-FLAG R2/R3/R6", "activity": "review",
+ "head": "6085112b", "worktree": ".claude/worktrees/codex-sweep-1", "branch": "codex/sweep-1",
+ "owned_paths": ["apps/infrx-api/tests/d/pgharness.py", "apps/infrx-api/tests/d/vkstore.py", "apps/infrx-api/tests/w/", "tests/integration/backend/e3c/control_trees.sh", "tests/integration/backend/e3c/reverts.py", "tests/integration/backend/e3c/test_e3c_runner.py", "apps/infrx-api/tests/q/mutants.py", "tests/integration/mutants.py", "tests/integration/environment.json", "tests/integration/ENVIRONMENT.md", "tests/integration/test_preflight.py", "apps/infrx-api/infrx/contracts/tasklocal.py", "models/marlin2b/results/E1B-protocol.md", "models/marlin2b/results/E4C-runbook.md", "research/plan/evidence/e/E1B-prep-fc3d66a.md", "models/marlin2b/e1b/", "models/marlin2b/tests/", "apps/app/tests/c/", "research/plan/evidence/coordinator/SWEEP-1-6085112.md"],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=w5 (+w5 Valkey env) pytest -q tests/w", "exit": 1, "summary": "334 passed, 10 skipped, 1 failed (w5-pg lock case; fixed at 6085112b)"},
+  {"cmd": "same env INFRX_MUTANTS=all the seven W mutant files", "exit": 1, "summary": "606 passed, 15 skipped, 1 failed (same case); test_w5_mutants.py at 6085112b: 43 passed"},
+  {"cmd": "INFRX_D_TASK=g8 pytest -q tests/g/ops; + INFRX_MUTANTS=all test_mutants.py", "exit": 0, "summary": "97 passed; 118 passed"},
+  {"cmd": "pytest -q tests/q; INFRX_MUTANTS=all the three Q lists", "exit": 0, "summary": "194 passed; 199 passed"},
+  {"cmd": "pytest tests/integration/test_preflight.py backend/e3c/test_e3c_runner.py tests/integration/app", "exit": 0, "summary": "128 passed"},
+  {"cmd": "python tests/integration/mutants.py", "exit": 1, "summary": "193: 187 killed, 3 controls survived; problems e2m70, i3bm117, i3bm54 identical at base b640c35c"},
+  {"cmd": "pytest models/marlin2b/tests tests/i/test_rollout.py", "exit": 0, "summary": "136 passed"},
+  {"cmd": "E3C final run: control_trees.sh HEAD + make backend-local", "exit": 0, "summary": "gate PASS at 5620546c, 16/16 scenarios, 14/14 controls (nc-dur-cap-org/-key detected by the scoped burst)"},
+  {"cmd": "make console-test / console-lint / console-typecheck; node tests/c/run-mutants.mjs", "exit": 0, "summary": "614 pass 0 fail 57 skip; 0 errors; clean; 197/197 killed"},
+  {"cmd": "ruff check (edited Python); validate_plan.py", "exit": 0, "summary": "clean; PASS"}],
+ "estimate": {"optimistic_h": 0.2, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "medium", "basis": "merge + WR-SWEEP1-1..3; AM1-L2 needs a coordinator decision", "at": "2026-09-26T23:14:17Z"},
+ "blockers": ["AM1-L2: no runner-side fault throws inside a console segment (reads are Results; auth memoized per request); needs a test-only App hook or accepting the root boundary"],
+ "wiring_requests": ["WR-SWEEP1-1 infra/rollout/e1b-window.sh: WC-2 c=1 gateway half (e1b-w1-pair-c1)", "WR-SWEEP1-2 tests/integration/backend/e3c/README.md DUR-CAP control column", "WR-SWEEP1-3 tests/integration/app/runner.py E3C_FINAL comment/reference (14 controls)"],
+ "evidence": ["research/plan/evidence/coordinator/SWEEP-1-6085112.md"]}
