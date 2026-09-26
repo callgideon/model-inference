@@ -1516,6 +1516,32 @@ MUTANTS += (
        '"$e4c/E4C-box.json" "$e4c/keys-certify.json"', LAUNCH),
 )
 
+# E1B-MUTANTS: the E1B window launcher (E1B-WIRE/E1B-WIRE-2), one mutant per rule its cases claim
+E1B_SH = "../../infra/rollout/e1b-window.sh"
+E1B_ORDER = "test_e1b_window__cells_run_in_order_one_container_each_with_only_parser_flags"
+E1B_REFUSE = "test_e1b_window__refuses_a_cell_that_would_overlap_or_run_off_the_pinned_engine"
+E1B_WC8 = "test_e1b_window__wc8_keeps_the_interrupted_half_and_bounds_its_exit"
+MUTANTS += (
+    _m("e1b_window_order_swapped", "the window runs §7.2's cells in order (WC-1..WC-5, WC-8; WC-7 alone)",
+       E1B_SH, 'ORDER="WC-1 WC-2 WC-3 WC-4 WC-5 WC-8 WC-7"', 'ORDER="WC-1 WC-2 WC-4 WC-3 WC-5 WC-8 WC-7"',
+       E1B_ORDER),
+    _m("e1b_window_non_parser_flag", "a cell hands bench.py only flags its parser defines",
+       E1B_SH, "--target gateway --model nemostation/marlin-2b --seed 20260922",
+       "--target gateway --model nemostation/marlin-2b --random-seed 20260922", E1B_ORDER),
+    _m("e1b_window_certify_live_ignored", "no cell starts while a certify container exists (§7.1 rule 1)",
+       E1B_SH, """  if awk '$2 ~ /^infrx-certify:/ {f=1} END {exit !f}' <<< "$names"; """
+               """then refuse "$1" "a certify run is live"; fi\n""", "", E1B_REFUSE),
+    _m("e1b_window_engine_seqs_unchecked", "no cell starts on an engine off the profile's max_num_seqs",
+       E1B_SH, '|| refuse "$1" "the engine is not at the pinned max_num_seqs $seqs"', "|| true",
+       E1B_REFUSE),
+    _m("e1b_window_wc8_output_discarded", "WC-8's interrupted half keeps its output (E1BW-R2)",
+       E1B_SH, '> "$out/$label-interrupted.log" 2>&1 &', '2> "$out/$label-interrupted.log" > /dev/null &',
+       E1B_WC8),
+    _m("e1b_window_wc8_stuck_half_not_killed",
+       "a WC-8 first half that ignores SIGINT is killed after the 120 s bound (E1BW-R3)",
+       E1B_SH, '    docker kill "infrx-e1b-$label" > /dev/null 2>&1 || true\n', "", E1B_WC8),
+)
+
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 
@@ -1535,6 +1561,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
     for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "alerts"),
                  ("infra", "app"),              # I3 (WR-I3-3): AppDown's runbook section
+                 ("models", "marlin2b", "profiles"),  # E1B-MUTANTS: the window cases' base profiles
                  ("apps", "app", "supabase", "migrations")):
         if REPO.joinpath(*part).exists():
             shutil.copytree(REPO.joinpath(*part), root.joinpath(*part), ignore=ignore)
@@ -1545,7 +1572,10 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
         shutil.copy2(compose, root / "tests" / "integration" / "compose.yaml")
     # E4C-RUNBOOK-2: the launcher case reads certify's parser and the E4C runbook's command
     for part in (("tests", "integration", "backend", "certify.py"),
-                 ("models", "marlin2b", "results", "E4C-runbook.md")):
+                 ("models", "marlin2b", "results", "E4C-runbook.md"),
+                 # E1B-MUTANTS: the window cases read both clients' parsers and WC-8's corpus
+                 ("models", "marlin2b", "bench.py"), ("models", "marlin2b", "dataset.py"),
+                 ("models", "marlin2b", "corpus-synth", "manifest.json")):
         root.joinpath(*part[:-1]).mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO.joinpath(*part), root.joinpath(*part))
     for name in ("pyproject.toml", "uv.lock"):
