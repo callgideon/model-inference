@@ -1,0 +1,45 @@
+{
+  "task": "E1B",
+  "slice": "E1B-WIRE-2: WREQ-1 worker metrics=rt.metrics, WREQ-2 bench eos mutants, WREQ-3 E4C-runbook §3/§4a/§5.0/§5.2 E1B fills and window order, E1BW-R1..R4 launcher/loop minors",
+  "activity": "review",
+  "head": "c4fd7b44",
+  "worktree": ".claude/worktrees/codex-e1b-wire-2",
+  "branch": "codex/e1b-wire-2",
+  "owned_paths": [
+    "apps/infrx-api/infrx/worker/__main__.py",
+    "apps/infrx-api/infrx/worker/loop.py",
+    "apps/infrx-api/tests/w/test_worker_main.py",
+    "apps/infrx-api/tests/w/worker_main_mutants.py",
+    "apps/infrx-api/tests/w/test_loop.py",
+    "apps/infrx-api/tests/w/loop_mutants.py",
+    "models/marlin2b/tests/mutants.py",
+    "infra/rollout/e1b-window.sh",
+    "apps/infrx-api/tests/i/test_rollout.py",
+    "models/marlin2b/results/E4C-runbook.md",
+    "models/marlin2b/results/E1B-protocol.md",
+    "research/plan/evidence/e/E1B-wire-2-c4fd7b4.md",
+    "research/plan/evidence/coordinator/updates/E1B-WIRE-2-20260926T2116Z.json"
+  ],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=w5 uv run --frozen --no-sync pytest -q tests/w", "exit": 0, "summary": "333 passed, 10 skipped"},
+    {"cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen --no-sync pytest -q tests/w/test_worker_main_mutants.py tests/w/test_loop_mutants.py", "exit": 0, "summary": "128 passed, 7 skipped (PG+S3, no local S3); 48 + 72 mutants killed, 4 new"},
+    {"cmd": "models/marlin2b/tests/mutants.py", "exit": 0, "summary": "119 mutants: 116 killed, 3 controls survived, 0 problems (e1bm32-34 new, e1bm17 re-anchored)"},
+    {"cmd": "cd apps/infrx-api && uv run --frozen --no-sync pytest -q ../../models/marlin2b/tests", "exit": 0, "summary": "118 passed"},
+    {"cmd": "uv run --frozen --no-sync pytest -q ../../tests/integration/backend/recovery/test_runbooks.py", "exit": 0, "summary": "13 passed"},
+    {"cmd": "uv run --frozen --no-sync pytest -q tests/i/test_rollout.py", "exit": 0, "summary": "15 passed; launcher ad hoc mutants 7/7 killed"},
+    {"cmd": "bash -n infra/rollout/e1b-window.sh; DRY_RUN=1 on a scratch profile dir", "exit": 0, "summary": "12 plan lines; CELLS=WC-7 1 line; SOP JSONL sha = base pin"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "all PASS"},
+    {"cmd": "git diff --stat aac38207..HEAD", "exit": 0, "summary": "owned paths only"}
+  ],
+  "estimate": {
+    "optimistic_h": 2.5,
+    "likely_h": 4.5,
+    "pessimistic_h": 8.5,
+    "confidence": "medium",
+    "basis": "est.: wiring done; window cells 1.0-1.6 h of the E4C window (E1B-protocol §7.2); post-window analysis 2-4 h; pessimistic adds a pair re-run and a launcher fix on the box",
+    "at": "2026-09-26T21:16Z"
+  },
+  "blockers": ["MEDIA_BASE_URL (operator-held) for the WC-5 URL form"],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/e/E1B-wire-2-c4fd7b4.md"]
+}
