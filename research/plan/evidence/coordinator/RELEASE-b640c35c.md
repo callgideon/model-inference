@@ -27,8 +27,8 @@ The full `certify.py --hashes` output is the freeze.json of E4C-runbook §7 (`sc
 | Gate | Result | Where |
 |---|---|---|
 | G1 | PASS 21:34:46Z (`HEAD` = RELEASE, porcelain empty) | freeze-b640c35c/G1.log |
-| G2 make check (e2c form, Q 55430) | RUNNING from 21:35Z (~3.5 h) | freeze-b640c35c/G2-make-check.log |
-| G2 tests/i on e2c | after make check | freeze-b640c35c/G2-tests-i.log |
+| G2 make check (e2c form, Q 55430) | **FAIL exit 2** at 22:21:54Z — api-test 1 failed / 4575 passed / 43 skipped / 9 xfailed (2819.63 s): `tests/i/test_mutants.py::test_every_case_is_covered_by_a_mutant` — cases no mutant can break: the three `test_e1b_window__*` cases (E1B-WIRE/-2 added the launcher cases without mutants) | freeze-b640c35c/G2-make-check.log |
+| G2 tests/i on e2c | NOT RUN (the script stops at the first failing gate) | — |
 | G3 | PASS (`"ok": true`; image `infrx-runtime:b640c35c`) | checks-b640c35c-gates.log |
 | G4 | PASS `[]` | checks-b640c35c-gates.log |
 | G4b (P-06) | PASS `ok` | checks-b640c35c-gates.log |
@@ -53,3 +53,4 @@ env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN infra/rol
 
 - 2026-09-26T21:40Z: identities computed on the fixed clone; G1/G3/G4/G4b/G5 PASS; G2, E3C and App re-proofs running; W1 user-run.
 - 2026-09-26T21:58Z: E3C final PASS and app-e2e PASS at RELEASE; BACKEND-LOCAL re-proven; APP-LOCAL candidate refreshed to RELEASE (17/17) — the manifest records the decision after BACKEND-READY, so the acceptance written at rev 141 was withdrawn at rev 143 (the tracker check rejects it). G2 still running.
+- 2026-09-26T22:25Z: **G2 FAIL** on b640c35c (tests/i mutant coverage of the E1B launcher cases). The candidate is withdrawn; fix lane E1B-MUTANTS (tests/i/mutants.py only) from b640c35c; the next RELEASE is its merge and every gate reruns there (this record stays as the b640c35c history; the new record is RELEASE-<sha>.md).
