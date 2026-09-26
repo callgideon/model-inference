@@ -75,6 +75,8 @@ const SUITE = [
   "tests/u/keys-source.test.ts",
   "tests/u/settings-view-model.test.ts",
   "tests/u/operator-console.test.ts",
+  // APP-MINORS-1 (I3R-6): every error boundary reports through I3's client.
+  "tests/i3/boundaries.test.ts",
 ];
 
 // U2: the API Keys and Settings page models and the two key controls (read as source by keys-source).
@@ -205,7 +207,25 @@ const U4 = {
   wiring: "U4-S02 the client components run the tested drivers, no fetch bypasses them, and the page mounts the poller only when it polls",
 };
 
+// APP-MINORS-1 (I3R-6): the error boundaries report through I3's one report client (tests/i3/boundaries).
+const TRACES_ERROR = "app/(console)/traces/error.tsx";
+const ERROR_VIEW = "lib/deploy/error-view.ts";
+const I3 = {
+  bound: "I3-BOUND-01 every error boundary under app/ reports once through the report client, with only digest, route and name",
+};
+const I3_DROP = "  useErrorReport(error); // I3: reported like app/error.tsx, never shown\n";
+const I3_BODY = "body: JSON.stringify(browserReport(error, window.location.pathname)),";
+
 const MUTANTS = [
+  { id: "I3-M01", what: "the usage boundary never reports (review I3R-6)", file: USAGE_ERROR, find: I3_DROP, replace: "", cases: [I3.bound] },
+  { id: "I3-M02", what: "the billing boundary never reports", file: BILLING_ERROR, find: I3_DROP, replace: "", cases: [I3.bound] },
+  { id: "I3-M03", what: "the traces boundary never reports", file: TRACES_ERROR, find: I3_DROP, replace: "", cases: [I3.bound] },
+  { id: "I3-M04", what: "the root error page (app/error.tsx, global-error.tsx) never reports", file: ERROR_VIEW,
+    find: "  useErrorReport(error);\n  const commit", replace: "  const commit", cases: [I3.bound] },
+  { id: "I3-M05", what: "the report carries the message", file: ERROR_VIEW, find: I3_BODY,
+    replace: "body: JSON.stringify({ ...browserReport(error, window.location.pathname), message: error.message }),", cases: [I3.bound] },
+  { id: "I3-M06", what: "the report is dropped when the retry navigates (no keepalive)", file: ERROR_VIEW,
+    find: "keepalive: true,", replace: "keepalive: false,", cases: [I3.bound] },
   // --- money formatting -----------------------------------------------------
   {
     id: "U1-M01",

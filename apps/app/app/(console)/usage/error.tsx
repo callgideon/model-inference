@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useErrorReport } from "@/lib/deploy/error-view";
 import { boundaryCopy } from "./boundary";
 
 /**
@@ -15,7 +16,8 @@ import { boundaryCopy } from "./boundary";
  * *without* re-fetching — it would replay the same errored payload — and that `retry()` is what to
  * use. See `./boundary.ts`.
  */
-export default function UsageError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {
+export default function UsageError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+  useErrorReport(error); // I3: reported like app/error.tsx, never shown
   const copy = boundaryCopy("usage");
   return (
     <Card>

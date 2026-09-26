@@ -392,7 +392,7 @@ test(T.cap, { skip }, async (t) => {
     let cursor: string | null = null;
     for (let pages = 1; ; pages += 1) {
       assert.ok(pages <= Math.ceil(expected.length / 100) + 1, `${name}: the walk does not end`);
-      const page = await read({ limit: 100, cursor });
+      const page: Awaited<ReturnType<typeof read>> = await read({ limit: 100, cursor });
       assert.ok(page.ok, `${name}: ${JSON.stringify(page)}`);
       items.push(...page.value.items);
       cursor = page.value.next_cursor;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useErrorReport } from "@/lib/deploy/error-view";
 
 /**
  * The last resort. Everything this page *expects* to go wrong is a typed `Result` the view model
@@ -22,7 +23,8 @@ import { Card, CardContent } from "@/components/ui/card";
  * `error.message` is deliberately not shown: it is not copy written for a reader, and for a Server
  * Component error the client only receives a generic message plus a digest anyway.
  */
-export default function TracesError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {
+export default function TracesError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+  useErrorReport(error); // I3: reported like app/error.tsx, never shown
   return (
     <>
       <PageHeader title="Traces" />

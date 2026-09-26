@@ -510,7 +510,7 @@ test("V1-V11 the error boundary re-fetches, and shows nothing from the thrown er
   // The comments explain *why* it is not `reset`, so they are stripped before the code is checked.
   const source = file.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   assert.match(file, /^"use client";/, "an error boundary is a Client Component");
-  assert.match(source, /export default function \w+\(\{ retry \}/, "the boundary takes `retry`");
+  assert.match(source, /export default function \w+\(\{ (?:error, )?retry \}/, "the boundary takes `retry`");
   assert.match(source, /onClick=\{\(\) => retry\(\)\}/, "and calls it");
   assert.ok(!/\breset\b/.test(source), "`reset` cannot recover a Server Component payload");
   // Nothing from the thrown error reaches the reader: not the message, not the digest.
