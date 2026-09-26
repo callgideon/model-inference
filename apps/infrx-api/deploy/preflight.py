@@ -159,6 +159,10 @@ MANIFEST: tuple[Key, ...] = (
     # request bearing it has no tenant to meter. Optional in dev/test, refused in pilot.
     Key("GATEWAY_API_KEY", "legacy shared key", "opaque",
         param="marlin2b_api_key", secret=True, required_in=(), forbidden_in=("pilot",)),
+    # W5-F5 (E3C F-6): D10's read-only `infrx_monitor` login, read only by the worker's
+    # reconciliation gauges; optional in every mode (unset: those gauges are off).
+    Key("MONITOR_DATABASE_URL", "worker reconciliation gauges (D10 infrx_monitor, read-only)",
+        "pg_dsn", param="monitor_database_url", secret=True, required_in=()),
 )
 
 
