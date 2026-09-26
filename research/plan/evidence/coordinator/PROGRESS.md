@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 04:27Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 81, updated 2026-09-26 04:27Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 04:55Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 81, updated 2026-09-26 04:27Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -105,7 +105,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (31.7 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (32.2 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
