@@ -294,7 +294,8 @@ def consumer_local(args, out: Path) -> list[dict]:
     own = dict(zip(spec["services"], zip(*pf.namespace(spec))))    # service -> (port, name)
     env = {"INFRX_D_TASK": "e2c", "INFRX_D2_VALKEY_PORT": str(own["valkey"][0]),
            "INFRX_D2_VALKEY_CONTAINER": own["valkey"][1],
-           "INFRX_Q_VALKEY_PORT": str(own["valkey"][0])}
+           # G2-FIX F-1: Q's harness gets its own port (tasklocal e2c `valkey-q`), never D2's
+           "INFRX_Q_VALKEY_PORT": str(pf.namespace({**spec, "services": ["valkey-q"]})[0][0])}
     s3 = s3_up(*own["s3"], out)
     stages.append(s3)
     if s3["verdict"] == PASS:            # else the S3 cases skip: BLOCKED, not FAIL

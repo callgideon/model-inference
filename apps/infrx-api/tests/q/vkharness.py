@@ -78,11 +78,14 @@ def _listening() -> bool:
 
 def ensure() -> None:
     """Start the container if it is not already up, and remove it at exit **if this
-    process is the one that started it**."""
+    process is the one that started it**. A server already on the port that is not this
+    container is refused (G2-FIX F-1), never adopted."""
     global _started
     if _started:
         return
-    if not _listening():
+    if _listening():
+        _refuse_foreign()
+    else:
         state = _docker("inspect", "-f", "{{.State.Running}}", CONTAINER, check=False)
         if state.returncode != 0:
             run = _docker("run", "-d", "--name", CONTAINER,
@@ -97,6 +100,23 @@ def ensure() -> None:
             _docker("start", CONTAINER)
         _wait_ready()
     _started = True
+
+
+def _refuse_foreign() -> None:
+    """A server already on PORT is adopted only if it is this lane's own container
+    publishing that port (R63). Anything else is refused, named and left running."""
+    try:
+        mine = _docker("port", CONTAINER, "6379", check=False)
+        if mine.returncode == 0 and f":{PORT}" in mine.stdout:
+            return
+        owner = _docker("ps", "--filter", f"publish={PORT}", "--format", "{{.Names}}",
+                        check=False).stdout.split()
+    except OSError:                                 # no docker: it cannot be ours
+        owner = []
+    raise RuntimeError(
+        f"127.0.0.1:{PORT} is held by {', '.join(owner) or 'a process that is not a container'}, "
+        f"not {CONTAINER}: refusing to adopt it (R63; give this harness its own "
+        f"INFRX_Q_VALKEY_PORT)")
 
 
 def _wait_ready(timeout_s: float = 90.0) -> None:       # generous: a loaded host is slow
