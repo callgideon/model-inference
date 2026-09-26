@@ -7,12 +7,14 @@
 #  1. reads, by NAME, the two passwords (RUNTIME_PASSWORD_PARAM, MONITOR_PASSWORD_PARAM) and the
 #     owner DSN (OWNER_DSN_PARAM: preflight's pg_journal_url, the migration login on the session
 #     pooler) into a 0600 file - never an argument, never printed;
-#  2. in the installed runtime image (no psql on the box): logs in as each on the transaction
-#     pooler (:6543, `<role>.<project-ref>` as Supavisor names it) with its SSM password and
-#     checks current_user; only a role whose login fails (the first run: NOLOGIN; a rotated
-#     password) gets, through the owner DSN, ALTER ROLE ... WITH LOGIN PASSWORD (a SCRAM verifier
-#     computed client-side, so the plain text is not in the server's statement log) and is
-#     checked again (CS-4: a rerun touches no role);
+#  2. in the installed runtime image (no psql on the box): reads each role's rolcanlogin over
+#     the owner DSN; a NOLOGIN role (the first run) is not probed (S55F-2: no failed pooler
+#     authentication from the box); a LOGIN role is logged into on the transaction pooler
+#     (:6543, `<role>.<project-ref>` as Supavisor names it) with its SSM password and
+#     current_user checked. A NOLOGIN role, or one whose login fails (a rotated password: one
+#     failed auth), gets through the owner DSN ALTER ROLE ... WITH LOGIN PASSWORD (a SCRAM
+#     verifier computed client-side, so the plain text is not in the server's statement log)
+#     and is logged into then (CS-4: a rerun touches no role);
 #  3. stages the env file with DATABASE_URL = infrx_runtime and MONITOR_DATABASE_URL =
 #     infrx_monitor (the worker's reconciliation gauges, WR-W5F5-2), runs envcheck on the staged
 #     bytes, then replaces the file by one rename (0600, owner kept, the old one saved 0600 under
@@ -79,10 +81,12 @@ with psycopg.connect(owner, autocommit=True) as conn:
         password = os.environ[secret]
         dsn = (f"postgresql://{quote(role + suffix)}:{quote(password)}@{where['host']}:6543/"
                f"{where.get('dbname') or 'postgres'}?sslmode={where.get('sslmode') or 'require'}")
-        try:
-            current = whoami(dsn)             # a rerun: the login already works, role untouched
+        can_login = conn.execute("select rolcanlogin from pg_roles where rolname = %s",
+                                 [role]).fetchone()[0]
+        try:                                  # NOLOGIN (the first run): no probe, no failed auth
+            current = whoami(dsn) if can_login else None   # a rerun: works, role untouched
         except psycopg.OperationalError:
-            current = None                    # the first run (NOLOGIN) or a rotated password
+            current = None                    # a rotated password: one failed auth
         if current != role:
             verifier = conn.pgconn.encrypt_password(password.encode(), role.encode(),
                                                     b"scram-sha-256").decode()

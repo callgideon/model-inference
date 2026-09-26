@@ -1446,7 +1446,8 @@ LOGIN_STEP = STEP + "55-runtime-login.sh"
 LOGIN = "test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only"
 LAUNCHER_SH = "../../infra/rollout/e4c-certify.sh"
 LAUNCH = "test_e4c_certify__the_launcher_passes_exactly_certify_s_box_flags_and_no_secret"
-# STEP55-FIX: CS-4 (a rerun touches no role), CS-5, F2, F4, F5 and RB4-1's resume step
+# STEP55-FIX: CS-4 (a rerun touches no role), CS-5, F2, F4, F5 and RB4-1's resume step;
+# STEP55-FIX-2: S55F-2 (a NOLOGIN role is not probed)
 LOGIN_RERUN = "test_ops_login__a_rerun_touches_no_role_and_a_rotated_password_is_set_again"
 LOGIN_PG = "test_ops_login__on_postgresql_the_first_run_sets_both_and_a_rerun_neither"
 LOGIN_FAILS = "test_ops_login__each_failure_has_its_exit_and_leaves_the_file_and_no_staged_copy"
@@ -1476,6 +1477,8 @@ MUTANTS += (
        "        if True:\n            verifier", LOGIN_RERUN, LOGIN_PG),
     _m("login_probe_failure_escapes", "a failing login probe leads to the ALTER, not a crash (CS-4)",
        LOGIN_STEP, "except psycopg.OperationalError:", "except ValueError:", LOGIN_RERUN, LOGIN_PG),
+    _m("login_first_run_probes_nologin", "a NOLOGIN role is ALTERed with no failed pooler login first (S55F-2)",
+       LOGIN_STEP, "whoami(dsn) if can_login else None", "whoami(dsn)", LOGIN_RERUN, LOGIN_PG),
     _m("login_dsn_count_is_exit_3", "one DSN back has its own exit, 5, not envcheck's 3 (CS-5)",
        LOGIN_STEP, 'nothing staged" >&2; exit 5; }', 'nothing staged" >&2; exit 3; }', LOGIN_FAILS),
     _m("login_failed_restart_not_put_back", "a failed restart puts the previous file back (CS-5)",
