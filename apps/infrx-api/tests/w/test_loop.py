@@ -78,9 +78,15 @@ class World:
         self.relayed.extend(chunks)
 
     async def _put_result(self, job_id: str, text: str, lease) -> str:
-        # R147 (D10 0026): fenced like `append`, by the fake store's own fence.
-        async with self.jobs._lock:
-            self.jobs._fence(lease)
+        # R147 (D10 0026), as the store answers it: with a lease, another job's lease is
+        # invalid_request and the rest is the fake store's own fence; WITHOUT one, 0014's
+        # unfenced write (kept for the rollback targets), so a runner that drops the lease
+        # is caught by what a stale write does, not by a crash here (RV-D10F-3).
+        if lease is not None:
+            if lease.job_id != job_id:
+                raise errors.InvalidRequest(f"lease is for {lease.job_id}, not {job_id}")
+            async with self.jobs._lock:
+                self.jobs._fence(lease)
         self.results[job_id] = text
         return f"infrx-result:{job_id}"
 

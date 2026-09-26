@@ -232,8 +232,30 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     return api
 
 
+HARNESS_LOCK_DIR = "Path(tempfile.gettempdir())"
+
+
+def _pg_layout(root: pathlib.Path) -> pathlib.Path:
+    """PREP-WORKER's PG copy, whose harness takes the HOST's port lock (RV-D10F-3).
+
+    The copy runs under its own TMPDIR and `pgharness.lock_path()` sits under
+    `gettempdir()`, so every copy locked a file no other run saw: a copy started while
+    another run held the port collided on it (a Created orphan) instead of refusing. The
+    copy's harness locks the file this process's harness would lock for the same port,
+    whatever the copy's TMPDIR (the rule tests/i/pooler.py follows, WR-KGP2-4)."""
+    from ..d import pgharness
+    api = prep_worker_mutants._pg_layout(root)
+    harness = api / "tests" / "d" / "pgharness.py"
+    source = harness.read_text()
+    if source.count(HARNESS_LOCK_DIR) != 1:
+        raise RuntimeError(f"pgharness.lock_path() no longer reads {HARNESS_LOCK_DIR}")
+    harness.write_text(source.replace(HARNESS_LOCK_DIR,
+                                      f"Path({str(pgharness.lock_path().parent)!r})"))
+    return api
+
+
 RUNNER = Runner(name="w5", targets=(SUITE_FILE,), layout=_layout)
-PG_RUNNER = Runner(name="w5-pg", targets=(SUITE_FILE,), layout=prep_worker_mutants._pg_layout,
+PG_RUNNER = Runner(name="w5-pg", targets=(SUITE_FILE,), layout=_pg_layout,
                    env=("INFRX_D_TASK",))
 
 

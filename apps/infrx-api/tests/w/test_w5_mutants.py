@@ -90,3 +90,23 @@ def test_pg_mutant_is_killed(mutant):
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
                            f"{result.detail}. The cases {list(mutant.cases)} do not prove "
                            f"what they claim.")
+
+
+def test_a_pg_copy_takes_the_hosts_port_lock_whatever_its_tmpdir(tmp_path):
+    """RV-D10F-3: every copy of the PG runner locks the file this run's harness locks for
+    the same port, so a copy started while another run holds the port is refused. Oracle:
+    the shared layout, whose copy locks under its own TMPDIR and so serialises with
+    nothing."""
+    import subprocess
+    import sys
+
+    from ..d import pgharness
+    api = mutation_list.PG_RUNNER.layout(tmp_path)
+    temp = tmp_path / ".tmp"
+    temp.mkdir()
+    probe = subprocess.run(
+        [sys.executable, "-c", "from tests.d import pgharness; print(pgharness.lock_path())"],
+        cwd=api, capture_output=True, text=True, check=True,
+        env={**{n: os.environ[n] for n in mutation_list.PG_RUNNER.env if n in os.environ},
+             "PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "TMPDIR": str(temp)})
+    assert probe.stdout.strip() == str(pgharness.lock_path()), probe.stdout

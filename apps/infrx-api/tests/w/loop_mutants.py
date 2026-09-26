@@ -286,7 +286,7 @@ MUTANTS: tuple[Mutant, ...] = (
        A, "                                                                result.visible_text,\n"
           "                                                                state.lease))",
        "                                                                result.visible_text,\n"
-          "                                                                None))", HAPPY),
+          "                                                                None))", RESULT_FENCE),
     _m("refused_result_write_is_a_platform_error",
        "R147: a result write the fence refuses settles nothing, like a refused complete",
        A, "            except (errors.StaleLease, errors.AlreadyTerminal) as refused:\n"
