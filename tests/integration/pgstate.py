@@ -603,6 +603,8 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
 # function is refused one layer earlier, at the schema, and the row says so.
 API_ROLES = ("anon", "authenticated", "service_role")
 NOBODY, SERVICE, BROWSER = (), ("service_role",), ("authenticated", "service_role")
+# 0025 (D10-0025, R143): the operator console's writes run with the operator's own JWT only
+SIGNED_IN = ("authenticated",)
 
 RELATIONS = {
     "infrx.attempts": SERVICE,
@@ -663,6 +665,8 @@ RELATIONS = {
     "public.feedback": BROWSER,
     "public.models": BROWSER,
     "public.operator_audit": BROWSER,
+    "public.operator_unknown_usage": BROWSER,     # 0025 (D10-0025): SELECT only
+    "public.operator_wallet_drift": BROWSER,      # 0025 (D10-0025): SELECT only
     "public.org_members": BROWSER,
     "public.org_settings": BROWSER,
     "public.organizations": BROWSER,
@@ -682,6 +686,8 @@ VIEWS = frozenset({
     "public.console_usage",
     "public.feedback",
     "public.operator_audit",
+    "public.operator_unknown_usage",
+    "public.operator_wallet_drift",
     "public.org_settings",
     "public.wallets",
 })
@@ -710,6 +716,7 @@ FUNCTIONS = {
     "infrx.claim_preparation_ready(jsonb)": SERVICE,              # 0019:976-986 (D10)
     "infrx.claim(jsonb)": SERVICE,
     "infrx.consent_guard()": NOBODY,
+    "infrx.console_operator(text,text)": NOBODY,                  # 0025 (D10-0025)
     "infrx.content_acknowledge_delete(jsonb)": SERVICE,           # 0020:482-489 (D10)
     "infrx.content_candidates(jsonb)": SERVICE,                   # 0020:482-489 (D10)
     "infrx.content_claim(jsonb)": SERVICE,                        # 0020:482-489 (D10)
@@ -827,6 +834,10 @@ FUNCTIONS = {
     "timestamp with time zone)": BROWSER,
     "public.consumer_org()": NOBODY,
     "public.handle_new_user()": SERVICE,
+    # 0025 (D10-0025, U3 WR-U3-1, R143): is_operator() inside; never anon or the platform key
+    "public.operator_adjust_credit(uuid,text,text,text)": SIGNED_IN,
+    "public.operator_revoke_key(uuid,text,text)": SIGNED_IN,
+    "public.operator_set_suspension(uuid,boolean,text,text)": SIGNED_IN,
     "public.is_operator()": BROWSER,
     "public.is_org_member(uuid)": BROWSER,
     "public.is_org_owner(uuid)": BROWSER,
@@ -927,7 +938,9 @@ def settlement_rows() -> list[Check]:
 # and signup relations only SECURITY DEFINER functions write. L3-REBASE: D10's 0019 adds the
 # upload tickets to the definer-only set (0019:959 `revoke insert, update, delete on
 # infrx.media_uploads from service_role`: the `upload_*` boundary is the writer, R128) and its
-# two new relations are read-only to service_role (0019:952-955).
+# two new relations are read-only to service_role (0019:952-955). D10-0025: 0025's two
+# operator views are SELECT-only to service_role too (0025:197-200 revokes the default ACL's
+# writes; `operator_wallet_drift` is auto-updatable over `infrx.credit_wallets`).
 WRITE_VERBS = ("INSERT", "UPDATE", "DELETE", "TRUNCATE")
 SERVICE_WRITES = {
     "infrx": "INSERT,UPDATE,DELETE", "public": "INSERT,UPDATE,DELETE,TRUNCATE",
@@ -940,7 +953,8 @@ SERVICE_WRITES = {
                      "infrx.feature_flags", "infrx.job_results", "infrx.retired_individuals",
                      "infrx.media_uploads", "infrx.content_objects", "infrx.job_readiness",
                      "infrx.signup_denials", "infrx.signup_entitlements",
-                     "infrx.signup_identity_claims", "infrx.wallets"), ""),
+                     "infrx.signup_identity_claims", "infrx.wallets",
+                     "public.operator_unknown_usage", "public.operator_wallet_drift"), ""),
 }
 
 
