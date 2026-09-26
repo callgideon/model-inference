@@ -53,8 +53,9 @@ def test_the_environment_manifest_is_self_consistent():
     from infrx.contracts.tasklocal import local_services     # the one registry, not a copy
     own = local_services("e2c")
     assert pf.namespace(ENV["namespaces"]["e2c"]) == \
-        ([own["postgres"].host_port, own["valkey"].host_port, own["s3"].host_port],
-         ["infrx-e2c-postgres", "infrx-e2c-valkey", "infrx-e2c-s3"])
+        ([own["postgres"].host_port, own["valkey"].host_port, own["s3"].host_port,
+          own["valkey-q"].host_port],
+         ["infrx-e2c-postgres", "infrx-e2c-valkey", "infrx-e2c-s3", "infrx-e2c-valkey-q"])
     assert all("@sha256:" in image["ref"] for image in ENV["images"].values())
     # layer 3 (integration-l3, backend-certify) also binds the E3B PostgREST pair
     sys.path.insert(0, str(HERE / "backend"))
@@ -113,6 +114,21 @@ def test_a_busy_namespace_port_is_blocked():
     assert result["verdict"] == "BLOCKED"
     assert [c.get("busy_ports") for c in result["checks"]
             if c["check"] == "namespace:e2c-selftest"] == [[port]]
+
+
+def test_a_foreign_listener_on_the_q_valkey_port_blocks_consumer_local():
+    """WR-G2FIX-3/SC-3: consumer-local's preflight probes e2c's `valkey-q` (55430) too, so a
+    run that finds it held is BLOCKED before Q's harness refuses it mid-suite (a FAIL).
+    Oracle: e2c's `services` without `valkey-q` - 55430 is never probed."""
+    from infrx.contracts.tasklocal import local_services
+    port = local_services("e2c")["valkey-q"].host_port
+    with socket.socket() as held:
+        held.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if pf.port_free(port):              # else another process already holds it: same row
+            held.bind(("127.0.0.1", port))
+            held.listen()
+        row = pf.check_namespace("e2c", ENV["namespaces"]["e2c"], [])
+    assert row["status"] == "busy" and port in row["busy_ports"], row
 
 
 def test_a_port_lingering_in_time_wait_is_not_busy():
