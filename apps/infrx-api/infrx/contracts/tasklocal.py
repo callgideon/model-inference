@@ -38,6 +38,8 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "e3b2d": {"postgres": 55438, "valkey": 55468},
     # E4B certifies on the E2 stack as namespace `e4b` (56800-56899, E4B request 1)
     "e4b": {"postgres": 56832},
+    # E3A's App journey (tests/integration/app/runner.py) runs INSIDE the e4b block: edge 56860,
+    # control 56861, App 56870 (E3A-WR-4); E4B and the App journey therefore never run at once.
     # Wave 4 (consumer v1, program 22, 2026-09-24): one PostgreSQL (+ Valkey / S3 where the lane
     # drives them) per lane so the twelve worktrees run their real-service suites concurrently.
     # 55442-55460 and 55469-55499 were free; 555xx belongs to the E compose block. The D

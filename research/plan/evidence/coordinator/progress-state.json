@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 65,
- "updated": "2026-09-26T01:12:32Z",
+ "revision": 66,
+ "updated": "2026-09-26T01:46:03Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -1801,12 +1801,12 @@
   {
    "id": "E3A",
    "task": "E3A",
-   "slice": "E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b compose block; gate not claimed",
+   "slice": "E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b block (runner over the E3C world, Supabase stand-in edge, Playwright journey: 19 checks over the 17 E3A test_ids, app-e2e gate wiring); verified ACCEPT_WITH_FIXES, merged 6d55c5e0; gate not claimed",
    "agent": "opus",
    "branch": "codex/e3a-prep",
    "worktree": ".claude/worktrees/codex-e3a-prep",
    "base": "fd40748c",
-   "head": null,
+   "head": "4391553c",
    "isolation": {
     "ports": "e4b compose block 56800–56899",
     "prefix": "infrx-e3a-prep-",
@@ -1814,19 +1814,42 @@
    },
    "activity": "queued",
    "started": "2026-09-25T23:50:01Z",
-   "updated": "2026-09-25T23:50:49Z",
-   "blocker": "E3A proper dispatches after BACKEND-LOCAL/READY; E3A-PREP (coordinator preparation lane, workflow wf_06c06a68-c32) builds the harness now without claiming the gate",
-   "next_action": "workflow wf_06c06a68-c32; E3A proper runs after BACKEND-LOCAL (E3C) and the remaining App merges (C3A/U2/U3/U4)",
+   "updated": "2026-09-26T01:45:09Z",
+   "blocker": "E3A proper needs BACKEND-LOCAL (E3C) and the merged C3A/U2/U3/U4 pages fitted (create-key/revoke-key/request-detail NOT RUN at the lane base); product findings F-1 (sign-in claim never runs: middleware 307 on the server-action POST) and F-2 (/traces, /dedicated, /teams served to a consumer) are open on the tip → APP-E3A-FIX lane (overlay keeps the E3A lane queued: the gate dispatches after BACKEND-READY; the prep work is merged and recorded in head/evidence/commands)",
+   "next_action": "merged 6d55c5e0 (E3A-PREP); E3A-WR-3/WR-4 applied by the coordinator; E3A-WR-1/WR-2 routed to the E3C final run; F-1/F-2 + selector fitting → APP-E3A-FIX lane; E3A proper runs after BACKEND-LOCAL on the merged SHA",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "low",
-    "basis": "preparation lane; not yet inspected",
-    "at": "2026-09-25T23:50:01Z"
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "lane handback: harness done; E3A proper = fit the lane-gated checks to the merged pages, F-1/F-2 fixed, one run on the merged SHA after BACKEND-LOCAL",
+    "at": "2026-09-26T01:45:09Z"
    },
-   "evidence": [],
-   "commands": []
+   "evidence": [
+    "research/plan/evidence/e/E3A-prep-1bc9e63.md"
+   ],
+   "commands": [
+    {
+     "cmd": "apps/infrx-api/.venv/bin/python tests/integration/app/runner.py --out <scratch> (P3: 31cf6f10 merged with consumer-v1 6badd4e1, e4b block)",
+     "exit": 1,
+     "summary": "gate FAIL in 94 s: 16 passed, 2 failed (F-1 signin-claim, F-2 provider-route-denial), 1 NOT RUN; cells 10 PASS, 4 NOT RUN (delegated: DUR-CAP/DUR-FENCE/DUR-OUTBOX/CREDIT-RATE), 3 FAIL; teardown PASS (no container; 56860/56861/56870 free)"
+    },
+    {
+     "cmd": "runner.py --break-seam fixture-port / grant-guard",
+     "exit": 1,
+     "summary": "both seams FAIL (detected): Usage 10000 vs ledger 9999.4592; 2 grants after a replayed callback"
+    },
+    {
+     "cmd": "pytest tests/integration/app tests/integration/backend/e3c/test_e3c_runner.py tests/integration/test_preflight.py",
+     "exit": 0,
+     "summary": "103 passed (twice)"
+    },
+    {
+     "cmd": "make console-test / console-lint / console-typecheck; pnpm install --frozen-lockfile",
+     "exit": 0,
+     "summary": "510 tests, 487 pass, 0 fail, 23 pre-existing skips; lint 0 errors; tsc clean; lockfile frozen (@playwright/test 1.63.0 exact)"
+    }
+   ]
   },
   {
    "id": "P25-ENACT",
@@ -1925,6 +1948,46 @@
    },
    "evidence": [],
    "commands": []
+  },
+  {
+   "id": "APP-E3A-FIX",
+   "task": null,
+   "slice": "E3A support lane: F-1 (middleware 307 on the sign-in server action: claim never runs) and F-2 (/traces, /dedicated, /teams served to a consumer) fixed with fails-before tests; journey checks un-gated by C3A/U2/U3/U4 fitted to the merged pages; runner rerun on the e4b block",
+   "agent": "opus",
+   "branch": "codex/app-e3a-fix",
+   "worktree": ".claude/worktrees/codex-app-e3a-fix",
+   "base": "6d55c5e0",
+   "head": null,
+   "isolation": {
+    "ports": "E3A runner inside the e4b block (56860/56861/56870; one runner at a time)",
+    "prefix": "infrx-e4b-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-26T01:46:03Z",
+   "updated": "2026-09-26T01:46:03Z",
+   "blocker": null,
+   "next_action": "workflow wf_6b1a3b25-9ee (implement → 2 lenses → one fix round → rechecks); merge --no-ff onto claude/consumer-v1 after shared-clone checks; E3A stays planned (gate needs BACKEND-LOCAL)",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "two small App fixes with unit tests + selector fitting + one runner pass (~95 s)",
+    "at": "2026-09-26T01:46:03Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/lib/supabase/middleware.ts",
+    "apps/app/app/(console)/traces/",
+    "apps/app/app/(console)/dedicated/",
+    "apps/app/app/(console)/teams/",
+    "apps/app/tests/a/",
+    "apps/app/tests/c/",
+    "apps/app/tests/e2e/ (selector fitting only)",
+    "research/plan/evidence/a/E3A-fix-*"
+   ]
   }
  ],
  "review_queue": [
@@ -3621,6 +3684,33 @@
    "at": "2026-09-26T01:18:15Z",
    "lane": "I3",
    "event": "I3-PREP dispatched (wf_eed7ff75-8f5) on 6badd4e1: the last consumer-v1 task whose start dependencies allow a preparation lane; App union round-2 checks green; tip 6badd4e1 unpushed (push denied by the tool policy this window)"
+  },
+  {
+   "at": "2026-09-26T01:45:09Z",
+   "lane": "E3A",
+   "event": "E3A-PREP verified ACCEPT_WITH_FIXES at 4391553c (6 findings fixed and rechecked) and merged 6d55c5e0; APP-LOCAL not claimed; F-1/F-2 product findings open → APP-E3A-FIX lane"
+  },
+  {
+   "at": "2026-09-26T01:46:03Z",
+   "lane": "APP-E3A-FIX",
+   "event": "APP-E3A-FIX dispatched (wf_6b1a3b25-9ee) on 6d55c5e0 for E3A-PREP's product findings F-1/F-2 and the journey selector fitting"
+  },
+  {
+   "at": "2026-09-26T01:46:03Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-26T00:39:11Z is not newer than lane E3A state 2026-09-26T01:45:09Z",
+   "source": "updates/E3A-20260926T0039Z.json"
+  },
+  {
+   "at": "2026-09-26T01:46:03Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-26T01:18:40Z is not newer than lane E3A state 2026-09-26T01:45:09Z",
+   "source": "updates/E3A-20260926T0118Z.json"
+  },
+  {
+   "at": "2026-09-26T01:46:03Z",
+   "by": "tracker",
+   "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C)"
   }
  ],
  "history": {
@@ -4011,10 +4101,20 @@
    "status": "rejected",
    "at": "2026-09-26T00:37:00Z",
    "reason": "stale: at 2026-09-26T00:37:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z"
+  },
+  "E3A-20260926T0039Z.json": {
+   "status": "rejected",
+   "at": "2026-09-26T00:39:11Z",
+   "reason": "stale: at 2026-09-26T00:39:11Z is not newer than lane E3A state 2026-09-26T01:45:09Z"
+  },
+  "E3A-20260926T0118Z.json": {
+   "status": "rejected",
+   "at": "2026-09-26T01:18:40Z",
+   "reason": "stale: at 2026-09-26T01:18:40Z is not newer than lane E3A state 2026-09-26T01:45:09Z"
   }
  },
  "eta": {
-  "computed_at": "2026-09-26T01:12:32Z",
+  "computed_at": "2026-09-26T01:46:03Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
@@ -4024,7 +4124,7 @@
    "E3C": {
     "gate": "BACKEND-LOCAL",
     "status": "forecast",
-    "text": "2026-09-26 04:48Z – 2026-09-26 12:36Z (likely 2026-09-26 07:24Z)",
+    "text": "2026-09-26 05:22Z – 2026-09-26 13:10Z (likely 2026-09-26 07:58Z)",
     "constraint": "dependency path W5 → E3C",
     "effort_h": [
      3.6,
@@ -4037,9 +4137,9 @@
      11.4
     ],
     "finish": [
-     "2026-09-26T04:48:32Z",
-     "2026-09-26T07:24:32Z",
-     "2026-09-26T12:36:32Z"
+     "2026-09-26T05:22:03Z",
+     "2026-09-26T07:58:03Z",
+     "2026-09-26T13:10:03Z"
     ],
     "conditional": null,
     "confidence": "medium",
@@ -4079,7 +4179,7 @@
     "gate": "APP-PILOT",
     "status": "blocked",
     "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26",
-    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C, I3",
+    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C",
     "effort_h": null,
     "wall_h": null,
     "finish": null,
