@@ -577,6 +577,24 @@ test("isolation: a second individual gets their own one grant and sees none of t
   expect((await facts(email)).jobs, "the refusal admitted nothing").toHaveLength(0);
 });
 
+// Before revoke-key: that revokes the key this reads with (the journey ends with the revocation).
+test("expired-result: past its persisted expiry a result is gone (410), its metadata kept", async () => {
+  const key = await keyFor("a");
+  const state = await journey();
+  const handle = needs(state.asyncHandle, "the async job");
+  expect((await api(key, "GET", `/v1/jobs/${handle}/result`)).status).toBe(200);
+  await control("/clock", { seconds: 86_400 + 600 });
+  try {
+    const gone = await api(key, "GET", `/v1/jobs/${handle}/result`);
+    expect([gone.status, await errorCode(gone)]).toEqual([410, "result_expired"]);
+    const status = await api(key, "GET", `/v1/jobs/${handle}`);
+    expect(status.status, "the metadata stays readable").toBe(200);
+    expect(((await status.json()) as { result_available: boolean }).result_available).toBe(false);
+  } finally {
+    await control("/clock", { seconds: 0 });
+  }
+});
+
 test("revoke-key: a key revoked in the App fails admission within the revocation bound", async ({ page }) => {
   needsLanes("key create/revoke actions and the keys page are absent", "C3A", "U2");
   const state = await journey();
@@ -595,21 +613,4 @@ test("revoke-key: a key revoked in the App fails admission within the revocation
   const refused = await api(state.keyA!, "POST", "/v1/chat/completions", { model: MODEL, messages: TEXT });
   expect([refused.status, await errorCode(refused)]).toEqual([401, "invalid_api_key"]);
   expect((await facts(state.a!)).jobs.length).toBe(jobs);
-});
-
-test("expired-result: past its persisted expiry a result is gone (410), its metadata kept", async () => {
-  const key = await keyFor("a");
-  const state = await journey();
-  const handle = needs(state.asyncHandle, "the async job");
-  expect((await api(key, "GET", `/v1/jobs/${handle}/result`)).status).toBe(200);
-  await control("/clock", { seconds: 86_400 + 600 });
-  try {
-    const gone = await api(key, "GET", `/v1/jobs/${handle}/result`);
-    expect([gone.status, await errorCode(gone)]).toEqual([410, "result_expired"]);
-    const status = await api(key, "GET", `/v1/jobs/${handle}`);
-    expect(status.status, "the metadata stays readable").toBe(200);
-    expect(((await status.json()) as { result_available: boolean }).result_available).toBe(false);
-  } finally {
-    await control("/clock", { seconds: 0 });
-  }
 });
