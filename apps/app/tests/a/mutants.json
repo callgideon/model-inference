@@ -466,6 +466,16 @@
       "cases": [
         "A2-MW-02 a signed-in server action POST to /login or /signup passes through (the sign-in claim runs)"
       ]
+    },
+    {
+      "id": "NEXT-SECOND-DEF",
+      "note": "WR-A2-3: the looser lib/utils safeNext comes back beside the strict one",
+      "file": "lib/utils.ts",
+      "find": "export { cn } from \"cn\";\n",
+      "replace": "export { cn } from \"cn\";\nexport function safeNext(next: string | null | undefined, fallback = \"/models\") {\n  return next && next.startsWith(\"/\") && !next.startsWith(\"//\") ? next : fallback;\n}\n",
+      "cases": [
+        "A2-NEXT-02 safeNext has one definition, the strict one in app/(auth)/flow.ts (WR-A2-3)"
+      ]
     }
   ]
 }
