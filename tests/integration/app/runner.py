@@ -18,9 +18,11 @@
    cells. A cell's `journey` is the worst of the checks under it; its `verdict` is that, except
    for a DELEGATED cell (an oracle the journey does not exercise): `PASS[delegated to E3C-FINAL
    <run head> <scenarios>]` when the committed E3C-FINAL evidence records each of its scenarios
-   PASS, NOT RUN when that reference is missing, and FAIL whenever a check under it fails. A
-   check a lane has not merged yet is NOT RUN with the reason; an absent check is NOT RUN. Gate = worst of cells and stages (FAIL > INVALID > BLOCKED >
-   NOT RUN > PASS); exit 0 / 1 / 3 / 3 / 4.
+   PASS, NOT RUN when that reference is missing or no scenario carries the oracle (`NOT RUN
+   [delegated] NOT carried: ...`, the gap named), and FAIL whenever a check under it fails. A
+   check a lane has not merged yet is NOT RUN with the reason; an absent check is NOT RUN.
+   Gate = worst of cells and stages (FAIL > INVALID > BLOCKED > NOT RUN > PASS); exit
+   0 / 1 / 3 / 3 / 4.
 6. teardown of everything it started: no `infrx-e4b` container (`docker ps -a`) and the
    edge, control and App ports free again.
 
@@ -103,16 +105,26 @@ CHECKS = {
 E3C_FINAL = {"run_head": "27a69619", "tip": "04ae5e21",
              "evidence": "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
              "verdict_json": "<scratchpad>/final/verdict.json (final run 2)"}
-DELEGATED = {
-    "DUR-CAP": (("s09",), "concurrent signup callbacks and CLI grants grant exactly once, and a "
-                          "transition meeting a parked admission refuses within its bound; NOT "
-                          "carried: a race of admissions across keys/orgs (no E3C case)"),
-    "DUR-FENCE": (("s05",), "a worker crash at claim/output/settle recovers once (9/9 points)"),
+DELEGATED = {      # () = no E3C-FINAL scenario carries the oracle: NOT RUN, the gap named
+    "DUR-CAP": ((), "04-verification DUR-CAP races concurrent ADMISSIONS/grants across keys/orgs "
+                    "(no negative available balance, no capacity oversubscription); E3C s09 races "
+                    "grants and the lock bound only; NOT carried: a race of admissions across "
+                    "keys/orgs at the cap (needs an E3C case or a journey injection admitting "
+                    "concurrently on two keys/orgs)"),
+    "DUR-FENCE": ((), "04-verification DUR-FENCE expires a lease and races stale and new workers "
+                      "at every mutation; E3C s05 SIGKILLs the worker (the dead worker never "
+                      "races); NOT carried: a stale/new generation race (append, renew, settle, "
+                      "second capacity) - predecessor E3B dr03/dr05/db07/db11 are not this tree; "
+                      "needs an E3C case"),
     "DUR-OUTBOX": (("s05", "s08"), "a crash at the outbox step recovers once; a lost Valkey "
                                    "index is rebuilt and loses no accepted job"),
-    "CREDIT-RATE": (("s09", "s13"), "a USD job admitted before CREDIT keeps its units and price "
-                                    "snapshot, an unapproved card is refused; discovery prices "
-                                    "only what admission serves"),
+    "CREDIT-RATE": ((), "04-verification CREDIT-RATE publishes changed rates/deployment while "
+                        "jobs wait or run and rejects an unknown/private/unpriced model; E3C s09 "
+                        "changes the regime USD->CREDIT (no rate published), s13 matches discovery "
+                        "to the serving profile; NOT carried: a published rate change keeping the "
+                        "admitted revision/rates, the unknown/private/unpriced refusal - "
+                        "predecessor E3B dr07c/db13 are not this tree; needs an E3C case or a "
+                        "journey publish-card injection"),
 }
 SCENARIO_ROW = re.compile(r"^\|\s*\**(s\d\d)\**[^|]*\|\s*\**([A-Z][A-Z ]*?)\**\s*\|", re.M)
 
@@ -120,6 +132,8 @@ SCENARIO_ROW = re.compile(r"^\|\s*\**(s\d\d)\**[^|]*\|\s*\**([A-Z][A-Z ]*?)\**\s
 def delegated_reference(evidence: str | None, scenarios) -> str | None:
     """Why the E3C-FINAL reference does not carry `scenarios` (None: it does). It must be the
     evidence of the accepted run - gate PASS at the run head - with each scenario's row PASS."""
+    if not scenarios:
+        return "NOT carried by E3C-FINAL"
     if not evidence:
         return f"reference missing: {E3C_FINAL['evidence']} is not on this tree"
     if "**Verdict: BACKEND-LOCAL PASS.**" not in evidence or E3C_FINAL["run_head"] not in \
@@ -224,7 +238,7 @@ def cells(checks: dict, evidence: str | None = None) -> list[dict]:
     """The E3A test_ids: `journey` = worst of the checks under each (APP-JOURNEY is every
     check); `verdict` = that, or for a DELEGATED cell the worst of it and the E3C-FINAL
     reference (`evidence`, that document's text): `PASS[delegated to E3C-FINAL ...]`, never a
-    bare PASS, NOT RUN without the reference."""
+    bare PASS, NOT RUN without the reference or when no scenario carries the oracle."""
     out = []
     for test_id in TEST_IDS:
         under = [name for name, (ids, _) in CHECKS.items()

@@ -108,32 +108,44 @@ def test_delegated_cells_pass_only_on_the_e3c_final_reference():
     PASS), or a red journey check under it hidden by the reference."""
     green = runner.classify(all_passed())
     table = {c["id"]: c for c in runner.cells(green, EVIDENCE)}
-    for test_id, (scenarios, _) in runner.DELEGATED.items():
-        want = f"PASS[delegated to E3C-FINAL 27a69619 {','.join(scenarios)}]"
-        assert table[test_id]["verdict"] == want, table[test_id]
-        assert table[test_id]["reasons"][0].startswith(want) and \
-            runner.E3C_FINAL["evidence"] in table[test_id]["reasons"][0]
-    assert runner.base(runner.worst(c["verdict"] for c in table.values())) == runner.PASS
+    want = "PASS[delegated to E3C-FINAL 27a69619 s05,s08]"
+    assert table["DUR-OUTBOX"]["verdict"] == want, table["DUR-OUTBOX"]
+    assert table["DUR-OUTBOX"]["reasons"][0].startswith(want) and \
+        runner.E3C_FINAL["evidence"] in table["DUR-OUTBOX"]["reasons"][0]
     for evidence, why in ((None, "not on this tree"),
                           (EVIDENCE.replace("BACKEND-LOCAL PASS", "BACKEND-LOCAL FAIL"),
                            "does not record"),
                           (EVIDENCE.replace("27a69619", "0000000"), "does not record"),
                           (EVIDENCE.replace("| s08 dependency outages | PASS |",
                                             "| s08 dependency outages | FAIL |"), "s08: FAIL"),
-                          (EVIDENCE.replace("| **s13** discovery vs admission | **PASS** | 2/2 |",
-                                            ""), "s13: no row")):
-        cell = {c["id"]: c for c in runner.cells(green, evidence)}
-        broken = "DUR-OUTBOX" if "s08" in why else "CREDIT-RATE" if "s13" in why else None
-        for test_id in runner.DELEGATED:
-            if broken in (None, test_id):
-                assert cell[test_id]["verdict"] == runner.NOT_RUN, (why, cell[test_id])
-                assert why in cell[test_id]["reasons"][0], (why, cell[test_id]["reasons"][0])
-            else:
-                assert cell[test_id]["verdict"].startswith("PASS[delegated"), (why, test_id)
-    tests = [(f"{name}: x", "passed", "", "") for name in runner.CHECKS if name != "rate-rejection"]
-    red = runner.cells(runner.classify(report(*tests, ("rate-rejection: x", "failed", "", "429"))),
+                          (EVIDENCE.replace("| s05 crash at each step | PASS | 9/9 |", ""),
+                           "s05: no row")):
+        cell = {c["id"]: c for c in runner.cells(green, evidence)}["DUR-OUTBOX"]
+        assert cell["verdict"] == runner.NOT_RUN, (why, cell)
+        assert why in cell["reasons"][0], (why, cell["reasons"][0])
+    tests = [(f"{name}: x", "passed", "", "") for name in runner.CHECKS if name != "async-poll"]
+    red = runner.cells(runner.classify(report(*tests, ("async-poll: x", "failed", "", "boom"))),
                        EVIDENCE)
-    assert {c["id"]: c["verdict"] for c in red}["DUR-FENCE"] == runner.FAIL
+    assert {c["id"]: c["verdict"] for c in red}["DUR-OUTBOX"] == runner.FAIL
+
+
+def test_an_oracle_no_e3c_scenario_carries_is_not_run_even_with_the_reference():
+    """Oracle (0-E3A-RUN-RV-1, 1-S-1, 1-S-2): DUR-FENCE bound to s05 (a SIGKILL, no stale/new
+    generation race), DUR-CAP to s09 (grants, no cross-key admission race) or CREDIT-RATE to
+    s09/s13 (no published rate change, no unknown/private/unpriced refusal) reads PASS[delegated]
+    and turns the gate APP-LOCAL PASS on a green journey and the accepted E3C-FINAL document."""
+    uncarried = {"DUR-CAP", "DUR-FENCE", "CREDIT-RATE"}
+    table = {c["id"]: c for c in runner.cells(runner.classify(all_passed()), EVIDENCE)}
+    for test_id in uncarried:
+        cell = table[test_id]
+        assert (cell["verdict"], cell["journey"]) == (runner.NOT_RUN, runner.PASS), cell
+        assert cell["reasons"][0].startswith("NOT RUN[delegated] NOT carried"), cell
+        assert "NOT carried: " in cell["reasons"][0], cell   # the gap is named
+    gate = runner.base(runner.worst(c["verdict"] for c in table.values()))
+    assert (gate, runner.EXIT[gate]) == (runner.NOT_RUN, 3)
+    assert {tid for tid, c in table.items()
+            if runner.base(c["verdict"]) != runner.PASS} == uncarried
+    assert {tid for tid, (scenarios, _) in runner.DELEGATED.items() if not scenarios} == uncarried
 
 
 def _need_stack_following_the_env():
