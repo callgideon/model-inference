@@ -26,6 +26,11 @@ def _m(name, file, old, new, check, why, **kw):
     return _d.Mutant(name, file, old, new, "admission", check, why, **kw)
 
 
+#: Killed on the plain image only: their check reads the nested plan through auto_explain,
+#: which Supabase's non-superuser `postgres` cannot LOAD (measured) - the suite case
+#: `test_a_ledger_page_is_a_limit_bounded_index_range` is a declared skip there too.
+PLAIN_IMAGE_ONLY = frozenset({"d10_ledger_page_sorts"})
+
 MIGRATION_MUTANTS = (
     # --- the failure oracles of §D10.d that 0019 carries ----------------------------------
     _m("d10_claim_without_the_marker", READY,
