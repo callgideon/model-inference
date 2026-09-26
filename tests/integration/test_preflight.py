@@ -549,9 +549,11 @@ def test_a_green_consumer_local_composition_passes_on_its_own_namespace(tmp_path
     for _, name, argv, env in api:
         assert env == {"INFRX_D_TASK": "e2c", "INFRX_D2_VALKEY_PORT": str(own["valkey"].host_port),
                        "INFRX_D2_VALKEY_CONTAINER": own["valkey"].container,
-                       "INFRX_Q_VALKEY_PORT": str(own["valkey"].host_port),
+                       "INFRX_Q_VALKEY_PORT": str(own["valkey-q"].host_port),
                        "INFRX_M_S3_ENDPOINT": f"http://127.0.0.1:{own['s3'].host_port}",
                        "INFRX_M_S3_LOCAL_CREDS": "1"}, name
+    # G2-FIX F-1: D2's relay and Q's harness share one pytest process, so never one port
+    assert own["valkey-q"].host_port != own["valkey"].host_port
     down = composed.calls.index(("s3-down", own["s3"].container))
     assert down > composed.calls.index(api[-1])          # after the last suite that uses it
     runners = [c[2] for c in composed.calls if c[0] == "runner"]

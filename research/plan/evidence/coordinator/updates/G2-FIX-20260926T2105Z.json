@@ -1,0 +1,40 @@
+{
+ "task": "G2-FIX",
+ "slice": "release gate G2 (README §0): G-GATES F-1, F-2, F-3, F-5, F-6",
+ "activity": "review",
+ "head": "041d6f6c020d91b1c85a1a22061d4357fd66b6bf",
+ "worktree": ".claude/worktrees/codex-g2-fix",
+ "branch": "codex/g2-fix",
+ "owned_paths": [
+  "apps/infrx-api/tests/q/vkharness.py",
+  "apps/infrx-api/tests/q/test_vkharness.py",
+  "apps/infrx-api/infrx/contracts/tasklocal.py",
+  "tests/integration/gates.py",
+  "apps/infrx-api/tests/contracts/mutants.py",
+  "apps/infrx-api/tests/i/mutants.py",
+  "apps/infrx-api/tests/i/test_observe.py",
+  "infra/rollout/README.md",
+  "research/plan/evidence/coordinator/G2-FIX-041d6f6.md",
+  "research/plan/evidence/coordinator/updates/G2-FIX-20260926T2105Z.json"
+ ],
+ "commands": [
+  {"cmd": "pytest -q tests/q/test_vkharness.py (before / after the fix)", "exit": 0, "summary": "before: 2 failed (DID NOT RAISE: a foreign listener was adopted); after: 2 passed"},
+  {"cmd": "INFRX_D_TASK=e2c INFRX_D2_VALKEY_PORT=55493 INFRX_D2_VALKEY_CONTAINER=infrx-e2c-valkey INFRX_Q_VALKEY_PORT=55430 pytest -q -rs tests/d/test_outbox_relay.py tests/q/test_reconcile.py", "exit": 0, "summary": "93 passed in one process (the two G-GATES q3 drills included); with the old shared 55493: 39 failed, each a named R63 refusal"},
+  {"cmd": "INFRX_MUTANTS=all pytest -q tests/contracts/test_mutants.py -k lc_reregistration_resets_the_grace", "exit": 0, "summary": "1 passed (killed)"},
+  {"cmd": "INFRX_D_TASK=e2c INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'pilot_key_not_forbidden or install_args_pool_pin_dropped or durable_forgets_unknown_holds'", "exit": 0, "summary": "3 passed (all killed)"},
+  {"cmd": "INFRX_D_TASK=i8 pytest -q -rsxX tests/i (i8 free, docker events)", "exit": 0, "summary": "239 passed, 1 xfailed: F-5 was host contention on the shared i8 flock, not the task value"},
+  {"cmd": "G2 (1): INFRX_D_TASK=e2c INFRX_D2_VALKEY_PORT=55493 INFRX_D2_VALKEY_CONTAINER=infrx-e2c-valkey INFRX_Q_VALKEY_PORT=55430 PYTEST_ADDOPTS=-rsxX make check", "exit": 0, "summary": "api-test 4566 passed/42 skipped/9 xfailed; api-mutants 3730 passed/33 skipped + E4B 255 passed; console-test 608 pass/0 fail/56 skipped; lint 0 errors; typecheck clean; console mutants all killed; console-built 22/22; bench 116 passed; 12,430 s"},
+  {"cmd": "G2 (2): cd apps/infrx-api && INFRX_D_TASK=e2c uv run --frozen pytest -q tests/i", "exit": 0, "summary": "239 passed, 1 xfailed"},
+  {"cmd": "INFRX_D_TASK=e2c INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py (alone)", "exit": 0, "summary": "366 passed (every mutant killed), 782 s"},
+  {"cmd": "G4b one-liner (README §0)", "exit": 1, "summary": "['processor_config_digest', 'preprocessor_config_digest']: fails while P-06 is open, as intended"},
+  {"cmd": "ruff check (edited files); python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "clean; plan valid"}
+ ],
+ "estimate": {"optimistic_h": 3.5, "likely_h": 4, "pessimistic_h": 6, "confidence": "medium", "basis": "merge + coordinator G2 rerun on the integration tip with e2c/i8 held free (this run 3 h 27 min + 4 min)", "at": "2026-09-26T21:05Z"},
+ "blockers": ["G4b/P-06: processor/preprocessor served-bytes digests (operator)", "G6 operator inputs (unchanged)"],
+ "wiring_requests": [
+  "WR-G2FIX-1: tests/q/mutants.py mutant harness_adopts_a_foreign_listener on tests/q/vkharness.py (_refuse_foreign() -> pass), killed by the two test_vkharness cases",
+  "WR-G2FIX-2: tests/integration/mutants.py mutant putting INFRX_Q_VALKEY_PORT back on own['valkey'] in gates.py, killed by test_a_green_consumer_local_composition_passes_on_its_own_namespace",
+  "WR-G2FIX-3: environment.json namespaces.e2c.use and ENVIRONMENT.md:67,108 name e2c valkey-q 55430 for INFRX_Q_VALKEY_PORT (optionally add valkey-q to the e2c services list + test_preflight.py:55 tuple)"
+ ],
+ "evidence": ["research/plan/evidence/coordinator/G2-FIX-041d6f6.md"]
+}

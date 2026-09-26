@@ -133,7 +133,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "    values, problems = collect(cfg)\n    if cfg.mode not in MODES:\n        report(",
        "test_deploy_failclosed__an_unset_or_unknown_mode_installs_nothing"),
     _m("pilot_key_not_forbidden", "pilot never carries the shared legacy key (R51)",
-       P, 'forbidden_in=("pilot",)),\n)', "forbidden_in=()),\n)",
+       P, 'forbidden_in=("pilot",)),\n', "forbidden_in=()),\n",   # G2-FIX F-2: MONITOR_DATABASE_URL follows
        "test_deploy_failclosed__pilot_never_writes_the_shared_legacy_key"),
     _m("staged_mode_unchecked", "the mode checked is the mode written",
        P, '    if staged_env.get("INFRX_MODE") != mode:', "    if False:",
@@ -1055,7 +1055,9 @@ DELIVERY = "test_ops_continuous__delivery_sends_changes_only_and_blocks_without_
 MUTANTS += (
     _m("durable_forgets_unknown_holds", "the durable exporter feeds the reconcile rules",
        OBS + "durable.py", '        out[("infrx_holds_unknown", ())] = holds.get("unknown", 0)\n', "",
-       "test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones"),
+       # G2-FIX F-3: the worker's record_reconciliation also produces the family, so the
+       # producer-scan case cannot see this edit; the exporter's own output can
+       "test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler"),
     _m("producer_scan_blind", "the producer check reads what the code writes",
        "tests/i/test_observe.py",
        "return {name for name, metrics in rule_metrics(rules).items() if not metrics <= produced}",
@@ -1437,7 +1439,8 @@ MUTANTS += (
        "pytest==8.4.2 --hash=sha256:872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79",
        "test_backend_deploy__the_bucket_check_installs_exactly_uv_locks_pytest_wheels"),
     _m("install_args_pool_pin_dropped", "the runbook's INSTALL_ARGS fit the session pooler",
-       "../../infra/runbooks/rollout.md", ' DATABASE_POOL_MAX_SIZE=6")', '")',
+       "../../infra/runbooks/rollout.md",   # G2-FIX F-2: the regime names follow the pin
+       " DATABASE_POOL_MAX_SIZE=6 ACCOUNTING_REGIME=", " ACCOUNTING_REGIME=",
        "test_backend_deploy__the_runbooks_install_args_fit_the_session_pooler"),
     *(_m(f"pre_i8_guard_dropped_{step[:2]}", "a step on a pre-I8 checkout is BLOCKED before it acts",
          STEP + step, RF_GUARD, "|| true", RF_PRE_I8)

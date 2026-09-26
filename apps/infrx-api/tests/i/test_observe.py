@@ -282,7 +282,8 @@ def test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the
     assert value[("infrx_durable_up", None)] == 1
     assert value[("infrx_durable_holds", "held")] >= 1 and value[("infrx_durable_holds", "unknown")] >= 1
     assert value[("infrx_durable_unknown_overdue", None)] >= 1
-    assert value[("infrx_holds_unknown", None)] >= 1
+    # G2-FIX F-3: an assertion, not a KeyError, when the exporter forgets the family
+    assert value.get(("infrx_holds_unknown", None), 0) >= 1          # UnknownUsageBacklog's input
     assert value[("infrx_reconciliation_drift", None)] >= 1        # a hold nobody reserved
     assert value[("infrx_durable_ready_backlog", "inference_dispatch")] >= 1
     assert value[("infrx_durable_ready_backlog_seconds", "inference_dispatch")] >= 690

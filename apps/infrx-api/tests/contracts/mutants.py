@@ -2349,8 +2349,9 @@ MUTANTS: tuple[Mutant, ...] = (
        LCF, "                    or row.claim.fence != claim.fence or now >= row.claim.expires_at:",
        "                    or False:", "retention_durable__claims_are_leased_and_fenced"),
     _m("lc_reregistration_resets_the_grace", "the first registration's eligibility persists",
-       LCF, "            raise refuse(R.bytes_changed, \"the key already names other bytes\")\n        return row",
-       "            raise refuse(R.bytes_changed, \"the key already names other bytes\")\n        return self._save(row, **fresh)",
+       # G2-FIX F-2: the M6 WR-7 `written` branch now sits between the raise and `return row`
+       LCF, "now + timedelta(seconds=self.grace_s)))\n        return row\n",
+       "now + timedelta(seconds=self.grace_s)))\n        return self._save(row, **fresh)\n",
        "retention_durable__eligibility_survives_restart_and_discovery"),
     _m("lc_open_ticket_does_not_protect_its_destination", "an open ticket references its destination",
        LCF, "                and ticket.state is UploadState.created and now < ticket.expires_at",
