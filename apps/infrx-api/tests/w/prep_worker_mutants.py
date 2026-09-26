@@ -225,8 +225,12 @@ MUTANTS = (
        MAIN, "runner=PreparationRunner(jobs=jobs, media=media,",
        "runner=PreparationRunner(jobs=store, media=media,", COMPOSE),
     _m("main_readiness_not_wired", "W5: preparation claims through D10's marker-gated "
-       "ReadinessStore", MAIN, "limits=limits, readiness=PgLifecycle(connect, limits=limits)),",
+       "ReadinessStore", MAIN, "limits=limits, readiness=lifecycle),",
        "limits=limits),", COMPOSE),
+    _m("main_readiness_a_second_lifecycle", "W5-F5B (union F3): the marker the claim reads "
+       "is M6's one lifecycle, not a second PgLifecycle over the same connect",
+       MAIN, "limits=limits, readiness=lifecycle),",
+       "limits=limits, readiness=PgLifecycle(connect, limits=limits)),", COMPOSE),
     _m("main_reconciliation_not_wired", "S3 F4: the reaper publishes the reconciliation gauges",
        MAIN, "                            reconciliation=reconciliation_reader(deployment),\n",
        "",

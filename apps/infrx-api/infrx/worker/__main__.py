@@ -162,7 +162,7 @@ def compose(settings, *, objects=None, index=None):
     preparation = WorkerLoop(
         scheduler=scheduler, worker_id=worker_id, kind=OutboxKind.prepare_dispatch,
         runner=PreparationRunner(jobs=jobs, media=media, engine=engine, worker_id=worker_id,
-                                 limits=limits, readiness=PgLifecycle(connect, limits=limits)),
+                                 limits=limits, readiness=lifecycle),
         limits=limits)
     service = WorkerService(loop=loop, jobs=jobs, engine=engine,
                             concurrency=limits.worker_concurrency,
