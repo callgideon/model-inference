@@ -30,9 +30,10 @@ RI=$(docker image inspect --format '{{.Id}}' "infrx-runtime:$RELEASE")   # the s
 # reach docker in a 0600 file with the run's other settings, never on its command line.
 DB6543=$(sed -n 's/^DATABASE_URL=//p' "$env_file" | tr -d '"' | sed 's/:5432\//:6543\//')
 [ -n "$DB6543" ] || { echo "no DATABASE_URL in the env file" >&2; exit 2; }
-OPS6543=$(aws ssm get-parameter --region us-east-1 --with-decryption \
-            --name "${OPS_DSN_PARAM:-/model-inference/pg_journal_url}" \
-            --query Parameter.Value --output text | sed 's/:5432\//:6543\//')
+ops_param=${OPS_DSN_PARAM:-/model-inference/pg_journal_url}
+OPS6543=$(aws ssm get-parameter --region us-east-1 --with-decryption --name "$ops_param" \
+            --query Parameter.Value --output text | sed 's/:5432\//:6543\//') \
+  || { echo "cannot read SSM parameter $ops_param; no container started" >&2; exit 2; }
 [[ $OPS6543 == *:6543/* ]] || { echo "the owner DSN is not on the pooler's :6543" >&2; exit 2; }
 dsns=$(umask 077; mktemp)
 trap 'rm -f "$dsns"' EXIT   # docker reads the env files when it starts the container
