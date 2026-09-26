@@ -57,7 +57,11 @@ bench-test:
 		echo "bench-test: not run - models/marlin2b/tests does not exist yet (E1 owns it)"; \
 	fi
 
-check: api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
+# I2A WR-I2A-2: the built-bundle cases (I2A-BUILT-01/02) need .next; without a build they skip visibly.
+console-built:
+	cd apps/app && pnpm build && node --test tests/i2a/*.test.ts
+
+check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test
 
 # Real service evidence is separate from unit checks; Docker absence must fail visibly.
 # Optional arguments: make integration INTEGRATION_ARGS="--layer 1 --no-mutants"

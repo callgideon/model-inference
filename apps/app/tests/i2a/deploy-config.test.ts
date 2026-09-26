@@ -119,6 +119,9 @@ test("I2A-ENV-05 a preview carrying production credentials is refused", () => {
   // production project is recognised by the loader's own marker, never by inspecting a key.
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL }), /production/i);
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL + "/" }), /production/i);
+  // Coordinator wiring (verification F2 / I2A-R4): a trailing-dot or upper-cased spelling of the production host is the same project.
+  assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL.replace(".supabase.co", ".supabase.co.") }), /production/i);
+  assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL.toUpperCase() }), /production/i);
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: undefined }), /production/i);
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_APP_URL: PRODUCTION_ORIGIN }), /NEXT_PUBLIC_APP_URL/);
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_APP_URL: "https://infrx-app-x-someoneelse.vercel.app" }), /NEXT_PUBLIC_APP_URL/);

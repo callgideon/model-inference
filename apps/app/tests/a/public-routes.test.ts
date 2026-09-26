@@ -45,3 +45,10 @@ test("A2-ROUTE-03 the console shell's verify/onboarding redirects land on shippe
   }
   assert.ok(isPublic("/verify-email"), "an unverified visitor must reach /verify-email");
 });
+
+// I2A WR-I2A-1: the release identity (commit, build time, deployment id, API origin) carries nothing
+// per-person, so the post-deploy smoke can curl it without a session.
+test("I2A-ROUTE-01 the release identity is public", () => {
+  assert.ok(isPublic("/api/version"), "smoke S1 must reach /api/version without a session");
+  assert.ok(!isPublic("/api/versions"), "only the exact identity route is public");
+});

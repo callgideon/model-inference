@@ -129,9 +129,13 @@ export function environmentOf(env: Env): Environment {
   return stated as Environment;
 }
 
+// The host comparison ignores trailing dots (an absolute DNS name is the same project).
+const host = (url: URL) => url.hostname.replace(/\.+$/, "");
 const sameOrigin = (value: string | undefined, origin: string) => {
   try {
-    return value !== undefined && new URL(value).origin === origin;
+    if (value === undefined) return false;
+    const a = new URL(value), b = new URL(origin);
+    return a.protocol === b.protocol && a.port === b.port && host(a) === host(b);
   } catch {
     return false;
   }
