@@ -8,6 +8,10 @@ through the operator CLI - burst `POST /v1/jobs` all released at one barrier:
   job stays active. However the one admission lock orders them, exactly 4 are admitted and
   no scope is past its cap; the other 12 are the declared 429 `capacity_exhausted` with a
   Retry-After, and leave no job, hold, reservation or idempotency mapping.
+  Then (CC-1) the same keys burst again through two gateways whose total cap sits above
+  every organization's cap summed, so only the narrower scopes can bind: alpha (two keys x
+  4) is admitted exactly PER_ORG with no key past PER_KEY, beta (one key x 4) exactly
+  PER_KEY, whatever the lock's order - each scope's comparison is then the one refusing.
 * **balance**: alpha's wallet funded for exactly two more holds; 8 alpha requests race an
   operator debit of one hold (G6B's audited adjustment, D5's `grant_credit`, in-process so
   it really lands inside the burst) and beta's 4 requests. Alpha admits exactly what its
@@ -38,6 +42,8 @@ CAP, PER_ORG, PER_KEY = 4, 3, 2
 CAPS = {"MAX_ACTIVE_JOBS": str(CAP), "MAX_ACTIVE_JOBS_PER_ORG": str(PER_ORG),
         "MAX_ACTIVE_JOBS_PER_KEY": str(PER_KEY)}
 EIGHT_PLACES = Decimal("0.00000001")
+#: CC-1: above PER_ORG x 2 organizations, so the per-scope burst never meets the total cap.
+WIDE = {"MAX_ACTIVE_JOBS": "16"}
 
 
 def keyholders(trip, workdir: Path) -> list:
@@ -184,6 +190,30 @@ def drained(trip, request_ids) -> None:
         world.settled_once(trip, request_id)
 
 
+def scoped(trip, holders) -> tuple[list[dict], list]:
+    """CC-1: alpha's two keys and beta's first, 4 requests each, released at one barrier
+    through two more gateway processes at the WIDE total cap (the worker stopped, so every
+    admitted job stays active). The answers and the gateways (for their logs)."""
+    boxes = []
+    for offset in (2, 3):                        # 56942/56943 in e3c: free in E2's layout
+        box = world.second_gateway(trip.box, port_offset=offset)
+        box.env.update(WIDE)
+        box.starts = {"gateway": 100 * offset, "worker": 100 * offset}   # its own log files
+        boxes.append(box)
+    alpha = [h for h in holders if h.org_id == trip.world.alpha.org_id]
+    plan = [(holder, f"e3c-s15-scope-{holder.name}-{n}")
+            for holder in (*alpha, trip.world.beta) for n in range(4)]
+    trip.box.stop("worker")
+    try:
+        for box in boxes:
+            box.start("gateway")
+        answers, _ = burst(trip, [box.url for box in boxes], plan)
+    finally:
+        for box in boxes:
+            box.stop("gateway")
+    return answers, boxes
+
+
 def test_s15_a_burst_across_keys_and_orgs_admits_exactly_the_capacity(workdir,
                                                                       record_property):
     with world.composed(workdir, start=("gateway",), **CAPS) as trip:
@@ -227,7 +257,29 @@ def test_s15_a_burst_across_keys_and_orgs_admits_exactly_the_capacity(workdir,
         assert world.terminal(trip, again.json()["request_id"], timeout=90.0) == "succeeded"
         for tenant in (trip.world.alpha, trip.world.beta):
             trip.conserved(tenant)
-        no_deadlock(trip, since, before, (trip.box, other))
+        # CC-1: the per-organization and per-key caps, each binding on its own
+        answers, wide = scoped(trip, holders)
+        record_property("scoped burst", tally(answers))
+        admitted = [a for a in answers if a["status"] == 202]
+        refused = [a for a in answers if a["status"] != 202]
+        wrong = [a for a in refused if (a["status"], a["code"]) != (429, "capacity_exhausted")
+                 or not (a["retry_after"] or "").isdigit()]
+        assert not wrong, f"not the declared capacity refusal: {wrong}"
+        per_org, per_key = {}, {}
+        for a in admitted:
+            per_org[a["org"]] = per_org.get(a["org"], 0) + 1
+            per_key[a["holder"]] = per_key.get(a["holder"], 0) + 1
+        alpha, beta = trip.world.alpha, trip.world.beta
+        assert (per_org.get(alpha.org_id), per_org.get(beta.org_id)) == (PER_ORG, PER_KEY) \
+            and max(per_key.values()) <= PER_KEY, \
+            f"alpha {per_org.get(alpha.org_id)} at PER_ORG {PER_ORG}, beta's one key " \
+            f"{per_org.get(beta.org_id)} at PER_KEY {PER_KEY}, keys {per_key} at " \
+            f"MAX_ACTIVE_JOBS {WIDE['MAX_ACTIVE_JOBS']} (DUR-CAP per scope)"
+        nothing_held(trip, refused)
+        drained(trip, [a["request_id"] for a in admitted])
+        for tenant in (alpha, beta):
+            trip.conserved(tenant)
+        no_deadlock(trip, since, before, (trip.box, other, *wide))
 
 
 def adjust(trip, tenant, amount: Decimal, key: str) -> str | None:
