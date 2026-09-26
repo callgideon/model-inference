@@ -605,8 +605,8 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_remove_only_ever_removes_what_this_run_created",)),
     Mutant("e2m68", "E2R: one lock covers both image variants, because they share the port",
            "apps/infrx-api/tests/d/pgharness.py",
-           'return Path(tempfile.gettempdir()) / f"{SERVICE.container}-{PORT}.lock"',
-           'return Path(tempfile.gettempdir()) / f"{CONTAINER}.lock"',
+           'return Path("/tmp") / f"{SERVICE.container}-{PORT}.lock"',
+           'return Path("/tmp") / f"{CONTAINER}.lock"',
            "apps/infrx-api/tests/d/test_pgharness.py", "both_image_variants",
            cases=("test_the_port_lock_is_shared_by_both_image_variants",)),
 
