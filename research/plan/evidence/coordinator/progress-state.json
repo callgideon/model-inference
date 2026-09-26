@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 132,
-  "updated": "2026-09-26T19:37:00Z",
+  "revision": 133,
+  "updated": "2026-09-26T19:45:00Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -3341,18 +3341,18 @@
         "prefix": "infrx-app-c0-",
         "db": null
       },
-      "activity": "integration",
+      "activity": "complete",
       "started": "2026-09-26T18:20:00Z",
-      "updated": "2026-09-26T19:35:00Z",
+      "updated": "2026-09-26T19:45:00Z",
       "blocker": null,
-      "next_action": "merged --no-ff at 4db24c49 (merged before the freeze: the App release SHA carries it); WR-AM2-1/2 applied; fixed-clone console checks running → complete when green; minors carried: AM2-L-2 (getSession throws where it redirected for a user without exactly one owned org — fail-closed, no product path reaches it), AM2-L-3 (personalOrg vs grant rule wording), AM1-L2 → an E3A journey check",
+      "next_action": "DONE: merged 4db24c49; WR-AM2-1/2 c7bdb07f; fixed-clone console checks green; minors carried: AM2-L-2 (fail-closed throw for a user without exactly one owned org), AM2-L-3, AM1-L2 → an E3A journey check",
       "estimate": {
         "optimistic_h": 0,
-        "likely_h": 0.2,
-        "pessimistic_h": 0.5,
+        "likely_h": 0,
+        "pessimistic_h": 0,
         "confidence": "high",
-        "basis": "merged and wired; one console check left",
-        "at": "2026-09-26T19:35:00Z"
+        "basis": "merged, wired and checked",
+        "at": "2026-09-26T19:45:00Z"
       },
       "evidence": [
         "research/plan/evidence/app/APP-MINORS-2-65528fe.md"
@@ -3362,6 +3362,11 @@
           "cmd": "make console-test/lint/typecheck/built/mutants/pg/c0-real; tests/integration/app",
           "exit": 0,
           "summary": "614 pass; contracts 212 / V 40 / U 218 / C 195 / A 47+46; pg 8/8 + 8/8; c0-real 16/16; 20 passed"
+        },
+        {
+          "cmd": "coordinator: make console-* + console-pg + c0-real + tests/integration/app + validate (fixed clone of c7bdb07f, 19:35–19:45Z)",
+          "exit": 0,
+          "summary": "613 pass; lint 0 errors; typecheck clean; built 22; mutants 46/46; pg 8/8; c0-real 16/16; app runner 20; PASS"
         }
       ],
       "owned_paths": [
@@ -4285,6 +4290,13 @@
         "result": "PASS exit 0: 16 scenarios PASS, controls detected; 879 s",
         "at": "2026-09-26T10:09:55Z",
         "candidate": "400a7e94"
+      },
+      {
+        "name": "console (test/lint/typecheck/built/mutants/pg/c0-real) + app runner unit",
+        "cmd": "fixed clone of c7bdb07f",
+        "result": "green: 613 pass; 46/46 mutants; pg 8/8; c0-real 16/16; app runner 20",
+        "at": "2026-09-26T19:45:00Z",
+        "candidate": "c7bdb07f"
       }
     ]
   },
