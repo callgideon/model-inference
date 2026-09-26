@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "a1807a09",
+  "integration_head": "9b21339a",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 103,
-  "updated": "2026-09-26T06:25:10Z",
+  "revision": 104,
+  "updated": "2026-09-26T06:41:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 5,
+    "active": 8,
     "reserved": 2,
-    "note": "Session 03 (05:56Z): workflows KNOWN-GOOD-PROOF-2 (i8), APP-0024-WIRE-2 (app-u1r), E3C-CELLS (e3c block); coordinator fixed-clone suite on 529249d0 (e1c); 2 slots reserved for verify-lane workflows."
+    "note": "Session 03 (06:41Z): workflows KNOWN-GOOD-PROOF-2 (i8), E3C-CELLS (e3c), RUNBOOK-3 (revoke), APP-MINORS-1 (app-u1r/app-c0), G-GATES (e2c); LINT-2 agent (g8); coordinator suite on 529249d0 (e1c); 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -2813,6 +2813,122 @@
         "research/plan/evidence/coordinator/LINT-2-*.md"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "RUNBOOK-3",
+      "task": null,
+      "slice": "(support lane for the E4C window) the two paths E4C-RUNBOOK-2 left unproven: the CREDIT reversal (W7f then credit-transition --to legacy_usd) drilled on the revoke harness with the rollout.md §3 / rollback.md rows pinned to the drill; the worker's MONITOR_DATABASE_URL surviving a reinstall (preserve in 50-install/install.sh, or the runbook rule that step 55 follows every install, tested); workflow (Opus implementer, 2 lenses, one fix round)",
+      "agent": "opus",
+      "branch": "codex/runbook-3",
+      "worktree": ".claude/worktrees/codex-runbook-3",
+      "base": "9b21339a",
+      "head": null,
+      "isolation": {
+        "ports": "revoke postgres 55459; tests/i docker cases wait for i8",
+        "prefix": "infrx-revoke-",
+        "db": "revoke"
+      },
+      "activity": "running",
+      "started": "2026-09-26T06:41:00Z",
+      "updated": "2026-09-26T06:41:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merges after a fixed-clone tests/g/ops + tests/i run",
+      "estimate": {
+        "optimistic_h": 2,
+        "likely_h": 3.5,
+        "pessimistic_h": 6,
+        "confidence": "medium",
+        "basis": "a PG drill of freeze/drain/enable both ways with mutants; an install-preserve fix or a runbook-structure rule; tests/i docker cases queue behind i8",
+        "at": "2026-09-26T06:41:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "infra/runbooks/rollout.md",
+        "infra/runbooks/rollback.md",
+        "infra/rollout/steps/50-install.sh",
+        "infra/rollout/steps/55-runtime-login.sh",
+        "apps/infrx-api/deploy/install.sh",
+        "apps/infrx-api/tests/g/ops/",
+        "apps/infrx-api/tests/i/",
+        "tests/integration/ops/",
+        "research/plan/evidence/i/RUNBOOK-3-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "APP-MINORS-1",
+      "task": null,
+      "slice": "(support lane) App-side carried minors: APP-0024-WIRE-2 R-1 (U1R-P08 walks until the cursor is null at any capped count) and the I3-PREP minors I3R-5/6/8 as far as they are App-side (segment error boundaries reporting through the allowlisted client report; the Vercel-state assertion; the MAJOR/MINOR compare); workflow (Opus implementer, 1 lens, one fix round)",
+      "agent": "opus",
+      "branch": "codex/app-minors-1",
+      "worktree": ".claude/worktrees/codex-app-minors-1",
+      "base": "9b21339a",
+      "head": null,
+      "isolation": {
+        "ports": "app-u1r postgres 55457; app-c0 55451 for c0-real",
+        "prefix": "infrx-app-u1r-",
+        "db": "app-u1r"
+      },
+      "activity": "running",
+      "started": "2026-09-26T06:41:00Z",
+      "updated": "2026-09-26T06:41:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merges after fixed-clone console checks",
+      "estimate": {
+        "optimistic_h": 1,
+        "likely_h": 2,
+        "pessimistic_h": 4,
+        "confidence": "medium",
+        "basis": "one paging-test rewrite plus up to three small I3 fixes with fails-before tests and mutants",
+        "at": "2026-09-26T06:41:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/app/tests/u/credit-pg.test.ts",
+        "apps/app/tests/u/credit_world.py",
+        "apps/app/app/**/error.tsx",
+        "apps/app/lib/ (client report wiring)",
+        "apps/app/tests/",
+        "infra/alerts/ (only if I3R-5 lives there)",
+        "research/plan/evidence/app/APP-MINORS-1-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "G-GATES",
+      "task": null,
+      "slice": "(support lane; evidence only) pre-run of the release go/no-go gates G1–G6 (infra/rollout/README.md §0) on the tip: make check + tests/i (e2c; i8 when free), the pilot-runtime image start, the engine pin (expected to name P-06's missing digests), the local rehearsal, G6 from the documents; a completeness lens and one rerun round",
+      "agent": "opus",
+      "branch": "codex/g-gates",
+      "worktree": ".claude/worktrees/codex-g-gates",
+      "base": "9b21339a",
+      "head": null,
+      "isolation": {
+        "ports": "e2c postgres 55448, valkey 55493/55494; rehearsal in its own network namespaces",
+        "prefix": "infrx-e2c-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T06:41:00Z",
+      "updated": "2026-09-26T06:41:00Z",
+      "blocker": null,
+      "next_action": "report → coordinator records what blocks RELEASE today; G4 stays FAIL until P-06",
+      "estimate": {
+        "optimistic_h": 1.5,
+        "likely_h": 2.5,
+        "pessimistic_h": 4,
+        "confidence": "medium",
+        "basis": "make check ≈ 45–60 min, rehearsal ≈ 10 min, image build; evidence only",
+        "at": "2026-09-26T06:41:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "research/plan/evidence/coordinator/G-GATES-*.md"
+      ],
+      "wiring_requests": []
     }
   ],
   "review_queue": [
@@ -5078,6 +5194,12 @@
       "by": "APP-0024-WIRE-2",
       "what": "integration → complete; head 2d4ea984; estimate likely 0.2 → 0 h (merged and suite-checked)",
       "source": "updates/APP-0024-WIRE-2-20260926T0626Z.json"
+    },
+    {
+      "at": "2026-09-26T06:41:00Z",
+      "by": "coordinator",
+      "what": "full-scale dispatch (user 06:30Z): RUNBOOK-3, APP-MINORS-1 and G-GATES launched from 9b21339a (WR-RUNBOOK-5 applied: 72-observe-install.sh header); eight parallel runs; the manifest has nothing else dispatchable without operator inputs",
+      "source": "research/plan/evidence/coordinator/E4C-readiness-2026-09-26.md"
     }
   ],
   "history": {
