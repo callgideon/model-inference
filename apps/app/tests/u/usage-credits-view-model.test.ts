@@ -6,7 +6,7 @@
 // are consumer_jobs' own (0024), and a keyset walk visits every job once so its totals match the wallet.
 import assert from "node:assert/strict";
 import { readFileSync, statSync } from "node:fs";
-import { createRequire, registerHooks } from "node:module";
+import * as nodeModule from "node:module";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -31,6 +31,16 @@ import {
 // `node --test` cannot load `.tsx` or Next's `@/` alias: these hooks let a case render a component
 // for real (TypeScript's own transpiler, React's server renderer), so the form is judged by the
 // markup a browser submits rather than by its source text.
+type Resolved = { url: string; shortCircuit?: boolean };
+type Loaded = { format: string; source: string | Uint8Array; shortCircuit?: boolean };
+type Context = { parentURL?: string };
+// This @types/node predates `module.registerHooks` (Node 22.15; engines >= 22.18).
+const { createRequire, registerHooks } = nodeModule as typeof nodeModule & {
+  registerHooks(hooks: {
+    resolve(specifier: string, context: Context, next: (specifier: string, context: Context) => Resolved): Resolved;
+    load(url: string, context: object, next: (url: string, context: object) => Loaded): Loaded;
+  }): void;
+};
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const requireApp = createRequire(`${appRoot}/package.json`);
 const isFile = (path: string) => statSync(path, { throwIfNoEntry: false })?.isFile() === true;
