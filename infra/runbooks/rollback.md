@@ -59,7 +59,7 @@ preparation loop (F7). Every step below is one coordinator op; log each before i
 (README rule 1). **Maintenance window, single GPU: no inference while the swap runs.**
 
 1. **Choose the target by its tree and its record**, never by a backup (coordinator host):
-   `apps/infrx-api/.venv/bin/python infra/rollout/known-good.py --list --applied 0018 --set S3_MEDIA_BUCKET --set MAX_VIDEO_SECONDS --set WORKER_CONCURRENCY --set LARGE_BODY_LIMIT --set DATABASE_POOL_MAX_SIZE --bundles s3://llm-bootcamp-641134885443/releases/`
+   `apps/infrx-api/.venv/bin/python infra/rollout/known-good.py --list --applied 0018 --set S3_MEDIA_BUCKET --set MAX_VIDEO_SECONDS --set WORKER_CONCURRENCY --set LARGE_BODY_LIMIT --set DATABASE_POOL_MAX_SIZE --set ENGINE_MAX_NUM_SEQS --set ACCOUNTING_REGIME --set ACTIVE_RATE_CARD_VERSION --bundles s3://llm-bootcamp-641134885443/releases/`
    (`--applied` = the version hosted's `migrate.py plan` reports). Pick a `KNOWN-GOOD` one.
    Hosted ahead of the target's tree (e.g. after D10's migrations) is `NOT-KNOWN-GOOD` until
    the target's record carries a `schema_proof` reaching `--applied`: the target's own store
@@ -162,3 +162,4 @@ ledger, journal or job tables to roll back code.
 - 2026-09-26 (G8-FLAG fix round, review 1-G8FLAG-R2): Maintenance marks the direct regime-flag
   statement's conflict with R144 as TO BE VERIFIED (WR-G8FLAG-3); the statement is unchanged.
   Local only.
+- 2026-09-26 (E4C-RUNBOOK-2 wiring): the known-good drill's `--list` line passes every install name rollout.md §3 sets (`ENGINE_MAX_NUM_SEQS`, `ACCOUNTING_REGIME`, `ACTIVE_RATE_CARD_VERSION` added; measured by the lane: 4226315 and bda1586 exit 0 KNOWN-GOOD with the eight names at --applied 0023).

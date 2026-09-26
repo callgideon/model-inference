@@ -1073,3 +1073,4 @@ target group.
 - 2026-09-26 (P25-ENACT, local only): §2 and the disk-budget row state that the processing
   cache's 50 GiB high water (P-25, decided 2026-09-25) sits under R's 60 GiB media budget;
   the budget is unchanged.
+- 2026-09-26 (E4C-RUNBOOK-2 wiring, I8): D10 wiring 6 login provisioning is `infra/rollout/steps/55-runtime-login.sh` (rollout.md W10b, rollout README row 8b); O7's privilege probe then runs `--role infrx_runtime --allow-functions research/plan/evidence/d/D10-runtime-functions.txt`. The two SSM SecureStrings `/model-inference/infrx_runtime_password` and `/model-inference/infrx_monitor_password` must exist before W10b (coordinator-generated from a 0600 file with `--value file://`; names only in any log).
