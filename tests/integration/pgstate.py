@@ -292,6 +292,12 @@ def seed_fixtures(conn, seed: int = 20260921) -> Fixtures:
     # to administer.
     conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, 'member')",
                  (fixtures.orgs["alpha"], fixtures.user("member_alpha")))
+    # 0024 (C3A WR-C3A-4): a browser key INSERT needs a verified individual, so owner_alpha
+    # is one: E2-RLS-30 stays a positive control and E2-RLS-20/31/32 stay refused by the
+    # owner/tenant/authorship checks, not by verification. GoTrue's column is on the
+    # template (`harness.GOTRUE_COLUMNS`).
+    conn.execute("update auth.users set email_confirmed_at = now() where id = %s",
+                 (fixtures.user("owner_alpha"),))
 
     model_id = conn.execute("select id from public.models order by sort, id limit 1").fetchone()
     if model_id is None:
@@ -813,7 +819,12 @@ FUNCTIONS = {
     "public.claim_signup_grant(uuid,text,uuid)": SERVICE,
     # 0021:420-428 (D10): the signed-in consumer reads; the org resolver is nobody's
     "public.consumer_job_result(uuid)": BROWSER,
-    "public.consumer_jobs(text,integer,uuid)": BROWSER,
+    # 0024 (D10-APP-SQL): consumer_jobs gains four defaulted filters (0021's signature is
+    # dropped and recreated), and C0 WR-5's own-ledger page
+    "public.consumer_credit_ledger(text,integer)": BROWSER,
+    "public.consumer_may_create_key()": BROWSER,   # 0024: the api_keys INSERT predicate
+    "public.consumer_jobs(text,integer,uuid,text,uuid,timestamp with time zone,"
+    "timestamp with time zone)": BROWSER,
     "public.consumer_org()": NOBODY,
     "public.handle_new_user()": SERVICE,
     "public.is_operator()": BROWSER,
@@ -1003,7 +1014,9 @@ LOGINS = {
                 "kind", "acknowledged_at", "claimed_at", "available_at")]
             + [f"infrx.credit_holds.{c}:SELECT" for c in (
                 "request_id", "state", "reconcile_after")]
-            + ["infrx.stream_chunks.expires_at:SELECT", "infrx.job_results.request_id:SELECT"])),
+            + ["infrx.stream_chunks.expires_at:SELECT", "infrx.job_results.request_id:SELECT",
+               # 0024 (W5-F5 WR-W5F5-1): the CREDIT holds' state, with a monitor policy
+               "infrx.credit_wallet_holds.state:SELECT"])),
     },
 }
 _LOGIN_ATTRIBUTES = ("rolsuper", "rolinherit", "rolcreaterole", "rolcreatedb", "rolcanlogin",

@@ -162,6 +162,7 @@ def _admin(*statements: str) -> None:
 
 def _create(name: str) -> None:
     if ON_D:
+        d_harness()._sb(harness.PG_TEMPLATE_SOURCE, harness.GOTRUE_COLUMNS)   # as E2's template
         d_harness().recreate(name)                  # the Supabase template's copy
         return
     terminate = ("select pg_terminate_backend(pid) from pg_stat_activity "
