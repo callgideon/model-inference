@@ -199,6 +199,270 @@ G3 (runtime image, pilot probe `"ok": true`) and G5 (the full local rehearsal, c
 - G5 ran with `REHEARSAL_NS=infrx-ggates` (the script's own knob) instead of the default `infrx-i2b`, so that its label-scoped teardown cannot touch another lane's rehearsal.
 - Left on the host: the images `infrx-runtime:9b21339a…` and `infrx-ggates-runtime:9b21339a…` (tags; no containers, volumes or networks). The rehearsal's rebuild retagged `infrx-runtime:<sha>` to image `0dec1dbb47c2`; G3 probed `9baee3d3…`.
 
+## Rerun (GG-1, 2026-09-26T11:33Z-11:48Z)
+
+Review finding GG-1 (major): G2a' (FAIL) and the controls behind F-2/F-3/F-4 were quoted as counts
+with no output tail and no log path. The tree is unchanged: `codex/g-gates` is still `9b21339a`
+plus the evidence commit `c731d156`, so no gate verdict changes. This round (a) gives the tails of
+the run already made, from its retained logs, and (b) reruns the parts that settle F-2/F-3 at the
+same tree: the contracts mutant alone (it was never rerun alone), `tests/i/test_mutants.py` alone,
+and the `durable_forgets_unknown_holds` one-case run with full pytest output, pristine and mutated.
+Not rerun: `make check` and the 2 h 41 min `make -k` supplement. The tree is the same, F-1 would
+stop `make check` in `api-test` again, and GG-1 asks for the output of the run already made.
+i8 was polled free before the `tests/i` run (`i8 free 2026-09-26T11:33:49Z`, no `infrx-i8-*`).
+
+### Retained logs of the 07:01Z-11:21Z run
+
+Directory `/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/`
+(the session scratchpad on the development host; this rerun's files are in its `ggrerun/`). It
+is under `/tmp`: host-local and not durable. The tails below are the record; the paths serve
+anyone reading on this host soon.
+
+| Log (in that directory) | What it holds |
+|---|---|
+| `g2.log` | G2a `make check` (07:15Z-07:58Z), then G2b run 1 appended (`ti_exit=1`) |
+| `ti.log` | G2b run 1 (`INFRX_D_TASK=i8`, 07:58Z, `3 failed, 231 passed, 1 xfailed, 4 errors`) |
+| `g2b.log` | the `tests/q/test_reconcile.py` control (`qconf_*`, 73 passed) then the whole G2a' supplement (`rest_*`, `make -k` of the seven targets, `rest_exit=2 rest_wall=9674s`) |
+| `e4bmut.log` | `api-mutants` line 2 (E4B list) by hand: `255 passed in 561.50s` |
+| `ti2.log` | G2b run 2 (`INFRX_D_TASK=i8`, 10:58Z, `44 failed, 193 passed, 1 xfailed, 1 error`) |
+| `ti3.log` | G2b control (`INFRX_D_TASK=e2c`, `238 passed, 1 xfailed`) |
+| `imut.log` | `INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py` alone on e2c (11:08Z-11:21Z, `3 failed, 358 passed`) |
+| `i8poll.log` | the i8 free/busy poll |
+| `load.log` | the `/proc/loadavg` samples |
+| `g1.log`, `g3.log`, `g4.log`, `g5.log` | G1, G3, G4, G5 (their tails are above) |
+| `ggrerun/` | this rerun: `cmut.log`, `imut.log`, `durable.log`, `durable_one_case.py`, `producers.log` |
+
+### R-1: G2a' `api-mutants` line 1, the 22 failures (retained `g2b.log`)
+
+Command (under `make -k api-mutants console-test console-lint console-typecheck console-mutants
+console-built bench-test`, env `INFRX_D_TASK=e2c INFRX_D2_VALKEY_PORT=55493
+INFRX_D2_VALKEY_CONTAINER=infrx-e2c-valkey INFRX_Q_VALKEY_PORT=55493 PYTEST_ADDOPTS=-rsxX`), the
+Makefile's first `api-mutants` line, as `make` echoed it: `cd apps/infrx-api && INFRX_MUTANTS=all
+uv run --frozen pytest -q tests/contracts/test_mutants.py ... tests/i/test_mutants.py` (28 files).
+Exit: `make` 2 (`api-mutants` Error 1), pytest wall 9,176.87 s, supplement wall 9,674 s (08:06:37Z
+to 10:47:51Z). `-rsxX` puts no `FAILED` lines in the summary, so the ids and reasons are the 22
+`E       AssertionError:` lines of the failure section, in run order (`grep '^E       AssertionError'
+g2b.log`, prefix removed, cut at 250 chars):
+```
+lc_reregistration_resets_the_grace is misdeclared (the first registration's eligibility persists): anchor appears 0 times in contracts/fakes/lifecycle.py, expected 1: '            raise refuse(R.bytes_changed, "the key already n'. The cases ['retenti
+pilot_key_not_forbidden is misdeclared (pilot never carries the shared legacy key (R51)): anchor appears 0 times in deploy/preflight.py, expected 1: 'forbidden_in=("pilot",)),\n)'. The cases ['test_deploy_failclosed__pilot_never_writes_the_shared_leg
+budget_forgets_the_worker_pool is broken_runner (every pool of the pooler's clients is counted): errors outside the named cases: ['tests/i/test_pooler.py::test_ops_continuous__the_computed_budget_is_what_the_session_pooler_admits']. The cases ['test_
+budget_session_limit_raised is broken_runner (the session pooler admits 15 clients, measured): errors outside the named cases: ['tests/i/test_pooler.py::test_ops_continuous__the_computed_budget_is_what_the_session_pooler_admits']. The cases ['test_op
+stand_in_pooler_in_session_mode is broken_runner (the stand-in hands server connections between clients at transaction boundaries, as 6543 does): errors outside the named cases: ['tests/i/test_pooler.py::test_ops_continuous__session_state_is_lost_and
+stand_in_pooler_replays_prepares is broken_runner (the stand-in, like 6543, supports no prepared statements): errors outside the named cases: ['tests/i/test_pooler.py::test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler']. T
+pool_prepares_again is broken_runner (no server-side prepares on the pool's connections (WR-I8-1)): errors outside the named cases: ['tests/i/test_pooler.py::test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pooler']. The cases 
+pool_sets_session_state_on_6543 is broken_runner (the hook sends no session SET on 6543 (WR-I8-1)): errors outside the named cases: ['tests/i/test_pooler.py::test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pooler']. The cases 
+connector_sets_role_on_6543 is broken_runner (the CLI's connect sends no session SET on 6543): errors outside the named cases: ['tests/i/test_pooler.py::test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pooler']. The cases ['tes
+probe_passes_an_allowed_operation is broken_runner (an operation that succeeds fails its check): errors outside the named cases: ['tests/i/test_privilege_probe.py::test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail']. The 
+probe_ignores_role_membership is broken_runner (membership in a privileged role fails the probe): errors outside the named cases: ['tests/i/test_privilege_probe.py::test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail']. The
+probe_passes_without_function_list is broken_runner (no D10 function list is PENDING, not a pass): errors outside the named cases: ['tests/i/test_privilege_probe.py::test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail']. Th
+durable_forgets_unknown_holds is survived (the durable exporter feeds the reconcile rules): 1 passed, 18 deselected in 7.31s. The cases ['test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones'] do not prove what they clai
+durable_backlog_counts_the_future is broken_runner (the ready backlog is what is available now): errors outside the named cases: ['tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cas
+durable_hides_drift is broken_runner (drift from durable truth reaches the drift rule): errors outside the named cases: ['tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test
+probe_attrs_blind is broken_runner (a BYPASSRLS (or superuser...) login fails the probe): errors outside the named cases: ['tests/i/test_privilege_probe.py::test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail']. The cases [
+probe_timeout_identity_blind is broken_runner (a login with no statement_timeout fails the probe): errors outside the named cases: ['tests/i/test_privilege_probe.py::test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail']. Th
+probe_identity_reads_its_own_timeout is broken_runner (the timeout check reads the login's, not the probe's): errors outside the named cases: ['tests/i/test_privilege_probe.py::test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones
+drift_credit_charge_unchecked is broken_runner (a CREDIT job settles only with its ledger debit): errors outside the named cases: ['tests/i/test_rollback_drill.py::test_ops_recover__the_settlement_check_passes_either_regime_and_fails_the_unsettled'].
+drift_usd_only is broken_runner (a settled CREDIT job is SETTLED (its USD debit is 0 by design)): errors outside the named cases: ['tests/i/test_rollback_drill.py::test_ops_recover__the_settlement_check_passes_either_regime_and_fails_the_unsettled'].
+drift_ignores_wallet_drift is broken_runner (wallet drift fails the settlement check): errors outside the named cases: ['tests/i/test_rollback_drill.py::test_ops_recover__the_settlement_check_passes_either_regime_and_fails_the_unsettled']. The cases 
+install_args_pool_pin_dropped is misdeclared (the runbook's INSTALL_ARGS fit the session pooler): anchor appears 0 times in ../../infra/runbooks/rollout.md, expected 1: ' DATABASE_POOL_MAX_SIZE=6")'. The cases ['test_backend_deploy__the_runbooks_inst
+```
+Summary lines (`sed -n 413,417p g2b.log`):
+```
+SKIPPED [18] tests/m/test_s3_mutants.py:38: M1-L2 (owner: M): no S3-compatible endpoint - start the E2 stack's s3 service and export INFRX_M_S3_ENDPOINT (and INFRX_M_S3_LOCAL_CREDS=1 for MinIO)
+SKIPPED [7] tests/w/test_worker_main_mutants.py:86: no local S3 endpoint (INFRX_M_S3_ENDPOINT, INFRX_M_S3_LOCAL_CREDS=1)
+SKIPPED [8] tests/w/test_prep_worker_mutants.py:86: no local S3 endpoint (INFRX_M_S3_ENDPOINT, INFRX_M_S3_LOCAL_CREDS=1)
+22 failed, 3689 passed, 33 skipped in 9176.87s (2:32:56)
+make: *** [Makefile:21: api-mutants] Error 1
+```
+The end of the supplement (last `bench-test` lines and the marker):
+```
+116 passed in 11.34s
+rest_exit=2 rest_wall=9674s rest_end=2026-09-26T10:47:51Z
+```
+`api-mutants` line 2 (E4B) never ran under `make`: a recipe stops at its first failing line. It
+was run by hand after the supplement as the Makefile's second line (`INFRX_MUTANTS=all
+$(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py`;
+the retained log does not record the command as typed), exit 0, 562 s. `e4bmut.log` tail:
+```
+255 passed in 561.50s (0:09:21)
+```
+The 22 split into 1 contracts `misdeclared`, 3 `tests/i` `misdeclared`/`survived` and 18 `tests/i`
+`broken_runner` (`errors outside the named cases`: pooler, privilege-probe, durable-observe and
+rollback-drill cases, all on the i8 stand-in). R-3 reruns the `tests/i` list alone.
+
+### R-2: the contracts mutant alone (new, F-2)
+
+```
+cd apps/infrx-api && INFRX_MUTANTS=all uv run --frozen --no-sync pytest -q tests/contracts/test_mutants.py -k lc_reregistration_resets_the_grace
+```
+Exit 1, wall 5 s (11:33:51Z-11:33:56Z). Tail (long lines cut at 250 chars):
+```
+E       AssertionError: lc_reregistration_resets_the_grace is misdeclared (the first registration's eligibility persists): anchor appears 0 times in contracts/fakes/lifecycle.py, expected 1: '            raise refuse(R.bytes_changed, "the key already
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail='anchor appears 0 times in contracts/fakes/lifecycle.py, expected 1: \'            raise refuse(R.bytes_changed, "the key already n\'').killed
+=========================== short test summary info ============================
+FAILED tests/contracts/test_mutants.py::test_mutant_is_killed[lc_reregistration_resets_the_grace]
+1 failed, 536 deselected in 4.60s
+cmut_exit=1 cmut_wall=5s end=2026-09-26T11:33:56Z
+```
+Its anchor (`tests/contracts/mutants.py:2352`) is the `raise` at `infrx/contracts/fakes/lifecycle.py:334`
+followed by `        return row`; line 335 is now `        if identity.origin is ContentOrigin.written
+and row.state is LifecycleState.live \`. The same mutant was one of the 22 in R-1.
+
+### R-3: `tests/i/test_mutants.py` alone (retained 11:08Z run, and a new run, F-2/F-3/F-4)
+
+In R-1, 21 of the 22 failures come from this file (`grep -c '^tests/i/test_mutants.py:66: AssertionError'
+g2b.log` = 21; the contracts one is `tests/contracts/test_mutants.py:82`). The file was run alone
+twice, both times on e2c with i8 free. The same three fail each time. The other 18 (the
+`broken_runner` ones in R-1) are killed each time.
+
+Retained run, 11:08Z-11:21Z (`imut.log`), command `cd apps/infrx-api && INFRX_D_TASK=e2c INFRX_MUTANTS=all
+uv run --frozen pytest -q tests/i/test_mutants.py`, exit 1, 780 s. Tail:
+```
+=========================== short test summary info ============================
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[pilot_key_not_forbidden]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[durable_forgets_unknown_holds]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[install_args_pool_pin_dropped]
+3 failed, 358 passed in 779.74s (0:12:59)
+```
+New run (this round), with i8 polled free first:
+```
+cd apps/infrx-api && INFRX_D_TASK=e2c INFRX_MUTANTS=all uv run --frozen --no-sync pytest -q tests/i/test_mutants.py
+```
+Exit 1, wall 858 s (11:33:49Z-11:48:07Z). Tail: the three `E       AssertionError:` lines (prefix removed, cut at 250 chars), then the summary:
+```
+pilot_key_not_forbidden is misdeclared (pilot never carries the shared legacy key (R51)): anchor appears 0 times in deploy/preflight.py, expected 1: 'forbidden_in=("pilot",)),\n)'. The cases ['test_deploy_failclosed__pilot_never_writes_the_shared_leg
+durable_forgets_unknown_holds is survived (the durable exporter feeds the reconcile rules): 1 passed, 18 deselected in 7.06s. The cases ['test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones'] do not prove what they clai
+install_args_pool_pin_dropped is misdeclared (the runbook's INSTALL_ARGS fit the session pooler): anchor appears 0 times in ../../infra/runbooks/rollout.md, expected 1: ' DATABASE_POOL_MAX_SIZE=6")'. The cases ['test_backend_deploy__the_runbooks_inst
+=========================== short test summary info ============================
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[pilot_key_not_forbidden]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[durable_forgets_unknown_holds]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[install_args_pool_pin_dropped]
+3 failed, 358 passed in 858.03s (0:14:18)
+imut_exit=1 imut_wall=858s end=2026-09-26T11:48:07Z
+```
+Afterwards: no `infrx-e2c-*` or `infrx-i8-*` container, volume or network was left on the host
+(`docker ps -a`, `docker volume ls`, `docker network ls` filtered by name).
+
+Result: the 18 `broken_runner` failures in R-1 did not reproduce in two isolated runs, which is
+consistent with the i8 contention of F-4.
+F-2's `pilot_key_not_forbidden` and `install_args_pool_pin_dropped` and F-3's
+`durable_forgets_unknown_holds` fail deterministically, the same way three times (R-1, 11:08Z, 11:34Z).
+
+### R-4: `durable_forgets_unknown_holds`, the one-case run with the mutant applied (new, F-3)
+
+The mutant (`tests/i/mutants.py:1056`) deletes
+`        out[("infrx_holds_unknown", ())] = holds.get("unknown", 0)` from `infra/observe/durable.py:116`
+and names one case, `test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones`.
+The runner reports only the last summary line (`1 passed, 18 deselected`), so this script shows the
+full pytest output. It uses the runner's own copy (`tests/i/mutants.py` `_layout`) and edit
+(`tests/contracts/mutants.py` `_prepare`) and the runner's argv and environment
+(`tests/contracts/mutants.py:2867`, with `-rA -v --tb=short` in place of `-rfE --tb=line` so passes
+print). It runs once on the pristine copy and once on the mutated copy, in throwaway temporary
+directories, and writes nothing in the worktree (`<scratchpad>` is the directory of the retained-logs
+table):
+```
+cd apps/infrx-api && uv run --frozen --no-sync python <scratchpad>/ggrerun/durable_one_case.py > <scratchpad>/ggrerun/durable.log 2>&1
+```
+```python
+"""G-GATES rerun: the durable_forgets_unknown_holds one-case run, printed in full.
+Uses the I runner's own copy + edit (tests/i/mutants.py _layout, contracts _prepare) and
+the exact pytest argv of contracts/mutants.py _pytest, once pristine and once mutated.
+Writes nothing in the worktree."""
+import pathlib, subprocess, sys, tempfile
+sys.path.insert(0, ".")
+from tests.i import mutants as M
+S = M._SHARED
+m = next(x for x in M.MUTANTS if x.name == "durable_forgets_unknown_holds")
+targets = M.RUNNER.select(m.cases)
+print("mutant:", m.name, "| file:", m.file, "| cases:", list(m.cases), "| targets:", targets)
+print("edit: delete", repr(m.old), flush=True)
+for label, mutate in (("pristine", False), ("mutated", True)):
+    with tempfile.TemporaryDirectory(prefix=f"ggates-{label}-") as tmp:
+        root = pathlib.Path(tmp)
+        api = S._copy(root, M.RUNNER)
+        if mutate:
+            assert S._prepare(api, m, M.RUNNER) is None
+        f = api / m.file
+        print(f"\n=== {label}: {m.old.strip()!r} occurs {f.read_text().count(m.old)}x in the copy's durable.py")
+        cache, temp = root / ".pycache", root / ".tmp"; cache.mkdir(); temp.mkdir()
+        argv = [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
+                "-rA", "--tb=short", *targets, "-k", " or ".join(m.cases), "-v"]
+        print("$ (cwd=<copy>/apps/infrx-api)", " ".join(argv[1:]), flush=True)
+        done = subprocess.run(argv, cwd=api, capture_output=True, text=True,
+                              env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "HOME": str(temp),
+                                   "PYTHONPYCACHEPREFIX": str(cache), "TMPDIR": str(temp)})
+        print((done.stdout or done.stderr).strip())
+        print(f"{label}_exit={done.returncode}")
+```
+Exit 0, wall 17 s (ended 11:34:55Z). Output (`durable.log`, whole; the temporary copy paths are not printed):
+```
+mutant: durable_forgets_unknown_holds | file: ../../infra/observe/durable.py | cases: ['test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones'] | targets: ('tests/i/test_observe.py',)
+edit: delete '        out[("infrx_holds_unknown", ())] = holds.get("unknown", 0)\n'
+
+=== pristine: 'out[("infrx_holds_unknown", ())] = holds.get("unknown", 0)' occurs 1x in the copy's durable.py
+$ (cwd=<copy>/apps/infrx-api) -m pytest -q --no-header -p no:cacheprovider -rA --tb=short tests/i/test_observe.py -k test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones -v
+============================= test session starts ==============================
+collected 19 items / 18 deselected / 1 selected
+
+tests/i/test_observe.py .                                                [100%]
+
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/i/test_observe.py::test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones
+======================= 1 passed, 18 deselected in 7.18s =======================
+pristine_exit=0
+
+=== mutated: 'out[("infrx_holds_unknown", ())] = holds.get("unknown", 0)' occurs 0x in the copy's durable.py
+$ (cwd=<copy>/apps/infrx-api) -m pytest -q --no-header -p no:cacheprovider -rA --tb=short tests/i/test_observe.py -k test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones -v
+============================= test session starts ==============================
+collected 19 items / 18 deselected / 1 selected
+
+tests/i/test_observe.py .                                                [100%]
+
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/i/test_observe.py::test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones
+======================= 1 passed, 18 deselected in 7.34s =======================
+mutated_exit=0
+durable_exit=0 durable_wall=17s end=2026-09-26T11:34:55Z
+```
+The mutated copy has the line 0 times and the case still passes, so F-3 is reproduced by its own
+output. Why it survives (reading, plus one check): the case compares `_unproduced(alerts)`, which is
+`runtime_producers() | exporter_producers()` (`tests/i/test_observe.py:113-115`). `runtime_producers()`
+counts every family of a `HELPERS` entry called outside its definition, and `record_reconciliation`
+lists `infrx_holds_unknown` (`test_observe.py:53-56`). The worker calls it at
+`infrx/worker/service.py:169` (added by `39bf0151`, "W5 (S3 F4): the reaper tick publishes the
+reconciliation gauges"). `runtime_producers()` scans only `infrx/**/*.py` (`test_observe.py:74`),
+so the `durable.py` edit cannot change it: `infrx_holds_unknown` stays produced when `durable.py` loses the
+line, and `UnknownUsageBacklog` never becomes unproduced. The check, run in the worktree:
+```
+cd apps/infrx-api && PYTHONDONTWRITEBYTECODE=1 uv run --frozen --no-sync python -c "import sys; sys.path.insert(0,'.'); from tests.i import test_observe as t; print('runtime_producers has infrx_holds_unknown:', 'infrx_holds_unknown' in t.runtime_producers()); print('exporter_producers has infrx_holds_unknown:', 'infrx_holds_unknown' in t.exporter_producers())"
+```
+```
+runtime_producers has infrx_holds_unknown: True
+exporter_producers has infrx_holds_unknown: True
+```
+(exit 0). The mutant became equivalent for its declared case once the runtime producer landed. The
+owner (I8/M6) either declares a case that reads the durable exporter's own output, or retires the
+mutant. One candidate, not run here:
+`test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler`
+(`test_observe.py:253`, an i8 docker case) reads `value[("infrx_holds_unknown", None)]` at line 285.
+With the line gone that read is a `KeyError`, which the runner counts only if `dies_by` declares
+it. This is a finding for the owner, not a fix here.
+
+### Rerun verdict
+
+| Finding | Before | After this rerun |
+|---|---|---|
+| GG-1 | G2a' FAIL and the F-2/F-3/F-4 controls quoted as counts only | G2a' tail with all 22 ids and reasons (R-1); retained log paths listed; F-2 reproduced alone (R-2, R-3); F-3 reproduced with the full one-case output, pristine and mutated, and its cause (R-4); F-4's 18 killed in two isolated runs (R-3) |
+
+No gate verdict changes: G2 stays **FAIL**, and the "What blocks RELEASE today" list stands as
+written. The tree was not changed. The only files committed are this evidence file and
+`updates/G-GATES-20260926T1121Z.json`, updated in place.
+
 ## Verification log
 
 - 2026-09-26T11:21Z (G-GATES, Opus runner): created; gates run at 9b21339a between 07:01Z and 11:21Z.
+- 2026-09-26T11:55Z (G-GATES rerun, Opus runner): GG-1. Added the section "Rerun (GG-1)": G2a' tails from the retained logs and their paths, the contracts mutant alone, `tests/i/test_mutants.py` alone, and the `durable_forgets_unknown_holds` one-case run pristine and mutated. Tree unchanged at 9b21339a; no verdict changed.
