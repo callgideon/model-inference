@@ -86,7 +86,7 @@ Every value is read from the served build, never typed from memory. Record them 
 | `weights_sha256` | "shard-set digest": `sha256:` plus the sha256 of the compact JSON list `model.weight_shard_digests` in `serving-version.json`, in file order: `python3 -c 'import json,hashlib;d=json.load(open("models/marlin2b/serving-version.json"))["model"]["weight_shard_digests"];print("sha256:"+hashlib.sha256(json.dumps(d,separators=(",",":")).encode()).hexdigest())'`. Each shard is served-bytes verified by `inventory.sh` (0.2) |
 | `processor_sha256` | `serving-version.json` `model.processor_config_digest`, filled by 0.2 (P-06, served bytes) |
 | `tokenizer_sha256`, `template_sha256` | Already in the base. Check them against `serving-version.json` `tokenizer_digest` and `chat_template_digest` |
-| `migration_version` | The newest applied version on the `applied:` line of W7's `migrate.py plan`. It must be 0025 or newer |
+| `migration_version` | The newest applied version on the `applied:` line of W7's `migrate.py plan`. It must be 0026 or newer (a tree at 0025 lacks 0026's lease fence, R147; RB4-5) |
 | `config_version` | `sha256:` plus `sudo sha256sum /etc/marlin2b-gateway.env`. Hash only; the file itself is never printed |
 | `allowed_fault_targets[1..2]` (box base only) | The worker and Valkey unit names installed by W10: `infrx-worker` and `infrx-valkey` (`apps/infrx-api/deploy/*.service`). Check with `systemctl list-units 'infrx-*'` |
 | `maintenance_window` | The window id logged in the lock record (step 1) |
@@ -146,7 +146,7 @@ certify.py's parser.
   `OPERATIONS_DATABASE_URL` = the owner login (SSM `pg_journal_url`) on :6543. After W10b `DATABASE_URL` is
   `infrx_runtime`, which the operator tool that runs the ledger half refuses. Both reach docker in a 0600 file.
   A missing `pg_journal_url` exits with the aws CLI's own code, not the launcher's 2 (`e4c-certify.sh:33-35`
-  under `set -e`), before docker runs (E4C-RUNBOOK-2 F2).
+  under `set -e`), before the certify container starts (`:44`; the image inspects at `:20-23` have already run) (E4C-RUNBOOK-2 F2; RB4-4).
 - `E4B_WINDOW_OK=1`
 - the three E4C inputs: `--run-profile`, `--key-inventory` and `--overload-profile` (§3, H6)
 
