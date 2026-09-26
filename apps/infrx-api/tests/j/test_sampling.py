@@ -75,7 +75,6 @@ def test_evaluation_consent_is_not_retroactive():
 
     # A revocation dated in the future leaves the record current now, but a trace made
     # after that instant is still outside the window.
-    revoked_at = datetime(2026, 12, 1, tzinfo=timezone.utc)
     future_revocation = fakes.consent(revoked_at="2026-12-01T00:00:00Z")
     later = fakes.candidate(4, started_at=datetime(2027, 1, 1, tzinfo=timezone.utc))
     selection = draw((inside, later), consent=future_revocation)

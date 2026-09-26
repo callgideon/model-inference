@@ -11,7 +11,6 @@ Valkey index are the defaults; they are constructed here only as far as needs no
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import threading
 
 import pytest

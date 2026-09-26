@@ -19,7 +19,7 @@ from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Runner
 
 J = "state/jobstore.py"
-O = "state/operations.py"
+OPS = "state/operations.py"
 C = "state/catalog.py"
 RUNNER = Runner(name="d5", targets=("tests/d/test_settle_units.py",
                                     "tests/d/test_operations_units.py"))
@@ -134,42 +134,42 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- item 7: the operator adapters -------------------------------------------------
     _m("key_lookup_ignores_org", "a key is read only within its own organization",
        '_KEY + "id = %s and org_id = %s", (key_id, org_id))', '_KEY + "id = %s", (key_id,))',
-       TENANT, file=O),
+       TENANT, file=OPS),
     _m("insert_key_duplicates", "a replayed key insert writes nothing",
-       ' on conflict (id) do nothing returning id",', ' returning id",', TENANT, file=O),
+       ' on conflict (id) do nothing returning id",', ' returning id",', TENANT, file=OPS),
     _m("insert_key_reports_every_call_written", "a replay is reported as a replay",
-       "        return written is not None", "        return True", TENANT, file=O),
+       "        return written is not None", "        return True", TENANT, file=OPS),
     _m("revoke_rewrites_revoked_at", "a revocation keeps its first instant",
        '"update public.api_keys set revoked_at = coalesce(revoked_at, infrx.now()) "',
-       '"update public.api_keys set revoked_at = infrx.now() "', REVOKE, file=O),
+       '"update public.api_keys set revoked_at = infrx.now() "', REVOKE, file=OPS),
     _m("suspension_lift_suspends", "lifting sends suspended = false",
        "            (org_id, reason is not None, reason,", "            (org_id, True, reason,",
-       REVOKE, file=O),
+       REVOKE, file=OPS),
     _m("audit_lookup_by_any_key", "an audit row answers only its own idempotency key",
        '"infrx.audit_by_idempotency_key(%s)", (key,))',
-       '"infrx.audit_by_idempotency_key(%s)", ("",))', AUDIT, file=O),
+       '"infrx.audit_by_idempotency_key(%s)", ("",))', AUDIT, file=OPS),
     _m("usage_totals_merge_units", "R73: each usage row keeps its own unit",
        "        request_id=str(request_id), org_id=str(org_id), accounting_regime=regime, "
        "unit=unit,", "        request_id=str(request_id), org_id=str(org_id), "
-       "accounting_regime=regime, unit=\"CREDIT\",", ACCOUNT, file=O),
+       "accounting_regime=regime, unit=\"CREDIT\",", ACCOUNT, file=OPS),
     _m("holds_read_usd_as_credit", "a USD hold is never read as a CREDIT hold",
        '"select request_id, state, amount from infrx.active_holds(%s) "\n'
        '            "where accounting_regime = \'credit\'"',
-       '"select request_id, state, amount from infrx.active_holds(%s) "', ACCOUNT, file=O),
+       '"select request_id, state, amount from infrx.active_holds(%s) "', ACCOUNT, file=OPS),
     _m("adjust_sends_another_actor", "review CF-2: the operator is the adjustment's actor",
        '"amount": str(amount), "operation_id": operation_id, "actor": actor,',
        '"amount": str(amount), "operation_id": operation_id, "actor": "system",',
-       LEDGER, file=O),
+       LEDGER, file=OPS),
     _m("reconcile_sends_another_actor", "review CF-2: the operator is the reconcile's actor",
        '"actor": actor, "at": at.isoformat()})', '"actor": "system", "at": at.isoformat()})',
-       LEDGER, file=O),
+       LEDGER, file=OPS),
     _m("adjust_allocates", "an adjustment is an operator_adjustment",
        '"wallet_id": wallet.wallet_id, "kind": "operator_adjustment",',
-       '"wallet_id": wallet.wallet_id, "kind": "operator_allocation",', LEDGER, file=O),
+       '"wallet_id": wallet.wallet_id, "kind": "operator_allocation",', LEDGER, file=OPS),
     _m("alias_moves_at_the_oldest_card", "review CF-1: the alias moves at the newest card",
        "                     order by c.effective_at desc, c.created_at desc limit 1) as card",
        "                     order by c.effective_at asc, c.created_at asc limit 1) as card",
-       REGISTRY, file=O),
+       REGISTRY, file=OPS),
     # --- item 8: the catalog -----------------------------------------------------------
     _m("private_visible_to_consumer", "a private deployment only for its provider_dev key",
        "        if row is None and audience is CredentialAudience.provider_dev and endpoint_id:",
@@ -188,20 +188,20 @@ MUTANTS: tuple[Mutant, ...] = (
        "statement", "        conn = await self._connect()\n        try:\n            yield conn",
        '        conn = self.__dict__.get("_kept") or self.__dict__.setdefault('
        '"_kept", await self._connect())\n        try:\n            yield conn',
-       CONNECTIONS, file=O),
+       CONNECTIONS, file=OPS),
     _m("a_connection_never_closed", "review CF-4: every statement's connection is closed",
        "        finally:\n            await conn.close()", "        finally:\n            pass",
-       CONNECTIONS, file=O),
+       CONNECTIONS, file=OPS),
     _m("a_connection_leaks_on_error", "verifier V-N3: a statement that raises still "
        "closes its connection (the verifier's om6)",
        "        try:\n            yield conn\n        finally:\n            await conn.close()",
-       "        yield conn\n        await conn.close()", CONNECTIONS, file=O),
+       "        yield conn\n        await conn.close()", CONNECTIONS, file=OPS),
     _m("errors_become_none", "a database error is raised, never answered as None",
        "                return await (await conn.execute(sql, params)).fetchall()\n"
        "            except Error as failed:\n                raise _typed(failed) from None",
        "                return await (await conn.execute(sql, params)).fetchall()\n"
        "            except Error as failed:\n                return []",
-       CATALOG, file=O),
+       CATALOG, file=OPS),
 )
 
 

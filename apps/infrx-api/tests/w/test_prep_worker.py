@@ -31,7 +31,7 @@ import uuid
 import httpx
 import pytest
 
-from infrx.config import RuntimeMisconfigured, from_env
+from infrx.config import RuntimeMisconfigured
 from infrx.contracts import errors, ports
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.factories import credit_jobstore_factory, jobstore_factory

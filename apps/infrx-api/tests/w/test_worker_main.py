@@ -713,7 +713,7 @@ def test_worker_main__the_process_refuses_to_start_naming_the_setting(tmp_path):
         process = start_worker(settings, log)
         assert process.wait(timeout=60) == worker_main.REFUSED, log.read_text()
         text = log.read_text()
-        assert f"refusing to start" in text and named in text and "Traceback" not in text, text
+        assert "refusing to start" in text and named in text and "Traceback" not in text, text
 
 
 def test_worker_main__the_pilot_box_runs_the_real_entry_point(tmp_path, monkeypatch):

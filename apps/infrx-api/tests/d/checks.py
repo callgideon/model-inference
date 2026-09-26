@@ -1282,7 +1282,7 @@ VIOLATIONS = (
      f"where org_id = '{ORG_A}' and handle = 'upl_a'"),
     ("editing ledger history",
      f"update public.credit_ledger set delta_usd = 0 where org_id = '{ORG_A}'"),
-    ("deleting ledger history", f"delete from public.credit_ledger"),
+    ("deleting ledger history", "delete from public.credit_ledger"),
     ("a pilot usage row with no outcome",
      "update public.usage_events set settlement_regime = 'pilot' "
      "where id = '90000000-0000-4000-8000-000000000001'"),
@@ -1616,7 +1616,7 @@ def check_view_pushdown(conn) -> str:
     for path, relation, query in PUSHDOWN:
         plan = "\n".join(line for line, in conn.execute(f"explain (costs off) {query}"))
         scan = [line for line in plan.splitlines()
-                if f"Scan on {relation}" in line or f"Scan using" in line and relation in line]
+                if f"Scan on {relation}" in line or "Scan using" in line and relation in line]
         if not scan:
             problems.append(f"{path}: no scan of {relation}\n{plan}")
             continue

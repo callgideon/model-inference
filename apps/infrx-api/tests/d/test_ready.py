@@ -139,7 +139,9 @@ def test_the_cutover_gate_needs_paused_admission_and_no_unmarked_preparing_job()
     world = ca.World(conn)
 
     def body():
-        gate = lambda: conn.execute("select infrx.readiness_cutover_check()").fetchone()[0]
+        def gate():
+            return conn.execute("select infrx.readiness_cutover_check()").fetchone()[0]
+
         assert gate()["ready"] is False and gate()["admission_paused"] is False
         old = cr.credit_request(conn, world)
         ca.admit(conn, old, b.idem(old, "cutover-old"), regime="credit")

@@ -28,8 +28,8 @@ from infrx.contracts.v2.lifecycle import LifecycleRefusal as R, refusal_of
 from infrx.media import retention
 
 from . import support
-from .worlds import (CLAIM_TTL_S, GRACE_S, ORG, RETENTION_S, UPLOAD_TTL_S,  # noqa: F401
-                     key, make_d10_world, make_world, run)
+from .worlds import (CLAIM_TTL_S, GRACE_S, ORG, RETENTION_S, UPLOAD_TTL_S,
+                     key, run)
 
 ORACLE = os.environ.get("INFRX_M6_ORACLE", "")
 #: The object store's worst-case delete, scaled to the fixture claim TTL (production: 75 s

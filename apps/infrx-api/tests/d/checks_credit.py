@@ -440,7 +440,7 @@ def _all_accepted(conn, cases, what: str) -> int:
 
 def _identity_cases(conn) -> tuple[tuple, tuple]:
     w1, w2 = wallet_of(conn, CONSUMER_1), wallet_of(conn, CONSUMER_2)
-    o1, o2 = personal_org(conn, CONSUMER_1), personal_org(conn, CONSUMER_2)
+    o1, _ = personal_org(conn, CONSUMER_1), personal_org(conn, CONSUMER_2)
     adj = "00000000-0000-4000-8000-00000000ad01"
     # A consumer wallet for UNGRANTED with no money yet (as the grant would create it), for
     # cases that must satisfy every rule but the one under test.
@@ -988,10 +988,10 @@ def _registry_cases() -> tuple[tuple, tuple]:
          "update infrx.catalog_listings set deployment_revision_id = deployment_revision_id, "
          "version = 2"),
         ("a listing under another model's alias",
-         f"insert into public.models (id, name, provider, description, status, base_url, "
-         f"served_model, input_usd_per_m, output_usd_per_m, context_tokens, input_modalities, "
-         f"output_modalities) values ('x/y', 'x', 'x', 'x', 'live', 'u', 'x', 0, 0, 1, "
-         f"'{{text}}', '{{text}}'); " + listing + f"('x/y', 1, '{MODEL}', '{PUBLIC_DEPLOYMENT}', "
+         "insert into public.models (id, name, provider, description, status, base_url, "
+         "served_model, input_usd_per_m, output_usd_per_m, context_tokens, input_modalities, "
+         "output_modalities) values ('x/y', 'x', 'x', 'x', 'live', 'u', 'x', 0, 0, 1, "
+         "'{text}', '{text}'); " + listing + f"('x/y', 1, '{MODEL}', '{PUBLIC_DEPLOYMENT}', "
          f"'{SERVING}', '{CARD}', now(), 'o')"),
         ("re-owning a model that has versions",
          f"update public.models set provider_org_id = '{OTHER_PROVIDER}' "
@@ -1203,7 +1203,7 @@ def _provider_dev_key(org: str, audience: str = "provider_dev") -> str:
 
 def _admission_cases(conn) -> tuple[tuple, tuple]:
     w1, w2 = wallet_of(conn, CONSUMER_1), wallet_of(conn, CONSUMER_2)
-    o1, o2 = personal_org(conn, CONSUMER_1), personal_org(conn, CONSUMER_2)
+    o1, _ = personal_org(conn, CONSUMER_1), personal_org(conn, CONSUMER_2)
     op = personal_org(conn, PROVIDER_DEV_USER)
     j = "5c000000-0000-4000-8000-0000000000"
     usage = ("insert into public.usage_events (id, org_id, model_id, status, "
@@ -1629,9 +1629,9 @@ def check_credit_privileges(conn) -> str:
 #: (what is protected, statement). Every browser session must be refused every one.
 ATTACKS = (
     ("mint: a CREDIT ledger row",
-     f"insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, "
-     f"actor) select wallet_id, 'consumer', 'operator_adjustment', 1000, gen_random_uuid(), "
-     f"'me' from infrx.credit_wallets limit 1"),
+     "insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, "
+     "actor) select wallet_id, 'consumer', 'operator_adjustment', 1000, gen_random_uuid(), "
+     "'me' from infrx.credit_wallets limit 1"),
     ("mint: the signup grant RPC", f"select infrx.grant_signup_credit('{UNGRANTED}', 'me')"),
     ("mint: an entitlement", f"insert into infrx.signup_entitlements (user_id, entitlement, "
                              f"wallet_id, amount, verification_evidence_ref, ledger_operation_id)"
@@ -1665,7 +1665,7 @@ ATTACKS = (
     ("deployment: promote", f"update infrx.deployment_revisions set state = 'retired' "
                             f"where deployment_revision_id = '{DEV_DEPLOYMENT}'"),
     ("model ownership", f"update public.models set provider_org_id = '{OTHER_PROVIDER}'"),
-    ("model identity", f"update public.models set model_uuid = gen_random_uuid()"),
+    ("model identity", "update public.models set model_uuid = gen_random_uuid()"),
     ("rollout switch", "update infrx.feature_flags set enabled = true"),
     ("the flag gate", "select infrx.require_feature('credit_admission')"),
     ("usage: write a CREDIT settlement",
@@ -2037,10 +2037,10 @@ def check_operator_seams(conn) -> str:
          key + f"('{o1}', '{CONSUMER_1}', 'c', 'sk-infrx-c0000003', 'hash-c3', 'admin', null, "
                f"null, null)"),
         ("changing a key's audience",
-         f"update public.api_keys set audience = 'operator' where key_hash = 'hash-a'"),
+         "update public.api_keys set audience = 'operator' where key_hash = 'hash-a'"),
         ("un-revoking a key",
-         f"update public.api_keys set revoked_at = now() where key_hash = 'hash-a'; "
-         f"update public.api_keys set revoked_at = null where key_hash = 'hash-a'"),
+         "update public.api_keys set revoked_at = now() where key_hash = 'hash-a'; "
+         "update public.api_keys set revoked_at = null where key_hash = 'hash-a'"),
         ("a second active operator key",
          f"select infrx.bootstrap_operator_key('{o1}', 'ops', 'sk-infrx-o1', '{'1' * 64}', "
          f"'ops', 'bootstrap'); select infrx.bootstrap_operator_key('{o1}', 'ops', "

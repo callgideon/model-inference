@@ -153,7 +153,7 @@ def test_a_sink_built_from_the_declared_signatures_alone_satisfies_the_suite():
     `isinstance` and then died with a `TypeError` inside a conformance case. This builds
     the minimal sink the signatures describe and makes every call the suite makes.
     """
-    from infrx.contracts.records import TraceLossReason, TraceMode, TraceOfferResult
+    from infrx.contracts.records import TraceOfferResult
 
     class MinimalCapture:
         """Written from the Protocol's docstrings: no-op, but shaped exactly."""

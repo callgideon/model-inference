@@ -35,7 +35,7 @@ from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EnginePr
                           EngineTransportError, EngineUnsupported, VllmEngine, cache_salt,
                           prepared_request)
 from infrx.worker.engine import (LOCAL_MEDIA_SCHEME, MAX_CANCEL_INTENTS,
-                                 MIN_JOURNAL_EVENT_BYTES, MODEL_EOS_TOKEN_IDS,
+                                 MIN_JOURNAL_EVENT_BYTES,
                                  PAYLOAD_OVERHEAD_BYTES, _delta_payload, check_storage_ref,
                                  media_uuid)
 from infrx.worker.fakes import (ERROR_BODY_CHUNK, FAKE_MEDIA_ROOT, SERVED_MODEL, FakeUpstream, m2_local_uri,
@@ -1550,7 +1550,7 @@ def test_api_stream__a_cancellation_is_scoped_to_its_generation():
     second = first.model_copy(update={"generation": 2})
     assert asyncio.run(engine.cancel(first)) is True
     stream = engine.generate(second, text_prepared(box))
-    events = asyncio.run(collect(stream))
+    asyncio.run(collect(stream))
     assert upstream.requests, "generation 2 was cancelled by generation 1's intent"
     assert not stream.cancelled and stream.complete and stream.usage is not None
     assert set(engine.cancelled) == {(first.job_id, 1)}    # the other intent is untouched

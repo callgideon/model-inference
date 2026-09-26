@@ -27,7 +27,7 @@ VALKEY = "scheduling/valkey.py"
 if str(API_DIR) not in sys.path:        # `python tests/q/valkey_mutants.py`
     sys.path.insert(0, str(API_DIR))
 
-from tests.contracts.mutants import Mutant, Outcome  # noqa: E402
+from tests.contracts.mutants import Mutant, Outcome  # noqa: E402, F401 (Outcome: test_valkey_mutants reads mutation_list.Outcome)
 from tests.q import vkharness                        # noqa: E402
 from tests.q.mutants import run_mutant               # noqa: E402
 
