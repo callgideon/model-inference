@@ -16,7 +16,6 @@ import pytest
 
 from infrx.contracts import errors
 
-from . import pgworld
 from .pgworld import R, admit_credit, admit_legacy, drift, footprint, needs_pg, settle
 from .test_transition_pg import (ACTIVATE, FIXTURE_CARD, cli_run, codes, pilot,
                                  publish_fixture_card, run)
