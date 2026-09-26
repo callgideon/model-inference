@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """U3 (DUR-RLS, DUR-CAP, CONSOLE-FLOWS): the operator console against a REAL task-local stack.
 
-The pinned Supabase PostgreSQL image with every committed migration, PLUS WR-U3-1's proposed SQL
-(`operator_rpc_proposed.sql`, applied to this throwaway database only - D10 ships the migration),
-the pinned PostgREST v13.0.4 in this lane's own container and network, and signed JWTs for anon,
-authenticated individuals, the operator and service_role. `operator-postgrest.test.ts` drives the
-App's own `operatorReads`, `operatorRpcPort` and C3A's `consoleActions` through supabase-js.
+The pinned Supabase PostgreSQL image with every committed migration (WR-U3-1's operator RPCs
+are D10's `0025_operator_console.sql`), the pinned PostgREST v13.0.4 in this lane's own
+container and network, and signed JWTs for anon, authenticated individuals, the operator and
+service_role. `operator-postgrest.test.ts` drives the App's own `operatorReads`,
+`operatorRpcPort` and C3A's `consoleActions` through supabase-js.
 
     cd apps/infrx-api && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase \\
         uv run --frozen python ../app/tests/u/operator_stack.py
@@ -50,7 +50,6 @@ LABEL = "ai.infrx.app-u3.checkout"
 JWT_SECRET = "infrx-app-u3-local-jwt-secret-not-a-real-one"
 AUTHN_PASSWORD = "infrx-app-u3-authenticator-local"
 DB = f"{pgharness.DATABASE}_rest"
-PROPOSED = Path(__file__).with_name("operator_rpc_proposed.sql")
 
 OPERATOR = "0b300000-0000-4000-8000-000000000003"      # a platform operator (profiles.is_operator)
 DRIFT_PROVIDER = "0b300000-0000-4000-8000-0000000000d0"
@@ -177,7 +176,6 @@ def main() -> int:
     pgharness.ensure()
     pgharness.recreate(DB)
     pgharness.apply(DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
-    pgharness.apply(DB, (("WR-U3-1 proposed", PROPOSED.read_text()),))
     with pgharness.connect(DB) as conn:
         world = seed(conn)
     base = up()

@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 65 planned; 57 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 64 planned; 58 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -53,7 +53,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | D10 | implemented / D | [Persist uploads, execution eligibility, safe cleanup and result read authority](consumer-v1/01-contracts-and-data.md) | F2C, D5 | E2C |
 | M5 | implemented / M | [Persist upload lifecycle across gateway replacement](consumer-v1/02-runtime.md) | F2C, M3 | D10 |
 | M6 | implemented / M | [Implement restart-safe content cleanup and bounded caches](consumer-v1/02-runtime.md) | F2C, M5 | D10 |
-| W5 | planned / W | [Enforce execution readiness and bounded worker recovery](consumer-v1/02-runtime.md) | F2C, W3 | D10, M5 |
+| W5 | implemented / W | [Enforce execution readiness and bounded worker recovery](consumer-v1/02-runtime.md) | F2C, W3 | D10, M5 |
 | G7 | implemented / G | [Align public capability discovery, alias pricing and persisted result expiry](consumer-v1/02-runtime.md) | F2C, G3 | D10, M5 |
 | G8 | implemented / G | [Prove headless consumer CREDIT operations and safe activation](consumer-v1/02-runtime.md) | F2C, G6B, A1 | D10, G7 |
 | E1C | implemented / E | [Repair upload client and deliver valid resumable dataset/load measurement](consumer-v1/05-client-and-load-testing.md) | F2C, E1 | E2C, G7, M5 |

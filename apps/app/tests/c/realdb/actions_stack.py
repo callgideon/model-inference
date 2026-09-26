@@ -116,7 +116,10 @@ def seed(conn) -> dict:
     # GoTrue's verification timestamp is the evidence 0015 reads (through infrx.verified_user);
     # the bare image has no GoTrue columns, so add the hosted ones (as tests/d does).
     checks_signup.gotrue_columns(conn)
-    conn.execute("update auth.users set email_confirmed_at = infrx.now() where id = %s", (FRESH,))
+    # 0024 (WR-C3A-4): a browser key INSERT needs a verified individual. The seeded consumers
+    # hold wallets, which only a verified claim creates, so their email is confirmed too.
+    conn.execute("update auth.users set email_confirmed_at = infrx.now() "
+                 "where id = any(%s::uuid[])", ([FRESH, cc.CONSUMER_1, cc.CONSUMER_2, cc.SHARED],))
     return {
         "users": {"c1": cc.CONSUMER_1, "c2": cc.CONSUMER_2, "shared": cc.SHARED,
                   "fresh": FRESH, "unverified": UNVERIFIED},

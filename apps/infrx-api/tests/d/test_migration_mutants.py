@@ -185,6 +185,8 @@ def test_mutant_is_killed(mutant) -> None:
     error is its own outcome and fails this test too - a migration that does not build
     proves nothing about the invariant.
     """
+    if pgharness.ON_SUPABASE and mutant.name in mutation_list.d10_mutants.PLAIN_IMAGE_ONLY:
+        pytest.skip("its check needs auto_explain, which Supabase cannot LOAD: plain image only")
     outcome, detail = mutation_list.kill(mutant)
     assert outcome == mutant.expects, (
         f"mutant {mutant.name} was {outcome.upper()}, expected {mutant.expects.upper()}: "

@@ -79,6 +79,11 @@ PG_USER, PG_PASSWORD = "postgres", "infrx-e2-local"
 PG_DATABASE = f"infrx_{NAMESPACE}"
 PG_ADMIN_ROLE = "supabase_admin"     # the image's superuser; `postgres` is not one
 PG_TEMPLATE_SOURCE = "postgres"
+# GoTrue's own `auth.users` columns: every hosted project has them (GoTrue's migrations), the
+# pinned image's bare auth schema does not, and A1/0024 derive verification from the first.
+# Added to the TEMPLATE, so every copy - and every I3B restore target - matches its source.
+GOTRUE_COLUMNS = ("alter table auth.users add column if not exists email_confirmed_at "
+                  "timestamptz, add column if not exists deleted_at timestamptz")
 CH_USER, CH_PASSWORD, CH_DATABASE = "infrx_e2", "infrx-e2-local", "infrx_e2"
 S3_ACCESS_KEY, S3_SECRET_KEY = "infrxe2minio", "infrx-e2-local-secret"
 S3_BUCKET = PROJECT
@@ -454,6 +459,8 @@ def provision_database(database: str = PG_DATABASE) -> dict:
     `database` defaults to E2's; E3B phase 2 builds its JobStore template the same way.
     """
     container = assert_ours(container_of("postgres"))
+    run(["docker", "exec", "-i", container, "psql", "-U", PG_ADMIN_ROLE, "-d",
+         PG_TEMPLATE_SOURCE, "-v", "ON_ERROR_STOP=1", "-c", GOTRUE_COLUMNS], timeout=120.0)
     terminate = (f"select pg_terminate_backend(pid) from pg_stat_activity "
                  f"where datname = '{PG_TEMPLATE_SOURCE}' and pid <> pg_backend_pid()")
     attempts = []
