@@ -116,19 +116,17 @@ def test_a_busy_namespace_port_is_blocked():
             if c["check"] == "namespace:e2c-selftest"] == [[port]]
 
 
-def test_a_foreign_listener_on_the_q_valkey_port_blocks_consumer_local():
+def test_a_foreign_listener_on_the_q_valkey_port_blocks_consumer_local(monkeypatch):
     """WR-G2FIX-3/SC-3: consumer-local's preflight probes e2c's `valkey-q` (55430) too, so a
     run that finds it held is BLOCKED before Q's harness refuses it mid-suite (a FAIL).
-    Oracle: e2c's `services` without `valkey-q` - 55430 is never probed."""
+    Oracle: e2c's `services` without `valkey-q` - 55430 is never probed. The port is only
+    reported held (never bound here: 55430 is e2c's, and a listener would trip a live Q run)."""
+    pf.namespace(ENV["namespaces"]["e2c"])   # puts pf's apps/infrx-api on sys.path (-k alone)
     from infrx.contracts.tasklocal import local_services
     port = local_services("e2c")["valkey-q"].host_port
-    with socket.socket() as held:
-        held.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if pf.port_free(port):              # else another process already holds it: same row
-            held.bind(("127.0.0.1", port))
-            held.listen()
-        row = pf.check_namespace("e2c", ENV["namespaces"]["e2c"], [])
-    assert row["status"] == "busy" and port in row["busy_ports"], row
+    monkeypatch.setattr(pf, "port_free", lambda p: p != port)
+    row = pf.check_namespace("e2c", ENV["namespaces"]["e2c"], None)
+    assert (row["status"], row.get("busy_ports")) == ("busy", [port]), row
 
 
 def test_a_port_lingering_in_time_wait_is_not_busy():
