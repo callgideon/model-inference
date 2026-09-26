@@ -43,6 +43,13 @@ const JOBS = "app/(console)/usage/credit-view-model.ts";
 const GATE = "app/(console)/usage/fake-console-context.ts";
 const SOURCE = "app/(console)/billing/credit-fixture.ts";
 
+// U3: the operator console (operator-postgrest.test.ts needs the stack and skips here;
+// operator_stack.py is its real-database oracle). The page is `.tsx`: its cases read it as source.
+const O_PORT = "app/(console)/admin/operator-port.ts";
+const O_READS = "app/(console)/admin/operator-reads.ts";
+const O_FORM = "app/(console)/admin/operator-form.ts";
+const O_PAGE = "app/(console)/admin/page.tsx";
+
 const SUITE = [
   "tests/u/usage-view-model.test.ts",
   "tests/u/billing-view-model.test.ts",
@@ -51,6 +58,7 @@ const SUITE = [
   "tests/u/credits-view-model.test.ts",
   "tests/u/usage-credits-view-model.test.ts",
   "tests/u/credit-preview-gate.test.ts",
+  "tests/u/operator-console.test.ts",
 ];
 
 const T = {
@@ -110,6 +118,24 @@ const T = {
   gGate: "U1R-G01 the CREDIT fixture gate opens only on an explicit development opt-in",
   gSource: "U1R-G02 with the gate closed the pages get the real session reads, never the fixture",
   gBuild: "U1R-G03 a production build never serves the CREDIT fixture whatever environment it is handed",
+};
+
+const O = {
+  noEdit: "U3-S01 no arbitrary balance edit: admin/ writes no ledger row and holds no service key",
+  gate: "U3-S02 the page refuses a non-operator (404) before any read, and reads with the session's own client",
+  rpc: "U3-P01 each command is exactly one audited RPC; the actor is never sent (the DB derives it)",
+  replay: "U3-P02 a replay is reported as a replay; an answer without a boolean is 'not confirmed', never success",
+  grant: "U3-P03 the one-time signup grant is not an operator console operation: nothing is sent",
+  refusals: "U3-P04 refusals map to typed codes with fixed text; DB detail never reaches the page",
+  transport: "U3-P05 a transport failure or a client that cannot be built is 'not confirmed, retry with the same key'",
+  accounts: "U3-R01 accounts are exact CREDIT strings joined to their organization's suspension state",
+  malformed: "U3-R02 a figure that is not an exact decimal string, or does not reconcile, makes the section unavailable - never a zero",
+  surface: "U3-R04 the reads touch only the operator read surface, bounded, with the documented filters",
+  units: "U3-R05 an unknown-usage hold keeps its own unit: CREDIT for a credit job, USD for a legacy one",
+  audit: "U3-R06 the audit trail is the closed action vocabulary; drift rows are exact CREDIT",
+  key: "U3-F01 a form keeps its idempotency key across every failure and rotates it only after a committed change",
+  outcome: "U3-F02 outcomes say what committed: once, already applied, refused, or not confirmed",
+  input: "U3-F03 a form submits exactly the allowlisted fields of its operation, plus its key",
 };
 
 /** One single edit each, and one named invariant each. */
@@ -746,6 +772,57 @@ const MUTANTS = [
   { id: "U1R-M33", what: "the sidebar shows the balance, ignoring holds", file: CREDITS,
     find: "? \"No credits yet\" : credits(wallet.value.available);", replace: "? \"No credits yet\" : credits(wallet.value.ledgerTotal);",
     cases: [T.bSidebar] },
+  // --- U3: operator console ---------------------------------------------------------------------
+  { id: "U3-M01", what: "the form-side actor is sent to the database", file: O_PORT,
+    find: "const audited = { p_reason: command.reason, p_idempotency_key: command.idempotency_key };",
+    replace: "const audited = { p_reason: command.reason, p_idempotency_key: command.idempotency_key, p_actor: command.actor };",
+    cases: [O.rpc] },
+  { id: "U3-M02", what: "a replay is reported as a fresh change", file: O_PORT,
+    find: "return { ok: true, value: { replayed } };", replace: "return { ok: true, value: { replayed: false } };", cases: [O.replay] },
+  { id: "U3-M03", what: "an unreadable answer is taken as success", file: O_PORT,
+    find: "if (Array.isArray(data) || typeof replayed !== \"boolean\") ", replace: "if (Array.isArray(data)) ", cases: [O.replay] },
+  { id: "U3-M04", what: "the signup grant is sent as an operator change", file: O_PORT,
+    find: "if (target === null) return fail(", replace: "if (target === null && false) return fail(", cases: [O.grant] },
+  { id: "U3-M05", what: "a database authority refusal reads as 'not confirmed'", file: O_PORT,
+    find: "  if (error.code === \"42501\") return fail(...(REFUSALS.forbidden as [ErrorCode, string]));\n", replace: "", cases: [O.refusals] },
+  { id: "U3-M06", what: "the database's refusal text and any code reach the page", file: O_PORT,
+    find: "if (known !== undefined) return fail(...known);",
+    replace: "return fail((/^([a-z_]+):/.exec(error.message ?? \"\")?.[1] ?? \"internal_error\") as ErrorCode, error.message ?? \"\");",
+    cases: [O.refusals] },
+  { id: "U3-M07", what: "a transport failure is reported as a committed change", file: O_PORT,
+    find: "      } catch {\n        return fail(\"dependency_unavailable\", UNCONFIRMED);",
+    replace: "      } catch {\n        return { ok: true, value: { replayed: false } };", cases: [O.transport] },
+  { id: "U3-M08", what: "a wallet whose figures do not reconcile is shown", file: O_READS,
+    find: "    if (subCredit(ledgerTotal, reservedTotal) !== available) throw new Malformed(\"available\");\n", replace: "",
+    cases: [O.malformed] },
+  { id: "U3-M09", what: "an organization's suspension is dropped from the account row", file: O_READS,
+    find: "      suspended: org.suspended,", replace: "      suspended: false,", cases: [O.accounts] },
+  { id: "U3-M10", what: "one failed section takes another down", file: O_READS,
+    find: "section(() => audit(client)),", replace: "section(() => accounts(client).then(() => audit(client))),", cases: [O.malformed] },
+  { id: "U3-M11", what: "a JSON number is accepted as money", file: O_READS,
+    find: "    return parseCredit(row[key]);", replace: "    return parseCredit(String(row[key]));", cases: [O.malformed, O.audit] },
+  { id: "U3-M12", what: "an audit action outside the closed vocabulary is shown", file: O_READS,
+    find: "    if (!(AUDIT_ACTIONS as readonly string[]).includes(action)) throw new Malformed(\"action\");\n", replace: "",
+    cases: [O.audit] },
+  { id: "U3-M13", what: "a legacy USD hold is labelled CREDIT", file: O_READS,
+    find: ": { amount: parseUsd(r.hold), unit: \"USD\" };", replace: ": { amount: parseCredit(r.hold), unit: \"CREDIT\" };", cases: [O.units] },
+  { id: "U3-M14", what: "the audit read is unbounded", file: O_READS,
+    find: "      .order(\"at\", { ascending: false })\n      .limit(AUDIT_LIMIT),", replace: "      .order(\"at\", { ascending: false }),",
+    cases: [O.surface] },
+  { id: "U3-M15", what: "provider_dev wallets are listed as consumer accounts", file: O_READS,
+    find: "      .eq(\"kind\", \"consumer\")\n", replace: "", cases: [O.surface] },
+  { id: "U3-M16", what: "a failed submission rotates the idempotency key (a retry can apply twice)", file: O_FORM,
+    find: "return result.ok ? fresh() : current;", replace: "return fresh();", cases: [O.key] },
+  { id: "U3-M17", what: "a replay is announced as a new commit", file: O_FORM,
+    find: "    return result.value.replayed\n", replace: "    return !result.value.replayed\n", cases: [O.outcome] },
+  { id: "U3-M18", what: "the suspension status is submitted as text", file: O_FORM,
+    find: "input[field.name] = field.kind === \"suspended\" ? value === \"true\" : value;", replace: "input[field.name] = value;",
+    cases: [O.input] },
+  { id: "U3-M19", what: "the page renders for a non-operator", file: O_PAGE,
+    find: "  if (!session.isOperator) notFound();\n", replace: "", cases: [O.gate] },
+  { id: "U3-M20", what: "the page reads with the service key instead of the operator's session", file: O_PAGE,
+    find: "operatorReads((await createClient()) as unknown as ReadClient)", replace: "operatorReads(createAdminClient() as unknown as ReadClient)",
+    cases: [O.gate, O.noEdit] },
 ];
 
 /**

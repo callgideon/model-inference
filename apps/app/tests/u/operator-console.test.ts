@@ -262,6 +262,11 @@ test("U3-R01 accounts are exact CREDIT strings joined to their organization's su
       },
     ],
   });
+  const world = WORLD();
+  world.console_admin_orgs = { data: [orgRow({ suspended: true, suspension_reason: "other" })], error: null };
+  const suspended = await operatorReads(readClient(world));
+  assert.ok(suspended.accounts.ok);
+  assert.deepEqual([suspended.accounts.value[0].suspended, suspended.accounts.value[0].suspensionReason], [true, "other"]);
 });
 
 test("U3-R02 a figure that is not an exact decimal string, or does not reconcile, makes the section unavailable - never a zero", async () => {
@@ -315,6 +320,7 @@ test("U3-R04 the reads touch only the operator read surface, bounded, with the d
     ["order", "created_at", { ascending: true }],
     ["limit", UNKNOWN_LIMIT],
   ]);
+  assert.ok(of("operator_audit").ops.some(([op, n]) => op === "limit" && n === AUDIT_LIMIT), "the audit read is bounded");
   assert.deepEqual(of("operator_audit").ops, [
     ["order", "at", { ascending: false }],
     ["limit", AUDIT_LIMIT],
@@ -330,6 +336,7 @@ test("U3-R04 the reads touch only the operator read surface, bounded, with the d
 test("U3-R05 an unknown-usage hold keeps its own unit: CREDIT for a credit job, USD for a legacy one", async () => {
   const reads = await operatorReads(readClient(WORLD()));
   const at = { orgId: ORG, createdAt: "2026-09-24T09:00:00+00:00", reconcileAfter: "2026-09-25T09:00:00+00:00" };
+  assert.ok(reads.unknownUsage.ok && reads.unknownUsage.value[1].hold?.unit === "USD", "a legacy hold stays USD");
   assert.deepEqual(reads.unknownUsage, {
     ok: true,
     value: [
