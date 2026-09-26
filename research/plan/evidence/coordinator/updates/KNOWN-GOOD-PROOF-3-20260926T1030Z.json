@@ -1,0 +1,38 @@
+{
+  "task": "KNOWN-GOOD-PROOF-3",
+  "slice": "I8 / E4C prerequisite (P-25, RR:51): both rollback targets (bda1586, 4226315) carry a schema_proof through 0026 (D10-0026-FENCE), rerun whole on the Supabase image and on plain PostgreSQL + shim with the committed driver (SHAPE unchanged, 13); 0026 changes no grant; known-good.py <t> --applied 0026 exits 0, --applied 0027 exits 1",
+  "activity": "review",
+  "head": "af552ed",
+  "worktree": ".claude/worktrees/codex-known-good-proof-3",
+  "branch": "codex/known-good-proof-3",
+  "owned_paths": [
+    "infra/rollout/known-good.json",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py",
+    "research/plan/evidence/i/KNOWN-GOOD-PROOF-3-af552ed.md",
+    "research/plan/evidence/coordinator/updates/KNOWN-GOOD-PROOF-3-20260926T1030Z.json"
+  ],
+  "commands": [
+    {"cmd": "standin.sh supabase|plain (KNOWN-GOOD-PROOF-2's 744b887a + an optional cap; sha256 720c3ee3)", "exit": 0, "summary": "migrate.py plan/apply: 0001-0018 6995aef8, 0019-0026 4a6bffd9 on both images; plain-p0025 0019-0025 c21cb7b2 (= KGP2)"},
+    {"cmd": "INFRX_D1_IMAGE=supabase SCHEMA_PROOF_DSN=<stand-in> infra/runbooks/schema_proof.py bda15866e5700f3856d7142580da842fba9bbd23 --candidate 400a7e94 --task i8", "exit": 0, "summary": "PASS schema 0001-0026; 26/26 suites: 384 passed, 0 skipped, 13 SHAPE deselected, 5 xfailed; PASS through 0026 (017ee735)"},
+    {"cmd": "the same, 422631591845fbd66b590c73d5ff4150318d9d7a, Supabase image", "exit": 0, "summary": "26/26, 384 passed, 13 deselected, 5 xfailed; PASS through 0026 (6c8bd789)"},
+    {"cmd": "the same, bda1586, plain PostgreSQL + shim", "exit": 0, "summary": "26/26, 384 passed, 13 deselected, 5 xfailed; PASS through 0026 (8b90c7cb)"},
+    {"cmd": "the same, 4226315, plain PostgreSQL + shim", "exit": 0, "summary": "26/26, 384 passed, 13 deselected, 5 xfailed; PASS through 0026 (5ca66661)"},
+    {"cmd": "grants.sql (0cad1979) on plain stand-ins 0001-0025 vs 0001-0026", "exit": 0, "summary": "byte-identical 3,431 lines (452cc37d): no grant, owner, SECURITY DEFINER or ACL change"},
+    {"cmd": "INFRX_D_TASK=i8 [INFRX_D1_IMAGE=supabase] pytest -q tests/d/test_credit_schema.py (credit_schema oracle, 0001-0026)", "exit": 0, "summary": "21 passed on plain, 21 passed on Supabase"},
+    {"cmd": "pytest -q tests/i/test_known_good_proof.py, new tests, old record", "exit": 1, "summary": "2 failed, 4 passed (fails before)"},
+    {"cmd": "pytest -q tests/i/test_known_good_proof.py", "exit": 0, "summary": "6 passed"},
+    {"cmd": "shared run_mutant, 20 known_good/schema_proof mutants, baseline narrowed", "exit": 0, "summary": "20/20 killed (new: known_good_record_stops_at_0025, known_good_record_proves_other_0026)"},
+    {"cmd": "INFRX_D_TASK=i8 uv run --frozen --no-sync pytest -q tests/i", "exit": 0, "summary": "239 passed, 1 xfailed"},
+    {"cmd": "known-good.py <bda1586|4226315> --applied 0026 / 0027", "exit": 0, "summary": "0026 KNOWN-GOOD exit 0 (was 1); 0027 NOT-KNOWN-GOOD (migrations) exit 1; --list --applied 0026: 27af05a NOT, 4226315 and bda1586 KNOWN-GOOD"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.1, "likely_h": 0.2, "pessimistic_h": 0.4, "confidence": "high", "basis": "lane done; coordinator applies WR-KGP3-1 (P-25 row) and WR-KGP3-2 (rollout README RR:51) - text only", "at": "2026-09-26T10:30Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-KGP3-1 research/plan/15-pending-inputs.md P-25 row: schema_proof reaches 0026 for both targets (plain + Supabase image); extend at 0027; log line",
+    "WR-KGP3-2 infra/rollout/README.md RR:51 row + paragraph: through 0026, beyond 0026 none qualifies, files 0019-0026, not proven adds the unfenced lease-less write; verification-log line",
+    "WR-KGP3-3 coordinator: R147's follow-up migration refusing the lease-less put_result breaks both targets (they send {job_id, text}); do not apply it while known-good.json names 4226315/bda1586 as the rollback target"
+  ],
+  "evidence": ["research/plan/evidence/i/KNOWN-GOOD-PROOF-3-af552ed.md"]
+}
