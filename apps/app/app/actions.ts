@@ -14,6 +14,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ApiKeyCreated, ApiKeyCreateInput, ApiKeySummary, Result } from "@/lib/contracts/types";
 import { consoleActions, supabaseKeyStore, type KeyClient } from "@/lib/services/actions";
+import { operatorRpcPort, type OperatorRpcClient } from "@/app/(console)/admin/operator-port";
 import { consumerSession } from "@/lib/services/server";
 import { getSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -27,6 +28,8 @@ const actions = consoleActions({
     await (await createClient()).auth.signOut();
   },
   revalidate: (path) => revalidatePath(path),
+  // U3 / WR-U3-2: the operator's own client; the database checks operator authority (WR-U3-1).
+  operator: operatorRpcPort(async () => (await createClient()) as unknown as OperatorRpcClient),
 });
 
 export async function signOut() {
@@ -44,7 +47,7 @@ export async function revokeConsumerKey(keyId: string): Promise<Result<ApiKeySum
   return actions.revokeKey(keyId);
 }
 
-/** A reasoned, idempotent operator change (U3); unavailable until an audited port exists (WR-C3A-3a). */
+/** A reasoned, idempotent operator change (U3): one audited `public.operator_*` RPC as the signed-in operator. */
 export async function operatorAction(input: unknown): Promise<Result<{ replayed: boolean }>> {
   return actions.operator(input);
 }
