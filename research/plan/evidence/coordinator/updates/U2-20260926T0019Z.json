@@ -1,0 +1,41 @@
+{
+  "task": "U2",
+  "slice": "fix round for review 0-U2-V-1..5: page renders the model's unavailable verdict (pinned), plaintext allowlist, one-time/lost-key copy pinned, exact action call shapes, rejected actions settle to a fixed notice",
+  "activity": "review",
+  "head": "e182ba96",
+  "worktree": ".claude/worktrees/codex-app-u2",
+  "branch": "codex/app-u2",
+  "owned_paths": [
+    "apps/app/app/(console)/api-keys/",
+    "apps/app/app/(console)/settings/",
+    "apps/app/tests/u/ (keys/settings tests; U2 entries appended to run-mutants.mjs)",
+    "research/plan/evidence/u/U2-9f4f0b0.md"
+  ],
+  "commands": [
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs --only U2-M23..U2-M34 (old tests)", "exit": 1, "summary": "12/12 reviewer-shaped mutants survived (reproduction)"},
+    {"cmd": "cd apps/app && node --test tests/u/keys-source.test.ts tests/u/keys-view-model.test.ts (at a493644e, old code)", "exit": 1, "summary": "fails before: S01/S02 no settle wrapper; K07 settle/CREATE_LOST absent"},
+    {"cmd": "cd apps/app && node --test tests/u/keys-source.test.ts tests/u/keys-view-model.test.ts", "exit": 0, "summary": "13/13 pass"},
+    {"cmd": "cd apps/app && pnpm test", "exit": 0, "summary": "474 tests: 447 pass, 0 fail, 27 skipped"},
+    {"cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && pnpm lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs", "exit": 0, "summary": "137/137 killed (119 prior + 18 new U2-M23..M40)"},
+    {"cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants", "exit": 0, "summary": "212/212 killed"},
+    {"cmd": "cd apps/app && node tests/v/run-mutants.mjs", "exit": 0, "summary": "40/40 killed"}
+  ],
+  "estimate": {
+    "optimistic_h": 0.25,
+    "likely_h": 0.5,
+    "pessimistic_h": 1.5,
+    "confidence": "medium",
+    "basis": "all five review findings fixed with killed mutants; remaining is re-review and coordinator applying WR-U2-1/2/3 at merge",
+    "at": "2026-09-26T00:19Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-U2-1 (coordinator): components/sidebar.tsx NAV adds { href: \"/settings\", label: \"Settings\", icon: Settings } (unchanged)",
+    "WR-U2-2 (coordinator/A3): remove rememberKey/recallKey from lib/keys.ts and components/snippet.tsx (unchanged)",
+    "WR-U2-3 (coordinator at U2+A3 merge): REVOCATION_COPY re-exported from ../docs/content.ts (unchanged)",
+    "Open (C0/C3A): keys_list has no audience filter and a silent 100-row cap (unchanged)"
+  ],
+  "evidence": ["research/plan/evidence/u/U2-9f4f0b0.md"]
+}
