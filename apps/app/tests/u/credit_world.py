@@ -39,6 +39,7 @@ from tests.d import pgharness  # noqa: E402
 APP = Path(__file__).resolve().parents[2]
 DB = f"{pgharness.DATABASE}_credit"
 ME, OTHER = cc.CONSUMER_1, cc.CONSUMER_2
+CAPPED = 120
 
 
 def conn():
@@ -89,6 +90,22 @@ def race(kinds: list[str]) -> list[str]:
         w.join()
     assert not failures, failures
     return seen
+
+
+def capped(c, world) -> None:
+    """CONSUMER_2 gets more than one full page at the 100 cap (P08): CAPPED more jobs, each taken
+    through the real admit/claim/settle to a free failure (active jobs are capacity-bounded), and
+    CAPPED operator adjustments of 1e-8 CREDIT, so a limit-100 page is 100 rows and a cursor."""
+    org = cc.personal_org(c, OTHER)
+    for _ in range(CAPPED):
+        request = cl.gateway_request(world, org_id=org, key_id=ca.C2_KEY, model_revision=ca.PIN)
+        ca.admit(c, request, b.idem(request, request.request_id), regime="credit")
+        _, prep = cl.claim(c, request.request_id)
+        assert cl.prepare(c, prep["lease"])[0] is None, "a capped job did not queue"
+        code, answer = cl.d3(c, "claim", job_id=request.request_id, worker_id="w-capped")
+        assert code is None, code
+        code, _ = cs.settle(c, cl.lease_of(answer), cs.propose(request.request_id, "invalid_media", "failed"), "credit")
+        assert code is None, code
 
 
 def exhaust(n: int) -> tuple[int, int]:
@@ -154,6 +171,10 @@ def main() -> int:
         other_world = ca.World(c)
         theirs = ca.credit_request(other_world, ca.C2_KEY, cc.personal_org(c, OTHER))
         ca.admit(c, theirs, b.idem(theirs, "u1r-theirs"), regime="credit")
+        capped(c, other_world)
+        c.execute("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, actor, "
+                  "reason) select %s, 'consumer', 'operator_adjustment', 0.00000001, gen_random_uuid(), "
+                  "'ops@test', 'U1R cap fixture' from generate_series(1, %s)", (cc.wallet_of(c, OTHER), CAPPED))
     admitted, refused = exhaust(6)
     assert (admitted, refused) == (2, 4), (admitted, refused)
     with conn() as c:

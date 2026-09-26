@@ -12,7 +12,7 @@
 //
 // Usage: node tests/u/run-mutants.mjs [--only ID,ID] [--timeout MS] [--keep]
 import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +42,7 @@ const CREDITS = "app/(console)/billing/credit-view-model.ts";
 const JOBS = "app/(console)/usage/credit-view-model.ts";
 const GATE = "app/(console)/usage/fake-console-context.ts";
 const SOURCE = "app/(console)/billing/credit-fixture.ts";
+const CONTROLS = "app/(console)/usage/usage-controls.tsx";
 
 // U4: the owned request detail — reads, view model, and the three route files the cases read as
 // source (request-pg.test.ts needs a database and skips here; request_world.py is its oracle).
@@ -123,6 +124,7 @@ const T = {
   rUnavailable: "U1R-R04 an error, a transport failure or an inexact row is an explicit failure, never a zero",
   rUnits: "U1R-R05 a job's unit follows its regime, and a CREDIT row labelled USD is refused",
   rCreditsIn: "U1R-R06 credits-in is a bounded read of the non-debit entries, and past the bound it is unknown",
+  rCap: "U1R-R10 both pages keep 0024's 100 cap: the look-ahead is clamped to 100, a full page at the cap has a next cursor, and a limit over 100 is refused before the call",
   rFilters: "U1R-R08 the model, key and window filters reach consumer_jobs each as its own parameter; unset ones are not sent",
   bFigures: "U1R-B01 available, reserved and spent are exact credits from their own fields, never dollars",
   bIdentity: "U1R-B02 available = balance - reserved, and a wallet that disagrees is flagged",
@@ -764,16 +766,16 @@ const MUTANTS = [
   // APP-0024-WIRE: the ledger is 0024's consumer_credit_ledger (C0 WR-5 / U1R WR-3(c)); M05-M07 were
   // the view's wallet filter, cursor splice guard and probe, which the RPC replaced.
   { id: "U1R-M05", what: "the ledger pages the security-barrier view again instead of consumer_credit_ledger", file: READS,
-    find: "read(client.rpc(\"consumer_credit_ledger\", { p_after: page.cursor, p_limit: page.limit + 1 }), (data) =>",
-    replace: "read(client.from(\"console_credit_ledger\").select(\"entry_id, created_at, kind, amount, unit, request_id, reason, cursor\").order(\"created_at\", { ascending: false }).order(\"entry_id\", { ascending: false }).limit(page.limit + 1), (data) =>",
+    find: "client.rpc(\"consumer_credit_ledger\", { p_after: page.cursor, p_limit: ask })",
+    replace: "client.from(\"console_credit_ledger\").select(\"entry_id, created_at, kind, amount, unit, request_id, reason, cursor\").order(\"created_at\", { ascending: false }).order(\"entry_id\", { ascending: false }).limit(ask)",
     cases: [T.rLedger] },
   { id: "U1R-M06", what: "a ledger amount is parsed as a number (a float round-trip of exact CREDIT)", file: READS,
     find: "    amount: credit(row, \"amount\"),", replace: "    amount: Number(text(row, \"amount\")) as unknown as Credit,", cases: [T.rLedger] },
   { id: "U1R-M07", what: "the ledger asks for no probe row, so it never has a next page", file: READS,
-    find: "{ p_after: page.cursor, p_limit: page.limit + 1 }), (data) =>", replace: "{ p_after: page.cursor, p_limit: page.limit }), (data) =>",
+    find: "{ p_after: page.cursor, p_limit: ask }), entryOf)", replace: "{ p_after: page.cursor, p_limit: page.limit }), entryOf)",
     cases: [T.rLedger] },
   { id: "U1R-M08", what: "the jobs read asks for no probe row", file: READS,
-    find: "p_limit: page.limit + 1, ...jobFilterArgs(page) }", replace: "p_limit: page.limit, ...jobFilterArgs(page) }", cases: [T.rJobs] },
+    find: "p_limit: ask, ...jobFilterArgs(page) }", replace: "p_limit: page.limit, ...jobFilterArgs(page) }", cases: [T.rJobs] },
   { id: "U1R-M09", what: "a JSON number is accepted as a wallet amount", file: READS,
     find: "  return parseCredit(text(row, name));",
     replace: "  const v = field(row, name);\n  return parseCredit(typeof v === \"number\" ? v.toFixed(8) : v);",
@@ -838,6 +840,21 @@ const MUTANTS = [
     find: "    keyId: KEY_ID.test(key) ? key : null,", replace: "    keyId: key === \"\" ? null : key,", cases: [T.uWindow] },
   { id: "U1R-M40", what: "the next page drops the key filter", file: JOBS,
     find: "  if (filters.keyId !== null) search.set(\"key\", filters.keyId);\n", replace: "", cases: [T.uHrefs] },
+  // APP-0024-WIRE-2 (CM-1, R146): C0's page rule in the U1R adapter. P08 is the real-PostgreSQL oracle.
+  { id: "U1R-M41", what: "the look-ahead is not clamped (limit 100 asks 101: the ledger is refused, jobs lose the cursor)", file: READS,
+    find: "  const ask = Math.min(limit + 1, MAX_PAGE_LIMIT);", replace: "  const ask = limit + 1;", cases: [T.rCap] },
+  { id: "U1R-M42", what: "a full page at the cap has no next cursor", file: READS,
+    find: "const more = items.length > limit || (ask === limit && items.length === limit);", replace: "const more = items.length > limit;",
+    cases: [T.rCap] },
+  { id: "U1R-M43", what: "a limit over 100 is not refused before the call", file: READS,
+    find: " || limit > MAX_PAGE_LIMIT) {", replace: ") {", cases: [T.rCap] },
+  // APP-0024-WIRE-2 (CM-2): the usage form, judged by its rendered markup (U06), not its source.
+  { id: "U1R-M44", what: "the key field is renamed, so the page never sees the key filter", file: CONTROLS,
+    find: "<Select name=\"key\"", replace: "<Select name=\"keyId\"", cases: [T.uHrefs] },
+  { id: "U1R-M45", what: "the form carries the old walk's cursor (applying a filter resumes mid-walk)", file: CONTROLS,
+    find: "      <Input\n        name=\"model\"",
+    replace: "      <input type=\"hidden\" name={\"cursor\"} value={filters.cursor ?? \"\"} />\n      <Input\n        name=\"model\"",
+    cases: [T.uHrefs] },
   // Fix round (0-U1R-V-01): the production/preview seam in front of the CREDIT fixture.
   { id: "U1R-M30", what: "the fixture gate is forced open (reviewer P1)", file: GATE,
     find: "  return consoleContext(env) !== null;", replace: "  return true;", cases: [T.gGate] },
@@ -1159,6 +1176,8 @@ function prepareCopy() {
     dereference: false,
     filter: (source) => !/(node_modules|\.next|\.git)(\/|$)/.test(source.slice(appRoot.length)),
   });
+  // U06 renders the usage form with React and TypeScript's transpiler (as tests/c and tests/a do).
+  symlinkSync(join(appRoot, "node_modules"), join(app, "node_modules"), "dir");
   return { root, app };
 }
 

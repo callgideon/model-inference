@@ -33,7 +33,7 @@ import {
   type Credit,
   type Usd,
 } from "../../../lib/contracts/v2/money-units.ts";
-import type { ErrorCode, Page, Result } from "../../../lib/contracts/types.ts";
+import { MAX_PAGE_LIMIT, type ErrorCode, type Page, type Result } from "../../../lib/contracts/types.ts";
 
 // ---------------------------------------------------------------------------
 // The slice of supabase-js this adapter calls. `lib/supabase/server.ts`'s client satisfies it.
@@ -305,19 +305,30 @@ async function read<T>(query: PromiseLike<Answer>, map: (data: unknown) => T): P
 // ---------------------------------------------------------------------------
 
 /**
- * One page of a D10 `consumer_*` read: `limit + 1` rows asked, the extra one only decides whether
- * there is a next page, which resumes from D10's opaque cursor on the last row shown. The cursor is
- * a bound parameter, never spliced into a filter; a malformed one is D10's `invalid_cursor`.
+ * One page of a D10 `consumer_*` read, on C0's rule (R146): a limit outside 1..100 is refused before
+ * the call; otherwise `limit + 1` rows are asked, clamped to 0024's cap of 100, and the extra row only
+ * decides whether there is a next page - at the cap a full page carries a cursor (the next page may
+ * be empty). The next page resumes from D10's opaque cursor on the last row shown: a bound
+ * parameter, never spliced into a filter; a malformed one is D10's `invalid_cursor`.
  */
-function rpcPage<T>(data: unknown, limit: number, parse: (row: unknown) => T): Page<T> {
-  const found = rows(data);
-  const cursors = found.map((row) => text(row, "cursor"));
-  const items = found.map(parse);
-  const shown = items.slice(0, limit);
-  return {
-    items: shown,
-    next_cursor: items.length > limit && shown.length > 0 ? cursors[shown.length - 1] : null,
-  };
+async function rpcPage<T>(
+  page: PageRequest,
+  call: (ask: number) => PromiseLike<Answer>,
+  parse: (row: unknown) => T,
+): Promise<Result<Page<T>>> {
+  const { limit } = page;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {
+    return fail("invalid_request", `A page holds 1 to ${MAX_PAGE_LIMIT} rows.`);
+  }
+  const ask = Math.min(limit + 1, MAX_PAGE_LIMIT);
+  return read(call(ask), (data) => {
+    const found = rows(data);
+    const cursors = found.map((row) => text(row, "cursor"));
+    const items = found.map(parse);
+    const shown = items.slice(0, limit);
+    const more = items.length > limit || (ask === limit && items.length === limit);
+    return { items: shown, next_cursor: more && shown.length > 0 ? cursors[shown.length - 1] : null };
+  });
 }
 
 /** Only the filters that are set; the RPC's named parameters, each to its own. */
@@ -349,9 +360,7 @@ export function postgrestCreditReads(client: CreditClient, userId: string): Cred
 
     // C0 WR-5 / U1R WR-3(c) (0024): O(limit) however deep the cursor; no actor column at all.
     ledger: (page) =>
-      read(client.rpc("consumer_credit_ledger", { p_after: page.cursor, p_limit: page.limit + 1 }), (data) =>
-        rpcPage(data, page.limit, entryOf),
-      ),
+      rpcPage(page, (ask) => client.rpc("consumer_credit_ledger", { p_after: page.cursor, p_limit: ask }), entryOf),
 
     creditsIn: (walletId) =>
       read(
@@ -378,10 +387,7 @@ export function postgrestCreditReads(client: CreditClient, userId: string): Cred
       }),
 
     jobs: (page) =>
-      read(
-        client.rpc("consumer_jobs", { p_after: page.cursor, p_limit: page.limit + 1, ...jobFilterArgs(page) }),
-        (data) => rpcPage(data, page.limit, jobOf),
-      ),
+      rpcPage(page, (ask) => client.rpc("consumer_jobs", { p_after: page.cursor, p_limit: ask, ...jobFilterArgs(page) }), jobOf),
 
     keys: (orgId) =>
       read(

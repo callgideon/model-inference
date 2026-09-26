@@ -5,8 +5,11 @@
 // is not a charge, unknown usage is not a zero, legacy USD rows say USD, the model/key/window filters
 // are consumer_jobs' own (0024), and a keyset walk visits every job once so its totals match the wallet.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
+import * as nodeModule from "node:module";
+import { dirname, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { credits } from "../../lib/format.ts";
 import { totalCredit, type Credit } from "../../lib/contracts/v2/money-units.ts";
@@ -24,6 +27,43 @@ import {
   parseJobFilters,
   type JobFilters,
 } from "../../app/(console)/usage/credit-view-model.ts";
+
+// `node --test` cannot load `.tsx` or Next's `@/` alias: these hooks let a case render a component
+// for real (TypeScript's own transpiler, React's server renderer), so the form is judged by the
+// markup a browser submits rather than by its source text.
+type Resolved = { url: string; shortCircuit?: boolean };
+type Loaded = { format: string; source: string | Uint8Array; shortCircuit?: boolean };
+type Context = { parentURL?: string };
+// This @types/node predates `module.registerHooks` (Node 22.15; engines >= 22.18).
+const { createRequire, registerHooks } = nodeModule as typeof nodeModule & {
+  registerHooks(hooks: {
+    resolve(specifier: string, context: Context, next: (specifier: string, context: Context) => Resolved): Resolved;
+    load(url: string, context: object, next: (url: string, context: object) => Loaded): Loaded;
+  }): void;
+};
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const requireApp = createRequire(`${appRoot}/package.json`);
+const isFile = (path: string) => statSync(path, { throwIfNoEntry: false })?.isFile() === true;
+registerHooks({
+  resolve(specifier, context, next) {
+    const parent = context.parentURL?.startsWith("file:") ? fileURLToPath(context.parentURL) : null;
+    const base = specifier.startsWith("@/")
+      ? resolve(appRoot, specifier.slice(2))
+      : parent !== null && !parent.includes("node_modules") && /^\.\.?\//.test(specifier)
+        ? resolve(dirname(parent), specifier)
+        : null;
+    const file = base === null ? undefined : [base, `${base}.tsx`, `${base}.ts`].find(isFile);
+    return file === undefined ? next(specifier, context) : { url: pathToFileURL(file).href, shortCircuit: true };
+  },
+  load(url, context, next) {
+    if (!url.endsWith(".tsx")) return next(url, context);
+    const ts = requireApp("typescript");
+    const source = ts.transpileModule(readFileSync(fileURLToPath(url), "utf8"), {
+      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    return { format: "module", source, shortCircuit: true };
+  },
+});
 
 const NOW = new Date("2026-09-20T12:00:00.000Z");
 const fixture = defaultCreditFixture();
@@ -145,7 +185,7 @@ test(T.window, () => {
   });
 });
 
-test(T.hrefs, () => {
+test(T.hrefs, async () => {
   const KEY = "c7000000-0000-4000-8000-0000000000c1";
   const first = jobsPageModel({ filters: parseJobFilters({ range: "7d", key: KEY, model: "m" }), jobs: page([byN(1)], "C1") });
   assert.equal(first.here, `/usage?range=7d&key=${KEY}&model=m`);
@@ -158,10 +198,29 @@ test(T.hrefs, () => {
   assert.equal(jobsHref(deep), "/usage?range=7d&cursor=C2&trail=C1");
   assert.equal(jobsHref(parseJobFilters({})), "/usage");
   assert.equal(jobsPageRequest(deep, NOW).cursor, "C2");
-  // Applying filters is a GET of the form: its fields are the filters only, so the walk restarts.
-  const form = readFileSync("app/(console)/usage/usage-controls.tsx", "utf8");
-  assert.deepEqual([...form.matchAll(/name="([a-z]+)"/g)].map((m) => m[1]), ["range", "key", "model"]);
-  assert.match(form, /<form action="\/usage"/);
+  // Applying filters is a GET of the rendered form: its fields are the filters only (no cursor, no
+  // trail), each carrying the current value, so the walk restarts under the new filters.
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { UsageControls } = await import("../../app/(console)/usage/usage-controls.tsx");
+  const html = renderToStaticMarkup(
+    createElement(UsageControls, {
+      filters: parseJobFilters({ range: "7d", key: KEY, model: "m", cursor: "CURSOR-9", trail: ["TRAIL-8"] }),
+      keys: [{ id: KEY, name: "laptop", prefix: "sk-infrx-abcd" }],
+    }),
+  );
+  const forms = [...html.matchAll(/<form\b[^>]*>/g)].map((m) => m[0]);
+  assert.equal(forms.length, 1);
+  assert.match(forms[0], / action="\/usage"/);
+  assert.doesNotMatch(forms[0], / method="post"/i, "the filters are a GET");
+  const fields = [...html.matchAll(/<(?:input|select|textarea)\b[^>]*>/g)].map((m) => ({
+    name: / name="([^"]*)"/.exec(m[0])?.[1],
+    value: / value="([^"]*)"/.exec(m[0])?.[1],
+  }));
+  const named = fields.filter((f) => f.name !== undefined);
+  assert.deepEqual(named.map((f) => f.name), ["range", "key", "model"], "the form's fields are not exactly the filters");
+  assert.deepEqual(named.map((f) => f.value), ["7d", KEY, "m"], "a field does not carry the current filter");
+  assert.doesNotMatch(html, /CURSOR-9|TRAIL-8|name="(cursor|trail)"/, "the form carries the old walk's position");
 });
 
 test(T.states, () => {
