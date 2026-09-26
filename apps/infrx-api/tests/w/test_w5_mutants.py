@@ -92,21 +92,30 @@ def test_pg_mutant_is_killed(mutant):
                            f"what they claim.")
 
 
-def test_a_pg_copy_takes_the_hosts_port_lock_whatever_its_tmpdir(tmp_path):
-    """RV-D10F-3: every copy of the PG runner locks the file this run's harness locks for
-    the same port, so a copy started while another run holds the port is refused. Oracle:
-    the shared layout, whose copy locks under its own TMPDIR and so serialises with
-    nothing."""
+@pytest.mark.parametrize("runner", (worker_main_mutants.PG_RUNNER, prep_worker_mutants.PG_RUNNER,
+                                    mutation_list.PG_RUNNER), ids=lambda r: r.name)
+def test_a_pg_copy_takes_the_hosts_port_lock_whatever_its_tmpdir(tmp_path, runner):
+    """RV-D10F-3 / WR-BM-1: two copies of any W PG runner, each under its own TMPDIR, lock
+    the one file this run's harness locks for the same port (PostgreSQL and Valkey), so a
+    copy started while another run holds the port is refused. Oracle: a lock under
+    `gettempdir()` - each copy then locks its own `.tmp` and serialises with nothing."""
+    import pathlib
     import subprocess
     import sys
 
-    from ..d import pgharness
-    api = mutation_list.PG_RUNNER.layout(tmp_path)
-    temp = tmp_path / ".tmp"
-    temp.mkdir()
-    probe = subprocess.run(
-        [sys.executable, "-c", "from tests.d import pgharness; print(pgharness.lock_path())"],
-        cwd=api, capture_output=True, text=True, check=True,
-        env={**{n: os.environ[n] for n in mutation_list.PG_RUNNER.env if n in os.environ},
-             "PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "TMPDIR": str(temp)})
-    assert probe.stdout.strip() == str(pgharness.lock_path()), probe.stdout
+    from ..d import pgharness, vkstore
+    host = [str(pgharness.lock_path()), str(vkstore.lock_path())]
+    assert all(pathlib.Path(p).parent == pathlib.Path("/tmp") for p in host), host
+    seen = []
+    for copy in ("a", "b"):
+        api = runner.layout(tmp_path / copy)
+        temp = tmp_path / copy / ".tmp"
+        temp.mkdir()
+        probe = subprocess.run(
+            [sys.executable, "-c", "from tests.d import pgharness, vkstore; "
+             "print(pgharness.lock_path()); print(vkstore.lock_path())"],
+            cwd=api, capture_output=True, text=True, check=True,
+            env={**{n: os.environ[n] for n in runner.env if n in os.environ},
+                 "PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "TMPDIR": str(temp)})
+        seen.append(probe.stdout.split())
+    assert seen == [host, host], seen

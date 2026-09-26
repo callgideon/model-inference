@@ -13,7 +13,6 @@ import fcntl
 import os
 import socket
 import subprocess
-import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -47,11 +46,17 @@ def _docker(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(("docker", *args), capture_output=True, text=True, check=False)
 
 
+def lock_path() -> Path:
+    """/tmp, not TMPDIR: a mutant runner's copy runs under its own TMPDIR and must still
+    serialise with the host run on the same port (WR-BM-1, as tests/i/pooler.py)."""
+    return Path("/tmp") / f"{CONTAINER}-{PORT}.lock"
+
+
 def _lock() -> None:
     global _lock_fd
     if _lock_fd is not None:
         return
-    path = Path(tempfile.gettempdir()) / f"{CONTAINER}-{PORT}.lock"
+    path = lock_path()
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)

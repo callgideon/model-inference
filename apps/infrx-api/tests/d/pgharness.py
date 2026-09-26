@@ -10,7 +10,7 @@ original code read `docker inspect` and, if something answered, used it - then r
 exit. Two checkouts running `tests/d` therefore shared, restarted and finally deleted each
 other's database. Three things now stand in the way, in this order:
 
-1. a host-wide **lock** on the shared port (`$TMPDIR/infrx-d1-postgres-<port>.lock`, an
+1. a host-wide **lock** on the shared port (`/tmp/infrx-d1-postgres-<port>.lock`, an
    exclusive `flock`). A second run is refused and **alters nothing**: it does not start,
    stop, remove or connect to the first run's container. The kernel drops the lock when the
    holder dies, so a crashed run cannot wedge the next one;
@@ -44,7 +44,6 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 
@@ -151,8 +150,10 @@ _lock_fd: int | None = None
 
 def lock_path() -> Path:
     """One lock per shared PORT, not per container name: the `-supabase` variant answers to a
-    different name but binds the same port, so it has to serialise with the plain one too."""
-    return Path(tempfile.gettempdir()) / f"{SERVICE.container}-{PORT}.lock"
+    different name but binds the same port, so it has to serialise with the plain one too.
+    /tmp, not TMPDIR: a mutant runner's copy runs under its own TMPDIR and must still
+    serialise with the host run on the same port (WR-BM-1, as tests/i/pooler.py)."""
+    return Path("/tmp") / f"{SERVICE.container}-{PORT}.lock"
 
 
 def _acquire_lock() -> None:
