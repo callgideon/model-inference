@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 06:14Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 102, updated 2026-09-26 06:14Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 06:25Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 103, updated 2026-09-26 06:25Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `529249d0`), base `dff31efc`, main `dff31efc`.
+- Integration branch `claude/consumer-v1` (head `a1807a09`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 6 active lanes, 2 reserved.
-- Validation: 0 error(s), 12 warning(s).
+- Agent slots: 16 total, 5 active lanes, 2 reserved.
+- Validation: 0 error(s), 10 warning(s).
 
 ### Actionable blockers
 
@@ -105,7 +105,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (33.5 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (33.7 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -160,7 +160,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | APP-0024-WIRE | support C0 WR-5 + U1R WR-3(a)/(b)/(c): the App's consumers of 0024 (consumer_credit_ledger, consumer_jobs filters, credits-in index P02 lines) | complete | codex/app-0024-wire | 9e4e34ca → 14bf8327 | ports app-c0 postgres 55451, prefix infrx-app-c0- | 2026-09-26 05:56Z | merged --no-ff at c1b7fcb4 (ACCEPT); R146 App clause (WR-0024W-1) at cf977a4c; minors carried: CM-1 (U1R adapter limit+1 unclamped at the 100 edge — page sizes 25; C0's rpcPage clamps; follow-up: reuse C0's rule in credit-reads), CM-2 (controls test greps the source), CM-3 (billing/page.tsx + credit-fixture edits, declared); fixed-clone console checks running | 0.25–1.5 h remaining (likely 0.5 h), confidence medium, estimated 2026-09-26 05:25Z; basis: all named checks green at d5e90cee; remaining is merge after D10-MERGE-2 (disjoint paths) and the ruling number |
 | E3A-RUN | support (support lane for E3A, like E3A-PREP: the manifest gate BACKEND-READY is unchanged) E3A journey gate run on the merged SHA after BACKEND-LOCAL: E3C's two E3A wirings, operator-controls check on 0025, expired-content display, the four delegated cells bound to E3C-FINAL, runner + seam controls on the e4b block; from the D10-MERGE-2 head 9e4e34ca (dispatched ahead of BACKEND-READY under the user's App-ahead decision; the APP-LOCAL decision stays the coordinator's); workflow wf_9ffa037f-60d | complete | codex/e3a-run | 9e4e34ca → a166963a | ports e4b compose block 56800–56899 (edge 56860, control 56861, App 56870; one runner), prefix infrx-e4b- | 2026-09-26 05:56Z | DONE: merged a53a194d + WR-E3A-1 8a285b58; APP-LOCAL cells recorded from the fixed-clone rerun (14 PASS, 3 NOT RUN[delegated]); the E3C-CELLS lane carries DUR-FENCE/DUR-CAP/CREDIT-RATE, then one app-e2e rerun on that tip; minors carried: reference pinned to 27a69619 → rebind to 8b824cd0 with the E3C-CELLS evidence | 3–8 h remaining (likely 5 h), confidence medium, estimated 2026-09-26 05:02Z; basis: two new checks + wirings + a journey run of ~2 min; 2 lenses, one fix round |
 | G8-FLAG-2 | support flag verb minors 0-G8FLAG-R2, 0-G8FLAG-R3, 1-G8FLAG-R6 | complete | codex/g8-flag-2 | 44ba44a9 → b108556f | ports g8 postgres 55447 / valkey 55492, prefix infrx-g8- | 2026-09-26 05:29Z | merged at 15f499b3; fixed-clone checks green | 0.1–0.5 h remaining (likely 0.2 h), confidence high, estimated 2026-09-26 05:12Z; basis: 4 owned files, no wiring, checks green |
-| APP-0024-WIRE-2 | support C0/U1R follow-up: CM-1 (U1R rpcPage on C0's 100-cap rule), CM-2 (usage form render assertion), optional unused-read note (left, with reasons) | integration | codex/app-0024-wire-2 | 6c390bda → 2d4ea984 | ports app-u1r postgres 55457 (console-c0-real waits on app-c0's flock), prefix infrx-app-u1r- | 2026-09-26 06:11Z | merged --no-ff at a1807a09 (ACCEPT; lens heavy world 2,001 ledger / 156 jobs walked at limits 25/99/100, no duplicates, limit 101 issues no SQL); fixed-clone console targets + console-pg (deferred from cf977a4c) + c0-real running on a1807a09 → complete when green; minor R-1 carried (U1R-P08 assumes 101–199 rows per read; walk until next_cursor is null) | 0–0.5 h remaining (likely 0.2 h), confidence high, estimated 2026-09-26 06:11Z; basis: merged; one fixed-clone console run left |
+| APP-0024-WIRE-2 | support C0/U1R follow-up: CM-1 (U1R rpcPage on C0's 100-cap rule), CM-2 (usage form render assertion), optional unused-read note (left, with reasons) | complete | codex/app-0024-wire-2 | 6c390bda → 2d4ea984 | ports app-u1r postgres 55457 (console-c0-real waits on app-c0's flock), prefix infrx-app-u1r- | 2026-09-26 06:26Z | DONE: merged --no-ff at a1807a09; fixed-clone console checks green (console-test 607 pass; lint 0 errors; typecheck clean; built 22; mutants 46/46; console-pg 8/8 + 8/8 — also closes the console-pg deferred from the APP-0024-WIRE check on cf977a4c; c0-real 15/15; validate PASS); minor R-1 carried (U1R-P08 assumes 101–199 rows per read) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 06:26Z; basis: merged and suite-checked |
 | LINT-1 | support clear the 12 pre-existing ruff findings in apps/infrx-api/infrx without behaviour change; tasklocal.py's repeated d2–d5 keys analysed (dead reservations); plain Opus agent with test proof | integration | codex/lint-1 | 6c390bda → e93439d9 | ports e1c postgres 55449 if a test needs PG, prefix infrx-e1c- | 2026-09-26 05:56Z | merged --no-ff at e81ddd3b; the 13th finding applied as WR-LINT-1 at 529249d0 (ruff check infrx clean); fixed-clone suite (api-test on e1c, worker mutant lists, integration unit tests) running → complete when green | 0–0.5 h remaining (likely 0.2 h), confidence high, estimated 2026-09-26 05:56Z; basis: merged; one fixed-clone suite run left |
 | E3C-CELLS | support (support lane for E3C; BACKEND-LOCAL stays accepted) three new E3C scenarios that carry the App-gate oracles no scenario covers — s14 DUR-FENCE (expired lease, stale generation refused at append/renew/settle/second capacity), s15 DUR-CAP (concurrent admissions across two orgs/keys at the cap: no negative balance, no oversubscription, no deadlock), s16 CREDIT-RATE (rate card / deployment publish while jobs wait and run: settlement at the admitted revision; unknown/private/unpriced model refused) — each with a negative control in control_trees.sh; final run on the e3c block; tests/integration/app/runner.py DELEGATED rebound to s14/s15/s16 and the new evidence; workflow wf_04200c8d-182 (Opus implementer, 2 lenses, one fix round) | running | codex/e3c-cells | ea29c1f1 → — | ports e3c compose block 56900–56999 (one run at a time), prefix infrx-e3c- | 2026-09-26 05:56Z | handback → coordinator merges; then one make app-e2e rerun on the merged tip fills DUR-FENCE/DUR-CAP/CREDIT-RATE | 3–9 h remaining (likely 5 h), confidence medium, estimated 2026-09-26 05:56Z; basis: three real-process scenarios with injections and controls (~12 min per final run), two lenses, one fix round; a product defect exposed stays a finding |
 | LINT-2 | support (support lane) the 118 ruff findings under apps/infrx-api/tests/ (F811 35 — shadowed tests resurrected or documented, E702 30, F401 17, F541 14, E741 7, E402 7, F841 6, E731 2) with no behaviour change: collect-only count must not drop, full api-test on g8, the touched directories' mutant lists; plain Opus agent | running | codex/lint-2 | 8c9c72f9 → — | ports g8 (postgres 55447, valkey 55492), prefix infrx-g8- | 2026-09-26 06:04Z | handback → coordinator merges after a fixed-clone api-test + mutant run | 0.7–3 h remaining (likely 1.5 h), confidence medium, estimated 2026-09-26 06:04Z; basis: mechanical rewrites; the F811 shadowed tests may resurrect failing cases that become findings |
@@ -168,7 +168,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 ### Queues and locks
 
 - Review queue: M6, E2C, A2, U1R, A3, C0, G8-FLAG-2, E4C-RUNBOOK-2, APP-0024-WIRE.
-- Integration queue: APP-0024-WIRE-2.
+- Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
 - runner dir tests/integration/backend: E2C. One owner per runner directory; E2C → E3C → E4C.
@@ -191,9 +191,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E4C (queued) and E3C-CELLS (running) both own tests/integration/backend/ / tests/integration/backend/e3c/
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and KNOWN-GOOD-PROOF-2 (running) both own infra/ / infra/rollout/known-good.json
-- warning: overlapping writers: I2A (review) and APP-0024-WIRE-2 (integration) both own apps/app/ / apps/app/app/(console)/billing/credit-reads.ts (+5 more)
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
-- warning: overlapping writers: E3A (queued) and APP-0024-WIRE-2 (integration) both own apps/app/tests/ / apps/app/tests/u/credit-reads.test.ts (+4 more)
 - warning: overlapping writers: E3A (queued) and E3C-CELLS (running) both own tests/integration/ / tests/integration/backend/e3c/ (+1 more)
 - warning: overlapping writers: I3 (queued) and KNOWN-GOOD-PROOF-2 (running) both own infra/ / infra/rollout/known-good.json
 - warning: overlapping writers: I3 (queued) and E3C-CELLS (running) both own tests/integration/ / tests/integration/backend/e3c/ (+1 more)
@@ -420,6 +418,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 06:26Z UTC, APP-0024-WIRE-2: integration → complete; head 2d4ea984; estimate likely 0.2 → 0 h (merged and suite-checked)
 - 2026-09-26 06:11Z UTC, APP-0024-WIRE-2: review → integration; head 2d4ea984; estimate likely 0.5 → 0.2 h (merged; one fixed-clone console run left)
 - 2026-09-26 06:05Z UTC, APP-0024-WIRE-2: running → review; head de462778; estimate likely 2 → 0.5 h (all named checks green at de462778; review and merge remain)
 - 2026-09-26 06:04Z UTC, coordinator (LINT-2): LINT-2 launched from 8c9c72f9 on g8: the 118 ruff findings under apps/infrx-api/tests (ruff check infrx already clean after LINT-1 + WR-LINT-1); F811 shadowed tests are the substantive class
