@@ -123,7 +123,7 @@ Never "fix forward" on production without a new release identity. The backend is
 
 | # | Check | Pass |
 |---|---|---|
-| S1 | `curl -sS -D - https://app.callbill.ai/api/version` (anonymous once WR-I2A-1 is applied; until then signed in, in a browser) | 200; `commit` = `RELEASE`; `environment` = `production`; `apiOrigin` = the accepted edge origin; `Cache-Control: private, no-store, max-age=0` |
+| S1 | `curl -sS -D - https://app.callbill.ai/api/version` (anonymous: `/api/version` is public, `apps/app/lib/supabase/middleware.ts:5`, WR-I2A-1 `416da075`) | 200; `commit` = `RELEASE`; `environment` = `production`; `apiOrigin` = the accepted edge origin; `Cache-Control: private, no-store, max-age=0` |
 | S2 | Docs point at the right origin: `curl -sS "$apiOrigin/v1/models"` and, signed in, `/docs` examples' `BASE` | 200 list; `BASE` = `apiOrigin` |
 | S3 | Private caching: `curl -sSI https://app.callbill.ai/usage` (anonymous: the login redirect) and, signed in, the response headers of `/usage`, `/billing`, `/api-keys`, `/traces` | every one `Cache-Control: private, no-store...`; no `s-maxage`, no `public` |
 | S4 | Signup callback: a fresh email on the **staging** project first, then production: sign up → email link → `/auth/callback` → `/welcome` | lands on `/welcome`; the grant state matches the `signup_grant` flag; E4 records the full journey |

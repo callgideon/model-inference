@@ -40,7 +40,7 @@ W12's smoke has passed. It measures against the predeclared criteria and sets no
 ## 1. The window (inside rollout.md §2)
 
 1. **[coordinator]** Run rollout.md W1–W7 for the candidate `RELEASE`. Hold the deployment lock. The window id
-   that is logged is the `maintenance_window` value in step 3. W7 takes hosted from 0001–0018 to 0001–0025
+   that is logged is the `maintenance_window` value in step 3. W7 takes hosted from 0001–0018 to 0001–0026
    (its second `plan` prints `nothing pending`).
 2. **[coordinator]** §1a below (H1–H6, on hosted), which is rollout.md W7f plus the key steps, then rollout.md
    W8–W13 with §1's `INSTALL_ARGS` (`ACCOUNTING_REGIME=credit`, `ACTIVE_RATE_CARD_VERSION=rc_marlin2b_20260925_launch`)
@@ -60,7 +60,7 @@ W12's smoke has passed. It measures against the predeclared criteria and sets no
 ### 1a. After the hosted apply (before W8)
 
 H1–H2 call the migrated schema: `publish-card` writes the 0018+ card tables, and the activation writes the
-flags through 0022's `infrx.set_feature_flag`. Hosted is at 0018 until W7 applies 0019–0025, so none of these
+flags through 0022's `infrx.set_feature_flag`. Hosted is at 0018 until W7 applies 0019–0026, so none of these
 runs before W7. They all run before W8, because W10 installs `ACCOUNTING_REGIME=credit` with this card, and
 without both the gateway does not serve CREDIT ([rollout.md §1](../../../infra/runbooks/rollout.md#1-settings-for-this-release),
 the `ACCOUNTING_REGIME` row). The operator CLI runs from the coordinator host with `OPERATIONS_DATABASE_URL`.
@@ -145,6 +145,8 @@ certify.py's parser.
 - the ledger half on the transaction port: the env file's `DATABASE_URL` rewritten to :6543 as in run3, and
   `OPERATIONS_DATABASE_URL` = the owner login (SSM `pg_journal_url`) on :6543. After W10b `DATABASE_URL` is
   `infrx_runtime`, which the operator tool that runs the ledger half refuses. Both reach docker in a 0600 file.
+  A missing `pg_journal_url` exits with the aws CLI's own code, not the launcher's 2 (`e4c-certify.sh:33-35`
+  under `set -e`), before docker runs (E4C-RUNBOOK-2 F2).
 - `E4B_WINDOW_OK=1`
 - the three E4C inputs: `--run-profile`, `--key-inventory` and `--overload-profile` (§3, H6)
 
@@ -366,3 +368,6 @@ Evidence directories are append-only. A failed attempt keeps its own `run<N>`.
   runs W10b (`55-runtime-login.sh`). §4's launcher is `infra/rollout/e4c-certify.sh`, with the three E4C flags
   and the ledger half's owner login. Tests: `tests/integration/backend/recovery/test_runbooks.py` rb11,
   `apps/infrx-api/tests/i/test_rollout.py`. Nothing here has run against the box, AWS or hosted.
+- 2026-09-26 (RUNBOOK-4): §1 step 1 and §1a now read 0001–0026 and 0019–0026, as rollout.md W6/W7 do. §4 records
+  that the launcher's missing-`pg_journal_url` exit is the aws CLI's code (E4C-RUNBOOK-2 F2). Nothing here has run
+  against the box, AWS or hosted.
