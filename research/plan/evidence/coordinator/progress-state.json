@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 146,
-  "updated": "2026-09-26T22:51:00Z",
+  "revision": 147,
+  "updated": "2026-09-26T23:49:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 1,
+    "active": 0,
     "reserved": 2,
     "note": "Session 03: RELEASE freeze b640c35c running (coordinator; e2c/i8/e4b/e3c/infrx-pre); workflow SWEEP-1 (w5/g8/d4/e1c); MAIN-MERGE waits for the go-live inputs."
   },
@@ -3775,27 +3775,35 @@
       "branch": "codex/sweep-1",
       "worktree": ".claude/worktrees/codex-sweep-1",
       "base": "b640c35c",
-      "head": null,
+      "head": "7581e239",
       "isolation": {
         "ports": "w5 55445/55491, g8 55447/55492, d4 55435/55465, e1c 55449, e3c block one at a time; never e2c/i8/e4b/55432",
         "prefix": "infrx-w5-/infrx-g8-/infrx-d4-/infrx-e1c-",
         "db": "w5"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T21:33:00Z",
-      "updated": "2026-09-26T21:33:00Z",
+      "updated": "2026-09-26T23:49:00Z",
       "blocker": null,
-      "next_action": "handback → merge after RELEASE (the live tree stays b640c35c; the sweep is the next candidate)",
+      "next_action": "DONE: merged --no-ff at 7d10f586 (after RELEASE d3a99e01; the App release merges the RELEASE sha). Carried to SWEEP-2: SW1-R2, SW1-R3/RV-2, SW1-RV-3, SW1-RV-4, WR-SWEEP1-1..3",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 3,
-        "pessimistic_h": 5,
-        "confidence": "medium",
-        "basis": "BACKEND-MINORS took ~4 h with the E3C run; this lane is docs/tests only",
-        "at": "2026-09-26T21:33:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-26T23:49:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/SWEEP-1-6085112.md"
+      ],
+      "commands": [
+        {
+          "cmd": "tests/w (w5) + W lists; tests/q + Q lists; integration tests + list; e3c unit + E3C final run; models/marlin2b/tests + test_rollout; console-test/lint/typecheck; validate",
+          "exit": 0,
+          "summary": "334 + 606 killed (15 S3 skips); 194 + 199; 128 + 187/193 (3 survivors identical at base); 49 + gate PASS 16/16, 14/14; 136; 614 pass; PASS"
+        }
+      ],
       "owned_paths": [
         "tests and docs listed in lane-sweep.js"
       ],
@@ -3841,6 +3849,40 @@
       "owned_paths": [
         "apps/infrx-api/tests/i/mutants.py",
         "research/plan/evidence/e/E1B-mutants-<head7>.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "SWEEP-2",
+      "task": null,
+      "slice": "(post-freeze minors sweep 2; from 7d10f586) SW1-R2 two integration mutants (held-55430 case, per-scope control case), SW1-R3/RV-2 valkey-q container identity (infrx-q3-valkey-<port>) in the e2c prefixes or the docs, SW1-RV-3 l8ref.sh stops infrx-observe.service as well as the timer (stub call list), SW1-RV-4 test_run.py docstring + mutants.py D-mode TMPDIR note, WR-SWEEP1-1 the WC-2 c=1 pair cell in e1b-window.sh + §7.2 line + plan count 12 + test_rollout container, WR-SWEEP1-2 e3c README DUR-CAP control row, WR-SWEEP1-3 app runner E3C_FINAL comment (reference stays the RELEASE run); Opus implementer, 2 lenses, one fix round",
+      "agent": "opus",
+      "branch": "codex/sweep-2",
+      "worktree": ".claude/worktrees/codex-sweep-2",
+      "base": "7d10f586",
+      "head": null,
+      "isolation": {
+        "ports": "w5, g8, d4, e1c, q3 via INFRX_Q_VALKEY_PORT=55491? no — q on a granted port only; e3c block one at a time; never e2c/i8/e4b/55430/55432/55462",
+        "prefix": "infrx-w5-/infrx-g8-/infrx-d4-/infrx-e1c-",
+        "db": "w5"
+      },
+      "activity": "queued",
+      "started": "2026-09-26T23:49:00Z",
+      "updated": "2026-09-26T23:49:00Z",
+      "blocker": null,
+      "next_action": "launch lane-sweep-2.js from the merge sha; merges after; the E1B cells (post go-live) want SW1-RV-3 and WR-SWEEP1-1 first",
+      "estimate": {
+        "optimistic_h": 1.5,
+        "likely_h": 2.5,
+        "pessimistic_h": 4,
+        "confidence": "medium",
+        "basis": "seven small items; SWEEP-1 took 2.2 h",
+        "at": "2026-09-26T23:49:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "listed in lane-sweep-2.js"
       ],
       "wiring_requests": []
     }
@@ -6429,6 +6471,12 @@
       "by": "coordinator (RELEASE)",
       "what": "RELEASE d3a99e01 side checks green: G3/G4/G4b/G5 PASS, E3C final PASS (16/16, 12/12 controls), app-e2e PASS (journey 20/20); BACKEND-LOCAL re-proven, APP-LOCAL candidate refreshed; G2 make check running",
       "source": "research/plan/evidence/coordinator/RELEASE-d3a99e01.md"
+    },
+    {
+      "at": "2026-09-26T23:49:00Z",
+      "by": "coordinator (SWEEP-1)",
+      "what": "SWEEP-1 ACCEPT_WITH_FIXES 7581e239 merged at 7d10f586 after RELEASE (the blocking finding — a preflight case bound the real 55430 — fixed and rechecked; near miss: the lane's first test_preflight run bound 55430 while the G2 freeze ran on e2c, G2 api-test passed regardless); AM1-L2 closed by decision (root boundary = the segment-error check); seven minors → SWEEP-2",
+      "source": "research/plan/evidence/coordinator/SWEEP-1-6085112.md"
     }
   ],
   "history": {
