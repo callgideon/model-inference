@@ -152,6 +152,10 @@ def test_i3_ops03_every_cutover_step_names_its_check_and_abort():
     assert all(len(c) == 3 and c[2] for c in checks)
     rollback = section("Auth and credit cutover").split("### Cutover rollback", 1)[1]
     assert "Not rolled back" in rollback and "money" in rollback and "users" in rollback
+    # R144 / G8-FLAG (review 0/1-G8FLAG-R1): the grant closes with the audited verb, never
+    # the maintenance block's direct flag write.
+    assert "flag --name signup_grant --off" in rollback, "cutover rollback step 2 skips the verb"
+    assert "where name = 'signup_grant'" not in rollback and "no CLI verb" not in rollback
 
 
 def test_i3_ops04_the_app_rule_names_a_section_merges_and_fires(tmp_path):

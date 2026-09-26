@@ -82,11 +82,12 @@ In this order, each step logged, stopping as soon as the cause is contained:
 
 1. **Close signup** [OP]: "Allow new users to sign up" off. New accounts stop; signed-up
    users keep signing in.
-2. **Signup grant flag off** [OP]: no CLI verb turns `signup_grant` off on its own
-   (`credit-transition` only enables it; GAP-I3-1 asks G8's owner for one). Until then it is
-   the logged flag write of [rollback.md](../runbooks/rollback.md#maintenance) with
-   `where name = 'signup_grant'`, your name and reason — a flag, never money. A claim then
-   answers `unavailable` and `/welcome` offers a retry (`app/(auth)/flow.ts` `claimOutcome`).
+2. **Signup grant flag off** [OP]:
+   `python -m infrx.operations.cli flag --name signup_grant --off --idempotency-key <k> --reason "<why>"`
+   (`infrx.set_feature_flag`, audited once per key, R144; exit 1 `state_conflict` when an
+   admission holds the flags past `--lock-timeout-s` — rerun under the same key) — a flag,
+   never money. A claim then answers `unavailable` and `/welcome` offers a retry
+   (`app/(auth)/flow.ts` `claimOutcome`).
 3. **App release at fault**: [App rollback](#app-rollback).
 4. **CREDIT admission must stop**: maintenance or `credit-transition --to legacy_usd`
    (X6's abort column).
@@ -320,3 +321,4 @@ re-drilled.
   most 2 KiB of an unsized body and judges origin by `Sec-Fetch-Site`, P-05 (X4) now precedes
   the App deploy (X5) as README §1 item 2 says, and an App target on a schema ahead of its
   tree needs a schema proof (`rollback.py --schema-proof`). Local checks only.
+- 2026-09-26: Cutover rollback step 2 uses the audited operator verb `flag --name signup_grant --off` (G8-FLAG, R144; WR-G8FLAG-1 applied at the merge a30631a8); GAP-I3-1 / I3R-7 closed.

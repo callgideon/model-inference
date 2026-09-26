@@ -126,10 +126,7 @@ operator verb
 (`infrx.set_feature_flag`, audited once per key, R144), which refuses the two admission flags
 (they move with `credit-transition`, R133).
 
-⚠️ TO BE VERIFIED (WR-G8FLAG-3, coordinator): R144 says the operator writes a regime flag
-only through `infrx.set_feature_flag`; the statement above is a direct write, kept verbatim
-with `bk04` (`rb03` pins it). Either R144 excepts this maintenance statement, or `bk04`,
-`rb03` and this block move to `select infrx.set_feature_flag(...)` together.
+Decided 2026-09-26 (WR-G8FLAG-3, R144 amendment): this direct statement is the recorded exception to R144 — under maintenance no metered runtime exists, and the drill sets both admission flags false as `service_role`, pinned word for word by rb03/bk04; it is a recovery action, not an operator regime change. Every other regime-flag write goes through `credit-transition` (R133) or the audited `flag` verb (G8-FLAG).
 
 `bk04` proves, on migrations 0001-0009: with both flags off an old-regime job insert and
 `resolve_admission_pins` refuse with `55000` and no job, hold or ledger row appears; with
