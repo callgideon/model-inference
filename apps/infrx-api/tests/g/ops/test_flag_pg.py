@@ -112,6 +112,9 @@ def test_flag_pg__regime_unknown_and_dry_run_write_nothing(capsys):
     code, would, _ = cli_run(w, [*flag("signup_grant", "--off", "d"), "--dry-run"], capsys,
                              operator=False)                  # 1-G8FLAG-R6: key given, no write
     assert code == 0 and would == {**current, "enabled_after": False, "changed": True}, would
+    code, same, _ = cli_run(w, [*flag("signup_grant", "--on", "d"), "--dry-run"], capsys,
+                            operator=False)       # G8F2-M2: already on, so no change
+    assert code == 0 and same == {**current, "enabled_after": True, "changed": False}, same
     assert footprint(w) == before
 
 
