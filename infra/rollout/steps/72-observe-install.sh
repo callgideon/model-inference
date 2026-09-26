@@ -13,7 +13,8 @@
 #   ALERT_SNS_TOPIC_ARN  a P-25 SNS topic ARN (not a secret; the instance role needs
 #                        sns:Publish on it). Exactly one; neither = delivery stays BLOCKED
 #   ALERT_OWNER, ALERT_ESCALATION   P-25's owner and escalation (names/handles, not secrets)
-#   MONITOR_DSN_PARAM  SSM name of D10's read-only monitor DSN; unset = the runtime DSN on 6543
+#   MONITOR_DSN_PARAM  SSM name of a monitor DSN; unset = /etc/infrx-observe.env as 55-runtime-login.sh
+#                      wrote it (else observe falls back to the runtime DSN on 6543)
 # Rollback: systemctl disable --now infrx-observe.timer infrx-canary.timer; rm the four unit
 # files and /etc/infrx-{canary,alert,observe}.env.
 set -euo pipefail
