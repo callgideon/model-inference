@@ -171,7 +171,12 @@ The smallest addition, both wiring requests to I8's owner (no edit to `infra/obs
   no body; before the canary-key check, so it runs even when the canary is not configured.
 - **WR-I3-3** `rules.py`: merge [`infra/alerts/app.json`](../alerts/app.json) when present
   (version `a<alerts>+o<ops>+p<app>`); its one rule, `AppDown`, pages through the same
-  delivery. The delivery test stays `74-alert-test.sh` (observe.md).
+  delivery. The delivery test stays `74-alert-test.sh` (observe.md). I8's own tests follow:
+  the merged version pin (`a1+o2+p1`) and `infra/app` in its mutant runner's tree copy.
+
+The probe runs with the canary timer, which `72-observe-install.sh` enables only with
+`P24_APPROVED` ([../runbooks/observe.md](../runbooks/observe.md#canary)); without it
+`AppDown` cannot fire.
 
 Browser and server error rates stay Vercel-side ([Browser error monitoring](#browser-error-monitoring)).
 
