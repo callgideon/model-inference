@@ -351,6 +351,33 @@ class DeploymentSettings:
     # (`python -m infrx.worker`: /readyz, /livez, /metrics), the one install.sh's
     # `wait_ready` and 60-verify-local.sh probe. Never public: WorkerService binds loopback.
     worker_health_port: int = 8002
+    # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
+    # process that runs it; gateways run none). P-25 (decided 2026-09-25,
+    # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):
+    # - the cache high water: 50 GiB; eviction runs down to `prepare.LOW_WATER` (0.8 of it,
+    #   unchanged). It sits under R's 60 GiB media disk budget (infra/README.md §2,
+    #   preflight DISK_BUDGET), which is unchanged; the ProcessingCacheLarge rule reads the
+    #   same 50 GiB. Box NVMe free space is ⚠️ TO BE VERIFIED before it applies (P-25);
+    # - a retention pass every 300 s: the I8 alert thresholds assume it (pending delete >
+    #   claim TTL 300 s + 2 x 300 s). The claim TTL (`PgLifecycle`, 300 s) stays above the
+    #   75 s object-store delete timeout whatever this is;
+    # - the cache sweep on the same cadence (expiry is 7 days; 300 s late is nothing);
+    # - the journal prune every 300 s: SSE deltas outlive `JOURNAL_CHUNK_TTL_S` (3600 s) by
+    #   at most one interval;
+    # - the content collection grace: 3,600 s from a content object's last reference to
+    #   its collection eligibility (the worker's `PgLifecycle(grace_s=)`). It only shortens
+    #   the wait; no TTL moves, and the library default (`lifecycle.GRACE_S`, 604,800 s)
+    #   stays for callers that pass none.
+    processing_cache_max_bytes: int = 53_687_091_200
+    retention_interval_s: float = 300.0
+    cache_sweep_interval_s: float = 300.0
+    journal_expire_interval_s: float = 300.0
+    # E3C F-6: the worker's reconciliation gauges (S3 F4) read 0021's reconciliation views,
+    # which only D10's read-only `infrx_monitor` may read (never granted to infrx_runtime:
+    # R122-R127). Its DSN, as I8's durable monitor names it (O7, WR-I8-6); unset, the
+    # worker publishes no reconciliation gauges. A credential: never in a repr or a log.
+    monitor_database_url: str = field(default="", repr=False)
+    retention_grace_s: float = 3600.0
 
     def replace(self, **changes):
         return dataclasses.replace(self, **changes)

@@ -9,19 +9,7 @@
       "reason": "the gateway container has no nvidia-smi, so its infrx_gpu_up is always 0 and would page every cycle; the host probe's reading is the GPU's (WR-I8-4: the gateway stops collecting GPU gauges)"
     }
   },
-  "pending_producers": {
-    "infrx_retention_pending_delete_seconds": "WR-I8-M6-1 (M6 phase 2 reports it in RetentionCollector's Report / ProcessingCache but records no metric; FAMILIES declares none)",
-    "infrx_retention_consecutive_aborted_passes": "WR-I8-M6-1",
-    "infrx_retention_last_success_timestamp_seconds": "WR-I8-M6-1",
-    "infrx_retention_delete_failed_total": "WR-I8-M6-1",
-    "infrx_retention_passes_total": "WR-I8-M6-1 (panel only)",
-    "infrx_retention_aborted_total": "WR-I8-M6-1 (panel only)",
-    "infrx_retention_deleted_total": "WR-I8-M6-1 (panel only)",
-    "infrx_retention_retained_total": "WR-I8-M6-1 (panel only)",
-    "infrx_retention_ack_lost_total": "WR-I8-M6-1 (panel only)",
-    "infrx_processing_cache_evicted_total": "WR-I8-M6-1 (panel only)",
-    "infrx_processing_cache_refused_total": "WR-I8-M6-1"
-  },
+  "pending_producers": {},
   "rules": [
     {
       "name": "DurableExporterDown",
@@ -205,11 +193,11 @@
     {
       "name": "ProcessingCacheLarge",
       "severity": "ticket",
-      "summary": "The processing cache is above its 60 GiB budget on the instance-store NVMe.",
+      "summary": "The processing cache is above its 50 GiB high water on the instance-store NVMe.",
       "metric": "infrx_processing_cache_bytes",
       "op": ">",
-      "threshold": 64424509440,
-      "threshold_status": "derived: the 60 GiB media budget of infra/README.md §2 (est.); ⚠️ TO BE VERIFIED (P-18): against measured cache growth",
+      "threshold": 53687091200,
+      "threshold_status": "derived: P-25 (decided 2026-09-25), the 50 GiB cache high water (PROCESSING_CACHE_MAX_BYTES), under the 60 GiB media disk budget of infra/README.md §2",
       "runbook": "infra/runbooks/disk.md#disk-filling"
     },
     {
@@ -302,7 +290,7 @@
       "agg": "max",
       "op": ">",
       "threshold": 900,
-      "threshold_status": "derived: M6's rule, claim TTL (lifecycle.CLAIM_TTL_S = 300 s) + 2 x the retention interval (300 s assumed; M6 wiring 1 leaves <RETENTION_INTERVAL_S> open); ⚠️ TO BE VERIFIED (P-25): the approved interval",
+      "threshold_status": "derived: M6's rule, claim TTL (lifecycle.CLAIM_TTL_S = 300 s) + 2 x the retention interval 300 s (P-25, decided 2026-09-25)",
       "runbook": "infra/runbooks/observe.md#retention-stalled"
     },
     {
@@ -325,7 +313,7 @@
       "age": true,
       "op": ">",
       "threshold": 1200,
-      "threshold_status": "derived: claim TTL 300 s + 3 x the retention interval (300 s assumed); ⚠️ TO BE VERIFIED (P-25): the approved interval",
+      "threshold_status": "derived: claim TTL 300 s + 3 x the retention interval 300 s (P-25, decided 2026-09-25)",
       "runbook": "infra/runbooks/observe.md#retention-stalled"
     },
     {
@@ -349,7 +337,7 @@
       "increase": true,
       "op": ">",
       "threshold": 0,
-      "threshold_status": "derived: every refusal is a caller's retry; ⚠️ TO BE VERIFIED (P-25): the high water (PROCESSING_CACHE_MAX_BYTES) itself",
+      "threshold_status": "derived: every refusal is a caller's retry; the 50 GiB high water (P-25)",
       "runbook": "infra/runbooks/observe.md#processing-cache-high-water"
     }
   ]

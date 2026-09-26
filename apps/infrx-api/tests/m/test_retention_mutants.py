@@ -54,6 +54,14 @@ IN_FLIGHT = "test_a_put_in_flight_is_never_evicted"
 GET_PINNED = "test_an_expired_pinned_file_is_a_miss_and_is_not_removed"
 PIN_RACE = "test_a_pin_that_loses_the_race_with_an_eviction_is_not_found"
 EVICT_RACE = "test_an_eviction_that_loses_the_race_with_a_put_keeps_the_new_file"
+RECORD = "test_the_registry_holds_what_each_report_says"
+RUN_METRICS = "test_run_records_every_pass_on_the_registry"
+CACHE_COUNTS = "test_the_cache_counts_evictions_expiries_and_refusals"
+PART_NOW = "test_a_part_being_written_now_is_not_swept"
+SLACK = "test_a_file_dated_inside_the_clock_step_slack_is_believed"
+REPUT = "test_putting_a_file_again_does_not_count_it_against_the_high_water"
+REWRITTEN = "test_a_rewritten_map_entry_is_the_newest"
+PREPARED_ROW = "test_the_prepared_artifact_is_registered_as_prepared_for_its_job"
 
 
 def _m(name, invariant, old, new, *cases, file=R, dies_by=()) -> Mutant:
@@ -204,8 +212,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)",
        "                    pass", HIGH_WATER, SWEEP_PIN, CROSS_PROCESS, file=P),
     _m("m6_full_cache_overfills", "a cache full of pinned media refuses the put",
-       "        if total + incoming > self.max_bytes:\n            raise",
-       "        if False:\n            raise", FULL, PREPARE_FULL, file=P),
+       "        if total + incoming > self.max_bytes:\n            if self.metrics",
+       "        if False:\n            if self.metrics", FULL, PREPARE_FULL, file=P),
     _m("m6_parts_evicted_in_flight", "a put in flight is never the high water's to take",
        ' and not f[2].endswith(".part")]', "]", IN_FLIGHT, file=P),
     # --- fix round: pins hold on every path ---------------------------------------------------
@@ -218,6 +226,71 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("m6_evict_takes_a_replaced_file", "an evictor removes only the inode it locked",
        "                if not _names(path, fd):    # a later `put` replaced it: not ours to take",
        "                if False:", EVICT_RACE, file=P),
+    # --- M6-WIRING (WR-I8-M6-1): the metrics each pass and the cache record -----------------
+    _m("m6_metrics_pass_uncounted", "every pass is counted",
+       '    metrics.inc("infrx_retention_passes_total")\n', "", RECORD, RUN_METRICS),
+    _m("m6_metrics_location_fixed", "a deletion is counted where it lived",
+       'metrics.inc("infrx_retention_deleted_total", location=location)',
+       'metrics.inc("infrx_retention_deleted_total", location="object_store")', RECORD),
+    _m("m6_metrics_retained_once", "each retained candidate is counted, not each reason",
+       'metrics.inc("infrx_retention_retained_total", count, reason=reason)',
+       'metrics.inc("infrx_retention_retained_total", reason=reason)', RECORD),
+    _m("m6_metrics_failed_once", "every failed delete is counted",
+       'metrics.inc("infrx_retention_delete_failed_total", report.delete_failed)',
+       'metrics.inc("infrx_retention_delete_failed_total", 1)', RECORD),
+    _m("m6_metrics_ack_lost_uncounted", "every lost acknowledgement is counted",
+       'metrics.inc("infrx_retention_ack_lost_total", report.ack_lost)',
+       'metrics.inc("infrx_retention_ack_lost_total", 0)', RECORD),
+    _m("m6_metrics_pending_age_dropped", "the oldest pending delete is the report's",
+       'metrics.set("infrx_retention_pending_delete_seconds", report.max_pending_delete_s)',
+       'metrics.set("infrx_retention_pending_delete_seconds", 0)', RECORD),
+    _m("m6_metrics_abort_uncounted", "an aborted pass is counted by its reason",
+       '        metrics.inc("infrx_retention_aborted_total", reason=report.aborted)\n',
+       "        pass\n", RECORD, RUN_METRICS),
+    _m("m6_metrics_success_on_abort", "only a completed pass stamps the last success",
+       '    else:\n        metrics.set("infrx_retention_last_success_timestamp_seconds"',
+       '    if True:\n        metrics.set("infrx_retention_last_success_timestamp_seconds"',
+       RECORD, RUN_METRICS),
+    _m("m6_metrics_streak_never_resets", "a completed pass resets the aborted streak",
+       "                aborted = 0 if report is not None and report.aborted is None "
+       "else aborted + 1",
+       "                aborted = aborted + 1", RUN_METRICS),
+    _m("m6_metrics_crash_not_aborted", "a pass that raised extends the aborted streak",
+       "aborted = 0 if report is not None and report.aborted is None else aborted + 1",
+       "aborted = 0 if report is None or report.aborted is None else aborted + 1",
+       RUN_METRICS),
+    _m("m6_metrics_registry_ignored", "run() records on the registry it is given",
+       "            if metrics is not None:\n                aborted =",
+       "            if False:\n                aborted =", RUN_METRICS),
+    _m("m6_metrics_expiry_uncounted", "each expired file the sweep removes is counted",
+       'self.metrics.inc("infrx_processing_cache_evicted_total", reason="expired")',
+       "pass", CACHE_COUNTS, file=P),
+    _m("m6_metrics_high_water_uncounted", "each high-water eviction is counted",
+       'self.metrics.inc("infrx_processing_cache_evicted_total", reason="high_water")',
+       "pass", CACHE_COUNTS, file=P),
+    _m("m6_metrics_refusal_uncounted", "a refused put is counted before it raises",
+       'self.metrics.inc("infrx_processing_cache_refused_total")', "pass", CACHE_COUNTS,
+       file=P),
+    # --- M6 phase-2 verification R6 (X6/X7/X11/X17/X19): the surviving mutants, pinned -------
+    _m("m6_x6_part_grace_zero", "a .part a writer holds is not swept",
+       "PART_GRACE_S = 3_600.0", "PART_GRACE_S = 0.0", PART_NOW, file=P),
+    _m("m6_x7_no_clock_step_slack", "a file dated inside the slack is believed and kept",
+       "FUTURE_MTIME_SLACK_S = 60.0", "FUTURE_MTIME_SLACK_S = 0.0", SLACK, file=P),
+    _m("m6_x11_keep_path_counted", "a re-put never counts the file it replaces",
+       "files = [f for f in self._files() if f[2] != keep and ",
+       "files = [f for f in self._files() if ", REPUT, file=P),
+    _m("m6_x17_rewrite_not_newest", "a rewritten map entry is the newest",
+       "        super().__setitem__(key, value)\n        self.move_to_end(key)\n",
+       "        super().__setitem__(key, value)\n", REWRITTEN, file=S),
+    _m("m6_x19_prepared_row_wrong_kind", "the prepared artifact's row is kind prepared",
+       "await self._register(ContentKind.prepared, ref.org_id, prepared_key,",
+       "await self._register(ContentKind.payload, ref.org_id, prepared_key,", PREPARED_ROW,
+       file=P),
+    _m("m6_x19_prepared_row_no_job", "the prepared artifact's row names its job",
+       "                                     len(body), job_id=job_id)",
+       "                                     len(body), job_id=None)", PREPARED_ROW, file=P,
+       # F2C's ContentIdentity refuses a prepared row without its job: the contract kills it
+       dies_by=("ValidationError",)),
 )
 
 RUNNER = Runner(name="m6", targets=("tests/m/test_retention.py", "tests/m/test_cache_bounds.py",

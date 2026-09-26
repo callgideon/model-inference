@@ -5055,7 +5055,7 @@
             "schema_version": 2
           },
           "content_id": "<id:1>",
-          "eligible_at": "t+150",
+          "eligible_at": "t+210",
           "generation": 2,
           "identity": {
             "bytes": 7,
@@ -5292,7 +5292,7 @@
             "schema_version": 2
           },
           "content_id": "<id:1>",
-          "eligible_at": "t+60",
+          "eligible_at": "t+120",
           "generation": 1,
           "identity": {
             "bytes": 5,

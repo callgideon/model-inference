@@ -1,0 +1,33 @@
+{
+  "task": "KNOWN-GOOD-PROOF",
+  "slice": "fix round (0-KGP-1, 0-KGP-2, 1-KGP-1): a skipped or pass-less suite is FAIL; a CLI-split history must be the whole file in order; schema_proof.files binds the proven 0019-0023 bytes and known-good.py refuses other bytes",
+  "activity": "review",
+  "head": "59dc5c06",
+  "worktree": ".claude/worktrees/codex-known-good-proof",
+  "branch": "codex/known-good-proof",
+  "owned_paths": [
+    "infra/rollout/known-good.json",
+    "infra/rollout/known-good.py",
+    "infra/runbooks/schema_proof.py",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py",
+    "infra/rollout/README.md",
+    "research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md"
+  ],
+  "commands": [
+    {"cmd": "pytest -q tests/i/test_known_good_proof.py (new tests on 913cfa9e code)", "exit": 1, "summary": "4 failed, 1 passed: fails before"},
+    {"cmd": "pytest -q tests/i/test_known_good_proof.py", "exit": 0, "summary": "5 passed"},
+    {"cmd": "SCHEMA_PROOF_DSN=<task-local stand-in> schema_proof.py bda15866e5700f3856d7142580da842fba9bbd23", "exit": 0, "summary": "PASS schema; 26/26 suites PASS: 387 passed, 0 skipped, 10 SHAPE deselected, 5 xfailed; PASS through 0023"},
+    {"cmd": "SCHEMA_PROOF_DSN=<task-local stand-in> schema_proof.py 422631591845fbd66b590c73d5ff4150318d9d7a", "exit": 0, "summary": "PASS schema; 26/26 suites PASS: 387 passed, 0 skipped, 10 SHAPE deselected, 5 xfailed; PASS through 0023"},
+    {"cmd": "PATH=git,tar,uv,env schema_proof.py bda1586... --suite tests/d/test_journal.py --suite tests/d/test_settle.py", "exit": 1, "summary": "FAIL 20 skipped / FAIL 19 skipped (review repro now FAIL)"},
+    {"cmd": "known-good.py bda1586... --applied 0023 with one byte added to 0023", "exit": 1, "summary": "NOT-KNOWN-GOOD (migrations: ['0023'] are not the bytes its schema_proof ran on); restored"},
+    {"cmd": "known-good.py <bda1586|4226315> --applied 0018/0022/0023/0024", "exit": 0, "summary": "0018/0022/0023 KNOWN-GOOD, 0024 NOT-KNOWN-GOOD"},
+    {"cmd": "INFRX_D_TASK=d10 pytest -q tests/i --deselect tests/i/test_mutants.py --deselect <6 i8-block cases>", "exit": 1, "summary": "174 passed, 56 deselected, 1 xfailed, 2 errors: test_pooler session_state/auto_prepared BlockingIOError on the i8 lock held by another lane"},
+    {"cmd": "shared run_mutant on the 12 KNOWN-GOOD mutants, baseline narrowed to their cases", "exit": 0, "summary": "12/12 killed (whole-list baseline blocked by the held i8 lock)"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.2, "likely_h": 0.3, "pessimistic_h": 0.5, "confidence": "medium", "basis": "lane done; coordinator reruns the i8-block cases and the whole-list tests/i mutants once the i8 lock is free, plus the read-only hosted history check after step 6", "at": "2026-09-25T23:25Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md"]
+}

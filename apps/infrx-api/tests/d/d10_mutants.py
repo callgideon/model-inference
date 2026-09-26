@@ -10,10 +10,12 @@ runner, `assertion_kill` underneath. They are in the default subset (`ALWAYS`).
 """
 from __future__ import annotations
 
-from . import checks_content, checks_reads, checks_ready, pgharness
+from . import checks_content, checks_followup, checks_reads, checks_ready, pgharness
 from . import migration_mutants as _d
 
 READY = _d.READY
+#: The D10 follow-up (W5 request 3, G8 V-G8TL-2).
+FOLLOWUP = "0022_preparation_refusal_and_flag_writer.sql"
 
 
 def _m(name, file, old, new, check, why, **kw):
@@ -70,14 +72,14 @@ MIGRATION_MUTANTS = (
        "      for share;",
        "    select * into u from infrx.media_uploads where org_id = p_org and handle = p_handle;",
        "ready_races", "an abort or completion races an admission on the same ticket"),
-    _m("d10_register_outside_the_prefix", READY,
+    _m("d10_register_outside_the_prefix", FOLLOWUP,
        "  if not exists (select 1 from public.organizations o where o.id::text = "
        "p_identity->>'org_id')\n     or (p_identity->>'location' = 'object_store' and not coalesce(",
        "  if not exists (select 1 from public.organizations o where o.id::text = "
        "p_identity->>'org_id')\n     or (false and not coalesce(", "register_guards",
        "ambiguous ownership is registered (and so becomes deletable) instead of retained"),
     # M6 findings (2026-09-25): a dot segment inside the tenant prefix; the unlocked row.
-    _m("d10_register_dot_segment", READY,
+    _m("d10_register_dot_segment", FOLLOWUP,
        "           or p_identity->>'object_key' ~ '(^|/)\\.\\.?(/|$)') then",
        "           or false) then", "register_guards",
        "a '..' key inside one tenant's prefix is registered and deleted as another's object"),
@@ -93,12 +95,12 @@ MIGRATION_MUTANTS = (
        "                where state = 'created' and expires_at <= infrx.now()\n",
        "                where state = 'created' and expires_at <= infrx.now() + interval '1 year'\n",
        "upload_ticket", "the sweep closes tickets still inside their window (review 0-D10-R4)"),
-    _m("d10_register_other_bytes", READY,
+    _m("d10_register_other_bytes", FOLLOWUP,
        "  if (c.digest is not null and p_identity->>'digest' is not null\n"
        "      and c.digest <> p_identity->>'digest')",
        "  if (false)", "register_guards",
        "one key comes to name two sets of bytes, and a delete of one removes the other"),
-    _m("d10_tombstoned_key_recreated", READY,
+    _m("d10_tombstoned_key_recreated", FOLLOWUP,
        "  if c.state = 'tombstoned' then\n    perform infrx.lifecycle_refuse('content_retiring',\n"
        "      'the object at this key",
        "  if false then\n    perform infrx.lifecycle_refuse('content_retiring',\n"
@@ -290,8 +292,121 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "settled_at,\n              outcome_cause, result_expires_at) on infrx.jobs to infrx_monitor;",
        "grant select on infrx.jobs to infrx_monitor;", "reads_privileges",
        "the read-only monitor login reads request records (customer content)"),
+
+    # --- 0022: fail_preparation (W5 request 3) and the flag writer (V-G8TL-2) ------------
+    _m("d10_refetch_not_refreshed", FOLLOWUP,
+       "  if p_identity->>'origin' = 'written' and c.state = 'live'\n"
+       "     and c.digest = p_identity->>'digest' then",
+       "  if false then", "refetch_refresh",
+       "M6 WR-7: a clip fetched again is collected before its admission (not_found)"),
+    _m("d10_refetch_discovered_refreshes", FOLLOWUP,
+       "  if p_identity->>'origin' = 'written' and c.state = 'live'",
+       "  if c.state = 'live'", "refetch_refresh",
+       "a collector's discovery keeps an orphan alive for ever"),
+    _m("d10_refetch_shortens", FOLLOWUP,
+       "       set eligible_at = greatest(eligible_at, v_now + make_interval(secs => p_grace_s))",
+       "       set eligible_at = v_now + make_interval(secs => p_grace_s)", "refetch_refresh",
+       "a registration with a shorter grace makes a protected object deletable early"),
+    _m("d10_guard_eligibility_earlier", FOLLOWUP,
+       "                  and new.eligible_at > old.eligible_at)) then",
+       "                  )) then", "refetch_refresh",
+       "any writer moves a live object's eligibility earlier (deletable before its grace)"),
+    _m("d10_guard_retiring_eligibility", FOLLOWUP,
+       "         and not (old.state = 'live' and new.state = 'live'\n"
+       "                  and new.eligible_at > old.eligible_at)) then",
+       "         and not (new.eligible_at > old.eligible_at)) then", "refetch_refresh",
+       "a tombstoned row's eligibility is rewritten under its delete"),
+    _m("d10_fail_prep_any_cause", FOLLOWUP,
+       "  if v_cause is null or v_cause not in ('invalid_media', 'preparation_failed') then",
+       "  if v_cause is null then", "fail_preparation",
+       "a preparation worker ends a job with a cause that bills or blames the client"),
+    _m("d10_fail_prep_unfenced", FOLLOWUP,
+       "  v_refusal := infrx.fence_lease(v_lease, array['preparation'], v_reconcile_s);\n"
+       "  if v_refusal is not null then",
+       "  v_refusal := null;\n  if v_refusal is not null then", "fail_preparation",
+       "a superseded, foreign or lapsed preparation worker ends a job someone else owns"),
+    _m("d10_fail_prep_inference_lease", FOLLOWUP,
+       "  v_refusal := infrx.fence_lease(v_lease, array['preparation'], v_reconcile_s);",
+       "  v_refusal := infrx.fence_lease(v_lease, array['preparation', 'inference'], "
+       "v_reconcile_s);", "fail_preparation",
+       "an inference lease ends a running job through the preparation door (R46)"),
+    _m("d10_fail_prep_no_replay", FOLLOWUP,
+       "  if found and j.settled_at is not null and j.proposal = v_mark then",
+       "  if false then", "fail_preparation",
+       "the worker's retry of a committed end is refused, so it cannot learn it won"),
+    _m("d10_fail_prep_replay_any_lease", FOLLOWUP,
+       "  if found and j.settled_at is not null and j.proposal = v_mark then",
+       "  if found and j.settled_at is not null and j.outcome_cause = v_cause then",
+       "fail_preparation", "another worker (or R29's deadline) is answered as the winner"),
+    # Fix round 0-D10F-1: each half of the replay key, alone.
+    _m("d10_fail_prep_replay_ignores_generation", FOLLOWUP,
+       "                                 'generation', v_lease->'generation',\n", "",
+       "fail_preparation", "a zombie call of an earlier generation from the same worker, "
+       "after that worker re-claimed and ended the job, is told it won"),
+    _m("d10_fail_prep_replay_ignores_worker", FOLLOWUP,
+       ",\n                                 'worker_id', v_lease->'worker_id')", ")",
+       "fail_preparation", "another worker's call with the same generation is told it won"),
+    _m("d10_fail_prep_unmarked", FOLLOWUP,
+       "  update infrx.jobs set proposal = v_mark where request_id = j.request_id;\n", "",
+       "fail_preparation", "the replay key is never written: an identical retry is refused"),
+    _m("d10_fail_prep_platform_absorbed", FOLLOWUP,
+       "  perform infrx.terminalize_no_usage(j.request_id, v_cause, 'failed', v_reconcile_s);",
+       "  perform infrx.terminalize_no_usage(j.request_id, 'platform_error', 'failed', "
+       "v_reconcile_s);", "fail_preparation",
+       "a permanent refusal is recorded as the platform's fault, not actionable to the client"),
+    _m("d10_fail_prep_not_for_the_runtime", FOLLOWUP,
+       "grant execute on function infrx.fail_preparation(jsonb) to service_role, infrx_runtime;",
+       "grant execute on function infrx.fail_preparation(jsonb) to service_role;",
+       "followup_privileges", "the dedicated runtime login cannot end a refused preparation"),
+    _m("d10_fail_prep_for_browsers", FOLLOWUP,
+       "revoke all on function infrx.fail_preparation(jsonb) from public, anon, authenticated;",
+       "grant execute on function infrx.fail_preparation(jsonb) to public;",
+       "followup_privileges", "a browser session ends another tenant's job (the revoke "
+       "alone is an equivalent mutant: 0004's default privileges already withhold it)"),
+    _m("d10_flag_writer_row_lock_only", FOLLOWUP,
+       "  lock table infrx.feature_flags in exclusive mode;\n", "", "flag_writer_queue",
+       "V-G8TL-1: overlapping admissions starve the freeze (the row UPDATE joins last)"),
+    _m("d10_flag_writer_share_row_exclusive", FOLLOWUP,
+       "  lock table infrx.feature_flags in exclusive mode;",
+       "  lock table infrx.feature_flags in share row exclusive mode;", "flag_writer_queue",
+       "a table lock that does not conflict with ROW SHARE: the freeze still starves"),
+    _m("d10_flag_writer_starves_under_load", FOLLOWUP,
+       "  lock table infrx.feature_flags in exclusive mode;\n", "", "flag_writer_lands",
+       "G8's overlapping-lockers probe: the bounded write never lands"),
+    _m("d10_flag_writer_always_changed", FOLLOWUP,
+       "  return found;", "  return true;", "followup_privileges",
+       "the operator's report says it changed a flag that already had the value"),
+    _m("d10_flag_writer_unattributed", FOLLOWUP,
+       "     set enabled = p_enabled, updated_by = left(p_actor, 200), reason = left(p_reason, 500),",
+       "     set enabled = p_enabled,", "followup_privileges",
+       "a flag change is not attributed to the operator who made it"),
+    _m("d10_flag_writer_for_the_runtime", FOLLOWUP,
+       "grant execute on function infrx.set_feature_flag(text, boolean, text, text) to service_role;",
+       "grant execute on function infrx.set_feature_flag(text, boolean, text, text) "
+       "to service_role, infrx_runtime;", "followup_privileges",
+       "the runtime login can switch a regime off (or signup on)"),
+    _m("d10_result_expiry_guard_executable", FOLLOWUP,
+       "revoke all on function infrx.jobs_result_expiry_guard()\n"
+       "  from public, anon, authenticated, service_role;", "", "followup_privileges",
+       "L3-REBASE F2: the platform role keeps EXECUTE on a trigger guard its siblings deny"),
+    _m("d10_flag_writer_for_browsers", FOLLOWUP,
+       "revoke all on function infrx.set_feature_flag(text, boolean, text, text)\n"
+       "  from public, anon, authenticated;",
+       "grant execute on function infrx.set_feature_flag(text, boolean, text, text)\n"
+       "  to authenticated;", "followup_privileges",
+       "a browser session flips a feature flag"),
 )
 
+_d._CHECKS.update({
+    "fail_preparation": checks_followup.check_fail_preparation,
+    "refetch_refresh": checks_followup.check_written_reregistration_refreshes,
+    "followup_privileges": checks_followup.check_followup_privileges,
+    "flag_writer_queue": lambda conn: checks_followup.check_flag_writer_queues_new_readers(
+        pgharness.connect, _d.MUT_DB),
+    "flag_writer_lands": lambda conn: (
+        checks_followup.check_flag_writer_lands_under_overlapping_lockers(
+            pgharness.connect, _d.MUT_DB)),
+})
 _d._CHECKS.update({
     "ready_marker": checks_ready.check_ready_marker,
     "ready_refusals": checks_ready.check_ready_refusals,

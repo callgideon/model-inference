@@ -171,9 +171,12 @@ class RetentionCollector:
         if in_database:
             report.deleted.append(erased)
 
-    async def run(self, interval_s: float, *, sleep=asyncio.sleep) -> None:
+    async def run(self, interval_s: float, *, sleep=asyncio.sleep, metrics=None) -> None:
         """The schedule hook: one pass every `interval_s`, forever. A failed pass is
-        logged and the next one runs; nothing here decides to stop collecting."""
+        logged and the next one runs; nothing here decides to stop collecting. `metrics`
+        (an `observe.metrics.Registry`) records every pass (WR-I8-M6-1); a pass that raised
+        counts as aborted for `consecutive_aborted_passes`."""
+        aborted = 0
         while True:
             try:
                 report = await self.sweep()
@@ -185,4 +188,28 @@ class RetentionCollector:
                          f", aborted: {report.aborted}" if report.aborted else "")
             except Exception:
                 log.exception("retention sweep failed")
+                report = None
+            if metrics is not None:
+                aborted = 0 if report is not None and report.aborted is None else aborted + 1
+                record(metrics, report, aborted)
             await sleep(interval_s)
+
+
+def record(metrics, report: Report | None, aborted: int) -> None:
+    """One pass into the registry; `report` is None for a pass that raised, `aborted` the
+    passes since the last completed one."""
+    metrics.set("infrx_retention_consecutive_aborted_passes", aborted)
+    if report is None:
+        return
+    metrics.inc("infrx_retention_passes_total")
+    for location, _, _ in report.deleted:
+        metrics.inc("infrx_retention_deleted_total", location=location)
+    for reason, count in report.retained.items():
+        metrics.inc("infrx_retention_retained_total", count, reason=reason)
+    metrics.inc("infrx_retention_delete_failed_total", report.delete_failed)
+    metrics.inc("infrx_retention_ack_lost_total", report.ack_lost)
+    metrics.set("infrx_retention_pending_delete_seconds", report.max_pending_delete_s)
+    if report.aborted is not None:
+        metrics.inc("infrx_retention_aborted_total", reason=report.aborted)
+    else:
+        metrics.set("infrx_retention_last_success_timestamp_seconds", time.time())

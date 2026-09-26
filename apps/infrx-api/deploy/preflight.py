@@ -80,6 +80,8 @@ WORKER_ENTRIES = ("infrx.worker.__main__",)
 # est. budgets (infra/README.md §2), checked where each directory lives or will live: the
 # usage spill and logs on the root EBS volume (5 GiB + headroom), and the media root on
 # the instance-store NVMe (media/staging 60 GiB; a rebuildable cache, W3's proposed R).
+# The processing cache's high water (PROCESSING_CACHE_MAX_BYTES, 50 GiB, P-25 decided
+# 2026-09-25) sits under that 60 GiB; the budget itself is unchanged.
 DISK_BUDGET = (("/var/lib/infrx", 10 * 2**30), ("/opt/dlami/nvme/processing", 60 * 2**30))
 
 # infra/README.md §5: `/model-inference/price_table_version` was **withdrawn**, not
@@ -159,6 +161,10 @@ MANIFEST: tuple[Key, ...] = (
     # request bearing it has no tenant to meter. Optional in dev/test, refused in pilot.
     Key("GATEWAY_API_KEY", "legacy shared key", "opaque",
         param="marlin2b_api_key", secret=True, required_in=(), forbidden_in=("pilot",)),
+    # W5-F5 (E3C F-6): D10's read-only `infrx_monitor` login, read only by the worker's
+    # reconciliation gauges; optional in every mode (unset: those gauges are off).
+    Key("MONITOR_DATABASE_URL", "worker reconciliation gauges (D10 infrx_monitor, read-only)",
+        "pg_dsn", param="monitor_database_url", secret=True, required_in=()),
 )
 
 
@@ -201,6 +207,11 @@ TUNABLE = (
     "S3_MEDIA_PREFIX", "S3_ENDPOINT_URL",
     # F2P wire-in: the admission regime, legacy_usd or credit (validate_deployment)
     "ACCOUNTING_REGIME",
+    # M6 wiring 1 + E3C F-4: the worker's cache high water and housekeeping cadences (P-25)
+    "PROCESSING_CACHE_MAX_BYTES", "RETENTION_INTERVAL_S", "CACHE_SWEEP_INTERVAL_S",
+    "JOURNAL_EXPIRE_INTERVAL_S",
+    # P-25: the worker lifecycle's content collection grace
+    "RETENTION_GRACE_S",
     # the F1 names that keep theirs until G/W retire them (08 §5)
     "MAX_VIDEO_MB", "FETCH_TIMEOUT_S", "MAX_REDIRECTS", "ALLOWED_VIDEO_MIME",
     "USAGE_FAILED_LOG",

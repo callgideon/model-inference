@@ -107,7 +107,7 @@ def rule_metrics(rules) -> dict[str, set[str]]:
 # exporters): W5 (worker: queue, reaper, reconciliation), G (rejections) and the component
 # probes own the producers. Pinned so a NEW rule without a producer fails here.
 KNOWN_UNPRODUCED = {"ComponentDown", "QueueStalled", "QueueSaturated", "RejectionsHigh",
-                    "PlatformFailureRate", "LeaseLost", "ReaperTerminalized", "UnsettleableJobs"}
+                    "PlatformFailureRate", "LeaseLost", "ReaperTerminalized"}
 
 
 def _unproduced(rules) -> set[str]:
@@ -525,18 +525,24 @@ def test_ops_continuous__the_test_alert_is_marked_and_names_its_owner_and_runboo
 
 # --- M6 wiring 4: retention and processing-cache families, rules, bucket rule -------------
 # Failure oracles:
-# * a retention/cache family M6's code can report has no panel, a label outside a closed
-#   vocabulary, or a vocabulary missing a reason M6 writes (a rename at M6's tip fails here);
-# * a pending family that landed in FAMILIES but is still only in `pending` (OB-10 then
-#   owns it: it must move into `rows`);
+# * a retention/cache family M6's code can report is undeclared, has no panel in `rows`,
+#   a label outside a closed vocabulary, or a vocabulary missing a reason M6 writes (a
+#   rename at M6's tip fails here);
+# * a family declared but not produced by the runtime or an exporter (WR-I8-M6-1 landed:
+#   the collector and the cache record them, the host probe writes the cache bytes), or a
+#   `pending` dashboard section / `pending_producers` entry left behind;
 # * a retention/cache rule that fires on a healthy scrape or not on its own fault;
 # * a bucket rule that expires completed objects, reaches outside the media prefix, or
 #   carries an account id instead of the pinned bucket variable.
 DASHBOARD = json.loads((ALERTS / "dashboard.json").read_text())
-PENDING = DASHBOARD.get("pending", {})
 M6_PREFIXES = ("infrx_retention_", "infrx_processing_cache_")
 LIFECYCLE_RULE = API / "deploy" / "s3-lifecycle.json"
 LIFECYCLE_RUNBOOK = support.REPO / "infra" / "runbooks" / "observe.md"
+
+
+def _m6_families() -> dict:
+    from infrx.observe.metrics import FAMILIES
+    return {name: spec for name, spec in FAMILIES.items() if name.startswith(M6_PREFIXES)}
 
 
 def _retained_reasons() -> set[str]:
@@ -549,34 +555,33 @@ def _retained_reasons() -> set[str]:
             | {e.code for e in caught} | set(re.findall(r'retained\["([a-z_]+)"\]', source)))
 
 
-def test_ops_retention__every_m6_family_has_a_pending_panel_and_a_closed_vocabulary():
+def test_ops_retention__every_m6_family_is_declared_paneled_and_produced():
     from infrx.contracts.v2.lifecycle import ContentLocation
-    from infrx.observe.metrics import FAMILIES
-    families = PENDING["families"]
-    assert set(families) and all(name.startswith(M6_PREFIXES) for name in families)
-    assert set(families).isdisjoint(FAMILIES), "declared now: move its panel into rows (OB-10)"
+    families = _m6_families()
+    assert len(families) == 12, sorted(families)
+    assert "pending" not in DASHBOARD, "every M6 family is declared: the panels live in rows"
+    labels = {name: dict(spec.labels) for name, spec in families.items()}
     for name, spec in families.items():
-        assert spec["kind"] in ("counter", "gauge"), name
-        for label, values in spec.get("labels", {}).items():
-            assert values and all(re.fullmatch(r"[a-z][a-z0-9_]*", v) for v in values), (name, label)
+        assert spec.kind in ("counter", "gauge"), name
+        for label, values in labels[name].items():
+            assert isinstance(values, frozenset) and values, (name, label)
+            assert all(re.fullmatch(r"[a-z][a-z0-9_]*", v) for v in values), (name, label)
     shown = set()
-    for row in PENDING["rows"]:
+    for row in DASHBOARD["rows"]:
         for panel in row["panels"]:
-            for field in ("metric", "compare"):
-                if field in panel:
-                    assert panel[field] in families, panel["title"]
-                    shown.add(panel[field])
-            assert set(panel.get("by", ())) <= set(families[panel["metric"]].get("labels", {}))
+            if panel["metric"].startswith(M6_PREFIXES):
+                shown.add(panel["metric"])
+                assert set(panel.get("by", ())) <= set(labels[panel["metric"]]), panel["title"]
     assert shown == set(families), f"no panel: {set(families) - shown}"
-    labels = {name: spec.get("labels", {}) for name, spec in families.items()}
-    assert _retained_reasons() <= set(labels["infrx_retention_retained_total"]["reason"])
+    assert _retained_reasons() <= labels["infrx_retention_retained_total"]["reason"]
     source = (API / "infrx" / "media" / "retention.py").read_text()
     aborted = set(re.findall(r'aborted = "([a-z_]+)"', source))
-    assert aborted and aborted <= set(labels["infrx_retention_aborted_total"]["reason"])
-    assert {c.value for c in ContentLocation} == set(labels["infrx_retention_deleted_total"]["location"])
+    assert aborted and aborted <= labels["infrx_retention_aborted_total"]["reason"]
+    assert {c.value for c in ContentLocation} == labels["infrx_retention_deleted_total"]["location"]
     ops = json.loads((ALERTS / "operations.json").read_text())
     produced = exporter_producers() | runtime_producers()
-    assert set(families) - produced <= set(ops["pending_producers"])
+    assert set(families) <= produced, f"declared, never written: {set(families) - produced}"
+    assert set(families).isdisjoint(ops["pending_producers"])
 
 
 def _m6_rules():
@@ -607,13 +612,14 @@ M6_FAULTS = {
 
 
 def test_ops_retention__each_rule_fires_on_its_fault_and_nothing_fires_when_healthy():
-    families = PENDING["families"]
+    families = _m6_families()
     assert {r["name"] for r in _m6_rules()} == set(M6_FAULTS)
     for rule in _m6_rules():
         spec = families[rule["metric"]]
         for label, value in rule.get("match", {}).items():
-            assert value in spec["labels"][label], rule["name"]
-        assert "⚠️ TO BE VERIFIED (P-25)" in rule["threshold_status"] or \
+            assert value in dict(spec.labels)[label], rule["name"]
+        # every threshold is exact or rests on P-25 (open, or decided 2026-09-25: WR-P25-3)
+        assert "(P-25" in rule["threshold_status"] or \
             rule["threshold_status"].startswith("exact"), rule["name"]
     now = time.time()
     healthy = evaluator.parse(_healthy_m6(now))

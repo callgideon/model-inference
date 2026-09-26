@@ -32,7 +32,7 @@ _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_upgrade"
-D10 = ("0019_", "0020_", "0021_")
+D10 = ("0019_", "0020_", "0021_", "0022_", "0023_")
 
 
 def _split():

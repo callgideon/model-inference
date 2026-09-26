@@ -38,6 +38,7 @@ CAUSE = "test_cancel__sends_the_cause_and_defaults_to_the_clients_own"
 WORK = "test_load_work_credit__the_admitted_work_and_a_legacy_job_refused"
 RELEASED = "test_recover__a_24h_release_is_reported_in_released"
 LOOKUP = "test_lookup__answers_the_jobs_own_regime_and_sends_the_stores_ttl"
+FAILPREP = "test_fail_preparation__sends_the_lease_the_cause_and_the_limits"
 
 
 def _m(name, invariant, old, new, *cases, file=J) -> Mutant:
@@ -120,6 +121,16 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lookup_drops_the_outcome", "a terminal mapping answers its committed outcome",
        '        return admission, _outcome(doc["outcome"])', '        return admission, None',
        LOOKUP),
+    # --- D10 follow-up (0022): W5 request 3 -------------------------------------------
+    _m("fail_preparation_cause_not_sent", "the worker's permanent cause reaches the store",
+       '        return _outcome((await self._fenced("fail_preparation", lease,\n'
+       '                                            cause=str(cause)))["outcome"])',
+       '        return _outcome((await self._fenced("fail_preparation", lease,\n'
+       '                                            cause="preparation_failed"))["outcome"])',
+       FAILPREP),
+    _m("fail_preparation_unfenced_door", "a preparation end goes through its own door",
+       '        return _outcome((await self._fenced("fail_preparation", lease,',
+       '        return _outcome((await self._fenced("cancel", lease,', FAILPREP),
     # --- item 7: the operator adapters -------------------------------------------------
     _m("key_lookup_ignores_org", "a key is read only within its own organization",
        '_KEY + "id = %s and org_id = %s", (key_id, org_id))', '_KEY + "id = %s", (key_id,))',

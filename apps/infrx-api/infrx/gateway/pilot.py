@@ -36,6 +36,7 @@ from typing import Any
 from ..config import RuntimeMisconfigured, runtime_mode
 from ..contracts import errors
 from ..contracts.limits import env_name
+from ..contracts.v2.lifecycle import AdmissionExpectation, ReadinessStore
 from ..media import fetch
 from ..media.attachments import PgAttachments
 from ..media.prepare import ProcessingCache
@@ -218,21 +219,28 @@ def adapters_from_env(settings, **injected):
             # from it - an empty DSN is libpq's defaults, some other database.
             raise RuntimeMisconfigured(runtime_mode(settings), ("DATABASE_URL",))
         pool, connect = connection_pool(settings)
+        lifecycle = _pg_lifecycle(connect, settings)
         adapters = {"catalog": PgCatalogDirectory(connect),
                     "stream": PgStreamStore(connect, limits=settings.pilot),
                     # MPILOT gap 2: M's attach, durable where the worker reads it
                     "attachments": PgAttachments(connect),
                     # M5 (RV-02): upload tickets and content rows, on the same pool
-                    "lifecycle": _pg_lifecycle(connect, settings.pilot),
+                    "lifecycle": lifecycle,
+                    # W5 wiring 4: the same adapter is the admission's ReadinessStore -
+                    # only beside the job store it was built with (one database)
+                    **({} if "jobs" in adapters else {"readiness": lifecycle}),
                     "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
                     **adapters}
     return adapters
 
 
-def _pg_lifecycle(connect, limits):
-    """D10's `PgLifecycle`: the upload ticket authority and the content lifecycle (M5)."""
+def _pg_lifecycle(connect, settings):
+    """D10's `PgLifecycle`: the upload ticket authority and the content lifecycle (M5).
+    WR-P25-1: `upload_complete` and every source/payload `MediaUploads` registers take the
+    deployment's collection grace (P-25: `RETENTION_GRACE_S`), as the worker's do."""
     from ..state.lifecycle import PgLifecycle
-    return PgLifecycle(connect, limits=limits)
+    return PgLifecycle(connect, limits=settings.pilot,
+                       grace_s=settings.deployment.retention_grace_s)
 
 
 def valkey_index(pilot):
@@ -274,7 +282,7 @@ def build_info(rt) -> None:
 
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
                        pool=None, consent_for=None, attachments=None,
-                       lifecycle=None) -> IngressDeps:
+                       lifecycle=None, readiness=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -293,11 +301,13 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     fetch.silence_transport_logs()
     if getattr(rt, "metrics", None) is None:
         rt.metrics = Registry("gateway")
+    readiness, expectation = admission_readiness(rt, jobs, readiness)
     reconciler = Reconciler(store=jobs, index=index if index is not None else valkey_index(pilot),
                             now=_utc_now, worker_id=f"gateway-{uuid.uuid4().hex[:8]}")
     relay = Relay(jobs=jobs, stream=stream, media=None, regime=deployment.accounting_regime,
                   catalog=catalog, active_rate_card_version=pilot.active_rate_card_version,
-                  limits=pilot, clock=rt.clock, registry=rt.metrics)
+                  limits=pilot, clock=rt.clock, registry=rt.metrics, readiness=readiness,
+                  expectation=expectation)
     relay.media = rt.media_store = MediaUploads(
         objects, cache=ProcessingCache(pilot.processing_cache_dir,
                                        ttl_s=pilot.processing_cache_ttl_s),
@@ -312,6 +322,31 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                            relay=relay)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
                        catalog=catalog, large_bodies=rt.large_bodies)
+
+
+def admission_readiness(rt, jobs, readiness):
+    """W5 wiring 4: the relay's `(readiness, expectation)`. `readiness` is the
+    `ReadinessStore` every admission writes its execution-ready marker through (D10's
+    `PgLifecycle` on the job store's pool, from `adapters_from_env`); the expectation is this
+    deployment's regime and, for CREDIT, its approved card (`ACTIVE_RATE_CARD_VERSION`, R69).
+    Fail closed: a PostgreSQL job store without one refuses to start in every mode (its
+    worker prepares only marked jobs). ponytail: a composition over the contract fakes with
+    no readiness store keeps the pre-D10 `jobs.admit` door (fake-backed tests)."""
+    if readiness is None:
+        if isinstance(jobs, PgJobStore):
+            raise RuntimeMisconfigured(rt.mode, detail="a PostgreSQL job store needs its "
+                                                       "ReadinessStore (D10): readiness")
+        return None, None
+    if not isinstance(readiness, ReadinessStore):
+        raise RuntimeMisconfigured(rt.mode, detail="readiness is not a ReadinessStore (D10)")
+    regime = rt.settings.deployment.accounting_regime
+    card = rt.settings.pilot.active_rate_card_version
+    try:
+        expectation = AdmissionExpectation(
+            accounting_regime=regime, rate_card_version=card if regime == "credit" else None)
+    except ValueError:
+        raise RuntimeMisconfigured(rt.mode, ("ACTIVE_RATE_CARD_VERSION",)) from None
+    return readiness, expectation
 
 
 async def _refresh(probes, stop: asyncio.Event) -> None:

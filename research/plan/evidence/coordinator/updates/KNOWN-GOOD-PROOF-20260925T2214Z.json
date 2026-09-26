@@ -1,0 +1,28 @@
+{
+  "task": "KNOWN-GOOD-PROOF",
+  "slice": "I8 rollback targets proven on the candidate schema 0001-0023 (0022 codex/d10-followup c584f54a, 0023 codex/door-revoke 1d0a418d)",
+  "activity": "review",
+  "head": "aab4b41d",
+  "worktree": ".claude/worktrees/codex-known-good-proof",
+  "branch": "codex/known-good-proof",
+  "owned_paths": [
+    "infra/rollout/known-good.json",
+    "infra/runbooks/schema_proof.py",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py",
+    "infra/rollout/README.md",
+    "research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md"
+  ],
+  "commands": [
+    {"cmd": "SCHEMA_PROOF_DSN=<task-local stand-in> schema_proof.py bda15866e5700f3856d7142580da842fba9bbd23", "exit": 0, "summary": "PASS schema; 26/26 suites PASS: 387 passed, 10 SHAPE deselected, 5 xfailed; PASS through 0023"},
+    {"cmd": "SCHEMA_PROOF_DSN=<task-local stand-in> schema_proof.py 422631591845fbd66b590c73d5ff4150318d9d7a", "exit": 0, "summary": "PASS schema; 26/26 suites PASS: 387 passed, 10 SHAPE deselected, 5 xfailed; PASS through 0023"},
+    {"cmd": "known-good.py <bda1586|4226315> --applied 0018/0022/0023/0024", "exit": 0, "summary": "before: 0022/0023 NOT-KNOWN-GOOD (migrations); after: 0018/0022/0023 KNOWN-GOOD, 0024 NOT-KNOWN-GOOD"},
+    {"cmd": "INFRX_D_TASK=d10 pytest -q tests/i --deselect <6 i8-block cases>", "exit": 0, "summary": "224 passed, 6 deselected, 1 xfailed"},
+    {"cmd": "tests/i/mutants.py known_good_proof_ignores_through known_good_record_unproven schema_proof_trusts_moved_statements known_good_assumes_additive", "exit": 0, "summary": "4/4 killed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.1, "likely_h": 0.2, "pessimistic_h": 0.5, "confidence": "medium", "basis": "lane done; only the coordinator's read-only hosted history check after step 6 remains", "at": "2026-09-25T22:14Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md"]
+}

@@ -44,9 +44,11 @@ from infrx.media.attachments import PgAttachments
 from infrx.media.prepare import MediaPreparation, ProcessingCache
 from infrx.media.store import InMemoryObjectStore
 from infrx.state.jobstore import PgJobStore
+from infrx.state.lifecycle import PgLifecycle
 from infrx.worker import VllmEngine, WorkerLoop, WorkerService, prepared_request
 from infrx.worker import __main__ as worker_main
 from infrx.worker.fakes import m2_local_uri
+from infrx.worker.service import PgReconciliation
 from infrx.worker.preparation import (MEMO_ENTRIES, CountMemo, PreparationRunner,
                                       PreparationResult, VIDEO_TOKEN_ID, engine_prompt_tokens,
                                       memo_key)
@@ -123,8 +125,11 @@ class Prep:
         return self.attached.get(job_id)
 
     async def admit(self, *, video: bool = False, org_id: str = b.ORG_A, clip: bytes = CLIP,
-                    text: str | None = None, model_revision: str = b.MODEL):
-        """`text` replaces the builders' prompt; another `model_revision` is priced first."""
+                    text: str | None = None, model_revision: str = b.MODEL, ready: bool = True):
+        """`text` replaces the builders' prompt; another `model_revision` is priced first.
+        `ready` (W5, D1): the admission also records its source manifest - possibly empty -
+        where the worker reads it, as the atomic admission does; `ready=False` is an
+        acceptance whose manifest has not landed (the two-phase attach still to come)."""
         url = "data:video/mp4;base64," + base64.b64encode(clip).decode()
         org_id = v2fix.IDS.consumer_org if self.credit else org_id
         refs = ((await self.media.materialize(org_id, url)),) if video else ()
@@ -147,6 +152,8 @@ class Prep:
             await self.store.admit_credit(request, b.idem(request, request.request_id))
         else:
             await self.store.admit(request, b.idem(request, request.request_id), ())
+        if ready:
+            self.attached[request.request_id] = request.media
         return request
 
     async def prepare(self, **admitted):
@@ -228,7 +235,7 @@ def test_prep_worker__a_video_job_is_prepared_from_its_durable_attach(tmp_path):
     prep = Prep(tmp_path)
 
     async def case():
-        request = await prep.admit(video=True)
+        request = await prep.admit(video=True, ready=False)
 
         async def gateway_attaches():
             await asyncio.sleep(0.2)
@@ -256,17 +263,18 @@ def test_prep_worker__a_video_job_is_prepared_from_its_durable_attach(tmp_path):
 
 
 def test_prep_worker__a_job_whose_attach_never_lands_prepares_nothing(tmp_path):
-    """No durable attach within the bound: `not_found`, nothing prepared or counted, the
-    job still `preparing` (its lease left to lapse for `recover`)."""
+    """No durable attach within the bound: `not_claimable` (W5: F2C's `not_ready`; it was
+    `not_found`), nothing prepared or counted, the job still `preparing` (its lease left to
+    lapse for `recover`)."""
     prep = Prep(tmp_path, attach_wait_s=0.2)
 
     async def case():
-        request = await prep.admit(video=True)
+        request = await prep.admit(video=True, ready=False)
         return request, await within(prep.runner.run(request.request_id), 5.0), \
             await prep.state(request)
 
     request, result, state = run(case())
-    assert isinstance(result, PreparationResult) and result.refusal == "not_found", result
+    assert isinstance(result, PreparationResult) and result.refusal == "not_claimable", result
     assert state is JobState.preparing and prep.app.tokenized == []
 
 
@@ -463,16 +471,17 @@ TEXT_ANSWERS = {
     "bool-with-its-token": {"count": True, "tokens": [1]},
     "float-with-its-tokens": {"count": 3.0, "tokens": [1, 1, 1]},
 }
-# a 12.5 s clip (the builders' ref): 26 frames, 13 two-frame patches, at most 13 x 196
+# a 12.5 s clip (the builders' ref): 26 frames, 13 two-frame patches; 13 x 196 = 2548 when
+# every frame is sampled, 2756 at the processor's worst case (W5: 25 sampled, 13 groups of 212)
 VIDEO_ANSWERS = {"unexpanded": counted(40, 1), "below-one-per-patch": counted(40, 12),
-                 "past-the-budget": counted(3000, 2549), "no-tokens": {"count": 3000}}
+                 "past-the-budget": counted(3000, 2757), "no-tokens": {"count": 3000}}
 
 
 @pytest.mark.parametrize("name", sorted(TEXT_ANSWERS) + sorted(VIDEO_ANSWERS))
 def test_prep_worker__the_engines_answer_is_checked_and_never_guessed(name):
     """`/tokenize`'s answer is the count only when it is one: an integer and exactly that many
-    tokens, and for a video between one `video_token_id` per two-frame patch and the pinned
-    budget (196 per patch). Every other answer - the engine down, not JSON, no count, a bool,
+    tokens, and for a video between one `video_token_id` per two-frame patch and the most the
+    pinned processor gives any geometry at the budget (W5: `most_video_tokens`). Every other answer - the engine down, not JSON, no count, a bool,
     a negative, text, a disagreement, no tokens, one unexpanded placeholder, fewer than the
     patches, more than the budget - is `dependency_unavailable`, never a number."""
     box, root = ClockBox(), "/srv/infrx-cache"
@@ -487,9 +496,11 @@ def test_prep_worker__the_engines_answer_is_checked_and_never_guessed(name):
     assert got is errors.DependencyUnavailable, (name, got)
 
 
-@pytest.mark.parametrize("pads", [13, 1300, 2548], ids=["one-per-patch", "between", "budget"])
+@pytest.mark.parametrize("pads", [13, 1300, 2548, 2756],
+                         ids=["one-per-patch", "between", "fully-sampled", "budget"])
 def test_prep_worker__a_video_count_inside_the_pinned_budget_is_the_count(pads):
-    """The two bounds are inclusive: 13 patches of a 12.5 s clip, and 13 x 196."""
+    """The two bounds are inclusive: 13 patches of a 12.5 s clip, and the processor's worst
+    case at its budget (2756; 13 x 196 = 2548 when every frame is sampled, W5)."""
     box, root = ClockBox(), "/srv/infrx-cache"
     engine = VllmEngine(httpx.AsyncClient(transport=tokenizer(counted(3000, pads)),
                                           base_url="http://engine"),
@@ -808,6 +819,13 @@ def test_prep_worker__the_worker_composes_the_preparation_pool(tmp_path):
                                                           PgAttachments)
     assert runner.media.cache.root == str(tmp_path / "cache")
     assert worker.engine.local_uri == runner.media.local_uri
+    # W5: the marker-gated claim and manifest (D10); S3 F4's reconciliation reader only on
+    # D10's monitor login (W5-F5, E3C F-6: 0021 grants the views to infrx_monitor alone)
+    assert isinstance(runner.readiness, PgLifecycle), runner.readiness
+    assert worker.reconciliation is None, worker.reconciliation
+    monitored, _ = composed({**env, "MONITOR_DATABASE_URL":
+                             "postgresql://infrx_monitor@127.0.0.1:9/infrx"}, objects=objects)
+    assert isinstance(monitored.reconciliation, PgReconciliation), monitored.reconciliation
 
 
 def test_prep_worker__a_media_root_the_worker_cannot_write_refuses_startup(tmp_path):

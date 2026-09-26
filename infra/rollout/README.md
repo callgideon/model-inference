@@ -48,8 +48,29 @@ export INSTANCE=i-0e8449a4ffca29bab
 | R1 - step 8 refused (exit 2) | Nothing was installed. Fix and rerun 8, or abort: `infra/rollout/ssm.sh infra/rollout/steps/91-abort.sh RELEASE=$RELEASE` (previous checkout, previous gateway, edge reopened after `/health`) |
 | R2 - step 8 exit 4 or step 9/10 fails, **no pilot request was accepted** | `infra/rollout/ssm.sh infra/rollout/steps/90-revert.sh RELEASE=$RELEASE BACKUP=<backup dir from step 8> ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted` - previous checkout, the backed-up env/unit/Caddy files, the engine restarted onto its previous unit and healthy **before** the previous gateway (the monolith's `/health` asks the engine, and step 8 may have failed on the engine itself), then `drain.sh resume`: the backup was taken after step 5, so the Caddy file it restores is the maintenance site, and the edge reopens (the release's normal site in front of the restored gateway) only once that gateway is ready. Exit 4 from the step means the restored engine or gateway did not come up: the edge stays in maintenance - fix that (`journalctl -u marlin2b-vllm`, `-u marlin2b-gateway`), then `/root/infrx-deploy-$RELEASE/apps/infrx-api/deploy/drain.sh resume`. The statement is the operator's, not something the script can check: corroborate it first with a read-only count of hosted pilot job and ledger rows since step 8 (zero), and put both in the lock record ([infra/README.md §8](../README.md)) |
 | R3 - pilot has accepted work and must stop | `infra/rollout/ssm.sh infra/rollout/steps/95-maintenance.sh RELEASE=$RELEASE` - maintenance 503 until a compatible metered runtime exists (§8 rule 3); `rollback.sh` refuses to put the unmetered monolith back |
-| Rollback target after migrations 0019+ | Once hosted carries migrations 0019 or later, **no recorded target qualifies** (`known-good.py` refuses one without a `schema_proof` reaching the applied migration) until a `schema_proof` entry exists for it - that proof is the KNOWN-GOOD-PROOF lane's, not this runbook's. Meanwhile the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has no target (bda1586 and 4226315 are recorded without one) and R3 (maintenance) is the fallback. Steps 71/72/74/80/81/86 also answer `BLOCKED ... I8+ checkout` (exit 3) on such a checkout |
+| Rollback target after migrations 0019+ | Once hosted carries migrations 0019 or later, a recorded target qualifies only through a `schema_proof` reaching the applied migration (`known-good.py` refuses one without it). Both recorded targets, bda1586 and 4226315, carry a `schema_proof` through 0023 (KNOWN-GOOD-PROOF; see the paragraph below), so the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has a target up to 0023; beyond 0023 none qualifies until a new proof is recorded, and R3 (maintenance) is the fallback. Steps 71/72/74/80/81/86 also answer `BLOCKED ... I8+ checkout` (exit 3) on such a checkout |
 | R4 - the host itself | `aws ec2 create-replace-root-volume-task --instance-id $INSTANCE --snapshot-id $snap` then `aws ec2 describe-replace-root-volume-tasks --filters Name=instance-id,Values=$INSTANCE` until `succeeded` (the instance reboots; the instance-store NVMe - weights, media cache - survives a reboot), then step 3. RTO est. 10-20 min (§6), ⚠️ TO BE VERIFIED by I3B. Hosted migrations are additive and are **not** reverted (§8 rule 4) |
+
+**Rollback targets after the window applies 0019+ (KNOWN-GOOD-PROOF).** R2 and the O12 drill
+return to a release from `known-good.json`; with hosted ahead of that release's tree,
+`known-good.py` accepts it only through its record's `schema_proof`. `bda1586` and `4226315`
+carry `through: 0023` (0001-0021 as on main, 0022 from `codex/d10-followup` c584f54a, 0023 from
+`codex/door-revoke` 1d0a418d): each release's own `tests/d` (admission, preparation/claim and
+leases, settlement in both regimes, journal/stream, outbox relay, operations, signup, catalog,
+gateway composition over PostgreSQL) and a probe of its result read after a committed outcome
+passed on a database built from those files. `infra/runbooks/schema_proof.py <sha>` reruns it
+task-locally; with `SCHEMA_PROOF_DSN` it also checks, read-only, that a migrated database's
+history is exactly those files: run that against hosted after step 6, before relying on the
+proof. Each `schema_proof` also records the sha256 of 0019-0023 (`files`), and `known-good.py`
+refuses a checkout whose migrations beyond the target's tree are other bytes; the driver counts
+a suite that skipped a case or passed none as FAIL, and accepts a Supabase CLI history only when
+its statements, in order, are the whole file. Not proven: any migration after 0023, or a
+0022/0023 other than those bytes (rerun, then add the new `through` and `files`); the old release on the `infrx_runtime` login (0023 revokes
+`admit`/`claim_preparation` from it on purpose, so revert with the target's own env file, which
+R2 restores: the login the release ran on, which cannot be `infrx_runtime`, created by 0021); hosted rows written before the window (the proof uses
+fresh rows); the Supabase image (plain PostgreSQL plus the shim). Ten old cases that list the
+old catalog or read a result before its outcome are skipped by name, each with its reason
+(`SHAPE` in the driver). If no record reaches `--applied`, R3 maintenance is the only fallback.
 
 ## 3. What changes for clients (legacy-account transition)
 
@@ -102,3 +123,6 @@ that residual risk and its bound).
   `--help`/a non-file before any aws call; 45-s3-check pins uv.lock's pytest 9.1.1; the
   pre-I8 checkout guard (exit 3) on 71/72/74/80/81/86; rehearse.sh's worker `infrx_build_info`
   check reads the whole body. Not run on the box.
+- 2026-09-25 (KNOWN-GOOD-PROOF): `bda1586` and `4226315` proven on migrations 0001-0023 (the `schema_proof` entries in `known-good.json`; driver `infra/runbooks/schema_proof.py`; evidence `research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md`). Only the task-local database was used; hosted and the box were not touched.
+- 2026-09-25 (KNOWN-GOOD-PROOF fix round): `schema_proof.files` binds the proven 0019-0023 bytes (`known-good.py` refuses others); the driver fails a skipped or pass-less suite and a CLI history that omits, reorders or cuts statements; proof rerun on both targets (evidence `research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md`, section Fix round). Task-local only.
+- 2026-09-26 (WAVE4B-UNION): the "Rollback target after migrations 0019+" row now says both recorded targets carry a `schema_proof` through 0023, as the KNOWN-GOOD-PROOF paragraph in §2 does; doc only.

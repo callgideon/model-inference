@@ -726,6 +726,7 @@ FUNCTIONS = {
     "infrx.expire_journal(jsonb)": SERVICE,                       # 0017 (D4)
     "infrx.extend_model_limits()": SERVICE,
     "infrx.fail_dispatch(jsonb)": SERVICE,
+    "infrx.fail_preparation(jsonb)": SERVICE,                     # 0022 (D10 follow-up)
     "infrx.fence_lease(jsonb,text[],double precision)": NOBODY,
     "infrx.forbid_truncate()": NOBODY,
     "infrx.forbid_update_delete()": NOBODY,
@@ -743,8 +744,8 @@ FUNCTIONS = {
     "infrx.jobs_guard()": NOBODY,
     "infrx.jobs_no_delete_when_terminal()": NOBODY,
     "infrx.jobs_pins_guard()": SERVICE,
-    # 0021 (D10) revokes nothing on it: 0004:53's default privilege, like its sibling guards
-    "infrx.jobs_result_expiry_guard()": SERVICE,
+    # 0022 (D10 follow-up, L3-REBASE F2) revokes it from everyone, like its sibling guards
+    "infrx.jobs_result_expiry_guard()": NOBODY,
     "infrx.jobs_settlement_record_guard()": NOBODY,               # 0018 (D5)
     "infrx.journal_terminal_event()": NOBODY,                     # 0017 (D4)
     "infrx.journal_usage()": SERVICE,                             # 0017 (D4)
@@ -789,6 +790,7 @@ FUNCTIONS = {
     "infrx.retired_wallet_guard()": SERVICE,
     "infrx.revoke_key(uuid,text,text,text)": SERVICE,
     "infrx.scrub_content(infrx.content_objects,timestamp with time zone)": NOBODY,  # 0020
+    "infrx.set_feature_flag(text,boolean,text,text)": SERVICE,    # 0022 (V-G8TL-2)
     "infrx.set_suspension(uuid,boolean,text,text,text,text)": SERVICE,
     "infrx.settle_credit(uuid,numeric)": NOBODY,                  # 0018 (D5)
     "infrx.settle_legacy_usd(uuid,numeric)": NOBODY,              # 0018 (D5)
@@ -952,19 +954,20 @@ def write_rows() -> list[Check]:
 
 # D10's two dedicated logins (0021:458-560, R127), read off the migration text: NOLOGIN here
 # (the operator grants LOGIN out of band), NOINHERIT, no attribute that widens, a member of
-# nothing, and exactly the surface 0021 grants. The runtime still holds the two unmarked
-# doors `admit`/`claim_preparation` - R123's interim clause; D10's follow-up migration revokes
-# them, and that migration re-baselines RUNTIME_FUNCTIONS. Read as `postgres`, catalog-wide
-# over `infrx`/`public`, so a grant that appears anywhere fails the row.
-RUNTIME_FUNCTIONS = (                                             # 0021:490-515
-    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit(jsonb)", "infrx.admit_ready(jsonb)",
+# nothing, and exactly the surface 0021 grants, plus 0022's `fail_preparation`, minus the
+# two unmarked doors `admit`/`claim_preparation` 0023 revokes (R123; the W5 runtime admits
+# and claims through the ready doors). Read as `postgres`, catalog-wide over
+# `infrx`/`public`, so a grant that appears anywhere fails the row.
+RUNTIME_FUNCTIONS = (                                             # 0021:490-515, 0022, 0023
+    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)",
     "infrx.append(jsonb)", "infrx.cancel(jsonb)", "infrx.claim(jsonb)",
-    "infrx.claim_preparation(jsonb)", "infrx.claim_preparation_ready(jsonb)",
+    "infrx.claim_preparation_ready(jsonb)",
     "infrx.content_acknowledge_delete(jsonb)", "infrx.content_candidates(jsonb)",
     "infrx.content_claim(jsonb)", "infrx.content_references(jsonb)",
     "infrx.content_register(jsonb)", "infrx.content_tombstone(jsonb)",
     "infrx.dispatch_pending(jsonb)", "infrx.dispatch_snapshot()", "infrx.expire_journal(jsonb)",
-    "infrx.fail_dispatch(jsonb)", "infrx.gc_outbox(jsonb)", "infrx.heartbeat(jsonb)",
+    "infrx.fail_dispatch(jsonb)", "infrx.fail_preparation(jsonb)",  # 0022
+    "infrx.gc_outbox(jsonb)", "infrx.heartbeat(jsonb)",
     "infrx.idempotency_lookup(jsonb)", "infrx.job_admission(uuid)", "infrx.journal_usage()",
     "infrx.load_work(jsonb)", "infrx.load_work_credit(jsonb)", "infrx.now()",
     "infrx.prepare(jsonb)", "infrx.put_result(jsonb)", "infrx.read_journal(jsonb)",

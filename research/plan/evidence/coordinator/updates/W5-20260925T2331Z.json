@@ -1,0 +1,91 @@
+{
+ "task": "W5-F5",
+ "slice": "E3C F-5 + F-6",
+ "activity": "review",
+ "head": "3a6195b2",
+ "worktree": ".claude/worktrees/codex-w5-f5",
+ "branch": "codex/w5-f5",
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/routes/relay.py",
+  "apps/infrx-api/infrx/worker/__main__.py",
+  "apps/infrx-api/infrx/worker/service.py",
+  "apps/infrx-api/infrx/config.py",
+  "apps/infrx-api/tests/g/",
+  "apps/infrx-api/tests/w/",
+  "apps/infrx-api/tests/contracts/test_config_and_imports.py"
+ ],
+ "commands": [
+  {
+   "cmd": "pytest -q tests/g/test_relay_readiness.py -k f5 (base relay)",
+   "exit": 1,
+   "summary": "2 failed (400 unsupported_media for a succeeded job), 1 passed - fails-before"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/w/test_worker_main.py -k monitor|reconciliation|refused|down (base worker)",
+   "exit": 1,
+   "summary": "4 failed, 1 passed - fails-before"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/g",
+   "exit": 0,
+   "summary": "692 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/w (after prep composition update: test_prep_worker + mutants 55 passed 4 skipped)",
+   "exit": 0,
+   "summary": "317 passed, 10 skipped (MinIO box) on first run; the 5 failures were the F-6 composition assertion, updated"
+  },
+  {
+   "cmd": "python -m tests.g.mutants <94 relay.py mutants>",
+   "exit": 0,
+   "summary": "94/94 killed (incl. w5_f5_late_recheck_restored, w5_f5_legacy_recheck_dropped)"
+  },
+  {
+   "cmd": "python -m tests.w.worker_main_mutants",
+   "exit": 0,
+   "summary": "40/40 killed"
+  },
+  {
+   "cmd": "python -m tests.w.prep_worker_mutants",
+   "exit": 0,
+   "summary": "70/70 killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c PG mutants pg_monitor_login_sets_a_role, pg_privilege_refusal_every_tick",
+   "exit": 0,
+   "summary": "2/2 killed"
+  },
+  {
+   "cmd": "pytest -q tests/contracts/test_config_and_imports.py",
+   "exit": 0,
+   "summary": "274 passed"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py",
+   "exit": 0,
+   "summary": "PASS"
+  },
+  {
+   "cmd": "pytest -q tests/i/test_packaging.py",
+   "exit": 1,
+   "summary": "config schema test red until WR-W5F5-2 (verified green with it: 48 passed)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1.5,
+  "confidence": "medium",
+  "basis": "code done; WR-W5F5-2 manifest entry + D10 WR-W5F5-1 grant, then E3C s04 -k late on the merged SHA",
+  "at": "2026-09-25T23:31Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-W5F5-1 (D10 migration): grant select (state) on infrx.credit_wallet_holds to infrx_monitor + policy monitor_reads for select to infrx_monitor using (true)",
+  "WR-W5F5-2 (deploy/preflight.py MANIFEST): Key('MONITOR_DATABASE_URL', ..., 'pg_dsn', param='monitor_database_url', secret=True, required_in=()) - test_packaging red until applied",
+  "WR-W5F5-3 (optional, contracts fake): FakeLifecycle.admit_ready to refuse text outside input_modalities and a missing pinned revision like 0019"
+ ],
+ "evidence": [
+  "research/plan/evidence/w/W5-F5-3a6195b.md"
+ ]
+}
