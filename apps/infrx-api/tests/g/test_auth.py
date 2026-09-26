@@ -16,7 +16,6 @@ from infrx.auth import keys
 from infrx.auth.context import API_KEY_ROLE, AuthResolver
 from infrx.config import RuntimeMisconfigured
 from infrx.contracts import errors
-from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes import FACTORIES
 from infrx.contracts.records import Role
 

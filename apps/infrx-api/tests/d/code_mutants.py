@@ -16,7 +16,7 @@ import sys
 from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Runner
 
-J, O, T = "state/jobstore.py", "state/outbox.py", "state/pgtesting.py"
+J, OUTBOX, T = "state/jobstore.py", "state/outbox.py", "state/pgtesting.py"
 RUNNER = Runner(name="d2", targets=("tests/d/test_adapter_units.py",))
 
 
@@ -72,52 +72,52 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if prompt_tokens is not None and (isinstance(prompt_tokens, bool)",
        "        if prompt_tokens is not None and (False",
        "test_prepared__a_prompt_count_must_be_an_integer"),
-    _m("everything_read_is_acknowledged", "only what the index took is acknowledged", O,
+    _m("everything_read_is_acknowledged", "only what the index took is acknowledged", OUTBOX,
        "acknowledged = (await self.store.acknowledge_dispatch(taken, worker_id=self.worker_id)",
        "acknowledged = (await self.store.acknowledge_dispatch("
        "[e.event_id for e in events], worker_id=self.worker_id)",
        "test_relay__a_full_index_stops_and_hands_the_rest_back"),
-    _m("a_full_index_is_a_failure", "a full index defers, it is not a row failure", O,
+    _m("a_full_index_is_a_failure", "a full index defers, it is not a row failure", OUTBOX,
        "            except errors.CapacityExhausted:", "            except errors.RateLimited:",
        "test_relay__a_full_index_stops_and_hands_the_rest_back"),
-    _m("a_full_index_does_not_stop_the_pump", "OB-4: the pump stops at a full index", O,
+    _m("a_full_index_does_not_stop_the_pump", "OB-4: the pump stops at a full index", OUTBOX,
        "                deferred = [e.event_id for e in events[position:]]\n                break",
        "                deferred = [event.event_id]\n                continue",
        "test_relay__a_full_index_stops_and_hands_the_rest_back"),
-    _m("deferred_rows_are_not_released", "OB-4: deferred rows are handed back now", O,
+    _m("deferred_rows_are_not_released", "OB-4: deferred rows are handed back now", OUTBOX,
        "        if deferred:\n            await self.store.release_dispatch(deferred)\n", "",
        "test_relay__a_full_index_stops_and_hands_the_rest_back"),
-    _m("a_failing_row_is_acknowledged", "enqueue before acknowledge", O,
+    _m("a_failing_row_is_acknowledged", "enqueue before acknowledge", OUTBOX,
        "                continue\n            taken.append(event.event_id)",
        "            taken.append(event.event_id)",
        "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
-    _m("a_failing_row_is_not_recorded", "OB-7: the refused row is recorded", O,
+    _m("a_failing_row_is_not_recorded", "OB-7: the refused row is recorded", OUTBOX,
        "                await self.store.record_dispatch_error(event.event_id, "
        "repr(failed)[:500])\n", "",
        "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
-    _m("a_failing_row_aborts_the_batch", "OB-7: one bad row does not strand the batch", O,
+    _m("a_failing_row_aborts_the_batch", "OB-7: one bad row does not strand the batch", OUTBOX,
        "                failures.append(failed)\n", "                raise\n",
        "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
-    _m("a_failure_is_swallowed", "OB-7: the failure is raised after the batch", O,
+    _m("a_failure_is_swallowed", "OB-7: the failure is raised after the batch", OUTBOX,
        "        if failures:\n            raise failures[0]\n", "",
        "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
-    _m("an_empty_pump_acknowledges", "no acknowledgment without an indexed row", O,
+    _m("an_empty_pump_acknowledges", "no acknowledgment without an indexed row", OUTBOX,
        "                        if taken else 0)", "                        if True else 0)",
        "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
     _m("the_ack_carries_another_workers_claim", "OB-1b: the relay acknowledges as the claim "
-       "holder", O, "acknowledge_dispatch(taken, worker_id=self.worker_id)",
+       "holder", OUTBOX, "acknowledge_dispatch(taken, worker_id=self.worker_id)",
        'acknowledge_dispatch(taken, worker_id="any")',
        "test_relay__a_full_index_stops_and_hands_the_rest_back"),
     _m("relays_share_a_worker_id", "OB-1b residual: each relay acknowledges under its own "
-       "id", O,
+       "id", OUTBOX,
        '    worker_id: str = field(default_factory=lambda: f"relay-{uuid.uuid4().hex[:8]}")',
        '    worker_id: str = field(default_factory=lambda: "relay")',
        "test_relay__two_default_relays_carry_different_worker_ids"),
     _m("a_rebuild_does_not_reopen", "OB-1: a rebuild reopens the acknowledgments it may "
-       "have erased", O, "        await self.store.reopen_dispatch(since)\n", "",
+       "have erased", OUTBOX, "        await self.store.reopen_dispatch(since)\n", "",
        "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),
     _m("the_fence_is_read_after_the_snapshot", "OB-1: the fence's lower bound predates the "
-       "snapshot", O,
+       "snapshot", OUTBOX,
        "        since = await self.store.db_now()                 # BEFORE the snapshot (the fence)\n"
        "        indexed = await self.scheduler.rebuild(await self.store.dispatch_snapshot())\n",
        "        snapshot = await self.store.dispatch_snapshot()\n"

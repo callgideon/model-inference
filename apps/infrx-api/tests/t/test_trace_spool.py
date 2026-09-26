@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import binascii
 import errno
 import inspect
 import os
@@ -37,7 +36,7 @@ from infrx.contracts.conformance import builders as b
 from infrx.contracts.conformance.services import tracesink_cases
 from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds, failure_hooks
 from infrx.contracts.limits import DEFAULTS
-from infrx.contracts.records import (TraceEnvelope, TraceLossReason, TraceMode,
+from infrx.contracts.records import (TraceLossReason, TraceMode,
                                      TraceOfferResult)
 from infrx.traces.spool import (FRAME, HEADER, MAX_ENVELOPE_BYTES, SEGMENT_MAGIC,
                                 SEGMENT_VERSION, SpoolCapture, SpoolIO,

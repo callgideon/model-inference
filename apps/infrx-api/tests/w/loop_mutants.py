@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .mutants import Mutant, Outcome, run_mutant as _run_mutant
+from .mutants import Mutant, run_mutant as _run_mutant
 
 SUITE = ("tests/w/test_loop.py",)
 

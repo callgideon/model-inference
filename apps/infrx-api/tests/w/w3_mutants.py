@@ -29,8 +29,8 @@ from . import test_serving as serving
 S = "marlin2b/serve.sh"
 J = "marlin2b/serving-version.json"
 C = "marlin2b/measure/concurrency.sh"
-I = "marlin2b/measure/inventory.sh"
-PIN_FILES = ("common/env.sh", "marlin2b/model.env", S, J, C, I)
+INVENTORY_SH = "marlin2b/measure/inventory.sh"
+PIN_FILES = ("common/env.sh", "marlin2b/model.env", S, J, C, INVENTORY_SH)
 
 LAUNCH = "test_perf_pilot__the_engine_starts_pinned_on_loopback_with_the_recorded_flags"
 ONE_SOURCE = "test_perf_pilot__a_pinned_setting_has_one_source"
@@ -112,8 +112,8 @@ PIN_MUTANTS: tuple[Mutant, ...] = (
        C, 'verified=$("$PY" "$REPO/models/marlin2b/corpus/build.py" verify 2>&1) || {',
        'verified=$(true) || {', CORPUS),
     _m("inventory_without_its_container", "no container is a failed precondition, exit 2",
-       I, '  *) echo "precondition=failed: no container $CONTAINER to inventory (see '
-          'container_image)"; exit 2 ;;', "  *) ;;", INVENTORY),
+       INVENTORY_SH, '  *) echo "precondition=failed: no container $CONTAINER to inventory (see '
+                     'container_image)"; exit 2 ;;', "  *) ;;", INVENTORY),
     _m("record_flag_drift", "the record's flags are the flags served",
        J, '    "bfloat16",', '    "float16",', LAUNCH),
     _m("record_digest_stale", "engine_options_digest is recomputed from the flags",

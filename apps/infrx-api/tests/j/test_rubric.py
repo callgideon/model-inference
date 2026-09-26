@@ -154,10 +154,12 @@ def test_a_result_that_is_not_an_object_is_rejected(payload):
 def test_a_missing_or_extra_field_is_rejected_by_name():
     """Closed key set, like every record in this repo (`extra="forbid"`). An extra key is
     a prompt or schema change nobody reviewed."""
-    short = fakes.result(); short.pop("refusal")
+    short = fakes.result()
+    short.pop("refusal")
     assert reject(check(short)).reason == "missing_field"
     assert "refusal" in reject(check(short)).detail
-    wide = fakes.result(); wide["confidence"] = {"score": 5, "rationale": "sure"}
+    wide = fakes.result()
+    wide["confidence"] = {"score": 5, "rationale": "sure"}
     rejected = reject(check(wide))
     assert rejected.reason == "unexpected_field"
     # R2-B3: the *count and type*, never the key itself - an unexpected key is the
@@ -172,7 +174,8 @@ def test_a_missing_or_extra_field_is_rejected_by_name():
 def test_a_criterion_needs_exactly_a_score_and_a_rationale():
     for broken in ({"score": 4}, {"rationale": "x"}, {"score": 4, "rationale": "x", "extra": 1},
                    4, None, [4, "x"]):
-        payload = fakes.result(); payload["relevance"] = broken
+        payload = fakes.result()
+        payload["relevance"] = broken
         assert reject(check(payload)).reason == "malformed_criterion", broken
 
 
@@ -181,7 +184,8 @@ def test_a_criterion_needs_exactly_a_score_and_a_rationale():
 def test_a_score_outside_the_allowed_range_is_rejected(score):
     """The range is the rubric's, and it is checked before projection (02). A 0 or a 6
     would be stored and then averaged into a quality tile."""
-    payload = fakes.result(); payload["relevance"] = {"score": score, "rationale": "x"}
+    payload = fakes.result()
+    payload["relevance"] = {"score": score, "rationale": "x"}
     rejected = reject(check(payload))
     assert rejected.reason == "score_out_of_range" and "relevance" in rejected.detail
 
@@ -190,7 +194,8 @@ def test_a_score_outside_the_allowed_range_is_rejected(score):
 def test_a_score_that_is_not_an_integer_is_rejected(score):
     """`True` is not 1 and `4.0` is not 4: a float would round into the projection and a
     boolean would compare as one."""
-    payload = fakes.result(); payload["relevance"] = {"score": score, "rationale": "x"}
+    payload = fakes.result()
+    payload["relevance"] = {"score": score, "rationale": "x"}
     assert reject(check(payload)).reason == "score_not_an_integer"
 
 
@@ -204,7 +209,8 @@ def test_a_rationale_is_required_and_bounded():
     """Required, because a score with no reason cannot be audited; bounded, because a
     rationale is a sentence and not an upload channel."""
     for empty in ("", "   ", None, 5):
-        payload = fakes.result(); payload["relevance"] = {"score": 4, "rationale": empty}
+        payload = fakes.result()
+        payload["relevance"] = {"score": 4, "rationale": empty}
         assert reject(check(payload)).reason == "rationale_missing", empty
     payload = fakes.result()
     payload["relevance"] = {"score": 4, "rationale": "x" * RUBRIC.max_rationale_chars}
@@ -282,15 +288,19 @@ def test_a_hostile_payload_is_rejected_rather_than_raised():
     that made it: an integer whose `repr` exceeds Python's int/str conversion limit, a
     non-string key (the key-set arithmetic raised `TypeError`), and a key so large that
     echoing it into the detail would copy megabytes into a log row."""
-    huge = fakes.result(); huge["relevance"] = {"score": 10 ** 5000, "rationale": "x"}
+    huge = fakes.result()
+    huge["relevance"] = {"score": 10 ** 5000, "rationale": "x"}
     assert reject(check(huge)).reason == "score_out_of_range"
 
     # A non-string key **beside** a string one, because that is the shape that made the
     # key-set arithmetic raise: `sorted({7, "confidence"})` cannot order the two.
-    keyed = fakes.result(); keyed[7] = "not a name"; keyed["confidence"] = 1
+    keyed = fakes.result()
+    keyed[7] = "not a name"
+    keyed["confidence"] = 1
     assert reject(check(keyed)).reason == "non_string_key"
 
-    enormous = fakes.result(); enormous["k" * 5_000_000] = 1
+    enormous = fakes.result()
+    enormous["k" * 5_000_000] = 1
     rejected = reject(check(enormous))
     assert rejected.reason == "unexpected_field"
     assert len(rejected.detail) <= MAX_DETAIL_CHARS, "a rejection detail is a log field"
@@ -335,7 +345,8 @@ def test_describe_reports_what_a_value_is_never_what_it_says():
 
     # The last resort: even the *type name* can raise, so the fallback is a constant.
     assert describe(Nameless()) == "<undescribable>"
-    payload = fakes.result(); payload["relevance"] = {"score": 4, "rationale": Nameless()}
+    payload = fakes.result()
+    payload["relevance"] = {"score": 4, "rationale": Nameless()}
     assert reject(check(payload)).reason == "rationale_missing"
 
 
@@ -348,20 +359,26 @@ def _fuzz_payloads(marker: str):
         shapes.append({**fakes.result(), text: 1})                       # unexpected_field
         shapes.append({**fakes.result(), text: 1, "also" + text: 2})
         shapes.append({**fakes.result(), NOTES: text * 40})              # notes_out_of_bounds
-        bad = fakes.result(); bad["relevance"] = {"score": 4, "rationale": text * 40}
+        bad = fakes.result()
+        bad["relevance"] = {"score": 4, "rationale": text * 40}
         shapes.append(bad)                                               # rationale bounds
-        bad = fakes.result(); bad["relevance"] = {"score": 4, "rationale": text + "\ud800"}
+        bad = fakes.result()
+        bad["relevance"] = {"score": 4, "rationale": text + "\ud800"}
         shapes.append(bad)                                               # unstorable_text
-        bad = fakes.result(); bad["relevance"] = {"score": 4, "rationale": ""}
+        bad = fakes.result()
+        bad["relevance"] = {"score": 4, "rationale": ""}
         bad[text] = text
         shapes.append(bad)
-        bad = fakes.result(); bad["relevance"] = {text: 4, "rationale": text}
+        bad = fakes.result()
+        bad["relevance"] = {text: 4, "rationale": text}
         shapes.append(bad)                                               # malformed_criterion
     for score in (0, 6, -(10 ** 40), 10 ** 400, int(marker.replace("-", "").encode().hex(), 16)):
-        bad = fakes.result(); bad["relevance"] = {"score": score, "rationale": marker}
+        bad = fakes.result()
+        bad["relevance"] = {"score": score, "rationale": marker}
         shapes.append(bad)                                               # score_out_of_range
     for key in (7, 1.5, True, None):
-        bad = fakes.result(); bad[key] = marker
+        bad = fakes.result()
+        bad[key] = marker
         shapes.append(bad)                                               # non_string_key
     for _ in range(400):                                                 # random recombinations
         base = dict(rng.choice(shapes))
@@ -483,7 +500,8 @@ def test_a_hostile_subclass_cannot_make_the_validator_raise():
     assert reject(check(Exploding())).reason == "not_an_object"
     # R3-B2: the **criterion entry** is exact-typed too. A `dict` subclass whose `keys` or
     # `__iter__` raises reached `set(entry)` and blew up inside the loop.
-    payload = fakes.result(); payload["relevance"] = Exploding(score=4, rationale="x")
+    payload = fakes.result()
+    payload["relevance"] = Exploding(score=4, rationale="x")
     assert reject(check(payload)).reason == "malformed_criterion"
     # R3-B2: and so is a **key**. A `str` subclass got past the key scan and then into the
     # key-set arithmetic and the detail.
@@ -494,14 +512,18 @@ def test_a_hostile_subclass_cannot_make_the_validator_raise():
         def __eq__(self, other):
             raise RuntimeError("boom")
 
-    payload = fakes.result(); payload[Sly("confidence")] = {"score": 4, "rationale": "x"}
+    payload = fakes.result()
+    payload[Sly("confidence")] = {"score": 4, "rationale": "x"}
     assert reject(check(payload)).reason == "non_string_key"
 
-    payload = fakes.result(); payload["relevance"] = {"score": 4, "rationale": Weird("x")}
+    payload = fakes.result()
+    payload["relevance"] = {"score": 4, "rationale": Weird("x")}
     assert reject(check(payload)).reason == "rationale_missing"
-    payload = fakes.result(); payload["relevance"] = {"score": Sneaky(4), "rationale": "x"}
+    payload = fakes.result()
+    payload["relevance"] = {"score": Sneaky(4), "rationale": "x"}
     assert reject(check(payload)).reason == "score_not_an_integer"
-    payload = fakes.result(); payload[NOTES] = Weird("x")
+    payload = fakes.result()
+    payload[NOTES] = Weird("x")
     assert reject(check(payload)).reason == "notes_out_of_bounds"
 
 

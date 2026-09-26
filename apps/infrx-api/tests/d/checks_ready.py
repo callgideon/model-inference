@@ -21,7 +21,6 @@ from psycopg.types.json import Jsonb
 
 from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
-from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import ExecutionMode, MediaKind, MediaRef
 from infrx.contracts.v2.lifecycle import refusal_of
 from infrx.state.jobstore import PgJobStore

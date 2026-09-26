@@ -315,8 +315,8 @@ def test_race__cancel_and_complete_have_one_terminal_outcome() -> None:
         rig.advance(GEN)
         half = CALLERS // 2
         answers = together([(rig.service(), cancel(lease.job_id)) for _ in range(half)] +
-                           [(rig.service(), lambda c, l=lease: rpc(c, "heartbeat",
-                                                                   lease_args(l)))
+                           [(rig.service(), lambda c, held=lease: rpc(c, "heartbeat",
+                                                                      lease_args(held)))
                             for _ in range(half)])
         causes = {a["cause"] for code, a in answers[:half] if code is None}
         assert len(causes) == 1 and all(code is None for code, _ in answers[:half]), answers

@@ -740,8 +740,10 @@ def test_the_engine_adapter_refuses_the_record_m1_alone_produced(tmp_path):
                                                                                   "prepared")})
                     for ref in refs)
     # a resolver that answers a well-formed local path, so the only guard left is W1's
-    shaped = (lambda ref: f"file://{tmp_path}/{ref.org_id}/{ref.profile_version}/"
-              f"{ref.digest[len('sha256:'):][:16]}/source.mp4")
+    def shaped(ref):
+        return (f"file://{tmp_path}/{ref.org_id}/{ref.profile_version}/"
+                f"{ref.digest[len('sha256:'):][:16]}/source.mp4")
+
     with pytest.raises(errors.UnsupportedMedia):
         engine(str(tmp_path), shaped).upstream_body(
             worker_engine.prepared_request(work_for(prepared_request, undated), 2_061))

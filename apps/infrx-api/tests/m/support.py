@@ -8,8 +8,16 @@ and a lying `Content-Length` is a header that disagrees with the stream beside i
 """
 from __future__ import annotations
 
+import os
+import pathlib
+import struct
+from types import SimpleNamespace
+
 import httpx
 from infrx.contracts import errors
+from infrx.config import Settings
+from infrx.media.fetch import digest_of
+from infrx.media.video import Media
 
 # Addresses, not names, so a case says what it means. 93.184.216.34 is example.com's
 # documentation address; the rest are the ranges MEDIA-SEC names.
@@ -174,7 +182,6 @@ class Records:
 # say exactly which bytes are under test - and the adversarial cases (a box shorter than
 # its header, an EBML length nobody can bound, a duration of `inf`) are ones no encoder
 # would ever emit.
-import struct
 
 
 def box(kind: bytes, *payload: bytes) -> bytes:
@@ -261,13 +268,6 @@ def webm_tracks(codec: bytes = b"V_VP9", width: int = 640, height: int = 480,
 
 
 # --- M4: a second object store and the parity facts ----------------------------
-import os
-import pathlib
-from types import SimpleNamespace
-
-from infrx.config import Settings
-from infrx.media.fetch import digest_of
-from infrx.media.video import Media
 
 
 class FileObjectStore:

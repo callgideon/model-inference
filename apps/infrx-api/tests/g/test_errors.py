@@ -5,7 +5,6 @@ The leak check is deliberately blunt: the whole response - body and headers - is
 searched for the things that must never be in it, for every failure the matrix can
 produce. A message that "looks safe" is not the test; the absence of the secret is.
 """
-import asyncio
 import json
 
 import pytest

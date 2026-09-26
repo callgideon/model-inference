@@ -49,7 +49,6 @@ import sys
 import tempfile
 import time
 import tracemalloc
-from types import SimpleNamespace
 
 import httpx
 from infrx.contracts.limits import DEFAULTS

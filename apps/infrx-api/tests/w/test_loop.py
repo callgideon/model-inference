@@ -557,7 +557,6 @@ def test_dur_fence__the_heartbeat_renews_inside_the_lease_and_is_what_a_silent_s
         # the same renewal, now discovering a cancellation with no output in flight
         silent = World()
         request2, admission = await queued(silent)
-        holder = {}
 
         async def cancel_at_the_heartbeat(work):
             return 1200
@@ -1497,11 +1496,16 @@ class _CancelThenKeepTalking(ScriptEngine):
         batch_s = self.world.limits.stream_batch_ms / 1000
         try:
             for event in (PROGRESS, delta("one "), delta("two ")):
-                self.clock.advance(batch_s); self.yielded += 1; yield event
+                self.clock.advance(batch_s)
+                self.yielded += 1
+                yield event
             await self.world.jobs.cancel(b.ORG_A, self.admission.job_handle)
             for n in range(20):
-                self.clock.advance(batch_s); self.yielded += 1; yield delta(f"late{n} ")
-            self.yielded += 1; yield usage_event(Usage.of(1200, 22))
+                self.clock.advance(batch_s)
+                self.yielded += 1
+                yield delta(f"late{n} ")
+            self.yielded += 1
+            yield usage_event(Usage.of(1200, 22))
         finally:
             self.closed += 1
 

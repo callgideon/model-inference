@@ -541,7 +541,7 @@ def test_api_modes__status_outlives_the_result_and_the_journal():
     world = JobsWorld()
     assert post(world).status == 202
     rs.run(world.work())
-    job = world.only_job()
+    world.only_job()
     world.clock.advance(world.limits.result_ttl_s)
     after_result = status(world)
     assert after_result.status == 200

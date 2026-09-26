@@ -79,12 +79,15 @@ def population(*, uniform: int = 40, failures: int = 20, feedback_bearing: int =
     out: list[TraceCandidate] = []
     n = 1
     for _ in range(uniform):
-        out.append(candidate(n, org_id=org_id)); n += 1
+        out.append(candidate(n, org_id=org_id))
+        n += 1
     for _ in range(failures):
-        out.append(truncated(n, org_id=org_id)); n += 1
+        out.append(truncated(n, org_id=org_id))
+        n += 1
     for _ in range(feedback_bearing):
         out.append(candidate(n, org_id=org_id,
-                             entries=(feedback(uuid(n), org_id=org_id),))); n += 1
+                             entries=(feedback(uuid(n), org_id=org_id),)))
+        n += 1
     return tuple(out)
 
 

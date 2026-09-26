@@ -53,7 +53,7 @@ async def source(client, shape: str) -> str:
 
 
 @pytest.mark.parametrize("shape", SHAPES)
-def test_w5_pg__the_worker_process_runs_a_video_admit_ready_admitted(box, shape):
+def test_w5_pg__the_worker_process_runs_a_video_admit_ready_admitted(box, shape):  # noqa: F811 (box: the fixture imported above)
     """The round trip across two processes: `POST /v1/jobs` with a video through the
     composed gateway (`admit_ready`: the marker and a one-source manifest), prepared and run
     by `python -m infrx.worker` behind the marker, settled. Oracle: without the marker the
@@ -91,7 +91,7 @@ def test_w5_pg__the_worker_process_runs_a_video_admit_ready_admitted(box, shape)
 
 
 @pytest.mark.parametrize("shape", SHAPES)
-def test_w5_pg__a_claim_the_moment_the_marker_commits_prepares_the_manifest(box, shape):
+def test_w5_pg__a_claim_the_moment_the_marker_commits_prepares_the_manifest(box, shape):  # noqa: F811 (box: the fixture imported above)
     """0-W5AW-1 / 2-W5W-A1: the marker opens W5's barrier as `admit_ready` commits, before
     the relay's attach. The worker's own preparation (the `PreparationRunner`
     `infrx.worker.__main__.compose` builds: `PgLifecycle`'s marker-gated claim, M's

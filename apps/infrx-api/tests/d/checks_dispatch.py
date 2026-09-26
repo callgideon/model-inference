@@ -10,7 +10,6 @@ from datetime import timedelta
 import psycopg
 from psycopg.types.json import Jsonb
 
-from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import Lease

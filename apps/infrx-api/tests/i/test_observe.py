@@ -398,7 +398,7 @@ def _canary(tmp_path, **env):
     (stub / "curl.log").unlink(missing_ok=True)
     out = tmp_path / "canary.prom"
     done = run_step((OBSERVE / "canary.sh").read_text(), stub, env={"OUT": str(out), **env})
-    log = [json.loads(l) for l in (stub / "curl.log").read_text().splitlines()] \
+    log = [json.loads(line) for line in (stub / "curl.log").read_text().splitlines()] \
         if (stub / "curl.log").exists() else []
     return done, evaluator.parse(out.read_text()), log
 
@@ -416,7 +416,7 @@ def test_ops_continuous__the_canary_sends_one_text_and_one_video_request_with_a_
         assert f"Authorization: Bearer {key}" in call["header"] and call["mode"] == "0o600"
         assert "--max-time" in call["argv"] and "Idempotency-Key" not in call["header"]
     assert '"max_tokens":8' in log[0]["body_head"] and "data:video/mp4;base64," in log[1]["body_head"]
-    up = {dict(l).get("kind"): v for (n, l), v in samples.items() if n == "infrx_canary_up"}
+    up = {dict(labels).get("kind"): v for (n, labels), v in samples.items() if n == "infrx_canary_up"}
     assert up == {"text": 1, "video": 1}
 
     done, samples, _ = _canary(tmp_path, INFRX_CANARY_KEY=key, CANARY_VIDEO=str(clip),

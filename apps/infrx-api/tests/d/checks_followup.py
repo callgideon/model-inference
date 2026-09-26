@@ -21,7 +21,7 @@ from . import checks_content as ck
 from . import checks_credit as cc
 from . import checks_ready as cr
 from . import checks_settle as cs
-from .checks_dispatch import advance, claim, kinds, outcome, prepare
+from .checks_dispatch import advance, claim, outcome, prepare
 from .checks_leases import LIMITS, d3, dump, running, waiting_on_a_lock
 
 FLAG = "legacy_usd_admission"

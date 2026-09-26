@@ -18,7 +18,7 @@ import asyncio
 
 import pytest
 
-from infrx.contracts import errors, wire
+from infrx.contracts import wire
 from infrx.contracts.records import (ChunkEventType, HoldState, JobState, OutboxKind,
                                      SettlementState, TerminalCause)
 
