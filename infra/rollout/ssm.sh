@@ -5,7 +5,10 @@
 # (a release SHA, a backup path): secrets are read on the box from SSM by preflight.py.
 #
 #   infra/rollout/ssm.sh infra/rollout/steps/10-inventory.sh
-#   infra/rollout/ssm.sh infra/rollout/steps/50-install.sh RELEASE=<sha>
+#   TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh "${INSTALL_ARGS[@]}" \
+#       MIGRATION_DIGEST=<the digest W7 applied, or nothing-pending>
+#   (INSTALL_ARGS as infra/runbooks/rollout.md section 1: RELEASE, ENGINE_MAX_NUM_SEQS, ...;
+#   50-install.sh refuses without RELEASE, MIGRATION_DIGEST or ENGINE_MAX_NUM_SEQS)
 #
 # Prints the step's stdout and stderr (SSM keeps the first 24,000 characters of each) and
 # exits 0 only if the invocation's status is Success.

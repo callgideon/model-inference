@@ -104,11 +104,15 @@ def test_ops_alert_sns__publishes_one_subject_and_message_with_the_instance_role
 
 def test_ops_alert_sns__a_failed_publish_is_kept_and_retried(monkeypatch, tmp_path, capsys):
     """F2/F3: any exception (not only botocore's) and an answer without an explicit 2xx
-    are failed sends: exit 4, kept, and the exception's text is never printed."""
+    (ASN-V1: nor a numeric status) are failed sends: exit 4, kept, and the exception's text
+    is never printed."""
     secret = support.MARKER + "-in-exception"
     failures = [dict(fail=ClientError("AuthorizationError")), dict(fail=BotoCoreError("creds")),
                 dict(fail=RuntimeError(secret)), dict(answer=lambda: {"MessageId": "m"}),
-                dict(answer=lambda: None)]
+                dict(answer=lambda: None),
+                # ASN-V1: a status present but not a number was a TypeError in main()
+                dict(answer=lambda: {"ResponseMetadata": {"HTTPStatusCode": None}}),
+                dict(answer=lambda: {"ResponseMetadata": {"HTTPStatusCode": "OK"}})]
     for failure in failures:
         _fake_boto3(monkeypatch, **failure)
         code, _ = _run(monkeypatch, tmp_path)

@@ -32,7 +32,7 @@ import pytest
 from infrx.observe import alerts as evaluator
 
 from . import support
-from .pooler import PG_DIRECT, TXN
+from .pooler import BOUNCER, PG_DIRECT, PORTS, TXN
 from .test_ops_steps import run_step, stubs
 
 API = support.API_DIR
@@ -296,7 +296,8 @@ def test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the
     assert {"ReconciliationDrift", "UnknownUsageOverdue", "ReadyBacklogOld"} <= fired
     # the monitor's DSN never leaves the process, and a dead database is a 0, not silence
     assert "infrx-i8-local" not in done.stdout + done.stderr
-    bad = {**os.environ, "MONITOR_DATABASE_URL": i8_stack.dsn(TXN).replace("55496", "55479")}
+    bad = {**os.environ,
+           "MONITOR_DATABASE_URL": i8_stack.dsn(TXN).replace(str(PORTS[BOUNCER]), "55479")}
     done = subprocess.run([sys.executable, str(OBSERVE / "durable.py"), "--out", str(out)],
                           capture_output=True, text=True, env=bad)
     assert done.returncode == 1 and "infrx-i8-local" not in done.stderr
