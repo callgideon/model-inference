@@ -90,16 +90,22 @@ def test_cells_the_journey_does_not_exercise_are_never_pass():
     assert {c["id"]: c["verdict"] for c in red}["DUR-FENCE"] == runner.FAIL
 
 
-# The E3C-FINAL evidence's verdict line and scenario rows, in both of its row styles.
-EVIDENCE = """- **Verdict: BACKEND-LOCAL PASS.** Gate PASS.
-3. **Final run 2 (`27a69619`): the evidence run. Gate PASS.** Verdict `/x/final/verdict.json`
+# The reference evidence's verdict line and scenario rows, in both of its row styles, at the
+# run head the runner is bound to (E3C-CELLS: s14-s16 carry DUR-FENCE, DUR-CAP, CREDIT-RATE).
+HEAD = runner.E3C_FINAL["run_head"]
+EVIDENCE = f"""- **Verdict: BACKEND-LOCAL PASS.** Gate PASS.
+3. **Final run (`{HEAD}`): the evidence run. Gate PASS.** Verdict `/x/final/verdict.json`
 | Scenario | Status | Cases |
 |---|---|---|
 | s05 crash at each step | PASS | 9/9 |
 | s08 dependency outages | PASS | 3/3 |
 | s09 CREDIT transition, lock bound | PASS | 4/4 |
 | **s13** discovery vs admission | **PASS** | 2/2 |
+| s14 stale generation race | PASS | 2/2 |
+| s15 admissions at the caps | PASS | 2/2 |
+| **s16** rates published mid-queue | **PASS** | 2/2 |
 """
+CARRIED = {"DUR-FENCE": "s14", "DUR-CAP": "s15", "CREDIT-RATE": "s16"}
 
 
 def test_delegated_cells_pass_only_on_the_e3c_final_reference():
@@ -108,14 +114,14 @@ def test_delegated_cells_pass_only_on_the_e3c_final_reference():
     PASS), or a red journey check under it hidden by the reference."""
     green = runner.classify(all_passed())
     table = {c["id"]: c for c in runner.cells(green, EVIDENCE)}
-    want = "PASS[delegated to E3C-FINAL 27a69619 s05,s08]"
+    want = f"PASS[delegated to E3C-FINAL {HEAD} s05,s08]"
     assert table["DUR-OUTBOX"]["verdict"] == want, table["DUR-OUTBOX"]
     assert table["DUR-OUTBOX"]["reasons"][0].startswith(want) and \
         runner.E3C_FINAL["evidence"] in table["DUR-OUTBOX"]["reasons"][0]
     for evidence, why in ((None, "not on this tree"),
                           (EVIDENCE.replace("BACKEND-LOCAL PASS", "BACKEND-LOCAL FAIL"),
                            "does not record"),
-                          (EVIDENCE.replace("27a69619", "0000000"), "does not record"),
+                          (EVIDENCE.replace(HEAD, "0000000"), "does not record"),
                           (EVIDENCE.replace("| s08 dependency outages | PASS |",
                                             "| s08 dependency outages | FAIL |"), "s08: FAIL"),
                           (EVIDENCE.replace("| s05 crash at each step | PASS | 9/9 |", ""),
@@ -129,23 +135,50 @@ def test_delegated_cells_pass_only_on_the_e3c_final_reference():
     assert {c["id"]: c["verdict"] for c in red}["DUR-OUTBOX"] == runner.FAIL
 
 
-def test_an_oracle_no_e3c_scenario_carries_is_not_run_even_with_the_reference():
-    """Oracle (0-E3A-RUN-RV-1, 1-S-1, 1-S-2): DUR-FENCE bound to s05 (a SIGKILL, no stale/new
-    generation race), DUR-CAP to s09 (grants, no cross-key admission race) or CREDIT-RATE to
-    s09/s13 (no published rate change, no unknown/private/unpriced refusal) reads PASS[delegated]
-    and turns the gate APP-LOCAL PASS on a green journey and the accepted E3C-FINAL document."""
-    uncarried = {"DUR-CAP", "DUR-FENCE", "CREDIT-RATE"}
+def test_the_cells_e3c_now_carries_pass_only_on_their_own_scenario_rows():
+    """Oracle (E3C-CELLS): DUR-FENCE, DUR-CAP or CREDIT-RATE bound to a scenario that does not
+    carry its oracle (the E3A-RUN gap: s05 / s09 / s13), reading PASS without its own row PASS
+    in the reference, or hiding a red journey check; and, the other way, the three staying NOT
+    RUN on a reference that records them PASS, which keeps APP-LOCAL open for ever."""
+    assert {tid: scenarios for tid, (scenarios, _) in runner.DELEGATED.items()} == {
+        "DUR-CAP": ("s15",), "DUR-FENCE": ("s14",), "DUR-OUTBOX": ("s05", "s08"),
+        "CREDIT-RATE": ("s16",)}
+    green = runner.classify(all_passed())
+    table = {c["id"]: c for c in runner.cells(green, EVIDENCE)}
+    for test_id, sid in CARRIED.items():
+        want = f"PASS[delegated to E3C-FINAL {HEAD} {sid}]"
+        assert (table[test_id]["verdict"], table[test_id]["journey"]) == (want, runner.PASS)
+        assert table[test_id]["reasons"][0].startswith(want), table[test_id]
+        rows = EVIDENCE.splitlines()
+        for evidence, why in (("\n".join(line.replace("PASS", "FAIL") if sid in line else line
+                                          for line in rows), f"{sid}: FAIL"),
+                              ("\n".join(line for line in rows if sid not in line),
+                               f"{sid}: no row")):
+            cell = {c["id"]: c for c in runner.cells(green, evidence)}[test_id]
+            assert cell["verdict"] == runner.NOT_RUN and why in cell["reasons"][0], (why, cell)
+    gate = runner.base(runner.worst(c["verdict"] for c in table.values()))
+    assert (gate, runner.EXIT[gate]) == (runner.PASS, 0), \
+        "a green journey on the accepted reference must be able to pass APP-LOCAL"
+    tests = [(f"{n}: x", "passed", "", "") for n in runner.CHECKS if n != "rate-rejection"]
+    red = runner.cells(runner.classify(report(*tests, ("rate-rejection: x", "failed", "", "x"))),
+                       EVIDENCE)
+    assert {c["id"]: c["verdict"] for c in red}["DUR-FENCE"] == runner.FAIL
+
+
+def test_an_oracle_no_e3c_scenario_carries_is_not_run_even_with_the_reference(monkeypatch):
+    """Oracle (0-E3A-RUN-RV-1, 1-S-1, 1-S-2): a cell no E3C scenario carries (`()`) read as
+    PASS[delegated] on a green journey and the accepted reference, turning the gate APP-LOCAL
+    PASS. Every cell is carried since E3C-CELLS, so the rule is held on a stand-in entry."""
+    monkeypatch.setitem(runner.DELEGATED, "DUR-CAP",
+                        ((), "stand-in: NOT carried: no scenario races admissions"))
     table = {c["id"]: c for c in runner.cells(runner.classify(all_passed()), EVIDENCE)}
-    for test_id in uncarried:
-        cell = table[test_id]
-        assert (cell["verdict"], cell["journey"]) == (runner.NOT_RUN, runner.PASS), cell
-        assert cell["reasons"][0].startswith("NOT RUN[delegated] NOT carried"), cell
-        assert "NOT carried: " in cell["reasons"][0], cell   # the gap is named
+    cell = table["DUR-CAP"]
+    assert (cell["verdict"], cell["journey"]) == (runner.NOT_RUN, runner.PASS), cell
+    assert cell["reasons"][0].startswith("NOT RUN[delegated] NOT carried"), cell
     gate = runner.base(runner.worst(c["verdict"] for c in table.values()))
     assert (gate, runner.EXIT[gate]) == (runner.NOT_RUN, 3)
-    assert {tid for tid, c in table.items()
-            if runner.base(c["verdict"]) != runner.PASS} == uncarried
-    assert {tid for tid, (scenarios, _) in runner.DELEGATED.items() if not scenarios} == uncarried
+    assert {tid for tid, c in table.items() if runner.base(c["verdict"]) != runner.PASS} == \
+        {"DUR-CAP"}
 
 
 def _need_stack_following_the_env():

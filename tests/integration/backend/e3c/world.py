@@ -403,6 +403,17 @@ def second_gateway(box: Box, port_offset: int = 1) -> Box:
     return other
 
 
+def second_worker(box: Box, name: str = "w2") -> Box:
+    """Another worker process over the SAME stores, with its own readiness port. It logs
+    under `<workdir>/<name>`, so its start never deletes the first worker's barrier marker
+    (`Box.start` clears `barrier-<role>.json` in its own workdir)."""
+    workdir = box.workdir / name
+    workdir.mkdir(parents=True, exist_ok=True)
+    other = Box({}, box.env["UPSTREAM"], workdir, box.port, box.namespace)
+    other.env = dict(box.env, WORKER_HEALTH_PORT=str(other.worker_port))
+    return other
+
+
 def set_clock(database: str, seconds: float) -> None:
     """`infrx.now()` for every session of the clone, `seconds` ahead of the wall."""
     import psycopg

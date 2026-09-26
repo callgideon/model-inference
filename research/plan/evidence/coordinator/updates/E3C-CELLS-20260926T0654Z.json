@@ -1,0 +1,33 @@
+{
+  "task": "E3C",
+  "slice": "E3C-CELLS: BACKEND-LOCAL scenarios s14 DUR-FENCE, s15 DUR-CAP, s16 CREDIT-RATE with revert-type controls; App gate DELEGATED rebound to them",
+  "activity": "review",
+  "at": "2026-09-26T06:54:39+00:00",
+  "head": "9227e9ed",
+  "base": "ea29c1f1",
+  "worktree": ".claude/worktrees/codex-e3c-cells",
+  "branch": "codex/e3c-cells",
+  "owned_paths": ["tests/integration/backend/e3c/", "tests/integration/app/runner.py (DELEGATED + E3C_FINAL reference only)",
+                  "tests/integration/app/test_e3a_runner.py", "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md",
+                  "research/plan/evidence/coordinator/updates/E3C-CELLS-20260926T0654Z.json"],
+  "commands": [
+    {"cmd": "cd apps/infrx-api && uv run --frozen --no-sync pytest -q ../../tests/integration/backend/e3c", "exit": 0,
+     "summary": "46 passed (38 + 8 new s12 cases); on base ea29c1f1 + the new test file 5 failed (manifest, cells, 3 cell-scenario cases)"},
+    {"cmd": "runner.py --only s14,s15,s16 --keep (dev1) / --reuse + the 3 new controls (dev2)", "exit": 3,
+     "summary": "6/6 new cases PASS in 83.5 s / 84.2 s; nc-dur-fence, nc-dur-cap, nc-credit-rate detected (gate NOT RUN only because --only)"},
+    {"cmd": "INFRX_E3C_RUNTIME_LOGIN=1 E3C_OUT=<scratch>/cells/final make backend-local E3C_ARGS=\"$(tests/integration/backend/e3c/control_trees.sh HEAD <scratch>/cells/ctl-final)\"", "exit": 0,
+     "summary": "BACKEND-LOCAL PASS at 9227e9ed: 16/16 scenarios (99 cases), 12/12 controls, all five revert controls detected for the right reason; 16:39.62 wall; teardown clean (0 containers, block free); deviations []"},
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/app", "exit": 0,
+     "summary": "19 passed; the carried-cells test and the stand-in NOT-carried test fail on the base runner"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"},
+    {"cmd": "scratch probe probe_result_write.py (s14 world, not a gate case)", "exit": 0,
+     "summary": "F-1 measured: a stale generation's put_result is accepted and the live generation ends failed/platform_error"}
+  ],
+  "estimate": {"optimistic_h": 0, "likely_h": 0.2, "pessimistic_h": 1, "confidence": "high",
+               "basis": "gate passed with the three cells carried and their controls detected; left: coordinator merge and the e4b App journey rerun reading E3C-CELLS-9227e9e.md",
+               "at": "2026-09-26T06:54:39+00:00"},
+  "blockers": [],
+  "wiring_requests": [],
+  "findings": ["F-1 (minor, measured, D10): infrx.put_result is not fenced - a stale generation's result write is accepted and fails the live generation platform_error; proposed: fence it like append or write it in terminalize; s14 oracle one line away"],
+  "evidence": ["research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"]
+}

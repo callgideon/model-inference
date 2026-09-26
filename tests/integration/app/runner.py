@@ -99,32 +99,41 @@ CHECKS = {
     "expired-display": (("DUR-OUTPUT", "CONSOLE-FLOWS"), ("U4",)),
 }
 # Cells whose 04-verification oracle the journey does not exercise. The checks under them are a
-# journey slice (`journey`); the oracle is E3C's final BACKEND-LOCAL run, bound here by scenario
-# id to its committed evidence (the scratch verdict.json it names is not durable: a later run
-# reuses that directory, so the evidence document is the reference the runner reads).
-E3C_FINAL = {"run_head": "27a69619", "tip": "04ae5e21",
-             "evidence": "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
-             "verdict_json": "<scratchpad>/final/verdict.json (final run 2)"}
-DELEGATED = {      # () = no E3C-FINAL scenario carries the oracle: NOT RUN, the gap named
-    "DUR-CAP": ((), "04-verification DUR-CAP races concurrent ADMISSIONS/grants across keys/orgs "
-                    "(no negative available balance, no capacity oversubscription); E3C s09 races "
-                    "grants and the lock bound only; NOT carried: a race of admissions across "
-                    "keys/orgs at the cap (needs an E3C case or a journey injection admitting "
-                    "concurrently on two keys/orgs)"),
-    "DUR-FENCE": ((), "04-verification DUR-FENCE expires a lease and races stale and new workers "
-                      "at every mutation; E3C s05 SIGKILLs the worker (the dead worker never "
-                      "races); NOT carried: a stale/new generation race (append, renew, settle, "
-                      "second capacity) - predecessor E3B dr03/dr05/db07/db11 are not this tree; "
-                      "needs an E3C case"),
+# journey slice (`journey`); the oracle is an E3C BACKEND-LOCAL run, bound here by scenario id
+# to its committed evidence (the scratch verdict.json it names is not durable: a later run
+# reuses that directory, so the evidence document is the reference the runner reads). E3C-CELLS
+# added the scenarios that carry DUR-FENCE (s14), DUR-CAP (s15) and CREDIT-RATE (s16); its final
+# run (all 16 scenarios, 12 controls) is the reference.
+E3C_FINAL = {"run_head": "9227e9ed", "tip": "ea29c1f1",
+             "evidence": "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md",
+             "verdict_json": "<scratchpad>/cells/final/verdict.json (E3C-CELLS final run)"}
+DELEGATED = {      # () = no E3C scenario carries the oracle: NOT RUN, the gap named
+    "DUR-CAP": (("s15",), "04-verification DUR-CAP (concurrent admissions/grants across keys/"
+                          "orgs: no negative available balance, no capacity oversubscription, "
+                          "stable lock order) is E3C s15: 16 admissions over 4 keys in 2 orgs "
+                          "through 2 gateways admit exactly MAX_ACTIVE_JOBS with every scope "
+                          "within its cap and the 429s holding nothing; a burst past a wallet "
+                          "racing an operator debit admits what the wallet holds, the 402s "
+                          "holding nothing, available never negative; no deadlock (control "
+                          "nc-dur-cap: the cap comparisons off by one oversubscribe)"),
+    "DUR-FENCE": (("s14",), "04-verification DUR-FENCE (a lapsed lease's stale generation races "
+                            "the new one at every mutation) is E3C s14: generation 1's token "
+                            "refused at append, renew, load_work, a second inference or "
+                            "preparation claim and settle while generation 2 runs, in another "
+                            "worker process and in the same one; one settlement, generation "
+                            "2's output only, one engine generation (control nc-dur-fence: "
+                            "without the generation check the same-process stale lease "
+                            "appends, renews and settles)"),
     "DUR-OUTBOX": (("s05", "s08"), "a crash at the outbox step recovers once; a lost Valkey "
                                    "index is rebuilt and loses no accepted job"),
-    "CREDIT-RATE": ((), "04-verification CREDIT-RATE publishes changed rates/deployment while "
-                        "jobs wait or run and rejects an unknown/private/unpriced model; E3C s09 "
-                        "changes the regime USD->CREDIT (no rate published), s13 matches discovery "
-                        "to the serving profile; NOT carried: a published rate change keeping the "
-                        "admitted revision/rates, the unknown/private/unpriced refusal - "
-                        "predecessor E3B dr07c/db13 are not this tree; needs an E3C case or a "
-                        "journey publish-card injection"),
+    "CREDIT-RATE": (("s16",), "04-verification CREDIT-RATE (rates/deployment published while "
+                              "jobs wait and run; unknown/private/unpriced rejected) is E3C s16: "
+                              "publish-card, then a new serving + deployment revision, while "
+                              "one job runs and one waits - each settles at its admitted "
+                              "revision and card, a gateway still at the old card admits "
+                              "nothing, a same-key retry replays; unknown, private and "
+                              "unpriced models refused at admission (control nc-credit-rate: "
+                              "a debit at the current listing's card)"),
 }
 SCENARIO_ROW = re.compile(r"^\|\s*\**(s\d\d)\**[^|]*\|\s*\**([A-Z][A-Z ]*?)\**\s*\|", re.M)
 
