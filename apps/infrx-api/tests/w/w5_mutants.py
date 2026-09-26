@@ -234,7 +234,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
 
 RUNNER = Runner(name="w5", targets=(SUITE_FILE,), layout=_layout)
 PG_RUNNER = Runner(name="w5-pg", targets=(SUITE_FILE,), layout=prep_worker_mutants._pg_layout,
-                   env=("INFRX_D_TASK",))
+                   env=prep_worker_mutants.PG_RUNNER.env)     # the same copy, the same ports
 
 
 def run_mutant(mutant) -> Result:
