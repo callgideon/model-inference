@@ -1,0 +1,60 @@
+command 552bf919-502e-401d-a72c-9920d0537b4f (10-inventory.sh on i-0e8449a4ffca29bab)
+== host
+ip-172-31-33-243
+ 17:39:27 up 6 days, 18:53,  0 user,  load average: 0.00, 0.04, 0.04
+/dev/root                       290G   49G  242G  17% /
+/dev/mapper/vg.01-lv_ephemeral  412G   11G  381G   3% /opt/dlami/nvme
+== docker
+client 29.7.2 server 29.7.2
+github.com/docker/buildx v0.36.1 1d8dde89b8aba914e05e45366770736fea1fd690
+storage driver overlayfs
+== checkout
+bda15866e5700f3856d7142580da842fba9bbd23
+== units
+infrx-valkey.service     loaded active running Valkey scheduling index (loopback only; rebuildable from PostgreSQL, no persistence)
+infrx-worker.service     loaded active running infrx worker (claim -> engine -> journal; drains on stop)
+marlin2b-gateway.service loaded active running infrx gateway (pinned runtime image, 127.0.0.1:8001)
+marlin2b-vllm.service    loaded active running vLLM serving Marlin-2B (docker, 127.0.0.1:8000; never public)
+== env names
+INFRX_MODE
+MODEL_ID
+MAX_INFLIGHT
+USAGE_LOG
+INFRX_IMAGE
+INFRX_RELEASE_SHA
+UPSTREAM
+VALKEY_URL
+PROCESSING_CACHE_DIR
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+DATABASE_URL
+MAX_VIDEO_SECONDS
+ENGINE_MAX_NUM_SEQS
+WORKER_CONCURRENCY
+S3_MEDIA_BUCKET
+LARGE_BODY_LIMIT
+== containers
+infrx-gateway cc2a80c9396f Up 45 hours
+infrx-worker cc2a80c9396f Up 45 hours
+marlin2b-8000 4cbfd34aac14 Up 46 hours
+infrx-valkey d2e18f3410b6 Up 47 hours
+caddy 14a9c00d4e83 Up 2 days
+== edge volumes (the certificates live in the /data one)
+volume caddy_data/var/lib/docker/volumes/caddy_data/_data -> /data; volume caddy_config/var/lib/docker/volumes/caddy_config/_data -> /config; bind /etc/caddy -> /etc/caddy; 
+== listeners (non-loopback)
+*:443
+*:80
+0.0.0.0:22
+127.0.0.53%lo:53
+127.0.0.54:53
+[::]:22
+== backups
+20260924T051144.233012159Z-27af05a8cb06ff446d62d13bfbd83f6e573d3461
+20260924T054001.368300606Z-27af05a8cb06ff446d62d13bfbd83f6e573d3461
+20260924T100129.620865008Z-422631591845fbd66b590c73d5ff4150318d9d7a
+20260924T200647.467964697Z-bda15866e5700f3856d7142580da842fba9bbd23
+pre-27af05a8cb06ff446d62d13bfbd83f6e573d3461.head
+pre-422631591845fbd66b590c73d5ff4150318d9d7a.head
+pre-bda15866e5700f3856d7142580da842fba9bbd23.head
+	
+status Success
