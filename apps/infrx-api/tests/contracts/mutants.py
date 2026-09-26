@@ -2301,11 +2301,11 @@ MUTANTS: tuple[Mutant, ...] = (
     # W5-F5B (WR-W5F5-3): the fake refuses what 0019 `check_pinned_capability` refuses
     _m("lc_capability_text_unchecked", "a text part outside the pinned modalities is refused",
        LCF, '            needed.add("text")', "            pass",
-       "capability__a_part_outside_the_pinned_modalities_admits_nothing"),
+       "test_the_fake_refuses_what_check_pinned_capability_refuses"),
     _m("lc_capability_legacy_unchecked", "a legacy <alias>@<label> is checked against its "
        "revision", LCF, "                if serving is not None:             # a pre-catalog",
        "                if False:             # a pre-catalog",
-       "capability__a_part_outside_the_pinned_modalities_admits_nothing"),
+       "test_the_fake_refuses_what_check_pinned_capability_refuses"),
     _m("lc_pinned_revision_missing_crashes", "a pinned revision missing from the catalog is "
        "not_found", LCF,
        "                if serving is None:\n                    raise errors.NotFound(",
