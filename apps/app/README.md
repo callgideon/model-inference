@@ -55,6 +55,10 @@ pnpm dev                       # http://localhost:3000
 
 Never commit real values: `.env*` is gitignored except this repo's `.env.example`.
 
+The full per-environment matrix (with `INFRX_API_BASE_URL` and `CONSOLE_CURSOR_SECRET`, both
+server-only and required in production) is `lib/deploy/env.ts`; the server refuses to start
+without it. Deploy, rollback and hosting settings: [`infra/app/README.md`](../../infra/app/README.md).
+
 ## Database
 
 Migrations live in [`supabase/migrations`](supabase/migrations) and are applied
