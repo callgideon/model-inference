@@ -1,0 +1,26 @@
+{
+  "task": "G8-FLAG-2",
+  "slice": "flag verb minors 0-G8FLAG-R2, 0-G8FLAG-R3, 1-G8FLAG-R6",
+  "activity": "review",
+  "head": "223a3bd5",
+  "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-g8-flag-2",
+  "branch": "codex/g8-flag-2",
+  "owned_paths": ["apps/infrx-api/infrx/operations/cli.py", "apps/infrx-api/infrx/operations/transition.py",
+                  "apps/infrx-api/tests/g/ops/test_flag.py", "apps/infrx-api/tests/g/ops/test_flag_pg.py",
+                  "apps/infrx-api/tests/g/ops/mutants.py", "research/plan/evidence/g/G8-FLAG-2-223a3bd.md",
+                  "research/plan/evidence/coordinator/updates/G8-FLAG-2-20260926T0512Z.json"],
+  "commands": [
+    {"cmd": "pytest -q tests/g/ops/test_flag.py tests/g/ops/test_flag_pg.py (new tests, base code)", "exit": 1, "summary": "2 failed, 5 passed (R6 fails-before)"},
+    {"cmd": "python -m tests.g.ops.mutants flag_audits_as_transition flag_lock_bound_hardcoded flag_cli_lock_bound_constant (base code+tests)", "exit": 1, "summary": "0/3 killed, survived (R2/R3 fails-before)"},
+    {"cmd": "python -m tests.g.ops.mutants <13 flag mutants>", "exit": 0, "summary": "13/13 killed"},
+    {"cmd": "pytest -q tests/g/ops (INFRX_D_TASK=g8)", "exit": 0, "summary": "94 passed"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/g/ops/test_mutants.py", "exit": 0, "summary": "115 passed (109 mutants killed)"},
+    {"cmd": "ruff check infrx/operations tests/g/ops", "exit": 0, "summary": "All checks passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.1, "likely_h": 0.2, "pessimistic_h": 0.5, "confidence": "high",
+               "basis": "4 owned files, no wiring, checks green", "at": "2026-09-26T05:12Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/g/G8-FLAG-2-223a3bd.md"]
+}

@@ -20,7 +20,8 @@ R = "cutover rollback: grant closed"
 
 @dataclasses.dataclass
 class FlagStore:
-    """`infrx.feature_flags` as `inventory()["flags"]` shows it; records every write."""
+    """`infrx.feature_flags` as `inventory()["flags"]` shows it; records every write with
+    the lock bound it was given (0-G8FLAG-R3: the bound is the operator's)."""
 
     flags: dict = dataclasses.field(default_factory=lambda: {
         f: {"enabled": True, "updated_by": "seed", "reason": "seed", "updated_at": "t0"}
@@ -34,7 +35,7 @@ class FlagStore:
     async def set_flag(self, name, enabled, actor, reason, *, lock_timeout_s) -> bool:
         if name in self.locked:
             raise transition.FlagLocked(name)
-        self.writes.append((name, enabled, actor, reason))
+        self.writes.append((name, enabled, actor, reason, lock_timeout_s))
         row = self.flags[name]
         if row["enabled"] == enabled:
             return False
@@ -74,15 +75,17 @@ def test_flag__signup_grant_goes_off_and_on_through_the_audited_writer_as_the_op
     assert code == 0 and off == {"name": "signup_grant", "enabled_before": True,
                                  "enabled_after": False, "changed": True, "replayed": False,
                                  "actor": principal, "updated_at": "t1"}, off
-    assert store.writes == [("signup_grant", False, principal, R)]
+    assert store.writes == [("signup_grant", False, principal, R, 5.0)]   # default bound
     assert store.flags["signup_grant"]["updated_by"] == principal
     code, again, _ = cli_run(w, flag("signup_grant", "--off", "k2"), capsys)
     assert code == 0 and (again["changed"], again["enabled_after"]) == (False, False), again
-    code, on, _ = cli_run(w, flag("signup_grant", "--on", "k3"), capsys)
+    code, on, _ = cli_run(w, [*flag("signup_grant", "--on", "k3"), "--lock-timeout-s", "0.25"],
+                          capsys)
     assert code == 0 and (on["changed"], on["enabled_after"]) == (True, True), on
-    audited = [(e.idempotency_key, e.actor_principal, e.action, e.after["request"])
-               for e in w.audit.entries]
-    assert audited == [(k, principal, "admin_set_entitlements",
+    assert store.writes[-1] == ("signup_grant", True, principal, R, 0.25), store.writes
+    audited = [(e.idempotency_key, e.actor_principal, e.action, e.after["operation"],
+                e.after["request"]) for e in w.audit.entries]
+    assert audited == [(k, principal, "admin_set_entitlements", "flag",
                         {"name": "signup_grant", "enabled": v})
                        for k, v in (("k1", False), ("k2", False), ("k3", True))], audited
     code, replay, _ = cli_run(w, flag("signup_grant", "--off", "k1"), capsys)
@@ -119,13 +122,22 @@ def test_flag__a_regime_flag_an_unknown_flag_and_a_locked_flag_change_nothing(ca
 
 def test_flag__the_dry_run_reads_without_a_key_and_writes_nothing(capsys):
     """`--dry-run` prints the current row, needs no operator key or idempotency key, and
-    writes nothing; it refuses a regime flag like the write does. Oracle: a dry run that
-    wrote, or that showed a regime flag as writable here, differs."""
+    writes nothing; it refuses a regime flag like the write does. 1-G8FLAG-R6: it needs no
+    direction (the row alone); with one it adds the would-be change and still writes
+    nothing, even given a key and a reason. A write needs a direction. Oracle: a dry run
+    that wrote, required `--on/--off`, misreported the change, or showed a regime flag as
+    writable here differs."""
     w = world()
-    code, row, _ = cli_run(w, ["flag", "--name", "signup_grant", "--off", "--dry-run"], capsys,
+    current = {"name": "signup_grant", "enabled": True, "updated_by": "seed",
+               "reason": "seed", "updated_at": "t0"}
+    code, row, _ = cli_run(w, ["flag", "--name", "signup_grant", "--dry-run"], capsys,
                            operator=False)
-    assert code == 0 and row == {"name": "signup_grant", "enabled": True, "updated_by": "seed",
-                                 "reason": "seed", "updated_at": "t0"}, row
+    assert code == 0 and row == current, row
+    for switch, after in (("--off", False), ("--on", True)):
+        code, row, err = cli_run(w, [*flag("signup_grant", switch, "d"), "--dry-run"], capsys,
+                                 operator=False)
+        assert code == 0 and row == {**current, "enabled_after": after,
+                                     "changed": after is not True}, (row, err)
     code, _, err = cli_run(w, ["flag", "--name", "credit_admission", "--off", "--dry-run"],
                            capsys, operator=False)
     assert code == 1 and err["error"] == "invalid_request", err
@@ -133,6 +145,10 @@ def test_flag__the_dry_run_reads_without_a_key_and_writes_nothing(capsys):
     with pytest.raises(SystemExit, match="idempotency-key"):
         cli.main(["flag", "--name", "signup_grant", "--off"], ops=w.ops,
                  environ={cli.OPERATOR_KEY_ENV: w.operator_secret})
+    with pytest.raises(SystemExit, match="--on or --off"):
+        cli.main(["flag", "--name", "signup_grant", "--idempotency-key", "n", "--reason", R],
+                 ops=w.ops, environ={cli.OPERATOR_KEY_ENV: w.operator_secret})
+    assert w.ops.transitions.writes == [] and w.audit.entries == []
 
 
 class Recorder:

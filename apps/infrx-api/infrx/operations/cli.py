@@ -6,6 +6,7 @@
         --secret-file ./sweep.key --idempotency-key k-1 --reason "..."
     python -m infrx.operations.cli flag --name signup_grant --off --idempotency-key f-1 \\
         --reason "..."                      # R144: never a regime flag (credit-transition)
+    python -m infrx.operations.cli flag --name signup_grant [--off] --dry-run  # the row (+ change)
 
 Secrets never travel through argv or output: the operator secret comes from
 `$INFRX_OPERATOR_KEY` or `getpass`, any argv token shaped like a key is refused, and an
@@ -116,7 +117,7 @@ def parser() -> argparse.ArgumentParser:
     # GAP-I3-1 / R144: one non-regime flag through the audited writer; `--dry-run` reads.
     f = sub.add_parser("flag")
     f.add_argument("--name", required=True)
-    switch = f.add_mutually_exclusive_group(required=True)
+    switch = f.add_mutually_exclusive_group()      # a dry run may omit it (1-G8FLAG-R6)
     switch.add_argument("--on", dest="enabled", action="store_const", const=True)
     switch.add_argument("--off", dest="enabled", action="store_const", const=False)
     f.add_argument("--idempotency-key")
@@ -166,12 +167,16 @@ async def dispatch(ops: service.Operations, secret: str, a) -> dict:
         if a.cmd == "credit-transition":
             rates = {"card": a.card, "input_rate": a.input_rate, "output_rate": a.output_rate}
         if a.dry_run:           # read-only: the plan (or the flag's row), no credential
-            if a.cmd == "flag":
-                return await transition.flag_row(ops.transitions, a.name)
+            if a.cmd == "flag":         # the row, plus the would-be change given a direction
+                row = await transition.flag_row(ops.transitions, a.name)
+                return row if a.enabled is None else \
+                    {**row, "enabled_after": a.enabled, "changed": row["enabled"] != a.enabled}
             return transition.plan(await ops.transitions.inventory(a.model), target=a.to,
                                    **rates)
         if not a.idempotency_key or not a.reason:
             raise SystemExit("--idempotency-key and --reason are required unless --dry-run")
+        if a.cmd == "flag" and a.enabled is None:
+            raise SystemExit("--on or --off is required unless --dry-run")
     op = await ops.operator(secret)
     if a.cmd == "account":
         return await op.account(a.user)
