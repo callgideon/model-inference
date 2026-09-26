@@ -6,6 +6,9 @@ real browser principal and compares every figure with durable ledger queries.
 
     cd apps/infrx-api && INFRX_D_TASK=app-u1r uv run --frozen python ../app/tests/u/credit_world.py
 
+U1R_CAPPED_JOBS / U1R_CAPPED_LEDGER (default 120 each) size CONSUMER_2's capped history for P08;
+the 2026-09-26 lens's heavy world is U1R_CAPPED_JOBS=155 U1R_CAPPED_LEDGER=2000.
+
 Reuses the D harness (tests/d: the labelled, locked, self-removing container; the admission world;
 the real admit/claim/terminalize functions) - no grant, hold or settlement SQL is written here. The
 container is removed when this process exits, so the Node suite runs inside it. Exit code = the
@@ -39,7 +42,8 @@ from tests.d import pgharness  # noqa: E402
 APP = Path(__file__).resolve().parents[2]
 DB = f"{pgharness.DATABASE}_credit"
 ME, OTHER = cc.CONSUMER_1, cc.CONSUMER_2
-CAPPED = 120
+CAPPED_JOBS = int(os.environ.get("U1R_CAPPED_JOBS", "120"))
+CAPPED_LEDGER = int(os.environ.get("U1R_CAPPED_LEDGER", "120"))
 
 
 def conn():
@@ -93,11 +97,11 @@ def race(kinds: list[str]) -> list[str]:
 
 
 def capped(c, world) -> None:
-    """CONSUMER_2 gets more than one full page at the 100 cap (P08): CAPPED more jobs, each taken
-    through the real admit/claim/settle to a free failure (active jobs are capacity-bounded), and
-    CAPPED operator adjustments of 1e-8 CREDIT, so a limit-100 page is 100 rows and a cursor."""
+    """CONSUMER_2 gets more than one full page at the 100 cap (P08): CAPPED_JOBS more jobs, each
+    taken through the real admit/claim/settle to a free failure (active jobs are capacity-bounded),
+    and CAPPED_LEDGER operator adjustments of 1e-8 CREDIT, so a limit-100 page is 100 rows and a cursor."""
     org = cc.personal_org(c, OTHER)
-    for _ in range(CAPPED):
+    for _ in range(CAPPED_JOBS):
         request = cl.gateway_request(world, org_id=org, key_id=ca.C2_KEY, model_revision=ca.PIN)
         ca.admit(c, request, b.idem(request, request.request_id), regime="credit")
         _, prep = cl.claim(c, request.request_id)
@@ -174,7 +178,7 @@ def main() -> int:
         capped(c, other_world)
         c.execute("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, actor, "
                   "reason) select %s, 'consumer', 'operator_adjustment', 0.00000001, gen_random_uuid(), "
-                  "'ops@test', 'U1R cap fixture' from generate_series(1, %s)", (cc.wallet_of(c, OTHER), CAPPED))
+                  "'ops@test', 'U1R cap fixture' from generate_series(1, %s)", (cc.wallet_of(c, OTHER), CAPPED_LEDGER))
     admitted, refused = exhaust(6)
     assert (admitted, refused) == (2, 4), (admitted, refused)
     with conn() as c:
