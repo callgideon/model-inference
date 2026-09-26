@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 112,
-  "updated": "2026-09-26T08:28:55Z",
+  "revision": 113,
+  "updated": "2026-09-26T08:38:08Z",
   "agent_slots": {
     "total": 16,
-    "active": 3,
+    "active": 2,
     "reserved": 2,
-    "note": "Session 03 (07:52Z): workflows G-GATES (e2c), D10-0026-FENCE (d4 + e3c block); coordinator fixed-clone suites on 76ec3a5e (e1c/app-*) and fe6cb51e (revoke/i8); 2 slots reserved for verify-lane workflows."
+    "note": "Session 03 (08:40Z): workflows G-GATES (e2c) and D10-0026-FENCE (d4 + e3c block); 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -2877,42 +2877,27 @@
         "prefix": "infrx-revoke-",
         "db": "revoke"
       },
-      "activity": "integration",
+      "activity": "complete",
       "started": "2026-09-26T06:41:00Z",
-      "updated": "2026-09-26T07:52:00Z",
+      "updated": "2026-09-26T08:40:00Z",
       "blocker": null,
-      "next_action": "merged --no-ff at 38febee3; WR-RB3-1..5 at 6f885c23 + fe6cb51e (credit-transition answers replayed; rollback step 6 after a reversal; 0025 statements; rotated-password clause; resumed reversal audits the frozen before); fixed-clone check on fe6cb51e running → complete when green; still open: the box half of the reversal (operator), a reinstall drops the worker's monitor DSN until step 55 (SSM leaf = user window item), RV3-3 docstring note applied",
+      "next_action": "DONE: merged 38febee3; WR-RB3-1..5 at fe6cb51e; fixed-clone check on fe6cb51e green — tests/g/ops 96 passed on revoke (the PG reversal drill with replayed), g/ops mutants 118/118, tests/i on i8 239 passed / 1 xfailed (i8 free; also covers the tests/i deferrals of LINT-1/LINT-2/KNOWN-GOOD-PROOF-2 on this tip), integration unit 112, bash -n clean, validate PASS; still open for the window: the box half of the reversal (operator), the monitor DSN SSM leaf (user)",
       "estimate": {
         "optimistic_h": 0,
-        "likely_h": 0.2,
-        "pessimistic_h": 0.5,
+        "likely_h": 0,
+        "pessimistic_h": 0,
         "confidence": "high",
-        "basis": "merged and wired; one fixed-clone check left",
-        "at": "2026-09-26T07:52:00Z"
+        "basis": "merged, wired and checked",
+        "at": "2026-09-26T08:40:00Z"
       },
       "evidence": [
         "research/plan/evidence/i/RUNBOOK-3-fb68152.md"
       ],
       "commands": [
         {
-          "cmd": "INFRX_D_TASK=revoke pytest -q tests/g/ops; INFRX_MUTANTS=all tests/g/ops/test_mutants.py",
+          "cmd": "coordinator: INFRX_D_TASK=revoke pytest tests/g/ops; INFRX_MUTANTS=all tests/g/ops/test_mutants.py; INFRX_D_TASK=i8 pytest tests/i; integration ops/runbooks/app/e3c unit; bash -n steps; validate_plan (fixed clone of fe6cb51e, 08:27–08:37Z)",
           "exit": 0,
-          "summary": "96 passed; 118 mutants killed (3 new: reversal_skips_the_drain, reversal_audits_as_forward, replay_reruns_the_freeze)"
-        },
-        {
-          "cmd": "tests/integration/ops + recovery/test_runbooks.py (rv01/rv02 fail on the base)",
-          "exit": 0,
-          "summary": "40 passed"
-        },
-        {
-          "cmd": "INFRX_D_TASK=i8 pytest -q tests/i (i8 freed 07:19Z)",
-          "exit": 0,
-          "summary": "238 passed, 1 xfailed; login_ mutants 7/7"
-        },
-        {
-          "cmd": "coordinator: fake-level g/ops + full g/ops mutant list after WR-RB3-1 (worktree)",
-          "exit": 0,
-          "summary": "20 passed; 118/118 killed"
+          "summary": "96 passed; 118/118 killed; 239 passed 1 xfailed; 112 passed; clean; PASS"
         }
       ],
       "owned_paths": [
@@ -3812,6 +3797,13 @@
         "result": "ruff clean; 4495 passed (tests/i refused: i8 held by another run); console 608/0, 46/46 mutants, pg 8/8, c0-real 15/15; 109 integration unit; validate PASS",
         "at": "2026-09-26T08:28:04Z",
         "candidate": "76ec3a5e"
+      },
+      {
+        "name": "g/ops + mutants + tests/i (i8) + integration unit",
+        "cmd": "fixed clone of fe6cb51e (revoke, i8)",
+        "result": "96 passed; 118/118 mutants; tests/i 239 passed 1 xfailed on i8; 112 integration unit; bash -n clean; validate PASS",
+        "at": "2026-09-26T08:37:35Z",
+        "candidate": "fe6cb51e"
       }
     ]
   },
@@ -5455,6 +5447,12 @@
       "by": "LINT-2",
       "what": "integration → complete; head c279d0c8; estimate likely 0.2 → 0 h (merged, wired and suite-checked)",
       "source": "updates/LINT-2-20260926T0830Z.json"
+    },
+    {
+      "at": "2026-09-26T08:40:00Z",
+      "by": "RUNBOOK-3",
+      "what": "integration → complete; head c586e8b4; estimate likely 0.2 → 0 h (merged, wired and checked)",
+      "source": "updates/RUNBOOK-3-20260926T0840Z.json"
     }
   ],
   "history": {
@@ -6083,10 +6081,14 @@
     "LINT-2-20260926T0830Z.json": {
       "status": "applied",
       "at": "2026-09-26T08:30:00Z"
+    },
+    "RUNBOOK-3-20260926T0840Z.json": {
+      "status": "applied",
+      "at": "2026-09-26T08:40:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T08:28:55Z",
+    "computed_at": "2026-09-26T08:38:08Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
