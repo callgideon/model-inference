@@ -145,6 +145,14 @@ def _admin(statement: str) -> None:
         conn.execute(statement)
 
 
+#: E3A-WR-2 (the hosted project's `auth.uid()`; `tests/integration/app/runner.py` applies the
+#: same text per clone until it reads this one).
+HOSTED_AUTH_UID = (
+    "create or replace function auth.uid() returns uuid language sql stable as $f$ select "
+    "coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''), nullif(nullif("
+    "current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', ''))::uuid $f$")
+
+
 def _template() -> None:
     import pgstate
     import psycopg
@@ -154,10 +162,14 @@ def _template() -> None:
     # GoTrue's own `auth.users` columns, which every hosted project has and the pinned
     # image's bare auth schema lacks (A1 derives verification from `email_confirmed_at`).
     # `postgres` does not own `auth.users` there, so as `supabase_admin` over the socket.
+    # E3A-WR-2: the hosted `auth.uid()`, which reads PostgREST v13's `request.jwt.claims`;
+    # the pinned image's reads only the legacy `request.jwt.claim.sub`, so every signed-in
+    # read saw no user and a deny case could pass because nobody was signed in. Same owner.
     harness.run(["docker", "exec", "-i", harness.assert_ours(harness.container_of("postgres")),
                  "psql", "-U", harness.PG_ADMIN_ROLE, "-d", TEMPLATE, "-v", "ON_ERROR_STOP=1",
                  "-c", "alter table auth.users add column if not exists email_confirmed_at "
-                       "timestamptz, add column if not exists deleted_at timestamptz"],
+                       "timestamptz, add column if not exists deleted_at timestamptz",
+                 "-c", HOSTED_AUTH_UID],
                 timeout=120.0)
     with psycopg.connect(harness.pg_dsn(TEMPLATE), autocommit=True) as conn:
         pgstate.apply_migrations(conn)
