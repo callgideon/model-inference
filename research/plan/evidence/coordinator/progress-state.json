@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "e7b1c272",
+  "integration_head": "7e0b7b95",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 83,
-  "updated": "2026-09-26T05:02:34Z",
+  "revision": 85,
+  "updated": "2026-09-26T05:11:02Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -2054,11 +2054,11 @@
         "prefix": "infrx-revoke-",
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-25T23:20:00Z",
-      "updated": "2026-09-26T03:35:23Z",
+      "updated": "2026-09-26T05:11:02Z",
       "blocker": null,
-      "next_action": "the D10-MERGE-2 lane merges 0024 (+ W-D10A-1 v2) and 0025 (+ W-D10B-1 v2, WR-D10B-2) onto 34f0ed28 with the C3A case 9 / U4-P08 flips; coordinator numbers 1-D10R-2 and the R143 amendment at the merge; APP-0024-WIRE (C0 rpc consumer_credit_ledger, U1R filters) follows",
+      "next_action": "0024 merged on the tip at f95377b9 via D10-MERGE-2; R146 numbered; C0/U1R adoption = APP-0024-WIRE (running)",
       "estimate": {
         "optimistic_h": 0.5,
         "likely_h": 1,
@@ -2115,11 +2115,11 @@
         "prefix": "infrx-revoke-",
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-26T01:59:07Z",
-      "updated": "2026-09-26T03:35:23Z",
+      "updated": "2026-09-26T05:11:02Z",
       "blocker": null,
-      "next_action": "verified ACCEPT_WITH_FIXES at b5fc2fbc (wf_1b0b99b9-75e; 1-F1 → W-D10B-1 v2, rechecked); the D10-MERGE-2 lane composes it with 0024 and the wirings on codex/d10-merge-2",
+      "next_action": "0025 merged on the tip at f95377b9 via D10-MERGE-2; R143 amended (codes, no-op re-revoke keeps its key, advisory lock)",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 2,
@@ -2206,17 +2206,17 @@
       "branch": "codex/d10-merge-2",
       "worktree": ".claude/worktrees/codex-d10-merge-2",
       "base": "34f0ed28",
-      "head": null,
+      "head": "a6fa30fa",
       "isolation": {
         "ports": "revoke postgres 55459 (D10-0025 done)",
         "prefix": "infrx-revoke-",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T03:35:23Z",
-      "updated": "2026-09-26T03:35:23Z",
+      "updated": "2026-09-26T05:11:02Z",
       "blocker": null,
-      "next_action": "handback → coordinator merges codex/d10-merge-2 --no-ff, numbers 1-D10R-2 + R143 amendment, flips nothing until checks; then APP-0024-WIRE",
+      "next_action": "merged --no-ff at f95377b9 (evidence a6fa30fa; code 9e4e34ca); R146 + R143 amendment at 7e0b7b95; the unrequested W5-F5 0024 test wiring e04a2edc accepted (the test would otherwise be red on 0024); merged-tip checks running (scratchpad/wave4b/checks-7e0b7b95)",
       "estimate": {
         "optimistic_h": 1.5,
         "likely_h": 3,
@@ -2225,7 +2225,9 @@
         "basis": "two clean merges in the D10-0025 verifier's scratch clone; api-test ~40 min; console targets ~15 min",
         "at": "2026-09-26T03:35:23Z"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/d10-merge-2-9e4e34c.md"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/app/supabase/migrations/",
@@ -4500,6 +4502,36 @@
       "by": "coordinator",
       "what": "Full-scale dispatch: KNOWN-GOOD-PROOF-2 (i8), APP-0024-WIRE (app-c0), E3A-RUN (e4b) and the E3C rerun (e3c) from the D10-MERGE-2 head 9e4e34ca; G8-FLAG-2 (g8) from the tip; E4C-RUNBOOK-2 in verification; D10-MERGE-2 still running its checks",
       "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+    },
+    {
+      "at": "2026-09-26T05:11:02Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
+      "source": "updates/D10-20260926T0010Z.json"
+    },
+    {
+      "at": "2026-09-26T05:11:02Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
+      "source": "updates/D10-20260926T0130Z.json"
+    },
+    {
+      "at": "2026-09-26T05:11:02Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
+      "source": "updates/D10-20260926T0335Z.json"
+    },
+    {
+      "at": "2026-09-26T05:11:02Z",
+      "by": "tracker",
+      "what": "rejected update: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']",
+      "source": "updates/D10-MERGE-2-20260926T0508Z.json"
+    },
+    {
+      "at": "2026-09-26T05:11:02Z",
+      "by": "coordinator (D10-MERGE-2)",
+      "what": "D10-MERGE-2 merged at f95377b9: migrations 0024/0025 + wirings + App flips; lane checks api-test 4536/0, tests/d 897 (both known failures gone), layer 3 916 rows 0 failed, console targets green; R146 numbered, R143 amended (7e0b7b95); hosted still at 0018",
+      "source": "research/plan/evidence/coordinator/d10-merge-2-9e4e34c.md"
     }
   ],
   "history": {
@@ -5029,10 +5061,30 @@
       "status": "rejected",
       "at": "2026-09-26T04:14:00Z",
       "reason": "stale: at 2026-09-26T04:14:00Z is not newer than lane G8-FLAG state 2026-09-26T04:20:12Z"
+    },
+    "D10-20260926T0010Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T00:10:00Z",
+      "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "D10-20260926T0130Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T01:30:00Z",
+      "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "D10-20260926T0335Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T03:35:00Z",
+      "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "D10-MERGE-2-20260926T0508Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T05:08:00Z",
+      "reason": "malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T04:22:02Z",
+    "computed_at": "2026-09-26T05:11:02Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
