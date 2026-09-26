@@ -6,7 +6,7 @@
 // of exactly `true` is a 404; an operator keeps the preview until V1M moves it to Lab. The pages are
 // `.tsx` and cannot load under node --test, so their wiring is pinned as source (as U3-S02 does).
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -54,5 +54,8 @@ test("C-PROV-02 each provider page runs the guard first, before any read", () =>
       `${name}: the guard is the page's first statement`,
     );
     assert.equal(body[1].split("providerRoute(").length, 2, `${name}: one guard call`);
+    // A loading.tsx wraps the page in Suspense: the shell streams with 200 before notFound() runs, so
+    // the consumer got a 404 body under a 200 status (E3A journey, /traces).
+    assert.ok(!existsSync(join(CONSOLE, name, "loading.tsx")), `${name}: no loading boundary above the guard`);
   }
 });
