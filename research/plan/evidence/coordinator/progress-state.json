@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 127,
-  "updated": "2026-09-26T19:06:00Z",
+  "revision": 128,
+  "updated": "2026-09-26T19:09:00Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -3464,7 +3464,7 @@
     {
       "id": "MAIN-MERGE",
       "task": null,
-      "slice": "(route A, user decision 2026-09-26) merge claude/consumer-v1 into main = the App release (APP-MERGE): after BACKEND-READY (E4C window), the W7 hosted apply 0019–0026 and the App production inputs (X0–X4); one --no-ff merge whose tree equals the App release SHA, pushed to origin main; rollback = Vercel promote of the recorded known-good deployment",
+      "slice": "(GO-LIVE, user decision 2026-09-26: \"skip the window, complete everything, get live, then keep running the test window on the side\") the App release (merge to main) and the backend install proceed ahead of BACKEND-READY: freeze RELEASE → gates → a short install maintenance (W1–W5, W6 verified dump, W7 hosted apply 0019–0026, W7f activation, W8–W13) → App inputs (X3/X4) → merge main → smoke; E4C certify runs afterwards on the live system as the test window; the manifest gates record the reordering as a user decision (dispatch override), not as evidence",
       "agent": "opus",
       "branch": "—",
       "worktree": ".claude/worktrees/main-merge (to be created off origin/main)",
@@ -3477,9 +3477,9 @@
       },
       "activity": "queued",
       "started": "2026-09-26T18:20:00Z",
-      "updated": "2026-09-26T19:05:00Z",
+      "updated": "2026-09-26T19:09:00Z",
       "blocker": null,
-      "next_action": "after BACKEND-READY + W7 + the App inputs: git fetch origin; merge --no-ff in a detached worktree off origin/main; tree == APP_RELEASE; push origin HEAD:refs/heads/main; smoke S1–S6; record the known-good App release",
+      "next_action": "GO-LIVE order: after G2-FIX + RELEASE gates: (1) hosted verified dump (user/operator), (2) W1–W5 + W7/W7f + W8–W13 install maintenance (~30–45 min; coordinator with the migrate.py / operations.cli allow rules), (3) Vercel production variables + P-05 auth settings (operator), (4) merge main (--no-ff, tree == APP_RELEASE) → Vercel deploy → smoke S1–S6 → known-good App release recorded, (5) E4C certify + E1B cells on the side",
       "estimate": {
         "optimistic_h": 0.3,
         "likely_h": 0.5,
@@ -5999,6 +5999,12 @@
       "at": "2026-09-26T19:06:00Z",
       "by": "coordinator (X-14)",
       "what": "box staged for the current tip a434e2a8 outside the window: release-bundle.sh uploaded <sha>.bundle/.sha256 to s3://llm-bootcamp-641134885443/releases/, the box fetched and verified it (SSM dd7fe2ab; working tree untouched), 20-prepull pulled the pinned engine image vllm/vllm-openai@sha256:4cbfd34a… (SSM 2ce71e28); the final RELEASE repeats the ~14 MB bundle step only",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+    },
+    {
+      "at": "2026-09-26T19:09:00Z",
+      "by": "coordinator",
+      "what": "user: \"skip the window, we shall complete everything, get live, then keep running the test window on the side\" — recorded as a dispatch decision: the backend install and the App release (main) proceed ahead of BACKEND-READY; E4C certify/E1B cells run afterwards on the live system; the irreversible steps keep their safety gates (verified dump before the hosted apply; the RELEASE gates green first); the short install maintenance (W5 pause → W10 → resume) remains",
       "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     }
   ],
