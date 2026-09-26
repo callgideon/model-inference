@@ -4,6 +4,8 @@
     python -m infrx.operations.cli grant --user <uuid> --idempotency-key g-<uuid> --reason "..."
     python -m infrx.operations.cli issue-key --user <uuid> --name sweep \\
         --secret-file ./sweep.key --idempotency-key k-1 --reason "..."
+    python -m infrx.operations.cli flag --name signup_grant --off --idempotency-key f-1 \\
+        --reason "..."                      # R144: never a regime flag (credit-transition)
 
 Secrets never travel through argv or output: the operator secret comes from
 `$INFRX_OPERATOR_KEY` or `getpass`, any argv token shaped like a key is refused, and an
@@ -111,6 +113,16 @@ def parser() -> argparse.ArgumentParser:
     t.add_argument("--freeze-only", action="store_true")   # pause both regimes, drain, stop
     t.add_argument("--drain-timeout-s", type=float, default=0.0)
     t.add_argument("--poll-s", type=float, default=2.0)
+    # GAP-I3-1 / R144: one non-regime flag through the audited writer; `--dry-run` reads.
+    f = sub.add_parser("flag")
+    f.add_argument("--name", required=True)
+    switch = f.add_mutually_exclusive_group(required=True)
+    switch.add_argument("--on", dest="enabled", action="store_const", const=True)
+    switch.add_argument("--off", dest="enabled", action="store_const", const=False)
+    f.add_argument("--idempotency-key")
+    f.add_argument("--reason")
+    f.add_argument("--dry-run", action="store_true")
+    f.add_argument("--lock-timeout-s", type=float, default=5.0)
     # G8 reads: no idempotency key and no reason, since nothing is written.
     sub.add_parser("account").add_argument("--user", required=True)
     # A consumer's own statement, authenticated by the key file `issue-key` wrote.
@@ -148,11 +160,14 @@ async def dispatch(ops: service.Operations, secret: str, a) -> dict:
     if a.cmd == "statement":
         return await (await ops.tenant(secret)).statement()
     rates = {}
-    if a.cmd == "credit-transition":
+    if a.cmd in ("credit-transition", "flag"):
         if ops.transitions is None:
-            raise SystemExit("the transition runs only on the PostgreSQL store")
-        rates = {"card": a.card, "input_rate": a.input_rate, "output_rate": a.output_rate}
-        if a.dry_run:           # read-only: the inventory and the plan, no credential
+            raise SystemExit(f"{a.cmd} runs only on the PostgreSQL store")
+        if a.cmd == "credit-transition":
+            rates = {"card": a.card, "input_rate": a.input_rate, "output_rate": a.output_rate}
+        if a.dry_run:           # read-only: the plan (or the flag's row), no credential
+            if a.cmd == "flag":
+                return await transition.flag_row(ops.transitions, a.name)
             return transition.plan(await ops.transitions.inventory(a.model), target=a.to,
                                    **rates)
         if not a.idempotency_key or not a.reason:
@@ -193,6 +208,9 @@ async def dispatch(ops: service.Operations, secret: str, a) -> dict:
         return await transition.apply(op, ops.transitions, target=a.to, **rates, **k,
                                       drain_timeout_s=a.drain_timeout_s, poll_s=a.poll_s,
                                       freeze_only=a.freeze_only)
+    if a.cmd == "flag":
+        return await transition.set_flag(op, ops.transitions, name=a.name, enabled=a.enabled,
+                                         lock_timeout_s=a.lock_timeout_s, **k)
     if a.cmd == "cancel":
         return await op.cancel_job(a.org, a.job, **k)
     if a.cmd == "reconcile":
@@ -206,7 +224,7 @@ def main(argv=None, *, ops=None, environ=os.environ, prompt=getpass.getpass) -> 
     a = parser().parse_args(argv)
     if a.cmd == "statement":
         secret = _read_secret(a.key_file)
-    elif a.cmd == "credit-transition" and a.dry_run:
+    elif a.cmd in ("credit-transition", "flag") and a.dry_run:
         secret = ""
     else:
         secret = environ.get(OPERATOR_KEY_ENV, "").strip() or prompt("operator key: ").strip()

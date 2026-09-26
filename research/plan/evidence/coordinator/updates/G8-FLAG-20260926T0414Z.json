@@ -1,0 +1,48 @@
+{
+ "task": "G8-FLAG",
+ "slice": "G8 operations: audited `flag` verb for one non-regime flag (GAP-I3-1, I3R-7, R144) - fix round",
+ "activity": "review",
+ "head": "44d623c8",
+ "worktree": ".claude/worktrees/codex-g8-flag",
+ "branch": "codex/g8-flag",
+ "owned_paths": [
+  "apps/infrx-api/infrx/operations/",
+  "apps/infrx-api/tests/g/ops/",
+  "infra/runbooks/rollback.md",
+  "infra/app/README.md",
+  "research/plan/evidence/g/G8-FLAG-3c5947f.md",
+  "research/plan/evidence/coordinator/updates/G8-FLAG-20260926T0414Z.json"
+ ],
+ "commands": [
+  {"cmd": "WR-G8FLAG-1 test hunk alone: pytest -q tests/integration/ops/test_i3_operations.py -k ops03", "exit": 1, "summary": "1 failed (cutover rollback step 2 skips the verb) - fails-before"},
+  {"cmd": "WR-G8FLAG-1 both hunks applied: pytest -q tests/integration/ops/test_i3_operations.py tests/integration/backend/recovery/test_runbooks.py", "exit": 0, "summary": "18 passed; reverted, tree clean (also re-verified at 44d623c8)"},
+  {"cmd": "pytest -q tests/integration/backend/recovery/test_runbooks.py tests/integration/ops/test_i3_operations.py (44d623c8)", "exit": 0, "summary": "18 passed (rb03 statement verbatim)"},
+  {"cmd": "INFRX_D_TASK=g8 pytest -q tests/g/ops", "exit": 0, "summary": "94 passed"},
+  {"cmd": "python -m tests.g.ops.mutants <6 flag mutants>", "exit": 0, "summary": "6/6 killed"},
+  {"cmd": "INFRX_D_TASK=g8 INFRX_MUTANTS=all pytest -q tests/g/ops/test_mutants.py", "exit": 0, "summary": "108 passed (102 mutants killed)"},
+  {"cmd": "ruff check infrx/operations tests/g/ops", "exit": 0, "summary": "All checks passed"},
+  {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+ ],
+ "estimate": {
+  "optimistic_h": 0.2,
+  "likely_h": 0.4,
+  "pessimistic_h": 1.0,
+  "confidence": "medium",
+  "basis": "code unchanged since 3c5947fb; coordinator applies WR-G8FLAG-1 (exact verified patch in the evidence Fix round) and WR-G8FLAG-2 at the merge and decides WR-G8FLAG-3",
+  "at": "2026-09-26T04:14Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-G8FLAG-1: exact patch (infra/app/operations.md Cutover rollback step 2 -> `flag --name signup_grant --off`; test_i3_operations.py ops03 +2 asserts), fails-before/passes-after verified; land in the same merge, close GAP-I3-1 (review 0/1-G8FLAG-R1)",
+  "WR-G8FLAG-2: R144 clause naming the `flag` verb (refuses the regime flags)",
+  "WR-G8FLAG-3: coordinator decision - rollback.md#maintenance's direct UPDATE of the regime flags (bk04/rb03 verbatim) vs R144; now marked TO BE VERIFIED in the runbook (review 1-G8FLAG-R2)"
+ ],
+ "evidence": [
+  "research/plan/evidence/g/G8-FLAG-3c5947f.md"
+ ],
+ "findings": [
+  {"id": "0-G8FLAG-R1", "fixed": false, "note": "not an owned path; WR-G8FLAG-1 now an exact verified patch"},
+  {"id": "1-G8FLAG-R1", "fixed": false, "note": "same as 0-G8FLAG-R1"},
+  {"id": "1-G8FLAG-R2", "fixed": false, "note": "coordinator decision WR-G8FLAG-3; runbook marks the conflict, owned sentence reworded"}
+ ]
+}
