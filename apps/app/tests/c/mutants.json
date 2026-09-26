@@ -1785,6 +1785,76 @@
       "cases": [
         "no client component reaches lib/services, however indirectly"
       ]
+    },
+    {
+      "id": "PROV-01",
+      "note": "E3A F-2: the guard drops the operator check, so a consumer is served the provider route",
+      "file": "lib/services/console.ts",
+      "find": "  if (session.isOperator !== true) notFound();",
+      "replace": "",
+      "cases": [
+        "C-PROV-01 a consumer gets a 404 from the provider-route guard; an operator is let through"
+      ]
+    },
+    {
+      "id": "PROV-02",
+      "note": "a truthy non-boolean flag is taken as operator authority",
+      "file": "lib/services/console.ts",
+      "find": "  if (session.isOperator !== true) notFound();",
+      "replace": "  if (!session.isOperator) notFound();",
+      "cases": [
+        "C-PROV-01 a consumer gets a 404 from the provider-route guard; an operator is let through"
+      ]
+    },
+    {
+      "id": "PROV-03",
+      "note": "the guard refuses the operator too (the preview is lost before V1M moves it to Lab)",
+      "file": "lib/services/console.ts",
+      "find": "  if (session.isOperator !== true) notFound();",
+      "replace": "  notFound();",
+      "cases": [
+        "C-PROV-01 a consumer gets a 404 from the provider-route guard; an operator is let through"
+      ]
+    },
+    {
+      "id": "PROV-04",
+      "note": "/traces drops its notFound guard (served to a consumer)",
+      "file": "app/(console)/traces/page.tsx",
+      "find": "  providerRoute(await getSession(), notFound);\n",
+      "replace": "",
+      "cases": [
+        "C-PROV-02 each provider page runs the guard first, before any read"
+      ]
+    },
+    {
+      "id": "PROV-05",
+      "note": "/dedicated drops its notFound guard",
+      "file": "app/(console)/dedicated/page.tsx",
+      "find": "  providerRoute(await getSession(), notFound);\n",
+      "replace": "",
+      "cases": [
+        "C-PROV-02 each provider page runs the guard first, before any read"
+      ]
+    },
+    {
+      "id": "PROV-06",
+      "note": "/teams drops its notFound guard (the organization's member table is served to a consumer)",
+      "file": "app/(console)/teams/page.tsx",
+      "find": "  providerRoute(session, notFound);\n",
+      "replace": "",
+      "cases": [
+        "C-PROV-02 each provider page runs the guard first, before any read"
+      ]
+    },
+    {
+      "id": "PROV-07",
+      "note": "/traces reads (consoleContext) before the guard",
+      "file": "app/(console)/traces/page.tsx",
+      "find": "  providerRoute(await getSession(), notFound);\n  const params = await searchParams;\n",
+      "replace": "  const params = await searchParams;\n  providerRoute(await getSession(), notFound);\n",
+      "cases": [
+        "C-PROV-02 each provider page runs the guard first, before any read"
+      ]
     }
   ]
 }

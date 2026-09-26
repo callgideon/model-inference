@@ -1,5 +1,8 @@
+import { notFound } from "next/navigation";
 import { ConsoleDataUnavailable, ConsolePreviewNotice } from "@/components/console-data-state";
 import { PageHeader } from "@/components/page-header";
+import { providerRoute } from "@/lib/services/console";
+import { getSession } from "@/lib/session";
 import { consoleContext } from "../usage/fake-console-context";
 import { parseTraceParams } from "./query.ts";
 import { TraceFilters } from "./trace-filters";
@@ -10,6 +13,7 @@ export const metadata = { title: "Traces · infrx" };
 
 /** V1 preview retained for migration to apps/lab after L1/L2. No provider content is served here. */
 export default async function TracesPage({ searchParams }: PageProps<"/traces">) {
+  providerRoute(await getSession(), notFound);
   const params = await searchParams;
 
   const context = consoleContext();

@@ -456,6 +456,16 @@
       "cases": [
         "A2-EMAIL-01 signup, resend and reset send one request each, with links through /auth/callback, and settle without enumeration"
       ]
+    },
+    {
+      "id": "MW-POST",
+      "note": "E3A F-1: the signed-in redirect of /login and /signup catches the login form's server action POST again, so the first-login claim never runs",
+      "file": "lib/supabase/middleware.ts",
+      "find": " && (request.method === \"GET\" || request.method === \"HEAD\")",
+      "replace": "",
+      "cases": [
+        "A2-MW-02 a signed-in server action POST to /login or /signup passes through (the sign-in claim runs)"
+      ]
     }
   ]
 }

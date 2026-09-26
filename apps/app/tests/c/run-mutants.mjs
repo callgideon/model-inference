@@ -45,6 +45,8 @@ const SUITE = [
   "tests/c/actions.test.ts",
   // S1-fix B2: the production preview gate is a module-level constant, so its case lives with the module.
   "app/(console)/usage/preview-context.test.ts",
+  // E3A F-2: the provider-route guard and its wiring in /traces, /dedicated, /teams.
+  "tests/c/provider-routes.test.ts",
 ];
 
 function prepareCopy() {

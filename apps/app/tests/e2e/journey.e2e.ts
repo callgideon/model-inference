@@ -59,6 +59,7 @@ type Journey = {
   appKeyName?: string;
   syncRequest?: string;
   syncKey?: string;
+  syncContent?: string;
   asyncHandle?: string;
   uploadRef?: string;
 };
@@ -272,6 +273,8 @@ test("signin-claim: signing in runs A2's first-login grant claim (answered repla
   await signIn(page, email); // returns once the form navigated, i.e. after its claim settled
   const after = await control<Record<string, number>>("/stats");
   expect(after["rpc/claim_signup_grant:200"] ?? 0, "the sign-in claim reached the database").toBe((before["rpc/claim_signup_grant:200"] ?? 0) + 1);
+  // afterSignIn: only a replayed claim (already onboarded) continues to `next` (/models by default).
+  expect(new URL(page.url()).pathname, "an onboarded user continues to next, not /welcome").toBe("/models");
   const books = await facts(email);
   expect([books.entitlements, books.grant_rows]).toEqual([1, 1]);
 });
@@ -306,7 +309,7 @@ test("text-sync: an external text request is answered and settled exactly once",
   expect(body.choices[0].message.content.length).toBeGreaterThan(0);
   const job = one((await facts((await journey()).a!)).jobs, requestId);
   expect([job.state, job.settlement, job.debits]).toEqual(["succeeded", "settled", 1]);
-  await remember({ syncRequest: requestId, syncKey: idem });
+  await remember({ syncRequest: requestId, syncKey: idem, syncContent: body.choices[0].message.content });
 });
 
 test("sse-stream: an external streamed request sends identity, deltas, usage and [DONE]", async () => {
@@ -442,6 +445,7 @@ test("request-detail: the owner reads a request's detail, charge and result from
   const job = one((await facts(state.a!)).jobs, requestId);
   await expect(page.getByText(requestId).first()).toBeVisible();
   await expect(page.getByText(exact(job.charged!)).first()).toBeVisible();
+  await expect(page.locator("main pre"), "the owned result is shown").toHaveText(needs(state.syncContent, "the text-sync reply"));
 });
 
 test("accounting-uncertainty: usage the engine did not report is held for reconciliation, never shown as a charge", async ({ page }) => {
@@ -562,6 +566,10 @@ test("isolation: a second individual gets their own one grant and sees none of t
   await page.goto("/api-keys");
   const keysPage = (await page.locator("main").textContent()) ?? "";
   for (const key of theirs.keys) expect(keysPage).not.toContain(key.name);
+  const foreign = needs(state.syncRequest, "the text-sync request");
+  await page.goto(`/usage/${foreign}`);
+  await expect(page.getByText("We could not find this request in your account.")).toBeVisible();
+  expect((await page.locator("main").textContent()) ?? "", "no detail of the first's request").not.toContain(foreign);
 
   const keyB = await keyFor("b");
   const handle = needs(state.asyncHandle, "the async job");

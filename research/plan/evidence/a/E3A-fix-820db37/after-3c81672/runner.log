@@ -1,0 +1,30 @@
+PASS     preflight 
+PASS     app-build 
+[ok  ] preflight: {"docker": "29.6.2", "images": {"postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb678…
+[ok  ] services: {"containers": ["infrx-e4b-clickhouse", "infrx-e4b-postgres", "infrx-e4b-s3", "infrx-e4b-valkey"], "versions": {"postgres": "PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit", "valkey": "8.1.1…
+[ok  ] migrate: {"applied": [["0001_init.sql", "b31ab5ad6117a88005cfa9dfbb878b15bcefba135b5d3151eaf2d8171831d2bc"], ["0002_seed_models.sql", "9f186e47ad8c88a1b7a97555f5ad0d6a49c3c3d5b8a66b78247e823fca629d38"], ["0003_pilot_durable_schem…
+PASS     stack provisioned
+PASS     world gateway + worker on the runtime login, controlled engine
+PASS     app 
+PASS     browser 
+[ok  ] backend-teardown: {"removed": []}
+[ok  ] teardown: {"removed": ["infrx-e4b-clickhouse", "infrx-e4b-postgres", "infrx-e4b-s3", "infrx-e4b-valkey"], "still_named_ours_but_not_ours": []}
+PASS     teardown no infrx-e4b container; ports 56860, 56861, 56870 free
+    PASS  DUR-ADMIT  (journey PASS)
+ NOT RUN  DUR-CAP  (journey PASS)
+ NOT RUN  DUR-FENCE  (journey PASS)
+    PASS  DUR-OUTPUT  (journey PASS)
+    PASS  DUR-SETTLE  (journey PASS)
+ NOT RUN  DUR-OUTBOX  (journey PASS)
+    FAIL  DUR-RLS  (journey FAIL)
+    PASS  MEDIA-SEC  (journey PASS)
+    PASS  API-MODES  (journey PASS)
+    PASS  API-STREAM  (journey PASS)
+    FAIL  CONSOLE-FLOWS  (journey FAIL)
+    PASS  CREDIT-GRANT  (journey PASS)
+    PASS  CREDIT-IDENTITY  (journey PASS)
+    PASS  CREDIT-UNITS  (journey PASS)
+ NOT RUN  CREDIT-RATE  (journey PASS)
+    PASS  CREDIT-SPEND  (journey PASS)
+    FAIL  APP-JOURNEY  (journey FAIL)
+APP-LOCAL: FAIL (exit 1) - <scratchpad>/after/verdict.json

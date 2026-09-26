@@ -27,6 +27,7 @@ const keep = args.includes("--keep");
 const SUITE = [
   "tests/a/onboarding-flow.test.ts",
   "tests/a/auth-surface.test.ts",
+  "tests/a/middleware.test.ts",
 ];
 
 const catalogue = JSON.parse(readFileSync(join(here, "mutants.json"), "utf8"));
