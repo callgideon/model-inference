@@ -52,6 +52,14 @@ const ROUTE = "app/(console)/usage/[requestId]/result/route.ts";
 const PAGE = "app/(console)/usage/[requestId]/page.tsx";
 const POLLER = "app/(console)/usage/[requestId]/status-poller.tsx";
 
+// U3: the operator console (operator-postgrest.test.ts needs the stack and skips here;
+// operator_stack.py is its real-database oracle). The page is `.tsx`: its cases read it as source.
+const O_PORT = "app/(console)/admin/operator-port.ts";
+const O_READS = "app/(console)/admin/operator-reads.ts";
+const O_FORM = "app/(console)/admin/operator-form.ts";
+const O_PAGE = "app/(console)/admin/page.tsx";
+const O_FORMS = "app/(console)/admin/operator-forms.tsx";
+
 const SUITE = [
   "tests/u/usage-view-model.test.ts",
   "tests/u/billing-view-model.test.ts",
@@ -65,6 +73,7 @@ const SUITE = [
   "tests/u/keys-view-model.test.ts",
   "tests/u/keys-source.test.ts",
   "tests/u/settings-view-model.test.ts",
+  "tests/u/operator-console.test.ts",
 ];
 
 // U2: the API Keys and Settings page models and the two key controls (read as source by keys-source).
@@ -149,6 +158,26 @@ const T = {
   pTruthful: "U2-P02 privacy copy states real serving retention and makes no zero-retention, never-stored or 120-second claim",
   pConsent: "U2-P03 sharing, annotation, evaluation and training are not offered, and signup grants no such permission",
   pAccount: "U2-P04 the account block shows the session's own e-mail and state; a failed load says so",
+};
+
+const O = {
+  noEdit: "U3-S01 no arbitrary balance edit: admin/ writes no ledger row and holds no service key",
+  gate: "U3-S02 the page refuses a non-operator (404) before any read, and reads with the session's own client",
+  rpc: "U3-P01 each command is exactly one audited RPC; the actor is never sent (the DB derives it)",
+  replay: "U3-P02 a replay is reported as a replay; an answer without a boolean is 'not confirmed', never success",
+  grant: "U3-P03 the one-time signup grant is not an operator console operation: nothing is sent",
+  refusals: "U3-P04 refusals map to typed codes with fixed text; DB detail never reaches the page",
+  transport: "U3-P05 a transport failure or a client that cannot be built is 'not confirmed, retry with the same key'",
+  accounts: "U3-R01 accounts are exact CREDIT strings joined to their organization's suspension state",
+  malformed: "U3-R02 a figure that is not an exact decimal string, or does not reconcile, makes the section unavailable - never a zero",
+  surface: "U3-R04 the reads touch only the operator read surface, bounded, with the documented filters",
+  units: "U3-R05 an unknown-usage hold keeps its own unit: CREDIT for a credit job, USD for a legacy one",
+  audit: "U3-R06 the audit trail is the closed action vocabulary; drift rows are exact CREDIT",
+  key: "U3-F01 a form keeps its idempotency key across every failure and rotates it only after a committed change",
+  outcome: "U3-F02 outcomes say what committed: once, already applied, refused, or not confirmed",
+  input: "U3-F03 a form submits exactly the allowlisted fields of its operation, plus its key",
+  wiring: "U3-S04 the form submits the key it holds and keeps it through nextKey(); a fresh key is only the initial state or the rotation",
+  sections: "U3-S05 every page section goes through Section, and a failed read renders 'Unavailable', never its table",
 };
 
 /** One single edit each, and one named invariant each. */
@@ -1020,6 +1049,67 @@ const MUTANTS = [
   { id: "U2-M22", what: "a privacy fact is rendered as a checkbox that saves nothing", file: SETTINGS_PAGE,
     find: '<Badge variant="outline">{row.status}</Badge>',
     replace: '<input type="checkbox" defaultChecked={row.status === "Off"} aria-label={row.title} />', cases: [T.sSettings] },
+  // --- U3: operator console ---------------------------------------------------------------------
+  { id: "U3-M01", what: "the form-side actor is sent to the database", file: O_PORT,
+    find: "const audited = { p_reason: command.reason, p_idempotency_key: command.idempotency_key };",
+    replace: "const audited = { p_reason: command.reason, p_idempotency_key: command.idempotency_key, p_actor: command.actor };",
+    cases: [O.rpc] },
+  { id: "U3-M02", what: "a replay is reported as a fresh change", file: O_PORT,
+    find: "return { ok: true, value: { replayed } };", replace: "return { ok: true, value: { replayed: false } };", cases: [O.replay] },
+  { id: "U3-M03", what: "an unreadable answer is taken as success", file: O_PORT,
+    find: "if (Array.isArray(data) || typeof replayed !== \"boolean\") ", replace: "if (Array.isArray(data)) ", cases: [O.replay] },
+  { id: "U3-M04", what: "the signup grant is sent as an operator change", file: O_PORT,
+    find: "if (target === null) return fail(", replace: "if (target === null && false) return fail(", cases: [O.grant] },
+  { id: "U3-M05", what: "a database authority refusal reads as 'not confirmed'", file: O_PORT,
+    find: "  if (error.code === \"42501\") return fail(...(REFUSALS.forbidden as [ErrorCode, string]));\n", replace: "", cases: [O.refusals] },
+  { id: "U3-M06", what: "the database's refusal text and any code reach the page", file: O_PORT,
+    find: "if (known !== undefined) return fail(...known);",
+    replace: "return fail((/^([a-z_]+):/.exec(error.message ?? \"\")?.[1] ?? \"internal_error\") as ErrorCode, error.message ?? \"\");",
+    cases: [O.refusals] },
+  { id: "U3-M07", what: "a transport failure is reported as a committed change", file: O_PORT,
+    find: "      } catch {\n        return fail(\"dependency_unavailable\", UNCONFIRMED);",
+    replace: "      } catch {\n        return { ok: true, value: { replayed: false } };", cases: [O.transport] },
+  { id: "U3-M08", what: "a wallet whose figures do not reconcile is shown", file: O_READS,
+    find: "    if (subCredit(ledgerTotal, reservedTotal) !== available) throw new Malformed(\"available\");\n", replace: "",
+    cases: [O.malformed] },
+  { id: "U3-M09", what: "an organization's suspension is dropped from the account row", file: O_READS,
+    find: "      suspended: org.suspended,", replace: "      suspended: false,", cases: [O.accounts] },
+  { id: "U3-M10", what: "one failed section takes another down", file: O_READS,
+    find: "section(() => audit(client)),", replace: "section(() => accounts(client).then(() => audit(client))),", cases: [O.malformed] },
+  { id: "U3-M11", what: "a JSON number is accepted as money", file: O_READS,
+    find: "    return parseCredit(row[key]);", replace: "    return parseCredit(String(row[key]));", cases: [O.malformed, O.audit] },
+  { id: "U3-M12", what: "an audit action outside the closed vocabulary is shown", file: O_READS,
+    find: "    if (!(AUDIT_ACTIONS as readonly string[]).includes(action)) throw new Malformed(\"action\");\n", replace: "",
+    cases: [O.audit] },
+  { id: "U3-M13", what: "a legacy USD hold is labelled CREDIT", file: O_READS,
+    find: ": { amount: parseUsd(r.hold), unit: \"USD\" };", replace: ": { amount: parseCredit(r.hold), unit: \"CREDIT\" };", cases: [O.units] },
+  { id: "U3-M14", what: "the audit read is unbounded", file: O_READS,
+    find: "      .order(\"at\", { ascending: false })\n      .limit(AUDIT_LIMIT),", replace: "      .order(\"at\", { ascending: false }),",
+    cases: [O.surface] },
+  { id: "U3-M15", what: "provider_dev wallets are listed as consumer accounts", file: O_READS,
+    find: "      .eq(\"kind\", \"consumer\")\n", replace: "", cases: [O.surface] },
+  { id: "U3-M16", what: "a failed submission rotates the idempotency key (a retry can apply twice)", file: O_FORM,
+    find: "return result.ok ? fresh() : current;", replace: "return fresh();", cases: [O.key] },
+  { id: "U3-M17", what: "a replay is announced as a new commit", file: O_FORM,
+    find: "    return result.value.replayed\n", replace: "    return !result.value.replayed\n", cases: [O.outcome] },
+  { id: "U3-M18", what: "the suspension status is submitted as text", file: O_FORM,
+    find: "input[field.name] = field.kind === \"suspended\" ? value === \"true\" : value;", replace: "input[field.name] = value;",
+    cases: [O.input] },
+  { id: "U3-M19", what: "the page renders for a non-operator", file: O_PAGE,
+    find: "  if (!session.isOperator) notFound();\n", replace: "", cases: [O.gate] },
+  { id: "U3-M20", what: "the page reads with the service key instead of the operator's session", file: O_PAGE,
+    find: "operatorReads((await createClient()) as unknown as ReadClient)", replace: "operatorReads(createAdminClient() as unknown as ReadClient)",
+    cases: [O.gate, O.noEdit] },
+  { id: "U3-M21", what: "the form rotates its key after every answer (a 'not confirmed' retry applies twice)", file: O_FORMS,
+    find: "setKey(nextKey(key, result, newKey));", replace: "setKey(newKey());", cases: [O.wiring] },
+  { id: "U3-M22", what: "the form submits a fresh key instead of the one it holds", file: O_FORMS,
+    find: "String(data.get(name)) : null), key);", replace: "String(data.get(name)) : null), newKey());", cases: [O.wiring] },
+  { id: "U3-M23", what: "a failed section renders its empty table ('everything reconciles')", file: O_PAGE,
+    find: "  if (!result.ok) {\n    return (\n      <p role=\"status\" className=\"p-4 text-sm text-destructive\">\n        Unavailable: {result.error.message}.\n      </p>\n    );\n  }\n",
+    replace: "  if (!result.ok) return <>{children([] as T)}</>;\n", cases: [O.sections] },
+  { id: "U3-M24", what: "a failed drift read bypasses Section and shows as no drift", file: O_PAGE,
+    find: "<Section result={view.drift}>", replace: "<Section result={view.drift.ok ? view.drift : { ok: true, value: [] }}>",
+    cases: [O.sections] },
 ];
 
 /**
