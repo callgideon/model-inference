@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/forgot-password", "/auth"];
+const PUBLIC = ["/api/version", "/login", "/signup", "/verify-email", "/forgot-password", "/auth"];
 
 /** Refreshes the Supabase session cookie and guards the console routes. */
 export async function updateSession(request: NextRequest) {
@@ -37,7 +37,7 @@ export async function updateSession(request: NextRequest) {
     url.searchParams.set("next", path + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
-  if (user && path === "/login") {
+  if (user && (path === "/login" || path === "/signup")) {
     const url = request.nextUrl.clone();
     url.pathname = "/models";
     url.search = "";

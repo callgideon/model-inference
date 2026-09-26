@@ -167,6 +167,46 @@ def test_catalog_truth__credit_discovery_advertises_only_the_approved_card():
     assert listed(discovery_app(other)[0]) == []
 
 
+LAUNCH = "rc_marlin2b_20260925_launch"
+# P-01's enactment: the text G8's `publish-card --approved-by` records (15 "Decisions
+# 2026-09-25"); it carries none of the blocking markers (`transition.unapproved`).
+LAUNCH_APPROVAL = ("Launch price approved by the coordinator under the operator's "
+                   "authorization of 2026-09-25")
+
+
+def credit_entry(approved_by, version=CARD) -> dict:
+    """The CREDIT entry published over the seeded card with `approved_by` replaced
+    (model_copy does not validate, so an absent approval can be stated)."""
+    catalog = priced()
+    catalog.rate_cards[IDS.prod_deployment] = catalog.rate_cards[IDS.prod_deployment] \
+        .model_copy(update={"approved_by": approved_by, "rate_card_version": version})
+    config = support.settings(deployment=CREDIT, active_rate_card_version=version, **DEPLOYED)
+    credit = only(discovery_app(config, catalog=catalog)[0])["pricing"]["credit"]
+    assert credit["rate_card_version"] == version
+    return credit
+
+
+def test_catalog_truth__an_approved_card_is_not_published_as_provisional():
+    """A3 WR-4 / P-01: the launch card G8's publish-card records as approved publishes
+    `provisional: false` - the flag is the card's approval, not a constant (fails on the
+    constant `PROVISIONAL = True`, and the App then shows an approved price as provisional)."""
+    assert credit_entry(LAUNCH_APPROVAL, LAUNCH)["provisional"] is False
+
+
+def test_catalog_truth__an_unapproved_or_unreadable_approval_publishes_provisional():
+    """Provisional rates are never published as approved: the seed card ('provisional -
+    P-01 pending'), any approval text with a blocking marker, and an absent or blank
+    approval all publish `provisional: true` (fail closed; the card stays priced and listed,
+    R109 - withholding is for unpriced cards). A catalog that cannot be read is a 503
+    (`..._an_unreachable_catalog_...`), never a guessed flag."""
+    seeded = only(discovery_app(support.settings(
+        deployment=CREDIT, active_rate_card_version=CARD, **DEPLOYED))[0])
+    assert seeded["pricing"]["credit"]["provisional"] is True     # the seed card as served
+    for approval in ("provisional - P-01 pending", "approved, P-01 pending", "Pending",
+                     "", "   ", None):
+        assert credit_entry(approval)["provisional"] is True, approval
+
+
 def test_catalog_truth__an_unreachable_catalog_is_a_retryable_503_not_a_claim():
     catalog = priced()
 

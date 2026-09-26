@@ -1,0 +1,14 @@
+{"task": "G7", "slice": "G7-PROVISIONAL (A3 WR-4)", "activity": "review",
+ "head": "0a01779ab3114513a5239b7bd7f694f9a56dd5d7",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-g7-provisional",
+ "branch": "codex/g7-provisional",
+ "owned_paths": ["apps/infrx-api/infrx/gateway/routes/models.py", "apps/infrx-api/tests/g/test_catalog_truth.py", "apps/infrx-api/tests/g/mutants.py", "research/plan/evidence/g/G7-provisional-0a01779.md"],
+ "commands": [
+  {"cmd": "pytest -q tests/g/test_catalog_truth.py -k provisional (before fix)", "exit": 1, "summary": "1 failed (assert True is False), 1 passed"},
+  {"cmd": "pytest -q tests/g --ignore=tests/g/ops --ignore=tests/g/test_mutants.py", "exit": 0, "summary": "556 passed"},
+  {"cmd": "INFRX_MUTANTS=all pytest -q tests/g/test_mutants.py", "exit": 0, "summary": "395 passed"},
+  {"cmd": "python -m tests.g.mutants provisional_flag_constant|provisional_flag_fails_open", "exit": 0, "summary": "killed, killed"},
+  {"cmd": "pytest -q tests/contracts/v2/test_published_model.py", "exit": 0, "summary": "98 passed"},
+  {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}],
+ "estimate": {"optimistic_h": 0, "likely_h": 0.25, "pessimistic_h": 1, "confidence": "high", "basis": "3-file diff, suites green", "at": "2026-09-25T23:26Z"},
+ "blockers": [], "wiring_requests": [], "evidence": ["research/plan/evidence/g/G7-provisional-0a01779.md"]}

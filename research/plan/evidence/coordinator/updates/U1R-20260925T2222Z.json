@@ -1,0 +1,92 @@
+{
+  "task": "U1R",
+  "lane": "U1R",
+  "slice": "fix round: 0-U1R-V-01 (preview gate tested), 1-U1R-V01 (ledger page drops actor), 1-U1R-V02 lane side (sidebarCredits), 0-U1R-V-02 as exact D10 index WR",
+  "activity": "review",
+  "at": "2026-09-25T22:22:11Z",
+  "head": "d199fffe",
+  "base": "46776646",
+  "worktree": ".claude/worktrees/codex-app-u1r",
+  "branch": "codex/app-u1r",
+  "owned_paths": [
+    "apps/app/app/(console)/usage/",
+    "apps/app/app/(console)/billing/",
+    "apps/app/lib/format.ts",
+    "apps/app/tests/u/",
+    "research/plan/evidence/u/U1R-ae8c388.md",
+    "research/plan/evidence/coordinator/updates/U1R-20260925T2222Z.json"
+  ],
+  "isolation": {
+    "ports": "postgres 55457 (INFRX_D_TASK=app-u1r)",
+    "prefix": "infrx-app-u1r-",
+    "db": "infrx_app-u1r_credit, infrx_app-u1r_perf"
+  },
+  "commands": [
+    {
+      "cmd": "make console-test",
+      "exit": 0,
+      "summary": "388 tests: 382 pass, 0 fail, 6 skipped (credit-pg, run via credit_world.py); +4 cases G01-G03, B09"
+    },
+    {
+      "cmd": "make console-lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "make console-typecheck",
+      "exit": 0,
+      "summary": "typegen + tsc clean"
+    },
+    {
+      "cmd": "make console-mutants",
+      "exit": 0,
+      "summary": "contracts self 14/14, 212/212; V 40/40; U 97/97 (M30=reviewer P1, M31=reviewer P2, M19 re-select actor, M32/M33 sidebar); C self 4/4, 104/104; 0 stale"
+    },
+    {
+      "cmd": "cd apps/infrx-api && INFRX_D_TASK=app-u1r uv run --frozen python ../app/tests/u/credit_world.py",
+      "exit": 0,
+      "summary": "6/6; P02 now asserts no actor in the ledger select and no visible_principal in the EXPLAIN plan (failed before on both, each independently)"
+    },
+    {
+      "cmd": "perf probe 10k/100k debits (task-local)",
+      "exit": 0,
+      "summary": "ledger page with actor 1483/13528 ms, without 8.4/84 ms; credits-in 1.4/8.2 ms -> 0.1 ms with WR-3(b) partial index"
+    },
+    {
+      "cmd": "WR-3(b) proof in scratch world",
+      "exit": 0,
+      "summary": "without index 5/1, with index 6/6"
+    },
+    {
+      "cmd": "WR-1+2 composed proof in scratch tree",
+      "exit": 0,
+      "summary": "composed test 0/1 current, 1/1 patched; tsc clean on patched tree"
+    },
+    {
+      "cmd": "cd apps/app && pnpm build",
+      "exit": 0,
+      "summary": "compiled gate returns null; creditSource calls it; 0 fixture/secret strings in .next/static"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "lane-side fixes and regressions green; remaining is coordinator WR-1+2 (exact diff + test) and D10 WR-3(b) (one index + test lines); WR-3(c) optional",
+    "at": "2026-09-25T22:22:11Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-1+2 (same merge as U1R): app/(console)/layout.tsx sidebar = sidebarCredits(await (await consumerCreditReads()).reads.wallet()); components/sidebar.tsx /billing label and sidebar row 'Balance' -> 'Credits'; add tests/u/sidebar-credits.test.ts (exact diff and test in the evidence Fix round)",
+    "WR-3(a) D10 SQL: consumer_jobs p_model/p_key_id/p_from/p_to (+ key id/name) (unchanged)",
+    "WR-3(b) D10 SQL: create index credit_ledger_wallet_credits_in_idx on infrx.credit_ledger (wallet_id) where kind <> 'inference_debit'; then P02 gains the plan assertion (diff in evidence)",
+    "WR-3(c) D10 SQL (optional, large histories): keyset ledger-page function over infrx.credit_ledger so LIMIT rides credit_ledger_wallet_created_idx (security_barrier view forces a top-N sort: 84 ms at 100k)",
+    "WR-4 U4: request detail page at app/(console)/usage/[requestId]/page.tsx (unchanged)",
+    "WR-5 A3/U3: use credits()/amount() instead of float money() for balances/charges/CREDIT rates (unchanged)",
+    "WR-6 coordinator: choose one consumer credit port (C0 credit_ledger_page vs postgrestCreditReads) before U4/E3A; both now select the same ledger columns (no actor)"
+  ],
+  "evidence": [
+    "research/plan/evidence/u/U1R-ae8c388.md"
+  ]
+}

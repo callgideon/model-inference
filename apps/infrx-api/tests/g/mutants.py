@@ -1532,6 +1532,15 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "    if regime == CREDIT and card.rate_card_version != settings.pilot.active_rate_card_version:",
        "    if False:",
        "test_catalog_truth__credit_discovery_advertises_only_the_approved_card"),
+    # A3 WR-4 / P-01: `provisional` is the card's approval record, fail closed.
+    _m("provisional_flag_constant", "an approved card is not published as provisional",
+       M, "    return unapproved(card.approved_by) is not None",
+       "    return True",
+       "test_catalog_truth__an_approved_card_is_not_published_as_provisional"),
+    _m("provisional_flag_fails_open", "an absent approval publishes provisional, never approved",
+       M, "    return unapproved(card.approved_by) is not None",
+       "    return bool(card.approved_by) and unapproved(card.approved_by) is not None",
+       "test_catalog_truth__an_unapproved_or_unreadable_approval_publishes_provisional"),
     _m("unpriced_model_published", "an unpriced model is not advertised (R69)",
        M, "    if serving is None or card is None:\n        return None",
        "    if serving is None:\n        return None",
@@ -1761,6 +1770,11 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "            if self.regime == CREDIT and self.readiness is None:",
        "            if False:",
        "test_w5_f5__the_pre_d10_door_still_rechecks_after_admission"),
+    # --- A3 WR-1: the Docs examples replayed on the mounted routes (resume is a replay) ---
+    _m("docs_resume_not_replayed", "the Docs resume example is answered as a replay of its job",
+       "gateway/routes/jobs.py", "                                idempotency_replayed=replayed)",
+       "                                idempotency_replayed=False)",
+       "test_app_journey__every_docs_example_is_served_by_the_mounted_routes"),
 )
 
 
@@ -1801,6 +1815,8 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     for name in ("pyproject.toml", "client_example.py"):
         shutil.copy2(API_DIR / name, api / name)
     (root / "models").symlink_to(API_DIR.parents[1] / "models")
+    # A3 WR-1: `test_app_examples` reads the App's recorded Docs calls (read only).
+    (root / "apps" / "app").symlink_to(API_DIR.parent / "app")
     return api
 
 

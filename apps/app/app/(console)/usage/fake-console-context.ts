@@ -38,3 +38,11 @@ export function consoleContext(env: { NODE_ENV?: string; INFRX_CONSOLE_PREVIEW?:
     now: new Date(orgsFixture.clock),
   };
 }
+
+/**
+ * The same gate for the U1R CREDIT fixture: one gate, so the preview can never be open for one
+ * console fixture and closed for another. A production build answers false without building anything.
+ */
+export function previewAllowed(env: { NODE_ENV?: string; INFRX_CONSOLE_PREVIEW?: string } = process.env): boolean {
+  return consoleContext(env) !== null;
+}

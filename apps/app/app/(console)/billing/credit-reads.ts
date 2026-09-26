@@ -1,0 +1,380 @@
+/**
+ * The consumer CREDIT reads the Usage and Credits pages render (U1R), over PostgREST.
+ *
+ * Every read goes through the signed-in user's own Supabase session (anon key + user JWT, RLS on):
+ * no service key, no caller-supplied tenant. The relations are D1R/D10's consumer read surface:
+ *
+ * - `console_credit_wallets` (0008): the caller's consumer wallet, filtered by `owner_user_id` — an
+ *   operator session sees every wallet through the view, so the filter is what scopes it;
+ * - `console_credit_ledger` (0008): that wallet's entries, keyset-paged on
+ *   `credit_ledger_wallet_created_idx (wallet_id, created_at desc, entry_id desc)`;
+ * - `consumer_jobs` (0021): the caller's jobs through the JWT subject, keyset-paged on
+ *   `jobs_org_created_idx`, money as text in each job's own unit;
+ * - `console_legacy_usd_statement` (0008): the historical USD balance, its own unit.
+ *
+ * Nothing here throws and nothing here guesses: an error, a transport failure or a row that is not
+ * exactly what the relation promises is a typed failure the page renders as unavailable, never a
+ * zero or a plausible balance. Money stays a decimal string from the row to the screen.
+ *
+ * Pure `.ts` with relative imports (R48): the client is injected, so `node --test` loads this.
+ */
+
+import {
+  parseCredit,
+  parseUsd,
+  subCredit,
+  totalCredit,
+  unitOfRegime,
+  type AccountingRegime,
+  type Credit,
+  type Usd,
+} from "../../../lib/contracts/v2/money-units.ts";
+import type { ErrorCode, Page, Result } from "../../../lib/contracts/types.ts";
+
+// ---------------------------------------------------------------------------
+// The slice of supabase-js this adapter calls. `lib/supabase/server.ts`'s client satisfies it.
+// ---------------------------------------------------------------------------
+
+export type Answer = { data: unknown; error: { code?: string | null; message?: string | null } | null };
+
+export interface Filter extends PromiseLike<Answer> {
+  eq(column: string, value: string): Filter;
+  neq(column: string, value: string): Filter;
+  or(filter: string): Filter;
+  order(column: string, options: { ascending: boolean }): Filter;
+  limit(count: number): Filter;
+}
+
+export interface CreditClient {
+  from(relation: string): { select(columns: string): Filter };
+  rpc(fn: string, args: Record<string, unknown>): PromiseLike<Answer>;
+}
+
+// ---------------------------------------------------------------------------
+// DTOs
+// ---------------------------------------------------------------------------
+
+export type CreditWallet = {
+  walletId: string;
+  /** The wallet's personal organization (R66): the tenant the legacy statement is read for. */
+  orgId: string;
+  ledgerTotal: Credit;
+  reservedTotal: Credit;
+  /** As the database computed it; the view model checks it against total - reserved. */
+  available: Credit;
+  /** When the one-time signup grant landed, or null when it has not. */
+  signupGrantedAt: string | null;
+};
+
+export type CreditLedgerEntry = {
+  id: string;
+  createdAt: string;
+  kind: string;
+  amount: Credit;
+  requestId: string | null;
+  reason: string;
+};
+
+export type LegacyUsd = { balance: Usd; entryCount: number; rolloutHold: boolean };
+
+export type HoldState = "held" | "settled" | "released" | "unknown";
+
+export type ConsumerJob = {
+  requestId: string;
+  createdAt: string;
+  requestedModel: string;
+  modelRevision: string;
+  executionMode: string;
+  state: string;
+  outcomeCause: string | null;
+  regime: AccountingRegime;
+  unit: "CREDIT" | "USD";
+  settlementState: string | null;
+  usageCertainty: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  /** The job's reservation in its own unit, and where it stands. */
+  hold: string | null;
+  holdState: HoldState | null;
+  /** What settlement charged, in the job's unit; null until it settled (never a zero). */
+  charged: string | null;
+  resultAvailable: boolean;
+  resultExpiresAt: string | null;
+};
+
+export type PageRequest = { limit: number; cursor: string | null };
+
+export interface CreditReads {
+  /** The caller's consumer wallet; `null` when none exists yet (no grant). */
+  wallet(): Promise<Result<CreditWallet | null>>;
+  ledger(walletId: string, page: PageRequest): Promise<Result<Page<CreditLedgerEntry>>>;
+  /** Σ of the non-debit entries (grant + adjustments); `null` past `CREDITS_IN_BOUND` entries. */
+  creditsIn(walletId: string): Promise<Result<Credit | null>>;
+  legacyUsd(orgId: string): Promise<Result<LegacyUsd>>;
+  jobs(page: PageRequest): Promise<Result<Page<ConsumerJob>>>;
+}
+
+/**
+ * How many grant/adjustment entries `creditsIn` will sum. A consumer wallet has one signup grant and
+ * the rare operator adjustment, so this is never reached in practice; past it, "spent" is shown as
+ * unavailable rather than computed from a partial sum.
+ *
+ * ponytail: spent is derived as Σ(non-debit) − ledger_total because no SQL aggregate exists for it;
+ * the read filters the wallet's index range by kind. Replace with a D10 `console_credit_totals`
+ * function (wiring request in the U1R evidence) if wallets grow long histories.
+ */
+export const CREDITS_IN_BOUND = 100;
+
+// ---------------------------------------------------------------------------
+// Row readers: fail closed. Anything not exactly as promised throws, and `guard` maps it.
+// ---------------------------------------------------------------------------
+
+class Malformed extends Error {}
+
+function field(row: unknown, name: string): unknown {
+  if (typeof row !== "object" || row === null || !Object.hasOwn(row, name)) {
+    throw new Malformed(`the read did not return ${name}`);
+  }
+  return (row as Record<string, unknown>)[name];
+}
+
+function text(row: unknown, name: string): string {
+  const value = field(row, name);
+  if (typeof value !== "string") throw new Malformed(`${name} must be text`);
+  return value;
+}
+
+function optionalText(row: unknown, name: string): string | null {
+  return field(row, name) === null ? null : text(row, name);
+}
+
+/** PostgREST renders `timestamptz` as `…+00:00`; the DTO carries one comparable form. */
+const INSTANT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(?:Z|\+00:00)$/;
+
+function instant(row: unknown, name: string): string {
+  const match = INSTANT.exec(text(row, name));
+  if (match === null) throw new Malformed(`${name} must be a UTC timestamp`);
+  return `${match[1]}.${(match[2] ?? "").padEnd(6, "0")}Z`;
+}
+
+function optionalInstant(row: unknown, name: string): string | null {
+  return field(row, name) === null ? null : instant(row, name);
+}
+
+/** Money is text (R59-9): a JSON number already went through a double and is refused. */
+function credit(row: unknown, name: string): Credit {
+  return parseCredit(text(row, name));
+}
+
+function optionalInteger(row: unknown, name: string): number | null {
+  const value = field(row, name);
+  if (value === null) return null;
+  if (!Number.isSafeInteger(value)) throw new Malformed(`${name} must be an integer`);
+  return value as number;
+}
+
+function flag(row: unknown, name: string): boolean {
+  const value = field(row, name);
+  if (typeof value !== "boolean") throw new Malformed(`${name} must be a boolean`);
+  return value;
+}
+
+function rows(data: unknown): unknown[] {
+  if (!Array.isArray(data)) throw new Malformed("the read did not return rows");
+  return data;
+}
+
+const HOLD_STATES: readonly HoldState[] = ["held", "settled", "released", "unknown"];
+
+function walletOf(row: unknown): CreditWallet {
+  return {
+    walletId: text(row, "wallet_id"),
+    orgId: text(row, "org_id"),
+    ledgerTotal: credit(row, "ledger_total"),
+    reservedTotal: credit(row, "reserved_total"),
+    available: credit(row, "available"),
+    signupGrantedAt: optionalInstant(row, "signup_granted_at"),
+  };
+}
+
+function entryOf(row: unknown): CreditLedgerEntry {
+  if (text(row, "unit") !== "CREDIT") throw new Malformed("a CREDIT ledger entry must be CREDIT");
+  return {
+    id: text(row, "entry_id"),
+    createdAt: instant(row, "created_at"),
+    kind: text(row, "kind"),
+    amount: credit(row, "amount"),
+    requestId: optionalText(row, "request_id"),
+    reason: text(row, "reason"),
+  };
+}
+
+function jobOf(row: unknown): ConsumerJob {
+  const regime = text(row, "accounting_regime");
+  const unit = unitOfRegime(regime);
+  // The unit is stated twice, by the regime and by the row; they must agree (no relabelling).
+  if (text(row, "unit") !== unit) throw new Malformed(`a ${regime} job cannot be denominated otherwise`);
+  const exact = (name: string): string | null => {
+    const value = optionalText(row, name);
+    if (value === null) return null;
+    return unit === "CREDIT" ? parseCredit(value) : parseUsd(value);
+  };
+  const holdState = optionalText(row, "hold_state");
+  if (holdState !== null && !(HOLD_STATES as readonly string[]).includes(holdState)) {
+    throw new Malformed("hold_state is outside its vocabulary");
+  }
+  return {
+    requestId: text(row, "request_id"),
+    createdAt: instant(row, "created_at"),
+    requestedModel: text(row, "requested_model"),
+    modelRevision: text(row, "model_revision"),
+    executionMode: text(row, "execution_mode"),
+    state: text(row, "state"),
+    outcomeCause: optionalText(row, "outcome_cause"),
+    regime: regime as AccountingRegime,
+    unit: unit as "CREDIT" | "USD",
+    settlementState: optionalText(row, "settlement_state"),
+    usageCertainty: optionalText(row, "usage_certainty"),
+    promptTokens: optionalInteger(row, "prompt_tokens"),
+    completionTokens: optionalInteger(row, "completion_tokens"),
+    hold: exact("hold"),
+    holdState: holdState as HoldState | null,
+    charged: exact("charged"),
+    resultAvailable: flag(row, "result_available"),
+    resultExpiresAt: optionalInstant(row, "result_expires_at"),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Errors: a code the page can explain, a message that carries no internals.
+// ---------------------------------------------------------------------------
+
+function fail<T>(code: ErrorCode, message: string): Result<T> {
+  return { ok: false, error: { code, message } };
+}
+
+function refusal<T>(error: NonNullable<Answer["error"]>): Result<T> {
+  if (error.code === "42501") return fail("forbidden", "This account cannot read that.");
+  if (error.code === "P0001" && (error.message ?? "").startsWith("invalid_cursor")) {
+    return fail("invalid_cursor", "This page link is no longer valid.");
+  }
+  // Everything else — PostgREST down, a JWT expired, a function missing — is "not now".
+  return fail("dependency_unavailable", "Account data is unavailable right now.");
+}
+
+async function read<T>(query: PromiseLike<Answer>, map: (data: unknown) => T): Promise<Result<T>> {
+  let answer: Answer;
+  try {
+    answer = await query;
+  } catch {
+    return fail("dependency_unavailable", "Account data is unavailable right now.");
+  }
+  if (answer.error !== null && answer.error !== undefined) return refusal(answer.error);
+  try {
+    return { ok: true, value: map(answer.data) };
+  } catch {
+    return fail("internal_error", "Account data could not be read exactly.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Keyset pages
+// ---------------------------------------------------------------------------
+
+/** The ledger cursor this adapter mints: `<normalised instant>|<entry uuid>`, nothing else. */
+const LEDGER_CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z)\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+function pageOf<T>(items: T[], limit: number, cursorOf: (item: T) => string): Page<T> {
+  const shown = items.slice(0, limit);
+  return {
+    items: shown,
+    next_cursor: items.length > limit && shown.length > 0 ? cursorOf(shown[shown.length - 1]) : null,
+  };
+}
+
+export function postgrestCreditReads(client: CreditClient, userId: string): CreditReads {
+  return {
+    wallet: () =>
+      read(
+        client
+          .from("console_credit_wallets")
+          .select("wallet_id, org_id, ledger_total, reserved_total, available, signup_granted_at")
+          .eq("owner_user_id", userId)
+          .eq("kind", "consumer")
+          .limit(2),
+        (data) => {
+          const found = rows(data);
+          if (found.length > 1) throw new Malformed("more than one consumer wallet");
+          return found.length === 0 ? null : walletOf(found[0]);
+        },
+      ),
+
+    async ledger(walletId, page) {
+      // The cursor is spliced into a PostgREST filter, so only the exact shape minted below is
+      // accepted — and it is checked before any query exists.
+      const match = page.cursor === null ? null : LEDGER_CURSOR.exec(page.cursor);
+      if (page.cursor !== null && match === null) {
+        return fail("invalid_cursor", "This page link is no longer valid.");
+      }
+      // No `actor`: the view computes visible_principal() for it on every row of the wallet before
+      // the sort and limit (1.5 s a page at 10k entries, 8 ms without), and every entry a consumer
+      // can read is masked to `platform` anyway (R59-1).
+      let query = client
+        .from("console_credit_ledger")
+        .select("entry_id, created_at, kind, amount, unit, request_id, reason")
+        .eq("wallet_id", walletId);
+      if (match !== null) {
+        const [, at, id] = match;
+        query = query.or(`created_at.lt."${at}",and(created_at.eq."${at}",entry_id.lt.${id})`);
+      }
+      return read(
+        query
+          .order("created_at", { ascending: false })
+          .order("entry_id", { ascending: false })
+          .limit(page.limit + 1),
+        (data) => pageOf(rows(data).map(entryOf), page.limit, (e) => `${e.createdAt}|${e.id}`),
+      );
+    },
+
+    creditsIn: (walletId) =>
+      read(
+        client
+          .from("console_credit_ledger")
+          .select("amount")
+          .eq("wallet_id", walletId)
+          .neq("kind", "inference_debit")
+          .limit(CREDITS_IN_BOUND + 1),
+        (data) => {
+          const found = rows(data);
+          return found.length > CREDITS_IN_BOUND ? null : totalCredit(found.map((r) => credit(r, "amount")));
+        },
+      ),
+
+    legacyUsd: (orgId) =>
+      read(client.rpc("console_legacy_usd_statement", { p_org: orgId }), (data) => {
+        const [row, ...rest] = rows(data);
+        if (row === undefined || rest.length > 0) throw new Malformed("one statement row expected");
+        if (text(row, "unit") !== "USD") throw new Malformed("the legacy statement is USD");
+        const entryCount = optionalInteger(row, "entry_count");
+        if (entryCount === null || entryCount < 0) throw new Malformed("entry_count");
+        return { balance: parseUsd(text(row, "balance")), entryCount, rolloutHold: flag(row, "rollout_hold") };
+      }),
+
+    jobs: (page) =>
+      read(client.rpc("consumer_jobs", { p_after: page.cursor, p_limit: page.limit + 1 }), (data) => {
+        const found = rows(data);
+        const cursors = found.map((row) => text(row, "cursor"));
+        const jobs = found.map(jobOf);
+        const shown = jobs.slice(0, page.limit);
+        return {
+          items: shown,
+          next_cursor: jobs.length > page.limit && shown.length > 0 ? cursors[shown.length - 1] : null,
+        };
+      }),
+  };
+}
+
+/** Spent = what came in (grant + adjustments) minus what is left on the ledger. Exact. */
+export function spentCredit(wallet: CreditWallet, creditsIn: Credit | null): Credit | null {
+  return creditsIn === null ? null : subCredit(creditsIn, wallet.ledgerTotal);
+}

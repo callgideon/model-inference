@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "6143058e",
+ "integration_head": "8d9e5b5f",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 55,
- "updated": "2026-09-25T22:42:57Z",
+ "revision": 63,
+ "updated": "2026-09-26T00:51:09Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -618,9 +618,9 @@
    },
    "activity": "complete",
    "started": "2026-09-24T21:40:00Z",
-   "updated": "2026-09-25T22:42:57Z",
+   "updated": "2026-09-25T23:50:01Z",
    "blocker": "P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator)",
-   "next_action": "ROLLOUT-FIXES merged a1e06236 (rehearsal G5 fixed → 48 PASS, ssm.sh help/step guard, INSTALL_ARGS pins, pytest re-pin, pre-I8 step guards, README refresh). KNOWN-GOOD-PROOF lane running (schema_proof for bda1586/4226315). Operator-held: SNS topic/webhook, IAM sns:Publish, boto3 on the box, hosted backup rehearsal.",
+   "next_action": "ROLLOUT-FIXES merged; KNOWN-GOOD-PROOF verified f5293057 (both targets proven through 0023) → via the union; ALERT-SNS merged; operator-held items unchanged",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
@@ -882,9 +882,9 @@
    },
    "activity": "review",
    "started": "2026-09-24T21:55:00Z",
-   "updated": "2026-09-25T22:42:57Z",
+   "updated": "2026-09-25T23:50:01Z",
    "blocker": "merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3",
-   "next_action": "W5-ADMIT-WIRING f18c72f7 verification in its fix round; union carries it at 9d61d1e1. E3C early run closed F-3/F-4 and found F-5 (relay recheck after admit_ready can refuse a ran job) + F-6 (reconciliation reader on the runtime login) → W5-F5 micro-lane (wf_5e483fbc-a92) on codex/w5-f5. Then R134–R137, manifest implemented.",
+   "next_action": "union round 2 landed (door-revoke, w5-merge delta, tip, known-good-proof) at 74183655; W5-F5 lenses running; then union merge → R134–R137, W5 implemented",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -946,9 +946,9 @@
    },
    "activity": "complete",
    "started": "2026-09-24T21:55:00Z",
-   "updated": "2026-09-25T08:29:44Z",
+   "updated": "2026-09-25T23:50:01Z",
    "blocker": "merge gate: codex/d10-durable WR-3c (PgJobStore result_expires_at) must merge before or with G7, else PG successes read 410 and G8's tests/g/ops/test_acceptance_pg.py regresses",
-   "next_action": "merged into claude/consumer-v1 via codex/g7-merge 739c0414 (WR-1/2/4/5/6 applied); R130-R131 numbered; manifest G7 implemented; WR-7 is A3; MODELS_DOC retired (box env must not set it)",
+   "next_action": "G7-PROVISIONAL merged 2b112a05 (provisional flag from the approval record); G mutant list needs one entry for A3 WR-1's tests/g/test_app_examples.py (follow-up in flight)",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
@@ -1251,149 +1251,410 @@
   {
    "id": "C0",
    "task": "C0",
-   "slice": "C0 real consumer context and read port (query/server/console/credits adapters; real RLS/RPC tests)",
+   "slice": "fix round: 0-C0-V1 (consumerSession tested via consumerSessionFrom), 1-C0-V1 (consoleShell: operator bypass, route-gated redirects; WR-1 revised); 0-C0-V2/0-C0-V3 need coordinator WR-4/WR-1/WR-2",
    "agent": "opus",
    "branch": "codex/app-c0",
    "worktree": ".claude/worktrees/codex-app-c0",
    "base": "46776646",
-   "head": null,
+   "head": "ab0b5179",
    "isolation": {
     "ports": "app-c0 postgres 55451",
     "prefix": "infrx-app-c0-",
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T21:11:40Z",
-   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-25T23:28:33Z",
+   "blocker": null,
+   "next_action": "merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings)",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged after the in-workflow verification (ACCEPT_WITH_FIXES)",
+    "at": "2026-09-25T23:28:33Z"
    },
-   "evidence": [],
-   "commands": []
+   "evidence": [
+    "research/plan/evidence/c/C0-acfd9a5.md"
+   ],
+   "commands": [
+    {
+     "cmd": "cd apps/app && pnpm test (reviewer mutants V-SV-AUTH-OUTAGE, V-SV-CATCH on server.ts at 5a152cdd)",
+     "exit": 0,
+     "summary": "both survive: 386 tests, 375 pass, 0 fail, 11 skip (reproduced)"
+    },
+    {
+     "cmd": "cd apps/app && node --test tests/c/consumer.test.ts (at f2746f01, tests only)",
+     "exit": 1,
+     "summary": "fails before: no export consoleShell/consumerSessionFrom"
+    },
+    {
+     "cmd": "cd apps/app && pnpm test",
+     "exit": 0,
+     "summary": "393 tests: 381 pass, 0 fail, 12 skipped (real-stack file)"
+    },
+    {
+     "cmd": "cd apps/app && pnpm lint",
+     "exit": 0,
+     "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+     "cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit",
+     "exit": 0,
+     "summary": "clean"
+    },
+    {
+     "cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+     "exit": 0,
+     "summary": "212/212 killed"
+    },
+    {
+     "cmd": "cd apps/app && node tests/v/run-mutants.mjs",
+     "exit": 0,
+     "summary": "40/40 killed"
+    },
+    {
+     "cmd": "cd apps/app && node tests/u/run-mutants.mjs",
+     "exit": 0,
+     "summary": "64/64 killed"
+    },
+    {
+     "cmd": "cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs",
+     "exit": 0,
+     "summary": "4 self-tests; 142/142 killed (9 new: C0-SES-01..04, C0-SHELL-01..05)"
+    },
+    {
+     "cmd": "cd apps/infrx-api && INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/stack.py",
+     "exit": 0,
+     "summary": "12/12 at 8264e104 (lib/ and stack test unchanged since); new composed session/shell case: operator renders, ungranted redirects to /onboarding, c1 CREDIT balance = durable wallet"
+    },
+    {
+     "cmd": "WR-1 as first written applied temporarily; node --test client-boundary 'never redirects to onboarding'",
+     "exit": 1,
+     "summary": "guard fails the original WR-1 (bare redirect('/onboarding')); reverted"
+    },
+    {
+     "cmd": "WR-1 revised applied temporarily; typegen+tsc, eslint, pnpm test",
+     "exit": 0,
+     "summary": "clean/clean/393: 381 pass 0 fail 12 skip; reverted"
+    }
+   ],
+   "owned_paths": [
+    "apps/app/lib/services/query.ts",
+    "apps/app/lib/services/server.ts",
+    "apps/app/lib/services/console.ts",
+    "apps/app/lib/services/credits.ts",
+    "apps/app/tests/c/",
+    "research/plan/evidence/c/C0-acfd9a5.md"
+   ],
+   "wiring_requests": [
+    "WR-1 (revised) app/(console)/layout.tsx: whole file in evidence; consumerSession() -> consoleShell(session, isOperator, ROUTES) with ROUTES null until A2/C3A ship /verify-email and /onboarding; operator without consumer wallet renders (reaches /admin); sidebarCredit balance",
+    "WR-2 usage/billing pages (U1R/U4): replace fake consoleContext() with consumerSession().reads (unchanged)",
+    "WR-3 lib/contracts: promote ConsumerContext/ConsumerAccount/ConsumerReads/ConsumerRequest/CreditLedgerEntry/AuthUser + ConsumerSession/ConsumerClient/ConsoleShell",
+    "WR-4 Makefile: console-c0-real target (exact patch in evidence); name it in the C0/APP-M1 and E3A gate commands (0-C0-V2); not in check (Docker)",
+    "WR-5 D10 SQL: consumer_credit_ledger(p_after,p_limit) definer function (unchanged)",
+    "WR-6 lib/session.ts (A2/U3): first-membership pick; operator flag only after WR-1 (unchanged)",
+    "WR-7 rerun console-c0-real on the merged SHA with 0022 (unchanged)"
+   ]
   },
   {
    "id": "U1R",
    "task": "U1R",
-   "slice": "U1R CREDIT usage and balance views (exact decimal display, legacy USD separate, pagination, request-detail link)",
+   "slice": "fix round: 0-U1R-V-01 (preview gate tested), 1-U1R-V01 (ledger page drops actor), 1-U1R-V02 lane side (sidebarCredits), 0-U1R-V-02 as exact D10 index WR",
    "agent": "opus",
    "branch": "codex/app-u1r",
    "worktree": ".claude/worktrees/codex-app-u1r",
    "base": "46776646",
-   "head": null,
+   "head": "7482c21a",
    "isolation": {
-    "ports": "app-u1r postgres 55457",
+    "ports": "postgres 55457 (INFRX_D_TASK=app-u1r)",
     "prefix": "infrx-app-u1r-",
-    "db": null
+    "db": "infrx_app-u1r_credit, infrx_app-u1r_perf"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T21:11:40Z",
-   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-25T23:28:33Z",
+   "blocker": null,
+   "next_action": "merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings)",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged after the in-workflow verification (ACCEPT_WITH_FIXES)",
+    "at": "2026-09-25T23:28:33Z"
    },
-   "evidence": [],
-   "commands": []
+   "evidence": [
+    "research/plan/evidence/u/U1R-ae8c388.md"
+   ],
+   "commands": [
+    {
+     "cmd": "make console-test",
+     "exit": 0,
+     "summary": "388 tests: 382 pass, 0 fail, 6 skipped (credit-pg, run via credit_world.py); +4 cases G01-G03, B09"
+    },
+    {
+     "cmd": "make console-lint",
+     "exit": 0,
+     "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+     "cmd": "make console-typecheck",
+     "exit": 0,
+     "summary": "typegen + tsc clean"
+    },
+    {
+     "cmd": "make console-mutants",
+     "exit": 0,
+     "summary": "contracts self 14/14, 212/212; V 40/40; U 97/97 (M30=reviewer P1, M31=reviewer P2, M19 re-select actor, M32/M33 sidebar); C self 4/4, 104/104; 0 stale"
+    },
+    {
+     "cmd": "cd apps/infrx-api && INFRX_D_TASK=app-u1r uv run --frozen python ../app/tests/u/credit_world.py",
+     "exit": 0,
+     "summary": "6/6; P02 now asserts no actor in the ledger select and no visible_principal in the EXPLAIN plan (failed before on both, each independently)"
+    },
+    {
+     "cmd": "perf probe 10k/100k debits (task-local)",
+     "exit": 0,
+     "summary": "ledger page with actor 1483/13528 ms, without 8.4/84 ms; credits-in 1.4/8.2 ms -> 0.1 ms with WR-3(b) partial index"
+    },
+    {
+     "cmd": "WR-3(b) proof in scratch world",
+     "exit": 0,
+     "summary": "without index 5/1, with index 6/6"
+    },
+    {
+     "cmd": "WR-1+2 composed proof in scratch tree",
+     "exit": 0,
+     "summary": "composed test 0/1 current, 1/1 patched; tsc clean on patched tree"
+    },
+    {
+     "cmd": "cd apps/app && pnpm build",
+     "exit": 0,
+     "summary": "compiled gate returns null; creditSource calls it; 0 fixture/secret strings in .next/static"
+    }
+   ],
+   "owned_paths": [
+    "apps/app/app/(console)/usage/",
+    "apps/app/app/(console)/billing/",
+    "apps/app/lib/format.ts",
+    "apps/app/tests/u/",
+    "research/plan/evidence/u/U1R-ae8c388.md",
+    "research/plan/evidence/coordinator/updates/U1R-20260925T2222Z.json"
+   ],
+   "wiring_requests": [
+    "WR-1+2 (same merge as U1R): app/(console)/layout.tsx sidebar = sidebarCredits(await (await consumerCreditReads()).reads.wallet()); components/sidebar.tsx /billing label and sidebar row 'Balance' -> 'Credits'; add tests/u/sidebar-credits.test.ts (exact diff and test in the evidence Fix round)",
+    "WR-3(a) D10 SQL: consumer_jobs p_model/p_key_id/p_from/p_to (+ key id/name) (unchanged)",
+    "WR-3(b) D10 SQL: create index credit_ledger_wallet_credits_in_idx on infrx.credit_ledger (wallet_id) where kind <> 'inference_debit'; then P02 gains the plan assertion (diff in evidence)",
+    "WR-3(c) D10 SQL (optional, large histories): keyset ledger-page function over infrx.credit_ledger so LIMIT rides credit_ledger_wallet_created_idx (security_barrier view forces a top-N sort: 84 ms at 100k)",
+    "WR-4 U4: request detail page at app/(console)/usage/[requestId]/page.tsx (unchanged)",
+    "WR-5 A3/U3: use credits()/amount() instead of float money() for balances/charges/CREDIT rates (unchanged)",
+    "WR-6 coordinator: choose one consumer credit port (C0 credit_ledger_page vs postgrestCreditReads) before U4/E3A; both now select the same ledger columns (no actor)"
+   ]
   },
   {
    "id": "A2",
    "task": "A2",
-   "slice": "A2 verified onboarding and recovery (signup/verify/resend/sign-in/recovery, once-only grant, next-step)",
+   "slice": "fix round: 0-A2-CM-01..04, 1-A2-V-RS-01/02 — /welcome read, emailSettled, form wiring, grant RPC pin, sign-in claim + routing",
    "agent": "opus",
    "branch": "codex/app-a2",
    "worktree": ".claude/worktrees/codex-app-a2",
    "base": "46776646",
-   "head": null,
+   "head": "cd4a688e",
    "isolation": {
-    "ports": "app-a2 postgres 55460",
+    "ports": "postgres 55460 (INFRX_D_TASK=app-a2), container removed at end",
     "prefix": "infrx-app-a2-",
-    "db": null
+    "db": "infrx_app-a2"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T21:11:40Z",
-   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-25T23:28:33Z",
+   "blocker": null,
+   "next_action": "merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings)",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged after the in-workflow verification (ACCEPT_WITH_FIXES)",
+    "at": "2026-09-25T23:28:33Z"
    },
-   "evidence": [],
-   "commands": []
+   "evidence": [
+    "research/plan/evidence/a/A2-16fe503.md"
+   ],
+   "commands": [
+    {
+     "cmd": "node --test tests/a/onboarding-flow.test.ts tests/a/auth-surface.test.ts @2f72d116",
+     "exit": 1,
+     "summary": "fails before: missing exports afterSignIn / CLAIM_RPC"
+    },
+    {
+     "cmd": "cd apps/app && pnpm test",
+     "exit": 0,
+     "summary": "393 tests: 388 pass, 0 fail, 5 skipped (real-PG without DSN)"
+    },
+    {
+     "cmd": "INFRX_APP_A2_DSN=<local harness DSN> node --test tests/a/grant-pg.test.ts",
+     "exit": 0,
+     "summary": "5/5 pass on task-local PostgreSQL"
+    },
+    {
+     "cmd": "pnpm lint",
+     "exit": 0,
+     "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+     "cmd": "pnpm exec next typegen && pnpm exec tsc --noEmit",
+     "exit": 0,
+     "summary": "clean"
+    },
+    {
+     "cmd": "node tests/a/run-mutants.mjs",
+     "exit": 0,
+     "summary": "45/45 killed (22 new)"
+    },
+    {
+     "cmd": "node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+     "exit": 0,
+     "summary": "14/14 self-tests; 212/212 killed"
+    },
+    {
+     "cmd": "node tests/v/run-mutants.mjs",
+     "exit": 0,
+     "summary": "40/40"
+    },
+    {
+     "cmd": "node tests/u/run-mutants.mjs; node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs",
+     "exit": 0,
+     "summary": "u 64/64; c 4/4 self-tests, 104/104"
+    }
+   ],
+   "owned_paths": [
+    "apps/app/app/(auth)/",
+    "apps/app/app/auth/callback/route.ts",
+    "apps/app/tests/a/",
+    "research/plan/evidence/a/A2-16fe503.md",
+    "research/plan/evidence/coordinator/updates/A2-20260925T2154Z.json"
+   ],
+   "wiring_requests": [
+    "WR-A2-1 apps/app/lib/supabase/middleware.ts: PUBLIC += /signup, /verify-email; signed-in redirect also for /signup (patch + test in A2-16fe503.md)",
+    "WR-A2-2 Makefile console-mutants: add `cd apps/app && node tests/a/run-mutants.mjs` (now 45/45)",
+    "WR-A2-3 (low) apps/app/lib/utils.ts safeNext has no production caller; delete or re-export app/(auth)/flow.ts safeNext"
+   ]
   },
   {
    "id": "A3",
    "task": "A3",
-   "slice": "A3 models, pricing and executable API docs (served version, CREDIT card, examples run in tests)",
+   "slice": "fix round: 0-A3-V1 page render guard (+18 page/copy mutants, refill/top-up/expiry bans); 1-A3-RSI-1 runner/list renamed to run-catalog-mutants.mjs / catalog-mutants.json (no A2 collision)",
    "agent": "opus",
    "branch": "codex/app-a3",
    "worktree": ".claude/worktrees/codex-app-a3",
    "base": "46776646",
-   "head": null,
+   "head": "7b0ea93f",
    "isolation": {
     "ports": "fakes only",
     "prefix": "infrx-app-a3-",
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T21:11:40Z",
-   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-25T23:28:33Z",
+   "blocker": null,
+   "next_action": "merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings)",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged after the in-workflow verification (ACCEPT_WITH_FIXES)",
+    "at": "2026-09-25T23:28:33Z"
    },
-   "evidence": [],
-   "commands": []
+   "evidence": [
+    "research/plan/evidence/a/A3-19f8467.md"
+   ],
+   "commands": [
+    {
+     "cmd": "cd apps/app && pnpm test",
+     "exit": 0,
+     "summary": "383 tests, 383 pass"
+    },
+    {
+     "cmd": "pnpm lint",
+     "exit": 0,
+     "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+     "cmd": "pnpm exec next typegen && pnpm exec tsc --noEmit",
+     "exit": 0,
+     "summary": "clean"
+    },
+    {
+     "cmd": "node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+     "exit": 0,
+     "summary": "self-tests ok; 212/212 killed"
+    },
+    {
+     "cmd": "node tests/v/run-mutants.mjs",
+     "exit": 0,
+     "summary": "40/40 killed"
+    },
+    {
+     "cmd": "node tests/a/run-catalog-mutants.mjs",
+     "exit": 0,
+     "summary": "2 self-checks ok; 46/46 killed (28 prior + 18 page/copy)"
+    },
+    {
+     "cmd": "node tests/a/run-catalog-mutants.mjs --only <16 PAGE-* ids> / COPY-TOPUP,COPY-EXPIRES against the pre-fix content.test.ts",
+     "exit": 1,
+     "summary": "fails before: 0/16 and 0/2 killed (all SURVIVED)"
+    },
+    {
+     "cmd": "git merge-tree --write-tree --name-only codex/app-a2 HEAD (and consumer-v1, c0, u1r, c3a, u2, u3, u4)",
+     "exit": 0,
+     "summary": "no conflicts (was rc=1 add/add vs A2 at 9de62aaa)"
+    }
+   ],
+   "owned_paths": [
+    "apps/app/app/(console)/models/",
+    "apps/app/app/(console)/docs/",
+    "apps/app/tests/a/",
+    "research/plan/evidence/a/A3-19f8467.md",
+    "research/plan/evidence/coordinator/updates/A3-20260925T2230Z.json"
+   ],
+   "wiring_requests": [
+    "WR-1 unchanged (apps/infrx-api/tests/g/test_app_examples.py; content in the evidence)",
+    "WR-2 (replaces earlier) Makefile console-mutants: add '\\tcd apps/app && node tests/a/run-catalog-mutants.mjs' (46/46 killed); independent of A2's tests/a/run-mutants.mjs line",
+    "WR-3 unchanged (server-only INFRX_API_BASE_URL + README env line)",
+    "WR-4 unchanged (G7 PROVISIONAL constant -> derived from card approval)"
+   ]
   },
   {
    "id": "C3A",
    "task": "C3A",
-   "slice": "C3A trusted consumer actions (keys, grant retry, settings, operator actions via narrow ports; idempotency/CSRF)",
+   "slice": "fix round done: 0-C3A-VCM-1/2, 1-C3A-V-1/2 fixed; 1-C3A-V-3 (unverified-JWT key insert) closes with 0024 WR-C3A-4",
    "agent": "opus",
    "branch": "codex/app-c3a",
    "worktree": ".claude/worktrees/codex-app-c3a",
    "base": "46776646",
-   "head": null,
+   "head": "91af4caf",
    "isolation": {
     "ports": "app-c3a postgres 55452",
     "prefix": "infrx-app-c3a-",
     "db": null
    },
-   "activity": "queued",
+   "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T21:11:40Z",
-   "blocker": "starts when C0 hands back (merges codex/app-c0)",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-26T00:41:44Z",
+   "blocker": null,
+   "next_action": "APP-UNION round 2 (codex/app-union-2 from 35bd43dd) merges C3A + U4 + U2 + U3 with the coordinator wirings; then the 0024 flip",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the union merge + coordinator wirings (+ the 0024 flip for C3A/U4)",
+    "at": "2026-09-26T00:41:44Z"
    },
    "evidence": [],
    "commands": []
@@ -1401,29 +1662,29 @@
   {
    "id": "U4",
    "task": "U4",
-   "slice": "U4 owned request detail and result lifecycle (bounded polling, expiry, two-tenant probes)",
+   "slice": "verified ACCEPT_WITH_FIXES: V-01/V-02 fixed; V-03 (unknown-usage result served) closes with 0024 WR-U4-2",
    "agent": "opus",
    "branch": "codex/app-u4",
    "worktree": ".claude/worktrees/codex-app-u4",
    "base": "46776646",
-   "head": null,
+   "head": "d76f912f",
    "isolation": {
     "ports": "app-u4 postgres 55456",
     "prefix": "infrx-app-u4-",
     "db": null
    },
-   "activity": "queued",
+   "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T21:11:40Z",
-   "blocker": "starts when U1R hands back (merges codex/app-u1r)",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-26T00:41:44Z",
+   "blocker": null,
+   "next_action": "APP-UNION round 2; WR-U4-1 console-pg target applied there",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the union merge + coordinator wirings (+ the 0024 flip for C3A/U4)",
+    "at": "2026-09-26T00:41:44Z"
    },
    "evidence": [],
    "commands": []
@@ -1431,29 +1692,29 @@
   {
    "id": "U2",
    "task": "U2",
-   "slice": "U2 keys and supported settings (one-time plaintext, rotation, truthful privacy copy)",
+   "slice": "verified ACCEPT_WITH_FIXES: U2-V-1..5 fixed and rechecked (failed key read never renders as empty; redaction; stuck pending; plaintext/lost-key seams; wiring tests)",
    "agent": "opus",
    "branch": "codex/app-u2",
    "worktree": ".claude/worktrees/codex-app-u2",
    "base": "46776646",
-   "head": null,
+   "head": "2bd04497",
    "isolation": {
     "ports": "fakes only",
     "prefix": "infrx-app-u2-",
     "db": null
    },
-   "activity": "queued",
+   "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T21:11:40Z",
-   "blocker": "starts when U1R and C3A hand back",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-26T00:41:44Z",
+   "blocker": null,
+   "next_action": "APP-UNION round 2; WR-U2-1/2/3 applied there",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the union merge + coordinator wirings (+ the 0024 flip for C3A/U4)",
+    "at": "2026-09-26T00:41:44Z"
    },
    "evidence": [],
    "commands": []
@@ -1461,32 +1722,179 @@
   {
    "id": "U3",
    "task": "U3",
-   "slice": "U3 minimal operator controls (rate publication, reasoned adjust/grant, suspension, audited idempotent ops)",
+   "slice": "verified ACCEPT_WITH_FIXES: U3-V1..V3 fixed and rechecked (DUR-RLS on operator views can fail; form retry protection wired; Unavailable rendering tested)",
    "agent": "opus",
    "branch": "codex/app-u3",
    "worktree": ".claude/worktrees/codex-app-u3",
    "base": "46776646",
-   "head": null,
+   "head": "b80c4cd8",
    "isolation": {
     "ports": "app-u3 postgres 55453",
     "prefix": "infrx-app-u3-",
     "db": null
    },
-   "activity": "queued",
+   "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T21:11:40Z",
-   "blocker": "starts when U1R and C3A hand back",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-26T00:41:44Z",
+   "blocker": null,
+   "next_action": "APP-UNION round 2 (WR-U3-2 operator port, WR-U3-4); WR-U3-1 operator RPC SQL → D10 0025 lane after 0024",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the union merge + coordinator wirings (+ the 0024 flip for C3A/U4)",
+    "at": "2026-09-26T00:41:44Z"
    },
    "evidence": [],
    "commands": []
+  },
+  {
+   "id": "I2A",
+   "task": "I2A",
+   "slice": "I2A-PREP: hosting configuration as code (env matrix, preview credential isolation, callback allowlists, private no-store, release identity) + App deploy/rollback runbook; no live deploy",
+   "agent": "opus",
+   "branch": "codex/i2a-prep",
+   "worktree": ".claude/worktrees/codex-i2a-prep",
+   "base": "fd40748c",
+   "head": "8ca672d0",
+   "isolation": {
+    "ports": "none",
+    "prefix": "infrx-i2a-prep-",
+    "db": null
+   },
+   "activity": "review",
+   "started": "2026-09-25T23:50:01Z",
+   "updated": "2026-09-26T00:33:19Z",
+   "blocker": null,
+   "next_action": "I2A-PREP merged a5ca1cd1 (+ wiring 416da075: /api/version public, console-built in check, trailing-dot refusal); R134 numbered. The live half (Vercel env, staging project, P-05 auth settings, deploy + smoke + known-good record) runs after BACKEND-READY with the operator inputs listed in i/I2A-prep-9fe9484.md",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 12,
+    "confidence": "low",
+    "basis": "prep merged; the live deploy waits for the accepted backend and seven operator inputs",
+    "at": "2026-09-26T00:33:19Z"
+   },
+   "evidence": [
+    "research/plan/evidence/i/I2A-prep-9fe9484.md",
+    "infra/app/README.md"
+   ],
+   "commands": [
+    {
+     "cmd": "cd apps/app && pnpm test (at 8ca672d0, lane + both lenses)",
+     "exit": 0,
+     "summary": "528 tests, 505 pass, 0 fail, 23 skipped (I2A-BUILT cases run after pnpm build)"
+    },
+    {
+     "cmd": "node --test tests/i2a/*.test.ts",
+     "exit": 0,
+     "summary": "22/22 after the fix round (4 failed before it)"
+    },
+    {
+     "cmd": "pnpm lint / next typegen + tsc / next build",
+     "exit": 0,
+     "summary": "0 errors (2 pre-existing warnings) / clean / exit 0"
+    }
+   ]
+  },
+  {
+   "id": "E3A",
+   "task": "E3A",
+   "slice": "E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b compose block; gate not claimed",
+   "agent": "opus",
+   "branch": "codex/e3a-prep",
+   "worktree": ".claude/worktrees/codex-e3a-prep",
+   "base": "fd40748c",
+   "head": null,
+   "isolation": {
+    "ports": "e4b compose block 56800–56899",
+    "prefix": "infrx-e3a-prep-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T23:50:01Z",
+   "updated": "2026-09-25T23:50:49Z",
+   "blocker": "E3A proper dispatches after BACKEND-LOCAL/READY; E3A-PREP (coordinator preparation lane, workflow wf_06c06a68-c32) builds the harness now without claiming the gate",
+   "next_action": "workflow wf_06c06a68-c32; E3A proper runs after BACKEND-LOCAL (E3C) and the remaining App merges (C3A/U2/U3/U4)",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "low",
+    "basis": "preparation lane; not yet inspected",
+    "at": "2026-09-25T23:50:01Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "P25-ENACT",
+   "task": null,
+   "slice": "P-25 enactment as configuration (I8/M6 support lane): retention grace 3,600 s, cache cap 50 GiB, intervals pinned, alert + runbooks",
+   "agent": "opus",
+   "branch": "codex/p25-enact",
+   "worktree": ".claude/worktrees/codex-p25-enact",
+   "base": "74183655",
+   "head": "a15393c5",
+   "isolation": {
+    "ports": "m6 block (postgres 55444), no Valkey/S3",
+    "prefix": "infrx-m6-",
+    "db": null
+   },
+   "activity": "review",
+   "started": "2026-09-25T23:58:00Z",
+   "updated": "2026-09-26T00:51:09Z",
+   "blocker": null,
+   "next_action": "verified ACCEPT_WITH_FIXES (P25R-1 gateway-grace gap recorded + WR-P25-1, A9 vs 7-newest cadence reconciled, known-good record with every --set); merges via the backend union round 3 with WR-P25-1..4",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the union round-3 merge and four coordinator wirings",
+    "at": "2026-09-26T00:51:09Z"
+   },
+   "evidence": [
+    "research/plan/evidence/i/P25-enact-5240bd8.md"
+   ],
+   "commands": [
+    {
+     "cmd": "INFRX_D_TASK=m6 pytest -q tests/w/test_prep_worker.py tests/w/test_worker_main.py tests/m/test_retention.py",
+     "exit": 0,
+     "summary": "161 passed, 7 skipped (MinIO/Valkey cases: no port in the m6 block)"
+    },
+    {
+     "cmd": "pytest -q tests/contracts/test_config_and_imports.py tests/i/test_packaging.py tests/i/test_envcheck.py",
+     "exit": 0,
+     "summary": "312 passed (7 failed before on config_and_imports)"
+    },
+    {
+     "cmd": "python -m tests.w.worker_main_mutants",
+     "exit": 0,
+     "summary": "40/40 killed (5 new: grace dropped/hardcoded/week default, cache 60 GiB, alert drift)"
+    },
+    {
+     "cmd": "pytest -q tests/i/test_observe.py",
+     "exit": 1,
+     "summary": "17 passed, 1 xfailed, 1 failed (pre-existing at base: KNOWN_UNPRODUCED lists UnsettleableJobs → WR-P25-4)"
+    }
+   ],
+   "owned_paths": [
+    "apps/infrx-api/infrx/config.py (retention/cache fields + pins)",
+    "apps/infrx-api/infrx/worker/__main__.py (composition lines)",
+    "apps/infrx-api/tests/w/, tests/m/",
+    "infra/alerts/operations.json (cache alert)",
+    "infra/README.md, infra/runbooks/restore.md, infra/runbooks/rollout.md",
+    "research/plan/evidence/i/P25-enact-5240bd8.md"
+   ],
+   "wiring_requests": [
+    "WR-P25-1 gateway pilot.py _pg_lifecycle passes grace_s=deployment.retention_grace_s (sources/payloads/upload_complete)",
+    "WR-P25-2 observe.md:189 wording",
+    "WR-P25-3 operations.json threshold_status wording (retention 300 s, 50 GiB) — thresholds unchanged",
+    "WR-P25-4 test_observe KNOWN_UNPRODUCED drop UnsettleableJobs",
+    "WR-P25-5 15-pending-inputs P-25 row: enactment recorded; schema_proof reaches 0023 (extend at 0024/0025)"
+   ]
   }
  ],
  "review_queue": [
@@ -1513,6 +1921,30 @@
    "lane": "E2C",
    "task": "E2C",
    "head": "8a94a855"
+  },
+  {
+   "since": "2026-09-25T21:27:00Z",
+   "lane": "A2",
+   "task": "A2",
+   "head": "ed6a282d"
+  },
+  {
+   "since": "2026-09-25T21:46:26Z",
+   "lane": "U1R",
+   "task": "U1R",
+   "head": "d199fffe"
+  },
+  {
+   "since": "2026-09-25T22:10:00Z",
+   "lane": "A3",
+   "task": "A3",
+   "head": "fdd9e1f5"
+  },
+  {
+   "since": "2026-09-25T22:03:00Z",
+   "lane": "C0",
+   "task": "C0",
+   "head": "ffd5ba7c"
   }
  ],
  "integration_queue": [],
@@ -2194,6 +2626,24 @@
   }
  ],
  "activity_log": [
+  {
+   "at": "2026-09-26T00:51:09Z",
+   "by": "coordinator",
+   "what": "P25-ENACT verified ACCEPT_WITH_FIXES at a15393c5 (wf_77ac74e5-386); routed into the backend union round 3 with WR-P25-1..4",
+   "source": "research/plan/evidence/i/P25-enact-5240bd8.md"
+  },
+  {
+   "at": "2026-09-26T00:41:44Z",
+   "by": "coordinator",
+   "what": "App wave wf_77b93903-38d complete (64 agents): C3A 91af4caf, U4 d76f912f, U2 2bd04497, U3 b80c4cd8 all ACCEPT_WITH_FIXES; APP-UNION round 2 dispatched (agent af6ff64e5e1803c28 resumed) with WR-U4-1, WR-U3-2, WR-U2-1/2/3, WR-U3-4 and the real-DB stacks",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-26T00:33:19Z",
+   "by": "coordinator",
+   "what": "I2A-PREP merged a5ca1cd1 + wiring 416da075 (ACCEPT_WITH_FIXES; I2A-R1..R3/F1 fixed, minors carried; coordinator ratified instrumentation.ts, app/api/version/route.ts and .env.example as I2A scope); R134 numbered; W5 rulings move to R135–R138",
+   "source": "research/plan/evidence/i/I2A-prep-9fe9484.md"
+  },
   {
    "at": "2026-09-24T21:30:00Z",
    "by": "coordinator",
@@ -2977,6 +3427,89 @@
    "by": "coordinator",
    "what": "ROLLOUT-FIXES (a1e06236) and E4C-RUNBOOK (2f2ca075) merged after self-verifying workflows; DOOR-REVOKE verified 273990a0 (0023) → union lane; E3C early run on union 9d61d1e1: F-3/F-4 closed, F-5/F-6 new → W5-F5 lane",
    "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-25T21:15:00Z",
+   "by": "U1R",
+   "what": "running → running; head 46776646",
+   "source": "updates/U1R-20260925T2115Z.json"
+  },
+  {
+   "at": "2026-09-25T21:27:00Z",
+   "by": "A2",
+   "what": "running → review; head 16fe503f; estimate likely 5 → 3 h (lane code complete and green; remaining WR-A2-1/2, review fixes, C3A reuse of the port, P-05 hosted auth config + staging fresh-email run)",
+   "source": "updates/A2-20260925T2127Z.json"
+  },
+  {
+   "at": "2026-09-25T21:46:26Z",
+   "by": "U1R",
+   "what": "running → review; head ae8c388a; estimate likely 5 → 2 h (lane implementation, tests, real-DB oracle and mutants complete; remaining is one review/fix round; wiring (nav label, sidebar CREDIT balance, D10 filters/totals, U4 route) is outside the lane)",
+   "source": "updates/U1R-20260925T2146Z.json"
+  },
+  {
+   "at": "2026-09-25T21:54:00Z",
+   "by": "A2",
+   "what": "review → review; head ed6a282d; estimate likely 3 → 2 h (lane code and tests green after the fix round; remaining WR-A2-1/2/3 application and the P-05 hosted auth configuration + staging fresh-email run)",
+   "source": "updates/A2-20260925T2154Z.json"
+  },
+  {
+   "at": "2026-09-25T22:03:00Z",
+   "by": "C0",
+   "what": "running → review; head acfd9a51; estimate likely 5 → 3 h (code+tests done; remaining = coordinator WR-1..WR-4 patches, rerun of real stack and App suites on the merged SHA with 0022, review fixes; page rewrites belong to U1R/U4)",
+   "source": "updates/C0-20260925T2203Z.json"
+  },
+  {
+   "at": "2026-09-25T22:10:00Z",
+   "by": "A3",
+   "what": "running → review; head 19f84679; estimate likely 5 → 1.5 h (A3 code/tests complete and green; remaining = coordinator WR-1..WR-4, merge with C0 session context, one review round, hosted E4 check of INFRX_API_BASE_URL)",
+   "source": "updates/A3-20260925T2210Z.json"
+  },
+  {
+   "at": "2026-09-25T22:22:11Z",
+   "by": "U1R",
+   "what": "review → review; head d199fffe; estimate likely 2 → 1 h (lane-side fixes and regressions green; remaining is coordinator WR-1+2 (exact diff + test) and D10 WR-3(b) (one index + test lines); WR-3(c) optional)",
+   "source": "updates/U1R-20260925T2222Z.json"
+  },
+  {
+   "at": "2026-09-25T22:30:00Z",
+   "by": "A3",
+   "what": "review → review; head fdd9e1f5; estimate likely 1.5 → 1 h (both findings closed and green; remaining = coordinator WR-1..WR-4, C0 merge, re-review)",
+   "source": "updates/A3-20260925T2230Z.json"
+  },
+  {
+   "at": "2026-09-25T22:38:00Z",
+   "by": "C0",
+   "what": "review → review; head ffd5ba7c; estimate likely 3 → 2 h (code, decision and guards done; remaining = coordinator WR-1 (full file in evidence) + WR-4 gate, U1R/U4 WR-2, rerun console-c0-real and App suites on merged SHA with 0022)",
+   "source": "updates/C0-20260925T2238Z.json"
+  },
+  {
+   "at": "2026-09-25T23:28:33Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'APP-UNION'",
+   "source": "updates/APP-UNION-20260925T2325Z.json"
+  },
+  {
+   "at": "2026-09-25T23:28:33Z",
+   "by": "tracker",
+   "what": "forecast E3C: 2026-09-26 02:18Z – 2026-09-26 11:24Z (likely 2026-09-26 04:54Z) → 2026-09-26 03:04Z – 2026-09-26 10:52Z (likely 2026-09-26 05:40Z) (because: dependency path W5 → E3C)"
+  },
+  {
+   "at": "2026-09-25T23:28:33Z",
+   "by": "coordinator",
+   "what": "APP-UNION merged 68128815: C0, U1R, A2, A3 implemented (verified lanes + coordinator wirings); U4 verified, C3A in its fix round; D10-APP-SQL 0024 takes WR-U4-2 and WR-C3A-4",
+   "source": "research/plan/evidence/coordinator/app-union-1cc0314.md"
+  },
+  {
+   "at": "2026-09-25T23:50:01Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
+   "source": "updates/G7-20260925T2326Z.json"
+  },
+  {
+   "at": "2026-09-25T23:50:01Z",
+   "by": "coordinator",
+   "what": "G7-PROVISIONAL merged 2b112a05; App union checks green; user override extended to I2A; I2A-PREP and E3A-PREP dispatched; union round 2 at 74183655; U2/U3 implementing",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
   }
  ],
  "history": {
@@ -3271,10 +3804,56 @@
    "status": "rejected",
    "at": "2026-09-25T21:25:00Z",
    "reason": "unknown task ID 'ROLLOUT-FIXES'"
+  },
+  "U1R-20260925T2115Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T21:15:00Z"
+  },
+  "A2-20260925T2127Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T21:27:00Z"
+  },
+  "U1R-20260925T2146Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T21:46:26Z"
+  },
+  "A2-20260925T2154Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T21:54:00Z"
+  },
+  "C0-20260925T2203Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T22:03:00Z"
+  },
+  "A3-20260925T2210Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T22:10:00Z"
+  },
+  "U1R-20260925T2222Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T22:22:11Z"
+  },
+  "A3-20260925T2230Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T22:30:00Z"
+  },
+  "C0-20260925T2238Z.json": {
+   "status": "applied",
+   "at": "2026-09-25T22:38:00Z"
+  },
+  "APP-UNION-20260925T2325Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T23:25:00Z",
+   "reason": "unknown task ID 'APP-UNION'"
+  },
+  "G7-20260925T2326Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T23:26:00Z",
+   "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
   }
  },
  "eta": {
-  "computed_at": "2026-09-25T22:42:57Z",
+  "computed_at": "2026-09-25T23:50:01Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
@@ -3284,22 +3863,22 @@
    "E3C": {
     "gate": "BACKEND-LOCAL",
     "status": "forecast",
-    "text": "2026-09-26 02:18Z – 2026-09-26 11:24Z (likely 2026-09-26 04:54Z)",
+    "text": "2026-09-26 03:26Z – 2026-09-26 11:14Z (likely 2026-09-26 06:02Z)",
     "constraint": "dependency path W5 → E3C",
     "effort_h": [
      3.6,
      6.2,
-     12.7
+     11.4
     ],
     "wall_h": [
      3.6,
      6.2,
-     12.7
+     11.4
     ],
     "finish": [
-     "2026-09-26T02:18:57Z",
-     "2026-09-26T04:54:57Z",
-     "2026-09-26T11:24:57Z"
+     "2026-09-26T03:26:01Z",
+     "2026-09-26T06:02:01Z",
+     "2026-09-26T11:14:01Z"
     ],
     "conditional": null,
     "confidence": "medium",

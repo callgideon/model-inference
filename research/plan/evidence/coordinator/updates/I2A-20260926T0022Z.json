@@ -1,0 +1,49 @@
+{
+  "task": "I2A",
+  "slice": "I2A-PREP fix round: NEXT_PUBLIC_APP_URL optional in production; host commit wins the release identity; README hunk moved to WR-I2A-0",
+  "activity": "review",
+  "head": "a8d9489d",
+  "worktree": ".claude/worktrees/codex-i2a-prep",
+  "branch": "codex/i2a-prep",
+  "owned_paths": [
+    "apps/app/lib/deploy/",
+    "apps/app/next.config.ts",
+    "apps/app/tests/i2a/",
+    "infra/app/",
+    "research/plan/evidence/i/I2A-prep-9fe9484.md",
+    "research/plan/evidence/coordinator/updates/I2A-20260926T0022Z.json"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/i2a/*.test.ts (new tests, old code 98882cfb)", "exit": 1, "summary": "22 tests: 18 pass, 4 fail: ENV-02, ENV-09, REL-02, REL-03 (fails-before)"},
+    {"cmd": "node --test tests/i2a/*.test.ts (fixed)", "exit": 0, "summary": "22/22 pass"},
+    {"cmd": "cd apps/app && rm -rf .next && pnpm build", "exit": 0, "summary": "19 routes; /api/version dynamic"},
+    {"cmd": "pnpm build with placeholder INFRX_RELEASE_SHA=a*40 VERCEL_GIT_COMMIT_SHA=b*40", "exit": 0, "summary": "both baked separately in the version route chunk; 0 hits in .next/static"},
+    {"cmd": "make console-test (at a8d9489d)", "exit": 0, "summary": "530 tests: 507 pass, 0 fail, 23 skip (pre-existing); I2A 22/22 incl. both BUILT cases"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "4 PASS"}
+  ],
+  "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 12,
+    "confidence": "medium-low",
+    "basis": "prep code/tests/runbook done and review findings addressed; remaining: WR-I2A-0/1, scope ratification, operator inputs (staging Supabase project, SMTP, P-05, Vercel env scoping), gate APP-MERGE deploy + smoke after BACKEND-READY, E4 journey",
+    "at": "2026-09-26T00:22Z"
+  },
+  "blockers": [
+    "live deploy waits for BACKEND-READY (E4C accepted) and operator inputs",
+    "gate APP-MERGE: merging claude/consumer-v1 into main is the production App deploy; the full production-required env set (infra/app/README.md section 7 item 2) must be in Vercel Production first"
+  ],
+  "wiring_requests": [
+    "SCOPE: ratify as I2A scope at merge: apps/app/instrumentation.ts, apps/app/app/api/version/route.ts, apps/app/.env.example (findings 0-F1 / 1-I2A-R1; no overlap with in-flight app lanes)",
+    "WR-I2A-0 apps/app/README.md: git diff fd40748c 98882cfb -- apps/app/README.md | git apply (A3 WR-3 README line; hunk removed from this branch)",
+    "WR-I2A-1 apps/app/lib/supabase/middleware.ts PUBLIC += \"/api/version\" (+ A2-ROUTE-01 assertion)",
+    "WR-I2A-2 (optional) Makefile console-built: pnpm build && node --test tests/i2a/*.test.ts",
+    "TRACKER: add gate APP-MERGE (merge of claude/consumer-v1 into main = production App deploy)"
+  ],
+  "evidence": [
+    "research/plan/evidence/i/I2A-prep-9fe9484.md",
+    "infra/app/README.md"
+  ]
+}
