@@ -118,7 +118,20 @@ def browser_surface(trip) -> dict:
                                       and (table, priv) in BROWSER_WRITES)})}
 
 
-def test_s10_the_browser_roles_reach_nothing_outside_the_console_surface(workdir):
+def denial(answer) -> str:
+    """`<status> <code>: <message>` of a PostgREST answer - the REASON a deny case denied
+    (E3A-WR-2: with the hosted auth.uid() a JWT's subject is seen, so a deny must hold for
+    its own reason, not because no user was seen)."""
+    try:
+        body = answer.json()
+    except ValueError:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+    return f"{answer.status_code} {body.get('code', '')}: {str(body.get('message', ''))[:120]}"
+
+
+def test_s10_the_browser_roles_reach_nothing_outside_the_console_surface(workdir,
+                                                                         record_property):
     import httpx
     with world.composed(workdir, start=()) as trip:
         extra = browser_surface(trip)
@@ -135,10 +148,47 @@ def test_s10_the_browser_roles_reach_nothing_outside_the_console_surface(workdir
                     "/rpc/claim_signup_grant", headers=member,
                     json={"p_user_id": trip.world.beta.user_id}),
             }
+        record_property("denials", {what: denial(answer) for what, answer in attempts.items()})
         let_through = {what: answer.status_code for what, answer in attempts.items()
                        if answer.status_code < 400}
         assert not extra["functions"] and not extra["writes"] and not let_through, \
             f"the browser roles reach: {extra}; PostgREST let through {let_through}"
+
+
+def test_s10_a_signed_in_consumer_reads_its_own_jobs_and_no_others(workdir, record_property):
+    """E3A-WR-2 (hosted `auth.uid()`, which reads `request.jwt.claims`): through the journey
+    PostgREST, 0021's `consumer_jobs` / `consumer_job_result` answer a tenant's JWT with that
+    tenant's job, another tenant's JWT with none of it, and `anon` not at all. On the pinned
+    image's `auth.uid()` (the legacy per-claim GUC PostgREST v13 does not set) the member's
+    own read is refused 'not signed in' - so every deny above would pass for the wrong
+    reason."""
+    import httpx
+    with world.composed(workdir) as trip:
+        alpha, beta = trip.world.alpha, trip.world.beta
+        answer = trip.send(alpha, "sync", world.TEXT, "e3c-s10-own")
+        assert answer.status_code == 200, answer.text[:300]
+        request_id = answer.headers["inference-id"]
+
+        def as_(user) -> dict:
+            return {"Authorization": f"Bearer {stack.jwt('authenticated', user.user_id)}"}
+        rest = trip.box.env["SUPABASE_URL"]
+        with httpx.Client(base_url=rest, timeout=10.0) as http:
+            own = http.post("/rpc/consumer_jobs", headers=as_(alpha),
+                            json={"p_request_id": request_id})
+            other = http.post("/rpc/consumer_jobs", headers=as_(beta),
+                              json={"p_request_id": request_id})
+            other_result = http.post("/rpc/consumer_job_result", headers=as_(beta),
+                                     json={"p_request_id": request_id})
+            anon = http.post("/rpc/consumer_jobs", json={"p_request_id": request_id})
+        record_property("reads", {"own": denial(own), "other": denial(other),
+                                  "other_result": denial(other_result), "anon": denial(anon)})
+        assert own.status_code == 200, f"the member's own read: {denial(own)}"
+        assert [row["request_id"] for row in own.json()] == [request_id], own.json()
+        assert other.status_code >= 400 or other.json() == [], \
+            f"another tenant reads the job: {other.json()}"
+        assert other_result.status_code >= 400, \
+            f"another tenant reads the result: {denial(other_result)}"
+        assert anon.status_code >= 400, f"anon reads consumer_jobs: {denial(anon)}"
 
 
 def test_nc_roles_browser__s10_detects_a_browser_write_grant_on_the_ledger(workdir):

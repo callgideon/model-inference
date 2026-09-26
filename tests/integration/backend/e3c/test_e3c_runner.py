@@ -135,6 +135,66 @@ def test_s12_every_bypass_installs_on_this_tree(name):
     assert done.returncode == 0, done.stderr[-800:]
 
 
+def test_s12_a_revert_control_tree_claims_this_checkouts_stack(tmp_path):
+    """A revert-type control runs the scratch tree's harness copy against the stack THIS
+    checkout provisioned. Without the checkout identity and the state file the copy reads
+    every container as foreign (B1) and its scenario is skipped: the control never judged."""
+    import world
+    tree = tmp_path / "tree"
+    env = runner.run_env(tmp_path, tree)
+    assert env["INFRX_E2_CHECKOUT"] == world.harness.working_dir()
+    assert env["INFRX_E2_STATE_FILE"] == str(world.harness.STATE_FILE)
+    assert env["INFRX_E2_REPO_ROOT"] == str(tree)
+    assert env["PYTHONPATH"] == str(tree / "apps/infrx-api")
+    assert "INFRX_E2_REPO_ROOT" not in runner.run_env(tmp_path) or \
+        runner.run_env(tmp_path)["INFRX_E2_REPO_ROOT"] != str(tree)
+
+
+def test_s12_a_reverted_tree_that_does_not_start_is_invalid_not_a_detection():
+    """E3C early run on 9d61d1e1: the admission revert dropped an import M6 also used, the
+    tree's worker died at start and every s04 case failed - read as FAIL, the control would
+    have PASSED without the oracle judging anything. A start-up death is INVALID; an oracle
+    failure on a tree that runs is the detection."""
+    dead = {"status": "FAIL", "cases": {"a": "FAIL"}, "reasons": [
+        "test_s04_x: RuntimeError: the worker exited 1:     raise SystemExit(main(sys.argv))"]}
+    status, why = runner.reverted_status(dead)
+    assert status == "INVALID" and "does not start" in why[0]
+    assert runner.control_verdict(status) == "INVALID"
+    detected = {"status": "FAIL", "cases": {"a": "FAIL"}, "reasons": [
+        "test_s04_x: AssertionError: executed before durable eligibility (RV-05)"]}
+    assert runner.control_verdict(runner.reverted_status(detected)[0]) == "PASS"
+    # a product assertion that quotes a dead worker (s10's F-1 message) is still a FAIL
+    quoted = {"status": "FAIL", "cases": {"a": "FAIL"}, "reasons": [
+        "test_s10_x: AssertionError: the box cannot serve on the dedicated runtime login: "
+        "the worker exited 2: ..."]}
+    assert runner.reverted_status(quoted)[0] == "FAIL"
+    # E3C final run 1: INVALID cases beside a FAIL - the tree could not judge
+    mixed = {"status": "FAIL", "cases": {"a": "INVALID", "b": "FAIL"}, "reasons": [
+        "test_s04_a: INVALID[harness] AssertionError: the gateway never reached its fault point",
+        "test_s04_b: AssertionError: assert 503 == 202"]}
+    assert runner.control_verdict(runner.reverted_status(mixed)[0]) == "INVALID"
+
+
+def test_s12_the_admission_control_runs_the_pre_d10_door_on_the_owner_login(tmp_path):
+    """0021 grants the dedicated runtime login admit_ready only (R127); the reverted tree's
+    pre-D10 `infrx.admit` needs the owner login, or every admission is a 503 (E3C final run
+    1). The control's own environment says so; the main run keeps the runtime login."""
+    control = runner.CONTROLS["nc-admission-ready"]
+    env = runner.run_env(tmp_path, tmp_path / "t", control.get("env"))
+    assert env["INFRX_E3C_RUNTIME_LOGIN"] == "0"
+    assert "env" not in runner.CONTROLS["nc-retention-durable"]
+
+
+def test_s12_a_control_writes_its_cases_apart_from_the_main_run(tmp_path):
+    """The control re-runs cases with the main run's names; its box logs must not overwrite
+    the main run's evidence (E3C early run: s04/s06 case dirs were the control's)."""
+    main = runner.run_env(runner.case_out(tmp_path, "scenarios", None))
+    control = runner.run_env(runner.case_out(tmp_path, "nc-admission-ready", tmp_path / "t"),
+                             tmp_path / "t")
+    assert main["INFRX_E3C_OUT"] == str(tmp_path)
+    assert control["INFRX_E3C_OUT"] == str(tmp_path / "nc-admission-ready")
+
+
 def test_s12_the_namespace_is_the_reserved_block():
     """WR-1's row, however it is provided: the e3c layout is tasklocal's 56900-56999."""
     import world

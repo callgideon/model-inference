@@ -103,8 +103,12 @@ def invalid(why: str):
 
 
 def need_stack():
-    if harness.NAMESPACE != NAMESPACE:
-        invalid(f"namespace {harness.NAMESPACE!r}, not {NAMESPACE!r}: run through e3c/runner.py")
+    # E3A-WR-1: the namespace the harness loaded (INFRX_E2_NAMESPACE) - e3c under this
+    # lane's runner, e4b under E3A's - never a constant another runner must shim.
+    expected = os.environ.get("INFRX_E2_NAMESPACE", NAMESPACE)
+    if harness.NAMESPACE != expected:
+        invalid(f"namespace {harness.NAMESPACE!r}, not {expected!r}: run through a runner "
+                "that sets INFRX_E2_NAMESPACE (e3c/runner.py)")
     if not stack.has_stack():
         import pytest
         pytest.skip(f"BLOCKED[E2C] no {harness.PROJECT} stack: run "
@@ -697,6 +701,57 @@ async def collect_once(grace_s: float = 0.0) -> dict:
 
 
 COLLECTOR_CONNECT_TIMEOUT_S = 5
+
+
+#: M6 wiring (E3C F-4): the worker - `python -m infrx.worker`, M6's entry - is the one process
+#: that runs retention, the cache keeper and the journal prune. The deployed cadence is 300 s
+#: (P-25 placeholder); a scenario that waits for them runs its worker at 2 s. A tree without
+#: the wiring ignores the names (deployment settings read only their own fields).
+HOUSEKEEPING = {"RETENTION_INTERVAL_S": "2", "CACHE_SWEEP_INTERVAL_S": "2",
+                "JOURNAL_EXPIRE_INTERVAL_S": "2"}
+
+
+def scrubbed_content(trip, request_id: str) -> dict:
+    """The content-bearing rows that must be gone past the persisted expiry and journal TTL
+    (0 each when scrubbed); the job's metadata is asserted by the caller."""
+    return {"job_results.body": trip.one("select count(*) from infrx.job_results where "
+                                         "request_id = %s and body <> ''", request_id)[0],
+            "jobs.request_record messages": trip.one(
+                "select count(*) from infrx.jobs where request_id = %s and "
+                "request_record::text like %s", request_id, "%Describe the van.%")[0],
+            "stream_chunks deltas": trip.one("select count(*) from infrx.stream_chunks where "
+                                             "job_id = %s and event_type = 'delta'",
+                                             request_id)[0]}
+
+
+#: What each content row's life ends at (0020 `content_referenced`): the result at the
+#: persisted `result_expires_at`, journal deltas at `JOURNAL_CHUNK_TTL_S`, the request record
+#: (like the job's sources) at `settled_at + job_readiness.retention_s` - the content
+#: retention the admission persisted (R43), which is longer than the result's.
+RESULT_AND_JOURNAL = ("job_results.body", "stream_chunks deltas")
+REQUEST_RECORD = ("jobs.request_record messages",)
+
+
+def retention_left_s(trip, request_id: str) -> float:
+    """Seconds (store clock) until the job's persisted content retention ends."""
+    left, = trip.one("select extract(epoch from (j.settled_at + make_interval(secs => "
+                     "coalesce(r.retention_s, 0))) - infrx.now()) from infrx.jobs j left join "
+                     "infrx.job_readiness r on r.job_id = j.request_id "
+                     "where j.request_id = %s", request_id)
+    return float(left)
+
+
+def housekept(trip, request_id: str, timeout: float = 60.0,
+              rows: tuple[str, ...] = RESULT_AND_JOURNAL + REQUEST_RECORD) -> dict:
+    """Wait (bounded) for the running worker's housekeeping to scrub `rows` of
+    `request_id`'s content; what is left when it did not (empty dict = scrubbed)."""
+    end = time.monotonic() + timeout
+    while True:
+        left = {k: v for k, v in scrubbed_content(trip, request_id).items()
+                if v and k in rows}
+        if not left or time.monotonic() > end:
+            return left
+        time.sleep(0.5)
 
 
 def grace_passed() -> float:

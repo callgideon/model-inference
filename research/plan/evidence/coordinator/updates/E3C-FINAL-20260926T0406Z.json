@@ -1,0 +1,25 @@
+{
+  "task": "E3C",
+  "slice": "final BACKEND-LOCAL on integration tip 04ae5e21 (merged as 601f4c1d) with E3A-WR-1, E3A-WR-2, WR-W5F5B-3 (R139) and both revert-type controls",
+  "activity": "review",
+  "at": "2026-09-26T04:06:00+00:00",
+  "head": "27a69619",
+  "base": "04ae5e21",
+  "worktree": ".claude/worktrees/codex-e3c-rerun",
+  "branch": "codex/e3c-rerun",
+  "owned_paths": ["tests/integration/backend/e3c/", "tests/integration/backend/stack.py (E3A-WR-2, assigned)",
+                  "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+                  "research/plan/evidence/coordinator/updates/E3C-FINAL-20260926T0406Z.json"],
+  "commands": [
+    {"cmd": "pytest -q tests/integration/backend/e3c (no stack, 27a69619)", "exit": 0, "summary": "38 passed"},
+    {"cmd": "INFRX_E3C_RUNTIME_LOGIN=1 runner.py --only s10 (before / after E3A-WR-2)", "exit": 1, "summary": "before 3/4: signed-in consumer_jobs 403 'not signed in' (tenant-scoped denies vacuous); after 4/4: own rows 200, other tenant [] / not_found, anon 401; browser denials by privilege both times"},
+    {"cmd": "final-run.sh 04ae5e21 at 7c4101af (final run 1)", "exit": 0, "summary": "gate PASS but REJECTED: nc-admission-ready tree could not admit on infrx_runtime (permission denied for function admit; 3 INVALID + 1 503) - runner fixed at 27a69619"},
+    {"cmd": "final-run.sh 04ae5e21 at 27a69619 (final run 2, evidence)", "exit": 0, "summary": "BACKEND-LOCAL PASS: 13/13 scenarios (85 cases), 9/9 controls; nc-admission-ready detected (RV-05 executed+debited on the reverted tree), nc-retention-durable detected (live media deleted); s08 20.0 s / 40.0 s; 11:55 wall; teardown clean"}
+  ],
+  "estimate": {"optimistic_h": 0, "likely_h": 0, "pessimistic_h": 0.5, "confidence": "high",
+               "basis": "gate passed on the integration tip; left is the coordinator merge of codex/e3c-rerun",
+               "at": "2026-09-26T04:06:00+00:00"},
+  "blockers": [],
+  "wiring_requests": ["E3A: drop tests/integration/app/runner.py's world.NAMESPACE shim (E3A-WR-1) and per-clone HOSTED_AUTH_UID (now in stack._template, E3A-WR-2)"],
+  "evidence": ["research/plan/evidence/e3c/E3C-FINAL-27a6961.md"]
+}
