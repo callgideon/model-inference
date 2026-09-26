@@ -52,4 +52,4 @@ env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN infra/rol
 ## Verification log
 
 - 2026-09-26T21:40Z: identities computed on the fixed clone; G1/G3/G4/G4b/G5 PASS; G2, E3C and App re-proofs running; W1 user-run.
-- 2026-09-26T21:58Z: E3C final PASS and app-e2e PASS at RELEASE; BACKEND-LOCAL re-proven, APP-LOCAL accepted (GO-LIVE decision) in the overlay (rev 141). G2 still running.
+- 2026-09-26T21:58Z: E3C final PASS and app-e2e PASS at RELEASE; BACKEND-LOCAL re-proven; APP-LOCAL candidate refreshed to RELEASE (17/17) — the manifest records the decision after BACKEND-READY, so the acceptance written at rev 141 was withdrawn at rev 143 (the tracker check rejects it). G2 still running.
