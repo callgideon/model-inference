@@ -438,6 +438,13 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "     where v.verification_evidence_ref is not null\n",
        "     where true\n", "port_key_insert",
        "a wallet holder whose email is not verified mints keys (the claim path's predicate)"),
+    _m("d10_monitor_holds_ungranted", PORT,
+       "grant select (state) on infrx.credit_wallet_holds to infrx_monitor;\n", "",
+       "port_monitor", "the worker's gauges on the monitor login fail on CREDIT holds (W5-F5)"),
+    _m("d10_monitor_holds_without_policy", PORT,
+       "create policy monitor_reads on infrx.credit_wallet_holds for select to infrx_monitor\n"
+       "  using (true);", "", "port_monitor",
+       "RLS answers the monitor zero CREDIT unknown holds: the gauge reads 0 while holds wait"),
     _m("d10_ledger_for_the_runtime", PORT,
        "grant execute on function public.consumer_credit_ledger(text, integer)\n"
        "  to authenticated, service_role;",
@@ -454,6 +461,7 @@ _d._CHECKS.update({
     "port_privileges": checks_port.check_port_privileges,
     "port_result_withheld": checks_port.check_result_withheld,
     "port_key_insert": checks_port.check_key_insert_needs_verified_wallet,
+    "port_monitor": lambda conn: checks_port.check_monitor_reads_unknown_holds(conn, _d.MUT_DB),
 })
 _d._CHECKS.update({
     "fail_preparation": checks_followup.check_fail_preparation,

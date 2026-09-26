@@ -452,7 +452,11 @@ def check_monitor_reads_unknown_holds(conn, database: str) -> str:
     with monitor_login(database) as monitor:
         who, = monitor.execute("select session_user").fetchone()
         assert who == "infrx_monitor", who
-        drift, unknown = monitor.execute(RECONCILIATION_SQL).fetchone()
+        try:
+            drift, unknown = monitor.execute(RECONCILIATION_SQL).fetchone()
+        except psycopg.Error as refused:
+            raise AssertionError(f"the monitor login cannot run the reconciliation read: "
+                                 f"{refused.sqlstate} {refused}") from None
         assert (drift, unknown) == (0, expected), (drift, unknown, expected)
         try:
             monitor.execute("select amount from infrx.credit_wallet_holds limit 1")

@@ -1,6 +1,7 @@
 -- D10-APP-SQL: the console read port the App lanes asked for (C0 WR-5, U1R WR-3(a)/(b),
--- U4 WR-U4-2, C3A WR-C3A-4; R59-4, R64, R66, R122-R127). No table, row, money or runtime
--- grant changes; one browser write (the api_keys INSERT policy) is narrowed.
+-- U4 WR-U4-2, C3A WR-C3A-4, W5-F5 WR-W5F5-1; R59-4, R64, R66, R122-R127). No table, row,
+-- money or runtime grant changes; one browser write (the api_keys INSERT policy) is narrowed
+-- and the read-only monitor login gains one column (a hold's state, never its amount).
 --
 --   credit_ledger_wallet_credits_in_idx   U1R WR-3(b): "Spent" = sum(grant + adjustments)
 --                                         - ledger_total reads a wallet's NON-debit entries;
@@ -46,6 +47,12 @@
 --                                         Consequence: an org owner with no consumer wallet
 --                                         (a legacy USD pilot owner) creates keys through
 --                                         the operator/service seams, not the browser.
+--   infrx_monitor on credit_wallet_holds  W5-F5 WR-W5F5-1: the worker's reconciliation
+--                                         gauges (S3 F4) count both regimes' unknown-usage
+--                                         holds on I8's read-only login. 0021 gave it
+--                                         `credit_holds (request_id, state,
+--                                         reconcile_after)`, not the CREDIT holds, which
+--                                         have RLS: a column grant (state) AND a policy.
 --
 -- ORDER. After 0021 (consumer_org, the consumer read surface) and 0006 (the ledger index).
 -- Apply before the App build that calls `consumer_credit_ledger` or passes the new
@@ -54,6 +61,8 @@
 -- on the DDL notification Supabase sends.
 --
 -- ROLLBACK (0024 alone):
+--   drop policy if exists monitor_reads on infrx.credit_wallet_holds;
+--   revoke select (state) on infrx.credit_wallet_holds from infrx_monitor;
 --   drop policy if exists api_keys_insert_owner on public.api_keys;
 --   create policy api_keys_insert_owner on public.api_keys for insert to authenticated
 --     with check (public.is_org_owner(org_id) and created_by = auth.uid());   -- 0001's
@@ -226,6 +235,12 @@ drop policy if exists api_keys_insert_owner on public.api_keys;
 create policy api_keys_insert_owner on public.api_keys for insert to authenticated
   with check (public.is_org_owner(org_id) and created_by = auth.uid()
               and public.consumer_may_create_key());
+
+-- ================================ W5-F5 WR-W5F5-1: the monitor counts unknown holds ===
+grant select (state) on infrx.credit_wallet_holds to infrx_monitor;
+drop policy if exists monitor_reads on infrx.credit_wallet_holds;
+create policy monitor_reads on infrx.credit_wallet_holds for select to infrx_monitor
+  using (true);
 
 -- ================================================================ privileges ===
 -- R59-4: Supabase's default ACL hands anon/authenticated EXECUTE on a new public function;
