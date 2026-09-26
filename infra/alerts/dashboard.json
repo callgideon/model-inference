@@ -55,7 +55,8 @@
       "panels": [
         {"title": "Accepted by mode", "metric": "infrx_jobs_accepted_total", "by": ["mode"], "rate": true, "unit": "1/s"},
         {"title": "Terminal by state and cause", "metric": "infrx_jobs_terminal_total", "by": ["state", "cause"], "rate": true, "unit": "1/s"},
-        {"title": "Settlements", "metric": "infrx_settlements_total", "by": ["settlement"], "rate": true, "unit": "1/s"}
+        {"title": "Settlements", "metric": "infrx_settlements_total", "by": ["settlement"], "rate": true, "unit": "1/s"},
+        {"title": "Refusals after the execution-ready marker (logged, never answered; W5-F5B)", "metric": "infrx_post_marker_refusals_total", "by": ["code"], "rate": true, "unit": "1/s"}
       ]
     },
     {
