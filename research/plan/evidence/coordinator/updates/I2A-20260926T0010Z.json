@@ -1,0 +1,51 @@
+{
+  "task": "I2A",
+  "slice": "I2A-PREP: deployment configuration as code + App release runbook (no live deploy)",
+  "activity": "review",
+  "head": "9fe94846",
+  "worktree": ".claude/worktrees/codex-i2a-prep",
+  "branch": "codex/i2a-prep",
+  "owned_paths": [
+    "apps/app/lib/deploy/",
+    "apps/app/instrumentation.ts",
+    "apps/app/next.config.ts",
+    "apps/app/app/api/version/route.ts",
+    "apps/app/tests/i2a/",
+    "apps/app/.env.example",
+    "apps/app/README.md",
+    "infra/app/",
+    "research/plan/evidence/i/I2A-prep-9fe9484.md"
+  ],
+  "commands": [
+    {"cmd": "cd apps/app && pnpm test (base fd40748c)", "exit": 0, "summary": "508 tests: 485 pass, 23 skip"},
+    {"cmd": "node --test tests/i2a/*.test.ts (before wiring)", "exit": 1, "summary": "17 pass, 3 fail: START-01, CACHE-01, REL-02"},
+    {"cmd": "10 hand mutants over lib/deploy, instrumentation, a client import, a new env read", "exit": 0, "summary": "10/10 killed"},
+    {"cmd": "cd apps/app && rm -rf .next && pnpm build", "exit": 0, "summary": "19 routes; /api/version dynamic; register() not run at build"},
+    {"cmd": "next start with no environment stated", "exit": 0, "summary": "every request 500: instrumentation refuses (fail closed)"},
+    {"cmd": "next start (development, placeholder env) + curl", "exit": 0, "summary": "all routes private, no-store, max-age=0; static chunks immutable; /api/version JSON (with temporary WR-I2A-1 patch, restored)"},
+    {"cmd": "cd apps/app && pnpm test (head)", "exit": 0, "summary": "528 tests: 505 pass, 0 fail, 23 skip; I2A 20/20 incl. both BUILT cases"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "4 PASS"}
+  ],
+  "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 12,
+    "confidence": "medium-low",
+    "basis": "prep code/tests/runbook done; remaining: WR-I2A-1, operator inputs (staging Supabase project, SMTP, P-05, Vercel env scoping), deploy + smoke after BACKEND-READY, E4 journey",
+    "at": "2026-09-26T00:10Z"
+  },
+  "blockers": [
+    "live deploy waits for BACKEND-READY (E4C accepted) and operator inputs",
+    "production Vercel env must carry INFRX_API_BASE_URL and CONSOLE_CURSOR_SECRET before this code reaches the production branch (fail-closed startup)"
+  ],
+  "wiring_requests": [
+    "WR-I2A-1 apps/app/lib/supabase/middleware.ts PUBLIC += \"/api/version\" (+ A2-ROUTE-01 assertion)",
+    "WR-I2A-2 (optional) Makefile console-built: pnpm build && node --test tests/i2a/*.test.ts"
+  ],
+  "evidence": [
+    "research/plan/evidence/i/I2A-prep-9fe9484.md",
+    "infra/app/README.md"
+  ]
+}
