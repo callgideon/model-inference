@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "76ec3a5e",
+  "integration_head": "fe6cb51e",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 110,
-  "updated": "2026-09-26T07:40:55Z",
+  "revision": 111,
+  "updated": "2026-09-26T08:27:40Z",
   "agent_slots": {
     "total": 16,
-    "active": 5,
+    "active": 3,
     "reserved": 2,
-    "note": "Session 03 (07:36Z): workflows RUNBOOK-3 (revoke), G-GATES (e2c), D10-0026-FENCE (d4 + e3c block); coordinator fixed-clone suite on the tip (e1c/app-*); 2 slots reserved for verify-lane workflows."
+    "note": "Session 03 (07:52Z): workflows G-GATES (e2c), D10-0026-FENCE (d4 + e3c block); coordinator fixed-clone suites on 76ec3a5e (e1c/app-*) and fe6cb51e (revoke/i8); 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -2886,27 +2886,50 @@
       "branch": "codex/runbook-3",
       "worktree": ".claude/worktrees/codex-runbook-3",
       "base": "9b21339a",
-      "head": null,
+      "head": "c586e8b4",
       "isolation": {
         "ports": "revoke postgres 55459; tests/i docker cases wait for i8",
         "prefix": "infrx-revoke-",
         "db": "revoke"
       },
-      "activity": "running",
+      "activity": "integration",
       "started": "2026-09-26T06:41:00Z",
-      "updated": "2026-09-26T06:41:00Z",
+      "updated": "2026-09-26T07:52:00Z",
       "blocker": null,
-      "next_action": "handback → coordinator merges after a fixed-clone tests/g/ops + tests/i run",
+      "next_action": "merged --no-ff at 38febee3; WR-RB3-1..5 at 6f885c23 + fe6cb51e (credit-transition answers replayed; rollback step 6 after a reversal; 0025 statements; rotated-password clause; resumed reversal audits the frozen before); fixed-clone check on fe6cb51e running → complete when green; still open: the box half of the reversal (operator), a reinstall drops the worker's monitor DSN until step 55 (SSM leaf = user window item), RV3-3 docstring note applied",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 3.5,
-        "pessimistic_h": 6,
-        "confidence": "medium",
-        "basis": "a PG drill of freeze/drain/enable both ways with mutants; an install-preserve fix or a runbook-structure rule; tests/i docker cases queue behind i8",
-        "at": "2026-09-26T06:41:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0.2,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "merged and wired; one fixed-clone check left",
+        "at": "2026-09-26T07:52:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/i/RUNBOOK-3-fb68152.md"
+      ],
+      "commands": [
+        {
+          "cmd": "INFRX_D_TASK=revoke pytest -q tests/g/ops; INFRX_MUTANTS=all tests/g/ops/test_mutants.py",
+          "exit": 0,
+          "summary": "96 passed; 118 mutants killed (3 new: reversal_skips_the_drain, reversal_audits_as_forward, replay_reruns_the_freeze)"
+        },
+        {
+          "cmd": "tests/integration/ops + recovery/test_runbooks.py (rv01/rv02 fail on the base)",
+          "exit": 0,
+          "summary": "40 passed"
+        },
+        {
+          "cmd": "INFRX_D_TASK=i8 pytest -q tests/i (i8 freed 07:19Z)",
+          "exit": 0,
+          "summary": "238 passed, 1 xfailed; login_ mutants 7/7"
+        },
+        {
+          "cmd": "coordinator: fake-level g/ops + full g/ops mutant list after WR-RB3-1 (worktree)",
+          "exit": 0,
+          "summary": "20 passed; 118/118 killed"
+        }
+      ],
       "owned_paths": [
         "infra/runbooks/rollout.md",
         "infra/runbooks/rollback.md",
@@ -2918,7 +2941,10 @@
         "tests/integration/ops/",
         "research/plan/evidence/i/RUNBOOK-3-*.md"
       ],
-      "wiring_requests": []
+      "wiring_requests": [
+        "WR-RB3-1 transition.apply returns replayed (applied 6f885c23/fe6cb51e)",
+        "SSM /model-inference/monitor_database_url (user-held; 15-pending-inputs)"
+      ]
     },
     {
       "id": "APP-MINORS-1",
@@ -5418,6 +5444,18 @@
       "by": "tracker",
       "what": "rejected update: stale: at 2026-09-26T07:24:00Z is not newer than lane APP-MINORS-1 state 2026-09-26T07:36:00Z",
       "source": "updates/APP-MINORS-1-20260926T0724Z.json"
+    },
+    {
+      "at": "2026-09-26T07:52:00Z",
+      "by": "coordinator (RUNBOOK-3)",
+      "what": "RUNBOOK-3 ACCEPT_WITH_FIXES c586e8b4 merged at 38febee3 (CREDIT reversal drilled on PG; the reversal now runs before the worker stops; the reinstall rule); WR-RB3-1..5 at fe6cb51e; the monitor DSN SSM leaf is a user window item",
+      "source": "research/plan/evidence/i/RUNBOOK-3-fb68152.md"
+    },
+    {
+      "at": "2026-09-26T08:27:40Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T07:30:00Z is not newer than lane RUNBOOK-3 state 2026-09-26T07:52:00Z",
+      "source": "updates/RUNBOOK-3-20260926T0730Z.json"
     }
   ],
   "history": {
@@ -6033,10 +6071,15 @@
       "status": "rejected",
       "at": "2026-09-26T07:24:00Z",
       "reason": "stale: at 2026-09-26T07:24:00Z is not newer than lane APP-MINORS-1 state 2026-09-26T07:36:00Z"
+    },
+    "RUNBOOK-3-20260926T0730Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T07:30:00Z",
+      "reason": "stale: at 2026-09-26T07:30:00Z is not newer than lane RUNBOOK-3 state 2026-09-26T07:52:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T07:40:55Z",
+    "computed_at": "2026-09-26T08:27:40Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -6080,7 +6123,9 @@
         "conditional": null,
         "confidence": null,
         "critical_path": null,
-        "stale": []
+        "stale": [
+          "E3A"
+        ]
       },
       "E4": {
         "gate": "APP-PILOT",
@@ -6094,7 +6139,9 @@
         "confidence": null,
         "critical_path": null,
         "stale": [
-          "I2A"
+          "E3A",
+          "I2A",
+          "I3"
         ]
       }
     }
