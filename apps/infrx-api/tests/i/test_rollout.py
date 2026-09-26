@@ -51,7 +51,7 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
     read on the box by preflight.py, from SSM, and never travel."""
     assert [p.name for p in STEPS] == ["10-inventory.sh", "20-prepull.sh", "25-save-edge.sh",
                                        "30-pause.sh", "40-checkout.sh", "45-s3-check.sh",
-                                       "50-install.sh",
+                                       "50-install.sh", "55-runtime-login.sh",
                                        "60-verify-local.sh", "71-pool-budget.sh",
                                        "72-observe-install.sh", "73-observe-status.sh",
                                        "74-alert-test.sh", "78-e4b-report.sh", "79-evidence-export.sh",
@@ -61,7 +61,7 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
                                        "90-revert.sh", "91-abort.sh",
                                        "93-restore-edge.sh", "95-maintenance.sh"]
     for path in [*STEPS, ROLLOUT / "ssm.sh", ROLLOUT / "verify-external.sh",
-                 ROLLOUT / "verify-journey.sh"]:
+                 ROLLOUT / "verify-journey.sh", ROLLOUT / "e4c-certify.sh"]:
         text = path.read_text()
         done = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
         assert done.returncode == 0, (path.name, done.stderr)
@@ -434,3 +434,105 @@ def test_backend_deploy__the_runbooks_install_args_fit_the_session_pooler():
                            "--runtime-port", "5432", *[a for p in pairs for a in ("--set", p)]],
                           capture_output=True, text=True)
     assert done.returncode == 0 and "PASS session: peak 13 " in done.stdout, done.stdout
+
+
+# --- E4C-RUNBOOK-2 item 4: the certify launcher carries certify's E4C flag set ---------------
+
+CERTIFY = support.REPO / "tests" / "integration" / "backend" / "certify.py"
+LAUNCHER = ROLLOUT / "e4c-certify.sh"
+#: certify.py flags a box run never passes: the local E2 stack's scale/keep, and --hashes
+#: (print and exit). Every other flag certify defines is part of the E4C invocation.
+LOCAL_ONLY = {"--scale", "--keep", "--hashes"}
+
+DOCKER_CERTIFY = '''#!{python}
+import json, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+record = {{"argv": args, "env_files": {{}}}}
+for i, a in enumerate(args):
+    if a == "--env-file":
+        record["env_files"][args[i + 1]] = pathlib.Path(args[i + 1]).read_text()
+with (here / "docker.log").open("a") as log:
+    log.write(json.dumps(record) + "\\n")
+if args[:1] == ["inspect"] or args[:2] == ["image", "inspect"]:
+    print("sha256:" + "e" * 64)
+'''
+
+
+def _flags(command: str) -> list[str]:
+    return re.findall(r"(?:^|\s)(--[a-z][\w-]*)", command.split("certify.py", 1)[1])
+
+
+def test_e4c_certify__the_launcher_passes_exactly_certify_s_box_flags_and_no_secret(tmp_path):
+    """E4C-readiness §2h: session-03's e4b-certify3.sh ran certify without --run-profile,
+    --key-inventory and --overload-profile, so every bench cell and the P4 overload cell are
+    BLOCKED (certify `profile_blocked`, R133), and it put the DSN on docker's command line
+    (`-e DATABASE_URL=...`, visible in `ps`). Oracle: the launcher's certify flags equal
+    certify.py's parser flags minus the local-only ones - a flag certify gains or the launcher
+    drops fails here - and equal the E4C runbook's §4 command; the E4C paths are the ones the
+    runbook fills; the ledger half gets the owner login on :6543 (OPERATIONS_DATABASE_URL:
+    after W10b DATABASE_URL is infrx_runtime, which the operator tool refuses), in a 0600
+    env file only; a missing profile is refused before docker runs."""
+    text = LAUNCHER.read_text()
+    assert subprocess.run(["bash", "-n", str(LAUNCHER)]).returncode == 0
+    assert "set -euo pipefail" in text and ': "${RELEASE:?' in text
+    for shape in SECRET_SHAPES:
+        assert not re.search(shape, text), shape
+    defined = set(re.findall(r'parser\.add_argument\("(--[\w-]+)"', CERTIFY.read_text()))
+    assert LOCAL_ONLY < defined and {"--run-profile", "--key-inventory", "--overload-profile"} <= defined
+    rb = (support.REPO / "models" / "marlin2b" / "results" / "E4C-runbook.md").read_text()
+    runbook = re.search(r"python tests/integration/backend/certify\.py --no-stack --box.*?\n```",
+                        rb, re.S).group(0)
+    assert set(_flags(runbook)) == defined - LOCAL_ONLY, set(_flags(runbook)) ^ (defined - LOCAL_ONLY)
+
+    secret = f"{support.MARKER}-owner"
+    nvme, etc = tmp_path / "nvme", tmp_path / "etc"
+    e4c = nvme / "e4b" / "e4c"
+    for d in (nvme / "w3-corpus", e4c, etc):
+        d.mkdir(parents=True, exist_ok=True)
+    for f in ("key.env", "inventory.txt", "parity-e0.jsonl"):
+        (nvme / "e4b" / f).write_text("INFRX_API_KEY=k\n" if f == "key.env" else "x\n")
+    for f in ("E4C-box.json", "E4C-edge.json", "keys-certify.json"):
+        (e4c / f).write_text("{}\n")
+    (etc / "marlin2b-gateway.env").write_text(
+        f"DATABASE_URL=postgresql://infrx_runtime.ref:{secret}@pooler:6543/postgres\n")
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    for tool, body in (("docker", DOCKER_CERTIFY.format(python=sys.executable)),
+                       ("aws", f"#!/bin/sh\necho 'postgresql://postgres.ref:{secret}@pooler:5432/postgres?sslmode=require'\n"),
+                       # the launcher's `sleep 30`: until the backgrounded docker has started
+                       ("sleep", '#!/bin/sh\nfor i in $(seq 200); do grep -q \'"run"\' '
+                                 '"$(dirname "$0")/docker.log" 2>/dev/null && exit 0; /bin/sleep 0.05; done\n'),
+                       ("nohup", '#!/bin/sh\nexec "$@"\n')):
+        (stub / tool).write_text(body)
+        (stub / tool).chmod(0o755)
+    script = text.replace("/opt/dlami/nvme", str(nvme)).replace("/etc/marlin2b-gateway.env",
+                                                                 str(etc / "marlin2b-gateway.env"))
+    env = {"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "RELEASE": "c" * 40,
+           "TMPDIR": str(tmp_path)}
+    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+    assert done.returncode == 0, done.stderr
+    assert secret not in done.stdout + done.stderr
+    runs = [json.loads(line) for line in (stub / "docker.log").read_text().splitlines()]
+    (run,) = [r for r in runs if r["argv"][:1] == ["run"]]
+    argv = run["argv"]
+    assert not any(secret in a for a in argv), "a DSN on docker's command line"
+    command = " ".join(argv)
+    assert set(_flags(command)) == defined - LOCAL_ONLY
+    for flag, path in (("--run-profile", "/e4b/e4c/E4C-box.json"),
+                       ("--key-inventory", "/e4b/e4c/keys-certify.json"),
+                       ("--overload-profile", "/e4b/e4c/E4C-edge.json")):
+        assert argv[argv.index(flag) + 1] == path, flag
+    assert f"{nvme / 'e4b'}:/e4b:ro" in argv
+    (dsns,) = [body for path, body in run["env_files"].items()
+               if path not in (str(etc / "marlin2b-gateway.env"), str(nvme / "e4b" / "key.env"))]
+    assert dsns == (f"DATABASE_URL=postgresql://infrx_runtime.ref:{secret}@pooler:6543/postgres\n"
+                    f"OPERATIONS_DATABASE_URL=postgresql://postgres.ref:{secret}@pooler:6543/postgres?sslmode=require\n"
+                    "CORPUS_CACHE=/corpus\nE4B_WINDOW_OK=1\n"
+                    f"INFRX_CERTIFY_GATEWAY_IMAGE=sha256:{'e' * 64}\nINFRX_CERTIFY_RELEASE_IMAGE=sha256:{'e' * 64}\n")
+    assert not list(tmp_path.glob("tmp.*")), "the DSN file outlived the launch"
+    (e4c / "E4C-edge.json").unlink()                            # no overload profile: refused
+    (stub / "docker.log").unlink()
+    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+    assert done.returncode == 2 and "E4C-edge.json" in done.stderr
+    assert not (stub / "docker.log").exists()

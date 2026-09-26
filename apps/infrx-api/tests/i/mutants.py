@@ -1411,6 +1411,35 @@ MUTANTS += (
 )
 
 
+# E4C-RUNBOOK-2: the dedicated runtime logins (55-runtime-login.sh) and the E4C certify launcher
+LOGIN_STEP = STEP + "55-runtime-login.sh"
+LOGIN = "test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only"
+LAUNCHER_SH = "../../infra/rollout/e4c-certify.sh"
+LAUNCH = "test_e4c_certify__the_launcher_passes_exactly_certify_s_box_flags_and_no_secret"
+MUTANTS += (
+    _m("login_value_printed", "an SSM value never reaches the output",
+       LOGIN_STEP, """printf '%s=%s\\n' "${spec%%=*}" "$value" >> "$work/secrets.env\"""",
+       """printf '%s=%s\\n' "${spec%%=*}" "$value" | tee -a "$work/secrets.env\"""", LOGIN),
+    _m("login_envcheck_ignored", "a staged file envcheck refuses never replaces the env file",
+       LOGIN_STEP,
+       '  || { rm -f "$staged"; echo "envcheck refused the staged env file; nothing replaced" >&2; exit 3; }',
+       "  || true", LOGIN),
+    _m("login_env_world_readable", "the env file stays root 0600",
+       LOGIN_STEP, 'chown --reference="$env_file" "$staged"; chmod 0600 "$staged"',
+       'chown --reference="$env_file" "$staged"; chmod 0644 "$staged"', LOGIN),
+    _m("login_restarts_when_unchanged", "a rerun on an unchanged file restarts nothing",
+       LOGIN_STEP, 'if cmp -s "$staged" "$env_file"; then', "if false; then", LOGIN),
+    _m("login_unready_kept", "not ready on the logins puts the previous env file back",
+       LOGIN_STEP, '    cp -p "$saved" "$env_file"; systemctl restart', "    systemctl restart", LOGIN),
+    _m("launcher_overload_profile_dropped", "the launcher passes certify's whole E4C flag set",
+       LAUNCHER_SH, "    --overload-profile /e4b/e4c/E4C-edge.json \\\n", "", LAUNCH),
+    _m("launcher_ledger_on_the_runtime_login", "the ledger half runs on the owner login, not infrx_runtime",
+       LAUNCHER_SH, 'OPERATIONS_DATABASE_URL "$OPS6543" ', "", LAUNCH),
+    _m("launcher_profile_unchecked", "a missing E4C profile is refused before docker runs",
+       LAUNCHER_SH, '"$e4c/E4C-box.json" "$e4c/E4C-edge.json" "$e4c/keys-certify.json"',
+       '"$e4c/E4C-box.json" "$e4c/keys-certify.json"', LAUNCH),
+)
+
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 
@@ -1438,6 +1467,11 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     if compose.exists():
         (root / "tests" / "integration").mkdir(parents=True, exist_ok=True)
         shutil.copy2(compose, root / "tests" / "integration" / "compose.yaml")
+    # E4C-RUNBOOK-2: the launcher case reads certify's parser and the E4C runbook's command
+    for part in (("tests", "integration", "backend", "certify.py"),
+                 ("models", "marlin2b", "results", "E4C-runbook.md")):
+        root.joinpath(*part[:-1]).mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO.joinpath(*part), root.joinpath(*part))
     for name in ("pyproject.toml", "uv.lock"):
         shutil.copy2(API_DIR / name, api / name)
     return api

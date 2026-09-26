@@ -415,3 +415,136 @@ def test_ops_continuous__a_step_on_a_pre_i8_checkout_is_blocked_before_it_acts(t
                          "RELEASE": "c" * 40, "MIRROR_URL": "s3://bucket/prefix/",
                          "MODE": "undo", "RESTORE_ID": "20260925T000000Z"})
     assert undo.returncode == 2 and "nothing moved aside" in undo.stderr, undo.stderr
+
+
+# --- E4C-RUNBOOK-2 item 5: the dedicated runtime logins (RV-09, D10 wiring 6, R127) ----------
+
+AWS_BY_NAME = '''#!{python}
+import json, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+with (here / "calls.log").open("a") as log:
+    log.write(json.dumps({{"tool": "aws", "argv": args, "stdin": ""}}) + "\\n")
+values = json.loads((here / "ssm.json").read_text())
+name = args[args.index("--name") + 1]
+if name not in values:
+    sys.stderr.write("ParameterNotFound\\n"); sys.exit(254)
+print(values[name])
+'''
+
+DOCKER_LOGIN = '''#!{python}
+import json, os, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+stdin = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
+record = {{"tool": "docker", "argv": args, "stdin": stdin, "env_files": {{}}}}
+for i, a in enumerate(args[:-1]):
+    if a == "--env-file" and args[i + 1] != "/dev/stdin":
+        record["env_files"][args[i + 1]] = pathlib.Path(args[i + 1]).read_text()
+with (here / "calls.log").open("a") as log:
+    log.write(json.dumps(record) + "\\n")
+if "envcheck" in args:
+    sys.exit(int(os.environ.get("STUB_ENVCHECK_EXIT", "0")))
+if args[-2:] == ["python", "-"]:
+    sys.stdout.write((here / "dsns.out").read_text())
+'''
+
+RUNTIME_PASSWORD_PARAM = "/model-inference/infrx_runtime_password"
+MONITOR_PASSWORD_PARAM = "/model-inference/infrx_monitor_password"
+OWNER_DSN_PARAM = "/model-inference/pg_journal_url"
+
+
+def test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only(tmp_path):
+    """55-runtime-login.sh (after W10, which writes the env file from SSM): the two login
+    passwords and the owner DSN are read from SSM by NAME (preflight's /model-inference/<leaf>
+    convention) into a 0600 file handed to the installed image as --env-file; the image sets
+    each password (a SCRAM verifier, never the plain text, crosses the wire) and logs in as
+    each on :6543; the env file gets DATABASE_URL (infrx_runtime) and MONITOR_DATABASE_URL
+    (infrx_monitor), 0600 by one rename after envcheck passes on the staged bytes; gateway and
+    worker restart and must answer /readyz. Oracles: a value on any argument or in the output;
+    a missing parameter or no installed image refused before anything changes; envcheck red
+    leaves the file and the units alone (exit 3); not ready puts the previous file back and
+    restarts on it (exit 4); a rerun on an unchanged file restarts nothing (idempotent)."""
+    owner, rt, mon = (f"{support.MARKER}-{w}" for w in ("owner", "rt", "mon"))
+    image = "sha256:" + "a" * 64
+    before = ("# INFRX_ENV_SCHEMA 1:abc\nINFRX_MODE=pilot\nINFRX_IMAGE=" + image + "\n"
+              f"DATABASE_URL=postgresql://postgres.ref:{owner}@pooler:5432/postgres?sslmode=require\n"
+              "S3_MEDIA_BUCKET=b\n")
+    new = (f"DATABASE_URL=postgresql://infrx_runtime.ref:{rt}@pooler:6543/postgres?sslmode=require\n"
+           f"MONITOR_DATABASE_URL=postgresql://infrx_monitor.ref:{mon}@pooler:6543/postgres?sslmode=require\n")
+    env_file, backups = tmp_path / "marlin2b-gateway.env", tmp_path / "backups"
+    env_file.write_text(before)
+    env_file.chmod(0o600)
+    stub = stubs(tmp_path, "systemctl", "curl", "sleep")
+    (stub / "aws").write_text(AWS_BY_NAME.format(python=sys.executable))
+    (stub / "docker").write_text(DOCKER_LOGIN.format(python=sys.executable))
+    (stub / "aws").chmod(0o755), (stub / "docker").chmod(0o755)
+    (stub / "ssm.json").write_text(json.dumps({OWNER_DSN_PARAM: before.split("DATABASE_URL=")[1].split("\n")[0],
+                                               RUNTIME_PASSWORD_PARAM: rt, MONITOR_PASSWORD_PARAM: mon}))
+    (stub / "dsns.out").write_text(new)
+    step = (STEPS / "55-runtime-login.sh").read_text()
+    env = {"ENV_FILE": str(env_file), "BACKUPS": str(backups), "TMPDIR": str(tmp_path)}
+
+    def run(**extra):
+        (stub / "calls.log").unlink(missing_ok=True)
+        done = run_step(step, stub, env={**env, **extra})
+        assert support.MARKER not in done.stdout + done.stderr, "a value in the output"
+        for call in calls(stub):
+            assert not any(support.MARKER in a for a in call["argv"]), call["argv"]
+        return done, calls(stub)
+
+    text = step
+    assert subprocess.run(["bash", "-n", str(STEPS / "55-runtime-login.sh")]).returncode == 0
+    assert "set -euo pipefail" in text and "ALTER ROLE" in text.upper()
+    done, made = run()
+    assert done.returncode == 0, done.stderr
+    ssm = [c["argv"] for c in made if c["tool"] == "aws"]
+    assert [a[a.index("--name") + 1] for a in ssm] == [OWNER_DSN_PARAM, RUNTIME_PASSWORD_PARAM,
+                                                        MONITOR_PASSWORD_PARAM]
+    (login,) = [c for c in made if c["tool"] == "docker" and c["argv"][-2:] == ["python", "-"]]
+    assert login["argv"][:5] == ["run", "--rm", "-i", "--network", "host"] and image in login["argv"]
+    (secrets,) = login["env_files"].values()
+    assert [line.split("=", 1)[0] for line in secrets.splitlines()] == [
+        "OWNER_DSN", "RUNTIME_PASSWORD", "MONITOR_PASSWORD"]
+    program = login["stdin"]
+    for needle in ("alter role {} with login password {}", "encrypt_password", "scram-sha-256",
+                   ":6543/", "select current_user", "infrx_runtime", "infrx_monitor"):
+        assert needle in program, needle
+    assert "except" not in program                   # any SQL error stops it (ON_ERROR_STOP)
+    (check,) = [c for c in made if c["tool"] == "docker" and "envcheck" in c["argv"]]
+    assert check["argv"][:5] == ["run", "--rm", "-i", "--network", "none"]
+    assert check["stdin"] == before.replace(before.split("\n")[3] + "\n", "") + new
+    assert env_file.read_text() == check["stdin"]
+    assert oct(env_file.stat().st_mode & 0o777) == "0o600"
+    (saved,) = backups.iterdir()
+    assert saved.read_text() == before and oct(saved.stat().st_mode & 0o777) == "0o600"
+    systemctl = [c["argv"] for c in made if c["tool"] == "systemctl"]
+    assert systemctl == [["restart", "marlin2b-gateway", "infrx-worker"]]
+    curls = [" ".join(c["argv"]) for c in made if c["tool"] == "curl"]
+    assert any("127.0.0.1:8001/readyz" in c for c in curls) and any("127.0.0.1:8002/readyz" in c for c in curls)
+    assert not list(tmp_path.glob("tmp.*")), "the secrets file outlived the step"
+
+    done, made = run()                                            # rerun: nothing to restart
+    assert done.returncode == 0 and "unchanged" in done.stdout, done.stderr
+    assert not [c for c in made if c["tool"] == "systemctl"] and len(list(backups.iterdir())) == 1
+
+    env_file.write_text(before)                                   # envcheck red: untouched
+    done, made = run(STUB_ENVCHECK_EXIT="1")
+    assert done.returncode == 3 and env_file.read_text() == before
+    assert not [c for c in made if c["tool"] == "systemctl"]
+
+    done, made = run(STUB_EXIT_curl="7", READY_S="2")            # not ready: previous file back
+    assert done.returncode == 4 and env_file.read_text() == before, done.stderr
+    assert [c["argv"] for c in made if c["tool"] == "systemctl"] == [
+        ["restart", "marlin2b-gateway", "infrx-worker"]] * 2
+
+    ssm_values = json.loads((stub / "ssm.json").read_text())      # a parameter missing: refused
+    del ssm_values[MONITOR_PASSWORD_PARAM]
+    (stub / "ssm.json").write_text(json.dumps(ssm_values))
+    done, made = run()
+    assert done.returncode != 0 and env_file.read_text() == before
+    assert not [c for c in made if c["tool"] in ("docker", "systemctl")]
+
+    env_file.write_text("# INFRX_ENV_SCHEMA 1:abc\nINFRX_MODE=pilot\n")   # no install yet
+    done, made = run()
+    assert done.returncode == 2 and "50-install" in done.stderr and made == []

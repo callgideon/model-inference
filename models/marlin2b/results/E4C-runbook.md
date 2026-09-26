@@ -36,18 +36,15 @@ W12's smoke has passed. It measures against the predeclared criteria and sets no
 |---|---|---|---|
 | 0.1 | coordinator | Check that P-18 was committed before the run. `git log -1 --format='%H %cI' -S'"latency_p95_s": 9.0' -- tests/integration/backend/certify.py` must show a commit timestamp earlier than step 5's start. Confirm that the E4B-protocol amendment 6 is in the release tree. | SHA and timestamp |
 | 0.2 | coordinator | **P-06.** Run `CONTAINER=marlin2b-8000 ENGINE=http://127.0.0.1:8000 WEIGHTS=/opt/dlami/nvme/marlin2b bash models/marlin2b/measure/inventory.sh` through SSM. Fill `processor_config_digest` and `preprocessor_config_digest` in `models/marlin2b/serving-version.json`, then pin both in `infra/runbooks/artifacts.py` `PINNED`. **Stop** if they differ from the repository copies (`d89ef49c…3b1` and `27225450…516`). | SSM command id, both digests |
-| 0.3 | coordinator | **P-01.** Publish the launch card: `python -m infrx.operations.cli publish-card --model nemostation/marlin-2b --card-version rc_marlin2b_20260925_launch --input-rate 400 --output-rate 1200 --approved-by "Launch price approved by the coordinator under the operator's authorization of 2026-09-25" --effective-at <RFC3339 ≤ now> --idempotency-key pub-20260925-launch --reason "launch price"`. Export `OPERATIONS_DATABASE_URL` first with `read -rs`. | card id, output |
-| 0.4 | coordinator | **P-02 dry-run.** `credit-transition --dry-run --card rc_marlin2b_20260925_launch --input-rate 400 --output-rate 1200` must exit 0 with `drift == []`. Then activate CREDIT (G8). The ledger half must run in CREDIT, not in `legacy_usd`. | JSON sha256, `keys` block (prefixes only), exit code |
-| 0.5 | **[operator-held]** | **Revoke the pre-cutover keys.** The two pre-cutover consumer keys must be revoked (`revoke-key`, logged), or the 0.4 `keys` block must show `revoked_at` on both. Otherwise the run is refused: any active prefix outside `test_key_ids` is an error. | prefixes, `revoked_at` |
-| 0.6 | **[operator-held]** | **P-05 second tenant: the account only.** Read `auth.users.email_confirmed_at`, and confirm the second user if needed. The coordinator then runs `grant --user <uuid2> --idempotency-key grant-tenant2-20260925 --reason "E4C second test tenant"`. **Do not issue its key here.** It is issued in §5.0, after certify. An active tenant-2 key is outside the box and edge profiles' `test_key_ids` (`["142c7d81"]`), so every certify cell would be refused. | tenant-2 user id (opaque), grant id |
-| 0.7 | **[operator-held]** | **P-24 funding.** Run `python -m infrx.operations.cli adjust --user <certify tenant> --amount 40000 --idempotency-key adj-e4c-20260925 --reason "E4C test allocation"`. This is test funding, not a second grant. The tenant then holds 10,000 + 40,000 = 50,000 CREDIT, which is the per-cell cap. | adjustment id, balance after |
-| 0.8 | coordinator | **The certify key inventory**, taken after 0.5 and 0.6. Run a fresh read-only `credit-transition --dry-run` (same flags as 0.4; it writes nothing and needs no operator key). List every prefix in its `keys` block whose `revoked_at` is null. The list must be exactly `142c7d81`. For any other active prefix (a pre-cutover key, a tenant-2 key issued early, a canary key), **stop**: the operator revokes it, then retake 0.8. Write `keys-certify.json`: `{"active_key_id_prefixes": ["142c7d81"], "taken_at": "<as_of of this dry-run>", "source": "G8 credit-transition --dry-run sha256:<this dry-run's JSON sha256>"}` as `/opt/dlami/nvme/e4b/e4c/keys-certify.json` on the box. It holds prefixes only. No key may be issued or restored between 0.8 and the end of §4; if one is, retake 0.8 before the next cell. | dry-run JSON sha256, `as_of`, file sha256 |
 
 ## 1. The window (inside rollout.md §2)
 
-1. **[coordinator]** Run rollout.md W1–W13 for the candidate `RELEASE`. Hold the deployment lock. The window id
-   that is logged is the `maintenance_window` value in step 3.
-2. W12's `verify-external.sh` must print `failures: 0`.
+1. **[coordinator]** Run rollout.md W1–W7 for the candidate `RELEASE`. Hold the deployment lock. The window id
+   that is logged is the `maintenance_window` value in step 3. W7 takes hosted from 0001–0018 to 0001–0025
+   (its second `plan` prints `nothing pending`).
+2. **[coordinator]** §1a below (H1–H6, on hosted), which is rollout.md W7f plus the key steps, then rollout.md
+   W8–W13 with §1's `INSTALL_ARGS` (`ACCOUNTING_REGIME=credit`, `ACTIVE_RATE_CARD_VERSION=rc_marlin2b_20260925_launch`)
+   and W10b (`55-runtime-login.sh`, the dedicated logins). W12's `verify-external.sh` must print `failures: 0`.
 3. The **edge must be open**, not in maintenance, for the P4 burst and the journey. The window's safety comes from
    the key inventory (only test keys are active), not from the edge.
 4. From the box, `curl -s -o /dev/null -w '%{http_code}' https://marlin2b.callbill.ai/health` must print `200`.
@@ -56,9 +53,26 @@ W12's smoke has passed. It measures against the predeclared criteria and sets no
    **[operator-held]**: the operator confirms the nonce at the P-25 destination.
    - **The canary stays off until §5 ends.** Run O4 **without** `P24_APPROVED`, so the canary timer is not enabled
      (`BLOCKED (P-24)`) and O5 shows no `infrx_canary_up`. The canary tenant's traffic would otherwise be foreign
-     traffic in the envelope and soak cells. Its key, unless it is `142c7d81`, must not be active at 0.8 (see 0.8).
+     traffic in the envelope and soak cells. Its key, unless it is `142c7d81`, must not be active at H6 (see H6).
    - After §5: issue or restore the canary key (logged), re-run O4 with `P24_APPROVED=<ref>`, then O5. Record both
      in `ops.md`.
+
+### 1a. After the hosted apply (before W8)
+
+H1–H2 call the migrated schema: `publish-card` writes the 0018+ card tables, and the activation writes the
+flags through 0022's `infrx.set_feature_flag`. Hosted is at 0018 until W7 applies 0019–0025, so none of these
+runs before W7. They all run before W8, because W10 installs `ACCOUNTING_REGIME=credit` with this card, and
+without both the gateway does not serve CREDIT ([rollout.md §1](../../../infra/runbooks/rollout.md#1-settings-for-this-release),
+the `ACCOUNTING_REGIME` row). The operator CLI runs from the coordinator host with `OPERATIONS_DATABASE_URL`.
+
+| # | Who | Step | Record |
+|---|---|---|---|
+| H1 | coordinator | **P-01.** Publish the launch card: `python -m infrx.operations.cli publish-card --model nemostation/marlin-2b --card-version rc_marlin2b_20260925_launch --input-rate 400 --output-rate 1200 --approved-by "Launch price approved by the coordinator under the operator's authorization of 2026-09-25" --effective-at <RFC3339 ≤ now> --idempotency-key pub-20260925-launch --reason "launch price"`. Export `OPERATIONS_DATABASE_URL` first with `read -rs` (the owner login; the CLI refuses the dedicated logins). It writes the 0018+ card tables of the migrated schema. | card id, output |
+| H2 | coordinator | **P-02 dry-run.** `credit-transition --dry-run --card rc_marlin2b_20260925_launch --input-rate 400 --output-rate 1200` must exit 0 with `drift == []`. Then activate CREDIT (G8 step 3): `credit-transition --card rc_marlin2b_20260925_launch --input-rate 400 --output-rate 1200 --drain-timeout-s 900 --idempotency-key cutover-20260925-launch --reason "E4C CREDIT activation (P-01, P-02)"` with `INFRX_OPERATOR_KEY` exported from the secure store. It writes the flags through 0022's `infrx.set_feature_flag` (`infrx/operations/transition.py:206`), which is why H1-H2 follow W7. The ledger half must run in CREDIT, not in `legacy_usd`. | JSON sha256, `keys` block (prefixes only), exit code |
+| H3 | **[operator-held]** | **Revoke the pre-cutover keys.** The two pre-cutover consumer keys must be revoked (`revoke-key`, logged), or the H2 `keys` block must show `revoked_at` on both. Otherwise the run is refused: any active prefix outside `test_key_ids` is an error. | prefixes, `revoked_at` |
+| H4 | **[operator-held]** | **P-05 second tenant: the account only.** Read `auth.users.email_confirmed_at`, and confirm the second user if needed. The coordinator then runs `grant --user <uuid2> --idempotency-key grant-tenant2-20260925 --reason "E4C second test tenant"`. **Do not issue its key here.** It is issued in §5.0, after certify. An active tenant-2 key is outside the box and edge profiles' `test_key_ids` (`["142c7d81"]`), so every certify cell would be refused. | tenant-2 user id (opaque), grant id |
+| H5 | **[operator-held]** | **P-24 funding.** Run `python -m infrx.operations.cli adjust --user <certify tenant> --amount 40000 --idempotency-key adj-e4c-20260925 --reason "E4C test allocation"`. This is test funding, not a second grant. The tenant then holds 10,000 + 40,000 = 50,000 CREDIT, which is the per-cell cap. | adjustment id, balance after |
+| H6 | coordinator | **The certify key inventory**, taken after H3 and H4. Run a fresh read-only `credit-transition --dry-run` (same flags as H2's dry-run; it writes nothing and needs no operator key). List every prefix in its `keys` block whose `revoked_at` is null. The list must be exactly `142c7d81`. For any other active prefix (a pre-cutover key, a tenant-2 key issued early, a canary key), **stop**: the operator revokes it, then retake H6. Write `keys-certify.json`: `{"active_key_id_prefixes": ["142c7d81"], "taken_at": "<as_of of this dry-run>", "source": "G8 credit-transition --dry-run sha256:<this dry-run's JSON sha256>"}` as `/opt/dlami/nvme/e4b/e4c/keys-certify.json` on the box. It holds prefixes only. No key may be issued or restored between H6 and the end of §4; if one is, retake H6 before the next cell. | dry-run JSON sha256, `as_of`, file sha256 |
 
 ## 2. Freeze the candidate (P-06, P-17 check 2)
 
@@ -121,18 +135,24 @@ python $M/bench.py $C --base-url https://marlin2b.callbill.ai/v1 --rate 1000.0 -
 
 **[coordinator]**
 
-The launcher is `research/plan/evidence/coordinator/session-03-tools/rollout/e4b-certify3.sh`, with the
-E4C additions below:
+The launcher is `infra/rollout/e4c-certify.sh` (`infra/rollout/ssm.sh infra/rollout/e4c-certify.sh
+RELEASE=$RELEASE`): session-03's `e4b-certify3.sh` (kept unchanged there as run3's record) with the E4C
+additions below. `apps/infrx-api/tests/i/test_rollout.py` pins its certify flags to the command below and to
+certify.py's parser.
 
 - the certify image `infrx-certify:$RELEASE`
 - `--env-file /etc/marlin2b-gateway.env`, never `-e MAX_VIDEO_SECONDS`
-- the transaction-port DSN for the ledger half
+- the ledger half on the transaction port: the env file's `DATABASE_URL` rewritten to :6543 as in run3, and
+  `OPERATIONS_DATABASE_URL` = the owner login (SSM `pg_journal_url`) on :6543. After W10b `DATABASE_URL` is
+  `infrx_runtime`, which the operator tool that runs the ledger half refuses. Both reach docker in a 0600 file.
 - `E4B_WINDOW_OK=1`
+- the three E4C inputs: `--run-profile`, `--key-inventory` and `--overload-profile` (§3, H6)
 
-Pre-checks (they print names only):
+Pre-checks. The launcher runs them and refuses with exit 2 (they print names only):
 
 - `cut -d= -f1 /opt/dlami/nvme/e4b/key.env` must print exactly `INFRX_API_KEY` (rule 1).
 - `grep -c '^MARLIN_API_KEY=' /etc/marlin2b-gateway.env` must print `0`.
+- `E4C-box.json`, `E4C-edge.json` and `keys-certify.json` exist under `/opt/dlami/nvme/e4b/e4c/`.
 
 ```bash
 python tests/integration/backend/certify.py --no-stack --box \
@@ -156,13 +176,13 @@ Two more checks on the report:
 - Check `target.max_video_seconds == 82.0` in the report.
 - Poll the run with `infra/rollout/steps/78-e4b-report.sh`.
 
-Certify passes the same `keys-certify.json` to every cell. The tenant-2 key does not exist yet (0.6), so
+Certify passes the same `keys-certify.json` to every cell. The tenant-2 key does not exist yet (H4), so
 no cell is refused for it.
 
 A failed cell follows the automatic fix loop in
 [05 §7](../../../research/plan/consumer-v1/05-client-and-load-testing.md). A rerun is a new qualifying run with
 new start timestamps, and the criteria are unchanged. A certify rerun after §5.0 first revokes the tenant-2 key
-(and turns the canary off again), then retakes 0.8.
+(and turns the canary off again), then retakes H6.
 
 ## 5. The two-tenant headless journey (P-17 check 5)
 
@@ -176,8 +196,8 @@ and exported under their own names. `MARLIN_API_KEY` must be unset.
    path> --idempotency-key key-tenant2-20260925 --reason "E4C second test tenant"`. Record the **prefix** only.
 2. Fill `~/e4c/E4C-two-tenant.json` from `E4C-box.two-tenant.base.json` with the §2 values, `maintenance_window`,
    and `test_key_ids[1]` = the new prefix. Record both sha256 values.
-3. **The journey inventory.** Run a fresh read-only `credit-transition --dry-run`, as in 0.8. The active prefixes
-   must be exactly `142c7d81` and the new prefix. Otherwise stop, as in 0.8. Then write the inventory:
+3. **The journey inventory.** Run a fresh read-only `credit-transition --dry-run`, as in H6. The active prefixes
+   must be exactly `142c7d81` and the new prefix. Otherwise stop, as in H6. Then write the inventory:
    `~/e4c/keys-journey.json` = `{"active_key_id_prefixes": ["142c7d81", "<tenant-2 prefix>"], "taken_at": "<as_of of this dry-run>", "source": "G8 credit-transition --dry-run sha256:<this dry-run's JSON sha256>"}`
 4. **[operator-held] `MEDIA_BASE_URL`.** This is an https prefix, approved by the operator, that serves every corpus
    clip file under its manifest basename (`<prefix>/<basename of the clip's file>`). The gateway fetches it
@@ -303,7 +323,7 @@ models/marlin2b/results/E4C-box-<release7>/run<N>-<UTC>/   # the profiles' evide
 research/plan/evidence/e/E4C-<release7>/
   freeze.json          # §2 identities, certify --hashes, bundle SHA256SUMS, command ids
   profiles.sha256      # the 3 committed bases + the 3 filled copies (filled copies committed too)
-  keys-certify.json    # 0.8's inventory (142c7d81 only) + its dry-run JSON sha256
+  keys-certify.json    # H6's inventory (142c7d81 only) + its dry-run JSON sha256
   keys-journey.json    # §5.0's inventory (142c7d81 + tenant 2) + its dry-run JSON sha256
   drills.md            # §6 records, one line per drill
   reconcile.txt        # drift.py outputs (counts only)
@@ -320,7 +340,7 @@ Evidence directories are append-only. A failed attempt keeps its own `run<N>`.
 |---|---|---|
 | 1 | Gate schema: E4C is implemented; candidate source and deployed identity recorded; every E4C test_id cell PASS | `E4C-<release7>.md` cell table; `gates.BACKEND-READY` in the coordinator updates |
 | 2 | Frozen identities, including P-06 and the profile sha | `E4C-<release7>/freeze.json`, `profiles.sha256` |
-| 3 | CREDIT regime, P-01 card, P-02 dry-run exit 0 | step 0.3/0.4 records; the report's ledger half in CREDIT |
+| 3 | CREDIT regime, P-01 card, P-02 dry-run exit 0 | step H1/H2 records; the install's `ACCOUNTING_REGIME=credit` (W10); the report's ledger half in CREDIT |
 | 4 | P-18 committed before the first qualifying run; every envelope and soak row PASS | step 0.1 timestamp compared with the `report.json` start; `e4b.b.envelope` and `e4b.b.soak` |
 | 5 | Two-tenant headless journey passed: both tenants over sync, SSE and async; upload, inline video, video URL and text; at least one cancel per tenant and the replay of each; dataset resume; foreign read and cancel 404; discovery and retention match. A leg NOT RUN or BLOCKED leaves this false | `results/…/journey/`; the §5.1 legs |
 | 6 | Exact reconciliation within the P-24 cap | `reconcile.txt`; the report's ledger rows; the spend figure |
@@ -340,3 +360,9 @@ Evidence directories are append-only. A failed attempt keeps its own `run<N>`.
   adds video URL and text, and its cancels are fixed at seqs 4, 7, 8 and 18. Sync and foreign-call legs are added;
   a NOT RUN leg leaves check 5 false. `models/marlin2b/tests/test_profile.py` validates every bench command here as
   written.
+- 2026-09-26 (E4C-RUNBOOK-2): the P-01 card and the P-02 dry-run and activation (old 0.3/0.4) need 0022's
+  `infrx.set_feature_flag` and the 0018+ card tables, so they move with the key steps (old 0.5–0.8) into §1a,
+  H1–H6, after rollout.md W7 and before W8; every reference is renumbered. §1 installs the CREDIT regime and
+  runs W10b (`55-runtime-login.sh`). §4's launcher is `infra/rollout/e4c-certify.sh`, with the three E4C flags
+  and the ledger half's owner login. Tests: `tests/integration/backend/recovery/test_runbooks.py` rb11,
+  `apps/infrx-api/tests/i/test_rollout.py`. Nothing here has run against the box, AWS or hosted.

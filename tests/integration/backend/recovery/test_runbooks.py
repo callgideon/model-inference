@@ -135,3 +135,94 @@ def test_i3b_rb07_a_client_timeout_never_re_raises_its_argv(monkeypatch, tmp_pat
     assert isinstance(raised, RuntimeError), type(raised)
     assert "timed out" in str(raised) and "sekritXYZ" not in str(raised), str(raised)
     assert raised.__cause__ is None and raised.__suppress_context__, "the argv is chained"
+
+
+# --- E4C-RUNBOOK-2: the window's hosted order (E4C-readiness-2026-09-26 §2d-f) -----------
+
+RB = kit.ROOT / "models" / "marlin2b" / "results" / "E4C-runbook.md"
+MIGRATIONS = kit.ROOT / "apps" / "app" / "supabase" / "migrations"
+
+
+def _section(text: str, heading: str) -> str:
+    start = text.index(heading)
+    following = re.search(r"^#{2,3} ", text[start + len(heading):], re.M)
+    return text[start:start + len(heading) + following.start()] if following else text[start:]
+
+
+def test_e4c_rb09_the_copy_is_seeded_with_hosted_s_own_applied_history():
+    """rollout.md W6: the restored copy has no supabase_migrations schema, so its history is
+    seeded before the copy's `plan`. Oracle: the seed was the literal 0001/0002 of the
+    prep-time hosted; hosted is at 0018 (20-platform-handoff-2026-09-24.md:73), so the copy
+    planned 0003-0025 while hosted plans 0019-0025, their digests differ and W7 aborts - or,
+    worse, an operator re-types the seed. The seed is now derived at the window from
+    hosted's own read-only `migrate.py plan` `applied:` line; fed the line migrate.py prints
+    for a 0001-0018 history, it yields exactly those 18 rows."""
+    sys.path.insert(0, str(kit.ROOT / "apps" / "infrx-api" / "deploy"))
+    import migrate
+    block = _section((RUNBOOKS / "rollout.md").read_text(), "### W6")
+    assert "values ('0001', 'init'), ('0002', 'seed_models')" not in block, "the stale seed"
+    read = re.search(r'^export MIGRATE_DATABASE_URL="\$HOSTED".*\n'
+                     r"^HOSTED_APPLIED=\$\(\$PY apps/infrx-api/deploy/migrate\.py plan \| "
+                     r"sed -n 's/\^applied: //p'\)", block, re.M)
+    assert read, "the seed is not read from hosted's own plan"
+    derive = re.search(r"^SEED=.*$", block, re.M)
+    assert derive and block.index(read.group(0)) < derive.start(), "no SEED derived after it"
+    assert re.search(r'-c "insert into supabase_migrations\.schema_migrations '
+                     r'\(version, name\) values \$SEED"', block), "the insert is not the seed"
+    local = migrate.local_migrations(MIGRATIONS)
+    applied = {v: n for v, n, _ in local if v <= "0018"}
+    line = migrate.describe([], applied).splitlines()[0].removeprefix("applied: ")
+    done = subprocess.run(["bash", "-c", f'set -euo pipefail; HOSTED_APPLIED="$1"; '
+                                         f'{derive.group(0)}; printf %s "$SEED"', "_", line],
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    rows = re.findall(r"\('(\d{4})', '([a-z0-9_]*)'\)", done.stdout)
+    assert rows == sorted(applied.items()) and len(rows) == 18, done.stdout
+    assert done.stdout == ",".join(f"('{v}', '{n}')" for v, n in rows), done.stdout
+    assert "0001-0018" in block and "0001-0025" in _section((RUNBOOKS / "rollout.md").read_text(), "### W7")
+
+
+def test_e4c_rb10_the_candidate_installs_the_credit_regime_with_the_p01_card():
+    """rollout.md §1: the E4C candidate runs in CREDIT with the P-01 card (P-17 check 3).
+    Oracle: INSTALL_ARGS left ACCOUNTING_REGIME unset (legacy_usd), so the certify ledger ran
+    in USD and P-17 failed by construction; the card in INFRX_SET must be the one the E4C
+    runbook publishes, and the known-good record passes every INFRX_SET name (else its
+    `config` check skips the two)."""
+    ro = (RUNBOOKS / "rollout.md").read_text()
+    block = re.search(r"^INSTALL_ARGS=\((.*?)\)$", ro, re.S | re.M).group(1)
+    pairs = dict(p.split("=", 1) for p in re.search(r'INFRX_SET="([^"]*)"', block).group(1).split())
+    card = re.search(r"publish-card .*?--card-version (\S+)", RB.read_text()).group(1)
+    assert pairs.get("ACCOUNTING_REGIME") == "credit", pairs
+    assert pairs.get("ACTIVE_RATE_CARD_VERSION") == card == "rc_marlin2b_20260925_launch", pairs
+    record = _section(ro, "### Known-good record")
+    assert set(pairs) <= set(re.findall(r"--set (\w+)", record)), record
+    row = next(line for line in ro.splitlines() if line.startswith("| `ACCOUNTING_REGIME`"))
+    for claim in ("config.py:249", "price_source", "55000", "exit 2", "exit 4"):
+        assert claim in row, claim
+
+
+def test_e4c_rb11_the_card_and_the_activation_follow_the_hosted_apply():
+    """E4C-runbook §0 ran publish-card and the credit-transition before the window, but the
+    activation calls 0022's `infrx.set_feature_flag` (transition.py) and hosted is at 0018:
+    both must follow W7, and both must precede the install (W8-W13) that sets the regime.
+    Oracle: either command in §0, or after the install line; a stale `0.3`-`0.8` step
+    reference left behind by the renumbering."""
+    text = RB.read_text()
+    before = _section(text, "## 0. Before the window")
+    assert "publish-card" not in before and "credit-transition" not in before, before
+    hosted = _section(text, "### 1a. After the hosted apply")
+    window = _section(text, "## 1. The window")
+    assert window.index("W1–W7") < window.index("§1a below (H1–H6") < window.index("W8–W13")
+    assert text.index("## 1. The window") < text.index("### 1a.") < text.index("## 2. Freeze")
+    steps = re.findall(r"^\| (H\d) \|", hosted, re.M)
+    assert steps == ["H1", "H2", "H3", "H4", "H5", "H6"], steps
+    order = [hosted.index(s) for s in ("publish-card", "credit-transition --dry-run",
+                                       "credit-transition --card", "revoke-key", "grant --user",
+                                       "adjust --user", "keys-certify.json")]
+    assert order == sorted(order), order
+    body = text.split("## Verification log")[0]
+    stale = re.findall(r"\b(?:step|as in|see|retakes?|after|flags as|yet) 0\.[3-8]\b|\(0\.[3-8]\)"
+                       r"|\b0\.[3-8]'s\b|\b0\.[3-8]/0\.[3-8]\b|\b0\.[3-8] `keys`|^\| 0\.[3-8] \|",
+                       body, re.M)
+    assert not stale, stale
+    assert "set_feature_flag" in hosted
