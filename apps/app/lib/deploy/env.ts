@@ -93,7 +93,9 @@ export const VARIABLES: readonly Variable[] = Object.freeze([
   {
     name: "NEXT_PUBLIC_APP_URL",
     exposure: "public",
-    required: ["production"],
+    // Nothing reads it (auth callbacks use window.location.origin), so its absence must not stop
+    // production (fix round 1-I2A-R2; I2A-ENV-09); a value that is set must still be this environment's.
+    required: [],
     check: (value, environment) => (originAllowed(environment, value) ? null : `is not an allowed ${environment} origin`),
   },
   { name: "SUPABASE_SERVICE_ROLE_KEY", exposure: "server", required: ["production"] },
@@ -170,10 +172,22 @@ export type ReleaseIdentity = {
 };
 
 const pick = (value: string | undefined, shape: RegExp) => (value && shape.test(value) ? value : undefined);
+const SHA = /^[0-9a-f]{40}$/;
+
+/**
+ * The host's commit (`VERCEL_GIT_COMMIT_SHA`) wins when present; `INFRX_RELEASE_SHA` is the
+ * off-Vercel build input only. Both present and different → "unknown": a stale operator value
+ * never relabels a build (fix round 1-I2A-R3). "" (next.config.ts's bake of an absent one) is absent.
+ */
+function releaseCommit(env: Env): string {
+  const host = env.VERCEL_GIT_COMMIT_SHA || undefined;
+  const own = env.INFRX_RELEASE_SHA || undefined;
+  if (host) return own && own !== host ? "unknown" : (pick(host, SHA) ?? "unknown");
+  return pick(own, SHA) ?? "unknown";
+}
 
 /** What is running: from the build and the host, with "unknown" for anything absent or malformed. */
 export function releaseIdentity(env: Env): ReleaseIdentity {
-  const sha = /^[0-9a-f]{40}$/;
   let environment = "unknown";
   try {
     environment = environmentOf(env);
@@ -181,7 +195,7 @@ export function releaseIdentity(env: Env): ReleaseIdentity {
     // stays "unknown"
   }
   return {
-    commit: pick(env.INFRX_RELEASE_SHA, sha) ?? pick(env.VERCEL_GIT_COMMIT_SHA, sha) ?? "unknown",
+    commit: releaseCommit(env),
     builtAt: pick(env.INFRX_BUILT_AT, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/) ?? "unknown",
     deployment: pick(env.VERCEL_DEPLOYMENT_ID, /^dpl_[A-Za-z0-9]+$/) ?? "unknown",
     environment,

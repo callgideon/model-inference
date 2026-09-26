@@ -82,9 +82,12 @@ test("I2A-ENV-02 production missing any required server-only variable fails clos
       assert.match(refusal({ ...PRODUCTION, [name]: missing }), new RegExp(name), `${name}=${JSON.stringify(missing)} was accepted`);
     }
   }
-  for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_APP_URL"]) {
+  for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]) {
     assert.match(refusal({ ...PRODUCTION, [name]: undefined }), new RegExp(name));
   }
+  // Fix round (1-I2A-R2): nothing reads NEXT_PUBLIC_APP_URL, so its absence must not take
+  // production down (every request 500); a value that is set is still checked (I2A-ENV-04).
+  assert.equal(assertDeployEnv({ ...PRODUCTION, NEXT_PUBLIC_APP_URL: undefined }), "production");
 });
 
 test("I2A-ENV-03 the production API origin is https with no path, credentials, query or fragment", () => {
@@ -239,4 +242,19 @@ test("I2A-REL-01 the release identity comes from the build, never invented", () 
   assert.equal(releaseIdentity({ VERCEL_DEPLOYMENT_ID: "dpl_<x>" }).deployment, "unknown");
   assert.equal(releaseIdentity({ INFRX_API_BASE_URL: "http://api.example.test" }).apiOrigin, "unknown");
   assert.equal(releaseIdentity({ VERCEL_ENV: "staging" }).environment, "unknown");
+});
+
+test("I2A-REL-03 the host's commit wins; a disagreeing INFRX_RELEASE_SHA makes the commit unknown", () => {
+  // Catches (fix round 1-I2A-R3): a stale INFRX_RELEASE_SHA left in the host's environment
+  // relabelling every later deploy with the old commit, so smoke S1 passes against the wrong release.
+  const host = "b".repeat(40);
+  const stale = "a".repeat(40);
+  assert.equal(releaseIdentity({ VERCEL_GIT_COMMIT_SHA: host, INFRX_RELEASE_SHA: stale }).commit, "unknown");
+  assert.equal(releaseIdentity({ VERCEL_GIT_COMMIT_SHA: host, INFRX_RELEASE_SHA: host }).commit, host);
+  // next.config.ts bakes "" for an absent variable: "" is absent, not a disagreement.
+  assert.equal(releaseIdentity({ VERCEL_GIT_COMMIT_SHA: host, INFRX_RELEASE_SHA: "" }).commit, host);
+  // Off the host, INFRX_RELEASE_SHA is the build input.
+  assert.equal(releaseIdentity({ VERCEL_GIT_COMMIT_SHA: "", INFRX_RELEASE_SHA: stale }).commit, stale);
+  // A present but malformed host value is never replaced by the operator's.
+  assert.equal(releaseIdentity({ VERCEL_GIT_COMMIT_SHA: "main", INFRX_RELEASE_SHA: stale }).commit, "unknown");
 });

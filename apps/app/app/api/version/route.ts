@@ -7,6 +7,7 @@ export function GET() {
   const identity = releaseIdentity({
     ...process.env,
     INFRX_RELEASE_SHA: process.env.INFRX_RELEASE_SHA,
+    VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
     INFRX_BUILT_AT: process.env.INFRX_BUILT_AT,
   });
   return NextResponse.json(identity, { headers: PRIVATE_HEADERS });

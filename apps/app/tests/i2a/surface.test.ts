@@ -84,6 +84,20 @@ test("I2A-BUNDLE-01 no client module reaches a file that names a server-only var
   assert.deepEqual(offenders, []);
 });
 
+/** Every environment variable name the App's own code reads (`process.env.X` or `*_ENV = "X"`). */
+function envReads(): string[] {
+  const names: string[] = [];
+  const sources = [...files(join(appRoot, "app")), ...files(join(appRoot, "components")), ...files(join(appRoot, "lib"))]
+    .concat([join(appRoot, "middleware.ts"), join(appRoot, "instrumentation.ts"), join(appRoot, "next.config.ts")])
+    .filter((f) => existsSync(f) && !f.endsWith(".test.ts"));
+  for (const file of sources) {
+    const source = read(file);
+    for (const m of source.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) names.push(m[1]);
+    for (const m of source.matchAll(/_ENV\s*=\s*"([A-Z][A-Z0-9_]+)"/g)) names.push(m[1]);
+  }
+  return names;
+}
+
 test("I2A-ENV-08 every environment variable the App reads is in the matrix or named exempt", () => {
   // Catches: a new server secret wired into a page without appearing in the matrix, the startup
   // check or the runbook.
@@ -100,17 +114,17 @@ test("I2A-ENV-08 every environment variable the App reads is in the matrix or na
     "VERCEL_DEPLOYMENT_ID",
   ]);
   const known = new Set(VARIABLES.map((v) => v.name));
-  const read_: string[] = [];
-  const sources = [...files(join(appRoot, "app")), ...files(join(appRoot, "components")), ...files(join(appRoot, "lib"))]
-    .concat([join(appRoot, "middleware.ts"), join(appRoot, "instrumentation.ts"), join(appRoot, "next.config.ts")])
-    .filter((f) => existsSync(f) && !f.endsWith(".test.ts"));
-  for (const file of sources) {
-    const source = read(file);
-    for (const m of source.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) read_.push(m[1]);
-    for (const m of source.matchAll(/_ENV\s*=\s*"([A-Z][A-Z0-9_]+)"/g)) read_.push(m[1]);
-  }
+  const read_ = envReads();
   assert.ok(read_.includes("SUPABASE_SERVICE_ROLE_KEY") && read_.includes("INFRX_API_BASE_URL"), "the scan found nothing");
   assert.deepEqual([...new Set(read_.filter((n) => !known.has(n) && !EXEMPT.has(n)))], []);
+});
+
+test("I2A-ENV-09 a variable is required only if the App reads it", () => {
+  // Catches (fix round 1-I2A-R2): the startup check refusing to serve production (every request
+  // 500) for a variable no code uses, e.g. NEXT_PUBLIC_APP_URL missing from the host's settings.
+  const read_ = new Set(envReads());
+  const unread = VARIABLES.filter((v) => v.required.length > 0 && !read_.has(v.name)).map((v) => v.name);
+  assert.deepEqual(unread, []);
 });
 
 test("I2A-START-01 the server checks its environment once at startup and fails closed", () => {
@@ -163,10 +177,15 @@ test("I2A-REL-02 the release identity route is private and built from the loader
   const route = read(join(appRoot, "app", "api", "version", "route.ts"));
   assert.match(route, /releaseIdentity\(/);
   assert.match(route, /PRIVATE_HEADERS/);
-  assert.match(route, /process\.env\.INFRX_RELEASE_SHA/, "the build-time identity must be read textually so Next inlines it");
-  assert.match(route, /process\.env\.INFRX_BUILT_AT/);
+  for (const name of ["INFRX_RELEASE_SHA", "VERCEL_GIT_COMMIT_SHA", "INFRX_BUILT_AT"]) {
+    // Read textually so Next inlines the build-time value.
+    assert.match(route, new RegExp(`${name}: process\\.env\\.${name}\\b`), name);
+  }
+  // Fix round (1-I2A-R3): each commit source is baked as itself, never one folded into the other,
+  // so releaseIdentity can see a disagreement (I2A-REL-03).
   const config = read(join(appRoot, "next.config.ts"));
-  assert.match(config, /INFRX_RELEASE_SHA:\s*process\.env\.INFRX_RELEASE_SHA \|\| process\.env\.VERCEL_GIT_COMMIT_SHA \|\| ""/);
+  assert.match(config, /INFRX_RELEASE_SHA:\s*process\.env\.INFRX_RELEASE_SHA \|\| "",/);
+  assert.match(config, /VERCEL_GIT_COMMIT_SHA:\s*process\.env\.VERCEL_GIT_COMMIT_SHA \|\| "",/);
   assert.match(config, /INFRX_BUILT_AT:/);
 });
 

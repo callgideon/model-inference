@@ -17,6 +17,10 @@ browser journey; it never deploys or restarts runtime infrastructure.
    release on, a server whose environment is incomplete refuses to serve (every request 500,
    log line `App environment refused (<env>): <variable names>`), by design.
 3. The App release is deployed (§5), smoke-checked (§6) and recorded as the known-good App release.
+4. **Gate APP-MERGE.** The production branch is `main` (§3 Git), so merging `claude/consumer-v1`
+   (which carries `instrumentation.ts`) into `main` **is** the production App deploy. It is a named
+   tracker gate, opened only after items 1-2 above and the §7 item 2 inputs are confirmed; it is
+   never a routine integration merge.
 
 ## 2. Environments and domains
 
@@ -42,11 +46,12 @@ Vercel project `infrx-app` (root directory `apps/app`, framework Next.js, Node �
   |---|---|---|---|---|
   | `NEXT_PUBLIC_SUPABASE_URL` | public (inlined at build) | required, **must be** the production project | required, **must not be** the production project | required |
   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | required | required (staging project's) | required |
-  | `NEXT_PUBLIC_APP_URL` | public | required, exactly `https://app.callbill.ai` | optional; if set, a preview host of this project | optional; `http://localhost:3000` |
+  | `NEXT_PUBLIC_APP_URL` | public | optional (no code reads it; auth callbacks use `window.location.origin`); if set, exactly `https://app.callbill.ai` | optional; if set, a preview host of this project | optional; `http://localhost:3000` |
   | `SUPABASE_SERVICE_ROLE_KEY` | **server only**, mark Sensitive | required | optional (staging project's only) | optional |
   | `INFRX_API_BASE_URL` | **server only** | required, https origin with no path (the accepted edge origin) | optional | optional (loopback http allowed) |
   | `CONSOLE_CURSOR_SECRET` | **server only**, mark Sensitive | required, ≥ 16 characters | optional (usage/trace pages fail closed without it) | optional |
   | `INFRX_APP_ENVIRONMENT` | server | not needed on Vercel (`VERCEL_ENV` is read) | not needed | set for `next start` off Vercel |
+  | `INFRX_RELEASE_SHA` | build input | **never set on Vercel** (the host's commit is used; a different value makes the commit `unknown`) | never | off-Vercel builds only (§5) |
 
   No DSN, Sentry or alert variable exists in the App; none is invented here.
 - **System Environment Variables**: "Automatically expose System Environment Variables" ON, so
@@ -84,7 +89,10 @@ is the check that the entries cover `/auth/callback?next=...`.
 - **Identity** of an App release = the full commit SHA + the Vercel deployment id. Both are
   served by `GET /api/version` (`{commit, builtAt, deployment, environment, apiOrigin}`,
   `Cache-Control: private, no-store`); anything absent reads `"unknown"`, never a guess. The commit
-  is fixed at build (`INFRX_RELEASE_SHA`, else `VERCEL_GIT_COMMIT_SHA`).
+  is fixed at build: the host's `VERCEL_GIT_COMMIT_SHA` when present; `INFRX_RELEASE_SHA` is the
+  off-Vercel build input only, set to `git rev-parse HEAD` of a **clean** tree. Both present and
+  different reads `"unknown"`, so a stale operator value never relabels a build. A local build of
+  a dirty tree has no release identity; label any probe of one as such.
 - **Known-good App release**: a deployment whose §6 smoke passed, recorded in the session record
   as `{commit, deployment, UTC, smoke output}` — by record, not by the existence of a deployment.
   Like `known-good.py` for the backend, a rollback target must be compatible with the applied
@@ -122,9 +130,12 @@ Never "fix forward" on production without a new release identity. The backend is
 
 1. **[OP]** A non-production (staging) Supabase project for previews/development, with its URL,
    publishable key and (optional) service-role key set **Preview-scoped** in Vercel.
-2. **[OP]** Production-scoped `INFRX_API_BASE_URL` (accepted edge origin) and `CONSOLE_CURSOR_SECRET`
-   before the first deploy carrying `instrumentation.ts`; confirm `SUPABASE_SERVICE_ROLE_KEY` is
-   Production-scoped and Sensitive.
+2. **[OP]** Production-scoped `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY` (Sensitive), `INFRX_API_BASE_URL` (accepted edge origin) and
+   `CONSOLE_CURSOR_SECRET` (Sensitive) — the complete production-required set in `VARIABLES` — before
+   gate APP-MERGE (§1 item 4); a missing one makes production serve 500 on every request.
+   `NEXT_PUBLIC_APP_URL` is optional; if present in Production it must be exactly
+   `https://app.callbill.ai`, or startup refuses. No `INFRX_RELEASE_SHA` in any Vercel scope.
 3. **[OP]** Remove any production value that is currently scoped to Preview or "All Environments".
 4. **[OP]** Confirm the Vercel scope slug (`PREVIEW_SCOPE`) and system-variable exposure.
 5. **[OP]** P-05 (§4) on both projects; custom SMTP credentials; `signup_grant` when the grant opens.
@@ -135,3 +146,6 @@ Never "fix forward" on production without a new release identity. The backend is
 
 - 2026-09-26: Written by I2A-PREP with the code it describes; local checks only (`pnpm test`,
   lint, typecheck, `next build`, `next start` header probes). No hosted setting was read or changed.
+- 2026-09-26 (fix round): `NEXT_PUBLIC_APP_URL` no longer required in production (nothing reads
+  it); §7 item 2 lists the full production-required set; gate APP-MERGE named (§1); release commit
+  = the host's SHA, `INFRX_RELEASE_SHA` off-Vercel only, disagreement → `unknown` (§5). Local only.
