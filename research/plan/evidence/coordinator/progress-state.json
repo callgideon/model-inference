@@ -20,7 +20,7 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 141,
-  "updated": "2026-09-26T21:33:57Z",
+  "updated": "2026-09-26T21:58:00Z",
   "agent_slots": {
     "total": 16,
     "active": 1,
@@ -3727,21 +3727,27 @@
       },
       "activity": "running",
       "started": "2026-09-26T21:33:00Z",
-      "updated": "2026-09-26T21:33:00Z",
+      "updated": "2026-09-26T21:58:00Z",
       "blocker": null,
-      "next_action": "gates green → freeze identities (P-18 0.1 check, certify.py --hashes, R148 digest) → release-bundle.sh b640c35c + fetch + prepull on the box → install maintenance when the user-held inputs land",
+      "next_action": "G2 make check (e2c form) running since 21:35Z (~3.5 h) then tests/i on e2c → freeze complete → W1 staging [USER-RUN: denied as Production Deploy] → install maintenance when the user-held inputs land",
       "estimate": {
-        "optimistic_h": 3.5,
-        "likely_h": 4,
-        "pessimistic_h": 5,
+        "optimistic_h": 2.5,
+        "likely_h": 3,
+        "pessimistic_h": 4,
         "confidence": "medium",
-        "basis": "G2-FIX make check 12,430 s; pre-checks on e8222205 all green (G3/G4/G4b/G5, app-e2e 20/20)",
-        "at": "2026-09-26T21:33:00Z"
+        "basis": "G2-FIX make check 12,430 s; every other gate PASS at b640c35c",
+        "at": "2026-09-26T21:58:00Z"
       },
       "evidence": [
         "research/plan/evidence/coordinator/E4C-readiness-2026-09-26.md"
       ],
-      "commands": [],
+      "commands": [
+        {
+          "cmd": "G1; G4; G4b; G3 build+probe; G5 rehearse.sh (ns infrx-pre); make app-e2e (e4b); E3C final run (e3c block, 5 controls)",
+          "exit": 0,
+          "summary": "G1 PASS; G4 []; G4b ok; G3 \"ok\": true; G5 REHEARSAL PASSED (0 leftovers); app-e2e PASS (journey 20/20); E3C PASS 16/16 scenarios, 12/12 controls"
+        }
+      ],
       "owned_paths": [
         "research/plan/evidence/coordinator/E4C-readiness-2026-09-26.md",
         "research/plan/evidence/coordinator/RELEASE-b640c35c.md (new)"
@@ -3909,7 +3915,7 @@
       ],
       "decision": "accepted",
       "decided_at": "2026-09-26T04:07:41Z",
-      "note": "Accepted at the E3C final run on the integration tip 04ae5e21 (run head 27a69619, merged as dcce7775): 13/13 scenarios (85 cases) PASS, 9/9 negative controls detected for the right reason (both revert controls on the owner login), 11:55 wall, task-local e3c harness with INFRX_E3C_RUNTIME_LOGIN=1; evidence research/plan/evidence/e3c/E3C-FINAL-27a6961.md. Local gate only: the box window (E4C) remains. Re-proven 2026-09-26 on the 0024/0025 tree (E3C rerun 8b824cd0, merged with codex/e3c-rerun 1bfc327d): 13/13 scenarios, 9/9 controls, s10 with the 0024/0025 surface; evidence research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md. Re-proven 2026-09-26 on the 0026 tree 400a7e94 (E3C final run PASS exit 0, 16/16 scenarios incl. s14 with the put_result door, all controls; 879 s; the earlier FAIL on the same tree was the coordinator's relative E3C_OUT — every worker refused to start — not a tree defect)."
+      "note": "Accepted at the E3C final run on the integration tip 04ae5e21 (run head 27a69619, merged as dcce7775): 13/13 scenarios (85 cases) PASS, 9/9 negative controls detected for the right reason (both revert controls on the owner login), 11:55 wall, task-local e3c harness with INFRX_E3C_RUNTIME_LOGIN=1; evidence research/plan/evidence/e3c/E3C-FINAL-27a6961.md. Local gate only: the box window (E4C) remains. Re-proven 2026-09-26 on the 0024/0025 tree (E3C rerun 8b824cd0, merged with codex/e3c-rerun 1bfc327d): 13/13 scenarios, 9/9 controls, s10 with the 0024/0025 surface; evidence research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md. Re-proven 2026-09-26 on the 0026 tree 400a7e94 (E3C final run PASS exit 0, 16/16 scenarios incl. s14 with the put_result door, all controls; 879 s; the earlier FAIL on the same tree was the coordinator's relative E3C_OUT — every worker refused to start — not a tree defect). Re-proven 2026-09-26 at RELEASE b640c35c (E3C final run PASS exit 0, 16/16 scenarios, 12/12 controls, 21:40–21:56Z; evidence research/plan/evidence/coordinator/RELEASE-b640c35c.md)."
     },
     "BACKEND-READY": {
       "candidate": {
@@ -3955,155 +3961,172 @@
     },
     "APP-LOCAL": {
       "candidate": {
-        "source": "400a7e94 (claude/consumer-v1 with D10-0026-FENCE + WR-D10F-1..4)",
-        "deployed": "task-local e4b stack on the fixed shared clone of 400a7e94 (dirty false): App 56870, edge 56860, control 56861; make app-e2e run /tmp/infrx-e2c-app-e2e-bqnhjzf4 (09:48–09:51Z); teardown clean",
-        "config": "harness e4b, controlled engine, runtime login; 77 gate unit tests hermetic before pnpm install; PLAYWRIGHT_BROWSERS_PATH scratch chromium-headless-shell; migrations 0001–0026"
+        "source": "b640c35c (RELEASE: claude/consumer-v1 with G2-FIX; migrations 0001–0026)",
+        "deployed": "task-local e4b stack on the fixed shared clone of b640c35c (dirty false): make app-e2e run /tmp/infrx-e2c-app-e2e-uemiti5r (21:35–21:37Z); teardown clean",
+        "config": "harness e4b, controlled engine, runtime login; 78 gate unit tests hermetic before pnpm install; PLAYWRIGHT_BROWSERS_PATH scratch chromium-headless-shell; migrations 0001–0026"
       },
       "cells": [
         {
           "id": "DUR-ADMIT",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "DUR-CAP",
           "verdict": "PASS",
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md",
-            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "PASS[delegated to E3C-CELLS 9227e9ed s15] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree)"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s15] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "DUR-FENCE",
           "verdict": "PASS",
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md",
-            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "PASS[delegated to E3C-CELLS 9227e9ed s14] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree)"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s14] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "DUR-OUTPUT",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "DUR-SETTLE",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "DUR-OUTBOX",
           "verdict": "PASS",
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md",
-            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "PASS[delegated to E3C-CELLS 9227e9ed s05,s08] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree)"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s05,s08] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "DUR-RLS",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "MEDIA-SEC",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "API-MODES",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "API-STREAM",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "CONSOLE-FLOWS",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "CREDIT-GRANT",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "CREDIT-IDENTITY",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "CREDIT-UNITS",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "CREDIT-RATE",
           "verdict": "PASS",
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md",
-            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
+            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "PASS[delegated to E3C-CELLS 9227e9ed s16] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree)"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s16] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "CREDIT-SPEND",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         },
         {
           "id": "APP-JOURNEY",
           "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
           ],
-          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0); re-proven at RELEASE b640c35c (app-e2e PASS exit 0, journey 20/20; the delegated E3C cells re-proven by the E3C final at b640c35c: 16/16, 12/12 controls)"
         }
       ],
-      "decision": null,
-      "decided_at": null,
-      "note": "17/17 cells PASS on the fixed clone of 400a7e94 (0026 on the tree; 13 journey + 4 delegated to E3C-CELLS 9227e9ed — the E3C final run on 400a7e94 is running and refreshes the delegated reference); app-e2e PASS exit 0 (earlier: 17/17 on 2b29c617). The candidate is ready for acceptance; the decision is recorded when E3A dispatches after BACKEND-READY (the manifest gate is unchanged under the 2026-09-25 App-ahead decision)."
+      "decision": "accepted",
+      "decided_at": "2026-09-26T21:58:00Z",
+      "note": "Accepted at RELEASE b640c35c under the user's GO-LIVE decision (2026-09-26 19:50Z: install and App release ahead of BACKEND-READY; the manifest order APP-LOCAL-after-BACKEND-READY is superseded for this release): 17/17 cells PASS on the fixed shared clone of b640c35c — console-test/lint/typecheck, browser journey 20/20 PASS (102.9 s), the four delegated cells by the E3C final run at b640c35c (16/16 scenarios, 12/12 controls, exit 0); earlier 17/17 on 400a7e94 and 2b29c617. Local gate only: APP-PILOT (the hosted App against the live backend) remains. Evidence research/plan/evidence/coordinator/RELEASE-b640c35c.md."
     },
     "APP-PILOT": {
       "candidate": {
@@ -6309,6 +6332,12 @@
       "by": "tracker",
       "what": "rejected update: stale: at 2026-09-26T21:05:00Z is not newer than lane G2-FIX state 2026-09-26T21:33:00Z",
       "source": "updates/G2-FIX-20260926T2105Z.json"
+    },
+    {
+      "at": "2026-09-26T21:58:00Z",
+      "by": "coordinator (RELEASE)",
+      "what": "RELEASE b640c35c: G1/G3/G4/G4b/G5 PASS, E3C final PASS (16/16, 12/12 controls), app-e2e PASS (journey 20/20); BACKEND-LOCAL re-proven and APP-LOCAL ACCEPTED at RELEASE under the GO-LIVE decision; G2 make check running; W1 staging user-run (tool-policy denial)",
+      "source": "research/plan/evidence/coordinator/RELEASE-b640c35c.md"
     }
   ],
   "history": {

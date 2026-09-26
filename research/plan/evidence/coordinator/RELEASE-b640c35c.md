@@ -34,8 +34,8 @@ The full `certify.py --hashes` output is the freeze.json of E4C-runbook §7 (`sc
 | G4b (P-06) | PASS `ok` | checks-b640c35c-gates.log |
 | G5 | PASS `REHEARSAL PASSED` (REHEARSAL_NS=infrx-pre, 0 leftovers) | checks-b640c35c-gates-g5.log |
 | G6 | operator inputs (recorded in the readiness log) | — |
-| BACKEND-LOCAL re-proof (E3C final on the e3c block) | RUNNING | checks-b640c35c-e3c.log |
-| APP-LOCAL re-proof (make app-e2e on e4b) | RUNNING | checks-b640c35c-app.log |
+| BACKEND-LOCAL re-proof (E3C final on the e3c block) | PASS (exit 0; 16/16 scenarios s01–s16, 12/12 controls detected: 3 bypass, 2 revert, 2 DB defect, 1 classify, 3 SQL; 21:40–21:56Z; teardown 0 containers) | checks-b640c35c-e3c-run.log; e3c-b640c35c/verdict.json |
+| APP-LOCAL re-proof (make app-e2e on e4b) | PASS (exit 0; preflight, console-test 0 fail, console-lint 0 errors, console-typecheck, browser journey 20/20 PASS in 102.9 s; 21:35–21:37Z; 78 gate unit tests before pnpm install) | checks-b640c35c-app.log; /tmp/infrx-e2c-app-e2e-uemiti5r/verdict.json |
 
 Pre-checks on the previous tip e8222205 (G2-FIX is the only difference): G3/G4/G4b/G5 PASS, app-e2e PASS (journey 20/20).
 
@@ -52,3 +52,4 @@ env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN infra/rol
 ## Verification log
 
 - 2026-09-26T21:40Z: identities computed on the fixed clone; G1/G3/G4/G4b/G5 PASS; G2, E3C and App re-proofs running; W1 user-run.
+- 2026-09-26T21:58Z: E3C final PASS and app-e2e PASS at RELEASE; BACKEND-LOCAL re-proven, APP-LOCAL accepted (GO-LIVE decision) in the overlay (rev 141). G2 still running.
