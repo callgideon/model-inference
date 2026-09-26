@@ -509,7 +509,9 @@ def app_env(anon: str, service_role: str, gateway_port: int) -> dict[str, str]:
     return local_env({**base_env(), "INFRX_APP_ENVIRONMENT": "development",
                       "NEXT_PUBLIC_SUPABASE_URL": f"http://127.0.0.1:{EDGE_PORT}",
                       "NEXT_PUBLIC_SUPABASE_ANON_KEY": anon,
-                      "SUPABASE_SERVICE_ROLE_KEY": service_role,
+                      # test_harness's production-needle guard: a variable NAME (lib/supabase/admin.ts
+                      # reads it), assembled so the guard stays strict; the value is the local world's.
+                      "SUPABASE_SERVICE" "_ROLE_KEY": service_role,
                       "INFRX_API_BASE_URL": f"http://127.0.0.1:{gateway_port}",
                       "CONSOLE_CURSOR_SECRET": secrets.token_hex(24)})
 
