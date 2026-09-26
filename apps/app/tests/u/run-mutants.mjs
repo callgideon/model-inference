@@ -967,7 +967,7 @@ const MUTANTS = [
   { id: "U2-M09", what: "a refused creation hides why behind the replay text", file: KEYS_VM,
     find: '  if (!result.ok) return { kind: "notice", message: result.error.message };',
     replace: '  if (!result.ok) return { kind: "notice", message: REPLAYED_COPY };', cases: [T.kOnce] },
-  { id: "U2-M10", what: "the revocation copy stops being P-26's", file: KEYS_VM,
+  { id: "U2-M10", what: "the revocation copy stops being P-26's", file: "app/(console)/docs/content.ts",
     find: "Revoking a key stops new requests immediately.", replace: "Revoking a key stops requests within a minute.",
     cases: [T.kCopy] },
   { id: "U2-M11", what: "the confirmation says revocation takes a minute", file: KEYS_VM,
