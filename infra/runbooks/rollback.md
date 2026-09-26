@@ -120,6 +120,10 @@ reset role;
 Write your own name and reason into `updated_by`/`reason` (the drill's literals above are
 what `bk04` runs, verbatim); `legacy_usd_admission` goes back to `true` only while the
 pre-cutover regime is still the live one - after the cutover it stays off (02 §3).
+The statement covers only these two admission flags: `signup_grant` (the App's cutover
+rollback) is never written here but with the audited operator verb
+`python -m infrx.operations.cli flag --name signup_grant --off --idempotency-key <k> --reason "<why>"`
+(`infrx.set_feature_flag`, audited once per key, R144), which refuses the admission flags.
 
 `bk04` proves, on migrations 0001-0009: with both flags off an old-regime job insert and
 `resolve_admission_pins` refuse with `55000` and no job, hold or ledger row appears; with
@@ -150,3 +154,5 @@ ledger, journal or job tables to roll back code.
   record + bundle), the box check (85), maintenance proven closed, a real job + result +
   settlement after the rollback and after the roll-forward (verify-journey.sh, drift.py
   --request-id), readiness and cold-start timings kept apart. Not run on the box.
+- 2026-09-26 (G8-FLAG, GAP-I3-1/I3R-7): Maintenance names the audited `flag` verb for
+  `signup_grant` (R144); the maintenance statement itself is unchanged (bk04/rb03). Local only.

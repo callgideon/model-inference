@@ -417,4 +417,46 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
     return result
 
 
-__all__ = ["FlagLocked", "PgTransition", "TransitionBlocked", "apply", "plan", "unapproved"]
+# --------------------------------------------------------------------- one flag
+#: R133/R144: a regime moves only with `credit-transition` (freeze, drain, enable).
+REGIME_FLAGS = frozenset(ADMISSION_FLAG.values())
+
+
+async def flag_row(store: PgTransition, name: str) -> dict:
+    """The flag's current row (read-only). A regime flag is refused, as is an unknown one."""
+    if name in REGIME_FLAGS:
+        raise errors.InvalidRequest(f"{name} is a regime flag: change it only with "
+                                    "credit-transition (R133/R144)")
+    row = (await store.inventory())["flags"].get(name)
+    if row is None:
+        raise errors.NotFound(f"no feature flag named {name!r}")
+    return {"name": name, **row}
+
+
+async def set_flag(op, store: PgTransition, *, name: str, enabled: bool, idempotency_key: str,
+                   reason: str, lock_timeout_s: float) -> dict:
+    """GAP-I3-1 / R144: one non-regime flag (e.g. `signup_grant`) through the transition's
+    own writer (`set_feature_flag`, bounded), audited once under `idempotency_key` with the
+    operator session's principal as the actor. Nothing here touches money."""
+    async def write(_operation_id: str):
+        before = await flag_row(store, name)
+        try:
+            changed = await store.set_flag(name, enabled, op.principal, reason,
+                                           lock_timeout_s=lock_timeout_s)
+        except FlagLocked:
+            raise errors.StateConflict(
+                f"{name} stayed locked past {lock_timeout_s} s (an admission in flight holds "
+                "the flags FOR SHARE); nothing changed - rerun under the same key") from None
+        after = await flag_row(store, name)
+        return ({"enabled": before["enabled"]},
+                {"name": name, "enabled_before": before["enabled"],
+                 "enabled_after": after["enabled"], "changed": changed, "actor": op.principal,
+                 "updated_at": after["updated_at"]})
+
+    result, replayed = await op._once("flag", idempotency_key, reason, None,
+                                      {"name": name, "enabled": enabled}, write)
+    return {**result, "replayed": replayed}
+
+
+__all__ = ["FlagLocked", "PgTransition", "TransitionBlocked", "apply", "flag_row", "plan",
+           "set_flag", "unapproved"]

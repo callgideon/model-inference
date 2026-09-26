@@ -81,7 +81,7 @@ project; the lane set none of them.
 | Custom SMTP | configured (sender domain, credentials by name in the dashboard only) | configured or the default sender for testing |
 | Rate limits | emails/hour, sign-ups, sign-ins, verifications per IP set for launch | any |
 | Email templates | default `{{ .ConfirmationURL }}`, or cross-device: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email&next=/welcome` (`type=recovery&next=/update-password` for reset) | same |
-| `infrx.feature_flags.signup_grant` | enabled by the audited operator action when the grant opens | as needed |
+| `infrx.feature_flags.signup_grant` | set only by the audited operator verb `python -m infrx.operations.cli flag --name signup_grant --on` (or `--off`) `--idempotency-key <k> --reason "<why>"` when the grant opens or closes (R144; `credit-transition` also enables it) | as needed |
 
 Glob semantics (`**` any characters) are the auth service's; the first staging signup (§6 S4)
 is the check that the entries cover `/auth/callback?next=...`.
@@ -153,3 +153,5 @@ Never "fix forward" on production without a new release identity. The backend is
 - 2026-09-26 (fix round): `NEXT_PUBLIC_APP_URL` no longer required in production (nothing reads
   it); §7 item 2 lists the full production-required set; gate APP-MERGE named (§1); release commit
   = the host's SHA, `INFRX_RELEASE_SHA` off-Vercel only, disagreement → `unknown` (§5). Local only.
+- 2026-09-26 (G8-FLAG, GAP-I3-1/I3R-7): the `signup_grant` row names the audited `flag` verb
+  (R144). Local only.

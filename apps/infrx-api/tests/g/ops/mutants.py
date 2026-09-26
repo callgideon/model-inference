@@ -426,6 +426,40 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "        if why:\n            raise errors.InvalidRequest(f\"publish-card",
        "        if False:\n            raise errors.InvalidRequest(f\"publish-card",
        "test_credit_rate__publish_card_publishes_approved_prices_only"),
+    # --- G8-FLAG (GAP-I3-1, R144): one non-regime flag through the audited writer ----
+    _m("flag_regime_refusal_dropped", "a regime flag moves only with credit-transition (R133/R144)",
+       T, "    if name in REGIME_FLAGS:\n", "    if False:\n",
+       "test_flag__a_regime_flag_an_unknown_flag_and_a_locked_flag_change_nothing",
+       "test_flag__the_dry_run_reads_without_a_key_and_writes_nothing"),
+    _m("flag_actor_from_argument", "the flag's actor is the operator session, never an argument",
+       T, "op.principal, reason,\n                                           lock_timeout_s=lock_timeout_s)",
+       "reason, reason,\n                                           lock_timeout_s=lock_timeout_s)",
+       "test_flag__signup_grant_goes_off_and_on_through_the_audited_writer_as_the_operator"),
+    _m("flag_audit_skipped", "a flag write is audited once under its key and replays",
+       T, "    result, replayed = await op._once(\"flag\", idempotency_key, reason, None,\n"
+          "                                      {\"name\": name, \"enabled\": enabled}, write)",
+       "    result, replayed = (await write(\"\"))[1], False",
+       "test_flag__signup_grant_goes_off_and_on_through_the_audited_writer_as_the_operator"),
+    _m("flag_direct_update",
+       "the only flag write is infrx.set_feature_flag (its EXCLUSIVE table lock, R144); the "
+       "PG oracle is test_flag_pg's lock case (G8-FLAG evidence)",
+       T, "\"select infrx.set_feature_flag(%s, %s, %s, %s)\",",
+       "\"with p(n, e, a, r) as (values (%s::text, %s::boolean, %s::text, %s::text)), \"\n"
+       "                    \"u as (update infrx.feature_flags f set enabled = p.e, \"\n"
+       "                    \"updated_by = p.a, reason = p.r, updated_at = infrx.now() from p \"\n"
+       "                    \"where f.name = p.n and f.enabled <> p.e returning 1) \"\n"
+       "                    \"select count(*) > 0 from u\",",
+       "test_flag__the_writer_is_set_feature_flag_under_the_bounded_lock"),
+    _m("flag_off_ignored", "--off turns the flag off",
+       C, "name=a.name, enabled=a.enabled,", "name=a.name, enabled=True,",
+       "test_flag__signup_grant_goes_off_and_on_through_the_audited_writer_as_the_operator"),
+    _m("flag_lock_unmapped",
+       "a flag locked past the bound is an operator-facing refusal (declared: the raw "
+       "FlagLocked escapes the CLI)",
+       T, "        except FlagLocked:\n            raise errors.StateConflict(",
+       "        except ZeroDivisionError:\n            raise errors.StateConflict(",
+       "test_flag__a_regime_flag_an_unknown_flag_and_a_locked_flag_change_nothing",
+       dies_by=("FlagLocked",)),
     # --- G8 point 4: races and retries ---------------------------------------------
     _m("same_key_race_surfaces_the_raw_conflict", "a same-key race answers the recorded row",
        S, "        except errors.Conflict:\n            # G8:",

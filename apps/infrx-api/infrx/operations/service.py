@@ -51,13 +51,14 @@ MAX_REASON = 500                         # audit_entries.reason CHECK 1..500
 
 # Each operator write under its own 0009 audit action (G8: a reconciliation or an
 # adjustment filed as a grant misreads in an audit); it also names itself in
-# `after.operation`. `transition` flips the platform-wide admission flags (no org).
+# `after.operation`. `transition` flips the platform-wide admission flags (no org), `flag`
+# one non-regime flag (R144).
 ACTION = {
     "key_issue": "admin_key_issue", "key_revoke": "admin_key_revoke",
     "publish": "admin_publish", "job_cancel": "admin_job_cancel",
     "suspension": "admin_set_suspension", "signup_grant": "admin_grant",
     "adjustment": "admin_adjust", "reconcile": "admin_reconcile",
-    "transition": "admin_set_entitlements",
+    "transition": "admin_set_entitlements", "flag": "admin_set_entitlements",
 }
 assert set(ACTION.values()) <= set(AUDIT_ACTIONS)
 
