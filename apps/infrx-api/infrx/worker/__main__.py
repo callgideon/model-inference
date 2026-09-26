@@ -138,7 +138,8 @@ def compose(settings, *, objects=None, index=None):
     store = PgJobStore(connect, limits=limits)
     jobs = CreditWork(store) if deployment.accounting_regime == CREDIT_REGIME else store
     # --- M6-WIRING (wiring 1): the lifecycle, the bounded cache, the metrics -------------
-    lifecycle = PgLifecycle(connect, limits=limits)       # claim TTL 300 s > the 75 s delete
+    lifecycle = PgLifecycle(connect, limits=limits,       # claim TTL 300 s > the 75 s delete
+                            grace_s=deployment.retention_grace_s)     # P-25: 3,600 s
     media = MediaPreparation(objects, limits=limits, content=lifecycle,
                              cache=ProcessingCache(root, ttl_s=limits.processing_cache_ttl_s,
                                                    max_bytes=deployment.processing_cache_max_bytes,

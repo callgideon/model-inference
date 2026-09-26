@@ -481,8 +481,10 @@ DEPLOYMENT_EXPECTED = {
     # I2B-R4 (W3 request 6): the worker's loopback readiness/metrics port
     "WORKER_HEALTH_PORT": 8002,
     # M6 wiring 1 + E3C F-4: the worker's cache high water and housekeeping cadences (P-25)
-    "PROCESSING_CACHE_MAX_BYTES": 64424509440, "RETENTION_INTERVAL_S": 300.0,
+    "PROCESSING_CACHE_MAX_BYTES": 53687091200, "RETENTION_INTERVAL_S": 300.0,
     "CACHE_SWEEP_INTERVAL_S": 300.0, "JOURNAL_EXPIRE_INTERVAL_S": 300.0,
+    # P-25 (decided 2026-09-25): 50 GiB above, and the content collection grace
+    "RETENTION_GRACE_S": 3600.0,
 }
 
 # Everything except the text values (the secret, the accounting regime).

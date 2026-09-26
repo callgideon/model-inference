@@ -204,6 +204,19 @@ At prep time (0018 at `8554b47`) hosted's plan listed **0003-0018, sixteen files
 | Pilot requests were accepted and it must stop | R3: `95-maintenance.sh`; `rollback.sh` refuses the unmetered monolith |
 | The host itself | R4: root-volume swap to the W2 snapshot ([restore.md](restore.md#box-snapshot)) |
 
+### Known-good record
+
+P-25 (decided 2026-09-25): a release is a known-good rollback target when
+`apps/infrx-api/.venv/bin/python infra/rollout/known-good.py <sha> --applied <hosted version>
+--bundles <release prefix>` exits 0 with all six checks passing (commit, preparation,
+migrations, config, record, bundle) **and** `infra/rollout/steps/85-known-good-box.sh
+TARGET=<sha>` exits 0 on the box. A backup directory or a short readiness is not the record.
+The `schema_proof` for bda1586 and 4226315 reaches 0023 (`infra/rollout/known-good.json`,
+research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md); a migration beyond 0023 needs the
+proof extended before `--applied` may name it. The `config` check compares the names this
+install passes: leave `RETENTION_GRACE_S` (P-25's 3,600 s default) out of `INFRX_SET`, or a
+candidate that predates it refuses.
+
 ## 4. Continuous operations (I8) — after the release that carries I8
 
 Each row is one coordinator op, logged first (README rule 1), serialized after any running
@@ -251,3 +264,5 @@ Nothing here has run; every row's output goes into the I8 evidence record.
   `INFRX_SET` (it was a comment; the rehearsal's `pool_budget.py` FAILs at defaults, peak 21 +
   headroom 2 > 15, and PASSes at 6, peak 13); 50-install requires `ENGINE_MAX_NUM_SEQS` (its
   default of 32 is gone). Not run on the box.
+- 2026-09-26 (P25-ENACT): §3 "Known-good record" states P-25's definition (known-good.py's
+  six checks with `--bundles`, plus 85-known-good-box.sh) and the 0023 schema proof. Not run.

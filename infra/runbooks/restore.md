@@ -283,6 +283,25 @@ plan change, separately authorized (infra/README.md §6). The database recovery 
 Part A above (dump -> scratch restore -> `pgrestore.py check` equal), timed by the
 coordinator: that time is the database's RTO lower bound.
 
+### Dump cadence while PITR is off
+
+P-25 (decided 2026-09-25, research/plan/15-pending-inputs.md "Decisions 2026-09-25"): until
+the policy read above shows PITR on, the hosted database's recovery point is the newest
+verified logical dump, so the coordinator takes one:
+
+- **before every migration or rollout** (the release's W6 is that dump for a rollout that
+  applies migrations; a rollout without one still takes A3 first);
+- **daily during E4C**;
+- **keeping the 7 newest** verified dumps under `$HOME/infrx-backups/`, removing older ones as
+  A9 removes them (never committed; they hold the project's users' e-mail addresses).
+
+"Verified" is Part A's restore check: A3 dump, A4/A5 restore into a scratch copy, A6
+`pgrestore.py check` exit 0 with `"equal": true`, and the dump's `SHA256SUMS` in the
+operation log. A dump that was not restored and checked does not count toward the 7. The
+dump itself is operator-run from the coordinator host exactly as A1-A6 print it (names
+only; the password as A2 reads it). Enabling PITR is a separate paid decision
+(infra/README.md §6); when it is on, this cadence is revisited, not assumed.
+
 ## Other layers
 
 | Layer | Backup | Recovery |
@@ -317,3 +336,6 @@ coordinator: that time is the database's RTO lower bound.
 - 2026-09-24 (I8): "Model artifacts" (mirror, fetch/verify, timed swap, undo; RTO parts named)
   and "Backup and PITR policy" (supabase_policy.py; RPO derived only from what it reads)
   added. Not run: the mirror prefix and the access token are inputs (P-25).
+- 2026-09-26 (P25-ENACT): "Dump cadence while PITR is off" added from P-25 (decided
+  2026-09-25): a verified dump before every migration or rollout and daily during E4C, the
+  7 newest kept, verified by A6. Not run.
