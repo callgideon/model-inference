@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 04:07Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 75, updated 2026-09-26 04:07Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 04:12Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 76, updated 2026-09-26 04:07Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -406,17 +406,17 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
-- 2026-09-26 04:07Z UTC, None: —
+- 2026-09-26 04:07Z UTC, coordinator (E3C): E3C final BACKEND-LOCAL PASS on 04ae5e21 (run head 27a69619; 85 cases, 9/9 controls); codex/e3c-rerun 5c4f6d7b merged at dcce7775; gate BACKEND-LOCAL accepted; E3C → implemented
 - 2026-09-26 04:07Z UTC, tracker: forecast E3C: 2026-09-26 05:23Z – 2026-09-26 09:17Z (likely 2026-09-26 06:41Z) → 2026-09-26 04:37Z – 2026-09-26 05:13Z (likely 2026-09-26 04:37Z) (because: dependency path E3C)
 - 2026-09-26 04:06Z UTC, E3C: running → review; head 27a69619; estimate likely 2 → 0 h (gate passed on the integration tip; left is the coordinator merge of codex/e3c-rerun)
 - 2026-09-26 04:07Z UTC, tracker: rejected update: stale: at 2026-09-25T22:30:00Z is not newer than lane E3C state 2026-09-26T03:35:23Z
-- 2026-09-26 03:35Z UTC, None: —
-- 2026-09-26 03:35Z UTC, None: —
-- 2026-09-26 03:35Z UTC, None: —
-- 2026-09-26 03:35Z UTC, None: —
-- 2026-09-26 03:35Z UTC, None: —
-- 2026-09-26 03:35Z UTC, None: —
-- 2026-09-26 03:35Z UTC, None: —
+- 2026-09-26 03:35Z UTC, coordinator (COORD): full api-test + g/contracts/i/w mutants running on the fixed clone of 34f0ed28 (scratchpad/wave4b/checks-04ae5e21)
+- 2026-09-26 03:35Z UTC, coordinator (D10-MERGE-2): dispatched: 0024 + 0025 + wirings onto 34f0ed28 on codex/d10-merge-2 (revoke 55459)
+- 2026-09-26 03:35Z UTC, coordinator (D10-0025): verified ACCEPT_WITH_FIXES at b5fc2fbc (5 agents; 1-F1 fixed in W-D10B-1 v2: both views in SERVICE_WRITES; 916 matrix rows 0 failed)
+- 2026-09-26 03:35Z UTC, coordinator (E3C): final BACKEND-LOCAL run dispatched on 04ae5e21 (final-run.sh via the E3C agent) with E3A-WR-1/2 + WR-W5F5B-3
+- 2026-09-26 03:35Z UTC, coordinator (W5): rulings R135–R139 numbered (R144–R145, R123 amended); W5 → implemented in the manifest at 34f0ed28; P-25 enactment logged
+- 2026-09-26 03:35Z UTC, coordinator (W5-F5B): merged --no-ff at 04ae5e21 with WR-W5F5B-1; touched suites 100 passed
+- 2026-09-26 03:35Z UTC, coordinator (WAVE4B-UNION): backend union round 3b merged --no-ff at 51c1644d (code head d9e72c9c): 0022, 0023 door revoke, W5 + admit_ready wiring, W5-F5, P25-ENACT, WR-UNION-1/2; api-test 4510 passed at d9e72c9c
 - 2026-09-26 03:35Z UTC, tracker: forecast E3C: 2026-09-26 06:00Z – 2026-09-26 13:48Z (likely 2026-09-26 08:36Z) → 2026-09-26 05:23Z – 2026-09-26 09:17Z (likely 2026-09-26 06:41Z) (because: dependency path E3C)
 - 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'WAVE4B-UNION'
 - 2026-09-26 03:35Z UTC, tracker: rejected update: unknown activity 'review (fix round 1-F5B-R1 done)'
@@ -437,20 +437,20 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - 2026-09-26 03:35Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-25T19:10:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
 - 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'W5-MERGE'
-- 2026-09-26 02:34Z UTC, None: —
+- 2026-09-26 02:34Z UTC, coordinator (W5-F5B): W5-F5B verified ACCEPT_WITH_FIXES at 009af6b1 (1-F5B-R1: E3C s04 late case re-pointed at the pre-D10 door, rechecked); merges after the union, before BACKEND-LOCAL
 - 2026-09-26 02:24Z UTC, tracker: rejected update: lane APP-E3A-FIX belongs to None, not E3A
-- 2026-09-26 02:24Z UTC, None: —
+- 2026-09-26 02:24Z UTC, coordinator (APP-E3A-FIX): APP-E3A-FIX verified ACCEPT at 97dce397 (F-1 sign-in claim runs; F-2 provider routes 404 for consumers) and merged; journey 18/0/1 on e4b
 - 2026-09-26 02:11Z UTC, tracker: rejected update: stale: at 2026-09-26T02:06:00Z is not newer than lane I3 state 2026-09-26T02:11:40Z
 - 2026-09-26 02:11Z UTC, tracker: rejected update: stale: at 2026-09-26T01:46:00Z is not newer than lane I3 state 2026-09-26T02:11:40Z
-- 2026-09-26 02:11Z UTC, None: —
-- 2026-09-26 01:59Z UTC, None: —
-- 2026-09-26 01:54Z UTC, None: —
+- 2026-09-26 02:11Z UTC, coordinator (I3): I3-PREP verified ACCEPT_WITH_FIXES at 39b78070 (7 findings fixed and rechecked: no free text in browser reports, Sec-Fetch-Site origin, bounded body read, P-05 before the deploy, hosted-ahead needs a schema proof) and merged; gate not claimed
+- 2026-09-26 01:59Z UTC, coordinator (D10-0025): D10-0025 dispatched (wf_1b0b99b9-75e) from 8f453b98: WR-U3-1 operator RPCs as migration 0025
+- 2026-09-26 01:54Z UTC, coordinator (D10-APP-SQL): D10-APP-SQL verified ACCEPT_WITH_FIXES at 8f453b98 (0-CM-1/1-R1 GoTrue columns, 1-R2 key insert = verified individual without a wallet; minors carried); merges after the union; D10-0025 branches from it
 - 2026-09-26 01:46Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C)
 - 2026-09-26 01:46Z UTC, tracker: rejected update: stale: at 2026-09-26T01:18:40Z is not newer than lane E3A state 2026-09-26T01:45:09Z
 - 2026-09-26 01:46Z UTC, tracker: rejected update: stale: at 2026-09-26T00:39:11Z is not newer than lane E3A state 2026-09-26T01:45:09Z
-- 2026-09-26 01:46Z UTC, None: —
-- 2026-09-26 01:45Z UTC, None: —
-- 2026-09-26 01:18Z UTC, None: —
+- 2026-09-26 01:46Z UTC, coordinator (APP-E3A-FIX): APP-E3A-FIX dispatched (wf_6b1a3b25-9ee) on 6d55c5e0 for E3A-PREP's product findings F-1/F-2 and the journey selector fitting
+- 2026-09-26 01:45Z UTC, coordinator (E3A): E3A-PREP verified ACCEPT_WITH_FIXES at 4391553c (6 findings fixed and rechecked) and merged 6d55c5e0; APP-LOCAL not claimed; F-1/F-2 product findings open → APP-E3A-FIX lane
+- 2026-09-26 01:18Z UTC, coordinator (I3): I3-PREP dispatched (wf_eed7ff75-8f5) on 6badd4e1: the last consumer-v1 task whose start dependencies allow a preparation lane; App union round-2 checks green; tip 6badd4e1 unpushed (push denied by the tool policy this window)
 - 2026-09-26 01:12Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C, I3)
 - 2026-09-26 01:12Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C)
 - 2026-09-26 01:12Z UTC, tracker: rejected update: stale: at 2026-09-26T00:37:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z

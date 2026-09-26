@@ -19,7 +19,7 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 75,
+  "revision": 76,
   "updated": "2026-09-26T04:07:58Z",
   "agent_slots": {
     "total": 16,
@@ -3938,18 +3938,21 @@
     },
     {
       "at": "2026-09-26T01:18:15Z",
-      "lane": "I3",
-      "event": "I3-PREP dispatched (wf_eed7ff75-8f5) on 6badd4e1: the last consumer-v1 task whose start dependencies allow a preparation lane; App union round-2 checks green; tip 6badd4e1 unpushed (push denied by the tool policy this window)"
+      "by": "coordinator (I3)",
+      "what": "I3-PREP dispatched (wf_eed7ff75-8f5) on 6badd4e1: the last consumer-v1 task whose start dependencies allow a preparation lane; App union round-2 checks green; tip 6badd4e1 unpushed (push denied by the tool policy this window)",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T01:45:09Z",
-      "lane": "E3A",
-      "event": "E3A-PREP verified ACCEPT_WITH_FIXES at 4391553c (6 findings fixed and rechecked) and merged 6d55c5e0; APP-LOCAL not claimed; F-1/F-2 product findings open → APP-E3A-FIX lane"
+      "by": "coordinator (E3A)",
+      "what": "E3A-PREP verified ACCEPT_WITH_FIXES at 4391553c (6 findings fixed and rechecked) and merged 6d55c5e0; APP-LOCAL not claimed; F-1/F-2 product findings open → APP-E3A-FIX lane",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T01:46:03Z",
-      "lane": "APP-E3A-FIX",
-      "event": "APP-E3A-FIX dispatched (wf_6b1a3b25-9ee) on 6d55c5e0 for E3A-PREP's product findings F-1/F-2 and the journey selector fitting"
+      "by": "coordinator (APP-E3A-FIX)",
+      "what": "APP-E3A-FIX dispatched (wf_6b1a3b25-9ee) on 6d55c5e0 for E3A-PREP's product findings F-1/F-2 and the journey selector fitting",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T01:46:03Z",
@@ -3970,18 +3973,21 @@
     },
     {
       "at": "2026-09-26T01:54:50Z",
-      "lane": "D10-APP-SQL",
-      "event": "D10-APP-SQL verified ACCEPT_WITH_FIXES at 8f453b98 (0-CM-1/1-R1 GoTrue columns, 1-R2 key insert = verified individual without a wallet; minors carried); merges after the union; D10-0025 branches from it"
+      "by": "coordinator (D10-APP-SQL)",
+      "what": "D10-APP-SQL verified ACCEPT_WITH_FIXES at 8f453b98 (0-CM-1/1-R1 GoTrue columns, 1-R2 key insert = verified individual without a wallet; minors carried); merges after the union; D10-0025 branches from it",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T01:59:07Z",
-      "lane": "D10-0025",
-      "event": "D10-0025 dispatched (wf_1b0b99b9-75e) from 8f453b98: WR-U3-1 operator RPCs as migration 0025"
+      "by": "coordinator (D10-0025)",
+      "what": "D10-0025 dispatched (wf_1b0b99b9-75e) from 8f453b98: WR-U3-1 operator RPCs as migration 0025",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T02:11:40Z",
-      "lane": "I3",
-      "event": "I3-PREP verified ACCEPT_WITH_FIXES at 39b78070 (7 findings fixed and rechecked: no free text in browser reports, Sec-Fetch-Site origin, bounded body read, P-05 before the deploy, hosted-ahead needs a schema proof) and merged; gate not claimed"
+      "by": "coordinator (I3)",
+      "what": "I3-PREP verified ACCEPT_WITH_FIXES at 39b78070 (7 findings fixed and rechecked: no free text in browser reports, Sec-Fetch-Site origin, bounded body read, P-05 before the deploy, hosted-ahead needs a schema proof) and merged; gate not claimed",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T02:11:41Z",
@@ -3997,8 +4003,9 @@
     },
     {
       "at": "2026-09-26T02:24:04Z",
-      "lane": "APP-E3A-FIX",
-      "event": "APP-E3A-FIX verified ACCEPT at 97dce397 (F-1 sign-in claim runs; F-2 provider routes 404 for consumers) and merged; journey 18/0/1 on e4b"
+      "by": "coordinator (APP-E3A-FIX)",
+      "what": "APP-E3A-FIX verified ACCEPT at 97dce397 (F-1 sign-in claim runs; F-2 provider routes 404 for consumers) and merged; journey 18/0/1 on e4b",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T02:24:04Z",
@@ -4008,8 +4015,9 @@
     },
     {
       "at": "2026-09-26T02:34:12Z",
-      "lane": "W5-F5B",
-      "event": "W5-F5B verified ACCEPT_WITH_FIXES at 009af6b1 (1-F5B-R1: E3C s04 late case re-pointed at the pre-D10 door, rechecked); merges after the union, before BACKEND-LOCAL"
+      "by": "coordinator (W5-F5B)",
+      "what": "W5-F5B verified ACCEPT_WITH_FIXES at 009af6b1 (1-F5B-R1: E3C s04 late case re-pointed at the pre-D10 door, rechecked); merges after the union, before BACKEND-LOCAL",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T03:35:22Z",
@@ -4132,38 +4140,45 @@
     },
     {
       "at": "2026-09-26T03:35:23Z",
-      "lane": "WAVE4B-UNION",
-      "event": "backend union round 3b merged --no-ff at 51c1644d (code head d9e72c9c): 0022, 0023 door revoke, W5 + admit_ready wiring, W5-F5, P25-ENACT, WR-UNION-1/2; api-test 4510 passed at d9e72c9c"
+      "by": "coordinator (WAVE4B-UNION)",
+      "what": "backend union round 3b merged --no-ff at 51c1644d (code head d9e72c9c): 0022, 0023 door revoke, W5 + admit_ready wiring, W5-F5, P25-ENACT, WR-UNION-1/2; api-test 4510 passed at d9e72c9c",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T03:35:23Z",
-      "lane": "W5-F5B",
-      "event": "merged --no-ff at 04ae5e21 with WR-W5F5B-1; touched suites 100 passed"
+      "by": "coordinator (W5-F5B)",
+      "what": "merged --no-ff at 04ae5e21 with WR-W5F5B-1; touched suites 100 passed",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T03:35:23Z",
-      "lane": "W5",
-      "event": "rulings R135–R139 numbered (R144–R145, R123 amended); W5 → implemented in the manifest at 34f0ed28; P-25 enactment logged"
+      "by": "coordinator (W5)",
+      "what": "rulings R135–R139 numbered (R144–R145, R123 amended); W5 → implemented in the manifest at 34f0ed28; P-25 enactment logged",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T03:35:23Z",
-      "lane": "E3C",
-      "event": "final BACKEND-LOCAL run dispatched on 04ae5e21 (final-run.sh via the E3C agent) with E3A-WR-1/2 + WR-W5F5B-3"
+      "by": "coordinator (E3C)",
+      "what": "final BACKEND-LOCAL run dispatched on 04ae5e21 (final-run.sh via the E3C agent) with E3A-WR-1/2 + WR-W5F5B-3",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T03:35:23Z",
-      "lane": "D10-0025",
-      "event": "verified ACCEPT_WITH_FIXES at b5fc2fbc (5 agents; 1-F1 fixed in W-D10B-1 v2: both views in SERVICE_WRITES; 916 matrix rows 0 failed)"
+      "by": "coordinator (D10-0025)",
+      "what": "verified ACCEPT_WITH_FIXES at b5fc2fbc (5 agents; 1-F1 fixed in W-D10B-1 v2: both views in SERVICE_WRITES; 916 matrix rows 0 failed)",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T03:35:23Z",
-      "lane": "D10-MERGE-2",
-      "event": "dispatched: 0024 + 0025 + wirings onto 34f0ed28 on codex/d10-merge-2 (revoke 55459)"
+      "by": "coordinator (D10-MERGE-2)",
+      "what": "dispatched: 0024 + 0025 + wirings onto 34f0ed28 on codex/d10-merge-2 (revoke 55459)",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T03:35:23Z",
-      "lane": "COORD",
-      "event": "full api-test + g/contracts/i/w mutants running on the fixed clone of 34f0ed28 (scratchpad/wave4b/checks-04ae5e21)"
+      "by": "coordinator (COORD)",
+      "what": "full api-test + g/contracts/i/w mutants running on the fixed clone of 34f0ed28 (scratchpad/wave4b/checks-04ae5e21)",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     },
     {
       "at": "2026-09-26T04:07:07Z",
@@ -4184,8 +4199,9 @@
     },
     {
       "at": "2026-09-26T04:07:41Z",
-      "lane": "E3C",
-      "event": "E3C final BACKEND-LOCAL PASS on 04ae5e21 (run head 27a69619; 85 cases, 9/9 controls); codex/e3c-rerun 5c4f6d7b merged at dcce7775; gate BACKEND-LOCAL accepted; E3C → implemented"
+      "by": "coordinator (E3C)",
+      "what": "E3C final BACKEND-LOCAL PASS on 04ae5e21 (run head 27a69619; 85 cases, 9/9 controls); codex/e3c-rerun 5c4f6d7b merged at dcce7775; gate BACKEND-LOCAL accepted; E3C → implemented",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     }
   ],
   "history": {
