@@ -134,6 +134,127 @@ A cell that shows any of these is reported as invalid rather than published:
 | W3 | pinned serving version: runtime image digest, both EOS ids (`[248044, 248046]`), profile-v1 flags, and the engine-reported `num_gpu_blocks` × block size from its start-up log | L0–L4, calling the engine version "pinned" at all, and any KV-capacity statement |
 | I2B | the refactored gateway deployed, with `Server-Timing` phases and the usage resource | L2–L5 and all phase timing |
 
+## 7. Window cells: E1B inside the E4C window (E1B-PREP, 2026-09-26; prepared, not run)
+
+This section adds cells so that **one GPU window, the E4C window**
+([E4C-runbook.md](E4C-runbook.md)), also covers E1B. Nothing in it has run. Wall times,
+CREDIT ceilings and USD figures are `est.`, each with its basis. The certify criteria quoted
+here are E4B-protocol §5 amendment 6 (P-18) as coded in `tests/integration/backend/certify.py`
+`CRITERIA`, not new targets. The slice-by-slice map of what the certify run already produces
+is in `research/plan/evidence/e/E1B-prep-*.md`.
+
+### 7.1 Rules for the window cells
+
+1. **No overlap.** A window cell never runs while a certify cell, the soak, the journey or a
+   drill runs. There is one engine, so any concurrent request is foreign traffic in both
+   cells. The canary stays off until the last window cell ends (runbook §1 step 5).
+2. **Own profile, own dataset.** Each cell runs under a committed profile base filled with
+   the runbook §2 identity (WR-1 in the evidence file), with `keys-certify.json` (H6), or
+   `keys-journey.json` for WC-9, and with its own `--dataset-version e1b-w1-<cell>` (§5 items
+   9–10). A different rate, form set, tenant count or bound is a new base committed before
+   the window (R133), never an edit of a filled copy. Per-level fields are stamped by
+   committed code, the way `certify.cell_profile` does it (WR-2), never by hand.
+3. **Frozen shape.** Every cell uses `--seed 20260922`, `--max-tokens 128,512,1024`,
+   `--retries 0` and `--subset full`, unless its row says otherwise.
+4. **Certify is untouched.** No window cell changes a certify criterion, cell or profile. A
+   window cell that fails is recorded in E1B's record as FAIL, INVALID or NOT RUN, and has no
+   effect on the certify report.
+5. **Latency.** E1B's own §4 latency row stays **no criterion**. Gateway cells are reported
+   descriptively, beside E4B §5's P-18 numbers, and are not judged against any new number.
+6. **Phase timing** comes only from what the target publishes: `Server-Timing` (the gateway
+   publishes `prepare` only), the gateway and worker `/metrics`, and the engine's `vllm:*`
+   histograms. A phase that nothing publishes stays `declared_missing` (§5 item 7).
+7. **CREDIT and USD.** CREDIT figures are ledger units (P-01 card). USD figures are
+   infrastructure cost (P-19). They are never converted in either direction.
+
+### 7.2 The cells
+
+`M=models/marlin2b`. `BOX` is the certify bench prefix of runbook §3 (`--corpus $M/corpus/manifest.json --subset full --target gateway --model nemostation/marlin-2b --seed 20260922 --forms video_b64 --max-tokens 128,512,1024 --retries 0 --base-url http://127.0.0.1:8001/v1`). `DIRECT` is the same with `--target direct --model marlin2b --base-url http://127.0.0.1:8000/v1` (the engine's served name, `serve.sh --served-model-name`). Every bench line also takes `--profile <that cell's filled base> --key-inventory <H6 file> --out $O/<cell>.jsonl --raw $O/raw/<cell>.jsonl`. The CREDIT ceiling per request is 13.5168, the runbook §3 projection: 30,720 input tokens at 400 plus 1,024 output tokens at 1,200 CREDIT per 1M.
+
+| Cell | When | Command sketch | Wall (`est.`) | CREDIT ceiling (`est.`) | Oracle |
+|---|---|---|---|---|---|
+| **WC-0** stage and resource sidecar | Start with runbook §4; stop after the last window cell | `while :; do t=$(date -u +%s); for p in 8000 8001 8002; do curl -s -m 5 127.0.0.1:$p/metrics \| grep -E '^(vllm:(request_(queue\|prefill\|decode\|inference)_time_seconds\|time_to_first_token_seconds\|e2e_request_latency_seconds\|num_requests_(running\|waiting)\|kv_cache_usage_perc\|(prefix\|mm)_cache_(queries\|hits))\|infrx_(requests_rejected_total\|large_body_refused_total\|phase_seconds\|queue_oldest_wait_seconds\|db_pool_(wait_seconds_total\|requests_total)\|process_resident_bytes\|gpu_(memory_bytes\|utilization_ratio)\|processing_cache_bytes))' \| sed "s/^/$t $p /"; done; sleep 30; done >> $O/scrape.log` and `vmstat -t 30 >> $O/vmstat.log` | 0 extra (runs alongside) | 0 | Each cell's interval (summary `ts` − `wall_s` … `ts`) holds ≥ 2 scrapes. The per-cell histogram delta gives a `sum/count` mean and bucket bounds per engine phase (queue, prefill, decode) and per gateway phase. A counter's per-cell delta runs from the last scrape before the interval to the first scrape after it (cells never overlap, so nothing else lands in between). A cell with fewer than 2 scrapes has no stage split. It is never interpolated. Bucket bounds are not percentiles, and are never quoted as p95 |
+| **WC-1** direct concurrency ladder | After runbook §4's report is fetched | `for c in 1 2 4 8; do python $M/bench.py $DIRECT -c $c -n 64 --engine-state warm --dataset-version e1b-w1-L1-c$c …; done` (the ladder stops at the pinned `max_num_seqs` 8 in `E4C-box.base.json`. `measure/concurrency.sh` refuses any engine not at 32, so it is not used) | 6–10 min. Basis: 64 requests per level at the `meas.` 0.322–0.353 / 0.509–0.812 / 0.711–1.301 / 0.888–1.888 req/s for c = 1/2/4/8 (E1B-box-20260923T2155Z L1 and `serving-version.json` `concurrency_sweep`, same image, `--max-num-seqs 32`) | 0 (engine direct, unmetered) | One summary row per level. Failures are only the 4 over-cap clips (`expected_invalid`), with 0 in-cap failures. WC-0 shows peak running ≤ c and waiting 0 for c < 8. Each p95 rests on the 60 in-cap accepted samples, the §3 floor. No level sets a target |
+| **WC-2** paired direct legs (L4) | After WC-1 | `for r in 0.5 2.0; do python $M/bench.py $DIRECT --rate $r --requests 135 --engine-state warm --dataset-version e1b-w1-pair-r$r …; done`. 135 is certify's `rung_requests`. The schedule is a pure function of n, clips, forms, seed, rate and output mix, so this replays certify's `envelope-r0.5` and `envelope-r2.0` clip, arrival and budget sequence exactly (checked locally: two dataset versions give identical sequences) | 7–8 min. Basis: last scheduled arrival 276.3 s and 69.1 s (`bench.build_schedule`, local, no GPU), plus a tail of ≤ 60 s each | 0 | Pair on the 126 in-cap items per rung. (a) Media semantics: `prompt_tokens` direct = gateway (certify `work/envelope-r*-raw.jsonl`) per clip, or they differ by one constant across all clips (a text-scaffold offset, which is then named). A clip-dependent difference makes the pair INVALID (§5 item 5). (b) Output: `completion_tokens` equal per item. This needs WR-3 (both EOS ids on the direct leg). Without it the output half is labelled NOT PAIRED. (c) Gateway overhead = gateway − direct TTFT and latency p50, with p95 only at ≥ 60 samples, plus WC-0's phase deltas. (d) The cache regime of each leg comes from WC-0's prefix and MM cache deltas. It is measured, not assumed |
+| **WC-3** burst at the supported rate (L3) | After WC-2 | `python $M/bench.py $BOX --rate 0.5 --burst 8 --requests 135 --dataset-version e1b-w1-L3 …` | 8–9 min. Basis: last scheduled arrival 421.9 s, plus the tail | ≤ 1,824.768 | Every refusal is a 429 with `Retry-After` and an overload code (certify's `overload_problems` rule). In-cap failures are < 1 % (E4B §5, P-18). Refusals reconcile per code with WC-0's counter deltas. `infrx_requests_rejected_total` counts every `DomainError` at acceptance by `code` (relay.py:145-148), the typed over-cap 400 included. The intake's large-body 429 is raised in `Ingress.validated` before `accept` (ingress.py:151-175, intake.py:323-331), so it is counted only in `infrx_large_body_refused_total`. bench leaves the 9 declared over-cap items out of `counts.rejected` (bench.py:1545-1548, 1576). So: (i) the delta summed over certify's `OVERLOAD_CODES` (`capacity_exhausted`, `journal_capacity_exhausted`, `rate_limited`; certify.py:118), plus the `infrx_large_body_refused_total` delta, equals `counts.rejected` plus the over-cap rows refused for capacity (certify's `over_cap_refused_for_capacity`, from the raw rows). (ii) The `code="unsupported_media"` delta equals `counts.deliberate_invalid_refused` minus those same rows, which is the over-cap rows with the typed 400 (certify's `refused_over_cap`). (iii) Any other code's delta is named. A mismatch makes the cell's refusal count INVALID, not the certify report's. Any change to intake, ingress or `LARGE_BODY_LIMIT` since bda1586 is named |
+| **WC-4** cancellation under load (L5) | After WC-3 | `python $M/bench.py $BOX --rate 0.5 --requests 60 --cancel-fraction 0.2 --cancel-after 2 --dataset-version e1b-w1-L5 …` | 3–4 min. Basis: 9 scheduled cancels, last arrival 120.4 s | ≤ 811.008 | A cancelled row is neither accepted nor failed. Each cancelled item's debit is its model-reported consumed tokens, or nothing (R21), and it reconciles in `drift.py`. WC-0 shows `vllm:num_requests_running` back to 0 by the first scrape after the last arrival's tail |
+| **WC-5** forms (upload and inline; URL when approved) | After WC-4 | `python $M/bench.py $BOX --forms upload,video_b64 --rate 0.5 --requests 135 --dataset-version e1b-w1-forms …`. `video_url` is added with `--media-base-url` only once runbook §5.0 step 4's `MEDIA_BASE_URL` is approved. Until then the URL form is BLOCKED, not skipped | 5–7 min. Basis: last scheduled arrival about 276 s (the r0.5 schedule), plus the upload round trips | ≤ 1,824.768 | `stages_s.upload` is present on each of the 68 upload rows. `prompt_tokens` per clip is equal across forms (same bytes, same frames). In-cap failures are < 1 %. Latency is split by form from the raw rows |
+| **WC-8** SOP dataset, interrupt and resume (MARLIN-SOP) | After WC-5 | Items JSONL from `corpus-synth/manifest.json` sop00–sop08 (8/30/60 s, all in-cap), whole clip per item. Then `python $M/dataset.py run --manifest $O/sop-incap.jsonl --state $O/sop.sqlite --dataset-version e1b-w1-sop --base-url http://127.0.0.1:8001/v1 --model nemostation/marlin-2b --retain-output digest --form upload --concurrency 1 --profile … --key-inventory …`, SIGINT after 3 `done`, the same command again, then `dataset.py export` | 5–10 min. Basis: 9 clips of 8–60 s, with a passing 60 s clip bounded by E4B §5's 90 s-per-clip-minute e2e p95 | ≤ 121.6512 | All 9 items are `done`. Each item key has one accepted answer and at most one debit. Resumed items answer as replays (`Idempotency-Replayed`). `drift.py` shows 0. No accuracy statement (P-07) |
+| **WC-6a** caption-event parity, reference half (L8; D-13 option A) | Last box-local GPU step before WC-7 | A copy of `research/plan/evidence/w/box/box-lane/l8ref.sh` with `CLIPS` = sop00–sop08 plus the two 10 s samples (11 clips): stop the engine, run the reference, restore on EXIT. The original script stays in its append-only directory. WC-6b uses the same `EUTC`, so both halves write one `L8-$EUTC` directory | 5–7 min. Basis: reference 11 × 8.9–23.3 s = 98–256 s (`meas.` per-clip range, E1B-box-20260923T2155Z L8), plus the restore's `meas.` `ready_s=169` | 0 | The restore prints `restored=yes` with the same args and image, or the window stops. No request is sent to the engine after it until WC-7 starts |
+| **WC-7** cold/warm split | Immediately after WC-6a's `restored=yes`, with no request in between (WC-6b's served half comes after WC-7) | `python $M/bench.py $BOX --rate 0.5 --requests 128 --engine-state restarted --dataset-version e1b-w1-cold …`. Items 1–64 are the 64 distinct clips (60 in-cap), which are cold. Items 65–128 are warm (schedule, checked locally) | 5–6 min. Basis: last scheduled arrival 257.8 s, plus the tail | ≤ 1,730.1504 | The first WC-0 scrape after the restore reads 0 prefix and 0 MM cache queries. Otherwise the cell is reported as warm. Report `cold_ttft_s` and `warm_ttft_s`: p50 is supported, and p95 sits exactly at the 60-sample floor. The gateway's processing cache is **not** cleared, so this is an **engine**-cold split. A preparation-cold split needs an emptied `PROCESSING_CACHE_DIR`, a box state change that is the coordinator's decision and is not planned |
+| **WC-6b** caption-event parity, served half and compare | After WC-7 | A copy of `l8served.sh` over WC-6a's 11 clips at both budgets (c = 1, direct to `:8000`), then `l8compare.py` over the shared `L8-$EUTC` directory | 3–5 min. Basis: 22 requests at c = 1, the remainder of the 8–12 min L8 estimate | 0 | Events and their order are equal per clip at the processor default (the parity pair, §4). Served v1 events are recorded for context. Frame count and prompt tokens are logged per path where the tool reports them, and named as missing where it does not. The served half runs after WC-7 on a warm engine. Greedy parity is not meant to depend on cache state, and these requests go direct without the gateway's `cache_salt` or media uuids, so WC-7's traffic cannot give them cache hits. WC-0's prefix and MM cache deltas over WC-6b record the regime, measured and not assumed |
+| **WC-9** mixed tenants | After runbook §5.1, from the coordinator host, through the edge | `python $M/bench.py --corpus $M/corpus/manifest.json --subset full --base-url https://marlin2b.callbill.ai/v1 --target gateway --model nemostation/marlin-2b --rate 0.5 --requests 135 --seed 20260922 --forms video_b64 --max-tokens 128,512,1024 --retries 0 --tenant-keys INFRX_API_KEY,INFRX_API_KEY_B --dataset-version e1b-w1-2t --profile <two-tenant perf base, WR-1> --key-inventory ~/e4c/keys-journey.json …` | 5–7 min | ≤ 1,824.768 in total. Tenant B has 67 items, ≤ 905.6256 of its one 10,000 grant | Per-tenant accepted counts, failure rate (< 1 % each) and latency. Per-tenant ledger debits sum to that tenant's rows. The client is outside the box, so the edge and the WAN are included, and the cell is not comparable with the box cells |
+
+**Window budget (`est.`).** 52–73 min of cells plus 10–20 min of transitions, about
+**1.0–1.6 h** added to the E4C window. At the P-19 list price this is 2.24208 × 1.0–1.6 =
+**2.24–3.59 USD** of instance time (`est.`, a list price, not a bill). The gateway cells'
+CREDIT ceilings sum to **8,137.1136**. The certify tenant's share, WC-3/4/5/7/8 plus about
+half of WC-9 (68 × 13.5168), is **7,231.488**. Read the tenant's balance before WC-3 and stop
+if it is below that figure. The runbook's own estimate of about 9,200 CREDIT per full certify
+run (§6) leaves room in the P-24 allocation, but only the ledger decides.
+
+**Order.** §4 → WC-1 → WC-2 → WC-3 → WC-4 → WC-5 → WC-8 → WC-6a (reference, restore) →
+WC-7 → WC-6b (served, compare) → §5.0/§5.1 → WC-9 → §6 drills. WC-6a's restore is WC-7's
+cold start, so no request reaches the engine between them. WC-6b's 22 served requests would
+otherwise warm it first. Each drill's restart would reset WC-7's cold state, so no drill runs
+before WC-7.
+
+### 7.3 Cost per successful video and per video-second (formula; `est.` only)
+
+Inputs: a cell's bench summary (the certify `work/<cell>.jsonl` or a window cell's `--out`)
+and the P-19 row, [`cloud-pricing.md`](../../../research/cross-cutting/cloud-pricing.md)
+§3.1 line 176: `g6e.2xlarge` 1× L40S, **$2.24208/h on-demand**, AWS price sheet us-east-1
+Linux, published 2026-09-18, fetched 2026-09-20. The box profiles carry the same figure in
+`measurement.price`.
+
+- `USD_cell = 2.24208 × instances (1) × wall_s / 3600`. This is bench's
+  `measurement.infrastructure_cost.infrastructure_usd`. Per P-19, the whole box hour is
+  attributed to the measured workload.
+- **USD per successful video** = `USD_cell / N`, where `N` = `measurement.counts.fresh_accepted`
+  restricted to media items within the cap. In a video-only cell that is the fresh accepted
+  count minus text rows (none). Replays, cancels, rejections and failures are excluded
+  (RV-08).
+- **USD per successful video-second** = `USD_cell / measurement.successful_clip_seconds`,
+  over unique in-contract item keys. × 3600 gives bench's `usd_per_successful_video_hour`.
+- **CREDIT per successful video** = the ledger's CREDIT debits for the cell's tenant over the
+  cell (the usage resource, reconciled by `drift.py`) / `N`. Bench reports `charges.credit`
+  as null by design. It is never derived from token counts × the card on the client side,
+  and never converted to or from USD.
+
+Worked sketch, `est.`. It uses the schedule's last arrival as a lower bound on `wall_s` and
+**assumes that every in-cap item succeeds**, so it is a lower bound on cost per unit. The
+measured counters replace every term.
+
+| Cell | `wall_s` ≥ | in-cap items | clip-seconds | USD_cell | USD / video | USD / video-second | USD / video-hour |
+|---|---|---|---|---|---|---|---|
+| `envelope-r0.5` | 276.3 | 126 | 2,604 | 0.172080 | 0.001366 | 6.608e-05 | 0.2379 |
+| `soak` (0.25 × 14,400 s) | 14,218.1 | 3,374 | 71,180 | 8.855033 | 0.002624 | 1.244e-04 | 0.4479 |
+
+These agree with P-01's cost basis (0.239 and 0.449 USD per video-hour from run3's counters,
+`15-pending-inputs.md`). **Full service cost** adds the control plane (hosted Postgres/Auth,
+the edge). `cloud-pricing.md` has no row for it: ⚠️ TO BE VERIFIED, and no figure is written
+here. The ⚠️ in §4 and §5 item 8 about the ≈ $2.24/h operational figure is historical for
+cells run before 2026-09-25. From P-19's decision onward, the sourced row above is the input,
+and every derived figure stays `est.` until a bill replaces it.
+
+### 7.4 D-13 disposition (proposal; the coordinator decides)
+
+D-13 is the 2026-09-23 L8 result: caption-event parity 0/3 on the 120 s `sop-synth-v1`
+clips, undiagnosed. Those clips are now over the 82 s cap (P-20), so the product never sends
+them to the engine: the gateway answers 400 `unsupported_media`.
+
+- **Proposed: option A.** Run WC-6 (WC-6a and WC-6b) in the window on the in-cap clips (sop00–sop08 at 8, 30
+  and 60 s, plus the two 10 s samples that matched before). If the 30 s and 60 s clips match,
+  retire D-13 as **over-cap only, unreachable through the product**, with WC-6 as the
+  evidence. If they do not match, D-13 becomes a **live in-cap parity finding** for the
+  serving stack, and the §4 parity criterion fails within the cap. Its diagnosis (frame
+  indices and prompt tokens per path) then goes to W/E. Cost: about 8–12 min of window and no
+  CREDIT (`est.`).
+- **Option B**, if the window cannot spare it: retire D-13 as stated, because no 120 s clip
+  reaches the engine at 82 s. The underlying cause is not diagnosed, and it may scale with
+  duration, so the retirement must say that **in-cap caption parity beyond the two 10 s
+  samples is unmeasured**. It may not be read as parity.
+
 ## Verification log
 
 - 2026-09-22 (E1B.a–c): Protocol predeclared before any measurement. The workload,
@@ -143,3 +264,5 @@ A cell that shows any of these is reported as invalid rather than published:
   read-only inventory of the current box, both labelled as such. Nothing here has
   been measured on the target.
 - 2026-09-24: §5 items 9–11 and the §3 profile amendment appended at the E1C merge (evidence `research/plan/evidence/e/E1C-2531dc4.md`).
+- 2026-09-26 (E1B-PREP): §7 appended: window cells WC-0…WC-9 for the E4C window, the cost formula over bench/report counters × the P-19 row (`cloud-pricing.md` §3.1), and the D-13 proposal. Nothing run: no GPU, no box, no cloud, no paid call; every number in §7 is `est.` with its basis, or a quoted criterion. §1–§6 unchanged (evidence `research/plan/evidence/e/E1B-prep-*.md`).
+- 2026-09-26 (E1B-PREP fix round): §7.2 WC-6 split into WC-6a (reference, restore) and WC-6b (served, compare), with WC-7 between them, so no request reaches the engine between the restore and the cold cell (0-E1BP-1). WC-0 scrapes `infrx_requests_rejected_total` and `infrx_large_body_refused_total`. WC-3's refusal oracle reconciles per code with bench's `counts.rejected` and `counts.deliberate_invalid_refused` (0-E1BP-2). Nothing run. §1–§6 unchanged.

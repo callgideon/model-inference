@@ -1,0 +1,64 @@
+{
+  "task": "E1B",
+  "slice": "E1B-PREP: window cells WC-0..WC-9 for the E4C window (a/b/c + PERF-ENVELOPE, MARLIN-SOP, MEDIA-PARITY), cost formula, D-13 proposal; fix round 0-E1BP-1 (WC-6 split into WC-6a/WC-6b around WC-7) and 0-E1BP-2 (WC-0 scrapes the refusal counters, WC-3 reconciles per code)",
+  "activity": "review",
+  "head": "4d8d3255",
+  "worktree": ".claude/worktrees/codex-e1b-prep",
+  "branch": "codex/e1b-prep",
+  "owned_paths": [
+    "models/marlin2b/results/E1B-protocol.md",
+    "research/models/marlin2b/README.md",
+    "research/plan/evidence/e/E1B-prep-fc3d66a.md",
+    "research/plan/evidence/coordinator/updates/E1B-20260926T1842Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "all PASS (943 links, 272 documents)"
+    },
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen --no-sync pytest -q ../../models/marlin2b/tests",
+      "exit": 0,
+      "summary": "116 passed"
+    },
+    {
+      "cmd": "git diff --stat 9001335b..HEAD",
+      "exit": 0,
+      "summary": "owned paths only"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 8,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "est.: WR-1..WR-4 wiring 4.5-7 h; window cells 1.0-1.6 h of E4C window (E1B-protocol §7.2, schedule-derived); post-window analysis 2-4 h; pessimistic adds one pair re-run",
+    "at": "2026-09-26T18:42Z"
+  },
+  "blockers": [
+    "MEDIA_BASE_URL (operator-held) for the WC-5 URL form",
+    "WR-1/WR-2 profile bases + launcher before the window",
+    "WR-3 for the WC-2 output pair",
+    "WR-4 for journal/persist/settle phases"
+  ],
+  "wiring_requests": [
+    "WR-1 models/marlin2b/profiles/: E1B window bases (direct-engine, box window, SOP, two-tenant perf) + test_profile.py validation of every E1B-protocol §7 bench line",
+    "WR-2 infra/rollout: committed E1B window launcher stamping per-cell fields like certify.cell_profile; flags pinned in tests/i/test_rollout.py",
+    "WR-3 models/marlin2b/bench.py _send: --target direct sends stop_token_ids [248044, 248046]; test_bench direct-vs-gateway payload test",
+    "WR-4 apps/infrx-api/infrx/worker/loop.py:82: metrics.observe_phases({k: v/1000 for k, v in result.timings.items()}) on the worker Registry; fake-engine test for infrx_phase_seconds_count per phase"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E1B-prep-fc3d66a.md",
+    "models/marlin2b/results/E1B-protocol.md"
+  ],
+  "fix_round": {
+    "handback_head": "9001335b",
+    "fixed": [
+      "0-E1BP-1",
+      "0-E1BP-2"
+    ],
+    "at": "2026-09-26",
+    "evidence": "research/plan/evidence/e/E1B-prep-fc3d66a.md §9"
+  }
+}
