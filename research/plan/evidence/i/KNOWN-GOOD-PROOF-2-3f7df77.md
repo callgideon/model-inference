@@ -243,3 +243,116 @@ The i8 block was not free for the whole run. Another run using the I8 pooler har
 Lane: 0 h remaining. Coordinator: apply WR-KGP2-1..3 0.2/0.3/0.5 h
 (optimistic/likely/pessimistic), confidence high (text patches plus one driver rerun per target,
 ~4.5 min each on plain).
+
+## Fix round (finding 0-KGP2-RV-1)
+
+This round started from handback head `c4e3498d`. Its commits are `bf19c5a0` (the driver) and
+`8741523f` (the tests). This section and the coordinator update
+`KNOWN-GOOD-PROOF-2-20260926T0720Z.json` are in the commit after them.
+Everything ran task-locally on block `i8`, plus one stand-in container
+(`infrx-i8-migrated-supabase`) with no published port, which was removed at the end. The
+hosted project, the box, AWS, SSM and every secret were left alone.
+
+**Finding.** The committed `schema_proof.py` listed 10 SHAPE cases. The record counts 13. So
+only the scratch wrapper (`faf7799b…`) reproduced the through-0025 proof, and the committed
+driver alone printed `FAIL through 0025`.
+
+**Fix: WR-KGP2-1 lands in this lane.** The fix names `infra/runbooks/schema_proof.py`, so this
+round owns that file; it was not in the lane's original owned list.
+- The three 0024/0025 cases go into `SHAPE` after the `test_store_requests` entry. Their
+  reasons are the exact text the recorded runs printed; the wrapper's reasons were fuller than
+  the abridged WR text above.
+- The block comment now says where those three were measured.
+- Checked in-process: `SHAPE` has 13 entries, and each of the three matches the wrapper's
+  `update({...})` byte for byte.
+- The driver's sha256 is now `7560a92b…`. It was `34e5a73f…`. `known-good.py` and
+  `known-good.json` did not change.
+
+**Test.** `test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema` now also
+checks that the committed driver's `len(SHAPE)` is the `N SHAPE cases` each proof's `result`
+records. Before the fix it fails: with `infra/runbooks/schema_proof.py` at `9e4e34ca`,
+`pytest -q tests/i/test_known_good_proof.py` gives **1 failed, 5 passed**. After it: 6 passed.
+The new mutant `schema_proof_drops_a_0025_shape_case` deletes the 0025 browser-surface entry,
+and that case kills it.
+
+**Stand-in, now inlined.** This is the round-1 `standin.sh` (`b505ff2a…`) with its paths made
+into parameters, so it can be rerun as pasted. sha256 `744b887a…`:
+
+```bash
+#!/usr/bin/env bash
+# Task-local stand-in for hosted (KNOWN-GOOD-PROOF-2): <image> (+ supabase_shim.sql if plain) + the
+# Supabase CLI history table, then deploy/migrate.py plan + apply --expect for 0001-0018, then for
+# 0001-NNNN (applies 0019-NNNN). No published port: reached on its bridge IP. Prints DSN_IP=<ip>.
+#   standin.sh plain|supabase [scratch dir]      (run from the checkout; `make api-env` first)
+set -euo pipefail
+MODE=$1
+R=$(git rev-parse --show-toplevel)
+W=${2:-${TMPDIR:-/tmp}/kgp2-standin}
+NAME=infrx-i8-migrated-$MODE
+if [ "$MODE" = plain ]; then EXTRA="-e POSTGRES_DB=postgres"; IMG=postgres@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+else EXTRA=""; IMG=supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd; fi
+mkdir -p "$W"
+docker rm -f $NAME >/dev/null 2>&1 || true
+docker run -d --name $NAME --label ai.infrx.lane=known-good-proof-2 -e POSTGRES_PASSWORD=standin-local $EXTRA $IMG >/dev/null
+for i in $(seq 1 90); do docker exec $NAME pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1 && break; sleep 1; done
+sleep 3
+for i in $(seq 1 30); do docker exec $NAME psql -U postgres -h 127.0.0.1 -d postgres -c 'select 1' >/dev/null 2>&1 && break; sleep 1; done
+IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $NAME)
+if [ "$MODE" = plain ]; then docker exec -i $NAME psql -v ON_ERROR_STOP=1 -q -U postgres -d postgres < "$R/apps/infrx-api/infrx/state/supabase_shim.sql"; fi
+docker exec $NAME psql -v ON_ERROR_STOP=1 -q -U postgres -h 127.0.0.1 -d postgres -c "create schema if not exists supabase_migrations" -c "create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text)"
+rm -rf "$W/m0018" && mkdir -p "$W/m0018" && cp "$R"/apps/app/supabase/migrations/00{01..18}_*.sql "$W/m0018/"
+export MIGRATE_DATABASE_URL="postgresql://postgres:standin-local@$IP:5432/postgres"
+M="$R/apps/infrx-api/.venv/bin/python $R/apps/infrx-api/deploy/migrate.py"
+for d in "$W/m0018" "$R/apps/app/supabase/migrations"; do
+  $M plan --dir "$d" | tee "$W/plan-$MODE-$(basename "$d").txt"
+  DG=$(grep -oE '[0-9a-f]{64}' "$W/plan-$MODE-$(basename "$d").txt" | tail -1)
+  $M apply --dir "$d" --expect "$DG"; echo "apply exit=$?"
+done
+echo "DSN_IP=$IP"
+```
+
+The proof, the committed driver per target (sha256 of the loop script `201ee003…`):
+
+```bash
+IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' infrx-i8-migrated-supabase)
+INFRX_D1_IMAGE=supabase SCHEMA_PROOF_DSN="postgresql://postgres:standin-local@$IP:5432/postgres" \
+  apps/infrx-api/.venv/bin/python infra/runbooks/schema_proof.py <40-hex target> \
+  --candidate 9e4e34ca --task i8 --work <scratch>/work-supabase
+```
+
+| command | exit | result | output sha256 |
+|---|---|---|---|
+| `standin.sh supabase` | 0 | 0001-0018 `6995aef8…`, 0019-0025 `c21cb7b2…` applied (the digests from round 1) | `c7a1f380…` |
+| committed driver, bda1586, Supabase image, 06:46:51Z-07:00:48Z | 0 | `PASS schema`; 26 PASS / 0 FAIL; 384 passed, 0 skipped, **13 deselected** (13 `SKIP` lines), 5 xfailed; `PASS through 0025` | `8214380d…` |
+| committed driver, 4226315, Supabase image, 07:00:48Z-07:12:50Z | 0 | `PASS schema`; 26 PASS / 0 FAIL; 384 passed, 0 skipped, **13 deselected**, 5 xfailed; `PASS through 0025` | `7ea546bf…` |
+| `pytest -q tests/i/test_known_good_proof.py`, driver at `9e4e34ca` | 1 | 1 failed, 5 passed (fails before) | - |
+| `pytest -q tests/i/test_known_good_proof.py` | 0 | 6 passed | - |
+| `pytest -q tests/i/test_mutants.py -k "well_formed or every_case_is_covered"` | 0 | 2 passed | - |
+| the 15 KNOWN-GOOD mutants through the shared `run_mutant`, with the baseline narrowed to their cases | 0 | **15/15 killed** (14 + `schema_proof_drops_a_0025_shape_case`) | `242fb433…` |
+| `known-good.py <bda1586\|4226315> --applied 0025 / 0026 --set MAX_VIDEO_SECONDS --set WORKER_CONCURRENCY` | 0 / 1 | 0025 KNOWN-GOOD (all five checks ok); 0026 NOT-KNOWN-GOOD (`migrations`); unchanged | - |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS | - |
+
+The per-suite lines match the round-1 wrapper runs. So the committed driver alone reproduces
+the record, on the image of the reviewer's repro. That repro ran
+`--suite test_credit_schema --suite test_schema_postgres`, and both suites now PASS: 16 passed
+with 5 deselected, and 15 passed with 4 deselected.
+
+**Not rerun this round: the plain-PostgreSQL image.** Block `i8`'s plain harness container
+name, `infrx-i8-postgres`, is taken by another run's container. That container never started
+(state `Created`). It carries the label `ai.infrx.i8.harness=infrx-i8` and was created
+06:32:44Z by a `tests/i` pooler run in the `wave4b` scratch clone, while 55450 was held. The
+old `tests/d` harness refuses it as foreign. After round 1's lapse I did not remove it; this is
+WR-KGP2-4 again. The coordinator should remove it, or its owner should, before the next plain
+run on i8.
+
+The plain proof rests on round 1's plain runs (`7be3ee87…`, `0296159b…`). The wrapper there
+loaded this same driver and applied the same `SHAPE` set as the committed one, so the committed
+driver would give the same outcome. The fix does not depend on the image.
+Rerun when i8 is clear: `standin.sh plain`, then the command above without `INFRX_D1_IMAGE`,
+against `infrx-i8-migrated-plain`. Expect 26 PASS, 13 deselected, exit 0.
+
+Wiring requests after this round: WR-KGP2-1 is **done in-lane**. WR-KGP2-2, WR-KGP2-3 and
+WR-KGP2-4 are unchanged. WR-KGP2-4 adds the orphan `infrx-i8-postgres` described above.
+
+**Estimate.** Lane: 0 h. Coordinator: WR-KGP2-2/3 take 0.1/0.2/0.4 h (optimistic/likely/
+pessimistic); the optional plain rerun on a clear i8 adds about 10 min. Confidence high.
