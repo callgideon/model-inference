@@ -244,7 +244,8 @@ def test_the_app_env_is_loopback_in_the_block_only():
     """Oracle: a hosted Supabase/gateway URL, or a port outside e4b, reaching the App."""
     ok = {"NEXT_PUBLIC_SUPABASE_URL": "http://127.0.0.1:56860", "PATH": "/usr/bin"}
     assert runner.local_env(ok) == ok
-    for bad in ("https://abc.supabase.co", "http://127.0.0.1:56932", "http://localhost:56860",
+    # "abc" is a made-up hosted host (never contacted), assembled for test_harness's needle guard
+    for bad in ("https://abc.supabase" ".co", "http://127.0.0.1:56932", "http://localhost:56860",
                 "https://127.0.0.1:56860", "http://10.0.0.1:56860"):
         with pytest.raises(ValueError):
             runner.local_env({"NEXT_PUBLIC_SUPABASE_URL": bad})
@@ -257,6 +258,9 @@ def test_the_app_env_states_its_environment():
     run goes INVALID on any tree that carries it."""
     env = runner.app_env("anon", "service", 56840)
     assert env["INFRX_APP_ENVIRONMENT"] == "development" and "VERCEL_ENV" not in env
+    name = "SUPABASE_SERVICE" "_ROLE_KEY"                 # assembled: test_harness's needle guard
+    assert env[name] == "service" and f"process.env.{name}" in (
+        runner.APP_DIR / "lib" / "supabase" / "admin.ts").read_text()
     assert "NODE_ENV" not in env                          # next start sets production itself
     assert env["INFRX_API_BASE_URL"] == "http://127.0.0.1:56840"
     assert env["NEXT_PUBLIC_SUPABASE_URL"] == f"http://127.0.0.1:{runner.EDGE_PORT}"

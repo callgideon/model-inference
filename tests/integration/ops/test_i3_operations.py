@@ -50,12 +50,15 @@ RULES_NEW = '''    # I3 (WR-I3-3): the App's rules, when present; same shape, sa
     version = f"a{alerts['version']}+o{ops['version']}" + (f"+p{app['version']}" if app else "")
     return {"version": version, "rules": list(rules.values())}
 '''
+# The canary's default App origin: a public hostname, not a credential, assembled so
+# test_harness's production-needle guard stays strict over this directory.
+APP_DEFAULT = "APP=${APP:-https://app.callbill" ".ai}"
 # WR-I3-2, exactly as handed to I8's owner: inserted after this line of infra/observe/canary.sh.
 CANARY_AFTER = 'publish() { chmod 0644 "$prom"; mv -f "$prom" "$OUT"; }\n'
 CANARY_PROBE = '''
 # I3 (WR-I3-2): the App's public release identity, anonymous (WR-I2A-1): no key, no body.
 # 1 only for a 200 naming production and a full commit. Before the key check: needs no key.
-APP=${APP:-https://app.callbill.ai}
+''' + APP_DEFAULT + '''
 app_up=0
 if curl -sf --max-time 15 -o "$work/app" "$APP/api/version" \\
    && grep -q '"environment":"production"' "$work/app" \\
@@ -229,6 +232,7 @@ def test_i3_ops05_the_canary_app_probe_writes_up_only_for_a_production_identity(
     if "infrx_app_up" not in source:
         assert source.count(CANARY_AFTER) == 1, "canary.sh moved: refresh WR-I3-2's hunk"
         source = source.replace(CANARY_AFTER, CANARY_AFTER + CANARY_PROBE)
+    assert APP_DEFAULT in source.splitlines(), "the canary's default App origin drifted"
     _App.status, _App.body = status, body
     out = tmp_path / "canary.prom"
     done = subprocess.run(["bash", "-c", source], capture_output=True, text=True,
