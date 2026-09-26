@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 74,
-  "updated": "2026-09-26T04:07:41Z",
+  "revision": 75,
+  "updated": "2026-09-26T04:07:58Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -2439,8 +2439,8 @@
     "BACKEND-LOCAL": {
       "candidate": {
         "source": "04ae5e21",
-        "deployed": null,
-        "config": "task-local harness e3c (INFRX_E3C_RUNTIME_LOGIN=1)"
+        "deployed": "task-local e3c stack (docker; gateway+worker built from the run head 27a69619 = 04ae5e21 + harness) — nothing on the box",
+        "config": "task-local harness e3c, INFRX_E3C_RUNTIME_LOGIN=1, ports 56900–56999"
       },
       "cells": [
         {

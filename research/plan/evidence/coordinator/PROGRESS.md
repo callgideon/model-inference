@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 04:07Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 74, updated 2026-09-26 04:07Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 04:07Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 75, updated 2026-09-26 04:07Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -8,7 +8,7 @@ Generated 2026-09-26 04:07Z UTC by `python3 research/plan/scripts/progress.py` f
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
 - Agent slots: 16 total, 4 active lanes, 2 reserved.
-- Validation: 1 error(s), 14 warning(s).
+- Validation: 0 error(s), 14 warning(s).
 
 ### Actionable blockers
 
@@ -61,7 +61,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Milestone | Gate | Status | Forecast | Controlling constraint | Effort o/l/p | Wall-clock o/l/p | Confidence |
 |---|---|---|---|---|---|---|---|
-| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 04:37Z – 2026-09-26 04:37Z (likely 2026-09-26 04:37Z) | dependency path E3C | 0.5 / 0.5 / 0.5 h | 0.5 / 0.5 / 0.5 h | unknown |
+| `E3C` | BACKEND-LOCAL (ACCEPTED) | accepted | accepted 2026-09-26T04:07:41Z | explicit gate decision recorded | — | — | unknown |
 | `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
 | `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
 | `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C | — | — | unknown |
@@ -70,7 +70,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Gate | Roots | Cells PASS | Not PASS | Decision | Note |
 |---|---|---|---|---|---|
-| BACKEND-LOCAL **PENDING** | E3C (implemented) | 7 / 7 | — | accepted | Accepted at the E3C final run on the integration tip 04ae5e21 (run head 27a69619, merged as dcce7775): 13/13 scenarios (85 cases) PASS, 9/9 negative controls detected for the right reason (both revert controls on the owner login), 11:55 wall, task-local e3c harness with INFRX_E3C_RUNTIME_LOGIN=1; evidence research/plan/evidence/e3c/E3C-FINAL-27a6961.md. Local gate only: the box window (E4C) remains. |
+| BACKEND-LOCAL **ACCEPTED** | E3C (implemented) | 7 / 7 | — | accepted | Accepted at the E3C final run on the integration tip 04ae5e21 (run head 27a69619, merged as dcce7775): 13/13 scenarios (85 cases) PASS, 9/9 negative controls detected for the right reason (both revert controls on the owner login), 11:55 wall, task-local e3c harness with INFRX_E3C_RUNTIME_LOGIN=1; evidence research/plan/evidence/e3c/E3C-FINAL-27a6961.md. Local gate only: the box window (E4C) remains. |
 | BACKEND-READY **PENDING** | E4C (planned) | 0 / 6 | BACKEND-JOURNEY NOT RUN, LOAD-CLOSEDLOOP NOT RUN, PERF-ENVELOPE NOT RUN, OPS-CONTINUOUS NOT RUN, CREDIT-CUTOVER NOT RUN, MARLIN-SOP NOT RUN | none | Pending. Open list: RV-01…RV-12, all OPEN at dff31efc (S3); see findings. |
 | APP-LOCAL **PENDING** | E3A (planned) | 0 / 17 | DUR-ADMIT NOT RUN, DUR-CAP NOT RUN, DUR-FENCE NOT RUN, DUR-OUTPUT NOT RUN, DUR-SETTLE NOT RUN, DUR-OUTBOX NOT RUN, DUR-RLS NOT RUN, MEDIA-SEC NOT RUN, API-MODES NOT RUN, API-STREAM NOT RUN, CONSOLE-FLOWS NOT RUN, CREDIT-GRANT NOT RUN, CREDIT-IDENTITY NOT RUN, CREDIT-UNITS NOT RUN, CREDIT-RATE NOT RUN, CREDIT-SPEND NOT RUN, APP-JOURNEY NOT RUN | none | Pending; no decision recorded. |
 | APP-PILOT **PENDING** | E4 (planned) | 0 / 5 | PERF-PILOT NOT RUN, OPS-RECOVER NOT RUN, MEDIA-PARITY NOT RUN, APP-JOURNEY NOT RUN, CREDIT-SPEND NOT RUN | none | Pending; no decision recorded. |
@@ -178,7 +178,6 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Validation
 
-- error: impossible gate transition: BACKEND-LOCAL decision accepted but no candidate source/deployed identity recorded
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and D10-MERGE-2 (running) both own tests/integration/backend/ / tests/integration/
