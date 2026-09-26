@@ -803,7 +803,7 @@ test("U1-T19 the error boundaries wire up the recovery that can actually recover
   for (const file of ["usage/error.tsx", "billing/error.tsx"]) {
     const source = readFileSync(new URL(`../../app/(console)/${file}`, import.meta.url), "utf8");
     assert.match(source, /^"use client";/m, `${file}: an error boundary is a Client Component`);
-    assert.match(source, /\{\s*retry\s*\}/, `${file}: must destructure ${BOUNDARY_RECOVERY_PROP}`);
+    assert.match(source, /\{\s*(?:error,\s*)?retry\s*\}/, `${file}: must destructure ${BOUNDARY_RECOVERY_PROP}`);
     assert.match(source, /onClick=\{\(\) => retry\(\)\}/, `${file}: must call retry() on click`);
     assert.doesNotMatch(
       source.replace(/`reset\(\)`/g, "").replace(/^\s*\*.*$/gm, ""),
@@ -814,10 +814,12 @@ test("U1-T19 the error boundaries wire up the recovery that can actually recover
     // literal `{error.message}` only catches the spelling we happened to think of, so strip the
     // comments and the props type and require that the word does not appear in the code at all.
     const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-    const withoutPropsType = code.replace(
-      /\{\s*error: Error & \{ digest\?: string \};\s*retry: \(\) => void\s*\}/g,
-      "{ /* props type */ }",
-    );
+    // I3 (I3R-6): the one other use is handing it to the report hook, which sends no message.
+    const withoutPropsType = code
+      .replace(/\{\s*error: Error & \{ digest\?: string \};\s*retry: \(\) => void\s*\}/g, "{ /* props type */ }")
+      .replace("{ error, retry }", "{ retry }")
+      .replace("useErrorReport(error);", "")
+      .replace('from "@/lib/deploy/error-view"', "");
     assert.match(code, /error: Error & \{ digest\?: string \}/, `${file}: still declares the prop`);
     assert.doesNotMatch(
       withoutPropsType,

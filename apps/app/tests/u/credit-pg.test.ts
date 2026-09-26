@@ -372,7 +372,7 @@ test(T.filters, { skip }, async () => {
   );
 });
 
-test(T.cap, { skip }, async () => {
+test(T.cap, { skip }, async (t) => {
   // CONSUMER_2 has 120+ jobs and ledger entries (credit_world.py). Before R146's clamp the adapter
   // asked for 101: consumer_credit_ledger refused it (dependency_unavailable) and consumer_jobs
   // clamped it to 100 silently, so the full page had no next cursor.
@@ -386,14 +386,22 @@ test(T.cap, { skip }, async () => {
     ["jobs", reads.jobs, durableIds(`select request_id::text as id from infrx.jobs where org_id = ${lit(theirs.org_id)}`)],
   ] as const) {
     assert.ok(expected.length > 100, `${name}: the world has only ${expected.length} rows`);
-    const first = await read({ limit: 100, cursor: null });
-    assert.ok(first.ok, `${name}: ${JSON.stringify(first)}`);
-    assert.equal(first.value.items.length, 100);
-    assert.notEqual(first.value.next_cursor, null, `${name}: a full page at the cap has no next cursor`);
-    const rest = await read({ limit: 100, cursor: first.value.next_cursor });
-    assert.ok(rest.ok, `${name}: ${JSON.stringify(rest)}`);
-    assert.equal(rest.value.next_cursor, null);
-    const items = [...first.value.items, ...rest.value.items] as ({ id: string } | { requestId: string })[];
+    // Walk until the cursor is null, whatever the count (credit_world.py U1R_CAPPED_*): a page at
+    // the cap is exactly 100 rows and carries a cursor; the last page is short and carries none.
+    const items: ({ id: string } | { requestId: string })[] = [];
+    let cursor: string | null = null;
+    for (let pages = 1; ; pages += 1) {
+      assert.ok(pages <= Math.ceil(expected.length / 100) + 1, `${name}: the walk does not end`);
+      const page: Awaited<ReturnType<typeof read>> = await read({ limit: 100, cursor });
+      assert.ok(page.ok, `${name}: ${JSON.stringify(page)}`);
+      items.push(...page.value.items);
+      cursor = page.value.next_cursor;
+      assert.equal(page.value.items.length === 100, cursor !== null, `${name}: page ${pages} has ${page.value.items.length} rows and cursor ${cursor}`);
+      if (cursor === null) {
+        t.diagnostic(`${name}: ${items.length} rows in ${pages} pages`);
+        break;
+      }
+    }
     assert.deepEqual(items.map((i) => ("id" in i ? i.id : i.requestId)).sort(), expected, `${name}: the capped walk is not every row once`);
     const sent = issued.length;
     const refused = await read({ limit: 101, cursor: null });

@@ -1,0 +1,93 @@
+{
+  "task": "APP-MINORS-1",
+  "slice": "R-1 (U1R-P08 walk for any capped count) + I3R-6 (segment error boundaries report); I3R-5/I3R-8/limiter as wiring requests",
+  "activity": "review",
+  "head": "4479539d",
+  "head_note": "code head; the evidence/update commit follows it on the branch",
+  "base": "9b21339a",
+  "worktree": ".claude/worktrees/codex-app-minors-1",
+  "branch": "codex/app-minors-1",
+  "owned_paths": [
+    "apps/app/app/(console)/usage/error.tsx",
+    "apps/app/app/(console)/billing/error.tsx",
+    "apps/app/app/(console)/traces/error.tsx",
+    "apps/app/lib/deploy/error-view.ts",
+    "apps/app/tests/i3/boundaries.test.ts",
+    "apps/app/tests/u/credit-pg.test.ts",
+    "apps/app/tests/u/credit_world.py",
+    "apps/app/tests/u/run-mutants.mjs",
+    "apps/app/tests/u/usage-view-model.test.ts",
+    "apps/app/tests/v/trace-view-model.test.ts",
+    "apps/app/tests/v/mutants.json",
+    "research/plan/evidence/app/APP-MINORS-1-4479539.md",
+    "research/plan/evidence/coordinator/updates/APP-MINORS-1-20260926T0724Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "make console-test",
+      "exit": 0,
+      "summary": "664 tests / 610 pass / 0 fail / 54 skip"
+    },
+    {
+      "cmd": "make console-lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "make console-typecheck",
+      "exit": 0,
+      "summary": "typegen + tsc clean"
+    },
+    {
+      "cmd": "make console-built",
+      "exit": 0,
+      "summary": "build ok; i2a 22/22 (at 9f842af5)"
+    },
+    {
+      "cmd": "make console-mutants",
+      "exit": 0,
+      "summary": "contracts 212/212; V 40/40; U 218/218 (+I3-M01..M06); C 185/185; A 46/46; A catalog 46/46"
+    },
+    {
+      "cmd": "make console-c0-real",
+      "exit": 0,
+      "summary": "15/15 (app-c0)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=app-u1r credit_world.py (default 120/120)",
+      "exit": 0,
+      "summary": "8/8; ledger 121 rows / 2 pages, jobs 121 / 2"
+    },
+    {
+      "cmd": "INFRX_D_TASK=app-u1r U1R_CAPPED_JOBS=155 U1R_CAPPED_LEDGER=2000 credit_world.py",
+      "exit": 0,
+      "summary": "8/8; ledger 2001 rows / 21 pages, jobs 156 / 2; old P08 fails here (1 fail); stop-after-follow-up mutant killed by P08"
+    },
+    {
+      "cmd": "WR-AM1-1 in a shared clone: pytest tests/integration/ops + test_runbooks.py",
+      "exit": 0,
+      "summary": "test only: 2 rb09 failures; with the fix 44 passed"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "4 PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.25,
+    "likely_h": 0.5,
+    "pessimistic_h": 1,
+    "confidence": "high",
+    "basis": "merge + WR-AM1-1/2 by the infra/app owner; App side done",
+    "at": "2026-09-26T07:24Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-AM1-1 (I3R-5): infra/app/rollback.py contract check app[0]==backend[0] and app[1]<=backend[1] + tests/integration/ops rb09 (6 cases; exact patch in the evidence)",
+    "WR-AM1-2 (I3R-8 + limiter risk + I3R-6 doc): three infra/app/operations.md hunks (exact text in the evidence)"
+  ],
+  "evidence": [
+    "research/plan/evidence/app/APP-MINORS-1-4479539.md"
+  ]
+}
