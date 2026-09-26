@@ -1,0 +1,84 @@
+{
+ "task": "W5-F5",
+ "slice": "E3C F-5 + F-6 (fix round)",
+ "activity": "review",
+ "head": "7d28e115",
+ "worktree": ".claude/worktrees/codex-w5-f5",
+ "branch": "codex/w5-f5",
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/routes/relay.py",
+  "apps/infrx-api/infrx/worker/__main__.py",
+  "apps/infrx-api/infrx/worker/service.py",
+  "apps/infrx-api/infrx/config.py",
+  "apps/infrx-api/tests/g/",
+  "apps/infrx-api/tests/w/",
+  "apps/infrx-api/tests/contracts/test_config_and_imports.py"
+ ],
+ "commands": [
+  {
+   "cmd": "pytest -q tests/g/test_relay_readiness.py -k 'f5 and attach' --runxfail",
+   "exit": 1,
+   "summary": "2 failed: 409 state_conflict for a succeeded, settled job (0-W5F5-R2 fails-before; committed as strict xfail)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/g",
+   "exit": 0,
+   "summary": "692 passed, 2 xfailed"
+  },
+  {
+   "cmd": "python -m tests.g.mutants <94 relay.py mutants>",
+   "exit": 0,
+   "summary": "94/94 killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e2c pytest -q tests/w",
+   "exit": 0,
+   "summary": "322 passed, 10 skipped (MinIO box)"
+  },
+  {
+   "cmd": "python -m tests.w.worker_main_mutants",
+   "exit": 0,
+   "summary": "40/40 killed"
+  },
+  {
+   "cmd": "pytest -q tests/contracts/test_config_and_imports.py",
+   "exit": 0,
+   "summary": "274 passed"
+  },
+  {
+   "cmd": "pytest -q tests/i/test_packaging.py (branch as is)",
+   "exit": 1,
+   "summary": "1 failed, 22 passed: (['MONITOR_DATABASE_URL'], []) - WR-W5F5-2"
+  },
+  {
+   "cmd": "pytest -q tests/i/test_packaging.py test_envcheck.py test_ops_steps.py test_artifacts.py (WR-W5F5-2 applied temporarily, reverted)",
+   "exit": 0,
+   "summary": "48 passed"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py",
+   "exit": 0,
+   "summary": "PASS"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.1,
+  "likely_h": 0.25,
+  "pessimistic_h": 1.0,
+  "confidence": "medium",
+  "basis": "coordinator applies WR-W5F5-2 in the merge and re-runs tests/i/test_packaging.py; WR-W5F5-1 (D10) and WR-W5F5-4 (follow-up) are not merge blockers",
+  "at": "2026-09-26T00:20Z"
+ },
+ "blockers": [
+  "MERGE BLOCKER: WR-W5F5-2 (deploy/preflight.py MANIFEST Key MONITOR_DATABASE_URL) must land in the same union commit that merges codex/w5-f5 (or a WIRING commit directly on top); tests/i/test_packaging.py is red without it"
+ ],
+ "wiring_requests": [
+  "WR-W5F5-1 (D10 migration): grant select (state) on infrx.credit_wallet_holds to infrx_monitor + policy monitor_reads for select to infrx_monitor using (true)",
+  "WR-W5F5-2 (deploy/preflight.py MANIFEST): Key('MONITOR_DATABASE_URL', ..., 'pg_dsn', param='monitor_database_url', secret=True, required_in=()) - test_packaging red until applied",
+  "WR-W5F5-3 (optional, contracts fake): FakeLifecycle.admit_ready to refuse text outside input_modalities and a missing pinned revision like 0019",
+  "WR-W5F5-4 (follow-up, relay.py attach path): in Relay._admitted's except, when readiness is not None, the refusal is a DomainError and cancel answered a terminal non-cancelled outcome, return (answer the committed outcome) instead of re-raising; proof: drop the strict xfail on the attach parametrization of test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal (verified: 5 passed with --runxfail)"
+ ],
+ "evidence": [
+  "research/plan/evidence/w/W5-F5-3a6195b.md"
+ ]
+}
