@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 02:34Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 68, updated 2026-09-26 02:24Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 03:36Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 71, updated 2026-09-26 03:36Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `8d9e5b5f`), base `dff31efc`, main `dff31efc`.
+- Integration branch `claude/consumer-v1` (head `34f0ed28`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
-- Lowest open band: V2 runtime repairs; bands with active work: V0, V1, V2, V3, V5, V6.
-- Agent slots: 16 total, 9 active lanes, 2 reserved.
-- Validation: 0 error(s), 17 warning(s).
+- Lowest open band: V3 real-service backend; bands with active work: V0, V1, V2, V3, V5, V6.
+- Agent slots: 16 total, 8 active lanes, 2 reserved.
+- Validation: 0 error(s), 21 warning(s).
 
 ### Actionable blockers
 
@@ -48,7 +48,7 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 
 | Category | Implemented/integrated | Active | Acceptance cells PASS |
 |---|---|---|---|
-| Backend corrections | 10 / 14 | E2C, E3C, M6, W5 | BACKEND-LOCAL 0/7; BACKEND-READY 0/6 |
+| Backend corrections | 11 / 14 | E2C, E3C, M6, W5 | BACKEND-LOCAL 0/7; BACKEND-READY 0/6 |
 | App completion | 8 / 12 | I2A | APP-LOCAL 0/17; APP-PILOT 0/5 |
 | Deferred Lab / hosting / later | 0 / 57 | none | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
@@ -60,7 +60,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Milestone | Gate | Status | Forecast | Controlling constraint | Effort o/l/p | Wall-clock o/l/p | Confidence |
 |---|---|---|---|---|---|---|---|
-| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 06:10Z – 2026-09-26 13:58Z (likely 2026-09-26 08:46Z) | dependency path W5 → E3C | 3.6 / 6.2 / 11.4 h | 3.6 / 6.2 / 11.4 h | medium |
+| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 05:24Z – 2026-09-26 09:18Z (likely 2026-09-26 06:42Z) | dependency path E3C | 1.8 / 3.1 / 5.7 h | 1.8 / 3.1 / 5.7 h | medium |
 | `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
 | `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
 | `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C | — | — | unknown |
@@ -79,17 +79,17 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | Finding | Status | Corrective tasks | As of | Source |
 |---|---|---|---|---|
 | RV-01 | open | F2C (complete), G7 (complete), A3 (complete) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-02 | open | D10 (complete), M5 (complete), E1C (complete), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-03 | open | D10 (complete), M6 (review), I8 (complete), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-02 | open | D10 (complete), M5 (complete), E1C (complete), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-03 | open | D10 (complete), M6 (review), I8 (complete), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-04 | open | S3 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-05 | open | F2C (complete), D10 (complete), W5 (review), G7 (complete), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-05 | open | F2C (complete), D10 (complete), W5 (review), G7 (complete), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-06 | open | C0 (complete), C3A (complete), A2 (complete), A3 (complete), U1R (complete), U2 (complete), U3 (complete), U4 (complete), E3A (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-07 | open | E1C (complete), M5 (complete), G7 (complete) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-08 | open | E1C (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-09 | open | D10 (complete), I8 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-10 | open | I8 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-11 | open | F2C (complete), D10 (complete), G7 (complete), U4 (complete), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-12 | open | E2C (review), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-11 | open | F2C (complete), D10 (complete), G7 (complete), U4 (complete), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-12 | open | E2C (review), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 
 ### Historical run E4B-run3 (running)
 
@@ -106,7 +106,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (29.8 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (30.8 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -132,11 +132,11 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | I8 | I8 fix round (review of 103d20a8/d2f90ce6): slices 1, 2, 3, 5, 6 | complete | codex/i8-operate | dff31efc → ce33c24c | ports postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af), prefix infrx-i8- | 2026-09-25 23:50Z | P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 01:38Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at ce33c24c) |
 | D10 | D10 fix round (review of f9b6ce5c) | complete | codex/d10-durable | dff31efc → 483d9eca | ports postgres 55442, valkey 55469 (contracts/tasklocal.py, bfb3a8af), prefix infrx-d10- | 2026-09-25 22:42Z | DOOR-REVOKE verified ACCEPT_WITH_FIXES 273990a0 (0023 revokes admit/claim_preparation from infrx_runtime; RUNTIME_FUNCTIONS 41 by name; merge gate 'only with W5' satisfied on the union); the union lane merges it with wiring W-DR1 v2. | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 08:19Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 483d9eca); follow-ups are separate lanes |
 | M5 | M5 fix round (verifier, one round): M5-R1 stack drill INFRX_D_TASK guard, M5-R1b R82 attach binding, M5-RS-1 WR-2 confirmation | complete | codex/m5-uploads | dff31efc → c0c4ce25 | ports postgres 55443, s3 55470 (contracts/tasklocal.py, bfb3a8af), prefix infrx-m5- | 2026-09-25 08:19Z | D10: 0019 lacks F2C's media_refused / UPLOAD_ABORT_REASONS (strict xfail test_stack__os_processes_a_probe_refusal_is_final_on_postgres); WR-1 needs D10's infrx/state/lifecycle.py on the integration branch | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 08:19Z; basis: merged after the finish-verify fix round (ACCEPT_WITH_FIXES at c0c4ce25) |
-| W5 | W5 fix round (review findings 0-W5-R1..R3, 1-W5-RULES-1/2, 2-W5-ACC-1..3) | review | codex/w5-readiness | dff31efc → 97381015 | ports postgres 55445, valkey 55472 (contracts/tasklocal.py, bfb3a8af), prefix infrx-w5- | 2026-09-25 23:50Z | merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3 | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 21:06Z; basis: verification third lens + possible fix round, then the union merge and E3C final run |
+| W5 | W5 fix round (review findings 0-W5-R1..R3, 1-W5-RULES-1/2, 2-W5-ACC-1..3) | review | codex/w5-readiness | dff31efc → 97381015 | ports postgres 55445, valkey 55472 (contracts/tasklocal.py, bfb3a8af), prefix infrx-w5- | 2026-09-25 23:50Z | merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3 | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 21:06Z — STALE; basis: verification third lens + possible fix round, then the union merge and E3C final run |
 | G7 | G7 fix round (CM-1..5, ACC-1..3) | complete | codex/g7-catalog | dff31efc → 2f7ed3ac | ports postgres 55446 (contracts/tasklocal.py, bfb3a8af), prefix infrx-g7- | 2026-09-25 23:50Z | merge gate: codex/d10-durable WR-3c (PgJobStore result_expires_at) must merge before or with G7, else PG successes read 410 and G8's tests/g/ops/test_acceptance_pg.py regresses | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 08:29Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 2f7ed3ac) |
 | G8 | G8 fix round: 0-G8-R1/2-ACC-1 (pre-freeze admission straddling the transition), 0-G8-R2/1-G8-RULES-1/2-ACC-2 (contracts run on 55432; evidence correction), 0-G8-R3 (revoked-key read bound routed to G7) | complete | codex/g8-credit-ops | dff31efc → 09f4ab2a | ports postgres 55447, valkey 55473 (contracts/tasklocal.py, bfb3a8af), prefix infrx-g8- | 2026-09-25 00:44Z | P-01 approved launch rates (live activation only); coordinator box dry-run window (read-only) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 00:44Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 09f4ab2a) |
 | M6 | M6 phase 2 fix round: R1 prepared row-before-bytes proven; R3/R4/A2 pins hold on get, pin and evict; R2/A1 refetch race pinned as strict xfail (WR-7); A3 ruling, A4/A5 wiring | review | codex/m6-phase2 | bd556c5f → dea32507 | ports postgres 55444 (INFRX_D_TASK=m6), prefix infrx-m6-, db infrx_m6* | 2026-09-25 21:06Z | P-25 unresolved; WR-3 (E3C world.py + s06 clock) gates the merge; WR-7 (D10 register refresh) for the refetch race; R114 amendment | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 17:12Z — STALE; basis: lane code complete; remaining is WR-1/2/3/7 composition outside the lane, the R114 ruling, and P-25 |
-| E3C | E3C phase 2 interim rerun: harness re-pointed to G7 (s13 PublishedModel, expiry bypass), R130 (s08 measured), G8 lock bound (s09), RUNTIME-LOGIN (whole matrix on infrx_runtime), M6 phase 2 (WR-3 collector + grace) | review | codex/e3c-rerun | 19670a8c → 7d0d3d7b | ports compose block 56900-56999 (postgres 56932), prefix infrx-e3c-, db infrx_e3c | 2026-09-25 22:42Z | W5 (claim_preparation_ready, fail_preparation): s04 video/permanent, s05 admission; F-3 relay.py:167 admits via admit_credit; no caller of PgLifecycle.admit_ready (unowned: G7 deferred, W5 gate): s04 text/late, s05 readiness; F-4 PgStreamStore.expire (journal.py:121) has no caller; stream_chunks deltas kept past JOURNAL_CHUNK_TTL_S: s06 scrub, s11 scrub race | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 22:42Z; basis: W5-F5 fix + union round 2 + one 13–25 min final matrix run |
+| E3C | E3C final BACKEND-LOCAL run on the tip 04ae5e21 (backend union d9e72c9c + W5-F5B) with the harness wirings E3A-WR-1/WR-2 and WR-W5F5B-3 (s04 readiness-branch tail: 202, run, settled once), INFRX_E3C_RUNTIME_LOGIN=1 | running | codex/e3c-rerun | 19670a8c → 7d0d3d7b | ports compose block 56900-56999 (postgres 56932), prefix infrx-e3c-, db infrx_e3c | 2026-09-26 03:35Z | verdict.json → merge codex/e3c-rerun → E3C implemented; BACKEND-LOCAL cells from the verdict; a rerun on the 0024/0025 tip follows the D10-MERGE-2 merge | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 22:42Z; basis: W5-F5 fix + union round 2 + one 13–25 min final matrix run |
 | E4C | E4C  | queued | — | — → — | none | 2026-09-25 22:42Z | after E3C; needs an allocated GPU window | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | C0 | C0 fix round: 0-C0-V1 (consumerSession tested via consumerSessionFrom), 1-C0-V1 (consoleShell: operator bypass, route-gated redirects; WR-1 revised); 0-C0-V2/0-C0-V3 need coordinator WR-4/WR-1/WR-2 | complete | codex/app-c0 | 46776646 → ab0b5179 | ports app-c0 postgres 55451, prefix infrx-app-c0- | 2026-09-25 23:28Z | merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 23:28Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) |
 | U1R | U1R fix round: 0-U1R-V-01 (preview gate tested), 1-U1R-V01 (ledger page drops actor), 1-U1R-V02 lane side (sidebarCredits), 0-U1R-V-02 as exact D10 index WR | complete | codex/app-u1r | 46776646 → 7482c21a | ports postgres 55457 (INFRX_D_TASK=app-u1r), prefix infrx-app-u1r-, db infrx_app-u1r_credit, infrx_app-u1r_perf | 2026-09-25 23:28Z | merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 23:28Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) |
@@ -148,16 +148,17 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | U3 | U3 verified ACCEPT_WITH_FIXES: U3-V1..V3 fixed and rechecked (DUR-RLS on operator views can fail; form retry protection wired; Unavailable rendering tested) | complete | codex/app-u3 | 46776646 → b80c4cd8 | ports app-u3 postgres 55453, prefix infrx-app-u3- | 2026-09-26 01:02Z | merged via codex/app-union-2 (dec15244); manifest implemented; WR-U3-1 → D10 0025 lane after 0024 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 01:02Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) and the union round-2 checks |
 | I2A | I2A I2A-PREP: hosting configuration as code (env matrix, preview credential isolation, callback allowlists, private no-store, release identity) + App deploy/rollback runbook; no live deploy | review | codex/i2a-prep | fd40748c → 8ca672d0 | ports none, prefix infrx-i2a-prep- | 2026-09-26 00:33Z | I2A-PREP merged a5ca1cd1 (+ wiring 416da075: /api/version public, console-built in check, trailing-dot refusal); R134 numbered. The live half (Vercel env, staging project, P-05 auth settings, deploy + smoke + known-good record) runs after BACKEND-READY with the operator inputs listed in i/I2A-prep-9fe9484.md | 2–12 h remaining (likely 5 h), confidence low, estimated 2026-09-26 00:33Z; basis: prep merged; the live deploy waits for the accepted backend and seven operator inputs |
 | E3A | E3A E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b block (runner over the E3C world, Supabase stand-in edge, Playwright journey: 19 checks over the 17 E3A test_ids, app-e2e gate wiring); verified ACCEPT_WITH_FIXES, merged 6d55c5e0; gate not claimed | queued | codex/e3a-prep | fd40748c → 4391553c | ports e4b compose block 56800–56899, prefix infrx-e3a-prep- | 2026-09-26 02:24Z | E3A proper needs BACKEND-LOCAL (E3C) and a rerun on the merged SHA; still NOT RUN: operator-controls (operator identity + one U3 action with a reason), the four delegated cells, the expired-content display on /usage/<id>; E3A-WR-1/WR-2 with the E3C final run (overlay keeps the lane queued: the gate dispatches after BACKEND-READY) | 2–10 h remaining (likely 5 h), confidence medium, estimated 2026-09-26 02:24Z; basis: lane handback after F-1/F-2: one merged-SHA rerun after BACKEND-LOCAL, operator-controls, delegated cells, expired-content display, WR-1/WR-2 |
-| P25-ENACT | support P-25 enactment as configuration (I8/M6 support lane): retention grace 3,600 s, cache cap 50 GiB, intervals pinned, alert + runbooks | review | codex/p25-enact | 74183655 → a15393c5 | ports m6 block (postgres 55444), no Valkey/S3, prefix infrx-m6- | 2026-09-26 00:51Z | verified ACCEPT_WITH_FIXES (P25R-1 gateway-grace gap recorded + WR-P25-1, A9 vs 7-newest cadence reconciled, known-good record with every --set); merges via the backend union round 3 with WR-P25-1..4 | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 00:51Z; basis: lane verified; remaining is the union round-3 merge and four coordinator wirings |
+| P25-ENACT | support P-25 enactment as configuration (I8/M6 support lane): retention grace 3,600 s, cache cap 50 GiB, intervals pinned, alert + runbooks | complete | codex/p25-enact | 74183655 → a15393c5 | ports m6 block (postgres 55444), no Valkey/S3, prefix infrx-m6- | 2026-09-26 03:36Z | merged through the wave4b union at 51c1644d; WR-P25-5 logged in 15-pending-inputs | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 00:51Z; basis: lane verified; remaining is the union round-3 merge and four coordinator wirings |
 | I3 | I3 I3-PREP (coordinator): infra/app/operations.md (C1–C5 checks, cutover X0–X9 + rollback, browser error monitoring, alert delivery, App rollback rule, budgets, OPS-APP scenario register), infra/app/rollback.py, App error pages + POST /api/client-errors + onRequestError, alerts/app.json AppDown, tests/i3 (9) + tests/integration/ops (21); verified ACCEPT_WITH_FIXES, merged; gate not claimed | queued | codex/i3-prep | 6badd4e1 → 39b78070 | ports no compose block; task-local PostgreSQL app-i3 55461 only if needed, prefix infrx-i3-prep- | 2026-09-26 02:11Z | I3 proper (operator run) needs BACKEND-READY, the I2A live half, P-01/P-05/P-24/P-25 (overlay keeps the lane queued: the gate dispatches after BACKEND-READY; the prep work is merged and recorded in head/evidence/commands) | 3–14 h remaining (likely 6 h), confidence low, estimated 2026-09-26 02:11Z; basis: lane handback: preparation merged; the operator run needs hosted/Vercel/box windows and four pending inputs |
 | APP-E3A-FIX | support E3A support lane: F-1 (middleware 307 on the sign-in server action: claim never runs) and F-2 (/traces, /dedicated, /teams served to a consumer) fixed with fails-before tests; journey checks un-gated by C3A/U2/U3/U4 fitted to the merged pages; runner rerun on the e4b block | complete | codex/app-e3a-fix | 6d55c5e0 → 97dce397 | ports E3A runner inside the e4b block (56860/56861/56870; one runner at a time), prefix infrx-e4b- | 2026-09-26 02:24Z | merged --no-ff onto claude/consumer-v1 (ACCEPT; minors carried: plain-POST pass-through on /login,/signup, /admin keeps its own operator decision, ancestor loading.tsx assertion, update JSON exit codes) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 02:24Z; basis: merged after the in-workflow verification (ACCEPT) |
-| D10-APP-SQL | support D10 App-support SQL (0024 console read port): consumer_credit_ledger keyset RPC (C0 WR-5), credits-in partial index (U1R WR-3b), consumer_jobs filters (U1R WR-3a), addenda WR-U4-2, WR-C3A-4 (key insert = verified individual), WR-W5F5-1 (monitor grant on credit_wallet_holds); verified ACCEPT_WITH_FIXES | review | codex/d10-app-sql | 273990a0 → 8f453b98 | ports revoke postgres 55459, prefix infrx-revoke- | 2026-09-26 01:54Z | merge order: after the backend union (0022/0023 are on the union, not yet on the tip); then W-D10A-1 wirings (pgstate rows, e3c SIGNED_IN_FUNCTIONS, test_harness migration list), ruling for the key-insert predicate (1-D10R-2), C0/U1R App wirings, C3A/U4 known-gap flips | 0.5–3 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 01:54Z; basis: lane verified; remaining is the ordered merge, three coordinator wirings and the App follow-up lane |
-| D10-0025 | support D10 migration 0025 (WR-U3-1, R143): the App's operator RPCs (adjust CREDIT, suspension, key revocation) as a committed migration; U3's in-test apply removed; D-style tests, mutants and privilege tables | running | codex/d10-0025 | 8f453b98 → — | ports revoke postgres 55459 (shared with D10-APP-SQL, which is done), prefix infrx-revoke- | 2026-09-26 01:59Z | workflow wf_1b0b99b9-75e (implement → 2 lenses → one fix round → rechecks); merge order union → D10-APP-SQL (0024) → D10-0025 (0025) with W-D10B-1 wirings | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 01:59Z; basis: proposal SQL exists and is exercised by U3's 9-case stack; D10 conventions, mutants and both images remain |
-| W5-F5B | support W5 follow-up (W5-F5 R2, union F3, WR-W5F5-3): a refusal or outage of the gateway's post-marker attach is logged and counted, never answered; one PgLifecycle in the worker composition; FakeLifecycle.admit_ready mirrors 0019's check_pinned_capability; E3C s04 late case asserts the pre-D10 door; verified ACCEPT_WITH_FIXES | review | codex/w5-f5b | 1ea5047f → 009af6b1 | ports e2c postgres 55448 / valkey 55493 / s3 55494, prefix infrx-e2c- | 2026-09-26 02:34Z | merge after the union lands on the tip (keep-both conflicts in tests/g/mutants.py and tests/g/test_relay_readiness.py); WR-W5F5B-1 (metrics FAMILIES infrx_post_marker_refusals_total) applied at the merge; then the E3C final run | 0.1–1 h remaining (likely 0.3 h), confidence medium, estimated 2026-09-26 02:34Z; basis: lane verified; remaining is the ordered merge with one wiring |
+| D10-APP-SQL | support D10 App-support SQL (0024 console read port): consumer_credit_ledger keyset RPC (C0 WR-5), credits-in partial index (U1R WR-3b), consumer_jobs filters (U1R WR-3a), addenda WR-U4-2, WR-C3A-4 (key insert = verified individual), WR-W5F5-1 (monitor grant on credit_wallet_holds); verified ACCEPT_WITH_FIXES | review | codex/d10-app-sql | 273990a0 → 8f453b98 | ports revoke postgres 55459, prefix infrx-revoke- | 2026-09-26 03:35Z | the D10-MERGE-2 lane merges 0024 (+ W-D10A-1 v2) and 0025 (+ W-D10B-1 v2, WR-D10B-2) onto 34f0ed28 with the C3A case 9 / U4-P08 flips; coordinator numbers 1-D10R-2 and the R143 amendment at the merge; APP-0024-WIRE (C0 rpc consumer_credit_ledger, U1R filters) follows | 0.5–3 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 01:54Z; basis: lane verified; remaining is the ordered merge, three coordinator wirings and the App follow-up lane |
+| D10-0025 | support D10 migration 0025 (WR-U3-1, R143): the App's operator RPCs (adjust CREDIT, suspension, key revocation) as a committed migration; U3's in-test apply removed; D-style tests, mutants and privilege tables | review | codex/d10-0025 | 8f453b98 → b5fc2fbc | ports revoke postgres 55459 (shared with D10-APP-SQL, which is done), prefix infrx-revoke- | 2026-09-26 03:35Z | verified ACCEPT_WITH_FIXES at b5fc2fbc (wf_1b0b99b9-75e; 1-F1 → W-D10B-1 v2, rechecked); the D10-MERGE-2 lane composes it with 0024 and the wirings on codex/d10-merge-2 | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 01:59Z; basis: proposal SQL exists and is exercised by U3's 9-case stack; D10 conventions, mutants and both images remain |
+| W5-F5B | support W5 follow-up (W5-F5 R2, union F3, WR-W5F5-3): a refusal or outage of the gateway's post-marker attach is logged and counted, never answered; one PgLifecycle in the worker composition; FakeLifecycle.admit_ready mirrors 0019's check_pinned_capability; E3C s04 late case asserts the pre-D10 door; verified ACCEPT_WITH_FIXES | complete | codex/w5-f5b | 1ea5047f → 009af6b1 | ports e2c postgres 55448 / valkey 55493 / s3 55494, prefix infrx-e2c- | 2026-09-26 03:35Z | merged --no-ff at 04ae5e21 (keep-both in tests/g; WR-W5F5B-1 applied: metrics FAMILIES declares infrx_post_marker_refusals_total); R139 numbered | 0.1–1 h remaining (likely 0.3 h), confidence medium, estimated 2026-09-26 02:34Z; basis: lane verified; remaining is the ordered merge with one wiring |
+| D10-MERGE-2 | support merge lane: migrations 0024 (codex/d10-app-sql 8f453b98 + W-D10A-1 v2) and 0025 (codex/d10-0025 b5fc2fbc + W-D10B-1 v2 + WR-D10B-2) onto the tip 34f0ed28; C3A case 9 / U4-P08 flips; D suites both images, harness, api-test, console targets | running | codex/d10-merge-2 | 34f0ed28 → — | ports revoke postgres 55459 (D10-0025 done), prefix infrx-revoke- | 2026-09-26 03:35Z | handback → coordinator merges codex/d10-merge-2 --no-ff, numbers 1-D10R-2 + R143 amendment, flips nothing until checks; then APP-0024-WIRE | 1.5–5 h remaining (likely 3 h), confidence medium, estimated 2026-09-26 03:35Z; basis: two clean merges in the D10-0025 verifier's scratch clone; api-test ~40 min; console targets ~15 min |
 
 ### Queues and locks
 
-- Review queue: W5, M6, E3C, E2C, A2, U1R, A3, C0.
+- Review queue: M6, E3C, E2C, A2, U1R, A3, C0.
 - Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -177,22 +178,26 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 ## Validation
 
 - warning: stale estimate: lane E2C estimated at 2026-09-25T18:12Z (older than 6 h)
+- warning: stale estimate: lane W5 estimated at 2026-09-25T21:06:43Z (older than 6 h)
 - warning: stale estimate: lane M6 estimated at 2026-09-25T17:12:10Z (older than 6 h)
 - warning: overlapping writers: E2C (review) and I3 (queued) both own tests/integration/test_harness.py / tests/integration/ (+3 more)
-- warning: overlapping writers: W5 (review) and P25-ENACT (review) both own apps/infrx-api/infrx/worker/ / apps/infrx-api/infrx/worker/__main__.py (+1 more)
-- warning: overlapping writers: W5 (review) and W5-F5B (review) both own apps/infrx-api/infrx/worker/ / apps/infrx-api/infrx/worker/__main__.py
-- warning: overlapping writers: E3C (review) and I3 (queued) both own tests/integration/backend/e3c/ / tests/integration/
+- warning: overlapping writers: E2C (review) and D10-MERGE-2 (running) both own tests/integration/test_harness.py / tests/integration/ (+3 more)
+- warning: overlapping writers: E3C (running) and I3 (queued) both own tests/integration/backend/e3c/ / tests/integration/
+- warning: overlapping writers: E3C (running) and D10-MERGE-2 (running) both own tests/integration/backend/e3c/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
+- warning: overlapping writers: E4C (queued) and D10-MERGE-2 (running) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
-- warning: overlapping writers: I2A (review) and P25-ENACT (review) both own infra/ / infra/alerts/operations.json (+1 more)
 - warning: overlapping writers: I2A (review) and D10-APP-SQL (review) both own apps/app/ / apps/app/supabase/migrations/0024_console_read_port.sql
-- warning: overlapping writers: I2A (review) and D10-0025 (running) both own apps/app/ / apps/app/supabase/migrations/0025_*.sql (+2 more)
+- warning: overlapping writers: I2A (review) and D10-0025 (review) both own apps/app/ / apps/app/supabase/migrations/0025_*.sql (+2 more)
+- warning: overlapping writers: I2A (review) and D10-MERGE-2 (running) both own apps/app/ / apps/app/supabase/migrations/ (+1 more)
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
-- warning: overlapping writers: E3A (queued) and D10-0025 (running) both own apps/app/tests/ / apps/app/tests/u/operator_stack.py (+1 more)
-- warning: overlapping writers: P25-ENACT (review) and I3 (queued) both own infra/alerts/operations.json / infra/ (+1 more)
-- warning: overlapping writers: P25-ENACT (review) and W5-F5B (review) both own apps/infrx-api/infrx/worker/__main__.py / apps/infrx-api/infrx/worker/__main__.py
-- warning: overlapping writers: D10-APP-SQL (review) and D10-0025 (running) both own apps/infrx-api/tests/d/ / apps/infrx-api/tests/d/
+- warning: overlapping writers: E3A (queued) and D10-0025 (review) both own apps/app/tests/ / apps/app/tests/u/operator_stack.py (+1 more)
+- warning: overlapping writers: E3A (queued) and D10-MERGE-2 (running) both own tests/integration/ / tests/integration/ (+1 more)
+- warning: overlapping writers: I3 (queued) and D10-MERGE-2 (running) both own tests/integration/ / tests/integration/
+- warning: overlapping writers: D10-APP-SQL (review) and D10-0025 (review) both own apps/infrx-api/tests/d/ / apps/infrx-api/tests/d/
+- warning: overlapping writers: D10-APP-SQL (review) and D10-MERGE-2 (running) both own apps/app/supabase/migrations/0024_console_read_port.sql / apps/app/supabase/migrations/ (+1 more)
+- warning: overlapping writers: D10-0025 (review) and D10-MERGE-2 (running) both own apps/app/supabase/migrations/0025_*.sql / apps/app/supabase/migrations/ (+3 more)
 
 ## Pending inputs
 
@@ -246,6 +251,25 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `I3-20260926T0146Z.json`: stale: at 2026-09-26T01:46:00Z is not newer than lane I3 state 2026-09-26T02:11:40Z
 - `I3-20260926T0206Z.json`: stale: at 2026-09-26T02:06:00Z is not newer than lane I3 state 2026-09-26T02:11:40Z
 - `E3A-20260926T0208Z.json`: lane APP-E3A-FIX belongs to None, not E3A
+- `W5-MERGE-20260925T1717Z.json`: unknown task ID 'W5-MERGE'
+- `D10-20260925T1910Z.json`: stale: at 2026-09-25T19:10:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
+- `M6-20260925T1910Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- `W5-20260925T1916Z.json`: stale: at 2026-09-25T19:16:00Z is not newer than lane W5 state 2026-09-25T23:50:01Z
+- `M6-20260925T2025Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- `D10-20260925T2050Z.json`: stale: at 2026-09-25T20:50:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
+- `DOOR-REVOKE-20260925T2150Z.json`: stale: at 2026-09-25T21:50:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
+- `KNOWN-GOOD-PROOF-20260925T2214Z.json`: unknown task ID 'KNOWN-GOOD-PROOF'
+- `DOOR-REVOKE-20260925T2226Z.json`: stale: at 2026-09-25T22:26:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
+- `W5-20260925T2301Z.json`: stale: at 2026-09-25T23:01:00Z is not newer than lane W5 state 2026-09-25T23:50:01Z
+- `KNOWN-GOOD-PROOF-20260925T2325Z.json`: unknown task ID 'KNOWN-GOOD-PROOF'
+- `W5-20260925T2331Z.json`: unknown task ID 'W5-F5'
+- `P25-ENACT-20260926T0011Z.json`: stale: at 2026-09-26T00:11:00Z is not newer than lane P25-ENACT state 2026-09-26T00:51:09Z
+- `W5-20260926T0020Z.json`: unknown task ID 'W5-F5'
+- `P25-ENACT-20260926T0047Z.json`: stale: at 2026-09-26T00:47:00Z is not newer than lane P25-ENACT state 2026-09-26T00:51:09Z
+- `WAVE4B-UNION-20260926T0055Z.json`: unknown task ID 'WAVE4B-UNION'
+- `WAVE4B-UNION-20260926T0229Z.json`: unknown task ID 'WAVE4B-UNION'
+- `W5-F5B-20260926T0300Z.json`: unknown activity 'review (fix round 1-F5B-R1 done)'
+- `WAVE4B-UNION-20260926T0324Z.json`: unknown task ID 'WAVE4B-UNION'
 
 ## All manifest tasks
 
@@ -376,17 +400,44 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `D10` | Persist uploads, execution eligibility, safe cleanup and result read authority | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `M5` | Persist upload lifecycle across gateway replacement | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `M6` | Implement restart-safe content cleanup and bounded caches | Backend corrections | implemented | review | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `W5` | Enforce execution readiness and bounded worker recovery | Backend corrections | planned | review | active: lane active |
+| `W5` | Enforce execution readiness and bounded worker recovery | Backend corrections | implemented | review | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G7` | Align public capability discovery, alias pricing and persisted result expiry | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G8` | Prove headless consumer CREDIT operations and safe activation | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E1C` | Repair upload client and deliver valid resumable dataset/load measurement | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I8` | Operate continuously with bounded DB pools, durable artifacts and real rollback | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `E3C` | Integrate corrective backend with real services and process faults | Backend corrections | planned | review | active: lane active |
+| `E3C` | Integrate corrective backend with real services and process faults | Backend corrections | planned | running | active: lane active |
 | `E4C` | Certify repaired CREDIT backend on final Marlin deployment | Backend corrections | planned | queued | blocked: waiting on start dependencies: E3C |
 | `U4` | Expose owned consumer request detail and result lifecycle | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 
 ## Activity log (newest first)
 
+- 2026-09-26 03:35Z UTC, None: —
+- 2026-09-26 03:35Z UTC, None: —
+- 2026-09-26 03:35Z UTC, None: —
+- 2026-09-26 03:35Z UTC, None: —
+- 2026-09-26 03:35Z UTC, None: —
+- 2026-09-26 03:35Z UTC, None: —
+- 2026-09-26 03:35Z UTC, None: —
+- 2026-09-26 03:35Z UTC, tracker: forecast E3C: 2026-09-26 06:00Z – 2026-09-26 13:48Z (likely 2026-09-26 08:36Z) → 2026-09-26 05:23Z – 2026-09-26 09:17Z (likely 2026-09-26 06:41Z) (because: dependency path E3C)
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'WAVE4B-UNION'
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown activity 'review (fix round 1-F5B-R1 done)'
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'WAVE4B-UNION'
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'WAVE4B-UNION'
+- 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-26T00:47:00Z is not newer than lane P25-ENACT state 2026-09-26T00:51:09Z
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'W5-F5'
+- 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-26T00:11:00Z is not newer than lane P25-ENACT state 2026-09-26T00:51:09Z
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'W5-F5'
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'KNOWN-GOOD-PROOF'
+- 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-25T23:01:00Z is not newer than lane W5 state 2026-09-25T23:50:01Z
+- 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-25T22:26:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'KNOWN-GOOD-PROOF'
+- 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-25T21:50:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
+- 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-25T20:50:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
+- 2026-09-26 03:35Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-25T19:16:00Z is not newer than lane W5 state 2026-09-25T23:50:01Z
+- 2026-09-26 03:35Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- 2026-09-26 03:35Z UTC, tracker: rejected update: stale: at 2026-09-25T19:10:00Z is not newer than lane D10 state 2026-09-25T22:42:57Z
+- 2026-09-26 03:35Z UTC, tracker: rejected update: unknown task ID 'W5-MERGE'
 - 2026-09-26 02:34Z UTC, None: —
 - 2026-09-26 02:24Z UTC, tracker: rejected update: lane APP-E3A-FIX belongs to None, not E3A
 - 2026-09-26 02:24Z UTC, None: —
