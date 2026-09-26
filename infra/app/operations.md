@@ -118,7 +118,10 @@ dependency.
   own error log line; this line is the greppable index.
 - **Browser errors**: `app/error.tsx` (a segment failed) and `app/global-error.tsx` (the
   root layout failed) render one safe page — "Something went wrong", `Reference <digest>
-  · release <commit 7>`, a Try again button — and POST once to `/api/client-errors`.
+  · release <commit 7>`, a Try again button — and POST once to `/api/client-errors`. The
+  nearer segment boundaries (`app/(console)/usage`, `billing`, `traces` `error.tsx`) catch
+  first; they keep their own copy and POST the same report (`useErrorReport`, test
+  `I3-BOUND-01`).
 - **The line**, one JSON object per error (`lib/deploy/report.ts` `ErrorLine`; test
   `I3-SHAPE-01` pins this example's keys to the code):
 
@@ -151,13 +154,15 @@ dependency.
   to another origin without a CORS preflight, which the route never grants. Accepted is
   204. No answer carries a body, so nothing is echoed (test `I3-ROUTE-01`). Per-client
   limiting is a Vercel Firewall rate-limit rule on `POST /api/client-errors` [OP] (⚠️ TO BE
-  VERIFIED: available on the project's plan).
+  VERIFIED: available on the project's plan). The per-instance ceiling is shared by every
+  client, so 60 junk posts a minute mask real reports on that instance for the rest of the
+  minute; those 429s show in the Vercel request log, and a 429 spike there is itself a signal.
 - **Anonymous pages**: until WR-I3-1 makes `/api/client-errors` public in the middleware, a
   report from a signed-out page (login, signup) is redirected to `/login` and lost; signed-in
   pages report.
 - **Where it lands and how to read it**: the deployment's Runtime Logs in the Vercel
   dashboard (filter `app_error`), or `vercel logs <deployment url>` [OP]. Log retention is
-  the Vercel plan's ⚠️ TO BE VERIFIED [OP]; a log drain is optional and not configured [OP].
+  the Vercel plan's ⚠️ TO BE VERIFIED [OP]; a log drain is optional; none is configured by this lane, hosted state ⚠️ TO BE VERIFIED [OP].
   A user who quotes a page reference gives the digest: search for it; for a server-rendered
   failure the browser line and the server line carry the same digest.
 - **Startup refusal** is not an `app_error` line: an incomplete environment logs

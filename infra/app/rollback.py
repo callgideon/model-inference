@@ -22,7 +22,7 @@ Checks, each printed with its evidence:
               proven (this tree's console tests on the newer schema), never assumed - not
               every migration is additive (0021 revokes column grants and drops a policy)
   contract    the tree's pinned contract surface (SURFACE_VERSION, contracts-vMAJOR.MINOR in
-              apps/app/lib/contracts/v2/money-units.ts) <= the gateway release's
+              apps/app/lib/contracts/v2/money-units.ts): same MAJOR, MINOR <= the gateway release's
               (apps/infrx-api/infrx/contracts/v2/__init__.py)
 Exit 0 COMPATIBLE, 1 REFUSED, 2 usage.
 """
@@ -99,7 +99,8 @@ def judge(ref: str, applied: str, gateway_ref: str, repo: Path = REPO,
           f"hosted has {applied}{why}")
     app, backend = surface(repo, sha, APP_CONTRACT), surface(repo, gateway, GATEWAY_CONTRACT)
     fmt = lambda v: f"contracts-v{v[0]}.{v[1]}" if v else "none"   # noqa: E731
-    check("contract", app is not None and backend is not None and app <= backend,
+    # Same MAJOR (a MAJOR change is not compatible either way), MINOR <= the gateway's (I3R-5).
+    check("contract", app is not None and backend is not None and app[0] == backend[0] and app[1] <= backend[1],
           f"App pins {fmt(app)}; gateway {gateway[:12]} serves {fmt(backend)}")
     return {"candidate": ref, "commit": sha, "gateway": gateway,
             "verdict": "COMPATIBLE" if all(c["ok"] for c in checks) else "REFUSED",

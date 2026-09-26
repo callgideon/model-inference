@@ -154,6 +154,24 @@ def test_i3_rb06_the_comparison_mutants_are_caught(trees, tmp_path, line, mutant
     got, _, _ = run(repo, t["ok"], "--applied", applied, "--gateway", t["gw"])
     assert got == correct and code != correct, "the mutant survived"
 
+@pytest.mark.parametrize("app, gateway, ok", [
+    ((2, 1), (2, 1), True), ((2, 0), (2, 1), True), ((2, 1), (2, 0), False),
+    ((2, 1), (3, 0), False),   # review I3R-5: (2, 1) <= (3, 0) as a tuple passed
+    ((3, 0), (2, 9), False), ((2, 9), (3, 1), False),
+])
+def test_i3_rb09_the_contract_needs_the_same_major(tmp_path, app, gateway, ok):
+    """Catches (I3R-5): a (MAJOR, MINOR) tuple compare, which passes an App pinned to v2.1 against
+    a gateway serving v3.0; the MAJOR must match and the App's MINOR be <= the gateway's."""
+    repo = tmp_path
+    sh(repo, "init", "-q")
+    target = commit(repo, {**migrations("0001"), **IDENTITY,
+                           APP_CONTRACT: f'export const SURFACE_VERSION = "contracts-v{app[0]}.{app[1]}";\n'}, "App")
+    serving = commit(repo, {GATEWAY_CONTRACT: f'SURFACE_VERSION = "contracts-v{gateway[0]}.{gateway[1]}"\n'}, "gateway")
+    code, result, _ = run(repo, target, "--applied", "0001", "--gateway", serving)
+    assert (code, result["verdict"]) == ((0, "COMPATIBLE") if ok else (1, "REFUSED")), result
+    assert failed(result) == (set() if ok else {"contract"}), result
+
+
 
 def test_i3_rb07_this_repository_judges_itself():
     """The tool on the real tree: HEAD against its own newest migration and its own gateway."""
