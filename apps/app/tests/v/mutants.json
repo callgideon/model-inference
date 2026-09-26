@@ -396,8 +396,8 @@
       "id": "BOUNDARY-01",
       "note": "the error boundary uses reset(), which replays the same errored server payload",
       "file": "app/(console)/traces/error.tsx",
-      "find": "export default function TracesError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {",
-      "replace": "export default function TracesError({ retry: reset }: { error: Error & { digest?: string }; retry: () => void }) {",
+      "find": "export default function TracesError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {",
+      "replace": "export default function TracesError({ error, retry: reset }: { error: Error & { digest?: string }; retry: () => void }) {",
       "cases": [
         "V1-V11 the error boundary re-fetches, and shows nothing from the thrown error"
       ]

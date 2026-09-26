@@ -653,9 +653,9 @@ const MUTANTS = [
     id: "U1-M48",
     what: "the usage boundary goes back to `reset`, which cannot re-fetch a server throw",
     file: USAGE_ERROR,
-    find: "export default function UsageError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {",
+    find: "export default function UsageError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {",
     replace:
-      "export default function UsageError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {",
+      "export default function UsageError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {",
     cases: [T.boundary],
   },
   {
