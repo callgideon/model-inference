@@ -149,3 +149,23 @@ Test: add `"app/(console)/usage/[requestId]/request-context.ts"` to the file lis
 ## Remaining effort
 
 Optimistic 0.25 h / likely 0.5 h / pessimistic 1.5 h, confidence high. What remains is the merge, WR-AM2-1 and WR-AM2-2, and E3A's decision on a `segment-error` journey check for AM1-L2. The pessimistic case is that the E3A check is wanted now.
+
+## Fix round (code head `294a2626`, handback `379b67f1`)
+
+**0-AM2-L-1 (major): the `getSession` call site of the C0 WR-6 fix is now pinned.** C0-ORG-01/02 and C0-ORG-PG prove `personalOrg` but never run through `getSession`, and U1R-AUTH-02 pins only the client. Nothing guarded the call this item exists to change.
+
+- Test: `C0-ORG-03 getSession takes its organization from personalOrg, never an inline membership pick` (`apps/app/tests/c/consumer.test.ts`). It is a source pin, like U1R-AUTH-02, because `lib/session.ts` imports `next/*` (R48). It checks three things: `lib/session.ts` calls `personalOrg(supabase as unknown as Parameters<typeof personalOrg>[0], user.id)`, it never names `org_members`, and it has no `.limit(1)`.
+- Mutant: `C0-ORG-06` (`tests/c/mutants.json`, file `lib/session.ts`) replaces the `personalOrg(...)` element of the `Promise.all` with the reviewer's inline pick, `supabase.from("org_members")…eq("user_id", user.id).limit(1).maybeSingle()`.
+- Fails-before: the mutant **SURVIVED** when it declared only the existing cases (U1R-AUTH-02, C0-ORG-01 and C0-ORG-02). This reproduces the finding. With C0-ORG-03 declared, it is **killed** by that case.
+
+| Command (at `294a2626`) | Exit | Result |
+|---|---|---|
+| `make console-test` | 0 | 670 tests: 615 pass, 0 fail, 55 skip (+1 case) |
+| `make console-lint` | 0 | 0 errors, 2 pre-existing warnings |
+| `make console-typecheck` | 0 | typegen + tsc clean |
+| `make console-built` | 0 | build ok; i2a 22/22 |
+| `make console-mutants` | 0 | contracts 212/212; V 40/40; U 218/218; C **196/196** (+1: C0-ORG-06); A 47/47; A catalog 46/46 |
+| `make console-pg` | 0 | u1r 8/8 (ledger 201 rows / 3 pages); u4 8/8 |
+| `make console-c0-real` (app-c0) | 0 | 16/16 |
+
+The diff is `apps/app/tests/c/consumer.test.ts` and `apps/app/tests/c/mutants.json`, and both are owned paths. Product code is unchanged.

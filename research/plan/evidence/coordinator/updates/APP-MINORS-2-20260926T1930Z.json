@@ -1,0 +1,16 @@
+{"task": "APP-MINORS-2", "slice": "fix round: 0-AM2-L-1 (getSession personalOrg call site pinned)", "activity": "fix",
+ "head": "294a2626", "worktree": ".claude/worktrees/codex-app-minors-2", "branch": "codex/app-minors-2",
+ "owned_paths": ["apps/app/tests/c/consumer.test.ts", "apps/app/tests/c/mutants.json", "research/plan/evidence/app/APP-MINORS-2-65528fe.md"],
+ "findings": [{"id": "0-AM2-L-1", "fixed": true, "test": "C0-ORG-03", "mutant": "C0-ORG-06", "fails_before": "survived with only U1R-AUTH-02/C0-ORG-01/C0-ORG-02 declared; killed by C0-ORG-03"}],
+ "commands": [
+  {"cmd": "make console-test", "exit": 0, "summary": "670 tests, 615 pass, 0 fail, 55 skip"},
+  {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+  {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+  {"cmd": "make console-built", "exit": 0, "summary": "build ok; i2a 22/22"},
+  {"cmd": "make console-mutants", "exit": 0, "summary": "contracts 212/212, V 40/40, U 218/218, C 196/196, A 47/47, A catalog 46/46"},
+  {"cmd": "make console-pg", "exit": 0, "summary": "u1r 8/8 (ledger 201 rows / 3 pages), u4 8/8"},
+  {"cmd": "make console-c0-real", "exit": 0, "summary": "16/16"}],
+ "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "high", "basis": "unchanged: merge + WR-AM2-1/2; AM1-L2 needs an E3A journey check", "at": "2026-09-26T19:30Z"},
+ "blockers": ["AM1-L2: the built suite runs no server/auth/browser; a real-browser segment throw needs E3A's e4b world (not this lane's namespace)"],
+ "wiring_requests": ["WR-AM2-1 usage/[requestId]/request-context.ts -> requestClient (one getUser on /usage/<id>)", "WR-AM2-2 flow.ts:30 comment drops the lib/utils reference"],
+ "evidence": ["research/plan/evidence/app/APP-MINORS-2-65528fe.md"]}
