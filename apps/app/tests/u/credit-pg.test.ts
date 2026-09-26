@@ -175,6 +175,7 @@ const T = {
   tenant: "U1R-P05 another individual's session sees none of this wallet, ledger, jobs or legacy history",
   window: "U1R-P06 the date window is exact on real rows: inside it everything, past it nothing",
   filters: "U1R-P07 the model, key and window filters narrow the rows exactly as the durable jobs say; an empty filter is the unfiltered page",
+  cap: "U1R-P08 at the 100 cap each page is 100 rows with a next cursor and the walk is every row once; limit 101 never reaches the database",
 };
 
 test(T.card, { skip }, async () => {
@@ -369,4 +370,34 @@ test(T.filters, { skip }, async () => {
     ids(await walkJobs(reads, 3, now, "30d", { model: first })),
     expect(`${lit(first)} in (requested_model, model_revision) and created_at >= ${lit(bound)}::timestamptz - interval '30 days' and created_at < ${lit(bound)}::timestamptz`),
   );
+});
+
+test(T.cap, { skip }, async () => {
+  // CONSUMER_2 has 120+ jobs and ledger entries (credit_world.py). Before R146's clamp the adapter
+  // asked for 101: consumer_credit_ledger refused it (dependency_unavailable) and consumer_jobs
+  // clamped it to 100 silently, so the full page had no next cursor.
+  const reads = postgrestCreditReads(pgClient(WORLD.other), WORLD.other);
+  const [theirs] = durable<{ wallet_id: string; org_id: string }>(
+    `select wallet_id, personal_org_id as org_id from infrx.credit_wallets where owner_user_id = ${lit(WORLD.other)} and kind = 'consumer'`,
+  );
+  const durableIds = (statement: string) => durable<{ id: string }>(statement).map((r) => r.id).sort();
+  for (const [name, read, expected] of [
+    ["ledger", reads.ledger, durableIds(`select entry_id::text as id from infrx.credit_ledger where wallet_id = ${lit(theirs.wallet_id)}`)],
+    ["jobs", reads.jobs, durableIds(`select request_id::text as id from infrx.jobs where org_id = ${lit(theirs.org_id)}`)],
+  ] as const) {
+    assert.ok(expected.length > 100, `${name}: the world has only ${expected.length} rows`);
+    const first = await read({ limit: 100, cursor: null });
+    assert.ok(first.ok, `${name}: ${JSON.stringify(first)}`);
+    assert.equal(first.value.items.length, 100);
+    assert.notEqual(first.value.next_cursor, null, `${name}: a full page at the cap has no next cursor`);
+    const rest = await read({ limit: 100, cursor: first.value.next_cursor });
+    assert.ok(rest.ok, `${name}: ${JSON.stringify(rest)}`);
+    assert.equal(rest.value.next_cursor, null);
+    const items = [...first.value.items, ...rest.value.items] as ({ id: string } | { requestId: string })[];
+    assert.deepEqual(items.map((i) => ("id" in i ? i.id : i.requestId)).sort(), expected, `${name}: the capped walk is not every row once`);
+    const sent = issued.length;
+    const refused = await read({ limit: 101, cursor: null });
+    assert.equal(refused.ok ? null : refused.error.code, "invalid_request");
+    assert.equal(issued.length, sent, `${name}: limit 101 reached the database`);
+  }
 });

@@ -110,6 +110,7 @@ const T = {
   units: "U1R-R05 a job's unit follows its regime, and a CREDIT row labelled USD is refused",
   creditsIn: "U1R-R06 credits-in is a bounded read of the non-debit entries, and past the bound it is unknown",
   legacy: "U1R-R07 the legacy USD statement is read for the wallet's personal organization, in USD",
+  cap: "U1R-R10 both pages keep 0024's 100 cap: the look-ahead is clamped to 100, a full page at the cap has a next cursor, and a limit over 100 is refused before the call",
 };
 
 test(T.wallet, async () => {
@@ -314,4 +315,45 @@ test(T.legacy, async () => {
   assert.deepEqual(calls[0].args, { p_org: ORG });
   const wrong = await reads.legacyUsd(ORG);
   assert.equal(wrong.ok ? null : wrong.error.code, "internal_error");
+});
+
+test(T.cap, async () => {
+  // R146's App clause, C0's rule: 0024 refuses p_limit 101 (consumer_credit_ledger) or clamps it
+  // silently (consumer_jobs), so asking limit + 1 at the cap either fails the read or loses the cursor.
+  const ledgerRow = (n: number) => ({
+    entry_id: `e2000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    created_at: "2026-09-20T12:00:00+00:00",
+    kind: "operator_adjustment",
+    amount: "0.00000001",
+    unit: "CREDIT",
+    request_id: null,
+    reason: "fixture",
+    cursor: `L${n}`,
+  });
+  const jobs = (n: number) => Array.from({ length: n }, (_, i) => jobRow({ cursor: `J${i + 1}` }));
+  const ledgers = (n: number) => Array.from({ length: n }, (_, i) => ledgerRow(i + 1));
+  const { client, calls } = recording({
+    consumer_credit_ledger: [ok(ledgers(100)), ok(ledgers(99))],
+    consumer_jobs: [ok(jobs(100)), ok(jobs(99))],
+  });
+  const reads = postgrestCreditReads(client, USER);
+  for (const [name, read, prefix] of [
+    ["consumer_credit_ledger", reads.ledger, "L"],
+    ["consumer_jobs", reads.jobs, "J"],
+  ] as const) {
+    const before = calls.length;
+    const full = await read({ limit: 100, cursor: null });
+    assert.deepEqual(calls[before].args, { p_after: null, p_limit: 100 }, `${name}: the look-ahead is not clamped to 100`);
+    assert.ok(full.ok, `${name}: ${JSON.stringify(full)}`);
+    assert.equal(full.value.items.length, 100);
+    assert.equal(full.value.next_cursor, `${prefix}100`, `${name}: a full page at the cap lost its next cursor`);
+    const short = await read({ limit: 100, cursor: null });
+    assert.ok(short.ok);
+    assert.equal(short.value.next_cursor, null, `${name}: a short page at the cap has a next cursor`);
+    for (const limit of [101, 0, 2.5]) {
+      const refused = await read({ limit, cursor: null });
+      assert.equal(refused.ok ? null : refused.error.code, "invalid_request", `${name}: limit ${limit} was not refused`);
+    }
+    assert.equal(calls.length, before + 2, `${name}: a refused limit reached the database`);
+  }
 });
