@@ -154,9 +154,10 @@
       "services": [
         "postgres",
         "valkey",
-        "s3"
+        "s3",
+        "valkey-q"
       ],
-      "use": "consumer-local's API stages: INFRX_D_TASK=e2c (infrx-e2c-postgres, database infrx_e2c), INFRX_D2_VALKEY_PORT/_CONTAINER and INFRX_Q_VALKEY_PORT (the e2c Valkey port), INFRX_M_S3_ENDPOINT (infrx-e2c-s3, the MinIO pin the gate starts itself); ports from infrx/contracts/tasklocal.py"
+      "use": "consumer-local's API stages: INFRX_D_TASK=e2c (infrx-e2c-postgres, database infrx_e2c), INFRX_D2_VALKEY_PORT/_CONTAINER (the e2c Valkey port), INFRX_Q_VALKEY_PORT = e2c valkey-q 55430 (container infrx-q3-valkey-55430), INFRX_M_S3_ENDPOINT (infrx-e2c-s3, the MinIO pin the gate starts itself); ports from infrx/contracts/tasklocal.py"
     },
     "e2": {
       "harness": "e2",

@@ -345,6 +345,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "    async def acknowledge(self, event: IndexEvent) -> None:",
        "    def acknowledge(self, event: IndexEvent) -> None:",
        "test_q1_contract__the_adapter_satisfies_the_scheduler_protocol"),
+    # --- the harness (G2-FIX F-1; `file` is relative to `infrx/`, the runner's package) --
+    Mutant(name="harness_adopts_a_foreign_listener",
+           invariant="the harness never adopts a server it did not start (R63)",
+           file="../tests/q/vkharness.py",
+           old="    if _listening():\n        _refuse_foreign()\n",
+           new="    if _listening():\n        pass\n",
+           cases=("test_q_harness__a_listener_it_did_not_start_is_refused_not_adopted",
+                  "test_q_harness__the_refusal_names_the_foreign_container")),
 )
 
 

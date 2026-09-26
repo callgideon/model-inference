@@ -14,9 +14,10 @@
 // The same port runs against real PostgREST in `consumer-postgrest.test.ts`.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import type { PostgrestClient, QueryPlan, QueryPort, Row } from "../../lib/services/query.ts";
 import { buildPlan, postgrestPort, QueryPortError } from "../../lib/services/query.ts";
@@ -746,4 +747,40 @@ test("C0-ORG-03 getSession takes its organization from personalOrg, never an inl
   assert.match(session, /personalOrg\(supabase as unknown as Parameters<typeof personalOrg>\[0\], user\.id\)/);
   assert.doesNotMatch(session, /org_members/, "session.ts reads memberships itself");
   assert.doesNotMatch(session, /\.limit\(1\)/, "session.ts picks the first row");
+});
+
+/**
+ * lib/session.ts's own `getSession`, run for real (R48: it imports next/* and react, so those three
+ * imports are replaced by stubs in a scratch copy; the body and `personalOrg` are the tree's).
+ */
+async function getSessionWith(rows: Row[]) {
+  const consoleUrl = pathToFileURL(join(appRoot, "lib/services/console.ts")).href;
+  const body = source("lib/session.ts").replace(/^import .*$/gm, "");
+  const dir = mkdtempSync(join(tmpdir(), "c0-session-"));
+  writeFileSync(join(dir, "session.ts"), `import { onceGetUser, personalOrg } from ${JSON.stringify(consoleUrl)};
+const cache = <F,>(f: F): F => f;
+const redirect = (to: string): never => { throw new Error(\`redirect \${to}\`); };
+const createClient = async () => (globalThis as { sessionClient?: unknown }).sessionClient as never;
+${body}`);
+  (globalThis as { sessionClient?: unknown }).sessionClient = {
+    auth: { getUser: () => Promise.resolve({ data: { user: { id: ME, email: "me@example.com" } }, error: null }) },
+    from: (relation: string) => relation === "profiles"
+      ? { select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { email: "me@example.com", is_operator: true }, error: null }) }) }) }
+      : (membersClient(rows).client as unknown as { from(r: string): unknown }).from(relation),
+  };
+  const { getSession } = await import(pathToFileURL(join(dir, "session.ts")).href);
+  rmSync(dir, { recursive: true });
+  return getSession() as Promise<{ orgId: string; isOperator: boolean }>;
+}
+
+test("C0-ORG-04 getSession fails closed for a user without exactly one created-and-owned organization", async () => {
+  // AM2-L-2. Oracle: a session built anyway (a guessed or empty organization) for the ORPHAN shape
+  // (only someone else's organization) or for two personal organizations to choose between.
+  const refused = /No personal organization for this account/;
+  await assert.rejects(getSessionWith(memberships.slice(0, 3)), refused, "only other organizations");
+  await assert.rejects(getSessionWith([]), refused, "no membership");
+  const two = [...memberships, member("0e000000-0000-4000-8000-000000000005", "owner", ME, "Second")];
+  await assert.rejects(getSessionWith(two), refused, "two owned personal organizations");
+  const session = await getSessionWith(memberships);
+  assert.deepEqual([session.orgId, session.isOperator], [MY_ORG, true]);
 });

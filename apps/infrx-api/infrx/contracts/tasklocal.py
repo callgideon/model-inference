@@ -53,8 +53,8 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "g8": {"postgres": 55447, "valkey": 55492},
     # G2-FIX (R63): `make check` runs D2's relay drills and Q's harness in ONE pytest process,
     # so Q gets its own e2c Valkey port (`valkey-q`; the Q harness names its container
-    # infrx-q3-valkey-55430 from the port). 55430 sits below D1's 55432, outside every decoy
-    # (+40) and the 555xx E block, and no lane or evidence used it.
+    # infrx-q3-valkey-55430 from the port). 55430 sits below D1's 55432, clear of every
+    # D-harness decoy (port − 30000) and the 555xx E block, and no lane or evidence used it.
     "e2c": {"postgres": 55448, "valkey": 55493, "s3": 55494, "valkey-q": 55430},
     "e1c": {"postgres": 55449},
     # I8's PgBouncer stand-in for the hosted pooler (tests/i/pooler.py)

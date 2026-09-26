@@ -27,6 +27,18 @@ REVERTS = {
         "if v_count > (p_limits->>'max_active_jobs", 3,
         "DUR-CAP (s15): 0011 admission_checks's three active-job cap comparisons off by one "
         "(>= becomes >): total, per organization and per key each admit one more"),
+    # WR-BM-2 (CM-1): each scope alone, so s15's scoped burst (MAX_ACTIVE_JOBS 16, where only
+    # that scope's comparison refuses) is a gate control of its own.
+    "nc-dur-cap-org": (
+        "admission_checks", "if v_count >= (p_limits->>'max_active_jobs_per_org')::int then",
+        "if v_count > (p_limits->>'max_active_jobs_per_org')::int then", 1,
+        "DUR-CAP (s15): 0011 admission_checks's per-organization cap comparison off by one "
+        "(>= becomes >): only the organization cap admits one more"),
+    "nc-dur-cap-key": (
+        "admission_checks", "if v_count >= (p_limits->>'max_active_jobs_per_key')::int then",
+        "if v_count > (p_limits->>'max_active_jobs_per_key')::int then", 1,
+        "DUR-CAP (s15): 0011 admission_checks's per-key cap comparison off by one "
+        "(>= becomes >): only the key cap admits one more"),
     "nc-credit-rate": (
         "terminalize", "infrx.debit_credit(j.rate_card_version, v_in, v_out)",
         "infrx.debit_credit((select l.rate_card_version from infrx.catalog_listings l where "

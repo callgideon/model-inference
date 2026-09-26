@@ -36,8 +36,8 @@ def test_the_list_is_well_formed():
     assert set(SUBSET) <= {m.name for m in ALL}, "the default subset names a missing mutant"
     print(f"\nQ mutants: {len(ALL)} declared, {len(SELECTED)} selected "
           f"({'INFRX_MUTANTS=all' if FULL_RUN else 'default subset'})")
-    source = (mutation_list.API_DIR / "infrx" / mutation_list.Q).read_text()
     for mutant in ALL:
+        source = (mutation_list.API_DIR / "infrx" / mutant.file).read_text()
         assert mutant.cases, f"{mutant.name} names no case"
         assert mutant.invariant, f"{mutant.name} states no invariant"
         assert source.count(mutant.old) == 1, \

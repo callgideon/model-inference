@@ -206,16 +206,20 @@ new start timestamps, and the criteria are unchanged. A certify rerun after §5.
 1. `TIMEOUT_S=7200 infra/rollout/ssm.sh infra/rollout/e1b-window.sh RELEASE=$RELEASE` runs WC-1 to WC-5 and WC-8
    (45–60 min, `est.`). It prints `out=<dir>`; each cell's log is `<dir>/<cell>.log`, WC-8's interrupted half is
    `<dir>/sop-interrupted.log`, and `<dir>/cells.tsv` records every exit.
-2. WC-6a: the reference half, then the restore, which must print `restored=yes`.
+2. WC-6a: `infra/rollout/ssm.sh models/marlin2b/e1b/l8ref.sh EUTC=<stamp>`, the reference
+   half, then the restore, which must print `restored=yes`. The engine stop is declared: the script stops
+   `infrx-observe.timer` for the span and starts it again after the restore, and its `drill=wc6a-declared-engine-stop`
+   line goes into `drills.md` with `ssm=FILL` replaced by this command's id.
 3. `infra/rollout/ssm.sh infra/rollout/e1b-window.sh RELEASE=$RELEASE CELLS=WC-7`, right after WC-6a's
    `restored=yes`, with no request to the engine in between.
-4. WC-6b: the served half and the compare.
+4. WC-6b: `infra/rollout/ssm.sh models/marlin2b/e1b/l8served.sh EUTC=<the same stamp>`, then the compare.
 
 WC-0, the scrape sidecar, starts with §4 and stops after the last window cell (§5.2). While `e1b-window.sh`
 runs, no certify run, soak, journey leg or drill is started: there is one engine, so any other request is foreign
 traffic in both (E1B-protocol §7.1 rule 1). The launcher refuses a cell while a certify container exists, but it
 cannot see a journey or a drill. A window cell's result has no effect on the certify report or on P-17
-(§7.1 rule 4).
+(§7.1 rule 4). **The canary stays off through WC-9** (§5.2): §1 step 5's canary re-enable runs after WC-9 ends
+and before the §6 drills, never between two window cells.
 
 ## 5. The two-tenant headless journey (P-17 check 5)
 
@@ -414,3 +418,4 @@ Evidence directories are append-only. A failed attempt keeps its own `run<N>`.
   then WC-6b, and starts no certify run, soak, journey or drill while the launcher runs; §5 starts after §4a.
   §5.0 step 2 fills `E1B-two-tenant.json`, and §5.2 places WC-9 after §5.1. No bench command is added here.
   Nothing here has run against the box, AWS or hosted.
+- 2026-09-26 (SWEEP-1): §4a steps 2 and 4 name the committed WC-6 copies (`models/marlin2b/e1b/l8ref.sh`, `l8served.sh`); WC-6a's engine stop is declared (`infrx-observe.timer` stopped for its span, a `drills.md` line); the canary stays off through WC-9 and is re-enabled before the §6 drills (E1BP-4/5/6). Nothing run.
