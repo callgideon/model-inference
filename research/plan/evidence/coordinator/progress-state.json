@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 81,
-  "updated": "2026-09-26T04:27:51Z",
+  "revision": 82,
+  "updated": "2026-09-26T05:02:17Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -1154,7 +1154,7 @@
     {
       "id": "E3C",
       "task": "E3C",
-      "slice": "final BACKEND-LOCAL on integration tip 04ae5e21 (merged as 601f4c1d) with E3A-WR-1, E3A-WR-2, WR-W5F5B-3 (R139) and both revert-type controls",
+      "slice": "rerun on the 0024/0025 tree (D10-MERGE-2 head 9e4e34ca) via final-run.sh, harness only (E3C agent)",
       "agent": "opus",
       "branch": "codex/e3c-rerun",
       "worktree": ".claude/worktrees/codex-e3c-rerun",
@@ -1165,11 +1165,11 @@
         "prefix": "infrx-e3c-",
         "db": "infrx_e3c"
       },
-      "activity": "complete",
+      "activity": "running",
       "started": "2026-09-24T21:59:40Z",
-      "updated": "2026-09-26T04:07:41Z",
+      "updated": "2026-09-26T05:02:17Z",
       "blocker": null,
-      "next_action": "merged at dcce7775; E3C implemented; BACKEND-LOCAL accepted; a rerun on the 0024/0025 tip follows the D10-MERGE-2 merge (harness only)",
+      "next_action": "verdict → evidence E3C-RERUN-0025-<head>.md; merge codex/e3c-rerun after D10-MERGE-2; BACKEND-LOCAL candidate refreshed to the 0025 tree",
       "estimate": {
         "optimistic_h": 0,
         "likely_h": 0,
@@ -2335,6 +2335,152 @@
         "tests/integration/backend/recovery/test_runbooks.py",
         "apps/infrx-api/tests/i/",
         "research/plan/evidence/e/E4C-runbook-2-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "KNOWN-GOOD-PROOF-2",
+      "task": null,
+      "slice": "P-25 / E4C prerequisite: extend both rollback targets' schema_proof from 0023 to 0025 on the D harness (i8), known-good.py --applied 0025 KNOWN-GOOD; from the D10-MERGE-2 head 9e4e34ca; workflow wf_13c39cc6-5bd",
+      "agent": "opus",
+      "branch": "codex/known-good-proof-2",
+      "worktree": ".claude/worktrees/codex-known-good-proof-2",
+      "base": "9e4e34ca",
+      "head": null,
+      "isolation": {
+        "ports": "i8 postgres 55450 / valkey 55495 / pgbouncer 55496",
+        "prefix": "infrx-i8-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T05:02:17Z",
+      "updated": "2026-09-26T05:02:17Z",
+      "blocker": null,
+      "next_action": "verdict → merge after D10-MERGE-2; 15-pending-inputs P-25 row",
+      "estimate": {
+        "optimistic_h": 1.5,
+        "likely_h": 2.5,
+        "pessimistic_h": 4,
+        "confidence": "medium",
+        "basis": "the last proof lane took 128 min; two targets × 0024/0025",
+        "at": "2026-09-26T05:02:17Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "infra/rollout/known-good.json (schema_proof)",
+        "apps/infrx-api/tests/i/ (known-good tests)",
+        "research/plan/evidence/i/KNOWN-GOOD-PROOF-2-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "APP-0024-WIRE",
+      "task": null,
+      "slice": "C0/U1R consume 0024: creditLedger via rpc consumer_credit_ledger (limit+1 ≤ 100), U1R P02 lines + usage filters via consumer_jobs parameters; from the D10-MERGE-2 head 9e4e34ca; workflow wf_26299e6f-6a4",
+      "agent": "opus",
+      "branch": "codex/app-0024-wire",
+      "worktree": ".claude/worktrees/codex-app-0024-wire",
+      "base": "9e4e34ca",
+      "head": null,
+      "isolation": {
+        "ports": "app-c0 postgres 55451",
+        "prefix": "infrx-app-c0-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T05:02:17Z",
+      "updated": "2026-09-26T05:02:17Z",
+      "blocker": null,
+      "next_action": "verdict → merge after D10-MERGE-2; C0/U1R closure notes updated",
+      "estimate": {
+        "optimistic_h": 2,
+        "likely_h": 4,
+        "pessimistic_h": 6,
+        "confidence": "medium",
+        "basis": "two App files + tests + mutants; real-PG stacks; 2 lenses, one fix round",
+        "at": "2026-09-26T05:02:17Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/app/lib/services/console.ts (creditLedger)",
+        "apps/app/lib/billing/",
+        "apps/app/app/(console)/usage/",
+        "apps/app/tests/c/, tests/u/ (C0/U1R tests)",
+        "research/plan/evidence/app/APP-0024-WIRE-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "E3A-RUN",
+      "task": "E3A",
+      "slice": "E3A journey gate run on the merged SHA after BACKEND-LOCAL: E3C's two E3A wirings, operator-controls check on 0025, expired-content display, the four delegated cells bound to E3C-FINAL, runner + seam controls on the e4b block; from the D10-MERGE-2 head 9e4e34ca (dispatched ahead of BACKEND-READY under the user's App-ahead decision; the APP-LOCAL decision stays the coordinator's); workflow wf_9ffa037f-60d",
+      "agent": "opus",
+      "branch": "codex/e3a-run",
+      "worktree": ".claude/worktrees/codex-e3a-run",
+      "base": "9e4e34ca",
+      "head": null,
+      "isolation": {
+        "ports": "e4b compose block 56800–56899 (edge 56860, control 56861, App 56870; one runner)",
+        "prefix": "infrx-e4b-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T05:02:17Z",
+      "updated": "2026-09-26T05:02:17Z",
+      "blocker": null,
+      "next_action": "verdict → merge after D10-MERGE-2; APP-LOCAL cells from the runner's verdict; gate decision after BACKEND-READY per the manifest",
+      "estimate": {
+        "optimistic_h": 3,
+        "likely_h": 5,
+        "pessimistic_h": 8,
+        "confidence": "medium",
+        "basis": "two new checks + wirings + a journey run of ~2 min; 2 lenses, one fix round",
+        "at": "2026-09-26T05:02:17Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "tests/integration/app/",
+        "apps/app/tests/e2e/",
+        "research/plan/evidence/e/E3A-run-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "G8-FLAG-2",
+      "task": null,
+      "slice": "G8-FLAG carried minors R2/R3/R6 (audit operation pinned, lock-bound mutants runner-visible, --dry-run without a direction); from the tip 44ba44a9; workflow wf_ca5e636a-0d7",
+      "agent": "opus",
+      "branch": "codex/g8-flag-2",
+      "worktree": ".claude/worktrees/codex-g8-flag-2",
+      "base": "44ba44a9",
+      "head": null,
+      "isolation": {
+        "ports": "g8 postgres 55447 / valkey 55492",
+        "prefix": "infrx-g8-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T05:02:17Z",
+      "updated": "2026-09-26T05:02:17Z",
+      "blocker": null,
+      "next_action": "verdict → merge onto the tip",
+      "estimate": {
+        "optimistic_h": 0.5,
+        "likely_h": 1,
+        "pessimistic_h": 2,
+        "confidence": "medium",
+        "basis": "three small test/verb changes; 1 lens",
+        "at": "2026-09-26T05:02:17Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/infrx-api/infrx/operations/ (flag verb)",
+        "apps/infrx-api/tests/g/ops/",
+        "research/plan/evidence/g/G8-FLAG-2-*.md"
       ],
       "wiring_requests": []
     }
@@ -4348,6 +4494,12 @@
       "by": "coordinator (G8-FLAG)",
       "what": "G8-FLAG verified (lenses ACCEPT_WITH_FIXES ×2; REJECT only for the unowned wirings) and merged at a30631a8; WR-G8FLAG-1/2/3 applied at e7b1c272 (R144 amended; maintenance drill = recorded exception); GAP-I3-1/I3R-7 closed",
       "source": "research/plan/evidence/g/G8-FLAG-3c5947f.md"
+    },
+    {
+      "at": "2026-09-26T05:02:17Z",
+      "by": "coordinator",
+      "what": "Full-scale dispatch: KNOWN-GOOD-PROOF-2 (i8), APP-0024-WIRE (app-c0), E3A-RUN (e4b) and the E3C rerun (e3c) from the D10-MERGE-2 head 9e4e34ca; G8-FLAG-2 (g8) from the tip; E4C-RUNBOOK-2 in verification; D10-MERGE-2 still running its checks",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     }
   ],
   "history": {
