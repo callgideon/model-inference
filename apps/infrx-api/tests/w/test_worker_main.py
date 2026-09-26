@@ -150,6 +150,8 @@ REFUSALS = {
     "RETENTION_INTERVAL_S": {"RETENTION_INTERVAL_S": "0"},
     "CACHE_SWEEP_INTERVAL_S": {"CACHE_SWEEP_INTERVAL_S": "0"},
     "JOURNAL_EXPIRE_INTERVAL_S": {"JOURNAL_EXPIRE_INTERVAL_S": "0"},
+    # P-25: a zero grace would make content collectable the moment it is released
+    "RETENTION_GRACE_S": {"RETENTION_GRACE_S": "0"},
 }
 
 
@@ -342,6 +344,57 @@ def test_worker_main__the_worker_is_the_one_owner_of_housekeeping(tmp_path, monk
         text = path.read_text()
         for owned in ("RetentionCollector", "cache.sweep", ".expire(", "housekeeping"):
             assert owned not in text, f"{path.name} composes {owned}: the worker owns it"
+
+
+# ------------------------------------------------------------------ P-25 (decided 2026-09-25)
+# Failure oracles: a worker lifecycle left on the library's 7-day grace (the P-25 grace
+# unwired or dropped), a grace the deployment cannot set, a cache high water and its alert
+# that disagree with each other or with the decision, or a cap above R's disk budget.
+def test_worker_main__the_lifecycle_grace_is_the_deployments(tmp_path):
+    """P-25: content becomes collectable 3,600 s after its last reference, from
+    `RETENTION_GRACE_S`, on the one lifecycle the collector and preparation share. The
+    library default (`lifecycle.GRACE_S`, 604,800 s) stays; it never reaches the worker."""
+    from infrx.state import lifecycle
+    assert lifecycle.GRACE_S == 604_800.0
+    service, _ = composed(environment(tmp_path, INFRX_MODE="dev"))
+    assert service.preparation.runner.media.content.grace_s == 3600.0
+    service, _ = composed(environment(tmp_path, INFRX_MODE="dev", RETENTION_GRACE_S="11"))
+    assert service.preparation.runner.media.content.grace_s == 11.0
+
+
+def test_worker_main__the_cache_high_water_and_its_alert_are_p25s():
+    """P-25: the cache high water is 50 GiB (eviction runs down to `prepare.LOW_WATER`,
+    0.8 of it, unchanged); `ProcessingCacheLarge` fires above the same figure and names
+    the decision; both sit under R's 60 GiB media disk budget (preflight, unchanged)."""
+    from infrx.config import DEPLOYMENT_DEFAULTS
+    from infrx.media.prepare import LOW_WATER
+    high = DEPLOYMENT_DEFAULTS.processing_cache_max_bytes
+    assert high == 50 * 2**30 and LOW_WATER == 0.8
+    ops = json.loads((REPO / "infra" / "alerts" / "operations.json").read_text())
+    rule, = [r for r in ops["rules"] if r["name"] == "ProcessingCacheLarge"]
+    assert rule["threshold"] == high and "50 GiB" in rule["summary"]
+    assert "P-25" in rule["threshold_status"]
+    assert "TO BE VERIFIED" not in rule["threshold_status"]
+    spec = importlib.util.spec_from_file_location("infrx_p25_preflight",
+                                                  API / "deploy" / "preflight.py")
+    preflight = sys.modules[spec.name] = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(preflight)
+    assert dict(preflight.DISK_BUDGET)["/opt/dlami/nvme/processing"] == 60 * 2**30 > high
+
+
+@pytest.mark.xfail(strict=True, reason="WR-P25-1: the gateway's PgLifecycle keeps the "
+                   "library's 604,800 s grace; its patch makes this pass and removes the mark")
+def test_worker_main__the_gateways_content_grace_is_the_deployments(tmp_path):
+    """P-25's grace for what the gateway registers: `upload_complete` and every source and
+    payload `MediaUploads._register` writes go through the one `PgLifecycle`
+    `adapters_from_env` builds (`uploads=` and `content=` in `build_ingress_deps`). Until
+    WR-P25-1 lands it stamps `lifecycle.GRACE_S`, and 0022's `greatest(eligible_at, ...)`
+    keeps the worker's later 3,600 s registration from shortening it: P-25's grace holds
+    only for worker-registered content. Strict, so the gap cannot close unrecorded."""
+    from infrx.gateway import pilot
+    settings = from_env(environment(tmp_path, INFRX_MODE="dev", RETENTION_GRACE_S="11"))
+    lifecycle = pilot.adapters_from_env(settings, objects=InMemoryObjectStore())["lifecycle"]
+    assert lifecycle.grace_s == settings.deployment.retention_grace_s == 11.0
 
 
 def test_worker_main__a_housekeeping_loop_outlives_a_failed_step():

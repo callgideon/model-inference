@@ -47,6 +47,11 @@ KEEPER = "test_worker_main__the_keeper_never_removes_an_input_the_engine_is_read
 GONE = "test_worker_main__a_gone_input_is_prepared_again_once_then_refused"
 EXITS = "test_worker_main__every_exit_path_releases_every_pin"
 EVERY = "test_worker_main__a_housekeeping_loop_outlives_a_failed_step"
+GRACE = "test_worker_main__the_lifecycle_grace_is_the_deployments"
+P25_CACHE = "test_worker_main__the_cache_high_water_and_its_alert_are_p25s"
+CONFIG = "config.py"
+OPS = "../../../infra/alerts/operations.json"                # from `infrx/`
+GATEWAY_GRACE = "test_worker_main__the_gateways_content_grace_is_the_deployments"
 RELEASE = "                stream.pins.close()\n                # Every exit path"
 RECON_OFF = "test_worker_main__without_a_monitor_login_the_reconciliation_gauges_are_off"
 RECON_REFUSED = "test_worker_main__a_login_refused_the_views_disables_the_gauges_once"
@@ -114,6 +119,27 @@ MUTANTS = (
        "media = MediaPreparation(objects, limits=limits,", OWNER),
     _m("main_cache_unbounded", "the cache's high water is PROCESSING_CACHE_MAX_BYTES",
        MAIN, "max_bytes=deployment.processing_cache_max_bytes,", "max_bytes=None,", OWNER),
+    # --- P25-ENACT (P-25, decided 2026-09-25) ----------------------------------------------
+    _m("main_retention_grace_dropped", "the worker's lifecycle carries the deployment's grace",
+       MAIN, "    lifecycle = PgLifecycle(connect, limits=limits,       # claim TTL 300 s > the 75 s delete\n"
+             "                            grace_s=deployment.retention_grace_s)     # P-25: 3,600 s\n",
+       "    lifecycle = PgLifecycle(connect, limits=limits)\n", GRACE),
+    _m("main_retention_grace_fixed", "the grace is read from RETENTION_GRACE_S",
+       MAIN, "grace_s=deployment.retention_grace_s)", "grace_s=3600.0)", GRACE),
+    _m("config_retention_grace_a_week", "the deployed grace is P-25's 3,600 s",
+       CONFIG, "    retention_grace_s: float = 3600.0\n",
+       "    retention_grace_s: float = 604_800.0\n", GRACE),
+    _m("config_cache_high_water_60gib", "the cache high water is P-25's 50 GiB",
+       CONFIG, "    processing_cache_max_bytes: int = 53_687_091_200\n",
+       "    processing_cache_max_bytes: int = 64_424_509_440\n", P25_CACHE),
+    _m("alert_cache_threshold_drifts", "ProcessingCacheLarge fires above the same high water",
+       OPS, '"threshold": 53687091200,', '"threshold": 64424509440,', P25_CACHE),
+    # --- P25-ENACT fix round (0-P25R-1/1-P25R-1); the runbook cases: tests/w/test_p25_runbooks.py
+    _m("gateway_grace_wired_unrecorded", "the gateway-grace gap stays recorded until "
+       "WR-P25-1's patch removes the strict mark (then: a mutant that drops its grace_s)",
+       PILOT, "        lifecycle = _pg_lifecycle(connect, settings.pilot)\n",
+       "        lifecycle = _pg_lifecycle(connect, settings.pilot)\n"
+       "        lifecycle.grace_s = settings.deployment.retention_grace_s\n", GATEWAY_GRACE),
     _m("main_housekeeping_started_twice", "exactly one task per housekeeping loop",
        SERVICE, "for name, loop in self.housekeeping.items()]",
        "for name, loop in [*self.housekeeping.items()] * 2]", OWNER),
@@ -235,6 +261,10 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     api = w3_mutants._layout(root)
     shutil.copytree(API_DIR.parents[1] / "tests" / "integration", root / "tests" / "integration",
                     dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    # P25-ENACT: the cache alert and R's disk budget the P-25 case reads
+    for name in ("apps/infrx-api/deploy/preflight.py", "infra/alerts/operations.json"):
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(API_DIR.parents[1] / name, root / name)
     return api
 
 

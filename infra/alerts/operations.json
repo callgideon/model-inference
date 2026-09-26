@@ -193,11 +193,11 @@
     {
       "name": "ProcessingCacheLarge",
       "severity": "ticket",
-      "summary": "The processing cache is above its 60 GiB budget on the instance-store NVMe.",
+      "summary": "The processing cache is above its 50 GiB high water on the instance-store NVMe.",
       "metric": "infrx_processing_cache_bytes",
       "op": ">",
-      "threshold": 64424509440,
-      "threshold_status": "derived: the 60 GiB media budget of infra/README.md §2 (est.); ⚠️ TO BE VERIFIED (P-18): against measured cache growth",
+      "threshold": 53687091200,
+      "threshold_status": "derived: P-25 (decided 2026-09-25), the 50 GiB cache high water (PROCESSING_CACHE_MAX_BYTES), under the 60 GiB media disk budget of infra/README.md §2",
       "runbook": "infra/runbooks/disk.md#disk-filling"
     },
     {
