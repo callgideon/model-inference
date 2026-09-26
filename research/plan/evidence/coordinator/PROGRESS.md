@@ -1,13 +1,13 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 05:16Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 88, updated 2026-09-26 05:16Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 05:23Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 90, updated 2026-09-26 05:23Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `7e0b7b95`), base `dff31efc`, main `dff31efc`.
+- Integration branch `claude/consumer-v1` (head `15f499b3`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 6 active lanes, 2 reserved.
+- Agent slots: 16 total, 5 active lanes, 2 reserved.
 - Validation: 0 error(s), 17 warning(s).
 
 ### Actionable blockers
@@ -105,7 +105,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (32.5 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (32.6 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -159,11 +159,11 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | KNOWN-GOOD-PROOF-2 | support P-25 / E4C prerequisite: extend both rollback targets' schema_proof from 0023 to 0025 on the D harness (i8), known-good.py --applied 0025 KNOWN-GOOD; from the D10-MERGE-2 head 9e4e34ca; workflow wf_13c39cc6-5bd | running | codex/known-good-proof-2 | 9e4e34ca → — | ports i8 postgres 55450 / valkey 55495 / pgbouncer 55496, prefix infrx-i8- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; 15-pending-inputs P-25 row | 1.5–4 h remaining (likely 2.5 h), confidence medium, estimated 2026-09-26 05:02Z; basis: the last proof lane took 128 min; two targets × 0024/0025 |
 | APP-0024-WIRE | support C0/U1R consume 0024: creditLedger via rpc consumer_credit_ledger (limit+1 ≤ 100), U1R P02 lines + usage filters via consumer_jobs parameters; from the D10-MERGE-2 head 9e4e34ca; workflow wf_26299e6f-6a4 | running | codex/app-0024-wire | 9e4e34ca → — | ports app-c0 postgres 55451, prefix infrx-app-c0- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; C0/U1R closure notes updated | 2–6 h remaining (likely 4 h), confidence medium, estimated 2026-09-26 05:02Z; basis: two App files + tests + mutants; real-PG stacks; 2 lenses, one fix round |
 | E3A-RUN | support (support lane for E3A, like E3A-PREP: the manifest gate BACKEND-READY is unchanged) E3A journey gate run on the merged SHA after BACKEND-LOCAL: E3C's two E3A wirings, operator-controls check on 0025, expired-content display, the four delegated cells bound to E3C-FINAL, runner + seam controls on the e4b block; from the D10-MERGE-2 head 9e4e34ca (dispatched ahead of BACKEND-READY under the user's App-ahead decision; the APP-LOCAL decision stays the coordinator's); workflow wf_9ffa037f-60d | running | codex/e3a-run | 9e4e34ca → — | ports e4b compose block 56800–56899 (edge 56860, control 56861, App 56870; one runner), prefix infrx-e4b- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; APP-LOCAL cells from the runner's verdict; gate decision after BACKEND-READY per the manifest | 3–8 h remaining (likely 5 h), confidence medium, estimated 2026-09-26 05:02Z; basis: two new checks + wirings + a journey run of ~2 min; 2 lenses, one fix round |
-| G8-FLAG-2 | support G8-FLAG carried minors R2/R3/R6 (audit operation pinned, lock-bound mutants runner-visible, --dry-run without a direction); from the tip 44ba44a9; workflow wf_ca5e636a-0d7 | running | codex/g8-flag-2 | 44ba44a9 → — | ports g8 postgres 55447 / valkey 55492, prefix infrx-g8- | 2026-09-26 05:02Z | verdict → merge onto the tip | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 05:02Z; basis: three small test/verb changes; 1 lens |
+| G8-FLAG-2 | support flag verb minors 0-G8FLAG-R2, 0-G8FLAG-R3, 1-G8FLAG-R6 | complete | codex/g8-flag-2 | 44ba44a9 → b108556f | ports g8 postgres 55447 / valkey 55492, prefix infrx-g8- | 2026-09-26 05:23Z | merged --no-ff at 15f499b3 (ACCEPT; minors G8F2-M1/M2 carried); fixed-clone check running | 0.1–0.5 h remaining (likely 0.2 h), confidence high, estimated 2026-09-26 05:12Z; basis: 4 owned files, no wiring, checks green |
 
 ### Queues and locks
 
-- Review queue: M6, E2C, A2, U1R, A3, C0.
+- Review queue: M6, E2C, A2, U1R, A3, C0, G8-FLAG-2.
 - Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -419,6 +419,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 05:23Z UTC, coordinator: L3-RERUN-0025 on 7e0b7b95: rls 916/0 (all 0024/0025 rows as expected); ob10 → WR-W5F5B-4 dashboard panel applied at 7eb9e69b; G8-FLAG-2 ACCEPT b108556f merged at 15f499b3
+- 2026-09-26 05:12Z UTC, G8-FLAG-2: running → review; head 223a3bd5; estimate likely 1 → 0.2 h (4 owned files, no wiring, checks green)
 - 2026-09-26 05:16Z UTC, coordinator (E3C): E3C rerun on the 0024/0025 tree 9e4e34ca: BACKEND-LOCAL PASS (85 cases, 9/9 controls, s10 with the new surface); codex/e3c-rerun 1bfc327d merged; gate candidate refreshed
 - 2026-09-26 05:16Z UTC, E3C: running → review; head 8b824cd0
 - 2026-09-26 05:11Z UTC, coordinator: L3-RERUN-0025 dispatched: E2 layer-3 role matrix on the merged tip 7e0b7b95 (e2c namespace, read-only clone); eight parallel runs active
