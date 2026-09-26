@@ -2,6 +2,8 @@
 # RV-09 / D10 wiring 6 / R127: put the installed runtime on 0021's dedicated logins. Run after
 # W7 (0021 created infrx_runtime and infrx_monitor NOLOGIN) and after every 50-install (W10b):
 # install.sh rewrites the env file from SSM, where DATABASE_URL is pg_journal_url, the owner login.
+# Only for a release with R127's dedicated logins: never after a pre-R127 target (4226315,
+# bda1586), whose pool sets role service_role, which infrx_runtime may not (rollout.md §3).
 #  1. reads, by NAME, the two passwords (RUNTIME_PASSWORD_PARAM, MONITOR_PASSWORD_PARAM) and the
 #     owner DSN (OWNER_DSN_PARAM: preflight's pg_journal_url, the migration login on the session
 #     pooler) into a 0600 file - never an argument, never printed;
