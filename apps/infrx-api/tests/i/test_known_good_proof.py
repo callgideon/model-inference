@@ -66,7 +66,7 @@ def test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema():
               if r.get("known_good") and r.get("schema_proof")}
     assert set(proven) == {"4226315", "bda1586"}
     for proof in proven.values():
-        assert proof["through"] >= "0025" and proof["through"] in tree       # KNOWN-GOOD-PROOF-2
+        assert proof["through"] >= "0026" and proof["through"] in tree       # KNOWN-GOOD-PROOF-3
         assert any("KNOWN-GOOD-PROOF-" in p for p in proof["evidence"])
         # the bytes it ran on, beyond both targets' 0001-0018: a revised 0022/0023 fails here
         assert proof["files"] == {v: h for v, h in tree.items() if "0018" < v <= proof["through"]}
@@ -127,12 +127,13 @@ def test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order():
         "statements differ from the candidate's files: ['0002']"
 
 
-def test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond(tmp_path):
-    """KNOWN-GOOD-PROOF-2 (RR:51): each target's REAL record entry, judged against this
-    checkout's real 0019-0025 bytes, is KNOWN-GOOD with hosted at 0024/0025 and NOT at 0026,
-    which no proof reaches. The target tree is a stand-in commit (0001-0018 and the
+def test_ops_recover__both_targets_are_known_good_through_0026_and_not_beyond(tmp_path):
+    """KNOWN-GOOD-PROOF-2/-3 (RR:51): each target's REAL record entry, judged against this
+    checkout's real 0019-0026 bytes, is KNOWN-GOOD with hosted at 0024-0026 and NOT at 0027,
+    which no proof reaches (0026 fences put_result; its lease-less call, the targets' write,
+    is 0014's). The target tree is a stand-in commit (0001-0018 and the
     preparation loop, as both targets carry) because mutation copies are not git checkouts;
-    the real-sha verdicts are the evidence's `known-good.py <sha> --applied 0025|0026` runs."""
+    the real-sha verdicts are the evidence's `known-good.py <sha> --applied 0026|0027` runs."""
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "trunk")
@@ -148,7 +149,7 @@ def test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond(tm
             (repo / path).parent.mkdir(parents=True, exist_ok=True)
             (repo / path).touch()
         at = {applied: judge(target, applied, [], None, {"releases": [entry]}, repo)
-              for applied in ("0024", "0025", "0026")}
-        assert at["0024"]["verdict"] == at["0025"]["verdict"] == "KNOWN-GOOD", (real["sha"], at)
-        assert at["0026"]["verdict"] == "NOT-KNOWN-GOOD"
-        assert [c["check"] for c in at["0026"]["checks"] if not c["ok"]] == ["migrations"]
+              for applied in ("0024", "0025", "0026", "0027")}
+        assert {at[a]["verdict"] for a in ("0024", "0025", "0026")} == {"KNOWN-GOOD"}, (real["sha"], at)
+        assert at["0027"]["verdict"] == "NOT-KNOWN-GOOD"
+        assert [c["check"] for c in at["0027"]["checks"] if not c["ok"]] == ["migrations"]
