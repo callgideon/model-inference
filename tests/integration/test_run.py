@@ -870,8 +870,11 @@ def test_provision_database_statements_are_the_ones_r_a_requires():
 
     with patched(harness, run=fake_run, assert_ours=lambda name: name):
         detail = harness.provision_database()
-    assert len(issued) == 1, issued
-    argv = issued[0]
+    # 0024 (W-D10A-1): GoTrue's columns go onto the template first, so the copy has them
+    assert len(issued) == 2, issued
+    assert issued[0][-2:] == ["-c", harness.GOTRUE_COLUMNS] and \
+        issued[0][issued[0].index("-d") + 1] == harness.PG_TEMPLATE_SOURCE, issued[0]
+    argv = issued[1]
     assert argv[:3] == ["docker", "exec", "-i"], argv[:3]
     assert argv[3] == f"{harness.PREFIX}postgres"
     assert argv[4:8] == ["psql", "-U", harness.PG_ADMIN_ROLE, "-d"], argv[4:8]

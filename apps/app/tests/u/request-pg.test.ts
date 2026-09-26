@@ -148,9 +148,6 @@ const T = {
   direct: "U4-P08 consumer_job_result alone refuses what the API withholds: an unknown-usage success is result_pending",
 };
 
-/** P08 stays a TODO until D10 applies WR-U4-2; that migration's patch removes this line. */
-const WR_U4_2 = "WR-U4-2 (D10 SQL) not applied: consumer_job_result returns an unknown-usage success's body";
-
 test(T.agree, { skip }, async () => {
   try {
     for (const delta of WORLD.instants) {
@@ -329,7 +326,7 @@ test(T.gate, { skip }, async () => {
 
 // The grant to `authenticated` is a real PostgREST endpoint: the anon key plus the user's JWT
 // reaches it without the App, so the RPC itself must withhold what `read_outcome` withholds.
-test(T.direct, { skip, todo: WR_U4_2 }, () => {
+test(T.direct, { skip }, () => {
   at(0);
   const direct = sql({ user: WORLD.user }, `select to_json(public.consumer_job_result(${lit(WORLD.jobs.unknown)}))`);
   assert.equal(direct.data, null, "consumer_job_result served an unknown-usage result");

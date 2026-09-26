@@ -1143,10 +1143,10 @@ def test_worker_main__the_reconciliation_gauges_are_read_on_the_monitor_login(
 
 def test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not(
         tmp_path, caplog):
-    """On a database migrated through 0021/0022 (the e2c block): the runtime login is
-    refused the reconciliation statement (the E3C F-6 symptom); the monitor login, as 0021
-    grants it, is refused only `infrx.credit_wallet_holds` - so the gauges disable once
-    (WR-W5F5-1 is the grant) - and with that grant the monitor login publishes the pass."""
+    """On a database migrated through 0024: the runtime login is refused the reconciliation
+    statement (the E3C F-6 symptom), and composed as the reader it disables the gauges once;
+    the monitor login - 0021's views plus 0024's `credit_wallet_holds.state` grant and policy
+    (WR-W5F5-1) - publishes the pass."""
     import secrets
 
     from ..d import pgharness
@@ -1169,16 +1169,12 @@ def test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not(
         asyncio.run(runtime())
 
     caplog.set_level(logging.INFO, logger="infrx.worker")
-    service, _ = composed(environment(tmp_path, MONITOR_DATABASE_URL=logins["infrx_monitor"]))
+    service, _ = composed(environment(tmp_path, MONITOR_DATABASE_URL=logins["infrx_runtime"]))
     ticks(service)
     assert service.reconciliation is None and service.reap_errors == 0
     assert said(caplog, "disabled") == ["reconciliation gauges disabled: the login may not "
                                         "read the reconciliation views (InsufficientPrivilege)"]
 
-    with pgharness.connect(database) as owner:      # WR-W5F5-1, as D10 would write it
-        owner.execute("grant select (state) on infrx.credit_wallet_holds to infrx_monitor")
-        owner.execute("create policy monitor_reads on infrx.credit_wallet_holds for select "
-                      "to infrx_monitor using (true)")
     service, _ = composed(environment(tmp_path, MONITOR_DATABASE_URL=logins["infrx_monitor"]))
     ticks(service, 1)
     rendered = service.metrics.render()

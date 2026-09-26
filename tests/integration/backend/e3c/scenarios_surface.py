@@ -33,7 +33,12 @@ BROWSER_FUNCTIONS = {
     "public.console_legacy_usd_statement"}
 # 0021 (D10, C0/U4): the signed-in consumer's own reads, auth.uid()-scoped, granted to
 # `authenticated` only - never `anon` (anon executing them is still reported).
-SIGNED_IN_FUNCTIONS = {"public.consumer_jobs", "public.consumer_job_result"}
+SIGNED_IN_FUNCTIONS = {"public.consumer_jobs", "public.consumer_job_result",
+                       "public.consumer_credit_ledger",              # 0024 (D10-APP-SQL)
+                       "public.consumer_may_create_key",             # 0024 (C3A WR-C3A-4)
+                       # 0025 (D10-0025, R143): operator writes, is_operator() inside
+                       "public.operator_adjust_credit", "public.operator_set_suspension",
+                       "public.operator_revoke_key"}
 BROWSER_WRITES = {("public.profiles", "UPDATE"), ("public.organizations", "UPDATE"),
                   ("public.api_keys", "UPDATE")}
 

@@ -10,17 +10,29 @@ runner, `assertion_kill` underneath. They are in the default subset (`ALWAYS`).
 """
 from __future__ import annotations
 
-from . import checks_content, checks_followup, checks_reads, checks_ready, pgharness
+from . import (checks_content, checks_followup, checks_operator, checks_port, checks_reads,
+               checks_ready, pgharness)
 from . import migration_mutants as _d
 
 READY = _d.READY
 #: The D10 follow-up (W5 request 3, G8 V-G8TL-2).
 FOLLOWUP = "0022_preparation_refusal_and_flag_writer.sql"
+#: D10-APP-SQL: the console read port (C0 WR-5, U1R WR-3). It redefines 0021's
+#: `consumer_jobs` and `consumer_job_result`, so the mutants of those bodies live on 0024's
+#: copies (same name, edit and check).
+PORT = "0024_console_read_port.sql"
+#: D10-0025: the operator console's audited RPCs and reads (U3 WR-U3-1, R143).
+OPERATOR = "0025_operator_console.sql"
 
 
 def _m(name, file, old, new, check, why, **kw):
     return _d.Mutant(name, file, old, new, "admission", check, why, **kw)
 
+
+#: Killed on the plain image only: their check reads the nested plan through auto_explain,
+#: which Supabase's non-superuser `postgres` cannot LOAD (measured) - the suite case
+#: `test_a_ledger_page_is_a_limit_bounded_index_range` is a declared skip there too.
+PLAIN_IMAGE_ONLY = frozenset({"d10_ledger_page_sorts"})
 
 MIGRATION_MUTANTS = (
     # --- the failure oracles of §D10.d that 0019 carries ----------------------------------
@@ -216,10 +228,10 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
     _m("d10_reconcile_race_untyped", READS,
        "  perform pg_advisory_xact_lock(hashtextextended(v_key, 0));\n", "", "reconcile_race",
        "duplicate reconcile audit: a racing replay dies on a raw 23505"),
-    _m("d10_consumer_reads_any_tenant", READS,
+    _m("d10_consumer_reads_any_tenant", PORT,
        "   where v_org is not null and j.org_id = v_org\n", "   where true\n", "consumer_reads",
        "bypass the tenant join: an individual lists other individuals' jobs"),
-    _m("d10_consumer_result_past_expiry", READS,
+    _m("d10_consumer_result_past_expiry", PORT,
        "  return infrx.read_result(v_org, 'infrx-result:' || p_request_id);",
        "  return (select x.body from infrx.job_results x where x.request_id = p_request_id);",
        "consumer_reads", "an expired or scrubbed result is shown in the App"),
@@ -249,11 +261,11 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "legacy_scrub",
        "R116: a NOT VALID success-has-expiry check re-checks every UPDATE of a pre-0018 "
        "success, so its content never scrubs and the sweep retries forever (review 1-RI-1)"),
-    _m("d10_consumer_unit_mislabelled", READS,
+    _m("d10_consumer_unit_mislabelled", PORT,
        "         case j.accounting_regime when 'credit' then 'CREDIT' else 'USD' end,",
        "         'CREDIT',", "consumer_reads",
        "a USD job is shown in the App labelled CREDIT (units are exact and separate)"),
-    _m("d10_consumer_limit_unbounded", READS,
+    _m("d10_consumer_limit_unbounded", PORT,
        "   limit greatest(1, least(coalesce(p_limit, 50), 100));",
        "   limit greatest(1, coalesce(p_limit, 50));", "consumer_reads",
        "a browser pages an unbounded history in one call"),
@@ -397,6 +409,177 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "a browser session flips a feature flag"),
 )
 
+MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
+    # --- 0024: the console read port (D10-APP-SQL) ---------------------------------------
+    _m("d10_ledger_any_wallet", PORT,
+       "   where w.owner_user_id = auth.uid() and w.kind = 'consumer';\n  return query\n"
+       "  select l.entry_id",
+       "   where w.kind = 'consumer';\n  return query\n  select l.entry_id", "port_ledger",
+       "drop the ownership check: an individual pages another individual's CREDIT ledger"),
+    _m("d10_ledger_limit_uncapped", PORT,
+       "  if p_limit is null or p_limit < 1 or p_limit > 100 then",
+       "  if p_limit is null or p_limit < 1 then", "port_ledger",
+       "drop the page cap: a browser reads an unbounded ledger in one call"),
+    _m("d10_ledger_page_sorts", PORT,
+       "   order by l.created_at desc, l.entry_id desc\n   limit p_limit;",
+       "   order by l.created_at desc, l.entry_id\n   limit p_limit;", "port_ledger_plan",
+       "the page no longer follows the index: a sort over the wallet per page (C0 WR-5)"),
+    _m("d10_credits_in_unindexed", PORT,
+       "create index if not exists credit_ledger_wallet_credits_in_idx\n"
+       "  on infrx.credit_ledger (wallet_id) where kind <> 'inference_debit';", "",
+       "port_credits_in", "\"Spent\" filters every wallet entry by kind (U1R WR-3(b))"),
+    _m("d10_jobs_key_filter_ignored", PORT,
+       "     and (p_key_id is null or j.key_id = p_key_id)\n", "", "port_jobs_filters",
+       "the per-key usage filter answers every key's jobs (U1R WR-3(a))"),
+    _m("d10_result_served_while_unreconciled", PORT,
+       "              and (j.settlement_state is not distinct from 'held_unknown'\n"
+       "                   or j.usage_prompt_tokens is null)) then",
+       "              and false) then", "port_result_withheld",
+       "the direct RPC serves an unknown-usage result the API withholds (U4 WR-U4-2)"),
+    _m("d10_key_insert_unverified", PORT,
+       "  with check (public.is_org_owner(org_id) and created_by = auth.uid()\n"
+       "              and public.consumer_may_create_key());",
+       "  with check (public.is_org_owner(org_id) and created_by = auth.uid());",
+       "port_key_insert",
+       "an unverified individual's JWT inserts an api_keys row directly (C3A WR-C3A-4)"),
+    _m("d10_key_insert_verification_ignored", PORT,
+       "     where v.verification_evidence_ref is not null\n",
+       "     where true\n", "port_key_insert",
+       "an individual whose email is not verified mints keys (the claim path's predicate)"),
+    _m("d10_key_insert_needs_a_wallet", PORT,
+       "      join auth.users u on u.id = v.user_id\n",
+       "      join auth.users u on u.id = v.user_id\n"
+       "      join infrx.credit_wallets w on w.owner_user_id = v.user_id and w.kind = 'consumer'\n",
+       "port_key_insert",
+       "a verified owner without a consumer wallet - a legacy USD pilot owner - can no longer "
+       "create keys in the browser (1-D10R-2)"),
+    _m("d10_monitor_holds_ungranted", PORT,
+       "grant select (state) on infrx.credit_wallet_holds to infrx_monitor;\n", "",
+       "port_monitor", "the worker's gauges on the monitor login fail on CREDIT holds (W5-F5)"),
+    _m("d10_monitor_holds_without_policy", PORT,
+       "create policy monitor_reads on infrx.credit_wallet_holds for select to infrx_monitor\n"
+       "  using (true);", "", "port_monitor",
+       "RLS answers the monitor zero CREDIT unknown holds: the gauge reads 0 while holds wait"),
+    _m("d10_ledger_for_the_runtime", PORT,
+       "grant execute on function public.consumer_credit_ledger(text, integer)\n"
+       "  to authenticated, service_role;",
+       "grant execute on function public.consumer_credit_ledger(text, integer)\n"
+       "  to authenticated, service_role, infrx_runtime;", "port_privileges",
+       "the runtime login gains a consumer read (R122-R127 least privilege)"),
+)
+
+MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
+    # --- 0025: the operator console (D10-0025, U3 WR-U3-1, R143) --------------------------
+    _m("d10_operator_without_is_operator", OPERATOR,
+       "  if auth.uid() is null or not public.is_operator() then",
+       "  if auth.uid() is null then", "operator_authority",
+       "any signed-in consumer's JWT mints credit, suspends orgs and revokes keys"),
+    _m("d10_operator_actor_from_an_argument", OPERATOR,
+       "  return 'operator:' || auth.uid()::text;",
+       "  return 'operator:' || btrim(p_reason);", "operator_authority",
+       "the audit actor is whatever the form sends, not the JWT's operator"),
+    _m("d10_operator_adjust_key_unprefixed", OPERATOR,
+       "md5('app-operator:adjust:' || p_idempotency_key)", "md5(p_idempotency_key)",
+       "operator_idempotency", "console adjustments leave the app-operator key namespace"),
+    _m("d10_operator_suspension_key_unprefixed", OPERATOR,
+       "  v_key text := 'app-operator:suspension:' || p_idempotency_key;",
+       "  v_key text := p_idempotency_key;", "operator_idempotency",
+       "a console suspension under a key the CLI already used is refused as a conflict"),
+    _m("d10_operator_revoke_key_unprefixed", OPERATOR,
+       "  v_key text := 'app-operator:revoke:' || p_idempotency_key;",
+       "  v_key text := p_idempotency_key;", "operator_idempotency",
+       "a console revocation under a key the CLI already used is refused as a conflict"),
+    _m("d10_operator_suspension_replays_any_target", OPERATOR,
+       "  if a.target_org_id is distinct from p_org\n"
+       "     or (a.after->>'suspended')::boolean is distinct from p_suspended then",
+       "  if false then", "operator_idempotency",
+       "a reused key for another org or status answers replayed and changes nothing"),
+    _m("d10_operator_suspension_without_code", OPERATOR,
+       "infrx.set_suspension(p_org, p_suspended, case when p_suspended then 'other' end, v_actor,",
+       "infrx.set_suspension(p_org, p_suspended, null, v_actor,", "operator_suspension",
+       "a console suspension records no closed reason code (R59 (2))"),
+    _m("d10_operator_revoke_replays_any_key", OPERATOR,
+       "    if a.after->>'key_id' is distinct from p_key::text then", "    if false then",
+       "operator_idempotency", "a reused key for another credential answers replayed; "
+       "the credential stays live"),
+    _m("d10_operator_revokes_twice", OPERATOR,
+       "  if k.revoked_at is not null then\n"
+       "    return jsonb_build_object('replayed', true);", "  if false then\n"
+       "    return jsonb_build_object('replayed', true);", "operator_revoke",
+       "re-revoking a revoked key reports a new change (replayed: false)"),
+    _m("d10_operator_revokes_any_audience", OPERATOR,
+       "where id = p_key and audience = 'consumer' for update;",
+       "where id = p_key for update;", "operator_revoke",
+       "the console revokes the operator-audience key"),
+    _m("d10_operator_suspension_unserialized", OPERATOR,
+       "  -- used key, so it must never be what decides a console replay.\n"
+       "  perform pg_advisory_xact_lock(hashtextextended(v_key, 0));\n",
+       "  -- used key, so it must never be what decides a console replay.\n",
+       "operator_races", "a racing retry or reuse under one key is a raw unique violation "
+       "(the App says 'not confirmed') instead of a replay or a conflict"),
+    _m("d10_operator_revoke_unserialized", OPERATOR,
+       "  -- credential while its first use commits is a conflict, never a raw unique violation.\n"
+       "  perform pg_advisory_xact_lock(hashtextextended(v_key, 0));\n",
+       "  -- credential while its first use commits is a conflict, never a raw unique violation.\n",
+       "operator_races", "a key reused for another credential while its first use commits "
+       "is a raw unique violation, not idempotency_conflict"),
+    _m("d10_operator_drift_for_everyone", OPERATOR,
+       "where (r.ledger_drift <> 0 or r.reserved_drift <> 0)\n"
+       "  and (public.is_operator() or public.is_service_client());",
+       "where (r.ledger_drift <> 0 or r.reserved_drift <> 0);", "operator_views",
+       "every consumer reads every drifting wallet"),
+    _m("d10_operator_queue_for_everyone", OPERATOR,
+       "where j.settlement_state = 'held_unknown'\n"
+       "  and (public.is_operator() or public.is_service_client());",
+       "where j.settlement_state = 'held_unknown';", "operator_views",
+       "every consumer reads every organization's unknown-usage queue"),
+    _m("d10_operator_views_writable_by_the_platform", OPERATOR,
+       "revoke all on public.operator_wallet_drift, public.operator_unknown_usage\n"
+       "  from public, anon, authenticated, service_role;",
+       "revoke all on public.operator_wallet_drift, public.operator_unknown_usage\n"
+       "  from public, anon, authenticated;", "operator_views",
+       "the platform key writes credit_wallets through the drift view (0006 took that away)"),
+    _m("d10_operator_adjust_for_anon", OPERATOR,
+       "grant execute on function public.operator_adjust_credit(uuid, text, text, text) "
+       "to authenticated;",
+       "grant execute on function public.operator_adjust_credit(uuid, text, text, text) "
+       "to authenticated, anon;", "operator_privileges",
+       "anon executes an operator write (refused inside, but least privilege is gone)"),
+    _m("d10_operator_helper_callable", OPERATOR,
+       "revoke all on function infrx.console_operator(text, text)\n"
+       "  from public, anon, authenticated, service_role;\n", "", "operator_privileges",
+       "the guard keeps the default ACL: callable outside the three definer bodies"),
+    # 0018's guards, which the console path relies on (no second money check in 0025)
+    _m("d10_operator_zero_adjustment", _d.SETTLE,
+       "  if v_amount = 0 or (v_kind = 'operator_allocation' and v_amount < 0) then",
+       "  if (v_kind = 'operator_allocation' and v_amount < 0) then", "operator_adjust",
+       "a zero adjustment is written from the console"),
+    _m("d10_operator_below_zero", _d.SETTLE,
+       "  if w.ledger_total + v_amount < w.reserved_total then", "  if false then",
+       "operator_adjust", "a console correction below the holds is not refused typed"),
+)
+
+_d._CHECKS.update({
+    "operator_authority": checks_operator.check_operator_authority,
+    "operator_idempotency": checks_operator.check_operator_idempotency,
+    "operator_adjust": checks_operator.check_operator_adjust,
+    "operator_suspension": checks_operator.check_operator_suspension,
+    "operator_revoke": checks_operator.check_operator_revoke,
+    "operator_views": checks_operator.check_operator_views,
+    "operator_privileges": checks_operator.check_operator_privileges,
+    "operator_races": lambda conn: checks_operator.check_operator_races(pgharness.connect,
+                                                                        _d.MUT_DB),
+})
+_d._CHECKS.update({
+    "port_ledger": checks_port.check_consumer_credit_ledger,
+    "port_ledger_plan": checks_port.check_ledger_page_plan,
+    "port_credits_in": checks_port.check_credits_in_index,
+    "port_jobs_filters": checks_port.check_consumer_jobs_filters,
+    "port_privileges": checks_port.check_port_privileges,
+    "port_result_withheld": checks_port.check_result_withheld,
+    "port_key_insert": checks_port.check_key_insert_needs_verified_individual,
+    "port_monitor": lambda conn: checks_port.check_monitor_reads_unknown_holds(conn, _d.MUT_DB),
+})
 _d._CHECKS.update({
     "fail_preparation": checks_followup.check_fail_preparation,
     "refetch_refresh": checks_followup.check_written_reregistration_refreshes,

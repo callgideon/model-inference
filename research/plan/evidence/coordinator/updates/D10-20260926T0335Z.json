@@ -1,0 +1,66 @@
+{
+ "task": "D10",
+ "slice": "D10-0025 fix round: 1-F1 (W-D10B-1 v2 adds public.operator_unknown_usage / public.operator_wallet_drift to pgstate.SERVICE_WRITES' read-only set; composed role matrix incl. write rows 916 rows, 2 failed -> 0 failed); 0025 unchanged",
+ "activity": "review",
+ "head": "0bdb16ed + fix-round evidence commit (code head 47d252e7)",
+ "worktree": ".claude/worktrees/codex-d10-0025",
+ "branch": "codex/d10-0025",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0025_operator_console.sql",
+  "apps/infrx-api/tests/d/",
+  "research/plan/evidence/d/D10-0025-47d252e.md"
+ ],
+ "commands": [
+  {
+   "cmd": "scratch composition (consumer-v1 4acb4f42 + union d9e72c9c + 0bdb16ed + W-D10A-1 v2 + WR-D10B-2 + W-D10B-1 v1): pgstate apply_migrations/install_test_clock/seed_fixtures/run_role_matrix on D harness (revoke, supabase)",
+   "exit": 0,
+   "summary": "fails-before: 916 rows, 2 failed (E3B-RLS-W-public.operator_unknown_usage-service_role, E3B-RLS-W-public.operator_wallet_drift-service_role)"
+  },
+  {
+   "cmd": "same with W-D10B-1 v2",
+   "exit": 0,
+   "summary": "916 rows, 0 failed (198 write rows); completeness clean; S10 no extra"
+  },
+  {
+   "cmd": "same with v2 + grant all on both views to service_role",
+   "exit": 0,
+   "summary": "916 rows, 2 failed (the same two write rows): rows are live"
+  },
+  {
+   "cmd": "INFRX_D_TASK=revoke pytest -q tests/d/test_operator_d10 test_port_d10 test_reads test_upgrade_d10 test_followup_d10 test_schema_postgres test_credit_schema test_postgrest_d10 (plain / supabase) @0bdb16ed",
+   "exit": 0,
+   "summary": "plain 110 passed, 1 skipped, 3 xfailed; supabase 110 passed, 1 skipped, 3 xfailed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k 'd10_ or operator or well_formed or superseded' (plain / supabase) @0bdb16ed",
+   "exit": 0,
+   "summary": "plain 123 passed; supabase 122 passed, 1 skipped (d10_ledger_page_sorts, plain only)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=revoke INFRX_D1_IMAGE=supabase python ../app/tests/u/operator_stack.py (composed clone, WR-D10B-2 + W-D10B-1 v2)",
+   "exit": 0,
+   "summary": "9/9 pass; durable 4 operator adjustments, 4 distinct operations, no read-back problem"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py",
+   "exit": 0,
+   "summary": "PASS"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1.5,
+  "confidence": "medium",
+  "basis": "whole role matrix incl. write rows 916/916 on the composed tree; D suites + mutants green on both images; U3 stack 9/9; e2 layer-3 run on the merged SHA remains",
+  "at": "2026-09-26T03:35Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "W-D10B-1 v2 (replaces v1; exact patch in the evidence Fix round, sha256 aafded60...9a9f): e3c SIGNED_IN_FUNCTIONS, pgstate SIGNED_IN + RELATIONS/VIEWS/FUNCTIONS rows + SERVICE_WRITES read-only entries for the two 0025 views, test_harness migration list",
+  "WR-D10B-2 (unchanged): operator_stack.py drops the proposed-SQL apply; git rm apps/app/tests/u/operator_rpc_proposed.sql"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/D10-0025-47d252e.md"
+ ]
+}

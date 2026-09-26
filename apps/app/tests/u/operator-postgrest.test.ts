@@ -1,7 +1,7 @@
 // node --test "tests/**/*.test.ts"   (skips visibly without the stack)
 //
 // U3 DUR-RLS / DUR-CAP / CONSOLE-FLOWS through the REAL path: the pinned Supabase PostgreSQL with
-// every committed migration plus WR-U3-1's proposed operator SQL, PostgREST v13.0.4, supabase-js
+// every committed migration (0025 has WR-U3-1's operator RPCs), PostgREST v13.0.4, supabase-js
 // and signed JWTs. The App's own `operatorReads` and `operatorRpcPort` run unchanged, and the
 // operator action runs through C3A's `consoleActions` composed exactly as WR-U3-2 wires it.
 //

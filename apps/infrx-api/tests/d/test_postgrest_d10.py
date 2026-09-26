@@ -18,13 +18,16 @@ import hmac
 import json
 import subprocess
 import time
+import uuid
 
 import pytest
-from infrx.state import migrations
+from infrx.contracts.conformance import builders as b
+from infrx.state import migrations, pgtesting
 
 from . import checks_admission as ca
 from . import checks_content as ck
 from . import checks_credit as cc
+from . import checks_signup
 from . import pgharness
 
 POSTGREST = ("postgrest/postgrest@sha256:"
@@ -123,6 +126,7 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
     pgharness.recreate(DB)
     pgharness.apply(DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
     conn = pgharness.connect(DB)
+    checks_signup.gotrue_columns(conn)   # GoTrue's email_confirmed_at; the bare image lacks it
     ca.seed_admission(conn)
     world = ca.World(conn)
     settled, _ref = ck._settled_with_result(conn, world, result_ttl_s=600.0)
@@ -150,6 +154,46 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
         assert foreign.status_code >= 400 and "not_found" in foreign.text, foreign.text
         anon = rpc("consumer_jobs", {}, None)
         assert anon.status_code in (401, 403), anon.text
+        # 0024 (D10-APP-SQL): the own-ledger page and the consumer_jobs filters resolve
+        # through PostgREST's named-argument dispatch (one function each, no ambiguity)
+        ledger = rpc("consumer_credit_ledger", {"p_limit": 2}, _jwt(me))
+        wallet = cc.wallet_of(conn, me)
+        own = [str(e) for e, in conn.execute(
+            "select entry_id from infrx.credit_ledger where wallet_id = %s order by "
+            "created_at desc, entry_id desc limit 2", (wallet,))]
+        assert ledger.status_code == 200 and [r["entry_id"] for r in ledger.json()] == own \
+            and all(isinstance(r["amount"], str) and "wallet_id" not in r and "actor" not in r
+                    for r in ledger.json()), ledger.text
+        theirs = rpc("consumer_credit_ledger", {}, _jwt(other))
+        assert theirs.status_code == 200 and not {r["entry_id"] for r in theirs.json()} & \
+            set(own), theirs.text
+        capped = rpc("consumer_credit_ledger", {"p_limit": 101}, _jwt(me))
+        assert capped.status_code == 400 and "invalid_request" in capped.text, capped.text
+        assert rpc("consumer_credit_ledger", {}, None).status_code in (401, 403)
+        by_key = rpc("consumer_jobs", {"p_key_id": ca.C1_KEY, "p_limit": 10}, _jwt(me))
+        assert by_key.status_code == 200 and settled.request_id in \
+            {r["request_id"] for r in by_key.json()}, by_key.text
+        none = rpc("consumer_jobs", {"p_model": "nobody/none"}, _jwt(me))
+        assert none.status_code == 200 and none.json() == [], none.text
+        # 0024 (C3A WR-C3A-4): a direct key INSERT needs a verified individual - `me` holds a
+        # wallet but is not email-verified in this fixture; a verified legacy pilot owner
+        # (no consumer wallet) still mints through the deployed console's path (1-D10R-2)
+        def mint(user, tag, org=None):
+            return httpx.post(f"{base}/api_keys", json={
+                "org_id": org or cc.personal_org(conn, user), "created_by": user, "name": "k",
+                "prefix": "sk-infrx-rest0000", "key_hash": f"hash-rest-{tag}"},
+                headers={"Authorization": f"Bearer {_jwt(user)}", "Prefer": "return=minimal",
+                         "Content-Type": "application/json"}, timeout=10)
+        unverified = mint(me, "unverified")
+        assert unverified.status_code in (401, 403) and "42501" in unverified.text, \
+            unverified.text
+        conn.execute("update auth.users set email_confirmed_at = now() where id = %s", (me,))
+        verified = mint(me, "verified")
+        assert verified.status_code == 201, verified.text
+        pilot = pgtesting.USERS[b.ORG_A]
+        conn.execute("update auth.users set email_confirmed_at = now() where id = %s", (pilot,))
+        owner = mint(pilot, "pilot", b.ORG_A)
+        assert owner.status_code == 201 and cc.wallet_of(conn, pilot) is None, owner.text
         # a browser session never writes a key's audience or provider scope
         patch = httpx.patch(f"{base}/api_keys?id=eq.{ca.C1_KEY}", json={"audience": "operator"},
                             headers={"Authorization": f"Bearer {_jwt(me)}",
@@ -159,6 +203,48 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
         hidden = httpx.get(f"{base}/content_objects", headers={
             "Authorization": f"Bearer {_jwt(me)}"}, timeout=10)
         assert hidden.status_code == 404, hidden.text
+        # 0025 (D10-0025, U3 WR-U3-1, R143): the operator console's RPCs with each principal's
+        # own JWT - the operator commits once, then replays; the same key for another key id
+        # is idempotency_conflict; a consumer is refused by is_operator() (42501 -> 403); anon
+        # and the platform key hold no EXECUTE (42501 -> 401 / 403)
+        ops = "0d100000-0000-4000-8000-0000000000e1"
+        conn.execute("insert into auth.users (id, email) values (%s, 'ops@example.com')", (ops,))
+        conn.execute("update public.profiles set is_operator = true where id = %s", (ops,))
+        key = f"rest-{uuid.uuid4()}"
+        calls = {
+            "operator_adjust_credit": {"p_user": other, "p_amount": "2.5", "p_reason": "rest",
+                                       "p_idempotency_key": key},
+            "operator_set_suspension": {"p_org": cc.personal_org(conn, other),
+                                        "p_suspended": False, "p_reason": "rest",
+                                        "p_idempotency_key": key},
+            "operator_revoke_key": {"p_key": ca.C2_KEY, "p_reason": "rest",
+                                    "p_idempotency_key": key}}
+        for name, body in calls.items():
+            for token, status in ((_jwt(me), 403), (None, 401), (_jwt(None, "service_role"), 403)):
+                denied = rpc(name, body, token)
+                assert denied.status_code == status and "42501" in denied.text, \
+                    (name, denied.status_code, denied.text)
+            first = rpc(name, body, _jwt(ops))
+            assert first.status_code == 200 and first.json()["replayed"] is False, first.text
+            again = rpc(name, body, _jwt(ops))
+            assert again.status_code == 200 and again.json()["replayed"] is True, again.text
+        assert first.json() == {"replayed": False} and rpc(
+            "operator_adjust_credit", calls["operator_adjust_credit"], _jwt(ops)).json() == \
+            {"replayed": True, "unit": "CREDIT", "amount": "2.50000000"}
+        conflict = rpc("operator_revoke_key", {**calls["operator_revoke_key"],
+                                               "p_key": ca.C1_KEY}, _jwt(ops))
+        assert conflict.status_code == 400 and "idempotency_conflict" in conflict.text, \
+            conflict.text
+
+        def read(relation, sub):
+            headers = {"Authorization": f"Bearer {_jwt(sub)}"} if sub else {}
+            return httpx.get(f"{base}/{relation}", headers=headers, timeout=10)
+        for relation in ("operator_unknown_usage", "operator_wallet_drift"):
+            mine_ops = read(relation, ops)
+            assert mine_ops.status_code == 200 and isinstance(mine_ops.json(), list), \
+                mine_ops.text
+            assert read(relation, me).json() == [], f"a consumer read {relation}"
+            assert read(relation, None).status_code == 401, f"anon read {relation}"
         print(f"PostgREST {POSTGREST[-12:]}: own rows, isolation, result, anon {anon.status_code},"
               f" key scope {patch.status_code}, infrx hidden {hidden.status_code}")
     finally:

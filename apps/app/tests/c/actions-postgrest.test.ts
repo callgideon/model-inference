@@ -193,13 +193,13 @@ test("fails-before: the old page action's unconditional re-revoke is a DB error,
   valueOf(await act.revokeKey(c1, storeAs(S.users.c1), created.id), "the adapter's second click answers the first revocation");
 });
 
-test("known gap (reported, not fixed here): an unverified individual can insert a key row directly", { skip }, async (t) => {
+test("WR-C3A-4: an unverified individual's direct key insert is refused by the table policy (0024)", { skip }, async () => {
   const { error } = await clientAs(S.users.unverified).from("api_keys").insert({
     org_id: S.orgs.unverified, created_by: S.users.unverified, name: "direct", prefix: "sk-infrx-unverif0", key_hash: "c3a-unverified-hash",
   });
-  // The action refuses (tests/c/actions.test.ts); the table policy does not check verification. The key
-  // is unfunded (no wallet, so credit admission refuses it); WR-C3A-4 asks D10 to close the policy.
-  t.diagnostic(`direct insert by an unverified individual: ${error === null ? "ACCEPTED (gap)" : `refused ${error.code}`}`);
+  // The action refuses (tests/c/actions.test.ts), and so does the table: 0024's api_keys_insert_owner
+  // requires public.consumer_may_create_key() (a verified individual) besides 0001's owner check.
+  assert.equal(error?.code, "42501", `direct insert by an unverified individual: ${error === null ? "ACCEPTED" : error.code}`);
   const context = await contextOf(S.users.unverified, false);
   assert.equal(codeOf(await createConsumerActions().createKey(context, storeAs(S.users.unverified), { name: "x" })), "forbidden");
 });

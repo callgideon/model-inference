@@ -212,6 +212,10 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
         "0022_preparation_refusal_and_flag_writer.sql",
         # D10 door revoke (the runtime login loses admit/claim_preparation, R123)
         "0023_runtime_unmarked_door_revoke.sql",
+        # D10-APP-SQL: the console read port
+        "0024_console_read_port.sql",
+        # D10-0025: the operator console's audited RPCs and reads (U3 WR-U3-1, R143)
+        "0025_operator_console.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
