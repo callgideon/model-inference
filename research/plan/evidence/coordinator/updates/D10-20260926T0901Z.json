@@ -2,56 +2,160 @@
   "task": "D10",
   "slice": "D10-0026-FENCE: migration 0026 fences infrx.put_result with the worker's lease (R147, E3C-CELLS F-1); PgJobStore.put_result carries the lease; AttemptRunner._settle passes state.lease and ends a refused result write like a refused complete; E3C s14 result door",
   "activity": "review",
-  "at": "2026-09-26T09:01:29+00:00",
+  "at": "2026-09-26T09:31:07+00:00",
   "head": "c353227f",
   "base": "e0087a8f",
   "worktree": ".claude/worktrees/codex-d10-0026-fence",
   "branch": "codex/d10-0026-fence",
-  "owned_paths": ["apps/app/supabase/migrations/0026_fenced_result.sql", "apps/infrx-api/infrx/state/jobstore.py",
-                  "apps/infrx-api/infrx/worker/attempt.py", "apps/infrx-api/tests/d/", "apps/infrx-api/tests/w/",
-                  "tests/integration/backend/e3c/scenarios_fence.py", "research/plan/evidence/d/D10-0026-c353227.md",
-                  "research/plan/evidence/coordinator/updates/D10-20260926T0901Z.json"],
-  "commands": [
-    {"cmd": "INFRX_D_TASK=d4 pytest -q tests/d/test_result_fence_d10.py tests/d/test_lease_units.py tests/w/test_loop.py (tests-first commit 55dda9ab)", "exit": 1,
-     "summary": "fails before: 22 failed / 36 passed; the SQL oracle 'a lapsed generation wrote the result while the next one ran (F-1): None'"},
-    {"cmd": "same files + tests/w/test_service.py at c353227f", "exit": 0, "summary": "72 passed"},
-    {"cmd": "INFRX_D_TASK=d4 pytest -q tests/w", "exit": 0, "summary": "330 passed, 10 skipped (S3 absent, empty default subsets)"},
-    {"cmd": "INFRX_D_TASK=d4 pytest -q tests/contracts", "exit": 0, "summary": "1297 passed"},
-    {"cmd": "INFRX_D_TASK=d4 pytest -q tests/d (plain)", "exit": 1,
-     "summary": "904 passed, 7 failed, 1 skipped (PostgREST), 8 xfailed; the 7 are test_outbox_relay [valkey] cases refused HarnessBusy on D2's Valkey lock (another run holds it; nothing altered)"},
-    {"cmd": "INFRX_D_TASK=d4 INFRX_D2_VALKEY_PORT=55465 INFRX_D2_VALKEY_CONTAINER=infrx-d4-valkey pytest -q tests/d/test_outbox_relay.py", "exit": 0,
-     "summary": "20 passed (the 7 on d4's own Valkey); tests/d total 911 passed, 1 skipped, 8 xfailed"},
-    {"cmd": "INFRX_D1_IMAGE=supabase: test_result_fence_d10, test_upgrade_d10, test_credit_schema, test_schema_postgres, test_store_requests, test_leases, test_admission, test_reads, test_settle", "exit": 0,
-     "summary": "138 passed, 3 xfailed"},
-    {"cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py (plain)", "exit": 0,
-     "summary": "674 passed: 669 mutants killed incl. 7 new on 0026 and d2_result_rewritable moved onto 0026; supersession guard clean"},
-    {"cmd": "same -k 'd10_result or d2_result_rewritable or well_formed or superseded or supersession', Supabase image", "exit": 0, "summary": "17 passed"},
-    {"cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants*.py", "exit": 0, "summary": "100 passed (96 mutants incl. d3_result_write_drops_the_lease, d3_result_null_is_a_reference)"},
-    {"cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w5_mutants.py", "exit": 1,
-     "summary": "268 passed, 7 failed: W5 PostgreSQL mutants whose pristine baseline hit this lane's own orphan d4 container (created while this lane's Supabase run held 55435); orphan removed"},
-    {"cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_w5_mutants.py (d4 free)", "exit": 0, "summary": "40 passed; every W mutant killed incl. result_written_without_the_lease and refused_result_write_is_a_platform_error"},
-    {"cmd": "INFRX_E3C_RUNTIME_LOGIN=1 E3C_OUT=<scratch>/e3c/final make backend-local E3C_ARGS=\"$(tests/integration/backend/e3c/control_trees.sh HEAD <scratch>/e3c/ctl-final)\"", "exit": 0,
-     "summary": "BACKEND-LOCAL PASS at c353227f: 16/16 scenarios (99 cases), all controls; s14 result door stale_lease (another-process and same-process); nc-dur-fence detected with 'result': 'ACCEPTED (str)'; 14:24.09 wall; teardown clean"},
-    {"cmd": "infra/runbooks/schema_proof.py <4226315|bda1586> --candidate HEAD --task d4 --suite <9 result-writing suites + probe>", "exit": 0,
-     "summary": "PASS through 0026 for both known-good targets (their lease-less result writes on 0001-0026)"},
-    {"cmd": "scratch export of c353227f + WR-D10F-1..3: tests/g tests/m; tests/integration/test_harness.py; recovery rc01/rc05/rc07", "exit": 0,
-     "summary": "1266 passed, 32 skipped (75 failed without WR-D10F-1); harness 26 passed + the base's own production-string failure (2 failed without WR-D10F-3); rc 2 passed, 1 skipped (2 failed without WR-D10F-2)"},
-    {"cmd": "git merge-tree --write-tree claude/consumer-v1 HEAD", "exit": 0, "summary": "clean against the moved tip 67559472 (no 0026 there)"},
-    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  "owned_paths": [
+    "apps/app/supabase/migrations/0026_fenced_result.sql",
+    "apps/infrx-api/infrx/state/jobstore.py",
+    "apps/infrx-api/infrx/worker/attempt.py",
+    "apps/infrx-api/tests/d/",
+    "apps/infrx-api/tests/w/",
+    "tests/integration/backend/e3c/scenarios_fence.py",
+    "research/plan/evidence/d/D10-0026-c353227.md",
+    "research/plan/evidence/coordinator/updates/D10-20260926T0901Z.json"
   ],
-  "estimate": {"optimistic_h": 0.2, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "high",
-               "basis": "all owned suites and mutant lists green, E3C gate PASS with the result door and its control measured; left: coordinator merge (clean), WR-D10F-1..3 (composed proof recorded), the R147 amendment and the WR-D10F-4 documents; the KNOWN-GOOD proof record through 0026 is i8's",
-               "at": "2026-09-26T09:01:29+00:00"},
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=d4 pytest -q tests/d/test_result_fence_d10.py tests/d/test_lease_units.py tests/w/test_loop.py (tests-first commit 55dda9ab)",
+      "exit": 1,
+      "summary": "fails before: 22 failed / 36 passed; the SQL oracle 'a lapsed generation wrote the result while the next one ran (F-1): None'"
+    },
+    {
+      "cmd": "same files + tests/w/test_service.py at c353227f",
+      "exit": 0,
+      "summary": "72 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=d4 pytest -q tests/w",
+      "exit": 0,
+      "summary": "330 passed, 10 skipped (S3 absent, empty default subsets)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=d4 pytest -q tests/contracts",
+      "exit": 0,
+      "summary": "1297 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=d4 pytest -q tests/d (plain)",
+      "exit": 1,
+      "summary": "904 passed, 7 failed, 1 skipped (PostgREST), 8 xfailed; the 7 are test_outbox_relay [valkey] cases refused HarnessBusy on D2's Valkey lock (another run holds it; nothing altered)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=d4 INFRX_D2_VALKEY_PORT=55465 INFRX_D2_VALKEY_CONTAINER=infrx-d4-valkey pytest -q tests/d/test_outbox_relay.py",
+      "exit": 0,
+      "summary": "20 passed (the 7 on d4's own Valkey); tests/d total 911 passed, 1 skipped, 8 xfailed"
+    },
+    {
+      "cmd": "INFRX_D1_IMAGE=supabase: test_result_fence_d10, test_upgrade_d10, test_credit_schema, test_schema_postgres, test_store_requests, test_leases, test_admission, test_reads, test_settle",
+      "exit": 0,
+      "summary": "138 passed, 3 xfailed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py (plain)",
+      "exit": 0,
+      "summary": "674 passed: 669 mutants killed incl. 7 new on 0026 and d2_result_rewritable moved onto 0026; supersession guard clean"
+    },
+    {
+      "cmd": "same -k 'd10_result or d2_result_rewritable or well_formed or superseded or supersession', Supabase image",
+      "exit": 0,
+      "summary": "17 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants*.py",
+      "exit": 0,
+      "summary": "100 passed (96 mutants incl. d3_result_write_drops_the_lease, d3_result_null_is_a_reference)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w5_mutants.py",
+      "exit": 1,
+      "summary": "268 passed, 7 failed: W5 PostgreSQL mutants whose pristine baseline hit this lane's own orphan d4 container (created while this lane's Supabase run held 55435); orphan removed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_w5_mutants.py (d4 free)",
+      "exit": 0,
+      "summary": "40 passed; every W mutant killed incl. result_written_without_the_lease and refused_result_write_is_a_platform_error"
+    },
+    {
+      "cmd": "INFRX_E3C_RUNTIME_LOGIN=1 E3C_OUT=<scratch>/e3c/final make backend-local E3C_ARGS=\"$(tests/integration/backend/e3c/control_trees.sh HEAD <scratch>/e3c/ctl-final)\"",
+      "exit": 0,
+      "summary": "BACKEND-LOCAL PASS at c353227f: 16/16 scenarios (99 cases), all controls; s14 result door stale_lease (another-process and same-process); nc-dur-fence detected with 'result': 'ACCEPTED (str)'; 14:24.09 wall; teardown clean"
+    },
+    {
+      "cmd": "infra/runbooks/schema_proof.py <4226315|bda1586> --candidate HEAD --task d4 --suite <9 result-writing suites + probe>",
+      "exit": 0,
+      "summary": "PASS through 0026 for both known-good targets (their lease-less result writes on 0001-0026)"
+    },
+    {
+      "cmd": "scratch export of c353227f + WR-D10F-1..3: tests/g tests/m; tests/integration/test_harness.py; recovery rc01/rc05/rc07",
+      "exit": 0,
+      "summary": "1266 passed, 32 skipped (75 failed without WR-D10F-1); harness 26 passed + the base's own production-string failure (2 failed without WR-D10F-3); rc 2 passed, 1 skipped (2 failed without WR-D10F-2)"
+    },
+    {
+      "cmd": "git merge-tree --write-tree claude/consumer-v1 HEAD",
+      "exit": 0,
+      "summary": "clean against the moved tip 67559472 (no 0026 there)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    },
+    {
+      "cmd": "git merge-tree --write-tree claude/consumer-v1 HEAD; git apply --cached --check <WR-D10F-1..3 + test_drills hunk>",
+      "exit": 0,
+      "summary": "clean on tree a2e573f2 (tip 67559472); patch sha256 cbb88618"
+    },
+    {
+      "cmd": "composed a2e573f2+patch: INFRX_D_TASK=d4 pytest -q tests/g tests/m",
+      "exit": 0,
+      "summary": "1268 passed, 32 skipped"
+    },
+    {
+      "cmd": "composed: pytest -q tests/integration/backend/recovery; rc01/rc05_an/rc07 with INFRX_I3B_PG=d; test_drills.py",
+      "exit": 0,
+      "summary": "43 passed 33 skipped; 2 passed 1 skipped; 15 passed 26 skipped"
+    },
+    {
+      "cmd": "composed: pytest -q tests/integration/test_harness.py",
+      "exit": 1,
+      "summary": "26 passed, 1 failed: test_nothing_in_this_directory_points_at_production, identical on tip 67559472 alone (not this lane's)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.2,
+    "likely_h": 0.5,
+    "pessimistic_h": 1.5,
+    "confidence": "high",
+    "basis": "all owned suites and mutant lists green, E3C gate PASS with the result door and its control measured; left: coordinator merge (clean), WR-D10F-1..3 (composed proof recorded), the R147 amendment and the WR-D10F-4 documents; the KNOWN-GOOD proof record through 0026 is i8's",
+    "at": "2026-09-26T09:01:29+00:00"
+  },
   "blockers": [],
   "wiring_requests": [
-    "WR-D10F-1 tests/g/relay_support.py: put_result(self, job_id, text, lease=None) - the runner passes the lease; without it tests/g+tests/m 75 failed, with it 1266 passed",
-    "WR-D10F-2 tests/integration/backend/recovery/recoverykit.py: the drills' writer put_result(job_id, text, lease=None) - rc01/rc05 fail platform_error without it",
-    "WR-D10F-3 tests/integration/test_harness.py: the exact migration list gains 0026_fenced_result.sql",
+    "WR-D10F-1 tests/g/relay_support.py: put_result(self, job_id, text, lease=None) - apply IN THE SAME MERGE COMMIT; composed with tip 67559472: tests/g+tests/m 1268 passed",
+    "WR-D10F-2 tests/integration/backend/recovery/recoverykit.py: put_result(job_id, text, lease=None) (+ optional test_drills.py:130 lambda lease=None) - same merge commit; recovery 43 passed",
+    "WR-D10F-3 tests/integration/test_harness.py: the exact migration list gains 0026_fenced_result.sql - same merge commit",
     "WR-D10F-4 documents: infra/runbooks/rollout.md W6/W7 0001-0025 -> 0026 (RUNBOOK-3); infra/rollout/known-good.json schema_proof through 0026 (KNOWN-GOOD-PROOF-2's rerun; measured PASS here task-local); the E4C readiness brief 0019-0025 -> 0019-0026; 15-pending-inputs P-25 row"
   ],
   "findings": [
     "Decision: a put_result without a lease keeps 0014's write (the known-good targets 4226315/bda1586 send {job_id, text}; refusing it would fail every success after a rollback); proposed R147 amendment in the evidence",
-    "O-1: 0014's first-write-wins across generations stays (a generation that stored an empty answer and died before settling blocks a later generation's different text: state_conflict -> platform_error); not changed per the brief"
+    "O-1: 0014's first-write-wins across generations stays (a generation that stored an empty answer and died before settling blocks a later generation's different text: state_conflict -> platform_error); not changed per the brief",
+    "R147 amendment (evidence section 9) now states the lease-less call leaves F-1 reachable until a later migration refuses it with invalid_request; the rigs writing {job_id,text} move to leased calls first - record in 15-pending-inputs P-25"
   ],
-  "evidence": ["research/plan/evidence/d/D10-0026-c353227.md"]
+  "evidence": [
+    "research/plan/evidence/d/D10-0026-c353227.md"
+  ],
+  "fix_round": {
+    "reviewed_head": "5729616e",
+    "code_head": "c353227f",
+    "code_changed": false,
+    "results": {
+      "0-RV-D10F-1": "coordinator ruling; section 9 amendment now states F-1 reachability via the lease-less call and the follow-up migration",
+      "1-RULES-1": "same as 0-RV-D10F-1",
+      "0-RV-D10F-2": "coordinator applies WR-D10F-1..3 in the merge commit; patch re-proved on the merge with tip 67559472",
+      "1-SCOPE-1": "same as 0-RV-D10F-2"
+    }
+  }
 }
