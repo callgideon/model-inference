@@ -88,7 +88,8 @@ def model_dir(tmp_path: Path) -> tuple[Path, Path]:
     serving["model"].update({
         "weight_shard_digests": [sha(b"shard-1"), sha(b"shard-2")],
         "tokenizer_digest": sha(b"{tok}"), "chat_template_digest": sha(b"{{t}}"),
-        "config_digest": sha(b"{cfg}"), "generation_config_digest": sha(b"{gen}")})
+        "config_digest": sha(b"{cfg}"), "generation_config_digest": sha(b"{gen}"),
+        "processor_config_digest": sha(b"{proc}"), "preprocessor_config_digest": sha(b"{pre}")})   # P-06
     pinned = tmp_path / "serving-version.json"
     pinned.write_text(json.dumps(serving))
     return weights, pinned
@@ -111,7 +112,7 @@ def test_ops_recover__the_manifest_pins_the_served_bytes_and_records_names_only(
     doc = json.loads((out / "manifest.json").read_text())
     assert support.MARKER not in (out / "manifest.json").read_text()
     assert doc["env_names"] == ["INFRX_IMAGE", "DATABASE_URL"] and doc["runtime_image"]["id"] == image
-    assert doc["unpinned_processor_files"] == ["processor_config.json", "preprocessor_config.json"]
+    assert doc["unpinned_processor_files"] == []           # P-06: both processor files are pinned now
     roles = {f["path"]: f["role"] for f in doc["files"]}
     assert roles["model-00001-of-00002.safetensors"] == "weights"
     assert roles["preprocessor_config.json"] == "processor" and roles["chat_template.jinja"] == "template"

@@ -20,7 +20,7 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 120,
-  "updated": "2026-09-26T17:03:36Z",
+  "updated": "2026-09-26T17:55:00Z",
   "agent_slots": {
     "total": 16,
     "active": 1,
@@ -4000,8 +4000,8 @@
     },
     {
       "id": "P-06",
-      "status": "open",
-      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10)",
+      "status": "resolved",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10) [ENACTED 2026-09-26: served processor digests measured on the box = the repository copies; pinned in serving-version.json + artifacts.py PINNED]",
       "owner": "coordinator (SSM inventory.sh); I8 (record + PINNED)",
       "blocks": [
         "E4C"
@@ -5667,6 +5667,12 @@
       "by": "tracker",
       "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
       "source": "updates/G-GATES-20260926T1121Z.json"
+    },
+    {
+      "at": "2026-09-26T17:55:00Z",
+      "by": "coordinator (P-06)",
+      "what": "P-06 enacted: after the user's unblock run (SSM parameters ×3, alert subscription pending confirmation, role policy, allow rules) the coordinator measured the served processor files on the box — digests equal the repository copies; serving-version.json filled and artifacts.py PINNED extended",
+      "source": "research/plan/15-pending-inputs.md"
     }
   ],
   "history": {

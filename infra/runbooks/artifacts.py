@@ -34,7 +34,10 @@ from pathlib import Path
 SCHEMA = "infrx-artifacts/1"
 # serving-version.json model field -> the file it pins
 PINNED = {"tokenizer_digest": "tokenizer.json", "chat_template_digest": "chat_template.jinja",
-          "config_digest": "config.json", "generation_config_digest": "generation_config.json"}
+          "config_digest": "config.json", "generation_config_digest": "generation_config.json",
+          # P-06 (2026-09-26): the served processor files, measured equal to the repository copies
+          "processor_config_digest": "processor_config.json",
+          "preprocessor_config_digest": "preprocessor_config.json"}
 PROCESSOR = ("processor_config.json", "preprocessor_config.json",
              "video_preprocessor_config.json")
 
@@ -83,7 +86,7 @@ def pin_problems(entries: list[dict], serving: dict) -> tuple[list[str], list[st
     for field, name in PINNED.items():
         if by_name.get(name) != model[field]:
             problems.append(f"{name} is not the pinned {field}")
-    unpinned = [name for name in PROCESSOR if name in by_name]
+    unpinned = [name for name in PROCESSOR if name in by_name and name not in PINNED.values()]
     return problems, unpinned
 
 
