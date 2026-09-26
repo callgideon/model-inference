@@ -6,8 +6,10 @@ real browser principal and compares every figure with durable ledger queries.
 
     cd apps/infrx-api && INFRX_D_TASK=app-u1r uv run --frozen python ../app/tests/u/credit_world.py
 
-U1R_CAPPED_JOBS / U1R_CAPPED_LEDGER (default 120 each) size CONSUMER_2's capped history for P08;
-the 2026-09-26 lens's heavy world is U1R_CAPPED_JOBS=155 U1R_CAPPED_LEDGER=2000.
+U1R_CAPPED_JOBS / U1R_CAPPED_LEDGER (default 120 / 200) size CONSUMER_2's capped history for P08;
+the ledger's 201 rows walk in three pages at limit 100, so a walk that stops after the first
+follow-up page fails P08 in the default world (AM1-L3); the 2026-09-26 lens's heavy world is
+U1R_CAPPED_JOBS=155 U1R_CAPPED_LEDGER=2000.
 
 Reuses the D harness (tests/d: the labelled, locked, self-removing container; the admission world;
 the real admit/claim/terminalize functions) - no grant, hold or settlement SQL is written here. The
@@ -43,7 +45,7 @@ APP = Path(__file__).resolve().parents[2]
 DB = f"{pgharness.DATABASE}_credit"
 ME, OTHER = cc.CONSUMER_1, cc.CONSUMER_2
 CAPPED_JOBS = int(os.environ.get("U1R_CAPPED_JOBS", "120"))
-CAPPED_LEDGER = int(os.environ.get("U1R_CAPPED_LEDGER", "120"))
+CAPPED_LEDGER = int(os.environ.get("U1R_CAPPED_LEDGER", "200"))
 
 
 def conn():
