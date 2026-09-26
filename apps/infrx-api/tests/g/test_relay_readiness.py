@@ -25,6 +25,7 @@ from infrx.observe import metrics
 from infrx.state.jobstore import PgJobStore
 
 from . import relay_support as rs, support
+from .jobs import world as jw
 
 REGIMES = [LEGACY, CREDIT]
 
@@ -333,6 +334,44 @@ def test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refus
     expected = {"attach": {"state_conflict": 1.0},
                 "attach_down": {"dependency_unavailable": 1.0}}.get(late, {})
     assert post_marker_refusals(registry) == expected
+
+
+def test_w5_f5b__e3c_s04_late_is_202_and_runs_on_the_readiness_door():
+    """E3C s04 `late` in process (1-F5B-R1): `POST /v1/jobs` (text) held after admit_ready's
+    marker, the pinned revision's text withdrawn, then released. The job was checked and
+    made ready by the admission transaction, so the answer is its handle (202), never a
+    refusal or a cancel; the worker claims it behind the marker, runs it and settles it
+    once. Oracle: the recheck restored on this door answers 400 `unsupported_media` and
+    cancels - what s04's readiness branch still asserts (a pre-D10 door expectation)."""
+    world = jw.JobsWorld(regime=CREDIT, readiness=True)
+    admit_ready = world.lifecycle.admit_ready
+
+    async def withdrawn_after_the_marker(request, idem, expectation):
+        admitted = await admit_ready(request, idem, expectation)
+        withdraw_text(world)
+        return admitted
+
+    world.lifecycle.admit_ready = withdrawn_after_the_marker
+    world.during.append(lambda: world.clock.advance(3_600))
+    ledgers = {w: world.jobs.credit_wallet(w).ledger_total for w in world.seeded}
+    reply = rs.run(jw.send(world.app, "POST", "/v1/jobs", body=rs.body(), key="e3c-s04-late"))
+    assert reply.status == 202, reply.body
+    job = world.only_job()
+    assert not job.terminal and not world.released(job), job.state
+
+    async def runs():
+        lease = await world.lease()
+        ref = await world.put_result(job.id, "Two people")
+        await world.jobs.complete_credit(lease, b.outcome(job.id, world, tokens=Usage.of(1200, 5),
+                                                          result_ref=ref))
+
+    rs.run(runs())
+    assert job.state is JobState.succeeded and world.released(job)
+    after = {w: world.jobs.credit_wallet(w).ledger_total for w in world.seeded}
+    charged = job.settlement.charged.raw(CREDIT_UNIT)
+    assert job.outcome.settlement_state is SettlementState.settled
+    assert {w: ledgers[w] - after[w] for w in ledgers} == \
+        {w: charged if w == job.credit.wallet_id else 0 for w in ledgers} and charged > 0
 
 
 @pytest.mark.parametrize("fault", ["attach", "attach_down"])
