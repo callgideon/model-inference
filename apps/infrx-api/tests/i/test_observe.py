@@ -107,7 +107,7 @@ def rule_metrics(rules) -> dict[str, set[str]]:
 # exporters): W5 (worker: queue, reaper, reconciliation), G (rejections) and the component
 # probes own the producers. Pinned so a NEW rule without a producer fails here.
 KNOWN_UNPRODUCED = {"ComponentDown", "QueueStalled", "QueueSaturated", "RejectionsHigh",
-                    "PlatformFailureRate", "LeaseLost", "ReaperTerminalized", "UnsettleableJobs"}
+                    "PlatformFailureRate", "LeaseLost", "ReaperTerminalized"}
 
 
 def _unproduced(rules) -> set[str]:
