@@ -6,7 +6,7 @@ import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { revokeConsumerKey } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { revokeConfirmText } from "./view-model";
+import { REVOKE_LOST, revokeConfirmText, settle } from "./view-model";
 
 export function RevokeButton({ id, name }: { id: string; name: string }) {
   const router = useRouter();
@@ -15,7 +15,7 @@ export function RevokeButton({ id, name }: { id: string; name: string }) {
   async function revoke() {
     if (pending || !confirm(revokeConfirmText(name))) return;
     setPending(true);
-    const result = await revokeConsumerKey(id);
+    const result = await settle(() => revokeConsumerKey(id), REVOKE_LOST);
     setPending(false);
     if (!result.ok) toast.error(result.error.message);
     else toast.success(`Revoked ${name}`);

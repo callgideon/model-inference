@@ -102,6 +102,25 @@ export function createOutcome(result: Result<ApiKeyCreated>): { kind: "secret"; 
   return { kind: "secret", secret: result.value.secret };
 }
 
+/** C3A's lost-response text (`CREATE_UNKNOWN`, server-only), verbatim: a new key may still have been made. */
+export const CREATE_LOST =
+  "the key could not be created right now; try again. If a new key appears in your list, revoke it - its secret cannot be shown again";
+
+export const REVOKE_LOST = "The revocation could not be confirmed. Refresh the page to see whether the key is revoked.";
+
+/**
+ * A server-action call that rejects (network drop, deploy skew, a 5xx from the action endpoint)
+ * becomes a fixed refusal, so the control clears its pending state and says something true. The
+ * rejection's own text is never shown.
+ */
+export async function settle<T>(call: () => Promise<Result<T>>, lost: string): Promise<Result<T>> {
+  try {
+    return await call();
+  } catch {
+    return { ok: false, error: { code: "dependency_unavailable", message: lost } };
+  }
+}
+
 export function revokeConfirmText(name: string): string {
   return `Revoke "${name}"? New requests with this key are refused immediately. This cannot be undone.`;
 }

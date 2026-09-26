@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MAX_KEY_NAME_CHARS } from "@/lib/contracts/types";
-import { ONE_TIME_COPY, createOutcome } from "./view-model";
+import { CREATE_LOST, ONE_TIME_COPY, createOutcome, settle } from "./view-model";
 
 export function CreateKeyDialog() {
   const router = useRouter();
@@ -48,7 +48,7 @@ export function CreateKeyDialog() {
     if (pending) return;
     setPending(true);
     setError(null);
-    const outcome = createOutcome(await createConsumerKey({ name, idempotency_key: attempt }));
+    const outcome = createOutcome(await settle(() => createConsumerKey({ name, idempotency_key: attempt }), CREATE_LOST));
     setPending(false);
     if (outcome.kind === "secret") setSecret(outcome.secret);
     else setError(outcome.message);
