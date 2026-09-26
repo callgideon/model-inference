@@ -250,8 +250,9 @@ backup/snapshot restore), stays an operator step that no test runs.
 
 **The reinstall rule.** Every 50-install rewrites `/etc/marlin2b-gateway.env` from SSM
 (`preflight.py apply`, one rename): `DATABASE_URL` is `pg_journal_url`, the owner login, again,
-and `MONITOR_DATABASE_URL` comes only from the SSM leaf `monitor_database_url`, which no step
-creates, so it is dropped and the worker reports no reconciliation gauges. So every 50-install of a release that carries R127's
+and `MONITOR_DATABASE_URL` comes only from the SSM leaf `monitor_database_url`, which the
+operator creates with the two dedicated-login passwords (the `infrx_monitor` login; W10b must have run once
+before the first 50-install that picks it up, since 0021 leaves `infrx_monitor` NOLOGIN until then); without the leaf it is dropped and the worker reports no reconciliation gauges. So every 50-install of a release that carries R127's
 dedicated logins (this release and later: W10, the drill's roll-forward in
 [rollback.md](rollback.md#known-good-rollback-drill)) is followed by `55-runtime-login.sh` (W10b).
 A release before R127, such as the known-good targets 4226315 and bda1586, stays on

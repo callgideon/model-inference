@@ -134,7 +134,7 @@ Both set is refused by the install step (exit 2) and, if an env file has both an
 the box's instance role (`Subject` ≤ 100 characters, the first line; `Message` the whole
 text) through boto3, imported only on that path: no boto3 on the box's `python3` is BLOCKED
 (`apt install python3-boto3`). The instance role needs, on that one topic (coordinator op,
-not applied by any step):
+created by the operator with the dedicated-login passwords, applied to the role by W10b `55-runtime-login.sh`):
 
 ```json
 {"Effect": "Allow", "Action": "sns:Publish",
