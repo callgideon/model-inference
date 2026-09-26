@@ -78,3 +78,86 @@ The mutation layout also copies `deploy/preflight.py` and `infra/alerts/operatio
 ## Remaining effort
 
 Optimistic 0.25 h, likely 0.75 h, pessimistic 1.5 h; confidence medium. What is left: the coordinator's review/merge, WR-P25-1 (gateway grace), the doc/alert wirings, and the union gate's `_pg__` run.
+
+## Fix round (code head 1c62eef8; handback head 14de75e6 reviewed)
+
+Findings 0-P25R-1, 1-P25R-1, 1-P25R-2 and 1-P25R-3 are all fixed in owned paths. Nothing was pushed. No box, AWS, SSM, hosted DB, secret or container was used.
+
+**Correction to the headline and to WR-P25-1 (0-P25R-1, 1-P25R-1).** P-25's 3,600 s grace applies **only to content the worker registers**. The gateway has its own `PgLifecycle(connect, limits=limits)` (`infrx/gateway/pilot.py:237-240`, built at :222). It passes that lifecycle as both `uploads=` and `content=` to `MediaUploads` (:312), so these still stamp the library's 604,800 s:
+
+- `upload_complete` (lifecycle.py:160);
+- every source and payload that `MediaUploads._register` writes (`infrx/media/store.py:231-242`, called for `ContentKind.source` at :301, which covers URL-fetched and uploaded sources, and for `ContentKind.payload` at :352).
+
+On a re-register, 0022 (`0022_preparation_refusal_and_flag_writer.sql:266`) sets `eligible_at = greatest(eligible_at, now + grace)`. A later 3,600 s registration by the worker therefore cannot shorten a gateway-stamped 7-day eligibility.
+
+This does not extend retention. It is the status quo from before this lane. The coordinator should record P-25's grace as enacted for worker-registered content only, and not for gateway-registered sources or payloads, until WR-P25-1 merges.
+
+**WR-P25-1 (reworded, supersedes the text above):** the gateway's lifecycle, `pilot.py:237-240`, stamps 604,800 s for `upload_complete` and for every source and payload that `MediaUploads._register` registers. The patch is the same one adapter change, which covers both paths:
+
+- `def _pg_lifecycle(connect, settings)` returns `PgLifecycle(connect, limits=settings.pilot, grace_s=settings.deployment.retention_grace_s)`;
+- the caller at pilot.py:222 passes `settings`.
+
+The proof test is already committed as a strict xfail: `tests/w/test_worker_main.py::test_worker_main__the_gateways_content_grace_is_the_deployments` checks `adapters_from_env(...)["lifecycle"].grace_s == RETENTION_GRACE_S` (11 in the case). The patch must do three things:
+
+1. Remove the `xfail` mark. Otherwise the test XPASSes, and strict mode fails it.
+2. Replace the mutant `gateway_grace_wired_unrecorded` with one that drops `grace_s=` from `_pg_lifecycle`.
+3. Add the PostgreSQL proof on the union: register a source through the pilot app and assert `eligible_at - registered_at == 3600 s`.
+
+**1-P25R-2.** `infra/runbooks/restore.md` "Dump cadence while PITR is off" now says that P-25 is A9's "longer period" coordinator decision:
+
+- While PITR is off, A9's removal after A8 does not apply.
+- A9's container removal and `unset PGPASSWORD` still run.
+- A dump whose A6 check is not equal is removed at once with A9's `rm`.
+- After each new dump's A6 check is logged, the directory is pruned to the 7 newest with `ls -1d "$HOME"/infrx-backups/hosted-* | head -n -7 | while read -r old; do rm -rf -- "$old"; done`.
+
+A9 itself is not edited, because it already allows a logged longer period.
+
+**1-P25R-3.** The `infra/runbooks/rollout.md` "Known-good record" command now passes `--set` for each of §1's `INFRX_SET` names (S3_MEDIA_BUCKET, MAX_VIDEO_SECONDS, WORKER_CONCURRENCY, LARGE_BODY_LIMIT, DATABASE_POOL_MAX_SIZE) plus ENGINE_MAX_NUM_SEQS, which 50-install adds. That is rollback.md:62's list plus ENGINE_MAX_NUM_SEQS. The command also passes `--bundles s3://llm-bootcamp-641134885443/releases/`. The text says that `config` compares only the `--set` names.
+
+Local run, `--applied 0023`, without `--bundles` (no AWS):
+
+| Release | Six names | `--set RETENTION_GRACE_S` | No `--set` |
+|---|---|---|---|
+| 4226315 | `config` True, exit 0 | `config` False | `config` True (the vacuous pass) |
+| bda1586 | `config` True, exit 0 | `config` False | `config` True (the vacuous pass) |
+
+### Fails-before
+
+| Case | Before (pre-fix runbooks / tree) | After |
+|---|---|---|
+| `tests/w/test_p25_runbooks.py::test_worker_main__the_known_good_record_passes_every_install_name` | failed: no command block in the section (`ValueError: not enough values to unpack`); the first draft, which scanned the whole section, failed on the missing --set names | passed |
+| `tests/w/test_p25_runbooks.py::test_worker_main__the_dump_cadence_keeps_the_7_newest` (runs the prune under a temp `HOME` over 10 `hosted-<UTC>` dirs, twice) | failed: the section named neither A9's longer period nor a prune | passed |
+| `tests/w/test_worker_main.py::test_worker_main__the_gateways_content_grace_is_the_deployments` (`--runxfail`) | `assert 604800.0 == 11.0`, which is the gap | xfailed (strict); the mutant `gateway_grace_wired_unrecorded`, which is WR-P25-1's effect, is killed |
+
+The two runbook cases are in their own file. The shared runner `tests/contracts/mutants.py:2835` compiles every mutated file as Python, so Markdown anchors come out `broken_runner` (seen on the first try: 41/43, both runbook mutants broken_runner). `test_worker_main.py` requires a mutant for every case. The mutations were therefore run by hand against the runbooks, and each was restored afterwards:
+
+| Mutation | Result |
+|---|---|
+| prune `head -n -7` changed to `tail -n +8` (keeps the oldest) | 1 failed |
+| `head -n -100` (removes nothing) | 1 failed |
+| the record's `--set` lines deleted | 1 failed |
+| `--set ENGINE_MAX_NUM_SEQS` dropped | 1 failed |
+| pristine | 2 passed |
+
+### Checks (code head 1c62eef8)
+
+| Command (apps/infrx-api) | Exit | Counts |
+|---|---|---|
+| `INFRX_D_TASK=m6 uv run --frozen --no-sync pytest -q tests/w/test_prep_worker.py tests/w/test_worker_main.py tests/m/test_retention.py tests/w/test_p25_runbooks.py` | 0 | 163 passed, 7 skipped, 1 xfailed |
+| `uv run --frozen --no-sync pytest -q tests/contracts/test_config_and_imports.py tests/i/test_packaging.py tests/i/test_envcheck.py` | 0 | 312 passed |
+| `uv run --frozen --no-sync pytest -q tests/i/test_rollout.py` | 0 | 11 passed |
+| `uv run --frozen --no-sync pytest -q tests/i/test_observe.py` | 1 | 17 passed, 1 xfailed, 1 failed (the same pre-existing `KNOWN_UNPRODUCED` case, WR-P25-4) |
+| `uv run --frozen --no-sync pytest -q tests/w/test_worker_main_mutants.py` | 0 | 7 passed, 1 skipped |
+| `INFRX_D_TASK=m6 uv run --frozen --no-sync python -m tests.w.worker_main_mutants` | 0 | **41/41 killed** (40 + `gateway_grace_wired_unrecorded`) |
+| `python3 research/plan/scripts/validate_plan.py` (repo root) | 0 | 4 PASS lines; 933 links / 228 docs |
+
+The 7 skips are the same `_pg__`/MinIO cases as before.
+
+### Remaining effort
+
+Optimistic 0.25 h, likely 0.5 h, pessimistic 1.25 h; confidence medium. What remains:
+
+- the coordinator's review and merge;
+- WR-P25-1, the gateway grace. Its proof is already committed as a strict xfail;
+- WR-P25-2 through WR-P25-5;
+- the union gate's `_pg__` run.
