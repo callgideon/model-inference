@@ -205,3 +205,102 @@ Basis:
 ## Audit log
 
 - 2026-09-26: Created by the E3A-PREP lane (Opus implementer) at `1bc9e634`. The manifest's E3A status is unchanged (`planned`).
+
+## Fix round (2026-09-26): review E3A-PREP-R1/R2/R3
+
+- **Handback reviewed:** `e315a5ee`. **Code head:** `31cf6f10`, from three commits:
+  - `33b5a027`: runner fixes;
+  - `5285d88e`: spec fixes;
+  - `31cf6f10`: journey order.
+  The evidence commit follows. Base unchanged (`fd40748c`).
+- **Changed paths:**
+  - `tests/integration/app/runner.py`
+  - `tests/integration/app/test_e3a_runner.py`
+  - `apps/app/tests/e2e/journey.e2e.ts`
+  - this section, and raw logs in [`E3A-prep-1bc9e63/fix-31cf6f1/`](E3A-prep-1bc9e63/fix-31cf6f1/)
+  No dependency, gate or wiring change. `pnpm install --frozen-lockfile` still passes.
+
+| Finding | Fixed | How |
+|---|---|---|
+| 0-E3A-PREP-R1 / 1-E3A-PREP-R1 (blocking): DUR-FENCE, DUR-OUTBOX, CREDIT-RATE and DUR-CAP PASS unexercised | yes, option (a) | New `DELEGATED` map in `runner.py`. Each cell now records `journey` (the worst of its checks, the journey slice) apart from `verdict` (the oracle). For these four cells, `verdict = worst(journey, NOT RUN)`: they are never PASS, but they still FAIL when a check under them fails. The first reason reads `NOT RUN[delegated] <what the oracle needs>: <what the journey does>; <carrying cases>; rerun on the merged SHA (journey slice …)`. The carrying cases are E3C s05/s08, E3B dr03/dr05/db07/db11/dr13/db10/dr07c/db13 and dr02c/dr12/s09. For DUR-CAP it also records that no case races admissions across keys. |
+| 0-E3A-PREP-R2 (major): operator-controls PASS on the U3 flag alone | yes | The check skips `NOT RUN[operator-action]` whatever the manifest says. The vacuous body is removed; a consumer's `/admin` refusal stays under `provider-route-denial`. |
+| 0-E3A-PREP-R3 (major): revoke-key can never pass (the `confirm()` dialog was dismissed) | yes | Adds `page.once("dialog", accept)` before the click. The click targets `Revoke <name>` (exact) for the key create-key made; its name is kept in the journey state as `appKeyName`. |
+| 1-E3A-PREP-R2 (major): INVALID after I2A (`next start` refuses without an environment) | yes | New `app_env()` states `INFRX_APP_ENVIRONMENT=development`, the environment whose loopback origins `assertDeployEnv` accepts. A unit test holds it. |
+| 1-E3A-PREP-R3 (major): a failed `next start` leaves its process group holding 56870 | yes | `NextApp.__enter__` calls `__exit__` before re-raising. `__exit__` sends SIGTERM, then SIGKILL, to the whole group until no member is left, even when the leader has already exited. `leftovers()` and the teardown stage now also fail on a held edge, control or App port. |
+
+**New defect found by the fix, and fixed (`31cf6f10`):**
+
+- Once revoke-key worked (probe P2), `expired-result` ran after it with the now-revoked App key. It got a 401 instead of its result, so DUR-OUTPUT went FAIL.
+- `expired-result` now runs before `revoke-key`. The journey ends with the revocation, which is the order the brief gives.
+
+### Tests first (failed before, pass after)
+
+| Test (`tests/integration/app/test_e3a_runner.py`) | Before (runner at `e315a5ee`, names refactored only) | After |
+|---|---|---|
+| `test_all_green_is_pass_and_absent_or_skipped_is_never_pass` (changed) | `KeyError: 'journey'` | pass |
+| `test_cells_the_journey_does_not_exercise_are_never_pass` (R1) | no `DELEGATED` (4 cells PASS) | pass |
+| `test_the_app_env_states_its_environment` (1-R2) | `KeyError: 'INFRX_APP_ENVIRONMENT'` | pass |
+| `test_an_app_that_never_answers_leaves_no_process` (1-R3) | `'sleep 60 & exec sleep 60': its process group outlived the failed start` | pass (both the timeout and the leader-exited cases) |
+| `test_teardown_counts_a_held_port_as_left_behind` (1-R3) | `leftovers()` ignored ports | pass |
+
+Browser-level failed-then-passed. Each probe is `consumer-v1` `6badd4e1` (C3A/U2/U3/U4/A2 implemented, I2A instrumentation present) merged into this branch. The merges were made in a `git clone --shared` in the scratchpad, never pushed, with their own `make api-env` and `pnpm install --frozen-lockfile`.
+
+| Probe | Merge of | Result |
+|---|---|---|
+| P1 | `33b5a027` (runner fixed, old spec) | Every stage PASS: the App serves under I2A's instrumentation (1-R2). `operator-controls` **PASS** with no operator action (0-R2 reproduced). `revoke-key` **FAIL**: "Expected: true, Received: false" after the 20 s poll (0-R3 reproduced). 16 passed, 3 failed. |
+| P2 | `5285d88e` (spec fixed) | `revoke-key` **PASS**; `operator-controls` NOT RUN[operator-action]. `expired-result` FAIL 401: the ordering defect above. |
+| P3 | `31cf6f10` (code head) | Gate FAIL. **16 passed, 2 failed, 1 NOT RUN**. The 2 failures are the product findings F-1 (`signin-claim`) and F-2 (`provider-route-denial`), both still open on consumer-v1. Cells: 10 PASS, 4 NOT RUN (delegated, journey PASS), 3 FAIL (DUR-RLS, CONSOLE-FLOWS, APP-JOURNEY). Teardown PASS: no container, and ports 56860, 56861 and 56870 free. Took 94 s. |
+
+On consumer-v1, `create-key` (U2's dialog) and `request-detail` (U4's page) already pass with the existing selectors.
+
+### Runs at `31cf6f10` (this branch, clean tree at start and end)
+
+| Run | Exit | Result |
+|---|---|---|
+| full | 1 | Gate FAIL, 54 s. Playwright: 13 passed, 2 failed (F-1, F-2), 4 skipped (C3A/U2/U4 not merged at the base; operator-action). Cells: **8 PASS, 6 NOT RUN, 3 FAIL**. The 6 NOT RUN are DUR-ADMIT and DUR-OUTPUT (lanes), plus DUR-CAP, DUR-FENCE, DUR-OUTBOX and CREDIT-RATE, which are delegated with a PASS journey slice. At `1bc9e634` the result was 12 PASS / 2 NOT RUN / 3 FAIL; the difference is the four delegated cells that had passed without being exercised. |
+| `--break-seam fixture-port` | 1 | `seam:fixture-port` FAIL, detected (`usage-balance`), 29 s. |
+| `--break-seam grant-guard` | 1 | `seam:grant-guard` FAIL, detected (`signup-verify-grant`), 35 s. |
+
+After each run, `docker ps -a | grep -c infrx-e4b` = 0. No App process was left: the teardown stage checks the ports.
+
+### Commands
+
+| Command | Exit | Result |
+|---|---|---|
+| `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/app` (new tests, old behaviour) | 1 | 5 failed, 10 passed (`fix-31cf6f1/unit-before.log`) |
+| `… -m pytest -q tests/integration/app tests/integration/backend/e3c/test_e3c_runner.py tests/integration/test_preflight.py` | 0 | **107 passed**: 15 E3A + 34 E3C + 58 gates/preflight (`unit-after.log`) |
+| `make console-test` | 0 | 510 tests, 487 pass, 0 fail, 23 skipped (the pre-existing env-gated real-DB cases) |
+| `make console-lint` / `make console-typecheck` | 0 / 0 | The 2 pre-existing warnings in `lib/contracts/` |
+| `cd apps/app && pnpm install --frozen-lockfile` | 0 | |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS |
+| `PLAYWRIGHT_BROWSERS_PATH=… runner.py --out …` (full, and each seam), at `31cf6f10` | 1 / 1 / 1 | above |
+| probes P1–P3 (the merged clone's own `runner.py`, same block, run one after another) | 1 / 1 / 1 | above |
+
+Raw logs are in `fix-31cf6f1/{full,fixture-port,grant-guard,probe-p1,probe-p2,probe-p3}/`: `verdict.json`, `runner.log`, `browser.log`, `playwright.json` and `app.log`. They were scanned for key prefixes, JWTs, DSNs with passwords and the local password: none found.
+
+### Open after this round
+
+- F-1 and F-2 still FAIL on consumer-v1 `6badd4e1`, which is the same result as at `1bc9e634`.
+- The four delegated cells keep APP-LOCAL at NOT RUN or worse until E3A proper does one of two things:
+  - (a) import E3C's same-SHA verdict (s05, s08) and the E3B drill results. DUR-CAP's cross-key admission race has **no carrying case** today.
+  - (b) add journey injections: a worker SIGKILL mid-lease, a Valkey flush, a card published while jobs are queued (`publish-card` exists in the operator CLI), and concurrent admissions across two keys or orgs.
+- `operator-controls` needs the operator action itself: an operator identity on the edge, a U3 action with a reason, and one audit row after a repeat.
+- The E3A-WR-1…4 wiring requests are unchanged.
+
+**Estimate for E3A proper**, after its dependencies:
+
+| Optimistic | Likely | Pessimistic | Confidence |
+|---|---|---|---|
+| 3 h | 6 h | 12 h | medium |
+
+The basis has changed: create-key, request-detail and revoke-key already pass on consumer-v1, so the remaining work is:
+
+- the operator action;
+- resolving the delegated cells (import or injections, which carries the most variance);
+- F-1 and F-2;
+- WR-1 and WR-2;
+- merged-SHA reruns of about 1.5 min each.
+
+### Audit log
+
+- 2026-09-26: Fix round appended by the E3A-PREP fix lane (Opus implementer) at code head `31cf6f10`. Earlier sections are unchanged. The manifest's E3A status is unchanged (`planned`).

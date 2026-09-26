@@ -1,0 +1,742 @@
+{
+  "schema": "infrx.e2c.verdict/1",
+  "gate": "APP-LOCAL",
+  "task": "E3A",
+  "verdict": "FAIL",
+  "exit": 1,
+  "head": {
+    "sha": "31cf6f10005310eb9cd58ac186cbf93b9e7b435e",
+    "dirty": false
+  },
+  "head_end": {
+    "sha": "31cf6f10005310eb9cd58ac186cbf93b9e7b435e",
+    "dirty": false
+  },
+  "started": "2026-09-26T01:16:50+00:00",
+  "finished": "2026-09-26T01:17:25+00:00",
+  "seconds": 35.3,
+  "argv": [
+    "--out",
+    "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/own-grant-guard",
+    "--break-seam",
+    "grant-guard"
+  ],
+  "label": "the App in a real browser on real auth-stand-in/PostgREST/PostgreSQL/Valkey/S3-compatible/gateway/worker processes with a controlled engine; not Marlin quality, not GPU capacity, not hosted behaviour, not a real email",
+  "namespace": "e4b",
+  "ports": {
+    "edge": 56860,
+    "control": 56861,
+    "app": 56870,
+    "block": "56800-56899"
+  },
+  "lanes_merged": [
+    "A1",
+    "A2",
+    "A3",
+    "C0",
+    "C1",
+    "D1",
+    "D10",
+    "D1R",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "E1",
+    "E1C",
+    "E2",
+    "E2C",
+    "E2R",
+    "E3B",
+    "E4B",
+    "F1",
+    "F2",
+    "F2C",
+    "F2P",
+    "F2R",
+    "G1",
+    "G1R",
+    "G2",
+    "G3",
+    "G4U",
+    "G6B",
+    "G7",
+    "G8",
+    "I0",
+    "I1",
+    "I2B",
+    "I3B",
+    "I8",
+    "J1",
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "M5",
+    "M6",
+    "Q1",
+    "Q2",
+    "Q3",
+    "S1",
+    "S2M",
+    "S3",
+    "T1",
+    "U1",
+    "U1R",
+    "V1",
+    "W1",
+    "W2",
+    "W3",
+    "W4"
+  ],
+  "break_seam": "grant-guard",
+  "selected": [
+    "signup-verify-grant"
+  ],
+  "stages": [
+    {
+      "stage": "preflight",
+      "verdict": "PASS",
+      "seconds": 0.0,
+      "lanes_merged": [
+        "A1",
+        "A2",
+        "A3",
+        "C0",
+        "C1",
+        "D1",
+        "D10",
+        "D1R",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "E1",
+        "E1C",
+        "E2",
+        "E2C",
+        "E2R",
+        "E3B",
+        "E4B",
+        "F1",
+        "F2",
+        "F2C",
+        "F2P",
+        "F2R",
+        "G1",
+        "G1R",
+        "G2",
+        "G3",
+        "G4U",
+        "G6B",
+        "G7",
+        "G8",
+        "I0",
+        "I1",
+        "I2B",
+        "I3B",
+        "I8",
+        "J1",
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "M5",
+        "M6",
+        "Q1",
+        "Q2",
+        "Q3",
+        "S1",
+        "S2M",
+        "S3",
+        "T1",
+        "U1",
+        "U1R",
+        "V1",
+        "W1",
+        "W2",
+        "W3",
+        "W4"
+      ]
+    },
+    {
+      "stage": "app-build",
+      "verdict": "PASS",
+      "seconds": 5.2,
+      "exit": 0,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/own-grant-guard/app-build.log"
+    },
+    {
+      "stage": "stack",
+      "verdict": "PASS",
+      "seconds": 13.7,
+      "detail": "provisioned",
+      "services": [
+        {
+          "stage": "preflight",
+          "status": "PASS",
+          "seconds": 0.8
+        },
+        {
+          "stage": "services",
+          "status": "PASS",
+          "seconds": 12.4
+        },
+        {
+          "stage": "migrate",
+          "status": "PASS",
+          "seconds": 0.4
+        }
+      ]
+    },
+    {
+      "stage": "world",
+      "verdict": "PASS",
+      "seconds": 5.2,
+      "database": "infrx_e4b_1554197_1",
+      "deviations": [
+        "auth.uid() replaced by the hosted form on the clone (E3A-WR-2)"
+      ],
+      "gateway": "http://127.0.0.1:56840",
+      "runtime_login": true,
+      "detail": "gateway + worker on the runtime login, controlled engine"
+    },
+    {
+      "stage": "app",
+      "verdict": "PASS",
+      "seconds": 1.2,
+      "url": "http://localhost:56870",
+      "bound": "127.0.0.1:56870"
+    },
+    {
+      "stage": "browser",
+      "verdict": "PASS",
+      "seconds": 2.7,
+      "exit": 1,
+      "edge": {
+        "signups": 1,
+        "verified": 2,
+        "rest": 9,
+        "rpc/claim_signup_grant:200": 2,
+        "rpc/console_wallet_summary:200": 1,
+        "verify_refused": 1
+      },
+      "detail": ""
+    },
+    {
+      "stage": "teardown",
+      "verdict": "PASS",
+      "seconds": 5.6,
+      "detail": "no infrx-e4b container; ports 56860, 56861, 56870 free"
+    },
+    {
+      "stage": "seam:grant-guard",
+      "verdict": "FAIL",
+      "guarded": {
+        "signup-verify-grant": "FAIL"
+      },
+      "what": "the once-only signup grant guard dropped on the clone (E3B db09: entitlement key, one-grant index, replay answer, once guard)",
+      "detail": "broken seam detected: the gate fails"
+    }
+  ],
+  "cells": [
+    {
+      "id": "DUR-ADMIT",
+      "journey": "NOT RUN",
+      "checks": [
+        "text-sync",
+        "rate-rejection",
+        "low-funds",
+        "revoke-key"
+      ],
+      "reasons": [
+        "text-sync: NOT RUN - not selected (--only / --break-seam)",
+        "rate-rejection: NOT RUN - not selected (--only / --break-seam)",
+        "low-funds: NOT RUN - not selected (--only / --break-seam)",
+        "revoke-key: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-CAP",
+      "journey": "NOT RUN",
+      "checks": [
+        "rate-rejection"
+      ],
+      "reasons": [
+        "NOT RUN[delegated] concurrent admissions across keys/orgs: the journey admits on one key, one request at a time; E3B dr02c/dr12 (a full key or index refused) and E3C s09 (concurrent grants) carry parts, no case races admissions across keys; rerun on the merged SHA (journey slice rate-rejection: NOT RUN)",
+        "rate-rejection: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-FENCE",
+      "journey": "NOT RUN",
+      "checks": [
+        "rate-rejection"
+      ],
+      "reasons": [
+        "NOT RUN[delegated] a stale worker generation racing a new one: the journey stops the worker before any lease; E3C s05 (worker crash at claim/output/settle), E3B dr03/dr05/db07/db11; rerun on the merged SHA (journey slice rate-rejection: NOT RUN)",
+        "rate-rejection: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-OUTPUT",
+      "journey": "NOT RUN",
+      "checks": [
+        "sse-stream",
+        "async-poll",
+        "request-detail",
+        "expired-result"
+      ],
+      "reasons": [
+        "sse-stream: NOT RUN - not selected (--only / --break-seam)",
+        "async-poll: NOT RUN - not selected (--only / --break-seam)",
+        "request-detail: NOT RUN - not selected (--only / --break-seam)",
+        "expired-result: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-SETTLE",
+      "journey": "NOT RUN",
+      "checks": [
+        "text-sync",
+        "retry",
+        "usage-balance",
+        "accounting-uncertainty"
+      ],
+      "reasons": [
+        "text-sync: NOT RUN - not selected (--only / --break-seam)",
+        "retry: NOT RUN - not selected (--only / --break-seam)",
+        "usage-balance: NOT RUN - not selected (--only / --break-seam)",
+        "accounting-uncertainty: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-OUTBOX",
+      "journey": "NOT RUN",
+      "checks": [
+        "async-poll",
+        "rate-rejection"
+      ],
+      "reasons": [
+        "NOT RUN[delegated] Valkey data or ack lost, delivery replayed, dispatcher restarted: the journey loses nothing; E3C s05[outbox] and s08 (lost Valkey index), E3B dr13/db10; rerun on the merged SHA (journey slice async-poll, rate-rejection: NOT RUN)",
+        "async-poll: NOT RUN - not selected (--only / --break-seam)",
+        "rate-rejection: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-RLS",
+      "journey": "NOT RUN",
+      "checks": [
+        "provider-route-denial",
+        "isolation"
+      ],
+      "reasons": [
+        "provider-route-denial: NOT RUN - not selected (--only / --break-seam)",
+        "isolation: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "MEDIA-SEC",
+      "journey": "NOT RUN",
+      "checks": [
+        "video-upload",
+        "isolation"
+      ],
+      "reasons": [
+        "video-upload: NOT RUN - not selected (--only / --break-seam)",
+        "isolation: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "API-MODES",
+      "journey": "NOT RUN",
+      "checks": [
+        "text-sync",
+        "async-poll",
+        "video-upload"
+      ],
+      "reasons": [
+        "text-sync: NOT RUN - not selected (--only / --break-seam)",
+        "async-poll: NOT RUN - not selected (--only / --break-seam)",
+        "video-upload: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "API-STREAM",
+      "journey": "NOT RUN",
+      "checks": [
+        "sse-stream"
+      ],
+      "reasons": [
+        "sse-stream: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "CONSOLE-FLOWS",
+      "journey": "FAIL",
+      "checks": [
+        "signup-verify-grant",
+        "signin-claim",
+        "create-key",
+        "usage-balance",
+        "refresh",
+        "request-detail",
+        "provider-route-denial",
+        "operator-controls",
+        "revoke-key"
+      ],
+      "reasons": [
+        "signup-verify-grant: FAIL - Error: one grant despite the repeated callback\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 3\n+ Received  + 3\n\n  Array [\n-   1,\n-   1,\n-   \"10000\",\n+   2,\n+   2,\n+   \"20000\",\n  ]\n\n  254 |   expect(after[\"rpc/claim_signup_grant:200\"] ?? 0, \"the recovery callback claimed again\").toBe((claims[\"rpc/claim_signup_grant:200\"] ?? 0) + 1);\n  255 |   books = await facts(email);\n> 256 |   expect([books.entitlements, books.grant_rows, exact(books.grant_total)], \"one grant despite the repeated callback\").toEqual([1, 1, \"10000\"]);\n      |                                               ",
+        "signin-claim: NOT RUN - not selected (--only / --break-seam)",
+        "create-key: NOT RUN - not selected (--only / --break-seam)",
+        "usage-balance: NOT RUN - not selected (--only / --break-seam)",
+        "refresh: NOT RUN - not selected (--only / --break-seam)",
+        "request-detail: NOT RUN - not selected (--only / --break-seam)",
+        "provider-route-denial: NOT RUN - not selected (--only / --break-seam)",
+        "operator-controls: NOT RUN - not selected (--only / --break-seam)",
+        "revoke-key: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "CREDIT-GRANT",
+      "journey": "FAIL",
+      "checks": [
+        "signup-verify-grant",
+        "isolation"
+      ],
+      "reasons": [
+        "signup-verify-grant: FAIL - Error: one grant despite the repeated callback\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 3\n+ Received  + 3\n\n  Array [\n-   1,\n-   1,\n-   \"10000\",\n+   2,\n+   2,\n+   \"20000\",\n  ]\n\n  254 |   expect(after[\"rpc/claim_signup_grant:200\"] ?? 0, \"the recovery callback claimed again\").toBe((claims[\"rpc/claim_signup_grant:200\"] ?? 0) + 1);\n  255 |   books = await facts(email);\n> 256 |   expect([books.entitlements, books.grant_rows, exact(books.grant_total)], \"one grant despite the repeated callback\").toEqual([1, 1, \"10000\"]);\n      |                                               ",
+        "isolation: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "CREDIT-IDENTITY",
+      "journey": "FAIL",
+      "checks": [
+        "signup-verify-grant",
+        "isolation"
+      ],
+      "reasons": [
+        "signup-verify-grant: FAIL - Error: one grant despite the repeated callback\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 3\n+ Received  + 3\n\n  Array [\n-   1,\n-   1,\n-   \"10000\",\n+   2,\n+   2,\n+   \"20000\",\n  ]\n\n  254 |   expect(after[\"rpc/claim_signup_grant:200\"] ?? 0, \"the recovery callback claimed again\").toBe((claims[\"rpc/claim_signup_grant:200\"] ?? 0) + 1);\n  255 |   books = await facts(email);\n> 256 |   expect([books.entitlements, books.grant_rows, exact(books.grant_total)], \"one grant despite the repeated callback\").toEqual([1, 1, \"10000\"]);\n      |                                               ",
+        "isolation: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "CREDIT-UNITS",
+      "journey": "FAIL",
+      "checks": [
+        "signup-verify-grant",
+        "usage-balance"
+      ],
+      "reasons": [
+        "signup-verify-grant: FAIL - Error: one grant despite the repeated callback\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 3\n+ Received  + 3\n\n  Array [\n-   1,\n-   1,\n-   \"10000\",\n+   2,\n+   2,\n+   \"20000\",\n  ]\n\n  254 |   expect(after[\"rpc/claim_signup_grant:200\"] ?? 0, \"the recovery callback claimed again\").toBe((claims[\"rpc/claim_signup_grant:200\"] ?? 0) + 1);\n  255 |   books = await facts(email);\n> 256 |   expect([books.entitlements, books.grant_rows, exact(books.grant_total)], \"one grant despite the repeated callback\").toEqual([1, 1, \"10000\"]);\n      |                                               ",
+        "usage-balance: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "CREDIT-RATE",
+      "journey": "NOT RUN",
+      "checks": [
+        "usage-balance"
+      ],
+      "reasons": [
+        "NOT RUN[delegated] a rate published while jobs wait or run: the journey publishes none; E3B dr07c/db13; rerun on the merged SHA (journey slice usage-balance: NOT RUN)",
+        "usage-balance: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "CREDIT-SPEND",
+      "journey": "NOT RUN",
+      "checks": [
+        "retry",
+        "usage-balance",
+        "accounting-uncertainty",
+        "low-funds"
+      ],
+      "reasons": [
+        "retry: NOT RUN - not selected (--only / --break-seam)",
+        "usage-balance: NOT RUN - not selected (--only / --break-seam)",
+        "accounting-uncertainty: NOT RUN - not selected (--only / --break-seam)",
+        "low-funds: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "APP-JOURNEY",
+      "journey": "FAIL",
+      "checks": [
+        "signup-verify-grant",
+        "signin-claim",
+        "create-key",
+        "text-sync",
+        "sse-stream",
+        "async-poll",
+        "video-upload",
+        "retry",
+        "usage-balance",
+        "refresh",
+        "request-detail",
+        "accounting-uncertainty",
+        "rate-rejection",
+        "low-funds",
+        "provider-route-denial",
+        "operator-controls",
+        "isolation",
+        "revoke-key",
+        "expired-result"
+      ],
+      "reasons": [
+        "signup-verify-grant: FAIL - Error: one grant despite the repeated callback\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 3\n+ Received  + 3\n\n  Array [\n-   1,\n-   1,\n-   \"10000\",\n+   2,\n+   2,\n+   \"20000\",\n  ]\n\n  254 |   expect(after[\"rpc/claim_signup_grant:200\"] ?? 0, \"the recovery callback claimed again\").toBe((claims[\"rpc/claim_signup_grant:200\"] ?? 0) + 1);\n  255 |   books = await facts(email);\n> 256 |   expect([books.entitlements, books.grant_rows, exact(books.grant_total)], \"one grant despite the repeated callback\").toEqual([1, 1, \"10000\"]);\n      |                                               ",
+        "signin-claim: NOT RUN - not selected (--only / --break-seam)",
+        "create-key: NOT RUN - not selected (--only / --break-seam)",
+        "text-sync: NOT RUN - not selected (--only / --break-seam)",
+        "sse-stream: NOT RUN - not selected (--only / --break-seam)",
+        "async-poll: NOT RUN - not selected (--only / --break-seam)",
+        "video-upload: NOT RUN - not selected (--only / --break-seam)",
+        "retry: NOT RUN - not selected (--only / --break-seam)",
+        "usage-balance: NOT RUN - not selected (--only / --break-seam)",
+        "refresh: NOT RUN - not selected (--only / --break-seam)",
+        "request-detail: NOT RUN - not selected (--only / --break-seam)",
+        "accounting-uncertainty: NOT RUN - not selected (--only / --break-seam)",
+        "rate-rejection: NOT RUN - not selected (--only / --break-seam)",
+        "low-funds: NOT RUN - not selected (--only / --break-seam)",
+        "provider-route-denial: NOT RUN - not selected (--only / --break-seam)",
+        "operator-controls: NOT RUN - not selected (--only / --break-seam)",
+        "isolation: NOT RUN - not selected (--only / --break-seam)",
+        "revoke-key: NOT RUN - not selected (--only / --break-seam)",
+        "expired-result: NOT RUN - not selected (--only / --break-seam)"
+      ],
+      "verdict": "FAIL"
+    }
+  ],
+  "checks": [
+    {
+      "id": "signup-verify-grant",
+      "status": "FAIL",
+      "reason": "Error: one grant despite the repeated callback\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 3\n+ Received  + 3\n\n  Array [\n-   1,\n-   1,\n-   \"10000\",\n+   2,\n+   2,\n+   \"20000\",\n  ]\n\n  254 |   expect(after[\"rpc/claim_signup_grant:200\"] ?? 0, \"the recovery callback claimed again\").toBe((claims[\"rpc/claim_signup_grant:200\"] ?? 0) + 1);\n  255 |   books = await facts(email);\n> 256 |   expect([books.entitlements, books.grant_rows, exact(books.grant_total)], \"one grant despite the repeated callback\").toEqual([1, 1, \"10000\"]);\n      |                                               ",
+      "test_ids": [
+        "CREDIT-GRANT",
+        "CREDIT-IDENTITY",
+        "CREDIT-UNITS",
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "signin-claim",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "create-key",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "needs": [
+        "C3A",
+        "U2"
+      ]
+    },
+    {
+      "id": "text-sync",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "API-MODES",
+        "DUR-ADMIT",
+        "DUR-SETTLE"
+      ],
+      "needs": []
+    },
+    {
+      "id": "sse-stream",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "API-STREAM",
+        "DUR-OUTPUT"
+      ],
+      "needs": []
+    },
+    {
+      "id": "async-poll",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "API-MODES",
+        "DUR-OUTPUT",
+        "DUR-OUTBOX"
+      ],
+      "needs": []
+    },
+    {
+      "id": "video-upload",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "API-MODES",
+        "MEDIA-SEC"
+      ],
+      "needs": []
+    },
+    {
+      "id": "retry",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "DUR-SETTLE",
+        "CREDIT-SPEND"
+      ],
+      "needs": []
+    },
+    {
+      "id": "usage-balance",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "CREDIT-SPEND",
+        "CREDIT-UNITS",
+        "CREDIT-RATE",
+        "DUR-SETTLE",
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "refresh",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "request-detail",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "CONSOLE-FLOWS",
+        "DUR-OUTPUT"
+      ],
+      "needs": [
+        "U4"
+      ]
+    },
+    {
+      "id": "accounting-uncertainty",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "DUR-SETTLE",
+        "CREDIT-SPEND"
+      ],
+      "needs": []
+    },
+    {
+      "id": "rate-rejection",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "DUR-CAP",
+        "DUR-ADMIT",
+        "DUR-FENCE",
+        "DUR-OUTBOX"
+      ],
+      "needs": []
+    },
+    {
+      "id": "low-funds",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "CREDIT-SPEND",
+        "DUR-ADMIT"
+      ],
+      "needs": []
+    },
+    {
+      "id": "provider-route-denial",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "DUR-RLS",
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "operator-controls",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "needs": [
+        "U3"
+      ]
+    },
+    {
+      "id": "isolation",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "DUR-RLS",
+        "CREDIT-IDENTITY",
+        "CREDIT-GRANT",
+        "MEDIA-SEC"
+      ],
+      "needs": []
+    },
+    {
+      "id": "revoke-key",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "CONSOLE-FLOWS",
+        "DUR-ADMIT"
+      ],
+      "needs": [
+        "C3A",
+        "U2"
+      ]
+    },
+    {
+      "id": "expired-result",
+      "status": "NOT RUN",
+      "reason": "not selected (--only / --break-seam)",
+      "test_ids": [
+        "DUR-OUTPUT"
+      ],
+      "needs": []
+    }
+  ],
+  "evidence": {
+    "browser_report": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/own-grant-guard/playwright.json",
+    "browser_log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/own-grant-guard/browser.log",
+    "app_log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/own-grant-guard/app.log",
+    "box_logs": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/own-grant-guard/cases/journey"
+  },
+  "reproduce": "PLAYWRIGHT_BROWSERS_PATH=<dir> apps/infrx-api/.venv/bin/python tests/integration/app/runner.py --out <dir>"
+}
