@@ -95,3 +95,55 @@ the PG column is the recorded oracle run
 ## Deviations
 - `--lock-timeout-s` (default 5.0) added so the bound is the operator's and the PG lock case is fast; `--dry-run` needs no operator key (mirrors `credit-transition --dry-run`).
 - The verb reads rows through `PgTransition.inventory()["flags"]` (existing read-only snapshot) rather than a new query.
+
+## Fix round (review of handback 086f99d5; code head unchanged 3c5947fb, doc head 44d623c8)
+All three findings fix text outside the lane's owned paths or need a coordinator decision. Nothing
+in `infrx/operations` changed; the only commit is to `infra/runbooks/rollback.md` (owned).
+
+| finding | fixed | what |
+|---|---|---|
+| 0-G8FLAG-R1, 1-G8FLAG-R1 (operations.md cutover rollback step 2 still sends the operator to a direct `signup_grant` write) | no (not owned) | WR-G8FLAG-1 is now an exact two-file patch with its own test (below), fails-before and passes-after verified in this worktree and reverted; the coordinator lands it in the same merge as `codex/g8-flag` and closes GAP-I3-1 |
+| 1-G8FLAG-R2 (maintenance is a direct UPDATE of the two regime flags vs R144's first sentence) | no (coordinator decision, WR-G8FLAG-3) | the owned sentence no longer reads as the admission flags' path (they move with `credit-transition`, R133), and a `⚠️ TO BE VERIFIED (WR-G8FLAG-3)` note under the block states the conflict and the two options; the SQL block is unchanged (bk04/rb03) |
+
+### WR-G8FLAG-1, exact patch (replaces the text-only request above)
+`infra/app/operations.md` "Cutover rollback" step 2, and one assertion in
+`tests/integration/ops/test_i3_operations.py::test_i3_ops03_every_cutover_step_names_its_check_and_abort`:
+```diff
+-2. **Signup grant flag off** [OP]: no CLI verb turns `signup_grant` off on its own
+-   (`credit-transition` only enables it; GAP-I3-1 asks G8's owner for one). Until then it is
+-   the logged flag write of [rollback.md](../runbooks/rollback.md#maintenance) with
+-   `where name = 'signup_grant'`, your name and reason — a flag, never money. A claim then
+-   answers `unavailable` and `/welcome` offers a retry (`app/(auth)/flow.ts` `claimOutcome`).
++2. **Signup grant flag off** [OP]:
++   `python -m infrx.operations.cli flag --name signup_grant --off --idempotency-key <k> --reason "<why>"`
++   (`infrx.set_feature_flag`, audited once per key, R144; exit 1 `state_conflict` when an
++   admission holds the flags past `--lock-timeout-s` — rerun under the same key) — a flag,
++   never money. A claim then answers `unavailable` and `/welcome` offers a retry
++   (`app/(auth)/flow.ts` `claimOutcome`).
+```
+```diff
+     assert "Not rolled back" in rollback and "money" in rollback and "users" in rollback
++    # R144 / G8-FLAG (review 0/1-G8FLAG-R1): the grant closes with the audited verb, never
++    # the maintenance block's direct flag write.
++    assert "flag --name signup_grant --off" in rollback, "cutover rollback step 2 skips the verb"
++    assert "where name = 'signup_grant'" not in rollback and "no CLI verb" not in rollback
+```
+Plus one line in operations.md's verification log (coordinator's wording). WR-G8FLAG-2 (the R144
+clause naming the `flag` verb) stands unchanged.
+
+### Commands (fix round; `INFRX_D_TASK=g8`, in `apps/infrx-api` unless noted)
+| cmd | exit | result |
+|---|---|---|
+| test hunk of WR-G8FLAG-1 applied alone; `pytest -q ../../tests/integration/ops/test_i3_operations.py -k ops03` | 1 | 1 failed (`cutover rollback step 2 skips the verb`) - fails-before |
+| both hunks applied; `pytest -q ../../tests/integration/ops/test_i3_operations.py ../../tests/integration/backend/recovery/test_runbooks.py` | 0 | 18 passed; reverted (`git apply -R`, `git status` clean) |
+| `git apply --check` of the patch at 44d623c8, then applied: the same two files | 0 | 18 passed; reverted, clean |
+| at 44d623c8: `pytest -q ../../tests/integration/backend/recovery/test_runbooks.py ../../tests/integration/ops/test_i3_operations.py` | 0 | 18 passed (rb03: the statement still bk04's verbatim) |
+| `pytest -q tests/g/ops` | 0 | 94 passed (PG cases on the g8 harness) |
+| `python -m tests.g.ops.mutants <6 flag mutants>` | 0 | 6/6 killed |
+| `INFRX_MUTANTS=all pytest -q tests/g/ops/test_mutants.py` | 0 | 108 passed (102 mutants killed, list well-formed, every case covered, runner self-tests) |
+| `ruff check infrx/operations tests/g/ops` | 0 | All checks passed |
+| `python3 research/plan/scripts/validate_plan.py` (worktree root) | 0 | PASS (3 lines) |
+
+Estimate (unchanged work, coordinator side): optimistic 0.2 h, likely 0.4 h, pessimistic 1.0 h,
+confidence medium; basis: apply WR-G8FLAG-1 (verified patch) and WR-G8FLAG-2 at the merge, decide
+WR-G8FLAG-3 (R144 exception, or bk04 + rb03 + runbook to `set_feature_flag` by D10/I3B).
