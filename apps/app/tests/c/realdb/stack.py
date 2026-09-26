@@ -56,6 +56,8 @@ OPERATOR = "c0000000-0000-4000-8000-00000000000a"
 EMPTY = "c0000000-0000-4000-8000-00000000000b"      # granted, no requests
 LARGE = "c0000000-0000-4000-8000-00000000000c"      # granted, 20,000 extra ledger entries
 FILLER = "c0000000-0000-4000-8000-00000000000d"     # granted, 60,000 entries elsewhere
+JOINED = "c0000000-0000-4000-8000-00000000000e"     # first membership row is SHARED's (C0 WR-6)
+ORPHAN = "c0000000-0000-4000-8000-00000000000f"     # a member of SHARED's org only: no personal org
 REVOKED_KEY = "c7000000-0000-4000-8000-0000000000c1"
 SHARED_KEY = "c7000000-0000-4000-8000-0000000000c2"
 LARGE_ROWS, FILLER_ROWS = 20_000, 60_000
@@ -169,6 +171,18 @@ def seed(conn) -> dict:
     conn.execute("select infrx.set_suspension(%s, true, 'other', 'c0-test', 'fixture', %s)",
                  (c2_org, f"c0-suspend-{uuid.uuid4()}"))
     _user(conn, OPERATOR, operator=True)
+    # C0 WR-6: JOINED's membership rows are re-inserted so SHARED's comes first (what the old
+    # `limit(1)` pick returned); ORPHAN's personal organization is gone and they remain a member of
+    # SHARED's only.
+    _user(conn, JOINED)
+    joined_org = cc.personal_org(conn, JOINED)
+    conn.execute("delete from public.org_members where user_id = %s", (JOINED,))
+    conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, 'member'), "
+                 "(%s, %s, 'owner')", (shared_org, JOINED, joined_org, JOINED))
+    _user(conn, ORPHAN)
+    conn.execute("delete from public.organizations where created_by = %s", (ORPHAN,))
+    conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, 'member')",
+                 (shared_org, ORPHAN))
     for user in (EMPTY, LARGE, FILLER):
         _user(conn, user)
         cc.grant(conn, user)
@@ -187,8 +201,9 @@ def seed(conn) -> dict:
     return {
         "users": {"c1": cc.CONSUMER_1, "c2": cc.CONSUMER_2, "ungranted": cc.UNGRANTED,
                   "shared": cc.SHARED, "provider": cc.PROVIDER_DEV_USER, "operator": OPERATOR,
-                  "empty": EMPTY, "large": LARGE},
-        "orgs": {"c1": c1_org, "c2": c2_org, "shared": shared_org},
+                  "empty": EMPTY, "large": LARGE, "joined": JOINED, "orphan": ORPHAN},
+        "orgs": {"c1": c1_org, "c2": c2_org, "shared": shared_org, "joined": joined_org,
+                 "operator": cc.personal_org(conn, OPERATOR)},
         "wallets": {name: wallet(user) for name, user in
                     (("c1", cc.CONSUMER_1), ("c2", cc.CONSUMER_2), ("empty", EMPTY), ("large", LARGE))},
         "requests": {"short": str(short.request_id), "long": str(long_.request_id), "held": held,

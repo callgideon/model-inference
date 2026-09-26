@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { onceGetUser, personalOrg } from "@/lib/services/console";
 import { createClient } from "@/lib/supabase/server";
 
 export type Session = {
@@ -12,39 +13,40 @@ export type Session = {
 };
 
 /**
- * The signed-in user with their single organization (spec F2: one org per user).
- * Cached per request so the layout and the page share one round-trip.
+ * The request's one Supabase server client: its `getUser()` reaches GoTrue once per request
+ * (U1R WR-6), whether the layout's session, operator flag or credit read or the page asks.
+ */
+export const requestClient = cache(async () => onceGetUser(await createClient()));
+
+/**
+ * The signed-in user and their personal organization (C0 WR-6, R66): the one they created and own,
+ * never the first of their memberships. Cached per request so the layout and the page share it.
  */
 export const getSession = cache(async (): Promise<Session> => {
-  const supabase = await createClient();
+  const supabase = await requestClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: membership }] = await Promise.all([
+  const [{ data: profile }, org] = await Promise.all([
     supabase.from("profiles").select("email, is_operator").eq("id", user.id).single(),
-    supabase
-      .from("org_members")
-      .select("org_id, role, organizations(name)")
-      .eq("user_id", user.id)
-      .limit(1)
-      .maybeSingle(),
+    // The cookie client implements the slice `personalOrg` declares.
+    personalOrg(supabase as unknown as Parameters<typeof personalOrg>[0], user.id),
   ]);
 
-  if (!membership) {
-    // The auth.users trigger creates profile + org + membership; if it has not run yet
-    // there is nothing to show, and nothing the console can do about it.
-    throw new Error("No organization for this account yet — sign out and back in.");
+  if (!org) {
+    // The auth.users trigger creates profile + personal org + owner membership; a user without
+    // exactly one is not an account to guess at.
+    throw new Error("No personal organization for this account yet — sign out and back in.");
   }
 
-  const org = membership.organizations as unknown as { name: string } | null;
   return {
     userId: user.id,
     email: profile?.email ?? user.email ?? "",
     isOperator: profile?.is_operator ?? false,
-    orgId: membership.org_id as string,
-    orgName: org?.name ?? "Personal",
-    role: membership.role as "owner" | "member",
+    orgId: org.orgId,
+    orgName: org.orgName,
+    role: "owner",
   };
 });

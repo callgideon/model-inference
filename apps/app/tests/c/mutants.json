@@ -1877,6 +1877,106 @@
       "cases": [
         "C-PROV-02 each provider page runs the guard first, before any read"
       ]
+    },
+    {
+      "id": "C0-ORG-01",
+      "note": "C0 WR-6: the first-membership pick restored (lib/session.ts's old `.eq(user_id).limit(1)`)",
+      "file": "lib/services/console.ts",
+      "find": "    .eq(\"role\", \"owner\")\n    .eq(\"organizations.created_by\", userId)\n    .limit(2);",
+      "replace": "    .limit(1);",
+      "cases": [
+        "C0-ORG-01 the session's organization is the one the individual created and owns, never the first membership"
+      ]
+    },
+    {
+      "id": "C0-ORG-02",
+      "note": "the owner predicate dropped: an organization the individual created but no longer owns counts",
+      "file": "lib/services/console.ts",
+      "find": "    .eq(\"role\", \"owner\")\n",
+      "replace": "",
+      "cases": [
+        "C0-ORG-01 the session's organization is the one the individual created and owns, never the first membership"
+      ]
+    },
+    {
+      "id": "C0-ORG-03",
+      "note": "the creator predicate dropped: an organization someone else created counts as personal",
+      "file": "lib/services/console.ts",
+      "find": "    .eq(\"organizations.created_by\", userId)\n",
+      "replace": "",
+      "cases": [
+        "C0-ORG-01 the session's organization is the one the individual created and owns, never the first membership"
+      ]
+    },
+    {
+      "id": "C0-ORG-04",
+      "note": "two personal organizations: the first is taken instead of refused",
+      "file": "lib/services/console.ts",
+      "find": "  if (data.length !== 1) return null;",
+      "replace": "  if (data.length === 0) return null;",
+      "cases": [
+        "C0-ORG-02 no personal organization, or two to guess between, is refused (null); a failed read throws"
+      ]
+    },
+    {
+      "id": "C0-ORG-05",
+      "note": "a failed membership read is 'no organization' instead of a failure",
+      "file": "lib/services/console.ts",
+      "find": "throw new Error(\"the personal organization could not be read\");",
+      "replace": "return null;",
+      "cases": [
+        "C0-ORG-02 no personal organization, or two to guess between, is refused (null); a failed read throws"
+      ]
+    },
+    {
+      "id": "U1R-AUTH-01",
+      "note": "U1R WR-6: the credit reads' own client restored (a second getUser per render)",
+      "file": "app/(console)/billing/credit-context.ts",
+      "find": "    const supabase = await requestClient();",
+      "replace": "    const supabase = await createClient();",
+      "cases": [
+        "U1R-AUTH-02 the layout's session, operator flag and credit reads take the request's one client"
+      ]
+    },
+    {
+      "id": "U1R-AUTH-02",
+      "note": "consumerSession() builds its own client (a second getUser per render)",
+      "file": "lib/services/server.ts",
+      "find": "(await requestClient()) as unknown as ConsumerClient",
+      "replace": "(await createClient()) as unknown as ConsumerClient",
+      "cases": [
+        "U1R-AUTH-02 the layout's session, operator flag and credit reads take the request's one client"
+      ]
+    },
+    {
+      "id": "U1R-AUTH-03",
+      "note": "getSession() builds its own client (a second getUser per render)",
+      "file": "lib/session.ts",
+      "find": "  const supabase = await requestClient();\n  const {",
+      "replace": "  const supabase = await createClient();\n  const {",
+      "cases": [
+        "U1R-AUTH-02 the layout's session, operator flag and credit reads take the request's one client"
+      ]
+    },
+    {
+      "id": "U1R-AUTH-04",
+      "note": "requestClient is not cached per request (a client, and a getUser, per caller)",
+      "file": "lib/session.ts",
+      "find": "export const requestClient = cache(async () =>",
+      "replace": "export const requestClient = (async () =>",
+      "cases": [
+        "U1R-AUTH-02 the layout's session, operator flag and credit reads take the request's one client"
+      ]
+    },
+    {
+      "id": "U1R-AUTH-05",
+      "note": "the client's getUser is not memoised: every read asks GoTrue again",
+      "file": "lib/services/console.ts",
+      "find": "(answer ??= getUser())",
+      "replace": "(answer = getUser())",
+      "cases": [
+        "U1R-AUTH-01 one GoTrue call per request, however many of the render's reads ask"
+      ]
     }
   ]
 }

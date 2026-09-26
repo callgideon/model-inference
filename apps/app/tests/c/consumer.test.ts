@@ -14,6 +14,9 @@
 // The same port runs against real PostgREST in `consumer-postgrest.test.ts`.
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import type { PostgrestClient, QueryPlan, QueryPort, Row } from "../../lib/services/query.ts";
 import { buildPlan, postgrestPort, QueryPortError } from "../../lib/services/query.ts";
@@ -22,6 +25,8 @@ import {
   consoleShell,
   consumerSessionFrom,
   createConsumerReads,
+  onceGetUser,
+  personalOrg,
   resolveConsumerContext,
   type ConsumerAccount,
   type AuthUser,
@@ -660,4 +665,76 @@ test("the console shell: sign-in, verification, readiness and outages", async ()
   assert.deepEqual([shell.kind, "email" in shell && shell.email], ["render", "me@example.com"]);
   assert.ok("reads" in shell && shell.reads === ready.reads, "the page gets the account's reads");
   assert.deepEqual(consoleShell({ context: ready.context, reads: null }, false, SHIPPED), { kind: "panel", state: "unavailable" }, "ready without reads");
+});
+
+// ---------------------------------------------------------------- C0 WR-6: the personal organization
+
+/**
+ * `org_members` as PostgREST returns it with `organizations` embedded (`!inner`: a filter on the
+ * embedded row drops the membership), in insertion order, so a first-membership pick sees SHARED.
+ */
+function membersClient(rows: Row[], error: unknown = null) {
+  const at = (row: Row, path: string): unknown => path.split(".").reduce<unknown>((v, k) => (v as Row | null)?.[k], row);
+  const filter = (current: Row[]): unknown => ({
+    eq: (column: string, value: string) => filter(current.filter((row) => at(row, column) === value)),
+    limit: (count: number) => filter(current.slice(0, count)),
+    then: (ok: (a: unknown) => unknown, ko: (e: unknown) => unknown) => Promise.resolve({ data: error === null ? current : null, error }).then(ok, ko),
+  });
+  const relations: string[] = [];
+  const client = { from: (relation: string) => (relations.push(relation), { select: () => filter(rows) }) };
+  return { client: client as unknown as Parameters<typeof personalOrg>[0], relations };
+}
+const member = (org: string, role: string, createdBy: string, name: string): Row => ({ org_id: org, user_id: ME, role, organizations: { name, created_by: createdBy } });
+const DEMOTED_ORG = "0e000000-0000-4000-8000-000000000004";
+const memberships = [
+  member(SHARED_ORG, "member", OTHER, "Shared"), // first: what `.limit(1)` picked
+  member(OTHER_ORG, "owner", OTHER, "Theirs"), // owned, but created by someone else
+  member(DEMOTED_ORG, "member", ME, "Demoted"), // created by me, no longer owned
+  member(MY_ORG, "owner", ME, "Mine"),
+];
+
+test("C0-ORG-01 the session's organization is the one the individual created and owns, never the first membership", async () => {
+  const { client, relations } = membersClient(memberships);
+  assert.deepEqual(await personalOrg(client, ME), { orgId: MY_ORG, orgName: "Mine" });
+  assert.deepEqual(relations, ["org_members"]);
+});
+
+test("C0-ORG-02 no personal organization, or two to guess between, is refused (null); a failed read throws", async () => {
+  assert.equal(await personalOrg(membersClient(memberships.slice(0, 3)).client, ME), null, "only other organizations");
+  assert.equal(await personalOrg(membersClient([]).client, ME), null, "no membership");
+  const two = [...memberships, member("0e000000-0000-4000-8000-000000000005", "owner", ME, "Second")];
+  assert.equal(await personalOrg(membersClient(two).client, ME), null, "two owned personal organizations");
+  await assert.rejects(personalOrg(membersClient(memberships, { code: "PGRST000" }).client, ME), /could not be read/);
+});
+
+// ---------------------------------------------------------------- U1R WR-6: one getUser per request
+
+test("U1R-AUTH-01 one GoTrue call per request, however many of the render's reads ask", async () => {
+  let calls = 0;
+  const base = supabaseAs(signedIn, myWallet);
+  const client = onceGetUser({ ...base, auth: { getUser: () => ((calls += 1), Promise.resolve(signedIn)) } });
+  // The layout: consumerSession(), the operator flag (getSession) and the sidebar's credit reads, at
+  // once; then the page's own credit reads.
+  const [session, flag, sidebar] = await Promise.all([consumerSessionFrom(async () => client, secret), client.auth.getUser(), client.auth.getUser()]);
+  const page = await client.auth.getUser();
+  assert.equal(session.context.state, "ready");
+  assert.deepEqual([flag, sidebar, page], [signedIn, signedIn, signedIn]);
+  assert.equal(calls, 1, "getUser reached GoTrue more than once in one request");
+});
+
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const source = (file: string) => readFileSync(join(appRoot, file), "utf8");
+
+test("U1R-AUTH-02 the layout's session, operator flag and credit reads take the request's one client", () => {
+  // Pinned as source: these modules import next/* and cannot load under node --test (R48).
+  const session = source("lib/session.ts");
+  assert.match(session, /export const requestClient = cache\(async \(\) => onceGetUser\(await createClient\(\)\)\);/);
+  assert.match(session, /getSession = cache\(async \(\): Promise<Session> => \{\n  const supabase = await requestClient\(\);/);
+  assert.equal(session.match(/createClient\(/g)?.length, 1, "session.ts builds exactly one client");
+  for (const file of ["lib/services/server.ts", "app/(console)/billing/credit-context.ts"]) {
+    assert.match(source(file), /await requestClient\(\)/, file);
+    assert.doesNotMatch(source(file), /createClient\(/, `${file} builds a second client (a second getUser)`);
+  }
+  const layout = source("app/(console)/layout.tsx");
+  for (const read of ["consumerSession()", "getSession()", "consumerCreditReads()"]) assert.ok(layout.includes(read), read);
 });

@@ -22,6 +22,7 @@ import {
   consoleShell,
   consumerSessionFrom,
   createConsumerReads,
+  personalOrg,
   resolveConsumerContext,
   type ConsumerAccount,
   type ConsumerClient,
@@ -35,8 +36,8 @@ type Wallet = { wallet_id: string; ledger_total: string; reserved_total: string;
 type Stack = {
   url: string;
   jwt_secret: string;
-  users: Record<"c1" | "c2" | "ungranted" | "shared" | "provider" | "operator" | "empty" | "large", string>;
-  orgs: Record<"c1" | "c2" | "shared", string>;
+  users: Record<"c1" | "c2" | "ungranted" | "shared" | "provider" | "operator" | "empty" | "large" | "joined" | "orphan", string>;
+  orgs: Record<"c1" | "c2" | "shared" | "joined" | "operator", string>;
   wallets: Record<"c1" | "c2" | "empty" | "large", Wallet>;
   requests: { short: string; long: string; held: string[]; c2: string };
   keys: Record<"c1" | "c1_revoked" | "c2" | "c2_operator" | "shared" | "stray", string>;
@@ -181,6 +182,27 @@ test("fails-before: the legacy session picks the first of several memberships", 
     .eq("user_id", S.users.c2);
   assert.equal(error, null);
   assert.deepEqual(new Set((data ?? []).map((row) => row.org_id)), new Set([S.orgs.c2, S.orgs.shared]));
+});
+
+test("C0-ORG-PG the session's organization is the personal one the user created and owns, never the first membership", { skip }, async () => {
+  // C0 WR-6 (lib/session.ts). Fails-before: the old `.eq("user_id").limit(1)` pick, over this stack.
+  type Pick = { from(r: string): { select(c: string): { eq(c: string, v: string): { limit(n: number): Promise<{ data: { org_id: string }[] | null; error: unknown }> } } } };
+  const old = await (clientFor(S.users.joined) as unknown as Pick).from("org_members").select("org_id").eq("user_id", S.users.joined).limit(1);
+  assert.deepEqual([old.error, old.data?.[0]?.org_id], [null, S.orgs.shared], "precondition: the old pick returns JOINED's first membership, SHARED's org");
+  const org = (user: string | null, as: string) => personalOrg(clientFor(user) as unknown as Parameters<typeof personalOrg>[0], as);
+  for (const [who, want] of [
+    ["joined", S.orgs.joined],
+    ["c1", S.orgs.c1],
+    ["c2", S.orgs.c2], // also a member of SHARED's org
+    ["shared", S.orgs.shared], // owns an org another individual is a member of
+    ["operator", S.orgs.operator], // RLS shows an operator every organization
+  ] as const) {
+    assert.equal((await org(S.users[who], S.users[who]))?.orgId, want, who);
+  }
+  assert.equal(await org(S.users.orphan, S.users.orphan), null, "a member of another org only has no personal org: refused");
+  assert.equal(await org(S.users.c1, S.users.c2), null, "C1's session cannot name C2's organization");
+  const anonymous = await org(null, S.users.c1).catch(() => "refused");
+  assert.ok(anonymous === null || anonymous === "refused", `anonymous: ${JSON.stringify(anonymous)}`);
 });
 
 // ---------------------------------------------------------------------------------------- balance
