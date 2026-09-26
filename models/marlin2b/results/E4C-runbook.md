@@ -145,8 +145,8 @@ certify.py's parser.
 - the ledger half on the transaction port: the env file's `DATABASE_URL` rewritten to :6543 as in run3, and
   `OPERATIONS_DATABASE_URL` = the owner login (SSM `pg_journal_url`) on :6543. After W10b `DATABASE_URL` is
   `infrx_runtime`, which the operator tool that runs the ledger half refuses. Both reach docker in a 0600 file.
-  A missing `pg_journal_url` exits with the aws CLI's own code, not the launcher's 2 (`e4c-certify.sh:33-35`
-  under `set -e`), before the certify container starts (`:44`; the image inspects at `:20-23` have already run) (E4C-RUNBOOK-2 F2; RB4-4).
+  An unreadable `pg_journal_url` exits 2 naming the parameter (`e4c-certify.sh:33-36`),
+  before the certify container starts (`:45`; the image inspects at `:20-23` have already run) (E4C-RUNBOOK-2 F2, fixed by STEP55-FIX; RB4-4).
 - `E4B_WINDOW_OK=1`
 - the three E4C inputs: `--run-profile`, `--key-inventory` and `--overload-profile` (§3, H6)
 
