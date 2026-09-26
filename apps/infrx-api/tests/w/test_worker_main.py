@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import importlib.util
 import json
+import logging
 import os
 import pathlib
 import signal
@@ -45,6 +46,7 @@ from infrx.scheduling.memory import MemoryScheduler
 from infrx.state.jobstore import PgJobStore
 from infrx.state.journal import PgStreamStore
 from infrx.worker import __main__ as worker_main
+from infrx.worker.service import RECONCILIATION_SQL
 
 API = pathlib.Path(__file__).resolve().parents[2]
 REPO = API.parents[1]
@@ -940,3 +942,164 @@ def test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it(b
         code = pilot.stop("worker")
     assert ready[0] == 200 and '"engine": "up"' in ready[1], (ready, pilot.tail("worker"))
     assert code == 0, pilot.tail("worker")
+
+
+# ------------------------------------- W5-F5 (E3C F-6): the monitor login's gauges
+MONITOR_DSN = "postgresql://infrx_monitor:do-not-print@127.0.0.1:9/infrx"
+
+
+class NothingToRecover:
+    """A store whose `recover` finds nothing: a reaper tick that only reconciles."""
+
+    unsettleable = ()
+
+    async def recover(self):
+        return []
+
+
+def ticks(service, n: int = 3) -> None:
+    service.jobs = NothingToRecover()
+
+    async def run():
+        for _ in range(n):
+            await service.reap_once()
+    asyncio.run(run())
+
+
+def said(caplog, word: str = "reconciliation") -> list[str]:
+    return [r.getMessage() for r in caplog.records if word in r.getMessage()]
+
+
+def test_worker_main__without_a_monitor_login_the_reconciliation_gauges_are_off(
+        tmp_path, caplog):
+    """E3C F-6: 0021 grants the reconciliation views to `infrx_monitor` only (0021:550), so
+    a reader on the runtime pool (`infrx_runtime`) was refused on every reaper tick (39 of
+    46 worker log lines) and never published a gauge. With no `MONITOR_DATABASE_URL` no
+    reader is composed: ONE startup line, then no per-tick error and nothing published.
+    Oracle: `PgReconciliation` on the runtime pool (a reader, and an error every tick)."""
+    caplog.set_level(logging.INFO, logger="infrx.worker")
+    service, _ = composed(environment(tmp_path))
+    assert service.reconciliation is None
+    ticks(service)
+    assert said(caplog) == ["reconciliation gauges disabled: no monitor login"]
+    assert service.reap_errors == 0
+    assert "infrx_reconciliation" not in service.metrics.render()
+
+
+def test_worker_main__a_login_refused_the_views_disables_the_gauges_once(tmp_path, caplog):
+    """The reader's login is refused the statement (SQLSTATE 42501: `infrx_runtime`, or
+    today's `infrx_monitor`, which may not read `infrx.credit_wallet_holds` - WR-W5F5-1). A
+    privilege does not come back between ticks: the gauges are disabled with ONE line, the
+    reader is asked once, nothing is counted as a reap error. Oracle: `reconciliation read
+    failed: InsufficientPrivilege` and a reap error on every tick."""
+    import psycopg
+    caplog.set_level(logging.INFO, logger="infrx.worker")
+    service, _ = composed(environment(tmp_path, MONITOR_DATABASE_URL=MONITOR_DSN))
+    asked = []
+
+    async def refused():
+        asked.append(1)
+        raise psycopg.errors.InsufficientPrivilege("permission denied for view "
+                                                   "wallet_reconciliation")
+
+    service.reconciliation = refused
+    ticks(service)
+    assert asked == [1] and service.reconciliation is None and service.reap_errors == 0
+    assert said(caplog) == ["reconciliation gauges disabled: the login may not read the "
+                            "reconciliation views (InsufficientPrivilege)"]
+
+
+def test_worker_main__a_database_that_is_down_is_still_retried_every_tick(tmp_path, caplog):
+    """Only a privilege refusal disables the gauges: a connection failure is the S3 F4
+    rule - counted, logged, retried at the next tick, the last pass standing."""
+    import psycopg
+    service, _ = composed(environment(tmp_path, MONITOR_DATABASE_URL=MONITOR_DSN))
+    asked = []
+
+    async def down():
+        asked.append(1)
+        raise psycopg.OperationalError("connection refused")
+
+    service.reconciliation = down
+    ticks(service)
+    assert asked == [1, 1, 1] and service.reconciliation is down and service.reap_errors == 3
+
+
+def test_worker_main__the_reconciliation_gauges_are_read_on_the_monitor_login(
+        tmp_path, monkeypatch):
+    """`MONITOR_DATABASE_URL` set: the reader dials THAT login (never `DATABASE_URL`, the
+    runtime pool's), sets no role on it (a dedicated login's privileges and bounds are its
+    own, R127), and each tick publishes the pass. Oracle: the runtime DSN dialled, or no
+    gauge."""
+    import psycopg
+    dialled, statements = [], []
+
+    class Conn:
+        async def execute(self, sql, *args):
+            statements.append(sql)
+            return self
+
+        async def fetchone(self):
+            return (2, 5)
+
+        async def close(self):
+            pass
+
+    async def connect(dsn, **kw):
+        dialled.append(dsn)
+        return Conn()
+
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", connect)
+    service, _ = composed(environment(tmp_path, MONITOR_DATABASE_URL=MONITOR_DSN))
+    ticks(service, 2)
+    assert dialled == [MONITOR_DSN, MONITOR_DSN] and service.reap_errors == 0
+    assert statements == [RECONCILIATION_SQL] * 2, statements
+    rendered = service.metrics.render()
+    assert 'infrx_reconciliation_drift{process="worker"} 2.0' in rendered, rendered
+    assert 'infrx_holds_unknown{process="worker"} 5.0' in rendered
+
+
+def test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not(
+        tmp_path, caplog):
+    """On a database migrated through 0021/0022 (the e2c block): the runtime login is
+    refused the reconciliation statement (the E3C F-6 symptom); the monitor login, as 0021
+    grants it, is refused only `infrx.credit_wallet_holds` - so the gauges disable once
+    (WR-W5F5-1 is the grant) - and with that grant the monitor login publishes the pass."""
+    import secrets
+
+    from ..d import pgharness
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"W5-F5: the D harness is unavailable: {reason}")
+    from ..d.test_catalog_pg import fresh
+    database = fresh()
+    logins = {}
+    with pgharness.connect(database) as owner:
+        for role in ("infrx_runtime", "infrx_monitor"):
+            password = secrets.token_urlsafe(18)
+            owner.execute(f"alter role {role} login password '{password}'")
+            logins[role] = pgharness.dsn(database).replace(
+                f"postgres:{pgharness.PASSWORD}@", f"{role}:{password}@", 1)
+    import psycopg
+    from infrx.state.jobstore import connector
+    runtime = worker_main.PgReconciliation(connector(logins["infrx_runtime"], set_role=False))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        asyncio.run(runtime())
+
+    caplog.set_level(logging.INFO, logger="infrx.worker")
+    service, _ = composed(environment(tmp_path, MONITOR_DATABASE_URL=logins["infrx_monitor"]))
+    ticks(service)
+    assert service.reconciliation is None and service.reap_errors == 0
+    assert said(caplog, "disabled") == ["reconciliation gauges disabled: the login may not "
+                                        "read the reconciliation views (InsufficientPrivilege)"]
+
+    with pgharness.connect(database) as owner:      # WR-W5F5-1, as D10 would write it
+        owner.execute("grant select (state) on infrx.credit_wallet_holds to infrx_monitor")
+        owner.execute("create policy monitor_reads on infrx.credit_wallet_holds for select "
+                      "to infrx_monitor using (true)")
+    service, _ = composed(environment(tmp_path, MONITOR_DATABASE_URL=logins["infrx_monitor"]))
+    ticks(service, 1)
+    rendered = service.metrics.render()
+    assert service.reap_errors == 0 and service.reconciliation is not None
+    assert 'infrx_reconciliation_drift{process="worker"} 0.0' in rendered, rendered
+    assert 'infrx_holds_unknown{process="worker"} 0.0' in rendered

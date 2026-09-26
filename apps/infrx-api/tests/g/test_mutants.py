@@ -34,7 +34,9 @@ SUBSET = ("body_cap_removed", "anonymous_request_accepted", "unhandled_exception
           "build_info_not_required_in_pilot", "release_sha_accepts_a_short_id",
           # G7: discovery past the approved profile, and admission drifting from discovery
           "approved_profile_gate_removed", "admission_ceiling_below_advertised",
-          "release_refusal_removed")
+          "release_refusal_removed",
+          # W5-F5 (E3C F-5): a ready job answered a late refusal after it ran and was charged
+          "w5_f5_late_recheck_restored")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

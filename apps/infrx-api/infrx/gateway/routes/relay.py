@@ -274,7 +274,12 @@ class Relay:
         dependency that failed leaves the job for the same-key retry its 503 invites
         (money-B2; the stored deadline ends it otherwise)."""
         try:
-            if self.regime == CREDIT:
+            # E3C F-5: through `admit_ready` the admission transaction itself checked the card
+            # against this runtime's expectation and the PINNED revision's capability
+            # (0019 `check_pinned_capability`), and wrote the marker - the worker may already
+            # have run and settled the job. A recheck here could only refuse a job past the
+            # point of no return, so only the pre-D10 door (no marker) is rechecked.
+            if self.regime == CREDIT and self.readiness is None:
                 pins = admission.pins
                 # Wire-in request "G1R (active card)": the card admission pinned must be the
                 # one this deployment approved to serve (R69: otherwise it is unpriced here).

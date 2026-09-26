@@ -64,7 +64,7 @@ from ..media.attachments import PgAttachments
 from ..media.prepare import MediaPreparation, ProcessingCache
 from ..media.retention import RetentionCollector
 from ..observe.metrics import Registry
-from ..state.jobstore import PgJobStore, PreparedWork
+from ..state.jobstore import PgJobStore, PreparedWork, connector
 from ..state.journal import PgStreamStore
 from ..state.lifecycle import PgLifecycle
 from .attempt import AttemptRunner
@@ -167,12 +167,28 @@ def compose(settings, *, objects=None, index=None):
     service = WorkerService(loop=loop, jobs=jobs, engine=engine,
                             concurrency=limits.worker_concurrency,
                             health_port=deployment.worker_health_port,
-                            reconciliation=PgReconciliation(connect),
+                            reconciliation=reconciliation_reader(deployment),
                             metrics=rt.metrics, pool=pool, preparation=preparation,
                             preparation_concurrency=limits.preparation_concurrency,
                             housekeeping=housekeeping(deployment, lifecycle, objects, media,
                                                       journal, rt.metrics))
     return service, pool
+
+
+# --- W5-F5 (E3C F-6): the reconciliation gauges on D10's monitor login -------------------
+def reconciliation_reader(deployment):
+    """S3 F4's reader on `MONITOR_DATABASE_URL` (0021 `infrx_monitor`), or None. 0021 grants
+    the reconciliation views to the monitor role only (0021:550); the runtime login is never
+    granted them (R122-R127), so on the worker's own pool every tick was refused. Unset:
+    no gauges, said once here - never an error per tick."""
+    dsn = deployment.monitor_database_url
+    if not dsn:
+        log.info("reconciliation gauges disabled: no monitor login")
+        return None
+    # ponytail: one connection per tick (every 10 s), bounded by the login's own
+    # statement_timeout; put `connect_timeout` in the DSN if a hung connect ever matters.
+    return PgReconciliation(connector(dsn, set_role=not pilot.dedicated_login(dsn)))
+# --- end W5-F5 ----------------------------------------------------------------------------
 
 
 # --- M6-WIRING: the worker's housekeeping (wiring 1 + E3C F-4) ---------------------------

@@ -15,8 +15,12 @@ from __future__ import annotations
 import pytest
 
 from infrx.config import RuntimeMisconfigured
+from infrx.contracts import errors
 from infrx.contracts.v2.lifecycle import (AdmissionExpectation, LifecycleRefusal as R, refuse)
-from infrx.gateway.routes.relay import CREDIT, LEGACY, Relay
+from infrx.contracts.conformance import builders as b
+from infrx.contracts.records import JobState, SettlementState, Usage
+from infrx.contracts.v2.money_units import CREDIT as CREDIT_UNIT
+from infrx.gateway.routes.relay import CREDIT, ERROR_EVENT, LEGACY, Relay
 from infrx.media.store import MediaStaging
 from infrx.state.jobstore import PgJobStore
 
@@ -273,3 +277,96 @@ def test_w5_compose__a_relay_refuses_an_expectation_that_is_not_its_own():
             Relay(jobs=object(), stream=None, media=None, regime=CREDIT,
                   active_rate_card_version="rc_approved", readiness=object(),
                   expectation=expectation)
+
+
+# --- E3C F-5: past the point of no return ------------------------------------------------
+def withdraw_text(world) -> None:
+    """The pinned serving revision stops accepting text (E3C s04 `late`: the operator
+    withdraws a modality after the admission transaction checked it)."""
+    serving = world.catalog.servings[support.IDS.serving_version]
+    capability = serving.capability.model_copy(update={"input_modalities": ["video"]})
+    world.catalog.servings[serving.serving_version_id] = serving.model_copy(
+        update={"capability": capability})
+
+
+def refuse_attach(world) -> None:
+    """The gateway's attach after `admit_ready` is refused (0-W5F5-R2: an upload that expired
+    between stage and attach, or a durable binding that does not match)."""
+    async def refused(job_id, refs):
+        raise errors.Conflict("the durable binding does not match")
+    world.media.attach = refused
+
+
+LATE = {"recheck": withdraw_text, "attach": refuse_attach}
+
+
+@pytest.mark.parametrize("late", ["recheck", pytest.param("attach", marks=pytest.mark.xfail(
+    strict=True, raises=AssertionError,
+    reason="0-W5F5-R2, follow-up outside W5-F5's recheck path: `_admitted` re-raises an "
+           "attach refusal after cancel answered the committed outcome (409 for a job that "
+           "succeeded and settled); drop this mark with that fix"))])
+@pytest.mark.parametrize("mode", ["sync", "stream"])
+def test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal(mode, late):
+    """E3C F-5. `admit_ready` checked the pinned card and capability inside the admission
+    transaction (0019 `check_pinned_capability`) and wrote the marker: from then on the
+    worker may claim, run and settle the job before the relay takes its next step. A
+    capability withdrawn after that commit is not this job's refusal: the client is told the
+    committed outcome, and the job is charged exactly once. Oracle: the legacy
+    post-admission recheck (`_admitted` -> `check_capability`) answered 415
+    `unsupported_media` for a job that had succeeded and settled its debit (E3C f61b82d3).
+    `attach`: the same shape from the attach that follows (0-W5F5-R2, strict xfail)."""
+    world = rs.World(regime=CREDIT, readiness=True)
+    admit_ready, ran = world.lifecycle.admit_ready, []
+
+    async def ran_then_withdrawn(request, idem, expectation):
+        admitted = await admit_ready(request, idem, expectation)
+        # The worker reads the manifest the transaction committed (a text job's is empty),
+        # never the gateway's attach - so it can run before the relay's next step.
+        world.media.by_job[admitted[0].request_id] = ()
+        lease = await world.lease()             # the worker got there first: ran, settled
+        await world.commit(lease, "Two people")
+        ref = await world.put_result(lease.job_id, "Two people")
+        ran.append(await world.jobs.complete_credit(lease, b.outcome(
+            lease.job_id, world, tokens=Usage.of(1200, 5), result_ref=ref)))
+        LATE[late](world)
+        return admitted
+
+    world.lifecycle.admit_ready = ran_then_withdrawn
+    world.during.append(lambda: world.clock.advance(3_600))    # a wait would end, not hang
+    ledgers = {w: world.jobs.credit_wallet(w).ledger_total for w in world.seeded}
+    reply = rs.run(rs.call(world.app, rs.body(stream=mode == "stream")))
+    job = world.only_job()
+    assert ran and job.state is JobState.succeeded, (job.state, reply.body)
+    assert reply.status == 200, reply.body
+    if mode == "stream":
+        assert ERROR_EVENT not in reply.events() and reply.data()[-1] == "[DONE]"
+        assert reply.text() == "Two people", reply.body
+    else:
+        assert reply.json()["choices"][0]["message"]["content"] == "Two people"
+    # Charged exactly once, in CREDIT: the one settlement at the admitted card, the hold off
+    # the wallet and the ledger down by exactly that debit - never a refund or a second one.
+    after = {w: world.jobs.credit_wallet(w).ledger_total for w in world.seeded}
+    charged = job.settlement.charged.raw(CREDIT_UNIT)
+    assert job.outcome.settlement_state is SettlementState.settled and world.released(job)
+    assert {w: ledgers[w] - after[w] for w in ledgers} == \
+        {w: charged if w == job.credit.wallet_id else 0 for w in ledgers} and charged > 0
+
+
+def test_w5_f5__the_pre_d10_door_still_rechecks_after_admission():
+    """The legacy door (`jobs.admit_credit`, no marker, nothing claimable until the refs
+    are bound) keeps G1R Limit 2's recheck: a revision that stopped accepting text by
+    admission time cancels the job unbilled and answers the refusal."""
+    world = rs.World(regime=CREDIT)
+    admit = world.jobs.admit_credit
+
+    async def withdrawn(request, idem):
+        withdraw_text(world)
+        return await admit(request, idem)
+
+    world.jobs.admit_credit = withdrawn
+    world.during.append(lambda: world.clock.advance(3_600))
+    reply = rs.run(rs.call(world.app, rs.body()))
+    assert (reply.status, reply.json()["error"]["code"]) == (400, "unsupported_media"), \
+        reply.body
+    job = world.only_job()
+    assert job.state is JobState.cancelled and world.released(job)

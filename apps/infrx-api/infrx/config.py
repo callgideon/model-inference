@@ -366,6 +366,11 @@ class DeploymentSettings:
     retention_interval_s: float = 300.0
     cache_sweep_interval_s: float = 300.0
     journal_expire_interval_s: float = 300.0
+    # E3C F-6: the worker's reconciliation gauges (S3 F4) read 0021's reconciliation views,
+    # which only D10's read-only `infrx_monitor` may read (never granted to infrx_runtime:
+    # R122-R127). Its DSN, as I8's durable monitor names it (O7, WR-I8-6); unset, the
+    # worker publishes no reconciliation gauges. A credential: never in a repr or a log.
+    monitor_database_url: str = field(default="", repr=False)
 
     def replace(self, **changes):
         return dataclasses.replace(self, **changes)
