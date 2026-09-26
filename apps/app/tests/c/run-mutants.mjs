@@ -41,6 +41,8 @@ const SUITE = [
   "tests/c/client-boundary.test.ts",
   // C0: the consumer context and read port (the real-PostgREST twin skips without its stack).
   "tests/c/consumer.test.ts",
+  // C3A: the trusted consumer actions (the real-PostgREST twin skips without its stack).
+  "tests/c/actions.test.ts",
   // S1-fix B2: the production preview gate is a module-level constant, so its case lives with the module.
   "app/(console)/usage/preview-context.test.ts",
 ];

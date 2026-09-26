@@ -461,7 +461,7 @@ function ledgerEntryOf(row: Row, session: SessionContext): LedgerEntry {
   };
 }
 
-function keyOf(row: Row): ApiKeySummary {
+export function keyOf(row: Row): ApiKeySummary {
   return {
     id: text(row, "id"),
     name: text(row, "name"),
