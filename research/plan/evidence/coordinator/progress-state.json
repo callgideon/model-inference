@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "0d049e7c",
+  "integration_head": "76ec3a5e",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 109,
-  "updated": "2026-09-26T07:24:04Z",
+  "revision": 110,
+  "updated": "2026-09-26T07:40:55Z",
   "agent_slots": {
     "total": 16,
-    "active": 8,
+    "active": 5,
     "reserved": 2,
-    "note": "Session 03 (07:18Z): workflows KNOWN-GOOD-PROOF-2 (i8), RUNBOOK-3 (revoke), APP-MINORS-1 (app-u1r/app-c0), G-GATES (e2c), D10-0026-FENCE (d4 + e3c block); LINT-2 agent (g8); coordinator App gate rerun on e0087a8f (e4b); 2 slots reserved for verify-lane workflows."
+    "note": "Session 03 (07:36Z): workflows RUNBOOK-3 (revoke), G-GATES (e2c), D10-0026-FENCE (d4 + e3c block); coordinator fixed-clone suite on the tip (e1c/app-*); 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -2828,27 +2828,50 @@
       "branch": "codex/lint-2",
       "worktree": ".claude/worktrees/codex-lint-2",
       "base": "8c9c72f9",
-      "head": null,
+      "head": "c279d0c8",
       "isolation": {
         "ports": "g8 (postgres 55447, valkey 55492)",
         "prefix": "infrx-g8-",
         "db": null
       },
-      "activity": "running",
+      "activity": "integration",
       "started": "2026-09-26T06:04:00Z",
-      "updated": "2026-09-26T06:04:00Z",
+      "updated": "2026-09-26T07:36:00Z",
       "blocker": null,
-      "next_action": "handback → coordinator merges after a fixed-clone api-test + mutant run",
+      "next_action": "merged --no-ff at 243e2d7a; fixed-clone suite on 76ec3a5e (api-test on e1c, console, ops, ruff) running → complete when green; deviation accepted: single-letter mutant-list keys renamed; note: tests/i reaches the i8 stack whatever INFRX_D_TASK says",
       "estimate": {
-        "optimistic_h": 0.7,
-        "likely_h": 1.5,
-        "pessimistic_h": 3,
-        "confidence": "medium",
-        "basis": "mechanical rewrites; the F811 shadowed tests may resurrect failing cases that become findings",
-        "at": "2026-09-26T06:04:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0.2,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "merged; one fixed-clone suite run left",
+        "at": "2026-09-26T07:36:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/LINT-2-f6e9e66.md"
+      ],
+      "commands": [
+        {
+          "cmd": "ruff check infrx tests (base 8c9c72f9 → f6e9e66c)",
+          "exit": 0,
+          "summary": "118 findings → 0; F811 35 = fixture parameters (no hidden test; tests/m/conftest.py)"
+        },
+        {
+          "cmd": "pytest --collect-only (base vs head)",
+          "exit": 0,
+          "summary": "4597 = 4597, identical node ids"
+        },
+        {
+          "cmd": "INFRX_D_TASK=g8 pytest -q tests (run 2)",
+          "exit": 1,
+          "summary": "4538 passed, 0 failed, 42 skipped, 9 xfailed, 8 errors = i8 setups refused by the shared lock (environmental)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all mutant lists m/j/d/w/g + d5/w3/loop/retention",
+          "exit": 0,
+          "summary": "225/124/30/164/406 + 41/87/69/63 all killed; 15,575 anchors checked"
+        }
+      ],
       "owned_paths": [
         "apps/infrx-api/tests/",
         "research/plan/evidence/coordinator/LINT-2-*.md"
@@ -2905,27 +2928,40 @@
       "branch": "codex/app-minors-1",
       "worktree": ".claude/worktrees/codex-app-minors-1",
       "base": "9b21339a",
-      "head": null,
+      "head": "bc5e9720",
       "isolation": {
         "ports": "app-u1r postgres 55457; app-c0 55451 for c0-real",
         "prefix": "infrx-app-u1r-",
         "db": "app-u1r"
       },
-      "activity": "running",
+      "activity": "integration",
       "started": "2026-09-26T06:41:00Z",
-      "updated": "2026-09-26T06:41:00Z",
+      "updated": "2026-09-26T07:36:00Z",
       "blocker": null,
-      "next_action": "handback → coordinator merges after fixed-clone console checks",
+      "next_action": "merged --no-ff at 37592a43 (three foreign test edits accepted: U1-T19, V1-V11, BOUNDARY-01 re-anchored); WR-AM1-1/2 applied at 76ec3a5e (rollback.py same-MAJOR check + rb09; operations.md hunks); fixed-clone console + ops checks running → complete when green; minors carried: AM1-L2 (a real-browser segment-throw case for the built suite), AM1-L3 (walk mutant hand-only at 120)",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 2,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "one paging-test rewrite plus up to three small I3 fixes with fails-before tests and mutants",
-        "at": "2026-09-26T06:41:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0.2,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "merged and wired; one fixed-clone check left",
+        "at": "2026-09-26T07:36:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/app/APP-MINORS-1-4479539.md"
+      ],
+      "commands": [
+        {
+          "cmd": "make console-test / lint / typecheck / built / mutants; c0-real; app-u1r world at 120 and 155/2000",
+          "exit": 0,
+          "summary": "610 pass; contracts 212, V 40, U 218, C 185, A 46+46 killed; c0-real 15/15; 8/8 + 8/8"
+        },
+        {
+          "cmd": "lens: hostile name/digest through every boundary; walk-stops-early mutant on the heavy world",
+          "exit": 0,
+          "summary": "reports carry digest/route/name only; hostile → null; P08 kills the mutant on the heavy world"
+        }
+      ],
       "owned_paths": [
         "apps/app/tests/u/credit-pg.test.ts",
         "apps/app/tests/u/credit_world.py",
@@ -2935,7 +2971,10 @@
         "infra/alerts/ (only if I3R-5 lives there)",
         "research/plan/evidence/app/APP-MINORS-1-*.md"
       ],
-      "wiring_requests": []
+      "wiring_requests": [
+        "WR-AM1-1 rollback.py MAJOR check + rb09 (applied)",
+        "WR-AM1-2 operations.md three hunks (applied)"
+      ]
     },
     {
       "id": "G-GATES",
@@ -5361,6 +5400,24 @@
       "by": "KNOWN-GOOD-PROOF-2",
       "what": "integration → complete; head a4561868; estimate likely 0.2 → 0 h (merged, wired and checked)",
       "source": "updates/KNOWN-GOOD-PROOF-2-20260926T0728Z.json"
+    },
+    {
+      "at": "2026-09-26T07:36:00Z",
+      "by": "coordinator (APP-MINORS-1)",
+      "what": "APP-MINORS-1 ACCEPT bc5e9720 merged at 37592a43 (P08 walks to a null cursor; segment error boundaries report via useErrorReport); WR-AM1-1/2 at 76ec3a5e",
+      "source": "research/plan/evidence/app/APP-MINORS-1-4479539.md"
+    },
+    {
+      "at": "2026-09-26T07:36:00Z",
+      "by": "coordinator (LINT-2)",
+      "what": "LINT-2 c279d0c8 merged at 243e2d7a: ruff check infrx tests clean, collection unchanged (4597), all mutant lists killed; fixed-clone suite on the tip running",
+      "source": "research/plan/evidence/coordinator/LINT-2-f6e9e66.md"
+    },
+    {
+      "at": "2026-09-26T07:40:55Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T07:24:00Z is not newer than lane APP-MINORS-1 state 2026-09-26T07:36:00Z",
+      "source": "updates/APP-MINORS-1-20260926T0724Z.json"
     }
   ],
   "history": {
@@ -5971,10 +6028,15 @@
     "KNOWN-GOOD-PROOF-2-20260926T0728Z.json": {
       "status": "applied",
       "at": "2026-09-26T07:28:00Z"
+    },
+    "APP-MINORS-1-20260926T0724Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T07:24:00Z",
+      "reason": "stale: at 2026-09-26T07:24:00Z is not newer than lane APP-MINORS-1 state 2026-09-26T07:36:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T07:24:04Z",
+    "computed_at": "2026-09-26T07:40:55Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
