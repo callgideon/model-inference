@@ -47,8 +47,11 @@ type Facts = {
   wallet: { wallet_id: string; ledger: string; reserved: string; available: string } | null;
   jobs: Job[];
   keys: { key_id: string; name: string; revoked: boolean }[];
+  suspended: boolean | null;
   conserved: { ok: boolean; detail?: string } | null;
 };
+type Audit = { actor: string; action: string; reason: string; key: string | null; after: string | null };
+type Rpc = { status: number; body: unknown };
 type Journey = {
   a?: string;
   b?: string;
@@ -61,6 +64,8 @@ type Journey = {
   syncKey?: string;
   syncContent?: string;
   asyncHandle?: string;
+  asyncRequest?: string;
+  asyncContent?: string;
   uploadRef?: string;
 };
 
@@ -346,10 +351,11 @@ test("async-poll: an external async job is accepted, polled to its end and its r
   expect([status.state, status.result_available]).toEqual(["succeeded", true]);
   const result = await api(key, "GET", `/v1/jobs/${accepted.job_handle}/result`);
   expect(result.status).toBe(200);
-  expect(((await result.json()) as { response: { usage: unknown } }).response.usage).toEqual(status.usage);
+  const { response } = (await result.json()) as { response: { usage: unknown; choices: { message: { content: string } }[] } };
+  expect(response.usage).toEqual(status.usage);
   const job = one((await facts((await journey()).a!)).jobs, accepted.request_id);
   expect([job.state, job.settlement, job.debits]).toEqual(["succeeded", "settled", 1]);
-  await remember({ asyncHandle: accepted.job_handle });
+  await remember({ asyncHandle: accepted.job_handle, asyncRequest: accepted.request_id, asyncContent: response.choices[0].message.content });
 });
 
 test("video-upload: an uploaded finite video is processed as an async job and its result read", async () => {
@@ -537,13 +543,84 @@ test("provider-route-denial: provider and operator routes are not served to a co
   expect(served, "provider routes a consumer reached").toEqual([]);
 });
 
-test("operator-controls: operator actions are reachable only by an operator, with a reason, once", async () => {
-  // NOT RUN whatever the manifest says: U3's merge alone must not turn this into a pass while no
-  // operator action is performed. A consumer's /admin refusal is provider-route-denial's.
-  test.skip(
-    true,
-    "NOT RUN[operator-action] no operator action is exercised yet: E3A proper signs in an operator on the edge, performs one U3 action with a reason and asserts one audit row after a repeat",
-  );
+test("operator-controls: an operator suspends and restores an individual's organization in the App with a reason, audited once as the operator; a replay of the same key changes nothing; the individual sees it", async ({ page, browser, baseURL }) => {
+  needsLanes("the operator console's actions (U3) and their RPCs (0025)", "U3", "D10");
+  const consumer = needs((await journey()).a, "user A");
+  const org = needs((await facts(consumer)).org_id ?? undefined, "user A's organization");
+  const trail = () => control<Audit[]>(`/audit?org=${org}`);
+
+  // The operator: a verified individual the harness marks `profiles.is_operator` (the flag the
+  // database's is_operator() and the App's session read). The verification link signed them in.
+  const op = `e3a-op-${RUN}@e3a.invalid`;
+  await signUp(page, op);
+  await verify(page, op);
+  const { user_id: operatorId } = await control<{ user_id: string }>("/operator", { email: op });
+  await page.goto("/admin");
+  const form = page.locator("form").filter({ has: page.getByLabel("Organization id") });
+  const reasonField = form.getByLabel("Reason (recorded in the audit trail)");
+
+  // One U3 action with a reason. The reason names another principal: the actor must still be
+  // the signed-in operator's (the database's `operator:<auth.uid()>`), never an argument.
+  const before = (await trail()).length;
+  const reason = `e3a ${RUN}: suspend, on behalf of operator:00000000-0000-4000-8000-000000000000`;
+  await form.getByLabel("Organization id").fill(org);
+  await form.getByLabel("Status").selectOption("true");
+  await reasonField.fill(reason);
+  await form.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(form.getByRole("status")).toHaveText("Committed. The change is recorded once in the audit trail.");
+  let entries = await trail();
+  const [suspension] = entries.slice(before);
+  expect(
+    entries.slice(before).map((entry) => [entry.action, entry.actor, entry.reason]),
+    "one audit row, the operator's",
+  ).toEqual([["admin_set_suspension", `operator:${operatorId}`, reason]]);
+  expect(suspension.key ?? "").toMatch(/^app-operator:suspension:.+/);
+  expect((await facts(consumer)).suspended).toBe(true);
+
+  // The individual's view: the App says suspended, and the API admits nothing new.
+  const context = await browser.newContext({ baseURL });
+  try {
+    const mine = await context.newPage();
+    await signIn(mine, consumer);
+    await mine.goto("/settings");
+    await expect(mine.getByText("This account is suspended", { exact: false })).toBeVisible();
+    const jobs = (await facts(consumer)).jobs.length;
+    const refused = await api(await keyFor("a"), "POST", "/v1/chat/completions", { model: MODEL, messages: TEXT });
+    expect([refused.status, await errorCode(refused)]).toEqual([403, "org_suspended"]);
+    expect((await facts(consumer)).jobs.length, "the suspended organization admitted nothing").toBe(jobs);
+
+    // A replay of the same key through the committed RPC, as the operator: nothing changes.
+    const key = (suspension.key ?? "").slice("app-operator:suspension:".length);
+    const args = { p_org: org, p_suspended: true, p_reason: reason, p_idempotency_key: key };
+    const replay = await control<Rpc>("/operator-rpc", { email: op, fn: "operator_set_suspension", args });
+    expect([replay.status, replay.body]).toEqual([200, { replayed: true, suspended: true }]);
+    // The same RPC under the individual's own JWT: refused by the database, nothing moves.
+    const denied = await control<Rpc>("/operator-rpc", {
+      email: consumer,
+      fn: "operator_set_suspension",
+      args: { ...args, p_suspended: false, p_idempotency_key: `${key}-consumer` },
+    });
+    expect(denied.status, JSON.stringify(denied.body)).toBe(403);
+    expect([(await trail()).length, (await facts(consumer)).suspended], "the replay and the refusal wrote nothing").toEqual([entries.length, true]);
+
+    // Restore (a second action, so the journey goes on): one more row, the individual unsuspended.
+    await form.getByLabel("Organization id").fill(org);
+    await form.getByLabel("Status").selectOption("false");
+    await reasonField.fill(`e3a ${RUN}: restore`);
+    await form.getByRole("button", { name: "Apply", exact: true }).click();
+    await expect.poll(async () => (await trail()).length).toBe(entries.length + 1);
+    entries = await trail();
+    expect(entries.map((entry) => entry.actor).slice(before)).toEqual([`operator:${operatorId}`, `operator:${operatorId}`]);
+    expect((await facts(consumer)).suspended).toBe(false);
+    await mine.reload();
+    await expect(mine.getByText("This account is suspended", { exact: false })).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+  // The operator's audit trail shows the change with its reason and actor.
+  await page.reload();
+  await expect(page.getByText(reason).first()).toBeVisible();
+  await expect(page.getByText(`operator:${operatorId}`).first()).toBeVisible();
 });
 
 test("isolation: a second individual gets their own one grant and sees none of the first's requests, keys or results", async ({ page }) => {
@@ -598,6 +675,39 @@ test("expired-result: past its persisted expiry a result is gone (410), its meta
     const status = await api(key, "GET", `/v1/jobs/${handle}`);
     expect(status.status, "the metadata stays readable").toBe(200);
     expect(((await status.json()) as { result_available: boolean }).result_available).toBe(false);
+  } finally {
+    await control("/clock", { seconds: 0 });
+  }
+});
+
+// U4: the detail page past the persisted expiry. The content reaches the browser only from the
+// no-store result route and lives in component memory; going back to the page (Next's router
+// cache) or reloading it must show the expired state, never the content read before.
+test("expired-display: past its persisted expiry the request detail shows the result expired, and no cached copy of its content comes back", async ({ page }) => {
+  needsLanes("the request detail route (/usage/<request>) is absent", "U4");
+  const state = await journey();
+  const requestId = needs(state.asyncRequest, "the async job");
+  const content = needs(state.asyncContent, "the async job's result");
+  await signIn(page, state.a!);
+  await page.goto(`/usage/${requestId}`);
+  await expect(page.locator("main pre"), "before its expiry the owned result is shown").toHaveText(content);
+  await page.locator('main a[href="/usage"]').first().click();
+  await page.waitForURL((url) => url.pathname === "/usage");
+  await control("/clock", { seconds: 86_400 + 600 });
+  try {
+    await page.goBack();
+    await page.waitForURL((url) => url.pathname === `/usage/${requestId}`);
+    await expect(page.getByText(/The result expired/).first(), "back to the page: expired").toBeVisible();
+    await expect(page.locator("main pre"), "no content restored from a cache").toHaveCount(0);
+    expect((await page.locator("main").textContent()) ?? "").not.toContain(content);
+    await page.reload();
+    await expect(page.getByText(/The result expired at /).first(), "the persisted expiry, read from the store").toBeVisible();
+    await expect(page.locator("main pre")).toHaveCount(0);
+    expect((await page.locator("main").textContent()) ?? "").not.toContain(content);
+    await expect(page.getByText(requestId).first(), "the request's details stay").toBeVisible();
+    const read = await page.request.get(`/usage/${requestId}/result`);
+    expect(read.status()).toBe(410);
+    expect(read.headers()["cache-control"] ?? "").toContain("no-store");
   } finally {
     await control("/clock", { seconds: 0 });
   }

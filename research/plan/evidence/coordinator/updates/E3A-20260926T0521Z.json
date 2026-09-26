@@ -1,0 +1,86 @@
+{
+  "task": "E3A",
+  "lane": "E3A-RUN",
+  "slice": "E3A proper: E3A-WR-1/2 consumed (shims dropped behind a BLOCKED wirings stage), operator-controls (U3 suspension via 0025, actor = operator, replay no-op, consumer refused), expired-display on /usage/<id>, delegated cells bound to E3C-FINAL 27a69619; journey on probe 2eceb73d = head + claude/consumer-v1 44ba44a9",
+  "activity": "review",
+  "at": "2026-09-26T05:21:06Z",
+  "head": "555355d8",
+  "base": "9e4e34ca",
+  "worktree": ".claude/worktrees/codex-e3a-run",
+  "branch": "codex/e3a-run",
+  "owned_paths": [
+    "tests/integration/app/",
+    "apps/app/tests/e2e/",
+    "research/plan/evidence/e/E3A-run-555355d.md",
+    "research/plan/evidence/coordinator/updates/E3A-20260926T0521Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "pytest -q tests/integration/app (base runner swapped in)",
+      "exit": 1,
+      "summary": "fails-before: 3 failed, 14 passed"
+    },
+    {
+      "cmd": "uv run --frozen --no-sync pytest -q ../../tests/integration/app ../../tests/integration/test_preflight.py",
+      "exit": 0,
+      "summary": "75 passed"
+    },
+    {
+      "cmd": "make console-test",
+      "exit": 0,
+      "summary": "655 tests, 604 pass, 0 fail, 51 skipped (env-gated)"
+    },
+    {
+      "cmd": "make console-lint / console-typecheck",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings / clean"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    },
+    {
+      "cmd": "runner.py --out head-alone (lane head)",
+      "exit": 3,
+      "summary": "BLOCKED at wirings: E3A-WR-1, E3A-WR-2 not on the base (arrive with the consumer-v1 merge)"
+    },
+    {
+      "cmd": "probe 2eceb73d: runner.py --out full-20260926T051223Z",
+      "exit": 0,
+      "summary": "APP-LOCAL PASS, 104.8 s; 20/20 checks PASS; 13 cells PASS + 4 PASS[delegated to E3C-FINAL 27a69619 ...]; teardown clean"
+    },
+    {
+      "cmd": "probe: --break-seam fixture-port / grant-guard",
+      "exit": 1,
+      "summary": "both detected (usage-balance; signup-verify-grant), 37.3 s / 32.9 s"
+    },
+    {
+      "cmd": "probe: make app-e2e",
+      "exit": 0,
+      "summary": "app-e2e PASS, 120 s wall (browser-journey 99.0 s)"
+    },
+    {
+      "cmd": "probe mutants (actor-from-argument in 0025; sessionStorage result resurrection), --only 4 checks",
+      "exit": 1,
+      "summary": "operator-controls FAIL (actor), expired-display FAIL (cached content); probe reverted"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.1,
+    "likely_h": 0.3,
+    "pessimistic_h": 2,
+    "confidence": "medium-high",
+    "basis": "APP-LOCAL PASS on the merged probe with seams and new-check mutants detected; left: coordinator merge + one make app-e2e rerun on the merged SHA; DUR-CAP cross-key admission race not carried (stated)",
+    "at": "2026-09-26T05:21:06Z"
+  },
+  "blockers": [],
+  "wiring_requests": [],
+  "open": [
+    "rerun make app-e2e on the merged consumer-v1 SHA",
+    "DUR-CAP bound to s09 (grants/lock bound); no case races admissions across keys/orgs - coordinator may keep it NOT RUN (one line in DELEGATED)"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E3A-run-555355d.md"
+  ]
+}

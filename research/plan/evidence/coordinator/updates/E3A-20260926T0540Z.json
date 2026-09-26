@@ -1,0 +1,80 @@
+{
+  "task": "E3A",
+  "lane": "E3A-RUN",
+  "slice": "E3A-RUN fix round (0-E3A-RUN-RV-1, 1-S-1, 1-S-2): DUR-FENCE, DUR-CAP and CREDIT-RATE unbound from E3C-FINAL (NOT RUN[delegated] NOT carried, gap named); DUR-OUTBOX stays bound to s05+s08; APP-LOCAL PASS withdrawn -> NOT RUN; journey on probe2 00e462be = f522e281 + claude/consumer-v1 ab40e1df",
+  "activity": "review",
+  "at": "2026-09-26T05:40:00Z",
+  "head": "f522e281",
+  "base": "9e4e34ca",
+  "worktree": ".claude/worktrees/codex-e3a-run",
+  "branch": "codex/e3a-run",
+  "owned_paths": [
+    "tests/integration/app/",
+    "apps/app/tests/e2e/",
+    "research/plan/evidence/e/E3A-run-555355d.md",
+    "research/plan/evidence/coordinator/updates/E3A-20260926T0540Z.json"
+  ],
+  "findings": [
+    {"id": "0-E3A-RUN-RV-1", "fixed": true},
+    {"id": "1-S-1", "fixed": true},
+    {"id": "1-S-2", "fixed": true, "note": "DUR-CAP kept NOT RUN (the recommended option)"}
+  ],
+  "commands": [
+    {
+      "cmd": "pytest -q tests/integration/app (handback runner 555355d8 swapped in)",
+      "exit": 1,
+      "summary": "fails-before: 1 failed, 17 passed (DUR-FENCE PASS[delegated ... s05] where NOT RUN is required)"
+    },
+    {
+      "cmd": "uv run --frozen --no-sync pytest -q ../../tests/integration/app ../../tests/integration/test_preflight.py",
+      "exit": 0,
+      "summary": "76 passed"
+    },
+    {
+      "cmd": "cells(all PASS, E3C-FINAL-27a6961.md from dcce7775): handback vs fix",
+      "exit": 0,
+      "summary": "handback gate PASS (exit 0); fix gate NOT RUN (exit 3), only DUR-CAP/DUR-FENCE/CREDIT-RATE not PASS"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS (942 links, 251 documents)"
+    },
+    {
+      "cmd": "probe2 00e462be: runner.py --out full-20260926T053410Z",
+      "exit": 3,
+      "summary": "APP-LOCAL NOT RUN, 111.5 s; 20/20 checks PASS; 13 PASS + DUR-OUTBOX PASS[delegated s05,s08] + 3 NOT RUN (DUR-CAP, DUR-FENCE, CREDIT-RATE); teardown clean"
+    },
+    {
+      "cmd": "probe2: --break-seam fixture-port / grant-guard",
+      "exit": 1,
+      "summary": "both detected (usage-balance 10000 vs 9999.4592; signup-verify-grant [2,2,20000]), 40.9 s / 30.4 s"
+    },
+    {
+      "cmd": "probe2: make app-e2e",
+      "exit": 3,
+      "summary": "app-e2e NOT RUN, 116 s wall; preflight/console-test/lint/typecheck PASS, browser-journey NOT RUN (same three cells)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 8,
+    "pessimistic_h": 16,
+    "confidence": "medium-low",
+    "basis": "APP-LOCAL PASS needs three carrying cases on this tree: a stale/new worker-generation fence race (E3C-level), concurrent admissions across keys/orgs at the cap, a rate/deployment publish mid-queue plus unknown/private/unpriced refusal; merge + rerun alone ~0.3 h yields NOT RUN",
+    "at": "2026-09-26T05:40:00Z"
+  },
+  "blockers": [
+    "APP-LOCAL NOT RUN until DUR-FENCE, DUR-CAP and CREDIT-RATE each have a carrying case (E3C scenario or journey injection)"
+  ],
+  "wiring_requests": [],
+  "open": [
+    "rerun make app-e2e on the merged consumer-v1 SHA (expect NOT RUN exit 3, only the three uncarried cells)",
+    "DUR-FENCE: a stale/new generation race at append/renew/settle/capacity (E3C case)",
+    "DUR-CAP: concurrent admissions on two keys/orgs at the cap and low funds (E3C case or journey injection)",
+    "CREDIT-RATE: publish-card mid-queue keeps admitted revision/rates; unknown/private/unpriced model refused (E3C case or journey injection)"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E3A-run-555355d.md"
+  ]
+}
