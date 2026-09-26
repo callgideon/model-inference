@@ -206,16 +206,27 @@ At prep time (0018 at `8554b47`) hosted's plan listed **0003-0018, sixteen files
 
 ### Known-good record
 
-P-25 (decided 2026-09-25): a release is a known-good rollback target when
-`apps/infrx-api/.venv/bin/python infra/rollout/known-good.py <sha> --applied <hosted version>
---bundles <release prefix>` exits 0 with all six checks passing (commit, preparation,
-migrations, config, record, bundle) **and** `infra/rollout/steps/85-known-good-box.sh
-TARGET=<sha>` exits 0 on the box. A backup directory or a short readiness is not the record.
+P-25 (decided 2026-09-25): a release is a known-good rollback target when this exits 0
+with all six checks passing (commit, preparation, migrations, config, record, bundle)
+**and** `infra/rollout/steps/85-known-good-box.sh TARGET=<sha>` exits 0 on the box. A backup
+directory or a short readiness is not the record.
+
+```bash
+apps/infrx-api/.venv/bin/python infra/rollout/known-good.py <sha> --applied <hosted version> \
+  --set S3_MEDIA_BUCKET --set MAX_VIDEO_SECONDS --set WORKER_CONCURRENCY \
+  --set LARGE_BODY_LIMIT --set DATABASE_POOL_MAX_SIZE --set ENGINE_MAX_NUM_SEQS \
+  --bundles s3://llm-bootcamp-641134885443/releases/
+```
+
+The `config` check compares only the `--set` names (without one it passes vacuously), so
+the command passes every name this install does: section 1's `INFRX_SET` plus the
+`ENGINE_MAX_NUM_SEQS` 50-install adds (rollback.md's drill passes the same list). Leave
+`RETENTION_GRACE_S` (P-25's 3,600 s default) out of `INFRX_SET`, or a candidate that
+predates it refuses (meas. local, `--applied 0023` without `--bundles`: 4226315 and
+bda1586 pass `config` with these six names and fail it with `--set RETENTION_GRACE_S`).
 The `schema_proof` for bda1586 and 4226315 reaches 0023 (`infra/rollout/known-good.json`,
 research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md); a migration beyond 0023 needs the
-proof extended before `--applied` may name it. The `config` check compares the names this
-install passes: leave `RETENTION_GRACE_S` (P-25's 3,600 s default) out of `INFRX_SET`, or a
-candidate that predates it refuses.
+proof extended before `--applied` may name it.
 
 ## 4. Continuous operations (I8) — after the release that carries I8
 
@@ -266,3 +277,6 @@ Nothing here has run; every row's output goes into the I8 evidence record.
   default of 32 is gone). Not run on the box.
 - 2026-09-26 (P25-ENACT): §3 "Known-good record" states P-25's definition (known-good.py's
   six checks with `--bundles`, plus 85-known-good-box.sh) and the 0023 schema proof. Not run.
+- 2026-09-26 (P25-ENACT fix round, 1-P25R-3): the Known-good record command passes
+  `--set` for every install name (§1's INFRX_SET and ENGINE_MAX_NUM_SEQS), as rollback.md's
+  drill does, so its `config` check is exercised rather than vacuous. Not run on the box.

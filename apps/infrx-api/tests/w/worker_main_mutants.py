@@ -51,6 +51,7 @@ GRACE = "test_worker_main__the_lifecycle_grace_is_the_deployments"
 P25_CACHE = "test_worker_main__the_cache_high_water_and_its_alert_are_p25s"
 CONFIG = "config.py"
 OPS = "../../../infra/alerts/operations.json"                # from `infrx/`
+GATEWAY_GRACE = "test_worker_main__the_gateways_content_grace_is_the_deployments"
 RELEASE = "                stream.pins.close()\n                # Every exit path"
 
 MUTANTS = (
@@ -128,6 +129,12 @@ MUTANTS = (
        "    processing_cache_max_bytes: int = 64_424_509_440\n", P25_CACHE),
     _m("alert_cache_threshold_drifts", "ProcessingCacheLarge fires above the same high water",
        OPS, '"threshold": 53687091200,', '"threshold": 64424509440,', P25_CACHE),
+    # --- P25-ENACT fix round (0-P25R-1/1-P25R-1); the runbook cases: tests/w/test_p25_runbooks.py
+    _m("gateway_grace_wired_unrecorded", "the gateway-grace gap stays recorded until "
+       "WR-P25-1's patch removes the strict mark (then: a mutant that drops its grace_s)",
+       PILOT, "        lifecycle = _pg_lifecycle(connect, settings.pilot)\n",
+       "        lifecycle = _pg_lifecycle(connect, settings.pilot)\n"
+       "        lifecycle.grace_s = settings.deployment.retention_grace_s\n", GATEWAY_GRACE),
     _m("main_housekeeping_started_twice", "exactly one task per housekeeping loop",
        SERVICE, "for name, loop in self.housekeeping.items()]",
        "for name, loop in [*self.housekeeping.items()] * 2]", OWNER),

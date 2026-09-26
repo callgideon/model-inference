@@ -380,6 +380,21 @@ def test_worker_main__the_cache_high_water_and_its_alert_are_p25s():
     assert dict(preflight.DISK_BUDGET)["/opt/dlami/nvme/processing"] == 60 * 2**30 > high
 
 
+@pytest.mark.xfail(strict=True, reason="WR-P25-1: the gateway's PgLifecycle keeps the "
+                   "library's 604,800 s grace; its patch makes this pass and removes the mark")
+def test_worker_main__the_gateways_content_grace_is_the_deployments(tmp_path):
+    """P-25's grace for what the gateway registers: `upload_complete` and every source and
+    payload `MediaUploads._register` writes go through the one `PgLifecycle`
+    `adapters_from_env` builds (`uploads=` and `content=` in `build_ingress_deps`). Until
+    WR-P25-1 lands it stamps `lifecycle.GRACE_S`, and 0022's `greatest(eligible_at, ...)`
+    keeps the worker's later 3,600 s registration from shortening it: P-25's grace holds
+    only for worker-registered content. Strict, so the gap cannot close unrecorded."""
+    from infrx.gateway import pilot
+    settings = from_env(environment(tmp_path, INFRX_MODE="dev", RETENTION_GRACE_S="11"))
+    lifecycle = pilot.adapters_from_env(settings, objects=InMemoryObjectStore())["lifecycle"]
+    assert lifecycle.grace_s == settings.deployment.retention_grace_s == 11.0
+
+
 def test_worker_main__a_housekeeping_loop_outlives_a_failed_step():
     """The keeper and the prune run under `every`: a step that raises (the store down for a
     pass) is logged and the loop runs again after its interval. Oracle: a loop that dies,

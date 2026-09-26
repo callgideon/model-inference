@@ -292,8 +292,19 @@ verified logical dump, so the coordinator takes one:
 - **before every migration or rollout** (the release's W6 is that dump for a rollout that
   applies migrations; a rollout without one still takes A3 first);
 - **daily during E4C**;
-- **keeping the 7 newest** verified dumps under `$HOME/infrx-backups/`, removing older ones as
-  A9 removes them (never committed; they hold the project's users' e-mail addresses).
+- **keeping the 7 newest** verified dumps under `$HOME/infrx-backups/` (0700, the coordinator
+  host only, never committed; they hold the project's users' e-mail addresses).
+
+P-25 is A9's "longer period" coordinator decision: while PITR is off, A9's removal after A8
+does not apply. A9's container removal and `unset PGPASSWORD` still run; a dump whose A6
+check is not equal is removed at once with A9's `rm` (it is not a recovery point), so the
+directory holds only verified dumps. After each new dump's A6 check is logged, prune to the
+7 newest (the `hosted-<UTC>` names sort by time):
+
+```bash
+ls -1d "$HOME"/infrx-backups/hosted-* | head -n -7 | while read -r old; do rm -rf -- "$old"; done
+ls -1d "$HOME"/infrx-backups/hosted-*        # the 7 newest (fewer until 7 exist)
+```
 
 "Verified" is Part A's restore check: A3 dump, A4/A5 restore into a scratch copy, A6
 `pgrestore.py check` exit 0 with `"equal": true`, and the dump's `SHA256SUMS` in the
@@ -339,3 +350,6 @@ only; the password as A2 reads it). Enabling PITR is a separate paid decision
 - 2026-09-26 (P25-ENACT): "Dump cadence while PITR is off" added from P-25 (decided
   2026-09-25): a verified dump before every migration or rollout and daily during E4C, the
   7 newest kept, verified by A6. Not run.
+- 2026-09-26 (P25-ENACT fix round, 1-P25R-2): the cadence section states that P-25 is A9's
+  "longer period" decision (A9's post-A8 removal replaced by pruning to the 7 newest verified
+  dumps, an unverified dump removed at once) and gives the prune command. Not run.
