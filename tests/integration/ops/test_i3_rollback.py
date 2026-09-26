@@ -2,8 +2,9 @@
 
 Each case builds a throwaway git repository whose commits are App trees (migrations,
 identity files, the pinned contract) and a gateway tree, then runs the tool as the operator
-does. The rule: the candidate's newest migration <= hosted's applied one AND its pinned
-contract <= the running gateway's AND it has I2A's release identity.
+does. The rule: the candidate's newest migration == hosted's applied one (below it only with a
+schema proof reaching it, as infra/rollout/known-good.py) AND its pinned contract <= the running
+gateway's AND it has I2A's release identity.
 """
 from __future__ import annotations
 
@@ -80,15 +81,14 @@ def failed(result: dict) -> set[str]:
     return {c["check"] for c in result["checks"] if not c["ok"]}
 
 
-def test_i3_rb01_compatible_at_and_behind_the_applied_migration(trees):
-    """Catches: a tool that refuses the exact applied number (the `<=` read as `<`) or a hosted
-    schema ahead of the tree (migrations are additive), and one that loses the identity it prints."""
+def test_i3_rb01_compatible_at_the_applied_migration(trees):
+    """Catches: a tool that refuses the exact applied number, and one that loses the identity it
+    prints."""
     repo, t = trees
-    for applied in ("0003", "0009"):
-        code, result, _ = run(repo, t["ok"], "--applied", applied, "--gateway", t["gw"])
-        assert code == 0 and result["verdict"] == "COMPATIBLE", (applied, result)
-        assert result["expected_version_commit"] == t["ok"] and len(t["ok"]) == 40
-        assert result["migrations"] == ["0001", "0002", "0003"]
+    code, result, _ = run(repo, t["ok"], "--applied", "0003", "--gateway", t["gw"])
+    assert code == 0 and result["verdict"] == "COMPATIBLE", result
+    assert result["expected_version_commit"] == t["ok"] and len(t["ok"]) == 40
+    assert result["migrations"] == ["0001", "0002", "0003"]
 
 
 def test_i3_rb02_a_newer_migration_than_hosted_is_refused(trees):
@@ -120,6 +120,7 @@ def test_i3_rb04_a_contract_newer_than_the_running_gateway_is_refused(trees):
 
 @pytest.mark.parametrize("args, code", [
     (["{ok}", "--applied", "18", "--gateway", "{gw}"], 2),
+    (["{ok}", "--applied", "0009", "--gateway", "{gw}", "--schema-proof", "9"], 2),
     (["{ok}", "--applied", "abcd", "--gateway", "{gw}"], 2),
     (["{ok}", "--gateway", "{gw}"], 2),
     (["{ok}", "--applied", "0003"], 2),
@@ -135,16 +136,23 @@ def test_i3_rb05_malformed_inputs_are_refused(trees, args, code):
         assert result["verdict"] == "REFUSED"
 
 
-def test_i3_rb06_the_strict_comparison_mutant_is_caught(trees, tmp_path):
-    """The mutation the brief names: `newest <= applied` -> `<`. rb01's equal case must refuse
-    under it, i.e. the suite kills the mutant."""
+@pytest.mark.parametrize("line, mutant, applied, correct", [
+    # the equality dropped: rb01's exact-applied case would refuse
+    ("newest == applied or (newest < applied and proven)", "newest < applied and proven", "0003", 0),
+    # additivity assumed again (review 1-I3R-4): rb08's hosted-ahead case would pass unproven
+    ("newest == applied or (newest < applied and proven)", "newest <= applied", "0009", 1),
+])
+def test_i3_rb06_the_comparison_mutants_are_caught(trees, tmp_path, line, mutant, applied, correct):
+    """The mutations of the migration rule: under each, the case that pins it flips, i.e. the
+    suite (rb01, rb08) kills the mutant."""
     source = TOOL.read_text()
-    assert source.count("compatible = newest <= applied") == 1
-    mutant = tmp_path / "rollback.py"
-    mutant.write_text(source.replace("compatible = newest <= applied", "compatible = newest < applied"))
+    assert source.count(line) == 1
+    patched = tmp_path / "rollback.py"
+    patched.write_text(source.replace(line, mutant))
     repo, t = trees
-    code, result, _ = run(repo, t["ok"], "--applied", "0003", "--gateway", t["gw"], tool=mutant)
-    assert code == 1 and failed(result) == {"migrations"}, "the mutant survived"
+    code, _, _ = run(repo, t["ok"], "--applied", applied, "--gateway", t["gw"], tool=patched)
+    got, _, _ = run(repo, t["ok"], "--applied", applied, "--gateway", t["gw"])
+    assert got == correct and code != correct, "the mutant survived"
 
 
 def test_i3_rb07_this_repository_judges_itself():
@@ -152,3 +160,26 @@ def test_i3_rb07_this_repository_judges_itself():
     newest = sorted(p.name[:4] for p in (REPO / "apps/app/supabase/migrations").glob("[0-9]*.sql"))[-1]
     code, result, _ = run(REPO, "HEAD", "--applied", newest, "--gateway", "HEAD")
     assert code == 0, result
+
+
+def test_i3_rb08_hosted_ahead_of_the_tree_needs_a_schema_proof(trees):
+    """Catches (review 1-I3R-4): a hosted schema ahead of the target accepted on the assumption
+    that migrations are additive. They are not all additive (0021_read_authority.sql revokes
+    column grants and drops a policy), so, as infra/rollout/known-good.py, hosted ahead passes
+    only with a proof reaching --applied whose evidence exists in this checkout."""
+    repo, t = trees
+    (repo / "proof.md").write_text("the tree's console tests on a database migrated through 0009\n")
+    base = [t["ok"], "--applied", "0009", "--gateway", t["gw"]]
+    code, result, _ = run(repo, *base)
+    assert code == 1 and failed(result) == {"migrations"}, result
+    assert "0004-0009" in json.dumps(result) and "--schema-proof" in json.dumps(result)
+    code, result, _ = run(repo, *base, "--schema-proof", "0009", "--evidence", "proof.md")
+    assert code == 0 and result["verdict"] == "COMPATIBLE", result
+    assert "proof.md" in json.dumps(result)
+    for proof in (["--schema-proof", "0008", "--evidence", "proof.md"],      # does not reach 0009
+                  ["--schema-proof", "0009"],                                # no evidence
+                  ["--schema-proof", "0009", "--evidence", "missing.md"],    # evidence absent
+                  ["--schema-proof", "0009", "--evidence", str(TOOL)],       # not in this checkout
+                  ["--evidence", "proof.md"]):                               # no proof number
+        code, result, _ = run(repo, *base, *proof)
+        assert code == 1 and failed(result) == {"migrations"}, (proof, result)

@@ -1,8 +1,9 @@
 /**
  * I2A: check the deployment environment once when a server starts. A refusal (lib/deploy/env.ts,
  * variable names only) stops the server from serving rather than failing on a user's request.
- * I3: every server error Next captures is logged as one redacted line (lib/deploy/report.ts):
- * release, route pattern and digest. The request's path, query and headers are never logged.
+ * I3: every server error Next captures is logged as one sanitised line (lib/deploy/report.ts):
+ * release, route pattern, digest and class name. The request's path, query and headers and the
+ * error's message are never logged.
  */
 import type { Instrumentation } from "next";
 import { serverErrorLine } from "./lib/deploy/report.ts";

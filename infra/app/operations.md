@@ -23,7 +23,7 @@ backend change alters what the App depends on). C2 runs offline; the rest are [O
 | # | Check | Pass |
 |---|---|---|
 | C1 | App identity: `curl -sS https://app.callbill.ai/api/version` [OP] | `commit` = the recorded App release, `environment` = `production`, `apiOrigin` = the accepted edge origin |
-| C2 | Backend compatibility (offline): `python3 infra/app/rollback.py <App release> --applied <hosted applied> --gateway <backend release>` with the two hosted facts from the session record [OP] | exit 0 `COMPATIBLE`; `expected_version_commit` = C1's `commit` |
+| C2 | Backend compatibility (offline): `python3 infra/app/rollback.py <App release> --applied <hosted applied> --gateway <backend release>` with the two hosted facts from the session record [OP]; hosted ahead of the release's tree adds `--schema-proof NNNN --evidence <file>` ([App rollback](#app-rollback)) | exit 0 `COMPATIBLE`; `expected_version_commit` = C1's `commit` |
 | C3 | The backend release the edge runs is the accepted one (`infrx_build_info`, [../runbooks/rollout.md](../runbooks/rollout.md) W13 record) [OP] | same release as C2's `--gateway` |
 | C4 | Smoke S1–S6 of [README.md](README.md#6-smoke-checks-after-deploy), unchanged: docs origin (S2), private caching (S3), signup callback (S4), preview safety (S5), static assets (S6) | every row passes |
 | C5 | Maintenance rendering: while the edge serves maintenance (EdgeInMaintenance, [../runbooks/observe.md](../runbooks/observe.md#edge)) sign in and open `/models` and `/docs` [OP] | the catalog-unavailable notice, no model/limit/price shown; `/usage`, `/billing`, `/api-keys` still render (they read Supabase, not the gateway) |
@@ -62,11 +62,11 @@ moves a job between regimes ([transition.py](../../apps/infrx-api/infrx/operatio
 | # | Step | Check after | Abort / rollback |
 |---|---|---|---|
 | X0 | [OP] Log purpose, the current known-good App deployment id, the backend release and hosted's applied migration in the session record; hold the deployment lock ([../README.md](../README.md)) | the entry exists | nothing changed: stop |
-| X1 | Offline prerequisite: C2 with the App release to open and hosted's applied number | exit 0; if `migrations` fails, the missing migrations go through the backend window first ([../runbooks/rollout.md](../runbooks/rollout.md) W6–W7, fresh backup per [../runbooks/restore.md](../runbooks/restore.md)), never through the App | nothing changed: stop |
+| X1 | Offline prerequisite: C2 with the App release to open and hosted's applied number | exit 0; if `migrations` fails on migrations not applied, they go through the backend window first ([../runbooks/rollout.md](../runbooks/rollout.md) W6–W7, fresh backup per [../runbooks/restore.md](../runbooks/restore.md)), never through the App; if it fails on hosted ahead of the tree, open a newer App release or record a schema proof ([App rollback](#app-rollback)) | nothing changed: stop |
 | X2 | [OP] BACKEND-READY accepted (E4C) and hosted migrations applied through the App release's newest by the backend window | `migrate.py plan` reports nothing pending; reconcile drift 0 ([../runbooks/reconcile.md](../runbooks/reconcile.md#drift)) | the backend's own rollback rows ([../runbooks/rollout.md](../runbooks/rollout.md)); the App is not deployed yet |
 | X3 | [OP] App variables in Vercel Production ([README.md](README.md#7-operator-inputs) item 2), names checked, values never printed | every production-required name present | remove the new values; nothing is served from them yet |
-| X4 | [OP] Deploy the App release (gate APP-MERGE, [README.md](README.md#5-release-identity-deploy-and-rollback-i8-discipline)) | C1–C5; record the known-good App release | [App rollback](#app-rollback) to the previous known-good deployment |
-| X5 | [OP] P-05 auth settings on the production project with public signup still **off** ([README.md](README.md#4-hosted-auth-settings-p-05-op)); staging first | S4 passes on staging; the production dashboard shows each value (operator's read) | revert the changed setting |
+| X4 | [OP] P-05 auth settings on the production project with public signup still **off** ([README.md](README.md#4-hosted-auth-settings-p-05-op)); staging first. Before the deploy, like X3: the App's hosted inputs are set before its release ([README.md](README.md#1-order-relative-to-the-backend-window) item 2) | S4 passes on staging; the production dashboard shows each value (operator's read) | revert the changed setting; nothing is served from it yet |
+| X5 | [OP] Deploy the App release (gate APP-MERGE, [README.md](README.md#5-release-identity-deploy-and-rollback-i8-discipline)) | C1–C5; record the known-good App release | [App rollback](#app-rollback) to the previous known-good deployment |
 | X6 | [OP] Regime: `python -m infrx.operations.cli credit-transition --dry-run --card <P-01 card> --input-rate <r> --output-rate <r>` (read-only report: flags, in-flight jobs, USD statements, drift), then the same without `--dry-run` plus `--drain-timeout-s 600 --idempotency-key <k> --reason "<why>"`; it enables `credit_admission` and `signup_grant` (audited once); the coordinator restarts gateway and worker with the `restart_with` it prints. If the backend window already moved to CREDIT (E4C), only the dry run's check applies | `blockers` empty, `applied` lists the flags; drift 0; the backend smoke (rollout.md W12) | `credit-transition --to legacy_usd …` (freezes CREDIT admission; accepted CREDIT jobs settle in CREDIT) or maintenance ([../runbooks/rollback.md](../runbooks/rollback.md#maintenance)) |
 | X7 | [OP] Open public signup: "Allow new users to sign up" on the production project | X8 | turn it off: existing users keep signing in |
 | X8 | [OP] First verified signup: a fresh operator-owned address → confirmation email → `/auth/callback` → `/welcome` shows 10,000 CREDIT; open the callback link again | `python -m infrx.operations.cli account --user <uuid>` shows the CREDIT wallet at exactly 10,000 available after the repeat (a second grant would read 20,000); drift 0 | [Cutover rollback](#cutover-rollback); the grant itself stays |
@@ -122,20 +122,35 @@ dependency.
   `I3-SHAPE-01` pins this example's keys to the code):
 
 ```json
-{"event":"app_error","source":"browser","commit":"<40-hex or unknown>","deployment":"<dpl_... or unknown>","environment":"production","route":"/usage/[token]","digest":"1234567890","message":"<redacted, at most 300 characters; null on server lines>"}
+{"event":"app_error","source":"browser","commit":"<40-hex or unknown>","deployment":"<dpl_... or unknown>","environment":"production","route":"/usage/[id]","digest":"1234567890","name":"TypeError"}
 ```
 
-- **Never in a report**: API keys (`sk-…`), JWTs and bearer tokens, `key=value` secrets,
-  emails, URLs (credentialed or not), UUIDs and other long opaque runs (user, request and
-  token ids), the query string and fragment (a callback's `token_hash`), request headers and
-  cookies, the stack, the prompt, a request or result body. Server lines carry the route
-  **pattern** (`/usage/[requestId]`) and no message at all. The digest is kept only in Next's
-  shape (`<hash>` or `<hash>@E<code>`); anything else is dropped (tests `I3-SAN-01/02`).
-- **Limits**: a body over 2 KiB is refused unread (413); not `application/json` 415; not a
-  JSON object 400; an `Origin` other than the App's own 403; 429 past 60 reports a minute
-  per server instance. Accepted is 204. No answer carries a body, so nothing is echoed
-  (test `I3-ROUTE-01`). Per-client limiting is a Vercel Firewall rate-limit rule on
-  `POST /api/client-errors` [OP] (⚠️ TO BE VERIFIED: available on the project's plan).
+- **What a report carries, and nothing else** — each field is reduced to a fixed shape, in
+  the browser before it is sent and again on the server, never redacted from free text:
+  - `route`: the path without its query and fragment (a callback's `token_hash`); a segment
+    is kept only if it is one of the App's own route words (lowercase letters and hyphens)
+    or, on server lines, one of Next's patterns (`[requestId]`, `(console)`); any other
+    segment — an id, an email, a name, anything percent-encoded — reads `[id]`;
+  - `digest`: Next's shape only (`<hash>` or `<hash>@E<code>`), else `null`;
+  - `name`: the error's class name (`TypeError`, `ChunkLoadError`: letters only, ending
+    `Error` or `Exception`), else `null`.
+
+  The error **message is never sent or logged**: it is free text (an email, a key, the
+  start of a response body in a `JSON.parse` error), and no pattern list removes all of
+  that. The digest, route, release and class name are what the operator searches with;
+  Next's own log line for a server error is Vercel's, not this report. No stack, query,
+  request header, cookie, prompt or body is in a report (tests `I3-SAN-01/02`).
+- **Limits**: a declared `Content-Length` over 2 KiB is refused unread (413); a body with no
+  length is read to at most 2 KiB + one chunk, then refused (413) and the rest never read
+  (test `I3-ROUTE-05`); not `application/json` 415; not a JSON object 400; 429 past 60
+  reports a minute per server instance. A browser's cross-site or same-site post
+  (`Sec-Fetch-Site` other than `same-origin`) is 403; the check is the browser's own verdict,
+  so a same-origin report is accepted whatever host the server believes it serves (test
+  `I3-ROUTE-04`). A browser that sends no `Sec-Fetch-Site` cannot post `application/json`
+  to another origin without a CORS preflight, which the route never grants. Accepted is
+  204. No answer carries a body, so nothing is echoed (test `I3-ROUTE-01`). Per-client
+  limiting is a Vercel Firewall rate-limit rule on `POST /api/client-errors` [OP] (⚠️ TO BE
+  VERIFIED: available on the project's plan).
 - **Anonymous pages**: until WR-I3-1 makes `/api/client-errors` public in the middleware, a
   report from a signed-out page (login, signup) is redirected to `/login` and lost; signed-in
   pages report.
@@ -201,20 +216,32 @@ Browser and server error rates stay Vercel-side ([Browser error monitoring](#bro
 S1–S6. None exists yet [OP]. A target must also satisfy the compatibility rule, which
 `rollback.py` executes on the target's own tree:
 
-> the target tree's newest migration ≤ hosted's applied migration **and** the target's pinned
-> backend contract (`SURFACE_VERSION`) ≤ the running gateway's **and** the target has I2A's
-> release identity.
+> the target tree's newest migration = hosted's applied migration, or below it only with a
+> recorded schema proof reaching the applied one **and** the target's pinned backend contract
+> (`SURFACE_VERSION`) ≤ the running gateway's **and** the target has I2A's release identity.
+
+Hosted ahead of the target is the backend rule of
+[known-good.py](../rollout/known-good.py) (brief §I8.6): additive compatibility is proven,
+never assumed. Not every migration is additive — `0021_read_authority.sql` revokes column
+grants on `api_keys` and drops a policy — so an older App tree on a newer schema is accepted
+only with `--schema-proof NNNN` (the newest migration it is proven on) and `--evidence` files
+in this checkout: that tree's console tests (`make console-test`, the real-DB cases included)
+passed on a database migrated through `NNNN` [OP to run and record]. No proof, no target:
+choose a newer known-good.
 
 ```bash
 # coordinator host, repository root, read-only: the two hosted facts come from the record
 python3 infra/app/rollback.py "$APP_KNOWN_GOOD_COMMIT" --applied "$HOSTED_APPLIED" \
     --gateway "$BACKEND_RELEASE"      # exit 0 COMPATIBLE, 1 REFUSED (reason per check), 2 usage
+# hosted ahead of the target's tree: add the recorded proof
+#   --schema-proof "$PROVEN_THROUGH" --evidence research/plan/evidence/<track>/<file>.md
 ```
 
 1. **Log** the trigger, the serving and target deployment ids and C2's output [OP].
 2. **Judge** the target with the command above. `REFUSED` on `contract` means the backend
    was rolled back below the target's contract: choose an older known-good whose contract
-   the gateway serves, or keep the backend in maintenance. Never fix forward on production
+   the gateway serves, or keep the backend in maintenance. `REFUSED` on `migrations` with
+   hosted ahead means no proof reaches the applied number: choose a newer known-good. Never fix forward on production
    without a new release identity.
 3. **[OP] Vercel Instant Rollback** (promote the recorded deployment id; no rebuild).
    ⚠️ TO BE VERIFIED [OP]: after an instant rollback Vercel stops assigning the production
@@ -243,7 +270,7 @@ backend rollback, rerun C2 with the new `--gateway`; a contract refusal is step 
   reaches the browser only from `GET /usage/<id>/result`, is kept in memory only and dropped
   at the persisted `result_expires_at`; expiry is the database's, never a clock in the App
   (R141). Key plaintext and results are never in browser storage, a URL, a log or an error
-  report (R142; this runbook's report never carries a body).
+  report (R142; an error report carries no message or body, only the fields above).
 - **Content TTLs and caches**: the approved values — result, stream journal, cache and
   source retention, idempotency, the retention grace, the processing-cache high/low water
   (50 GiB) and the sweep intervals — are the P-25 decision
@@ -270,17 +297,17 @@ re-drilled.
 
 | ID | Scenario | Status |
 |---|---|---|
-| OPS-APP-01 | A rollback target is judged by its own tree: migrations, contract, identity | offline: test_i3_rb01, test_i3_rb02, test_i3_rb03, test_i3_rb04, test_i3_rb05, test_i3_rb06, test_i3_rb07 |
+| OPS-APP-01 | A rollback target is judged by its own tree: migrations (hosted ahead only with a proof), contract, identity | offline: test_i3_rb01, test_i3_rb02, test_i3_rb03, test_i3_rb04, test_i3_rb05, test_i3_rb06, test_i3_rb07, test_i3_rb08 |
 | OPS-APP-02 | Cutover prerequisite: the migration numbering is contiguous and C2 accepts the tree at its own newest | offline: test_i3_ops02 |
 | OPS-APP-03 | Every cutover step names its check and its abort | offline: test_i3_ops03 |
 | OPS-APP-04 | The App alert rule names a section here, merges without a clash and fires on its metric | offline: test_i3_ops04 |
 | OPS-APP-05 | The canary's App probe (WR-I3-2 composed) writes 1 only for a production identity | offline: test_i3_ops05 |
-| OPS-APP-06 | Error reports carry no secret; the report route refuses without echo; the error page shows no message or stack | offline: I3-SAN-01, I3-SAN-02, I3-SHAPE-01, I3-ROUTE-01, I3-ROUTE-02, I3-PAGE-01, I3-REL-01, I3-INST-01 |
+| OPS-APP-06 | Error reports carry no free text (no message; route ids, digest and name reduced to fixed shapes); the report route refuses without echo, reads at most 2 KiB and accepts same-origin whatever its host; the error page shows no message or stack | offline: I3-SAN-01, I3-SAN-02, I3-SHAPE-01, I3-ROUTE-01, I3-ROUTE-02, I3-ROUTE-04, I3-ROUTE-05, I3-PAGE-01, I3-REL-01, I3-INST-01 |
 | OPS-APP-07 | A draining gateway's 503 renders the catalog-unavailable state | offline: I3-COMPAT-01 |
 | OPS-APP-08 | The hosted cutover X0–X9 | NOT RUN: hosted Supabase, Vercel and the box; needs BACKEND-READY, P-01 card, P-05 settings, the I2A live half |
 | OPS-APP-09 | Vercel Instant Rollback to a known-good App release, then C1 and S1–S6 | NOT RUN: no deployed known-good App release exists yet (I2A live half) |
 | OPS-APP-10 | AppDown reaches the P-25 destination | NOT RUN: needs WR-I3-2/3 on the box, the P-25 destination and `74-alert-test.sh` |
-| OPS-APP-11 | A browser and a server `app_error` line appear in Vercel's Runtime Logs | NOT RUN: needs a deployment [OP] |
+| OPS-APP-11 | A browser and a server `app_error` line appear in Vercel's Runtime Logs; a same-origin report from `https://app.callbill.ai` is accepted (204) behind Vercel's proxy | NOT RUN: needs a deployment [OP]; ⚠️ TO BE VERIFIED: Vercel forwards the browser's `Sec-Fetch-Site` unchanged |
 | OPS-APP-12 | A backend rollback with the App open (maintenance rendering, C5 live) | NOT RUN: a box window, coordinator ([../runbooks/rollback.md](../runbooks/rollback.md)) |
 
 ## Verification log
@@ -288,3 +315,8 @@ re-drilled.
 - 2026-09-26: Written by I3-PREP with the code, tool, rule and tests it cites; local checks
   only (console tests, lint, typecheck, `next build`, `tests/integration/ops`). No hosted,
   Vercel, DNS, AWS or box state was read or changed.
+- 2026-09-26: I3-PREP fix round (review of `bf29b92b`): the browser report carries no message
+  (class name only; route segments outside the App's words read `[id]`), the route reads at
+  most 2 KiB of an unsized body and judges origin by `Sec-Fetch-Site`, P-05 (X4) now precedes
+  the App deploy (X5) as README §1 item 2 says, and an App target on a schema ahead of its
+  tree needs a schema proof (`rollback.py --schema-proof`). Local checks only.

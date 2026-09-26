@@ -63,6 +63,13 @@ if curl -sf --max-time 15 -o "$work/app" "$APP/api/version" \\
 m infrx_app_up "$app_up"
 echo "canary app up=$app_up"
 '''
+# WR-I3-5, exactly as handed to I2A's owner: infra/app/README.md section 5 states rollback.py's rule.
+README_OLD = """  schema: its tree's newest migration ≤ the hosted applied migration (migrations are additive).
+"""
+README_NEW = """  schema: its tree's newest migration = the hosted applied migration, or below it only with a
+  recorded schema proof (`infra/app/rollback.py --schema-proof`; not every migration is
+  additive, [operations.md](operations.md#app-rollback)).
+"""
 
 
 def anchors(path: Path) -> set[str]:
@@ -134,6 +141,12 @@ def test_i3_ops03_every_cutover_step_names_its_check_and_abort():
         assert "[OP]" in step or "Offline" in step, number
         assert check and check not in ("-", "—"), number
         assert abort and abort not in ("-", "—"), f"{number} has no abort/rollback"
+    # README section 1 item 2: the App's hosted inputs (section 3 variables, section 4 P-05
+    # settings) are set before the App release is deployed (review 1-I3R-2).
+    deploy = next(i for i, s in enumerate(steps) if "Deploy the App release" in s[1])
+    for i, (number, step, _check, _abort) in enumerate(steps):
+        if "P-05" in step or "App variables" in step:
+            assert i < deploy, f"{number} sets a hosted App input after the deploy ({steps[deploy][0]})"
     checks = rows(section("Combined checks"), "C")
     assert [c[0] for c in checks] == ["C1", "C2", "C3", "C4", "C5"]
     assert all(len(c) == 3 and c[2] for c in checks)
@@ -236,3 +249,18 @@ def test_i3_ops06_the_scenario_register_names_real_tests_or_a_reason():
             assert re.match(r"NOT RUN: \S.{10,}", status), (number, status)
     assert "DUR-OUTBOX" in section("Scenario register")
     assert (REPO / "research/plan/evidence/i/I3B-32f94b3.md").is_file()
+
+
+def test_i3_ops07_the_release_runbook_states_the_same_migration_rule():
+    """Catches (review 1-I3R-4; WR-I3-5 composed): infra/app/README.md section 5 and this
+    runbook disagreeing on a hosted schema ahead of the App target (README: assumed additive;
+    rollback.py and operations.md: proven, as infra/rollout/known-good.py)."""
+    readme = (REPO / "infra" / "app" / "README.md").read_text()
+    if "--schema-proof" not in readme:
+        assert readme.count(README_OLD) == 1, "README section 5 moved: refresh WR-I3-5's hunk"
+        readme = readme.replace(README_OLD, README_NEW)
+    rule = re.search(r"\*\*Known-good App release\*\*.*?(?=\n\n)", readme, re.S).group(0)
+    assert "additive)" not in rule and "--schema-proof" in rule, rule
+    anchor = re.search(r"\]\(operations\.md#([\w-]+)\)", rule).group(1)
+    assert anchor in anchors(OPS) and "--schema-proof" in section("App rollback")
+    assert "--schema-proof" in (REPO / "infra" / "app" / "rollback.py").read_text()
