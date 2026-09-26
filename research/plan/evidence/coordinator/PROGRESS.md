@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 17:48Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 120, updated 2026-09-26 17:55Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 17:50Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 121, updated 2026-09-26 18:05Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `01be4ccf`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 2 active lanes, 2 reserved.
-- Validation: 0 error(s), 11 warning(s).
+- Agent slots: 16 total, 3 active lanes, 2 reserved.
+- Validation: 0 error(s), 14 warning(s).
 
 ### Actionable blockers
 
@@ -104,7 +104,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (45.0 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (45.1 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -169,6 +169,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | D10-0026-FENCE | support (support lane for D10 + the W port; R147 / E3C-CELLS F-1) migration 0026 redefines infrx.put_result to take the worker's lease and call fence_lease first (stale/foreign/missing lease refused before any insert; same-generation dedupe and state_conflict kept); jobstore.put_result and AttemptRunner._settle pass the lease; fakes/conformance model the fence; E3C s14 gains the result door; final run on the e3c block; wiring requests for rollout.md W7 (0026), known-good.json schema_proof (0026), the readiness brief; workflow (Opus implementer, 2 lenses, one fix round) | complete | codex/d10-0026-fence | e0087a8f → ef4553c9 | ports d4 postgres 55435 / valkey 55465; e3c block 56900–56999 for the final run, prefix infrx-d4-, db d4 | 2026-09-26 10:50Z | DONE: merged 400a7e94 with WR-D10F-1..4; fixed-clone suite on 400a7e94: api-test 4324 passed / 0 failed (tests/i deselected), tests/i on i8 231 passed + 8 setups refused by the shared lock (KNOWN-GOOD-PROOF-3 held i8 — environmental; tests/i 239 green on this tree in that lane's run), ruff clean, recovery 42/1 (rb09 literal → WR-D10F-5 01be4ccf), test_harness 140/1 (the pre-existing needle guard, user-held), validate PASS; E3C final run PASS 16/16 and App gate PASS 17/17 on 400a7e94; minors carried: RV-D10F-3, O-1, W5 TMPDIR lock | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 10:50Z; basis: merged, wired and checked |
 | KNOWN-GOOD-PROOF-3 | support (support lane; P-25 / E4C prerequisite) extend both rollback targets' schema_proof from 0025 to 0026 on i8 (plain PostgreSQL and the Supabase image), known-good.py --applied 0026 KNOWN-GOOD / 0027 refused; workflow (Opus implementer, 1 lens, one fix round) | complete | codex/known-good-proof-3 | 400a7e94 → 6df59057 | ports i8 postgres 55450 / valkey 55495 / pgbouncer 55496 (no other i8 user while it runs), prefix infrx-i8-, db i8 | 2026-09-26 10:50Z | DONE: merged --no-ff at b96884f0; WR-KGP3-1/2 at 492ff447 (P-25 row and README say 0026); WR-KGP3-3 recorded (the R147 follow-up migration waits for the targets to leave the record); minors carried: m1 (log digests carry timings), m2 (the reviewer's full tests/i collided with the coordinator's i8 run) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 10:50Z; basis: merged, wired and checked |
 | G2-FIX | support (support lane; release gate G2) F-1 vkharness refuses a foreign listener (R63) and the E2C gate gives D2/Q distinct Valkey ports; F-2 three stale mutant anchors re-declared; F-3 a case that kills durable_forgets_unknown_holds; F-5 the tests/i task form settled and written into README §0 G2; F-6 a G4b P-06 digest row; the G2 row rerun as written; workflow (Opus implementer, 2 lenses, one fix round) | running | codex/g2-fix | 65d54b45 → — | ports e2c (55448/55493) and i8 (55450/55495/55496); no other user of either while it runs, prefix infrx-e2c-, db e2c | 2026-09-26 10:50Z | handback → merge → the G2 row green on the tip → tracker + push | 2–6 h remaining (likely 3.5 h), confidence medium, estimated 2026-09-26 10:50Z — STALE; basis: a harness rule + a gate port + four mutant items + a make check run (~45 min) + tests/i and its mutant list on i8 |
+| NEEDLE-1 | support (support lane) the production-needle guard's four offenders (env var NAME in the E3A runner, a fake supabase URL in its test, the public-edge hostname in test_certify, the App URL in a runbook snippet test) assembled from string parts as the guard itself does — no guard change, no exception; plain Opus agent | running | codex/needle-1 | 139ffeae → — | ports none | 2026-09-26 18:05Z | handback → merge → test_harness green on the tip (G2 precondition; main-merge precondition) | 0.3–1 h remaining (likely 0.5 h), confidence high, estimated 2026-09-26 18:05Z; basis: four one-line hunks + tests |
 
 ### Queues and locks
 
@@ -197,11 +198,14 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: stale estimate: lane G2-FIX estimated at 2026-09-26T10:50:00Z (older than 6 h)
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
+- warning: overlapping writers: E4C (queued) and NEEDLE-1 (running) both own tests/integration/backend/ / tests/integration/backend/test_certify.py
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and G2-FIX (running) both own infra/ / infra/rollout/README.md §0
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and G2-FIX (running) both own tests/integration/ / tests/integration/gates.py
+- warning: overlapping writers: E3A (queued) and NEEDLE-1 (running) both own tests/integration/ / tests/integration/app/runner.py (+3 more)
 - warning: overlapping writers: I3 (queued) and G2-FIX (running) both own infra/ / infra/rollout/README.md §0 (+1 more)
+- warning: overlapping writers: I3 (queued) and NEEDLE-1 (running) both own tests/integration/ / tests/integration/app/runner.py (+3 more)
 
 ## Pending inputs
 
@@ -432,6 +436,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 18:05Z UTC, coordinator: user: "analyze all the work, compare against plan, carefully merge everything on main, unblock all remaining tasks and execute them in parallel, update the tracker" — analysis workflow launched (coverage vs plan, main-merge readiness, remaining work executability); NEEDLE-1 launched for the guard's four offenders (the last red test on the tip); main = origin/main dff31efc is an ancestor of the branch (893 commits ahead, no conflicts)
 - 2026-09-26 17:55Z UTC, coordinator (P-06): P-06 enacted: after the user's unblock run (SSM parameters ×3, alert subscription pending confirmation, role policy, allow rules) the coordinator measured the served processor files on the box — digests equal the repository copies; serving-version.json filled and artifacts.py PINNED extended
 - 2026-09-26 17:03Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
 - 2026-09-26 17:03Z UTC, tracker: rejected update: stale: at 2026-09-26T10:30:00Z is not newer than lane KNOWN-GOOD-PROOF-3 state 2026-09-26T10:50:00Z
