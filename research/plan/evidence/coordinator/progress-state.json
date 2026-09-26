@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 133,
-  "updated": "2026-09-26T19:45:00Z",
+  "revision": 134,
+  "updated": "2026-09-26T19:46:00Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -3638,14 +3638,7 @@
       "wiring_requests": []
     }
   ],
-  "review_queue": [
-    {
-      "since": "2026-09-26T19:07:00Z",
-      "lane": "STEP55-FIX",
-      "task": "STEP55-FIX",
-      "head": "0f369aa96223383c2576332a34a0fe3658f28fd4"
-    }
-  ],
+  "review_queue": [],
   "integration_queue": [],
   "resource_locks": [
     {
@@ -6111,6 +6104,12 @@
       "by": "coordinator (STEP55-FIX-2)",
       "what": "STEP55-FIX-2 merged: the runtime-login step makes no failed pooler auth on a first run or a rerun (rolcanlogin read first); WR-S55F2-1 applied to the W10b cell",
       "source": "research/plan/evidence/i/STEP55-FIX-2-0a7dde4.md"
+    },
+    {
+      "at": "2026-09-26T19:46:12Z",
+      "by": "tracker",
+      "what": "rejected update: unknown task ID 'STEP55-FIX-2'",
+      "source": "updates/STEP55-FIX-2-20260926T1940Z.json"
     }
   ],
   "history": {
@@ -6782,10 +6781,15 @@
       "status": "rejected",
       "at": "2026-09-26T19:30:00Z",
       "reason": "unknown activity 'fix'"
+    },
+    "STEP55-FIX-2-20260926T1940Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T19:40:00Z",
+      "reason": "unknown task ID 'STEP55-FIX-2'"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T19:35:05Z",
+    "computed_at": "2026-09-26T19:46:12Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,

@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 19:45Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 133, updated 2026-09-26 19:45Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 19:46Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 134, updated 2026-09-26 19:46Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -8,7 +8,7 @@ Generated 2026-09-26 19:45Z UTC by `python3 research/plan/scripts/progress.py` f
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V4, V5, V6.
 - Agent slots: 16 total, 4 active lanes, 2 reserved.
-- Validation: 0 error(s), 20 warning(s).
+- Validation: 0 error(s), 19 warning(s).
 
 ### Actionable blockers
 
@@ -170,7 +170,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ### Queues and locks
 
-- Review queue: STEP55-FIX.
+- Review queue: empty.
 - Integration queue: empty.
 - e2c (55448/55493) + i8 (55450/55495/55496): G2-FIX until ≈2026-09-26 21:00Z. exclusive for the whole make check + tests/i run; no other user of either until the verdict
 - e3c compose block 56900–56999: BACKEND-MINORS. one E3C run at a time
@@ -198,7 +198,6 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: I3 (queued) and E1B-WIRE (running) both own infra/ / infra/rollout/e1b-window.sh
 - warning: overlapping writers: G2-FIX (running) and BACKEND-MINORS (running) both own apps/infrx-api/tests/i/test_observe.py / apps/infrx-api/tests/i/test_observe.py
 - warning: overlapping writers: BACKEND-MINORS (running) and E1B-WIRE (running) both own apps/infrx-api/tests/w/ / apps/infrx-api/tests/w/
-- warning: 1 update file(s) not applied yet: STEP55-FIX-2-20260926T1940Z.json (run apply-updates)
 
 ## Pending inputs
 
@@ -292,6 +291,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `E1B-20260926T1842Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - `APP-MINORS-2-20260926T1859Z.json`: stale: at 2026-09-26T18:59:00Z is not newer than lane APP-MINORS-2 state 2026-09-26T19:35:00Z
 - `APP-MINORS-2-20260926T1930Z.json`: unknown activity 'fix'
+- `STEP55-FIX-2-20260926T1940Z.json`: unknown task ID 'STEP55-FIX-2'
 
 ## All manifest tasks
 
@@ -433,6 +433,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 19:46Z UTC, tracker: rejected update: unknown task ID 'STEP55-FIX-2'
 - 2026-09-26 19:37Z UTC, coordinator (STEP55-FIX-2): STEP55-FIX-2 merged: the runtime-login step makes no failed pooler auth on a first run or a rerun (rolcanlogin read first); WR-S55F2-1 applied to the W10b cell
 - 2026-09-26 19:35Z UTC, tracker: rejected update: unknown activity 'fix'
 - 2026-09-26 19:07Z UTC, STEP55-FIX: running → review; head 0f369aa96223383c2576332a34a0fe3658f28fd4; estimate likely 2.5 → 0.3 h (committed, suites and mutants green; review remains)
