@@ -424,6 +424,27 @@ def test_ttft_comes_from_first_content_delta_and_tokens_from_usage():
         assert summary["out_tok_per_s"] == 0.0, "no usage means no counted tokens, never an estimate"
 
 
+def test_the_direct_leg_supplies_both_eos_ids_and_the_gateway_leg_neither():
+    """E1B WR-3 (E1B-protocol §7.2 WC-2 b): the worker re-supplies both EOS ids on every
+    engine request (infrx/worker/engine.py MODEL_EOS_TOKEN_IDS, serving-version.json
+    eos_token_ids), so a direct leg without them runs past the gateway leg's stop and its
+    completion_tokens never pair. Oracle: a direct payload missing either id, or a gateway
+    payload carrying the field (the ingress's parameter set is closed: a 400)."""
+    eos = json.load(open(os.path.join(os.path.dirname(HERE), "serving-version.json"),
+                         encoding="utf-8"))["eos_token_ids"]
+    assert eos == [248044, 248046]
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        for target, want in (("direct", eos), ("gateway", None)):
+            gw, bodies = FakeGateway(), []
+            gw.chat_override = lambda request: bodies.append(json.loads(request.content))
+            summary, _, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1, target=target),
+                                         gw, env={"MARLIN_API_KEY": KEY})
+            assert summary["accepted"] == 2 and len(bodies) == 2, target
+            assert [b.get("stop_token_ids") for b in bodies] == [want, want], target
+
+
 def test_percentiles_are_suppressed_when_samples_cannot_support_them():
     assert bench.min_samples(50) == 6 and bench.min_samples(95) == 60 and bench.min_samples(99) == 300
     v32 = [0.1 * i for i in range(32)]

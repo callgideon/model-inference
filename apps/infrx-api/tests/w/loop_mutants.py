@@ -67,6 +67,7 @@ CANCEL_REFUSED = "test_dur_settle__an_engine_cancel_that_is_refused_still_stops_
 REFUSED = ("test_dur_settle__a_request_the_engine_cannot_accept_settles_free_and_runs_"
            "nothing")
 CLAIM_ALL = "test_ops_recover__the_loop_claims_acknowledges_and_settles_every_candidate"
+PHASES = "test_ops_recover__the_loop_reports_each_attempts_phase_timings_in_seconds"
 LOSER = "test_ops_recover__a_candidate_whose_claim_loses_is_still_acknowledged"
 NOT_RESUMED = "test_ops_recover__a_lease_held_by_a_dead_worker_is_never_resumed"
 DRAIN_RELEASE = "test_ops_recover__a_drain_stops_claiming_and_releases_what_it_cannot_finish"
@@ -319,6 +320,11 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- the loop ---------------------------------------------------------------------
     _m("candidate_never_acknowledged", "every candidate this worker consumed is acknowledged",
        L, "            await self._acknowledge(candidate)", "            pass", CLAIM_ALL),
+    _m("phase_timings_never_observed", "E1B WR-4: each attempt's phases reach the worker /metrics",
+       L, "            self.metrics.observe_phases({k: v / 1000 for k, v in result.timings.items()})",
+       "            pass", PHASES),
+    _m("phase_timings_in_milliseconds", "the histogram takes seconds; the attempt keeps ms",
+       L, "{k: v / 1000 for k, v in result.timings.items()}", "result.timings", PHASES),
     _m("only_winners_acknowledged", "a candidate whose claim lost is consumed too",
        L, "            await self._acknowledge(candidate)",
        "            if result.settled:\n                await self._acknowledge(candidate)",

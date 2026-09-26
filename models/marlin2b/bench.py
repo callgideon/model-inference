@@ -995,8 +995,11 @@ async def _send(client, cfg, item, row, now):
     # vLLM streams usage only when asked. The infrx gateway always sends its usage frame, and
     # its parameter set is closed (01): `stream_options` there is 400 unsupported_parameter
     # (measured against the mounted gateway, E3B phase 3).
+    # The worker re-supplies both EOS ids on every engine request (infrx/worker/engine.py
+    # MODEL_EOS_TOKEN_IDS); without them a direct leg's output never pairs (E1B WC-2).
     if cfg["args"].target == "direct":
         payload["stream_options"] = {"include_usage": True}
+        payload["stop_token_ids"] = [248044, 248046]
     # A corpus clip knows its duration; the single-video path does not, and 'auto' there
     # means an ffprobe subprocess, so make_config() resolved it once instead of per attempt.
     mm = (resolve_mm_kwargs(cfg["args"], duration=item["duration_s"])

@@ -1041,3 +1041,185 @@ def test_every_runbook_bench_command_validates_as_written_and_the_journey_covers
         if not (a.media_base_url or "").startswith("https://"):
             problems.append("the journey passes no https --media-base-url for its video_url leg")
     assert not problems, "\n".join(problems)
+
+
+# ------------------------- E1B-WIRE: the window bases, the launcher and §7.2's commands as written
+
+import subprocess
+
+E1B_PROTOCOL = os.path.join(os.path.dirname(HERE), "results", "E1B-protocol.md")
+E1B_LAUNCHER = os.path.join(REPO, "infra", "rollout", "e1b-window.sh")
+E1B_FILLED = {"E1B-direct.json": "E1B-direct.base.json", "E1B-box.json": "E1B-box.base.json",
+              "E1B-box-forms.json": "E1B-box.forms.base.json", "E1B-sop.json": "E1B-sop.base.json"}
+CREDIT_PER_REQUEST = Decimal("13.5168")      # 30,720 x 400 + 1,024 x 1,200 CREDIT per 1M (§7.2)
+
+
+def launcher_plan(box, cells=None):
+    """e1b-window.sh DRY_RUN=1 on a scratch box tree holding the filled bases: its out dir and
+    {dataset version: argv} of every cell it would run (no docker on PATH: none may be called)."""
+    e4c = os.path.join(box, "e4b", "e4c")
+    os.makedirs(e4c)
+    os.symlink(REPO, os.path.join(box, "w3-checkout"))
+    for name, base in E1B_FILLED.items():
+        with open(os.path.join(e4c, name), "w", encoding="utf-8") as f:
+            json.dump(frozen(base), f)
+    with open(os.path.join(e4c, "keys-certify.json"), "w", encoding="utf-8") as f:
+        json.dump({"active_key_id_prefixes": ["142c7d81"]}, f)
+    with open(os.path.join(box, "e4b", "key.env"), "w", encoding="utf-8") as f:
+        f.write("INFRX_API_KEY=not-a-key\n")
+    script = open(E1B_LAUNCHER, encoding="utf-8").read().replace("/opt/dlami/nvme", box)
+    env = {"PATH": "/usr/bin:/bin", "RELEASE": "c" * 40, "DRY_RUN": "1",
+           **({"CELLS": cells} if cells else {})}
+    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+    assert done.returncode == 0, done.stderr
+    out = re.search(r"^out=(\S+)$", done.stdout, re.M).group(1)
+    plan = {}
+    for line in done.stdout.splitlines():
+        if line.startswith("plan ") and not line.split()[2].endswith(("-resume", "-export")):
+            argv = line.split()[3:]
+            plan[argv[argv.index("--dataset-version") + 1]] = argv
+    return out, plan
+
+
+def section7_commands():
+    """§7.2's bench/dataset lines, as written: loops unrolled, $BOX/$DIRECT/$M/$O expanded, the
+    `…` the launcher fills (profile, inventory, out, raw) left out. {dataset version: argv}."""
+    text = open(E1B_PROTOCOL, encoding="utf-8").read().split("### 7.2", 1)[1].split("### 7.3")[0]
+    box = shlex.split(re.search(r"`BOX` is [^(]*\(`([^`]+)`\)", text).group(1)
+                      .replace("$M", "models/marlin2b"))
+    direct = list(box)
+    over = shlex.split(re.search(r"`DIRECT` is the same with `([^`]+)`", text).group(1))
+    for flag, value in zip(over[::2], over[1::2]):
+        direct[direct.index(flag) + 1] = value
+    cells = {}
+    for line in text.splitlines():
+        cell = re.match(r"^\| \*\*(WC-\d+)\*\*", line)
+        for cmd in re.findall(r"`((?:for \w in [^;]+; do )?python \$M/(?:bench|dataset)\.py[^`]*)`",
+                              line):
+            loop = re.match(r"for (\w) in ([^;]+); do (.*?)(?:; done)?$", cmd)
+            values, var, body = ((loop.group(2).split(), loop.group(1), loop.group(3)) if loop
+                                 else ([None], None, cmd))
+            for v in values:
+                words = shlex.split(body.replace("…", "").replace("$M", "models/marlin2b")
+                                    .replace("$O", "/out").replace(f"${var}", v or ""))
+                argv = []
+                for w in words:
+                    argv += {"$BOX": box, "$DIRECT": direct}.get(w, [w])
+                argv = [a for i, a in enumerate(argv) if not (
+                    a in ("--profile", "--key-inventory") and (i + 1 == len(argv) or argv[i + 1].startswith("--")))]
+                cells[argv[argv.index("--dataset-version") + 1]] = (cell.group(1), argv)
+    return cells, text
+
+
+def drop(argv, *flags):
+    return [a for i, a in enumerate(argv) if a not in flags and (i == 0 or argv[i - 1] not in flags)]
+
+
+def validate_as_box(argv, swap):
+    """bench --validate-only on a planned argv, container paths swapped for the scratch box."""
+    argv = [swap(a) for a in argv[2:]] + ["--validate-only"]
+    out, saved = io.StringIO(), {n: os.environ.pop(n, None) for n in (*bench.KEY_ENV, "INFRX_API_KEY_B")}
+    try:
+        with contextlib.redirect_stdout(out):
+            code = bench.main(argv)
+    finally:
+        os.environ.update({n: v for n, v in saved.items() if v is not None})
+    return code, json.loads(out.getvalue())
+
+
+def test_every_section7_command_is_the_launchers_and_validates_against_its_filled_base():
+    """Oracle (E1B-PREP WR-1/WR-2): a §7.2 line the launcher does not run as written (a flag,
+    a value or a cell dropped or changed); a planned cell its stamped base refuses (wrong
+    target path, rate, concurrency, forms, dataset version, bounds, a manifest the SOP base
+    does not pin); a direct cell whose expected model is not the engine's served name (every
+    direct row would be an identity mismatch); a CREDIT ceiling off §7.2's figure or a spend
+    in any unit but CREDIT (USD is the price block's only, never converted); WC-9's
+    two-tenant line refused by its base."""
+    import dataset, test_bench
+    bench.load_corpus = test_bench.REAL_LOAD_CORPUS
+    wanted, text = section7_commands()
+    served = re.search(r"--served-model-name (\S+)", open(os.path.join(
+        os.path.dirname(HERE), "serve.sh"), encoding="utf-8").read()).group(1)
+    with tempfile.TemporaryDirectory() as tmp:
+        out, plan = launcher_plan(os.path.join(tmp, "box"))
+        e4c = os.path.join(tmp, "box", "e4b", "e4c")
+        launched = {v: w for v, (w, _) in wanted.items() if w != "WC-9"}
+        assert set(plan) == set(launched) - {"e1b-w1-cold"}, (sorted(plan), sorted(launched))
+        out_cold, cold = launcher_plan(os.path.join(tmp, "box-cold"), cells="WC-7")
+        plan.update(cold)
+        outs = {v: out_cold if v in cold else out for v in plan}
+        assert set(plan) == set(launched) and len(plan) == 11, sorted(plan)
+        fills = ("--profile", "--key-inventory", "--out", "--raw")
+        problems = [f"{v}: launcher {drop(plan[v], *fills)} != §7.2 {wanted[v][1]}"
+                    for v in plan if drop(plan[v], *fills) != wanted[v][1]]
+        swap = lambda a, out=out: (os.path.join(out, a[5:]) if a.startswith("/out/") else
+                          os.path.join(e4c, a[5:]) if a.startswith("/e4c/") else
+                          os.path.join(REPO, a) if a.startswith("models/") else a)
+        for version, argv in plan.items():
+            wc = launched[version]
+            if argv[1].endswith("dataset.py"):
+                continue
+            code, v = validate_as_box(argv, lambda a: swap(a, outs[version]))
+            d = v["derived"]
+            if code or v["errors"]:
+                problems.append(f"{wc} {version}: exit {code}, errors {v['errors']}")
+                continue
+            direct = "--target" in argv and argv[argv.index("--target") + 1] == "direct"
+            ceiling = re.search(rf"^\| \*\*{wc}\*\*[^|]*\|[^|]*\|[^|]*\|[^|]*\| ≤ ([\d,.]+)", text, re.M)
+            if direct:      # engine direct, unmetered: 0 CREDIT, and the served name is the identity
+                ok = (d["expect_model"] == served == "marlin2b" and "projected_spend" not in d
+                      and v["warnings"] == ["blocks do not apply to a local or fake target"])
+            else:
+                n = int(argv[argv.index("--requests") + 1])
+                ok = (not v["blocks"] and not v["warnings"] and d["spend_currency"] == "CREDIT"
+                      and Decimal(d["projected_spend"]) == n * CREDIT_PER_REQUEST
+                      and Decimal(ceiling.group(1).replace(",", "")) == n * CREDIT_PER_REQUEST
+                      and d["expect_model"] == "nemostation/marlin-2b@2026-09-01")
+            if not ok:
+                problems.append(f"{wc} {version}: {v}")
+        # WC-8: dataset.py's own check (it has no --validate-only), media where /out/../corpus is
+        (argv,) = [a for a in plan.values() if a[1].endswith("dataset.py")]
+        synth = json.load(open(os.path.join(os.path.dirname(HERE), "corpus-synth", "manifest.json")))
+        root = os.path.join(tmp, "container")
+        os.makedirs(os.path.join(root, "out"))
+        os.makedirs(os.path.join(root, "corpus", "sop-synth-v1"))
+        for c in synth["clips"]:
+            with open(os.path.join(root, "corpus", c["file"]), "wb") as f:
+                f.write(b"\0" * c["derived"]["bytes"])
+        with open(os.path.join(out, "sop-incap.jsonl"), "rb") as src, \
+                open(os.path.join(root, "out", "sop-incap.jsonl"), "wb") as dst:
+            dst.write(src.read())
+        a = dataset.parse_args([os.path.join(root, a[1:]) if a.startswith("/out/sop-incap")
+                                else swap(a) for a in argv[2:]])
+        saved = os.environ.pop("INFRX_API_KEY", None)
+        try:
+            why = dataset.check_profile(a)
+        finally:
+            os.environ.update({"INFRX_API_KEY": saved} if saved is not None else {})
+        if why is not None:
+            problems.append(f"WC-8: {why}")
+        sop = json.load(open(os.path.join(out, "profiles", "sop.json")))
+        if Decimal(str(sop["bounds"]["spend"]["max_spend"])) != 9 * CREDIT_PER_REQUEST:
+            problems.append(f"WC-8 spend cap {sop['bounds']['spend']}")
+        # WC-9 runs from the coordinator host, not the launcher: validate its line as written
+        (wc9,) = [argv for w, argv in wanted.values() if w == "WC-9"]
+        two = frozen("E1B-edge.two-tenant.base.json")
+        paths = {n: os.path.join(tmp, n) for n in ("E1B-two-tenant.json", "keys-journey.json")}
+        for n, doc in ((paths["E1B-two-tenant.json"], two),
+                       (paths["keys-journey.json"], {"active_key_id_prefixes": ["142c7d81", TENANT_B]})):
+            with open(n, "w", encoding="utf-8") as f:
+                json.dump(doc, f)
+        argv = [*wc9, "--out", os.path.join(tmp, "2t.jsonl"),
+                "--raw", os.path.join(tmp, "2t-raw.jsonl")]
+        code, v = validate_as_box(argv, lambda a: paths.get(os.path.basename(a), swap(a))
+                                  if a.startswith(("~/", "models/")) else a)
+        if code or v["errors"] or v["blocks"] or Decimal(v["derived"]["projected_spend"]) != \
+                135 * CREDIT_PER_REQUEST or two["workload"]["tenants"] != 2:
+            problems.append(f"WC-9: exit {code}, {v}")
+    for base in [*E1B_FILLED.values(), "E1B-edge.two-tenant.base.json"]:
+        p = json.load(open(os.path.join(PROFILES, base), encoding="utf-8"))
+        price, spend = p["measurement"]["price"], p["bounds"]["spend"]
+        if spend["currency"] != "CREDIT" or set(price) != {"usd_per_hour", "instances", "source", "as_of"} \
+                or "cloud-pricing.md" not in price["source"] or "usd" in json.dumps(spend).lower():
+            problems.append(f"{base}: CREDIT spend {spend}, USD price {price}")
+    assert not problems, "\n".join(map(str, problems))
