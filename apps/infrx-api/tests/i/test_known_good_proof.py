@@ -66,10 +66,12 @@ def test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema():
               if r.get("known_good") and r.get("schema_proof")}
     assert set(proven) == {"4226315", "bda1586"}
     for proof in proven.values():
-        assert proof["through"] >= "0022" and proof["through"] in tree
+        assert proof["through"] >= "0025" and proof["through"] in tree       # KNOWN-GOOD-PROOF-2
         assert any("KNOWN-GOOD-PROOF-" in p for p in proof["evidence"])
         # the bytes it ran on, beyond both targets' 0001-0018: a revised 0022/0023 fails here
         assert proof["files"] == {v: h for v, h in tree.items() if "0018" < v <= proof["through"]}
+        # the committed driver deselects the SHAPE cases the record counts (0-KGP2-RV-1: it named 10)
+        assert f"{len(PROOF['SHAPE'])} SHAPE cases" in proof["result"], len(PROOF["SHAPE"])
 
 
 def test_ops_recover__the_proof_driver_refuses_a_bad_target_and_a_moved_history():
@@ -123,3 +125,30 @@ def test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order():
     # a "statement" that is text inside the file's comment is not one of its statements
     assert compare([("0001", stmts), ("0002", ["select 1", "drop table b"])], files) == \
         "statements differ from the candidate's files: ['0002']"
+
+
+def test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond(tmp_path):
+    """KNOWN-GOOD-PROOF-2 (RR:51): each target's REAL record entry, judged against this
+    checkout's real 0019-0025 bytes, is KNOWN-GOOD with hosted at 0024/0025 and NOT at 0026,
+    which no proof reaches. The target tree is a stand-in commit (0001-0018 and the
+    preparation loop, as both targets carry) because mutation copies are not git checkouts;
+    the real-sha verdicts are the evidence's `known-good.py <sha> --applied 0025|0026` runs."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "trunk")
+    target = _commit(repo, {MAIN: "PreparationRunner(jobs)\n", PREP: "class PreparationRunner: ...\n",
+                            f"{MIG}/0018_x.sql": "", PREFLIGHT: "TUNABLE = (\n)\n"})
+    for real in sorted((support.REPO / MIG).glob("[0-9][0-9][0-9][0-9]_*.sql")):
+        if real.name[:4] > "0018":
+            (repo / MIG / real.name).write_bytes(real.read_bytes())
+    judge = KNOWN_GOOD["judge"]
+    for real in (r for r in json.loads(RECORD.read_text())["releases"] if r.get("schema_proof")):
+        entry = {**real, "sha": target}
+        for path in entry["evidence"] + entry["schema_proof"]["evidence"]:
+            (repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (repo / path).touch()
+        at = {applied: judge(target, applied, [], None, {"releases": [entry]}, repo)
+              for applied in ("0024", "0025", "0026")}
+        assert at["0024"]["verdict"] == at["0025"]["verdict"] == "KNOWN-GOOD", (real["sha"], at)
+        assert at["0026"]["verdict"] == "NOT-KNOWN-GOOD"
+        assert [c["check"] for c in at["0026"]["checks"] if not c["ok"]] == ["migrations"]
