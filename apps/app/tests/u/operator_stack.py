@@ -53,6 +53,8 @@ DB = f"{pgharness.DATABASE}_rest"
 PROPOSED = Path(__file__).with_name("operator_rpc_proposed.sql")
 
 OPERATOR = "0b300000-0000-4000-8000-000000000003"      # a platform operator (profiles.is_operator)
+DRIFT_PROVIDER = "0b300000-0000-4000-8000-0000000000d0"
+DRIFT_WALLET = "0b300000-0000-4000-8000-0000000000d1"   # drifts by +1 CREDIT while the cases run
 
 
 def _docker(*args, check=True):
@@ -107,6 +109,15 @@ def down() -> None:
         _docker("network", "rm", NETWORK, check=False)
 
 
+def set_drift(conn, ledger_total: int) -> None:
+    """The throwaway wallet's summary, written as the owner with the wallet guard off (as
+    checks_settle's drift positive control does): DUR-RLS on the drift view needs drift to exist."""
+    conn.execute("alter table infrx.credit_wallets disable trigger user")
+    conn.execute("update infrx.credit_wallets set ledger_total = %s where wallet_id = %s",
+                 (ledger_total, DRIFT_WALLET))
+    conn.execute("alter table infrx.credit_wallets enable trigger user")
+
+
 def seed(conn) -> dict:
     ca.seed_admission(conn)      # CONSUMER_1/2 granted, their consumer keys, C2's operator key
     conn.execute("insert into auth.users (id, email) values (%s, 'operator@example.com')",
@@ -118,18 +129,27 @@ def seed(conn) -> dict:
     code, _ = cs.settle(conn, lease, cs.propose(request.request_id,
                                                 ref=cs.stored(conn, request.request_id)), "credit")
     assert code is None, code
+    # A provider_dev wallet 1 CREDIT past its empty ledger: the operator sees it (DB01), a
+    # consumer does not (DB02). Not a consumer account, so no other case reads it.
+    conn.execute("insert into infrx.provider_orgs (provider_org_id, slug, display_name, "
+                 "created_by) values (%s, 'u3-drift', 'U3 drift', 'u3')", (DRIFT_PROVIDER,))
+    conn.execute("insert into infrx.credit_wallets (wallet_id, kind, owner_provider_org_id) "
+                 "values (%s, 'provider_dev', %s)", (DRIFT_WALLET, DRIFT_PROVIDER))
+    set_drift(conn, 1)
     return {
         "users": {"c1": cc.CONSUMER_1, "c2": cc.CONSUMER_2, "operator": OPERATOR},
         "orgs": {"c1": cc.personal_org(conn, cc.CONSUMER_1),
                  "c2": cc.personal_org(conn, cc.CONSUMER_2)},
         "keys": {"c1": ca.C1_KEY, "c2": ca.C2_KEY, "c2_operator": ca.OPERATOR_KEY},
         "unknown_request": str(request.request_id),
+        "drift_wallet": DRIFT_WALLET,
     }
 
 
 def read_back(conn) -> list[str]:
     """What the Node suite cannot see through PostgREST: the durable effects, exactly."""
     problems = []
+    set_drift(conn, 0)           # repair the seeded drift; nothing else may drift
     cs.assert_no_drift(conn, "the U3 world")
     actors = conn.execute(
         "select distinct actor_principal from infrx.audit_entries "

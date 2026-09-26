@@ -30,6 +30,7 @@ type Stack = {
   orgs: Record<"c1" | "c2", string>;
   keys: Record<"c1" | "c2" | "c2_operator", string>;
   unknown_request: string;
+  drift_wallet: string;
 };
 
 const manifest = process.env.INFRX_U3_STACK;
@@ -87,7 +88,7 @@ const text = (u: bigint) => {
   return `${u < ZERO ? "-" : ""}${s.slice(0, -8)}.${s.slice(-8)}`;
 };
 
-test("U3-DB01 the operator reads every section through its own JWT: exact CREDIT, the unknown-usage queue, no drift", { skip }, async () => {
+test("U3-DB01 the operator reads every section through its own JWT: exact CREDIT, the unknown-usage queue, the seeded drift", { skip }, async () => {
   const view: OperatorView = await readsAs(S.users.operator);
   const accounts = valueOf(view.accounts, "accounts");
   for (const user of [S.users.c1, S.users.c2]) {
@@ -102,14 +103,18 @@ test("U3-DB01 the operator reads every section through its own JWT: exact CREDIT
   assert.ok(unknown, "the unknown-usage request is in the queue");
   assert.equal(unknown.orgId, S.orgs.c1);
   assert.equal(unknown.hold?.unit, "CREDIT");
-  assert.deepEqual(valueOf(view.drift, "drift"), [], "WR-U3-1's drift view answers, and nothing drifts");
+  // operator_stack.py drifts one throwaway provider_dev wallet by +1 CREDIT; nothing else drifts.
+  const drift = valueOf(view.drift, "drift");
+  assert.equal(drift.length, 1, `only the seeded wallet drifts: ${drift.map((d) => d.walletId).join(",")}`);
+  assert.deepEqual(drift[0], { walletId: S.drift_wallet, kind: "provider_dev", ledgerDrift: "1.00000000", reservedDrift: "0.00000000" });
   valueOf(view.audit, "audit");
 });
 
 test("U3-DB02 DUR-RLS: a consumer's JWT reads no operator data (the page fails closed); anon reads nothing", { skip }, async () => {
   const mine = await readsAs(S.users.c1);
   assert.deepEqual(valueOf(mine.audit, "consumer audit"), [], "operator_audit is operator-only");
-  assert.deepEqual(valueOf(mine.drift, "consumer drift"), []);
+  // Drift exists while this runs (DB01 reads the seeded row): a consumer must still see none of it.
+  assert.equal(valueOf(mine.drift, "consumer drift").length, 0, "operator_wallet_drift is operator-only");
   assert.deepEqual(valueOf(mine.unknownUsage, "consumer unknown usage"), [], "the queue is operator-only, even the consumer's own row");
   // The organizations view is operator-only, so the accounts join cannot complete: unavailable, not a partial table.
   assert.equal(mine.accounts.ok, false);
