@@ -31,7 +31,7 @@ export default async function CreditsPage({ searchParams }: PageProps<"/billing"
       ? [null, null, null]
       : await Promise.all([
           reads.creditsIn(found.walletId),
-          reads.ledger(found.walletId, { limit: LEDGER_PAGE_SIZE, cursor: state.cursor }),
+          reads.ledger({ limit: LEDGER_PAGE_SIZE, cursor: state.cursor }),
           reads.legacyUsd(found.orgId),
         ]);
 

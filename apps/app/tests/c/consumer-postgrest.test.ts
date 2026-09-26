@@ -58,12 +58,13 @@ function jwt(claims: Record<string, unknown>): string {
   return `${head}.${body}.${signature}`;
 }
 
-type Client = PostgrestClient & { plans: unknown[]; control: { planning: boolean } };
+type Client = PostgrestClient & { plans: unknown[]; urls: string[]; control: { planning: boolean } };
 
 /** A supabase-js client as one browser session (`null` = anonymous) against the task-local PostgREST. */
 function clientFor(sub: string | null): Client {
   const token = sub === null ? jwt({ role: "anon" }) : jwt({ role: "authenticated", sub });
   const plans: unknown[] = [];
+  const urls: string[] = [];
   const control = { planning: false };
   const client = createClient(PLACEHOLDER, token, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -72,17 +73,19 @@ function clientFor(sub: string | null): Client {
         const url = String(input).replace(`${PLACEHOLDER}/rest/v1`, S.url);
         const headers = new Headers(init?.headers);
         headers.set("Authorization", `Bearer ${token}`);
-        if (control.planning && (init?.method ?? "GET") === "GET") {
-          // The adapter's OWN request, re-asked for its plan (PGRST_DB_PLAN_ENABLED on this stack).
+        urls.push(url.slice(S.url.length));
+        if (control.planning) {
+          // The adapter's OWN request (a GET read or a stable RPC's POST), re-asked for its plan
+          // (PGRST_DB_PLAN_ENABLED on this stack). BUFFERS counts the function's inner reads too.
           const planHeaders = new Headers(headers);
-          planHeaders.set("Accept", 'application/vnd.pgrst.plan+json; for="application/json"; options=analyze');
+          planHeaders.set("Accept", 'application/vnd.pgrst.plan+json; for="application/json"; options=analyze|buffers');
           plans.push(await (await fetch(url, { ...init, headers: planHeaders })).json());
         }
         return fetch(url, { ...init, headers });
       },
     },
   });
-  return Object.assign(client as unknown as PostgrestClient, { plans, control });
+  return Object.assign(client as unknown as PostgrestClient, { plans, urls, control });
 }
 
 const verifiedUser = (id: string) => ({ id, email: `${id.slice(-4)}@example.com`, email_confirmed_at: "2026-09-01T00:00:00Z" });
@@ -213,6 +216,8 @@ test("fails-before: the legacy sidebar shows USD org history, not the individual
 
 test("another session, or no session, cannot read an account by naming it", { skip }, async () => {
   const c1 = await accountOf(S.users.c1);
+  const c1Entries = new Set((await walk<CreditLedgerEntry>((cursor) => readsAs(S.users.c1, c1).reads.ledger({ cursor }), "c1 ledger")).map((e) => e.entry_id));
+  assert.equal(c1Entries.size, 3, "C1's grant and two debits");
   for (const [who, sub] of [
     ["CONSUMER_2", S.users.c2],
     ["anonymous", null],
@@ -220,8 +225,10 @@ test("another session, or no session, cannot read an account by naming it", { sk
     const { reads } = readsAs(sub, c1);
     assert.equal((await reads.balance()).ok, false, `${who}: balance`);
     assert.equal((await reads.legacyUsd()).ok, false, `${who}: legacy statement`);
-    const ledger = await reads.ledger({});
-    assert.ok(!ledger.ok || ledger.value.items.length === 0, `${who}: no CREDIT ledger row of C1`);
+    // The ledger is the JWT subject's own (consumer_credit_ledger): naming C1's account reads
+    // CONSUMER_2's own entries, never C1's.
+    const ledger = await reads.ledger({ limit: 100 });
+    assert.ok(!ledger.ok || ledger.value.items.every((e) => !c1Entries.has(e.entry_id)), `${who}: no CREDIT ledger row of C1`);
     const keys = await reads.keys();
     assert.ok(!keys.ok || keys.value.length === 0, `${who}: no key of C1`);
     const result = await reads.result(S.requests.long);
@@ -280,15 +287,83 @@ test("a large history pages on the index, every entry once, to the exact durable
   } while (cursor !== null && pages < 1000);
   assert.equal(seen.size, S.large_rows, "every entry, over 500 tied instants");
   assert.equal(totalCredit(amounts), parseCredit(S.wallets.large.ledger_total));
-  const plan = JSON.stringify(client.plans);
   assert.equal(client.plans.length, 1);
-  assert.match(plan, /credit_ledger_wallet_created_idx/, `the page must use the wallet index: ${plan.slice(0, 400)}`);
-  assert.doesNotMatch(plan, /"Seq Scan"[^}]*"Relation Name":"credit_ledger"/, "no full ledger scan per page");
   // Coarse regression bound: with the view's per-row `visible_principal()` selected this page took
   // 1.4 s on this fixture (measured); without it, milliseconds.
   const executed = (client.plans[0] as { "Execution Time"?: number }[])[0]?.["Execution Time"];
   assert.ok(typeof executed === "number" && executed < 250, `one page executes in bounded time: ${executed} ms`);
   t.diagnostic(`${pages} pages of 100; page 100 executed in ${executed} ms`);
+});
+
+/** Shared blocks touched by one planned request (BUFFERS covers a function's inner queries). */
+function blocksOf(plan: unknown): number {
+  const top = (plan as { Plan?: Record<string, number> }[])[0]?.Plan ?? {};
+  return (top["Shared Hit Blocks"] ?? NaN) + (top["Shared Read Blocks"] ?? NaN);
+}
+
+test("C0 WR-5: a page 2,000 entries deep is O(limit) through consumer_credit_ledger, with the view's rows", { skip }, async (t) => {
+  const account = await accountOf(S.users.large);
+  const { reads, client } = readsAs(S.users.large, account);
+  const limit = 100;
+  let cursor: string | null = null;
+  const blocks: number[] = [];
+  for (let page = 0; page <= 20; page += 1) {
+    client.control.planning = page === 0 || page === 20; // the first page and the one 2,000 deep
+    const got: Page<CreditLedgerEntry> = valueOf(await reads.ledger({ limit, cursor }), `large page ${page}`);
+    if (client.control.planning) blocks.push(blocksOf(client.plans[client.plans.length - 1]));
+    if (page === 20) {
+      // The same rows the view's keyset page returned before the change (console_credit_ledger,
+      // created_at desc, entry_id desc), read as the same browser principal.
+      const { data, error } = await (client as unknown as {
+        from(r: string): { select(c: string): { eq(c: string, v: string): { order(c: string, o: object): { order(c: string, o: object): { range(a: number, b: number): Promise<{ data: { entry_id: string; amount: string }[] | null; error: unknown }> } } } } };
+      })
+        .from("console_credit_ledger")
+        .select("entry_id,amount")
+        .eq("wallet_id", account.walletId)
+        .order("created_at", { ascending: false })
+        .order("entry_id", { ascending: false })
+        .range(2000, 2000 + limit - 1);
+      assert.equal(error, null);
+      assert.deepEqual(got.items.map((e) => [e.entry_id, e.amount]), (data ?? []).map((r) => [r.entry_id, r.amount]), "the view's rows at offset 2,000");
+      assert.equal(got.items.length, limit);
+      assert.ok(got.next_cursor !== null, "a full page at the 100 cap carries a cursor");
+    }
+    cursor = got.next_cursor;
+  }
+  // O(limit): the deep page touches about as many blocks as the first, and a bounded number of them.
+  // The view's page bitmaps and top-N sorts every wallet row older than the cursor (18,000 here).
+  const [first, deep] = blocks;
+  t.diagnostic(`blocks: first page ${first}, 2,000 deep ${deep}`);
+  assert.ok(Number.isFinite(first) && Number.isFinite(deep), `buffers were reported: ${blocks}`);
+  assert.ok(deep <= 2 * first + 16 && deep < 200, `the deep page is O(limit): first ${first} blocks, 2,000 deep ${deep}`);
+  const rpcCalls = client.urls.filter((u) => u.startsWith("/rpc/consumer_credit_ledger"));
+  assert.ok(rpcCalls.length >= 21, `every page is the D10 read, not the view: ${client.urls.slice(0, 3).join(" ")}`);
+  assert.equal(client.urls.filter((u) => u.startsWith("/console_credit_ledger")).length, 1, "only the reference read uses the view");
+});
+
+test("C0 WR-5: limit 100 is clamped to the read's cap before the call; 101 is refused without one", { skip }, async () => {
+  const { reads, client } = readsAs(S.users.large, await accountOf(S.users.large));
+  const top = valueOf(await reads.ledger({ limit: 100 }), "limit 100 never reaches the database as 101");
+  assert.equal(top.items.length, 100);
+  assert.ok(top.next_cursor !== null);
+  const before = client.urls.length;
+  const big = await reads.ledger({ limit: 101 });
+  assert.equal(!big.ok && big.error.code, "invalid_request");
+  assert.equal(client.urls.length, before, "an over-limit page is refused before any call");
+});
+
+test("C0 WR-5: another individual's session never sees these rows, even replaying their cursor", { skip }, async () => {
+  const large = await accountOf(S.users.large);
+  const own = valueOf(await readsAs(S.users.large, large).reads.ledger({ limit: 100 }), "large first page");
+  const ownIds = new Set(own.items.map((e) => e.entry_id));
+  for (const [who, sub] of [["CONSUMER_1", S.users.c1], ["EMPTY", S.users.empty]] as const) {
+    const { reads } = readsAs(sub, large);
+    const replay = valueOf(await reads.ledger({ limit: 100, cursor: own.next_cursor }), `${who} replaying LARGE's cursor`);
+    assert.ok(replay.items.every((e) => !ownIds.has(e.entry_id)), `${who}: LARGE's rows`);
+    const theirs = await walk<CreditLedgerEntry>((cursor) => reads.ledger({ limit: 2, cursor }), `${who} own ledger`);
+    assert.ok(theirs.length >= 1 && theirs.every((e) => !ownIds.has(e.entry_id)), `${who}: their own entries only`);
+    if (sub === S.users.c1) assert.equal(totalCredit(theirs.map((e) => e.amount)), parseCredit(S.wallets.c1.ledger_total));
+  }
 });
 
 // ------------------------------------------------------------------------------------ requests

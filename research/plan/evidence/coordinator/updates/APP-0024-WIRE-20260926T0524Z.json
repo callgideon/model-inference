@@ -1,0 +1,110 @@
+{
+  "task": "APP-0024-WIRE",
+  "slice": "C0 WR-5 + U1R WR-3(a)/(b)/(c): the App's consumers of 0024 (consumer_credit_ledger, consumer_jobs filters, credits-in index P02 lines)",
+  "activity": "review",
+  "head": "d5e90cee",
+  "head_note": "code head; the evidence/update commit follows it on the branch",
+  "base": "9e4e34ca",
+  "worktree": ".claude/worktrees/codex-app-0024-wire",
+  "branch": "codex/app-0024-wire",
+  "owned_paths": [
+    "apps/app/lib/services/console.ts",
+    "apps/app/app/(console)/billing/credit-reads.ts",
+    "apps/app/app/(console)/billing/credit-fixture.ts",
+    "apps/app/app/(console)/billing/page.tsx",
+    "apps/app/app/(console)/usage/credit-view-model.ts",
+    "apps/app/app/(console)/usage/page.tsx",
+    "apps/app/app/(console)/usage/usage-controls.tsx",
+    "apps/app/tests/c/consumer.test.ts",
+    "apps/app/tests/c/consumer-postgrest.test.ts",
+    "apps/app/tests/c/mutants.json",
+    "apps/app/tests/u/credit-pg.test.ts",
+    "apps/app/tests/u/credit-reads.test.ts",
+    "apps/app/tests/u/usage-credits-view-model.test.ts",
+    "apps/app/tests/u/run-mutants.mjs",
+    "research/plan/evidence/app/APP-0024-WIRE-d5e90ce.md",
+    "research/plan/evidence/coordinator/updates/APP-0024-WIRE-20260926T0524Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "make console-test",
+      "exit": 0,
+      "summary": "661 tests / 606 pass / 0 fail / 55 skip"
+    },
+    {
+      "cmd": "make console-lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "make console-typecheck",
+      "exit": 0,
+      "summary": "typegen + tsc clean"
+    },
+    {
+      "cmd": "make console-built",
+      "exit": 0,
+      "summary": "build ok; i2a 22/22"
+    },
+    {
+      "cmd": "make console-mutants",
+      "exit": 0,
+      "summary": "contracts 212/212 (14 self-tests); V 40/40; U 207/207 (2 self-checks); C 185/185, 4 self-tests, 0 stale; A2 46/46; A3 46/46"
+    },
+    {
+      "cmd": "make console-c0-real",
+      "exit": 0,
+      "summary": "15/15 (+3 WR-5); page 2,000 deep 107 blocks vs first 106 (base view: 597 vs 1635)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=app-c0 credit_world.py (console-pg U1R half)",
+      "exit": 0,
+      "summary": "7/7 (P07 filters new)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=app-c0 request_world.py (console-pg U4 half)",
+      "exit": 0,
+      "summary": "8/8, todo 0"
+    },
+    {
+      "cmd": "make console-c3a-real",
+      "exit": 0,
+      "summary": "9/9, todo 0"
+    },
+    {
+      "cmd": "make console-u3-real",
+      "exit": 0,
+      "summary": "9/9, todo 0"
+    },
+    {
+      "cmd": "fails-before: C0 stack / U1R world on base sources",
+      "exit": 1,
+      "summary": "C0 13/2; U1R 3/4; unit: R file SyntaxError, U05-U07 fail"
+    },
+    {
+      "cmd": "U1R world with M34 (p_to ignored) / M35 (from/to swapped)",
+      "exit": 1,
+      "summary": "6/1 / 5/2"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.25,
+    "likely_h": 0.5,
+    "pessimistic_h": 1.5,
+    "confidence": "medium",
+    "basis": "all named checks green at d5e90cee; remaining is merge after D10-MERGE-2 (disjoint paths) and the ruling number",
+    "at": "2026-09-26T05:25Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-0024W-1: 08 §10 ruling text for the 0024 App consumers (consumer_credit_ledger page, limit refused >100 / look-ahead clamped; usage filters = consumer_jobs p_model/p_key_id/[now-range, now); unset filters not sent; rows name no key)"
+  ],
+  "evidence": [
+    "research/plan/evidence/app/APP-0024-WIRE-d5e90ce.md"
+  ]
+}

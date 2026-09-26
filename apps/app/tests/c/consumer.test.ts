@@ -26,11 +26,10 @@ import {
   type ConsumerAccount,
   type AuthUser,
   type ConsumerClient,
-  type CreditLedgerEntry,
   type RpcClient,
 } from "../../lib/services/console.ts";
 import { creditBalanceOf, sidebarCredit } from "../../lib/services/credits.ts";
-import type { Page, Result } from "../../lib/contracts/types.ts";
+import type { Result } from "../../lib/contracts/types.ts";
 import { createMemoryPort, type Dataset } from "./harness.ts";
 
 /** Success, or a failure that prints the code that came back (the mutant runner reads it). */
@@ -256,77 +255,72 @@ test("legacy USD is its own statement: none is null, history is exact USD, never
 
 // -------------------------------------------------------------------------------------- ledger
 
-function ledgerRow(n: number, wallet = MY_WALLET, over: Record<string, unknown> = {}): Row {
+function ledgerRow(n: number, over: Record<string, unknown> = {}): Row {
+  const entry = `eeeeeeee-0000-4000-8000-${String(n).padStart(12, "0")}`;
   return {
-    wallet_id: wallet,
-    entry_id: `eeeeeeee-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    entry_id: entry,
     created_at: AT,
     kind: n === 0 ? "signup_grant" : "inference_debit",
-    amount: n === 0 ? "10000.00000000" : `-0.0000000${n}`,
+    amount: n === 0 ? "10000.00000000" : `-0.${String(n).padStart(8, "0")}`,
     unit: "CREDIT",
     request_id: n === 0 ? null : `5c000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     reason: "",
-    actor: "platform",
+    cursor: `2026-09-01 12:00:00+00|${entry}`,
     ...over,
   };
 }
 
-test("the CREDIT ledger walks ties on created_at exactly once, newest first, own wallet only", async () => {
-  const data = world();
-  data.credit_ledger = [0, 1, 2, 3, 4].map((n) => ledgerRow(n)).concat([ledgerRow(9, OTHER_WALLET)]);
-  const reads = createConsumerReads({ pg: createMemoryPort(data), rpc: rpcOf({}).client, cursorSecret: SECRET }, account);
-  const seen: string[] = [];
-  let cursor: string | null = null;
-  let pages = 0;
-  do {
-    const page: Page<CreditLedgerEntry> = valueOf(await reads.ledger({ limit: 2, cursor }), "every page answers");
-    seen.push(...page.items.map((item) => item.entry_id));
-    cursor = page.next_cursor;
-    pages += 1;
-  } while (cursor !== null && pages < 10);
-  const expected = [4, 3, 2, 1, 0].map((n) => ledgerRow(n).entry_id as string);
-  assert.deepEqual(seen, expected, "each entry once, in (created_at, entry_id) descending order");
-  const first = valueOf(await reads.ledger({ limit: 1 }), "the first page");
-  assert.deepEqual(first.items[0], {
-    entry_id: expected[0],
+const ledgerRpc = (rows: Row[]) => rpcOf({ consumer_credit_ledger: () => ({ data: rows, error: null }) });
+const ledgerReads = (rpc: RpcClient) => createConsumerReads({ pg: failingPort, rpc, cursorSecret: SECRET }, account);
+
+test("the CREDIT ledger pages through consumer_credit_ledger: no tenant argument, the DB's cursor, exact CREDIT", async () => {
+  const rpc = ledgerRpc([4, 3, 2].map((n) => ledgerRow(n)));
+  const page = valueOf(await ledgerReads(rpc.client).ledger({ limit: 2 }), "the first page");
+  // C0 WR-5 (0024): the JWT subject's own wallet, one index range stopped by its LIMIT - O(limit).
+  assert.deepEqual(rpc.calls, [["consumer_credit_ledger", { p_after: null, p_limit: 3 }]], "no wallet argument: the DB takes it from the JWT");
+  assert.deepEqual(page.items[0], {
+    entry_id: ledgerRow(4).entry_id,
     created_at: "2026-09-01T12:00:00.000000Z",
     kind: "inference_debit",
     amount: "-0.00000004",
     request_id: "5c000000-0000-4000-8000-000000000004",
     reason: "",
   });
+  assert.equal(page.items.length, 2, "the look-ahead row is a probe, not an item");
+  assert.equal(page.next_cursor, ledgerRow(3).cursor, "the next page resumes after the last row shown");
+  const second = ledgerRpc([ledgerRow(2)]);
+  const last = valueOf(await ledgerReads(second.client).ledger({ limit: 2, cursor: page.next_cursor }), "the last page");
+  assert.deepEqual(second.calls[0][1], { p_after: ledgerRow(3).cursor, p_limit: 3 }, "the cursor is passed through, opaque");
+  assert.equal(last.next_cursor, null);
 });
 
-test("a ledger cursor minted for one account is refused for another", async () => {
-  const data = world();
-  data.credit_ledger = [0, 1, 2].map((n) => ledgerRow(n)).concat([0, 1, 2].map((n) => ledgerRow(n + 5, OTHER_WALLET)));
-  const mine = createConsumerReads({ pg: createMemoryPort(data), rpc: rpcOf({}).client, cursorSecret: SECRET }, account);
-  const theirs = createConsumerReads(
-    { pg: createMemoryPort(data), rpc: rpcOf({}).client, cursorSecret: SECRET },
-    { ...account, userId: OTHER, walletId: OTHER_WALLET, orgId: OTHER_ORG },
-  );
-  const page = valueOf(await mine.ledger({ limit: 1 }), "my first page");
-  assert.ok(page.next_cursor !== null, "there is a second page");
-  const replay = await theirs.ledger({ limit: 1, cursor: page.next_cursor });
-  assert.equal(!replay.ok && replay.error.code, "invalid_cursor");
+test("the ledger's look-ahead is clamped at the read's 100 cap; a limit over 100 is refused before any call", async () => {
+  const full = ledgerRpc(Array.from({ length: 100 }, (_, n) => ledgerRow(n + 1)));
+  const top = valueOf(await ledgerReads(full.client).ledger({ limit: 100 }), "limit 100 is not refused by the database");
+  assert.deepEqual(full.calls[0][1], { p_after: null, p_limit: 100 }, "limit + 1 = 101 would be refused 400 invalid_request");
+  assert.equal(top.next_cursor, ledgerRow(100).cursor, "a full capped page is never read as the last one");
+  const none = ledgerRpc([]);
+  const big = await ledgerReads(none.client).ledger({ limit: 101 });
+  assert.equal(!big.ok && big.error.code, "invalid_request");
+  assert.deepEqual(none.calls, [], "refused before the call");
 });
 
 test("a ledger row that is not CREDIT, or of an unknown kind, fails the page instead of rendering", async () => {
   for (const over of [{ unit: "USD" }, { kind: "transfer" }, { amount: 5 }]) {
-    const data = world();
-    data.credit_ledger = [ledgerRow(1, MY_WALLET, over)];
-    const reads = createConsumerReads({ pg: createMemoryPort(data), rpc: rpcOf({}).client, cursorSecret: SECRET }, account);
-    const page = await reads.ledger({});
+    const page = await ledgerReads(ledgerRpc([ledgerRow(1, over)]).client).ledger({});
     assert.equal(page.ok, false, JSON.stringify(over));
   }
 });
 
-test("a port failure on the ledger is dependency_unavailable; a limit over 100 is invalid_request", async () => {
+test("a port failure is dependency_unavailable (keys, the ledger RPC); a stale ledger cursor is invalid_cursor", async () => {
   const reads = createConsumerReads({ pg: failingPort, rpc: rpcOf({}).client, cursorSecret: SECRET }, account);
+  const keys = await reads.keys();
+  assert.equal(!keys.ok && keys.error.code, "dependency_unavailable");
   const down = await reads.ledger({});
   assert.equal(!down.ok && down.error.code, "dependency_unavailable");
-  const big = await reads.ledger({ limit: 101 });
-  assert.equal(!big.ok && big.error.code, "invalid_request");
+  const stale = rpcOf({ consumer_credit_ledger: () => ({ data: null, error: { code: "P0001", message: "invalid_cursor: not a cursor this read issued" } }) });
+  const refused = await ledgerReads(stale.client).ledger({ cursor: "x|y" });
+  assert.equal(!refused.ok && refused.error.code, "invalid_cursor");
 });
 
 // ------------------------------------------------------------------------------------ requests

@@ -6,10 +6,14 @@
  *
  * - `console_credit_wallets` (0008): the caller's consumer wallet, filtered by `owner_user_id` — an
  *   operator session sees every wallet through the view, so the filter is what scopes it;
- * - `console_credit_ledger` (0008): that wallet's entries, keyset-paged on
- *   `credit_ledger_wallet_created_idx (wallet_id, created_at desc, entry_id desc)`;
- * - `consumer_jobs` (0021): the caller's jobs through the JWT subject, keyset-paged on
- *   `jobs_org_created_idx`, money as text in each job's own unit;
+ * - `consumer_credit_ledger` (0024): the caller's own ledger through the JWT subject, one range of
+ *   `credit_ledger_wallet_created_idx` stopped by its LIMIT, on D10's opaque cursor;
+ * - `console_credit_ledger` (0008): the wallet's grant and adjustments for "Spent", through 0024's
+ *   partial index `credit_ledger_wallet_credits_in_idx`;
+ * - `consumer_jobs` (0021/0024): the caller's jobs through the JWT subject, keyset-paged on
+ *   `jobs_org_created_idx`, money as text in each job's own unit, optionally narrowed by model,
+ *   key and the half-open window [from, to);
+ * - `api_keys` (0001, RLS): the personal organization's key names, for the key filter;
  * - `console_legacy_usd_statement` (0008): the historical USD balance, its own unit.
  *
  * Nothing here throws and nothing here guesses: an error, a transport failure or a row that is not
@@ -40,7 +44,6 @@ export type Answer = { data: unknown; error: { code?: string | null; message?: s
 export interface Filter extends PromiseLike<Answer> {
   eq(column: string, value: string): Filter;
   neq(column: string, value: string): Filter;
-  or(filter: string): Filter;
   order(column: string, options: { ascending: boolean }): Filter;
   limit(count: number): Filter;
 }
@@ -104,24 +107,44 @@ export type ConsumerJob = {
 
 export type PageRequest = { limit: number; cursor: string | null };
 
+/**
+ * `consumer_jobs`' 0024 filters. Unset (null or absent) is no filter and is not sent, so an
+ * unfiltered call is exactly 0021's. `from`/`to` are instants: the window is [from, to).
+ */
+export type JobsRequest = PageRequest & {
+  model?: string | null;
+  keyId?: string | null;
+  from?: string | null;
+  to?: string | null;
+};
+
+/** A key the individual can filter their requests by. A job row names no key (0024 note 3). */
+export type KeyOption = { id: string; name: string; prefix: string };
+
 export interface CreditReads {
   /** The caller's consumer wallet; `null` when none exists yet (no grant). */
   wallet(): Promise<Result<CreditWallet | null>>;
-  ledger(walletId: string, page: PageRequest): Promise<Result<Page<CreditLedgerEntry>>>;
+  /** The caller's own ledger: the database takes the wallet from the JWT, never an argument. */
+  ledger(page: PageRequest): Promise<Result<Page<CreditLedgerEntry>>>;
   /** Σ of the non-debit entries (grant + adjustments); `null` past `CREDITS_IN_BOUND` entries. */
   creditsIn(walletId: string): Promise<Result<Credit | null>>;
   legacyUsd(orgId: string): Promise<Result<LegacyUsd>>;
-  jobs(page: PageRequest): Promise<Result<Page<ConsumerJob>>>;
+  jobs(page: JobsRequest): Promise<Result<Page<ConsumerJob>>>;
+  /** The personal organization's keys (revoked ones too: their requests are still listed). */
+  keys(orgId: string): Promise<Result<KeyOption[]>>;
 }
+
+/** How many keys the filter offers; a consumer has a handful. */
+export const KEYS_BOUND = 100;
 
 /**
  * How many grant/adjustment entries `creditsIn` will sum. A consumer wallet has one signup grant and
  * the rare operator adjustment, so this is never reached in practice; past it, "spent" is shown as
  * unavailable rather than computed from a partial sum.
  *
- * ponytail: spent is derived as Σ(non-debit) − ledger_total because no SQL aggregate exists for it;
- * the read filters the wallet's index range by kind. Replace with a D10 `console_credit_totals`
- * function (wiring request in the U1R evidence) if wallets grow long histories.
+ * Spent is derived as Σ(non-debit) − ledger_total; 0024's partial index
+ * `credit_ledger_wallet_credits_in_idx` (U1R WR-3(b)) serves the read, so it no longer filters every
+ * entry of the wallet by kind.
  */
 export const CREDITS_IN_BOUND = 100;
 
@@ -281,15 +304,30 @@ async function read<T>(query: PromiseLike<Answer>, map: (data: unknown) => T): P
 // Keyset pages
 // ---------------------------------------------------------------------------
 
-/** The ledger cursor this adapter mints: `<normalised instant>|<entry uuid>`, nothing else. */
-const LEDGER_CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z)\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
-
-function pageOf<T>(items: T[], limit: number, cursorOf: (item: T) => string): Page<T> {
+/**
+ * One page of a D10 `consumer_*` read: `limit + 1` rows asked, the extra one only decides whether
+ * there is a next page, which resumes from D10's opaque cursor on the last row shown. The cursor is
+ * a bound parameter, never spliced into a filter; a malformed one is D10's `invalid_cursor`.
+ */
+function rpcPage<T>(data: unknown, limit: number, parse: (row: unknown) => T): Page<T> {
+  const found = rows(data);
+  const cursors = found.map((row) => text(row, "cursor"));
+  const items = found.map(parse);
   const shown = items.slice(0, limit);
   return {
     items: shown,
-    next_cursor: items.length > limit && shown.length > 0 ? cursorOf(shown[shown.length - 1]) : null,
+    next_cursor: items.length > limit && shown.length > 0 ? cursors[shown.length - 1] : null,
   };
+}
+
+/** Only the filters that are set; the RPC's named parameters, each to its own. */
+function jobFilterArgs(page: JobsRequest): Record<string, string> {
+  const args: Record<string, string> = {};
+  if (page.model) args.p_model = page.model;
+  if (page.keyId) args.p_key_id = page.keyId;
+  if (page.from) args.p_from = page.from;
+  if (page.to) args.p_to = page.to;
+  return args;
 }
 
 export function postgrestCreditReads(client: CreditClient, userId: string): CreditReads {
@@ -309,32 +347,11 @@ export function postgrestCreditReads(client: CreditClient, userId: string): Cred
         },
       ),
 
-    async ledger(walletId, page) {
-      // The cursor is spliced into a PostgREST filter, so only the exact shape minted below is
-      // accepted — and it is checked before any query exists.
-      const match = page.cursor === null ? null : LEDGER_CURSOR.exec(page.cursor);
-      if (page.cursor !== null && match === null) {
-        return fail("invalid_cursor", "This page link is no longer valid.");
-      }
-      // No `actor`: the view computes visible_principal() for it on every row of the wallet before
-      // the sort and limit (1.5 s a page at 10k entries, 8 ms without), and every entry a consumer
-      // can read is masked to `platform` anyway (R59-1).
-      let query = client
-        .from("console_credit_ledger")
-        .select("entry_id, created_at, kind, amount, unit, request_id, reason")
-        .eq("wallet_id", walletId);
-      if (match !== null) {
-        const [, at, id] = match;
-        query = query.or(`created_at.lt."${at}",and(created_at.eq."${at}",entry_id.lt.${id})`);
-      }
-      return read(
-        query
-          .order("created_at", { ascending: false })
-          .order("entry_id", { ascending: false })
-          .limit(page.limit + 1),
-        (data) => pageOf(rows(data).map(entryOf), page.limit, (e) => `${e.createdAt}|${e.id}`),
-      );
-    },
+    // C0 WR-5 / U1R WR-3(c) (0024): O(limit) however deep the cursor; no actor column at all.
+    ledger: (page) =>
+      read(client.rpc("consumer_credit_ledger", { p_after: page.cursor, p_limit: page.limit + 1 }), (data) =>
+        rpcPage(data, page.limit, entryOf),
+      ),
 
     creditsIn: (walletId) =>
       read(
@@ -361,16 +378,21 @@ export function postgrestCreditReads(client: CreditClient, userId: string): Cred
       }),
 
     jobs: (page) =>
-      read(client.rpc("consumer_jobs", { p_after: page.cursor, p_limit: page.limit + 1 }), (data) => {
-        const found = rows(data);
-        const cursors = found.map((row) => text(row, "cursor"));
-        const jobs = found.map(jobOf);
-        const shown = jobs.slice(0, page.limit);
-        return {
-          items: shown,
-          next_cursor: jobs.length > page.limit && shown.length > 0 ? cursors[shown.length - 1] : null,
-        };
-      }),
+      read(
+        client.rpc("consumer_jobs", { p_after: page.cursor, p_limit: page.limit + 1, ...jobFilterArgs(page) }),
+        (data) => rpcPage(data, page.limit, jobOf),
+      ),
+
+    keys: (orgId) =>
+      read(
+        client
+          .from("api_keys")
+          .select("id, name, prefix")
+          .eq("org_id", orgId)
+          .order("created_at", { ascending: false })
+          .limit(KEYS_BOUND),
+        (data) => rows(data).map((row) => ({ id: text(row, "id"), name: text(row, "name"), prefix: text(row, "prefix") })),
+      ),
   };
 }
 

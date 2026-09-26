@@ -2,9 +2,10 @@
 //
 // U1R Usage page view model (`app/(console)/usage/credit-view-model.ts`) over `consumer_jobs`:
 // status, model/revision, tokens, and the charge by settlement state in each job's own unit. A hold
-// is not a charge, unknown usage is not a zero, legacy USD rows say USD, and a keyset walk (with a
-// date window cut on the ordered stream) visits every job once so its totals match the wallet.
+// is not a charge, unknown usage is not a zero, legacy USD rows say USD, the model/key/window filters
+// are consumer_jobs' own (0024), and a keyset walk visits every job once so its totals match the wallet.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { credits } from "../../lib/format.ts";
@@ -21,7 +22,6 @@ import {
   jobsPageModel,
   jobsPageRequest,
   parseJobFilters,
-  withJobRange,
   type JobFilters,
 } from "../../app/(console)/usage/credit-view-model.ts";
 
@@ -34,8 +34,8 @@ const T = {
   units: "U1R-U02 each row is in its own unit: credits never carry '$', legacy USD always says USD",
   tokens: "U1R-U03 unreported usage shows no token count and says nothing is estimated",
   status: "U1R-U04 state, cause and settlement each read as what they are, and an unknown settlement is not a charge",
-  window: "U1R-U05 the date window is cut on the ordered stream at its inclusive start, and ends the walk",
-  hrefs: "U1R-U06 every href is computed here: pages, window changes reset the cursor, rows link to their detail",
+  window: "U1R-U05 the window is [now - range, now) and goes to consumer_jobs with the model and key; unknown URL values are no filter",
+  hrefs: "U1R-U06 every href is computed here: pages carry the filters, applying filters resets the cursor, rows link to their detail",
   states: "U1R-U07 a failed read is an error with its recovery, and an empty window says so",
   walk: "U1R-U08 walking every page visits each job once, and the totals equal the wallet's spent and reserved",
 };
@@ -118,57 +118,71 @@ function page(items: ConsumerJob[], next: string | null = null): Result<Page<Con
 }
 
 test(T.window, () => {
-  const filters = parseJobFilters({ range: "24h" });
-  const exactlyAtStart = { ...byN(8), createdAt: "2026-09-19T12:00:00.000000Z" };
-  const older = { ...byN(8), requestId: "b1000000-0000-4000-8000-000000000009", createdAt: "2026-09-19T11:59:59.999999Z" };
-  const model = jobsPageModel({ filters, jobs: page([byN(1), exactlyAtStart, older], "NEXT"), now: NOW });
-  assert.ok(model.rows.kind === "ready");
-  if (model.rows.kind !== "ready") return;
-  assert.deepEqual(model.rows.value.rows.map((r) => r.requestId), [byN(1).requestId, exactlyAtStart.requestId]);
-  assert.equal(model.rows.value.nextHref, null, "a page that crossed the window's start has no next page");
-  const all = jobsPageModel({ filters: parseJobFilters({}), jobs: page([byN(1), older], "NEXT"), now: NOW });
-  assert.ok(all.rows.kind === "ready" && all.rows.value.rows.length === 2 && all.rows.value.nextHref !== null);
+  const KEY = "c7000000-0000-4000-8000-0000000000c1";
+  assert.deepEqual(jobsPageRequest(parseJobFilters({ range: "24h", key: KEY, model: " m@1 " }), NOW), {
+    limit: JOB_PAGE_SIZE,
+    cursor: null,
+    model: "m@1",
+    keyId: KEY,
+    from: "2026-09-19T12:00:00.000000Z",
+    to: "2026-09-20T12:00:00.000000Z",
+  });
+  assert.deepEqual(jobsPageRequest(parseJobFilters({}), NOW), {
+    limit: JOB_PAGE_SIZE, cursor: null, model: null, keyId: null, from: null, to: null,
+  }, "no filter is no argument: the unfiltered read");
   assert.equal(parseJobFilters({}).range, DEFAULT_JOB_RANGE);
   assert.equal(parseJobFilters({ range: "toString" }).range, DEFAULT_JOB_RANGE);
   assert.equal(parseJobFilters({ range: "5m" }).range, DEFAULT_JOB_RANGE);
-  const outside = jobsPageModel({ filters, jobs: page([older]), now: NOW });
-  assert.equal(outside.rows.kind, "empty");
+  for (const key of ["all", "", "x", `${KEY}'`, KEY.toUpperCase()]) assert.equal(parseJobFilters({ key }).keyId, null, key);
+  for (const model of ["", "   ", "m".repeat(201)]) assert.equal(parseJobFilters({ model }).model, null);
+  assert.equal(parseJobFilters({ model: ["a", "b"] }).model, "b", "a repeated parameter: the last one");
+  // The fixture applies the window as consumer_jobs does: at its start in, at its end out.
+  const start = { ...byN(8), createdAt: "2026-09-19T12:00:00.000000Z" };
+  const end = { ...byN(1), createdAt: "2026-09-20T12:00:00.000000Z" };
+  const reads = fixtureCreditReads({ ...fixture, jobs: [start, end] });
+  return reads.jobs(jobsPageRequest(parseJobFilters({ range: "24h" }), NOW)).then((got) => {
+    assert.deepEqual(got.ok && got.value.items.map((j) => j.requestId), [start.requestId]);
+  });
 });
 
 test(T.hrefs, () => {
-  const first = jobsPageModel({ filters: parseJobFilters({ range: "7d" }), jobs: page([byN(1)], "C1"), now: NOW });
-  assert.equal(first.here, "/usage?range=7d");
+  const KEY = "c7000000-0000-4000-8000-0000000000c1";
+  const first = jobsPageModel({ filters: parseJobFilters({ range: "7d", key: KEY, model: "m" }), jobs: page([byN(1)], "C1") });
+  assert.equal(first.here, `/usage?range=7d&key=${KEY}&model=m`);
   assert.ok(first.rows.kind === "ready");
   if (first.rows.kind !== "ready") return;
-  assert.equal(first.rows.value.nextHref, "/usage?range=7d&cursor=C1");
+  assert.equal(first.rows.value.nextHref, `/usage?range=7d&key=${KEY}&model=m&cursor=C1`, "the next page keeps the filters");
   assert.equal(first.rows.value.previousHref, null);
   assert.equal(first.rows.value.rows[0].detailHref, `/usage/${byN(1).requestId}`);
   const deep: JobFilters = parseJobFilters({ range: "7d", cursor: "C2", trail: ["C1"] });
   assert.equal(jobsHref(deep), "/usage?range=7d&cursor=C2&trail=C1");
-  assert.equal(jobsHref(withJobRange(deep, "30d")), "/usage?range=30d");
   assert.equal(jobsHref(parseJobFilters({})), "/usage");
-  assert.deepEqual(jobsPageRequest(deep), { limit: JOB_PAGE_SIZE, cursor: "C2" });
+  assert.equal(jobsPageRequest(deep, NOW).cursor, "C2");
+  // Applying filters is a GET of the form: its fields are the filters only, so the walk restarts.
+  const form = readFileSync("app/(console)/usage/usage-controls.tsx", "utf8");
+  assert.deepEqual([...form.matchAll(/name="([a-z]+)"/g)].map((m) => m[1]), ["range", "key", "model"]);
+  assert.match(form, /<form action="\/usage"/);
 });
 
 test(T.states, () => {
   const failed = jobsPageModel({
     filters: parseJobFilters({}),
     jobs: { ok: false, error: { code: "dependency_unavailable", message: "x" } },
-    now: NOW,
   });
   assert.ok(failed.rows.kind === "error" && failed.rows.recovery === "retry");
   const stale = jobsPageModel({
     filters: parseJobFilters({ cursor: "C9" }),
     jobs: { ok: false, error: { code: "invalid_cursor", message: "x" } },
-    now: NOW,
   });
   assert.ok(stale.rows.kind === "error" && stale.rows.recovery === "restart");
   assert.equal(stale.firstHref, "/usage");
-  const empty = jobsPageModel({ filters: parseJobFilters({}), jobs: page([]), now: NOW });
+  const empty = jobsPageModel({ filters: parseJobFilters({}), jobs: page([]) });
   assert.equal(empty.rows.kind, "empty");
   assert.match(empty.emptyText, /no requests yet/i);
-  const emptyWindow = jobsPageModel({ filters: parseJobFilters({ range: "24h" }), jobs: page([]), now: NOW });
+  const emptyWindow = jobsPageModel({ filters: parseJobFilters({ range: "24h" }), jobs: page([]) });
   assert.match(emptyWindow.emptyText, /last 24h/);
+  const emptyFilter = jobsPageModel({ filters: parseJobFilters({ range: "24h", model: "m" }), jobs: page([]) });
+  assert.match(emptyFilter.emptyText, /match this model or key/);
 });
 
 test(T.walk, async () => {
@@ -180,7 +194,7 @@ test(T.walk, async () => {
     const held: Credit[] = [];
     for (let guard = 0; guard < 50; guard += 1) {
       const result = await reads.jobs({ limit, cursor: filters.cursor });
-      const model = jobsPageModel({ filters, jobs: result, now: NOW });
+      const model = jobsPageModel({ filters, jobs: result });
       if (model.rows.kind !== "ready") break;
       for (const row of model.rows.value.rows) seen.push(row.requestId);
       assert.ok(result.ok);
