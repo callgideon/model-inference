@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 01:54Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 66, updated 2026-09-26 01:46Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 01:59Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 66, updated 2026-09-26 01:46Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `8d9e5b5f`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V2 runtime repairs; bands with active work: V0, V1, V2, V3, V5, V6.
-- Agent slots: 16 total, 8 active lanes, 2 reserved.
-- Validation: 0 error(s), 14 warning(s).
+- Agent slots: 16 total, 9 active lanes, 2 reserved.
+- Validation: 0 error(s), 17 warning(s).
 
 ### Actionable blockers
 
@@ -60,7 +60,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Milestone | Gate | Status | Forecast | Controlling constraint | Effort o/l/p | Wall-clock o/l/p | Confidence |
 |---|---|---|---|---|---|---|---|
-| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 05:30Z – 2026-09-26 13:18Z (likely 2026-09-26 08:06Z) | dependency path W5 → E3C | 3.6 / 6.2 / 11.4 h | 3.6 / 6.2 / 11.4 h | medium |
+| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 05:35Z – 2026-09-26 13:23Z (likely 2026-09-26 08:11Z) | dependency path W5 → E3C | 3.6 / 6.2 / 11.4 h | 3.6 / 6.2 / 11.4 h | medium |
 | `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
 | `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
 | `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C | — | — | unknown |
@@ -106,7 +106,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (29.1 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (29.2 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -152,6 +152,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | I3 | I3 I3-PREP (coordinator): App recovery/alarm/rollback runbook, offline rollback-target tool, browser error reporting, operator release scenarios; gate not claimed | queued | codex/i3-prep | 6badd4e1 → — | ports no compose block; task-local PostgreSQL app-i3 55461 only if needed, prefix infrx-i3-prep- | 2026-09-26 01:18Z | I3 proper dispatches after BACKEND-READY and the I2A live half; I3-PREP (coordinator preparation lane, workflow wf_eed7ff75-8f5, user decision: App tasks run ahead of the gate) writes the App-side material now without claiming a gate | 2–8 h remaining (likely 4 h), confidence low, estimated 2026-09-26 01:18Z; basis: preparation lane; not yet inspected |
 | APP-E3A-FIX | support E3A support lane: F-1 (middleware 307 on the sign-in server action: claim never runs) and F-2 (/traces, /dedicated, /teams served to a consumer) fixed with fails-before tests; journey checks un-gated by C3A/U2/U3/U4 fitted to the merged pages; runner rerun on the e4b block | running | codex/app-e3a-fix | 6d55c5e0 → — | ports E3A runner inside the e4b block (56860/56861/56870; one runner at a time), prefix infrx-e4b- | 2026-09-26 01:46Z | workflow wf_6b1a3b25-9ee (implement → 2 lenses → one fix round → rechecks); merge --no-ff onto claude/consumer-v1 after shared-clone checks; E3A stays planned (gate needs BACKEND-LOCAL) | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 01:46Z; basis: two small App fixes with unit tests + selector fitting + one runner pass (~95 s) |
 | D10-APP-SQL | support D10 App-support SQL (0024 console read port): consumer_credit_ledger keyset RPC (C0 WR-5), credits-in partial index (U1R WR-3b), consumer_jobs filters (U1R WR-3a), addenda WR-U4-2, WR-C3A-4 (key insert = verified individual), WR-W5F5-1 (monitor grant on credit_wallet_holds); verified ACCEPT_WITH_FIXES | review | codex/d10-app-sql | 273990a0 → 8f453b98 | ports revoke postgres 55459, prefix infrx-revoke- | 2026-09-26 01:54Z | merge order: after the backend union (0022/0023 are on the union, not yet on the tip); then W-D10A-1 wirings (pgstate rows, e3c SIGNED_IN_FUNCTIONS, test_harness migration list), ruling for the key-insert predicate (1-D10R-2), C0/U1R App wirings, C3A/U4 known-gap flips | 0.5–3 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 01:54Z; basis: lane verified; remaining is the ordered merge, three coordinator wirings and the App follow-up lane |
+| D10-0025 | support D10 migration 0025 (WR-U3-1, R143): the App's operator RPCs (adjust CREDIT, suspension, key revocation) as a committed migration; U3's in-test apply removed; D-style tests, mutants and privilege tables | running | codex/d10-0025 | 8f453b98 → — | ports revoke postgres 55459 (shared with D10-APP-SQL, which is done), prefix infrx-revoke- | 2026-09-26 01:59Z | workflow wf_1b0b99b9-75e (implement → 2 lenses → one fix round → rechecks); merge order union → D10-APP-SQL (0024) → D10-0025 (0025) with W-D10B-1 wirings | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 01:59Z; basis: proposal SQL exists and is exercised by U3's 9-case stack; D10 conventions, mutants and both images remain |
 
 ### Queues and locks
 
@@ -185,9 +186,12 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: I2A (review) and P25-ENACT (review) both own infra/ / infra/alerts/operations.json (+1 more)
 - warning: overlapping writers: I2A (review) and APP-E3A-FIX (running) both own apps/app/ / apps/app/lib/supabase/middleware.ts (+6 more)
 - warning: overlapping writers: I2A (review) and D10-APP-SQL (review) both own apps/app/ / apps/app/supabase/migrations/0024_console_read_port.sql
+- warning: overlapping writers: I2A (review) and D10-0025 (running) both own apps/app/ / apps/app/supabase/migrations/0025_*.sql (+2 more)
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and APP-E3A-FIX (running) both own apps/app/tests/ / apps/app/tests/a/ (+2 more)
+- warning: overlapping writers: E3A (queued) and D10-0025 (running) both own apps/app/tests/ / apps/app/tests/u/operator_stack.py (+1 more)
 - warning: overlapping writers: P25-ENACT (review) and I3 (queued) both own infra/alerts/operations.json / infra/ (+1 more)
+- warning: overlapping writers: D10-APP-SQL (review) and D10-0025 (running) both own apps/infrx-api/tests/d/ / apps/infrx-api/tests/d/
 
 ## Pending inputs
 
@@ -379,6 +383,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 01:59Z UTC, None: —
 - 2026-09-26 01:54Z UTC, None: —
 - 2026-09-26 01:46Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C)
 - 2026-09-26 01:46Z UTC, tracker: rejected update: stale: at 2026-09-26T01:18:40Z is not newer than lane E3A state 2026-09-26T01:45:09Z
