@@ -78,12 +78,12 @@ Each row: what runs, what proves it, and the way back. Box rows are
 | W7d | host | **Consumer keys need the signup grant**: `infrx.feature_flags.signup_grant` must be `true` (A1's grant provisions the personal wallet that `issue-key` requires; CREDIT admission stays off), and in the legacy_usd regime a tenant needs a USD balance: a `grant` row in `public.credit_ledger` (R103: the legacy writer; `infrx.ledger_moves_wallet` applies it). The operator key: `infrx.bootstrap_operator_key(org, name, prefix, sha256hex, actor, reason)` with the secret in SSM `/model-inference/operator_key` only (2026-09-24) | `grant`/`issue-key` succeed through `python -m infrx.operations.cli` with `OPERATIONS_DATABASE_URL` exported (`read -rs`; the owner or broad login - the CLI refuses the dedicated `infrx_runtime`/`infrx_monitor` logins, OPS-CLI-DSN) | `revoke-key`; a negative `adjustment` row; the flag back to false |
 | W7e | host | **One price version per model string the clients send** (first pilot install only; idempotent): the USD admission keys `infrx.price_versions` by the request's literal model string (R45; not by the resolved revision), so a client that sends the labelled alias (`nemostation/marlin-2b@2026-09-01` - the E4B certify client, the E1B bench with `--model`) is refused `400` with no price version even though the unlabelled alias has one. Seed a row per alias form the pilot's clients use, same rates and `token_rules_version` as W7c. Better: D/G key the lookup on the resolved revision (ruling pending; 2026-09-24 box certification, run1) | 
 | W7f | host | **CREDIT activation** (after W7: it calls 0022's `infrx.set_feature_flag`; before W10, which installs `ACCOUNTING_REGIME=credit`, §1): [E4C-runbook §1a](../../models/marlin2b/results/E4C-runbook.md#1a-after-the-hosted-apply-before-w8) H1 `publish-card` (P-01), H2 `credit-transition --dry-run` then `credit-transition --card` (P-02, G8). The edge has served maintenance since W5, so no admission falls between the flag flip and the install (`--freeze-only` is not needed) | H2's dry-run `drift == []`; the flags `credit_admission` t, `legacy_usd_admission` f, `signup_grant` t (`transition.py` `ENABLE`) | `credit-transition --to legacy_usd` (PI P-02); the card is immutable (P-01) |
-| W8 | box | `40-checkout.sh RELEASE=$RELEASE` - from here to W10 no engine restart | HEAD = `RELEASE` | `91-abort.sh` returns the previous checkout |
-| W9 | box | **Real-bucket check**: `45-s3-check.sh RELEASE=$RELEASE` (tests/m/test_s3.py, instance role, image built from `RELEASE`) - before the install, because install.sh opens the edge itself once ready. The role needs Get/Put/Delete on `<bucket>/test/m1l2/*` (and `s3:ListBucket` for that prefix: the cases list); the bootcamp role allows the whole bucket | `passed`, no failure; `test/m1l2/` empty afterwards | red → `91-abort.sh` + `93-restore-edge.sh` (nothing installed) |
-| W10 | box | **Install**: `TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh "${INSTALL_ARGS[@]}" MIGRATION_DIGEST=<W7 digest>` - image, preflight (SSM + host HeadBucket), units, engine restart (start-to-ready meas. 168-181 s on this box, `ENGINE_READY_S` 900), gateway + worker `/readyz`, **then the edge goes live** | exit 0, `deployed …`, backup dir recorded | exit 2 → R1; exit 4 → R2 |
-| W10b | box | **Dedicated runtime logins** (RV-09, R127; after W7, which created them, and after every W10, which rewrites the env file from SSM): `infra/rollout/ssm.sh infra/rollout/steps/55-runtime-login.sh` - reads `/model-inference/infrx_runtime_password`, `/model-inference/infrx_monitor_password` and `pg_journal_url` by name, sets both passwords on hosted through the owner login, logs in as each on :6543, then `DATABASE_URL` = `infrx_runtime` and `MONITOR_DATABASE_URL` = `infrx_monitor` in the env file (envcheck first), gateway + worker restarted. Needs the two parameters (coordinator-created, as README step 2) | `runtime on infrx_runtime, gauges on infrx_monitor`; `/readyz` 200 on both; a rerun prints `unchanged` | exit 4 puts the previous env file back itself; else the saved file it names, or rerun 50-install |
-| W11 | box | `60-verify-local.sh` | units active, `/readyz` 200, least privilege as applied, `INFRX_MODE=pilot`, no `GATEWAY_API_KEY` | R2 |
-| W12 | host | **Smoke**: `read -rs INFRX_TEST_KEY; read -rs INFRX_REVOKED_KEY; export INFRX_TEST_KEY INFRX_REVOKED_KEY` then `infra/rollout/verify-external.sh` (+ `LEGACY_KEY` as step 10 there) | `failures: 0`, `PENDING` lines are not passes | before any pilot request was accepted: R2; after: R3 |
+| W8 | box | `40-checkout.sh RELEASE=$RELEASE` - from here to W10 no engine restart | HEAD = `RELEASE` | the W7f reversal (§3), then `91-abort.sh` returns the previous checkout |
+| W9 | box | **Real-bucket check**: `45-s3-check.sh RELEASE=$RELEASE` (tests/m/test_s3.py, instance role, image built from `RELEASE`) - before the install, because install.sh opens the edge itself once ready. The role needs Get/Put/Delete on `<bucket>/test/m1l2/*` (and `s3:ListBucket` for that prefix: the cases list); the bootcamp role allows the whole bucket | `passed`, no failure; `test/m1l2/` empty afterwards | red → the W7f reversal (§3), then `91-abort.sh` + `93-restore-edge.sh` (nothing installed) |
+| W10 | box | **Install**: `TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh "${INSTALL_ARGS[@]}" MIGRATION_DIGEST=<W7 digest>` - image, preflight (SSM + host HeadBucket), units, engine restart (start-to-ready meas. 168-181 s on this box, `ENGINE_READY_S` 900), gateway + worker `/readyz`, **then the edge goes live** | exit 0, `deployed …`, backup dir recorded | the W7f reversal (§3) first, then exit 2 → R1; exit 4 → R2 |
+| W10b | box | **Dedicated runtime logins** (RV-09, R127; after W7, which created them, and after every W10, which rewrites the env file from SSM): `infra/rollout/ssm.sh infra/rollout/steps/55-runtime-login.sh` - reads `/model-inference/infrx_runtime_password`, `/model-inference/infrx_monitor_password` and `pg_journal_url` by name, sets both passwords on hosted through the owner login, logs in as each on :6543, then `DATABASE_URL` = `infrx_runtime` and `MONITOR_DATABASE_URL` = `infrx_monitor` in the env file (envcheck first), gateway + worker restarted; then `MONITOR_DATABASE_URL` alone into `/etc/infrx-observe.env` (0600, by rename), which observe.sh's durable exporter reads first - its fallback, the env file's `DATABASE_URL`, is now `infrx_runtime`, which 0021 grants none of durable.py's tables. Needs the two parameters (coordinator-created, as README step 2) | `runtime on infrx_runtime, gauges on infrx_monitor`; `/readyz` 200 on both; a rerun prints `unchanged` | exit 4 puts the previous env file back itself; else the saved file it names, or rerun 50-install |
+| W11 | box | `60-verify-local.sh` | units active, `/readyz` 200, least privilege as applied, `INFRX_MODE=pilot`, no `GATEWAY_API_KEY` | the W7f reversal (§3), then R2 |
+| W12 | host | **Smoke**: `read -rs INFRX_TEST_KEY; read -rs INFRX_REVOKED_KEY; export INFRX_TEST_KEY INFRX_REVOKED_KEY` then `infra/rollout/verify-external.sh` (+ `LEGACY_KEY` as step 10 there) | `failures: 0`, `PENDING` lines are not passes | before any pilot request was accepted: the W7f reversal (§3), then R2; after: R3 |
 | W13 | host | Record `RELEASE`, image id, engine digest, snapshot, backup dir, `SHA256SUMS`, migration digest, command ids; release the lock | - | - |
 
 ### W4/W5 and the abort — the edge swap (the box lane's pattern)
@@ -209,17 +209,30 @@ reaches 0023 only (§3 Known-good record): extend it to 0025 before relying on R
 
 ## 3. Rollback triggers
 
+**The W7f reversal.** From W7f on, hosted admits CREDIT only (`credit_admission` t,
+`legacy_usd_admission` f), and 0006's admission guard (0011) refuses every admission of a
+release that runs `legacy_usd` - the previous pilot release and both known-good targets.
+`91-abort.sh`, `90-revert.sh` and R4 restart such a release and reopen the edge, which would
+then refuse every request while reading ready. So once W7f ran, every row below that reaches
+them first runs, from the coordinator host with `OPERATIONS_DATABASE_URL` (the owner login,
+`read -rs`) and `INFRX_OPERATOR_KEY` exported: `python -m infrx.operations.cli
+credit-transition --to legacy_usd --drain-timeout-s 900 --idempotency-key revert-<window id>
+--reason "<window id> rollback to legacy_usd"` (PI P-02; G8-6a075c5.md step 6). It freezes
+`credit_admission` and enables `legacy_usd_admission` (`signup_grant` stays t: hosted's flags
+at 0018); nothing converts, and a CREDIT job already accepted settles in CREDIT. Then the
+row's step, which reopens the edge. Before W7f (the W6 and W7 rows) there is nothing to reverse.
+
 | Trigger | Action |
 |---|---|
 | W6 check not equal, or the copy's apply fails | Stop before any hosted write: `91-abort.sh`, `93-restore-edge.sh` |
 | W7 plan digest ≠ `$COPY_DIGEST`, or `apply` exit 2/3 | Nothing changed: the same abort |
 | W7 `apply` exit 4, or anything wrong after it committed | Maintenance stays; [restore.md A8](restore.md#a8-then-and-only-then-the-hosted-apply). The migrations are additive: the monolith's own statements ran on the migrated copy (W6), so the abort path above still serves |
-| W9 red (bucket, role, AWS semantics) | Nothing installed: the same abort |
-| W10 exit 2 (preflight refused: a missing key, P3/P4) | R1 of [../rollout/README.md](../rollout/README.md): `91-abort.sh`, then `93-restore-edge.sh` |
-| W10 exit 4 (the runtime never became ready; the edge unchanged) | `90-revert.sh RELEASE=$RELEASE BACKUP=<the backup dir the install printed>` and, when no pilot request was ever accepted (the edge never switched), `ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted`; then `93-restore-edge.sh`. If the running Caddy then answers only on `localhost:2019` (the socket-addressed steps fail with `dial unix /config/admin.sock`), reload the live file once with `docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address localhost:2019` (2026-09-24) |
-| W10 exit 4, W11 or W12 red, **no pilot request accepted** | R2: `90-revert.sh` (runs `rollback.sh` on install.sh's backup, engine first), after the read-only zero count of pilot jobs/ledger rows since W10 |
+| W9 red (bucket, role, AWS semantics) | Nothing installed: the W7f reversal, then the same abort (`91-abort.sh`, `93-restore-edge.sh`) |
+| W10 exit 2 (preflight refused: a missing key, P3/P4) | The W7f reversal, then R1 of [../rollout/README.md](../rollout/README.md): `91-abort.sh`, then `93-restore-edge.sh` |
+| W10 exit 4 (the runtime never became ready; the edge unchanged) | The W7f reversal, then `90-revert.sh RELEASE=$RELEASE BACKUP=<the backup dir the install printed>` and, when no pilot request was ever accepted (the edge never switched), `ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted`; then `93-restore-edge.sh`. If the running Caddy then answers only on `localhost:2019` (the socket-addressed steps fail with `dial unix /config/admin.sock`), reload the live file once with `docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address localhost:2019` (2026-09-24) |
+| W10 exit 4, W11 or W12 red, **no pilot request accepted** | R2: after the read-only zero count of pilot jobs/ledger rows since W10, the W7f reversal, then `90-revert.sh` (runs `rollback.sh` on install.sh's backup, engine first) |
 | Pilot requests were accepted and it must stop | R3: `95-maintenance.sh`; `rollback.sh` refuses the unmetered monolith |
-| The host itself | R4: root-volume swap to the W2 snapshot ([restore.md](restore.md#box-snapshot)) |
+| The host itself | R4: the W7f reversal (the snapshot's release runs `legacy_usd`), then root-volume swap to the W2 snapshot ([restore.md](restore.md#box-snapshot)) |
 
 ### Known-good record
 
@@ -244,8 +257,8 @@ predates it refuses (meas. local, `--applied 0023` without `--bundles`: 4226315 
 bda1586 pass `config` with these six names and fail it with `--set RETENTION_GRACE_S`; with the
 eight names above, full SHAs, `--applied 0023`, both exit 0 KNOWN-GOOD, meas. 2026-09-26
 E4C-RUNBOOK-2). Both targets only ever served `legacy_usd`: after W7f, returning to one first
-needs `credit-transition --to legacy_usd` and that release's own env file (R2 restores it), a
-path no drill has run.
+needs the W7f reversal (above) and that release's own env file (R2 restores it), a path no
+drill has run.
 The `schema_proof` for bda1586 and 4226315 reaches 0023 (`infra/rollout/known-good.json`,
 research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md); a migration beyond 0023 needs the
 proof extended before `--applied` may name it.
@@ -261,7 +274,7 @@ Nothing here has run; every row's output goes into the I8 evidence record.
 | O1 | host | `apps/infrx-api/.venv/bin/python infra/runbooks/pool_budget.py --runtime-port 5432 --set DATABASE_POOL_MAX_SIZE=6` (and without `--set`: the FAIL that explains EMAXCONNSESSION) | `PASS session: peak 13` | - |
 | O2 | host | the release with I8 through W1-W13, `DATABASE_POOL_MAX_SIZE=6` in `INFRX_SET` (§1). New: the runtime units run `preflight.py envcheck` before every start (the journal names a refused setting) | W12 `failures: 0` | - |
 | O3 | box | `71-pool-budget.sh` | exit 0, `PASS session` | - |
-| O4 | box | `72-observe-install.sh RELEASE=$RELEASE CANARY_VIDEO=<in-cap clip on the box> CANARY_KEY_PARAM=<ssm name of the canary tenant key>` [+ `P24_APPROVED=<ref>`] [+ `ALERT_WEBHOOK_PARAM=<ssm name> ALERT_OWNER=<who> ALERT_ESCALATION=<how>`] [+ `MONITOR_DSN_PARAM=<D10's read-only DSN name>`] | timers listed; first cycle exit 0 or 3 (delivery BLOCKED); without `P24_APPROVED` the canary timer is not enabled (`BLOCKED (P-24)`) | P-24 (canary spend + its tenant, canary half only); P-25 (destination); D10 (monitor login) |
+| O4 | box | `72-observe-install.sh RELEASE=$RELEASE CANARY_VIDEO=<in-cap clip on the box> CANARY_KEY_PARAM=<ssm name of the canary tenant key>` [+ `P24_APPROVED=<ref>`] [+ `ALERT_WEBHOOK_PARAM=<ssm name> ALERT_OWNER=<who> ALERT_ESCALATION=<how>`] (no `MONITOR_DSN_PARAM`: W10b already wrote `/etc/infrx-observe.env` with the `infrx_monitor` login; a parameter given replaces it) | timers listed; first cycle exit 0 or 3 (delivery BLOCKED); without `P24_APPROVED` the canary timer is not enabled (`BLOCKED (P-24)`) | P-24 (canary spend + its tenant, canary half only); P-25 (destination); W10b (monitor login) |
 | O5 | box | `73-observe-status.sh` two minutes later | `infrx_durable_up 1`, `infrx_canary_up` 1 for text and video (only once O4 ran with `P24_APPROVED`), no unexpected firing | P-24 (the canary half) |
 | O6 | box | `74-alert-test.sh`, the owner confirms the nonce, then `74-alert-test.sh RESOLVE=<nonce>` | `http=2xx` twice + the owner's confirmation | **P-25** |
 | O7 | host | `read -rs PROBE_DATABASE_URL` (the runtime login's DSN on :6543) then `privilege_probe.py --role <login> --pooler-semantics` | today: FAIL (the `postgres` login is privileged - the baseline); after D10: PASS with its `--allow-functions` list | D10 |
@@ -310,3 +323,9 @@ Nothing here has run; every row's output goes into the I8 evidence record.
   §1a) before W10; W10b `55-runtime-login.sh` (the dedicated logins); the Known-good record passes
   the two regime names (measured). Tests: `tests/integration/backend/recovery/test_runbooks.py`
   rb09-rb11, `apps/infrx-api/tests/i/test_ops_steps.py` (step 55). Not run on the box or hosted.
+- 2026-09-26 (E4C-RUNBOOK-2 fix round): §3 defines the W7f reversal (`credit-transition --to
+  legacy_usd`) and every rollback after W7f runs it before the step that reopens the edge on a
+  legacy_usd release (W8-W12 cells; §3 W9, W10 exit 2/4, R2, R4), since hosted then refuses
+  every legacy admission; W10b also writes `/etc/infrx-observe.env` (the monitor login), so O4
+  needs no `MONITOR_DSN_PARAM` and O5's `infrx_durable_up 1` reads through `infrx_monitor`.
+  Tests: rb12 (`test_runbooks.py`), the step-55 case (observe cycle). Not run on the box or hosted.

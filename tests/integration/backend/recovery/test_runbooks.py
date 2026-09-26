@@ -226,3 +226,68 @@ def test_e4c_rb11_the_card_and_the_activation_follow_the_hosted_apply():
                        body, re.M)
     assert not stale, stale
     assert "set_feature_flag" in hosted
+
+
+ROLLOUT_README = kit.ROOT / "infra" / "rollout" / "README.md"
+#: The steps that restart a release other than RELEASE and reopen the edge on it.
+BACK = r"91-abort|90-revert|create-replace-root-volume-task|root-volume swap|\bR[124]\b"
+
+
+def _first_back(cell: str) -> int:
+    found = re.search(BACK, cell)
+    assert found, cell
+    return found.start()
+
+
+def test_e4c_rb12_every_way_back_after_the_activation_reverses_it_first():
+    """rollout.md W7f moves hosted to CREDIT (`credit_admission` t, `legacy_usd_admission` f)
+    before the install. Every rollback after it restarts a release that runs legacy_usd (the
+    previous pilot release, the known-good targets) and reopens the edge, where 0006's
+    admission guard then refuses every request. Oracle: a rollback cell after W7f - in the
+    window table, in §3, or in README R1/R2/R4 - that reaches 91-abort, 90-revert or the
+    root-volume swap without `credit-transition --to legacy_usd` (the W7f reversal) first."""
+    ro = (RUNBOOKS / "rollout.md").read_text()
+    window = {m.group(1): m.group(0) for m in re.finditer(r"^\| (W\d+[a-z]?) \|.*$", ro, re.M)}
+    order = list(window)
+    checked = []
+    for step in order[order.index("W7f") + 1:]:
+        back = window[step].rstrip().rstrip("|").rsplit("|", 1)[-1]
+        if re.search(BACK, back):
+            assert "W7f reversal" in back and back.index("W7f reversal") < _first_back(back), \
+                (step, back)
+            checked.append(step)
+    assert checked == ["W8", "W9", "W10", "W11", "W12"], checked
+    triggers = _section(ro, "## 3. Rollback triggers")
+    assert "credit-transition --to legacy_usd" in triggers.split("| Trigger |")[0], \
+        "§3 does not define the W7f reversal"
+    late = [line.split(" | ", 1) for line in triggers.splitlines()
+            if line.startswith("| ") and not line.startswith(("| Trigger", "|---"))]
+    late = [(t, a) for t, a in late if re.search(r"\bW(9|1[0-2])\b", t) or a.startswith("R4")]
+    assert len(late) == 5, late
+    for trigger, action in late:
+        action = re.sub(r"^R\d: ", "", action)                      # the row's own label
+        assert "W7f reversal" in action and action.index("W7f reversal") < _first_back(action), \
+            (trigger, action)
+    readme = ROLLOUT_README.read_text()
+    for revert in ("R1", "R2", "R4"):
+        row = next(line for line in readme.splitlines() if line.startswith(f"| {revert} - "))
+        action = row.split(" | ", 1)[1]
+        assert "--to legacy_usd" in action and action.index("--to legacy_usd") < _first_back(
+            action.replace(revert, "", 1)), (revert, action)
+
+
+def test_e4c_rb13_the_readme_window_activates_credit_before_the_credit_install():
+    """infra/rollout/README.md §1 is a valid window sequence (E4C-runbook §1), and its step 8
+    installs rollout.md §1's INSTALL_ARGS, which carry ACCOUNTING_REGIME=credit. Oracle: no
+    step between the hosted apply (6) and the install (8) publishes the card and activates
+    CREDIT, so the install exits 4 (price_source) or serves 503 on every admission."""
+    readme = ROLLOUT_README.read_text()
+    steps = re.findall(r"^\| (\d+[a-z]?) \| ", _section(readme, "## 1. The window"), re.M)
+    assert steps.index("6") < steps.index("6b") < steps.index("7") < steps.index("8"), steps
+    row = next(line for line in readme.splitlines() if line.startswith("| 6b | "))
+    for needle in ("rollout.md#2-the-window", "W7f",
+                   "E4C-runbook.md#1a-after-the-hosted-apply-before-w8", "publish-card",
+                   "credit-transition", "ACCOUNTING_REGIME=credit", "--to legacy_usd"):
+        assert needle in row, needle
+    install = next(line for line in readme.splitlines() if line.startswith("| 8 | "))
+    assert re.search(r"ACCOUNTING_REGIME=credit[^|]*only after (step )?6b", install), install

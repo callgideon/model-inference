@@ -12,12 +12,16 @@
 #  3. stages the env file with DATABASE_URL = infrx_runtime and MONITOR_DATABASE_URL =
 #     infrx_monitor (the worker's reconciliation gauges, WR-W5F5-2), runs envcheck on the staged
 #     bytes, then replaces the file by one rename (0600, owner kept, the old one saved 0600 under
-#     BACKUPS), restarts gateway and worker and waits for both /readyz.
+#     BACKUPS), restarts gateway and worker and waits for both /readyz;
+#  4. writes MONITOR_DATABASE_URL alone into /etc/infrx-observe.env (0600, by rename): observe.sh
+#     reads the monitor DSN only there, else the env file's DATABASE_URL - now infrx_runtime,
+#     which 0021 grants none of durable.py's tables. 50-install never touches that file.
 # Idempotent: the same passwords give the same file, and an unchanged file restarts nothing.
 # Exit 2 = refused before any change; 1 = the SQL or a login check failed (the env file untouched;
 # a password already set stays set, harmless: nothing logs in with it); 3 = the staged file
 # failed envcheck (nothing replaced);
 # 4 = not ready on the logins: the previous file is put back and the units restarted on it.
+# Step 4 runs only on success (and on an `unchanged` rerun); exits 1-4 leave that file as it was.
 # Rollback: that same put-back (the saved file), or re-run 50-install (pg_journal_url again).
 set -euo pipefail
 RUNTIME_PASSWORD_PARAM=${RUNTIME_PASSWORD_PARAM:-/model-inference/infrx_runtime_password}
@@ -25,6 +29,7 @@ MONITOR_PASSWORD_PARAM=${MONITOR_PASSWORD_PARAM:-/model-inference/infrx_monitor_
 OWNER_DSN_PARAM=${OWNER_DSN_PARAM:-/model-inference/pg_journal_url}
 env_file=${ENV_FILE:-/etc/marlin2b-gateway.env}
 backups=${BACKUPS:-/var/backups/infrx}
+observe_env=${OBSERVE_ENV:-/etc/infrx-observe.env}
 image=$(sed -n 's/^INFRX_IMAGE=//p' "$env_file")
 mode=$(sed -n 's/^INFRX_MODE=//p' "$env_file")
 [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "no INFRX_IMAGE in $env_file: run 50-install first" >&2; exit 2; }
@@ -71,12 +76,17 @@ print("".join(lines), end="")
 PY
 [ "$(cut -d= -f1 "$work/logins.env" | tr '\n' ' ')" = "DATABASE_URL MONITOR_DATABASE_URL " ] \
   || { echo "the login check did not return both DSNs" >&2; exit 3; }
+monitor_for_observe() {
+  local tmp; tmp=$(umask 077; mktemp "$observe_env.XXXXXX")
+  grep '^MONITOR_DATABASE_URL=' "$work/logins.env" > "$tmp"; chmod 0600 "$tmp"; mv -f "$tmp" "$observe_env"
+}
 staged=$(umask 077; mktemp "$env_file.XXXXXX")
 grep -v -e '^DATABASE_URL=' -e '^MONITOR_DATABASE_URL=' "$env_file" > "$staged"
 cat "$work/logins.env" >> "$staged"
 chown --reference="$env_file" "$staged"; chmod 0600 "$staged"
 if cmp -s "$staged" "$env_file"; then
-  rm -f "$staged"; echo "unchanged: $env_file already names infrx_runtime and infrx_monitor"; exit 0
+  rm -f "$staged"; monitor_for_observe
+  echo "unchanged: $env_file already names infrx_runtime and infrx_monitor"; exit 0
 fi
 docker run --rm -i --network none "$image" python /app/deploy/preflight.py envcheck \
   --mode "$mode" --env-file /dev/stdin < "$staged" \
@@ -98,4 +108,5 @@ for port in 8001 8002; do
     exit 4
   fi
 done
+monitor_for_observe
 echo "runtime on infrx_runtime, gauges on infrx_monitor (pooler :6543); previous env file $saved"

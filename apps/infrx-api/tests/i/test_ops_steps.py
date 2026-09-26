@@ -464,7 +464,11 @@ def test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only(tmp_p
     worker restart and must answer /readyz. Oracles: a value on any argument or in the output;
     a missing parameter or no installed image refused before anything changes; envcheck red
     leaves the file and the units alone (exit 3); not ready puts the previous file back and
-    restarts on it (exit 4); a rerun on an unchanged file restarts nothing (idempotent)."""
+    restarts on it (exit 4); a rerun on an unchanged file restarts nothing (idempotent).
+    CS-3: observe.sh reads the monitor DSN only from /etc/infrx-observe.env, else the env
+    file's DATABASE_URL - infrx_runtime once this step ran, with no grant on durable.py's
+    tables (0021) - so the step also writes MONITOR_DATABASE_URL alone there (0600, by
+    rename), and one observe cycle then hands the durable exporter the monitor login."""
     owner, rt, mon = (f"{support.MARKER}-{w}" for w in ("owner", "rt", "mon"))
     image = "sha256:" + "a" * 64
     before = ("# INFRX_ENV_SCHEMA 1:abc\nINFRX_MODE=pilot\nINFRX_IMAGE=" + image + "\n"
@@ -473,6 +477,7 @@ def test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only(tmp_p
     new = (f"DATABASE_URL=postgresql://infrx_runtime.ref:{rt}@pooler:6543/postgres?sslmode=require\n"
            f"MONITOR_DATABASE_URL=postgresql://infrx_monitor.ref:{mon}@pooler:6543/postgres?sslmode=require\n")
     env_file, backups = tmp_path / "marlin2b-gateway.env", tmp_path / "backups"
+    observe_env = tmp_path / "infrx-observe.env"
     env_file.write_text(before)
     env_file.chmod(0o600)
     stub = stubs(tmp_path, "systemctl", "curl", "sleep")
@@ -483,7 +488,8 @@ def test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only(tmp_p
                                                RUNTIME_PASSWORD_PARAM: rt, MONITOR_PASSWORD_PARAM: mon}))
     (stub / "dsns.out").write_text(new)
     step = (STEPS / "55-runtime-login.sh").read_text()
-    env = {"ENV_FILE": str(env_file), "BACKUPS": str(backups), "TMPDIR": str(tmp_path)}
+    env = {"ENV_FILE": str(env_file), "BACKUPS": str(backups), "TMPDIR": str(tmp_path),
+           "OBSERVE_ENV": str(observe_env)}
 
     def run(**extra):
         (stub / "calls.log").unlink(missing_ok=True)
@@ -523,14 +529,36 @@ def test_ops_login__the_runtime_moves_to_its_dedicated_logins_by_name_only(tmp_p
     curls = [" ".join(c["argv"]) for c in made if c["tool"] == "curl"]
     assert any("127.0.0.1:8001/readyz" in c for c in curls) and any("127.0.0.1:8002/readyz" in c for c in curls)
     assert not list(tmp_path.glob("tmp.*")), "the secrets file outlived the step"
+    (tmp_path / "observe").mkdir()                                # one observe cycle after it
+    ostub = stubs(tmp_path / "observe", "nvidia-smi", "curl", "systemctl", "du", "install")
+    (ostub / "docker").write_text(DOCKER_OBSERVE.format(python=sys.executable))
+    (ostub / "docker").chmod(0o755)
+    metrics, rundir = tmp_path / "metrics", tmp_path / "run"
+    metrics.mkdir(), rundir.mkdir()
+    observe = (support.REPO / "infra" / "observe" / "observe.sh").read_text().replace(
+        "/etc/infrx-observe.env", str(observe_env))
+    cycle = run_step(observe, ostub, env={"REPO": str(support.REPO), "METRICS_DIR": str(metrics),
+                                          "ENV_FILE": str(env_file), "HOME": str(tmp_path),
+                                          "RUNTIME_DIRECTORY": str(rundir)})
+    durable = json.loads((ostub / "docker.log").read_text().splitlines()[0])
+    assert "/observe/durable.py" in durable["argv"], durable
+    assert durable["env_names"] == ["MONITOR_DATABASE_URL"], cycle.stderr   # not infrx_runtime
+    assert observe_env.read_text() == new.split("\n", 1)[1]           # the monitor login only
+    assert oct(observe_env.stat().st_mode & 0o777) == "0o600"
 
     done, made = run()                                            # rerun: nothing to restart
     assert done.returncode == 0 and "unchanged" in done.stdout, done.stderr
     assert not [c for c in made if c["tool"] == "systemctl"] and len(list(backups.iterdir())) == 1
 
+    observe_env.unlink()                                          # the rerun rewrites it
+    done, made = run()
+    assert done.returncode == 0 and observe_env.read_text() == new.split("\n", 1)[1]
+
     env_file.write_text(before)                                   # envcheck red: untouched
+    observe_env.unlink()
     done, made = run(STUB_ENVCHECK_EXIT="1")
     assert done.returncode == 3 and env_file.read_text() == before
+    assert not observe_env.exists(), "the monitor file replaced on a refused run"
     assert not [c for c in made if c["tool"] == "systemctl"]
 
     done, made = run(STUB_EXIT_curl="7", READY_S="2")            # not ready: previous file back
