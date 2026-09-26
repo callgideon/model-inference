@@ -351,6 +351,11 @@ def test_the_app_e2e_gate_runs_this_runner_and_takes_its_verdict(tmp_path, monke
         0, 0.1, (tmp_path / "log").write_text("ok") and tmp_path / "log"))
     monkeypatch.setattr(gates, "e3c_stage", lambda out, runner=None, name="", sub="": seen.append(
         (runner, name, sub)) or {"stage": name, "verdict": "NOT RUN"})
+    # WR-E3A-1: the gate refuses at console-install when apps/app/node_modules is absent
+    # (gates.py app_e2e); the oracle must not depend on the working tree, so point REPO at a
+    # tree that has the directory.
+    (tmp_path / "apps" / "app" / "node_modules").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(gates, "REPO", tmp_path)
     stages = gates.app_e2e(None, tmp_path)
     assert seen == [(gates.APP_RUNNER, "browser-journey", "e3a")] and \
         stages[-1]["stage"] == "browser-journey"
