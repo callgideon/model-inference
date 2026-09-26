@@ -1158,7 +1158,7 @@
       ],
       "track": "U",
       "handoff": "consumer-v1/04-app.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "modify",
       "product": "app",
       "milestone": "APP-M1",
@@ -1177,7 +1177,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
-      }
+      },
+      "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane 2bd04497, verified ACCEPT_WITH_FIXES; WR-U2-1/WR-U2-2 applied; WR-U2-3 decided as option (a) with the U2-W03 drift guard). Manifest owned path keys/ is the real route api-keys/ (U2-V-6)."
     },
     {
       "id": "U3",
@@ -1197,7 +1198,7 @@
       ],
       "track": "U",
       "handoff": "consumer-v1/04-app.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "modify",
       "product": "app",
       "milestone": "APP-M1",
@@ -1215,7 +1216,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
-      }
+      },
+      "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane b80c4cd8, verified ACCEPT_WITH_FIXES; WR-U3-2 operator port, WR-U3-3/WR-U3-4 applied). OPEN until D10 0025 (WR-U3-1 operator_rpc_proposed.sql): in the hosted App operator changes answer \"not confirmed\" and the unknown-usage/drift sections show Unavailable; the U3 real-DB stack applies the SQL in-test until then."
     },
     {
       "id": "V1",
@@ -1870,7 +1872,7 @@
         "CREDIT-SPEND"
       ],
       "handoff": "consumer-v1/04-app.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "C3",
       "amendment_status": "awaits-product-v2-contract",
@@ -1886,7 +1888,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
-      }
+      },
+      "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane 91af4caf, verified ACCEPT_WITH_FIXES; WR-C3A-1 by U2, WR-C3A-2 by U3, WR-C3A-3(a) by U3 WR-U3-2, WR-C3A-5 withdrawn, WR-C3A-6 make target). OPEN until 0024 merges: 1-C3A-V-3 / WR-C3A-4 (unverified-JWT api_keys insert refused by consumer_may_create_key(); tests/c/actions-postgrest case 9 flips from ACCEPTED (gap)). D10 WR-C3A-3(b) (operator HTTP surface) deferred."
     },
     {
       "id": "C3F",
@@ -4572,7 +4575,7 @@
       "track": "U",
       "product": "app",
       "milestone": "APP-M1",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4608,7 +4611,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
-      }
+      },
+      "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane d76f912f, verified ACCEPT_WITH_FIXES; WR-U4-1 console-pg target applied). OPEN until 0024 merges: 0-U4-V-03 / WR-U4-2 (consumer_job_result withholds an unknown-usage result; request_world U4-P08 flips from todo). WR-U4-3 optional."
     }
   ],
   "product_revision": "2026-09-21-two-platforms-individual-grant",
