@@ -348,14 +348,14 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     """I2B-R4's copy (W3's package and tests, E3B's integration tree) plus `deploy/`, whose
     preflight the zero-pool case loads (`tests/i/support.py`)."""
     api = worker_main_mutants._layout(root)
-    shutil.copytree(API_DIR / "deploy", api / "deploy",
+    shutil.copytree(API_DIR / "deploy", api / "deploy", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__"))
     return api
 
 
 def _pg_layout(root: pathlib.Path) -> pathlib.Path:
     api = worker_main_mutants._pg_layout(root)
-    shutil.copytree(API_DIR / "deploy", api / "deploy",
+    shutil.copytree(API_DIR / "deploy", api / "deploy", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__"))
     return api
 
