@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 05:11Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 85, updated 2026-09-26 05:11Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 05:11Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 86, updated 2026-09-26 05:11Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -420,6 +420,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 05:11Z UTC, coordinator: L3-RERUN-0025 dispatched: E2 layer-3 role matrix on the merged tip 7e0b7b95 (e2c namespace, read-only clone); eight parallel runs active
 - 2026-09-26 05:11Z UTC, coordinator (D10-MERGE-2): D10-MERGE-2 merged at f95377b9: migrations 0024/0025 + wirings + App flips; lane checks api-test 4536/0, tests/d 897 (both known failures gone), layer 3 916 rows 0 failed, console targets green; R146 numbered, R143 amended (7e0b7b95); hosted still at 0018
 - 2026-09-26 05:11Z UTC, tracker: rejected update: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']
 - 2026-09-26 05:11Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)

@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 85,
-  "updated": "2026-09-26T05:11:02Z",
+  "revision": 86,
+  "updated": "2026-09-26T05:11:43Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -4532,6 +4532,12 @@
       "by": "coordinator (D10-MERGE-2)",
       "what": "D10-MERGE-2 merged at f95377b9: migrations 0024/0025 + wirings + App flips; lane checks api-test 4536/0, tests/d 897 (both known failures gone), layer 3 916 rows 0 failed, console targets green; R146 numbered, R143 amended (7e0b7b95); hosted still at 0018",
       "source": "research/plan/evidence/coordinator/d10-merge-2-9e4e34c.md"
+    },
+    {
+      "at": "2026-09-26T05:11:43Z",
+      "by": "coordinator",
+      "what": "L3-RERUN-0025 dispatched: E2 layer-3 role matrix on the merged tip 7e0b7b95 (e2c namespace, read-only clone); eight parallel runs active",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     }
   ],
   "history": {
