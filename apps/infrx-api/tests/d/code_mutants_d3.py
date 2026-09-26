@@ -22,6 +22,7 @@ LIMITS = "test_lease_calls__send_the_stores_own_lease_limits"
 FENCED = "test_fenced_calls__a_committed_refusal_is_raised_as_its_type"
 WORK = "test_load_work__the_admitted_work_with_the_prompt_count"
 RECOVER = "test_recover__outcomes_events_and_the_unsettleable_backlog"
+RESULT_WRITE = "test_put_result__the_workers_lease_is_sent_and_null_is_already_terminal"
 
 
 def _m(name, invariant, old, new, *cases) -> Mutant:
@@ -56,6 +57,13 @@ MUTANTS: tuple[Mutant, ...] = (
     # D5 replaced `complete`'s fail-closed stub with the settlement: its two D3 mutants
     # (`d3_fence_refusal_swallowed`, `d3_complete_succeeds_silently`) lost their anchors
     # and are retired; `complete` is code_mutants_d5.py's.
+    # R147 (0026): the worker's result write is fenced by its lease.
+    _m("d3_result_write_drops_the_lease", "the worker's lease and the store's limits are sent",
+       "        if lease is not None:\n            args |= {",
+       "        if False:\n            args |= {", RESULT_WRITE),
+    _m("d3_result_null_is_a_reference", "R29's committed NULL is already_terminal",
+       "        if ref is None:\n            raise errors.AlreadyTerminal(",
+       "        if False:\n            raise errors.AlreadyTerminal(", RESULT_WRITE),
     _m("d3_backlog_never_cleared", "each sweep reports its own backlog",
        "        self.unsettleable = {}\n        for item in",
        "        for item in", RECOVER),

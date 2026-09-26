@@ -7,7 +7,7 @@
 What this module is responsible for, and what it deliberately is not:
 
 * **Fencing (`02` §5, r1 R29/R46).** Every store call carries the lease: `load_work`,
-  `append`, `heartbeat` and `complete`. A `stale_lease` means "stop, the winner is
+  `append`, `heartbeat`, `put_result` and `complete`. A `stale_lease` means "stop, the winner is
   somebody else" and settles **nothing**; an `already_terminal` means the store
   terminalized the job in that same call (a customer cancellation, or a phase deadline
   R29 enforced) and there is nothing left to settle either. The two refusals are
@@ -146,7 +146,7 @@ class AttemptRunner:
 
     def __init__(self, *, jobs, stream, engine, clock, worker_id: str,
                  count_prompt_tokens: Callable[[Work], Any],
-                 put_result: Callable[[str, str], Any],
+                 put_result: Callable[[str, str, Lease], Any],
                  relay: Callable[[tuple], Any] | None = None,
                  limits: PilotSettings = DEFAULTS) -> None:
         self.jobs = jobs                     # ports.JobStore
@@ -478,8 +478,14 @@ class AttemptRunner:
             began = self.clock.now()
             try:
                 result_ref = await _maybe_await(self.put_result(state.lease.job_id,
-                                                                result.visible_text))
+                                                                result.visible_text,
+                                                                state.lease))
                 self._time(result, "persist", began)
+            except (errors.StaleLease, errors.AlreadyTerminal) as refused:
+                # R147: the write is fenced like `complete`, and refused it ends the same way.
+                result.refusal = refused.code
+                result.cancelled = result.cancelled or isinstance(refused, errors.AlreadyTerminal)
+                return result
             except Exception as failure:
                 # r1 R30: a success the customer cannot fetch is not a success. Nothing was
                 # stored, so this is ours to absorb, not theirs to be charged for.

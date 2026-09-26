@@ -86,6 +86,7 @@ EXACT_USAGE = "test_gap__the_usage_settled_is_the_engines_authoritative_record_u
 STOPS_READING = "test_gap__a_discovered_cancellation_stops_the_worker_reading_the_stream"
 SIBLING_ROOT = "test_gap__a_sibling_prefixed_root_is_outside_the_root"
 RECORDING_RELAY = "test_gap__the_relay_never_receives_anything_the_journal_has_not_taken"
+RESULT_FENCE = "test_dur_fence__a_result_write_the_fence_refuses_settles_nothing"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- r1 R58: the journal carries `visible`, and only what committed is relayed ----
@@ -280,6 +281,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:\n            began = self.clock.now()\n            try:\n"
        "                result_ref = await _maybe_await(self.put_result(state.lease.job_id,",
        HAPPY),
+    # R147 (D10 0026): the result write carries the lease and its refusal is a fence's.
+    _m("result_written_without_the_lease", "R147: the result write is fenced by our lease",
+       A, "                                                                result.visible_text,\n"
+          "                                                                state.lease))",
+       "                                                                result.visible_text,\n"
+          "                                                                None))", HAPPY),
+    _m("refused_result_write_is_a_platform_error",
+       "R147: a result write the fence refuses settles nothing, like a refused complete",
+       A, "            except (errors.StaleLease, errors.AlreadyTerminal) as refused:\n"
+          "                # R147: the write is fenced like `complete`, and refused it ends the "
+          "same way.\n", "            except () as refused:\n", RESULT_FENCE),
     _m("result_store_failure_still_completes",
        "a result object that could not be stored is not a completed answer",
        A, "                cause, result_ref = TerminalCause.platform_error, None",
