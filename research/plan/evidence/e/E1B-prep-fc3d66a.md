@@ -135,3 +135,28 @@ Optimistic 5 h, likely 8 h, pessimistic 12 h. Confidence: medium. Basis:
 - Window cells about 1.0–1.6 h (`est.`, §7.2).
 - Post-window analysis and the E1B record 2–4 h.
 - The pessimistic case adds one window re-run of the pair after a semantics mismatch.
+
+## 9. Fix round (handback head `9001335b`; fix head `4d8d3255`)
+
+Nothing run: no GPU, no box, no SSM/AWS, no hosted Supabase, no docker. Only
+`models/marlin2b/results/E1B-protocol.md` §7.2 and its verification log changed.
+
+| Finding | Fix | Where |
+|---|---|---|
+| **0-E1BP-1** (major) WC-7's "no request in between" was broken by WC-6's served half, which sent 22 engine requests (11 clips × 2 budgets, `l8served.sh` → `:8000`) after `l8ref.sh`'s restore | WC-6 split. **WC-6a** is the `l8ref.sh` copy (stop, reference, restore, `restored=yes` or the window stops). **WC-7** runs right after it. **WC-6b** is the `l8served.sh` copy plus `l8compare.py`, after WC-7, over the same `L8-$EUTC` directory. WC-6b goes direct without the gateway's `cache_salt` or media uuids, so WC-7's traffic cannot give it cache hits, and WC-0 records its cache deltas anyway. Wall 5–7 + 3–5 min, the same 8–12 min total (`est.`) | §7.2 rows WC-6a/WC-7/WC-6b, the Order line, §7.4 option A names both halves |
+| **0-E1BP-2** (major) WC-3's oracle compared an unscraped counter with a bench count it cannot equal | WC-0's regex adds `infrx_requests_rejected_total` and `infrx_large_body_refused_total`. A counter's per-cell delta runs from the last scrape before the cell to the first after it. WC-3 now reconciles per code: (i) the delta over certify `OVERLOAD_CODES` plus the large-body delta = `counts.rejected` + over-cap rows refused for capacity. (ii) The `unsupported_media` delta = `counts.deliberate_invalid_refused` − those rows = the typed over-cap 400s. (iii) Any other code is named | §7.2 WC-0 and WC-3 |
+
+One addition beyond the finding's proposed fix, from the code read. The intake's large-body
+429 (`capacity_exhausted`, the likely refusal in a `video_b64` burst) is raised in
+`Ingress.validated` (ingress.py:151-175, intake.py:323-331), before `accept`. So it never
+reaches `infrx_requests_rejected_total` (relay.py:145-148). It is counted only in
+`infrx_large_body_refused_total`, which the ingress wires to the gateway registry
+(ingress.py:131-133). Without that term, (i) would miss exactly the refusals WC-3 is
+meant to exercise. The `rate_limited` term is summed as certify does. No gateway path raises
+it today (it appears only in `contracts/errors.py`), so its delta is expected to be 0.
+
+| Command | Exit | Result |
+|---|---|---|
+| `python3 research/plan/scripts/validate_plan.py` | 0 | all PASS (943 local links across 272 documents) |
+| `cd apps/infrx-api && uv run --frozen --no-sync pytest -q ../../models/marlin2b/tests` | 0 | 116 passed (the protocol test still pins §1–§6) |
+| `git diff --stat 9001335b..HEAD` | 0 | owned paths only |
