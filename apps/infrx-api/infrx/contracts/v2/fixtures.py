@@ -31,7 +31,7 @@ from .. import codec, records as v1
 from . import records as v2
 from . import lifecycle as lc
 from . import money_units as mu
-from .money_units import CREDIT, PROVIDER_USD, USD
+from .money_units import CREDIT
 
 DIR = pathlib.Path(__file__).resolve().parent.parent / "fixtures" / "v2"
 

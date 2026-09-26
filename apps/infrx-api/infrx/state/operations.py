@@ -23,7 +23,7 @@ from typing import Any
 from ..contracts import errors, money
 from ..contracts.records import HoldState, Role, SettlementState, Usage, UsageCertainty
 from ..contracts.v2.money_units import Credit
-from ..contracts.v2.records import (CapabilityRecord, CredentialAudience, CreditLedgerEntry,
+from ..contracts.v2.records import (CredentialAudience, CreditLedgerEntry,
                                     DeploymentRevision, RateCardSnapshot, ServingRevision,
                                     UsageHistory, UsageRecordV2, WalletRef)
 from ..operations.ports import AuditEntry, HoldView, KeyRow, VerifiedIdentity

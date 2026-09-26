@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from .. import errors
 from ..limits import DEFAULTS, PilotSettings
