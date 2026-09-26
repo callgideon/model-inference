@@ -17,6 +17,7 @@ deadline, and those bound it at 50 ms by shortening the store's own generation b
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -33,6 +34,7 @@ from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, HoldState,
                                      IndexEvent, JobState, LeaseKind, OutboxKind,
                                      SettlementState, TerminalCause, Usage)
+from infrx.observe.metrics import Registry
 from infrx.worker import AttemptRunner, WorkerLoop, prepared_request
 from infrx.worker.attempt import BATCH_MAX_EVENTS
 from infrx.worker.engine import (MODEL_EOS_TOKEN_IDS, _inside_tenant_root,
@@ -1089,6 +1091,34 @@ def test_ops_recover__a_candidate_whose_claim_loses_is_still_acknowledged():
         results = await loop.run()
         assert len(results) == 1 and results[0].refusal == "already_terminal"
         assert world.scheduler.depth() == 0 and len(world.scheduler.acknowledged) == 1
+    run(case())
+
+
+def test_ops_recover__the_loop_reports_each_attempts_phase_timings_in_seconds():
+    """E1B WR-4 (E1B-protocol §7.1 rule 6): the worker's `/metrics` is the only place the
+    journal, persist and settle phases are published. Oracle: a loop that never hands the
+    attempt's timings to the worker Registry leaves `infrx_phase_seconds` empty (those
+    phases stay `declared_missing` in the window), and one that hands over the attempt's
+    milliseconds as seconds reports each phase 1,000 times too long."""
+    async def case():
+        world = World()
+        clock, now = world.clock, world.clock.now
+        clock.now = lambda: (clock.advance(0.001), now())[1]     # 1 ms per reading
+        request, _ = await queued(world)
+        await world.scheduler.enqueue(candidate(world, request))
+        _, engine = adapter(world)
+        metrics = Registry("worker")
+        loop = WorkerLoop(scheduler=world.scheduler, runner=world.runner(engine),
+                          worker_id="worker-a", limits=world.limits, metrics=metrics)
+        (result,) = await loop.run()
+        assert result.cause is TerminalCause.completed
+        assert set(result.timings) == {"prefill", "generate", "journal", "persist", "settle"}
+        scrape = metrics.render()
+        for phase, ms in result.timings.items():
+            assert ms > 0 and metrics.value("infrx_phase_seconds", phase=phase) == 1, phase
+            (seconds,) = re.findall(rf'^infrx_phase_seconds_sum{{process="worker",phase="{phase}"}} (\S+)$',
+                                    scrape, re.M)
+            assert float(seconds) == pytest.approx(ms / 1000), (phase, seconds, ms)
     run(case())
 
 

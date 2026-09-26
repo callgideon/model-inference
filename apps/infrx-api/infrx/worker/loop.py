@@ -69,6 +69,9 @@ class WorkerLoop:
     # runner task -> the job it is executing right now (W3: drain records what it released)
     in_flight: dict = field(default_factory=dict)
     _tasks: list = field(default_factory=list)
+    # E1B WR-4: the worker's `Registry`; each attempt's phase timings go to
+    # `infrx_phase_seconds` (the attempt keeps milliseconds, the histogram takes seconds).
+    metrics: object | None = None
 
     # --- one candidate --------------------------------------------------------
     async def claim_one(self) -> AttemptResult | None:
@@ -86,6 +89,8 @@ class WorkerLoop:
             # A job that needs another attempt is re-dispatched by the store, as a new
             # index event for a new generation.
             await self._acknowledge(candidate)
+        if self.metrics is not None:
+            self.metrics.observe_phases({k: v / 1000 for k, v in result.timings.items()})
         self.results.append(result)
         return result
 
