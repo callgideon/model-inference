@@ -26,10 +26,10 @@ Full output: `scratchpad/wave4b/freeze-d3a99e01/certify-hashes.json` (coordinato
 | G1 | PASS 22:35:56Z | freeze-d3a99e01/G1.log |
 | G2 make check (e2c form, Q 55430) | RUNNING from 22:36Z (~3.5 h) | freeze-d3a99e01/G2-make-check.log |
 | G2 tests/i on e2c | after make check | freeze-d3a99e01/G2-tests-i.log |
-| G3 / G4 / G4b / G5 | RUNNING | checks-d3a99e01-gates.log |
+| G3 / G4 / G4b / G5 | PASS: G4 `[]`, G4b `ok`, G3 build + probe `"ok": true` (image `infrx-runtime:d3a99e01`), G5 `REHEARSAL PASSED` (REHEARSAL_NS=infrx-pre, 0 leftovers) — 22:36–22:40Z | checks-d3a99e01-gates.log |
 | G6 | operator inputs (readiness log) | — |
-| BACKEND-LOCAL re-proof (E3C final, e3c block) | RUNNING | checks-d3a99e01-e3c.log |
-| APP-LOCAL re-proof (make app-e2e, e4b) | RUNNING | checks-d3a99e01-app.log |
+| BACKEND-LOCAL re-proof (E3C final, e3c block) | PASS exit 0: 16/16 scenarios, 12/12 controls detected (28 PASS rows, 0 FAIL); 22:36–22:50Z; teardown 0 containers | checks-d3a99e01-e3c-run.log; e3c-d3a99e01/verdict.json |
+| APP-LOCAL re-proof (make app-e2e, e4b) | PASS exit 0: preflight, console-test, console-lint, console-typecheck, browser journey 20/20 (103.4 s); 22:36–22:38Z; 78 gate unit tests before pnpm install | checks-d3a99e01-app.log; /tmp/infrx-e2c-app-e2e-pcd4nr9g/verdict.json |
 
 At b640c35c (same non-test tree): G3/G4/G4b/G5 PASS, E3C final PASS 16/16 + 12/12, app-e2e PASS 20/20, G2 FAIL (tests/i coverage) — the reason for this candidate.
 
@@ -44,3 +44,4 @@ env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN infra/rol
 ## Verification log
 
 - 2026-09-26T22:38Z: candidate frozen; identities recomputed (only git.sha differs from b640c35c); G1 PASS; G2, gates, E3C and App re-proofs running.
+- 2026-09-26T22:52Z: G3/G4/G4b/G5, E3C final and app-e2e PASS at d3a99e01; G2 make check running (api-test ~46% at 22:50Z).
