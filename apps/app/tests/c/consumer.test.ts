@@ -731,7 +731,8 @@ test("U1R-AUTH-02 the layout's session, operator flag and credit reads take the 
   assert.match(session, /export const requestClient = cache\(async \(\) => onceGetUser\(await createClient\(\)\)\);/);
   assert.match(session, /getSession = cache\(async \(\): Promise<Session> => \{\n  const supabase = await requestClient\(\);/);
   assert.equal(session.match(/createClient\(/g)?.length, 1, "session.ts builds exactly one client");
-  for (const file of ["lib/services/server.ts", "app/(console)/billing/credit-context.ts"]) {
+  for (const file of ["lib/services/server.ts", "app/(console)/billing/credit-context.ts",
+                      "app/(console)/usage/[requestId]/request-context.ts"]) {   // WR-AM2-1
     assert.match(source(file), /await requestClient\(\)/, file);
     assert.doesNotMatch(source(file), /createClient\(/, `${file} builds a second client (a second getUser)`);
   }

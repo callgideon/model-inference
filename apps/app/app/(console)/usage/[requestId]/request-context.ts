@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requestClient } from "@/lib/session";   // WR-AM2-1: the request's one client (getUser once per render)
 import type { CreditClient } from "../../billing/credit-reads";
 import { postgrestRequestReads, requestSource, type RequestSource } from "./request-reads";
 
@@ -11,7 +11,7 @@ import { postgrestRequestReads, requestSource, type RequestSource } from "./requ
  */
 export function consumerRequestReads(): Promise<RequestSource | null> {
   return requestSource(async () => {
-    const supabase = await createClient();
+    const supabase = await requestClient();
     const { data } = await supabase.auth.getUser();
     if (data.user === null) return null;
     return { reads: postgrestRequestReads(supabase as unknown as CreditClient, data.user.id), preview: false };

@@ -27,7 +27,7 @@ export const claimArgs = (userId: string) => ({ p_user_id: userId, p_campaign_ve
 export const MIN_PASSWORD_LENGTH = 8;
 
 /**
- * A same-site path to redirect to, or `fallback`. Stricter than `lib/utils` `safeNext`: a
+ * A same-site path to redirect to, or `fallback`. A
  * backslash (`/\evil` — browsers read it as `//evil`) or any whitespace/control character is
  * refused too, so the login round trip cannot become an open redirect.
  */
