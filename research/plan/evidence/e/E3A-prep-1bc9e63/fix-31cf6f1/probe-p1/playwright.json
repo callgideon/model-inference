@@ -1,0 +1,823 @@
+{
+  "config": {
+    "argv": [
+      "/usr/bin/node",
+      "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "tests/e2e/playwright.config.ts"
+    ],
+    "configFile": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/playwright.config.ts",
+    "rootDir": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/p1/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "/.*\\.e2e\\.ts$/"
+        ],
+        "timeout": 240000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json",
+        {
+          "outputFile": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/p1/playwright.json"
+        }
+      ],
+      [
+        "list",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "journey.e2e.ts",
+      "file": "journey.e2e.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "signup-verify-grant: a fresh individual verifies once and is granted 10,000 CREDIT exactly once",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1802,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:18.778Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-11fcca230849e7391066",
+          "file": "journey.e2e.ts",
+          "line": 221,
+          "column": 5
+        },
+        {
+          "title": "signin-claim: signing in runs A2's first-login grant claim (answered replayed, no second grant)",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 401,
+                  "error": {
+                    "message": "Error: the sign-in claim reached the database\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m3\u001b[39m\nReceived: \u001b[31m2\u001b[39m",
+                    "stack": "Error: the sign-in claim reached the database\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m3\u001b[39m\nReceived: \u001b[31m2\u001b[39m\n    at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts:273:94",
+                    "location": {
+                      "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                      "column": 94,
+                      "line": 273
+                    },
+                    "snippet": "\u001b[0m \u001b[90m 271 |\u001b[39m   \u001b[36mawait\u001b[39m signIn(page\u001b[33m,\u001b[39m email)\u001b[33m;\u001b[39m \u001b[90m// returns once the form navigated, i.e. after its claim settled\u001b[39m\n \u001b[90m 272 |\u001b[39m   \u001b[36mconst\u001b[39m after \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m control\u001b[33m<\u001b[39m\u001b[33mRecord\u001b[39m\u001b[33m<\u001b[39m\u001b[33mstring\u001b[39m\u001b[33m,\u001b[39m number\u001b[33m>>\u001b[39m(\u001b[32m\"/stats\"\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 273 |\u001b[39m   expect(after[\u001b[32m\"rpc/claim_signup_grant:200\"\u001b[39m] \u001b[33m?\u001b[39m\u001b[33m?\u001b[39m \u001b[35m0\u001b[39m\u001b[33m,\u001b[39m \u001b[32m\"the sign-in claim reached the database\"\u001b[39m)\u001b[33m.\u001b[39mtoBe((before[\u001b[32m\"rpc/claim_signup_grant:200\"\u001b[39m] \u001b[33m?\u001b[39m\u001b[33m?\u001b[39m \u001b[35m0\u001b[39m) \u001b[33m+\u001b[39m \u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                                              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 274 |\u001b[39m   \u001b[36mconst\u001b[39m books \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m facts(email)\u001b[33m;\u001b[39m\n \u001b[90m 275 |\u001b[39m   expect([books\u001b[33m.\u001b[39mentitlements\u001b[33m,\u001b[39m books\u001b[33m.\u001b[39mgrant_rows])\u001b[33m.\u001b[39mtoEqual([\u001b[35m1\u001b[39m\u001b[33m,\u001b[39m \u001b[35m1\u001b[39m])\u001b[33m;\u001b[39m\n \u001b[90m 276 |\u001b[39m })\u001b[33m;\u001b[39m\u001b[0m"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                        "column": 94,
+                        "line": 273
+                      },
+                      "message": "Error: the sign-in claim reached the database\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m3\u001b[39m\nReceived: \u001b[31m2\u001b[39m\n\n  271 |   await signIn(page, email); // returns once the form navigated, i.e. after its claim settled\n  272 |   const after = await control<Record<string, number>>(\"/stats\");\n> 273 |   expect(after[\"rpc/claim_signup_grant:200\"] ?? 0, \"the sign-in claim reached the database\").toBe((before[\"rpc/claim_signup_grant:200\"] ?? 0) + 1);\n      |                                                                                              ^\n  274 |   const books = await facts(email);\n  275 |   expect([books.entitlements, books.grant_rows]).toEqual([1, 1]);\n  276 | });\n    at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts:273:94"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:20.691Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/p1/playwright-artifacts/journey.e2e.ts-signin-clai-a368c-d-replayed-no-second-grant--chromium/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                    "column": 94,
+                    "line": 273
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-b476b79abafcda934ce7",
+          "file": "journey.e2e.ts",
+          "line": 268,
+          "column": 5
+        },
+        {
+          "title": "create-key: the individual creates a key in the App; its plaintext is shown once",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1146,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:21.567Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-0bd3e97125ea57710f6c",
+          "file": "journey.e2e.ts",
+          "line": 278,
+          "column": 5
+        },
+        {
+          "title": "text-sync: an external text request is answered and settled exactly once",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 317,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:22.809Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-d512c8383ca7231d3152",
+          "file": "journey.e2e.ts",
+          "line": 297,
+          "column": 5
+        },
+        {
+          "title": "sse-stream: an external streamed request sends identity, deltas, usage and [DONE]",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 284,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:23.140Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-66487861a31f0dd3d78d",
+          "file": "journey.e2e.ts",
+          "line": 311,
+          "column": 5
+        },
+        {
+          "title": "async-poll: an external async job is accepted, polled to its end and its result read",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 400,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:23.438Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-625c859d64ec2edcc892",
+          "file": "journey.e2e.ts",
+          "line": 335,
+          "column": 5
+        },
+        {
+          "title": "video-upload: an uploaded finite video is processed as an async job and its result read",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 476,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:23.847Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-b7d00baacfe003e4cba4",
+          "file": "journey.e2e.ts",
+          "line": 351,
+          "column": 5
+        },
+        {
+          "title": "retry: the same request retried with its idempotency key is replayed, never charged twice",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 212,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:24.335Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-ac2ef6e032200b5b28a6",
+          "file": "journey.e2e.ts",
+          "line": 380,
+          "column": 5
+        },
+        {
+          "title": "usage-balance: the console shows every request and the balance exactly as the ledger records them",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 661,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:24.563Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-c83cdaec7a9e5ecc198a",
+          "file": "journey.e2e.ts",
+          "line": 393,
+          "column": 5
+        },
+        {
+          "title": "refresh: a reload and an expiring session mid-journey keep the individual's exact state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 12783,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:25.239Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-d87e18b3150d8b412f9d",
+          "file": "journey.e2e.ts",
+          "line": 415,
+          "column": 5
+        },
+        {
+          "title": "request-detail: the owner reads a request's detail, charge and result from Usage",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 642,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:38.036Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-c8c2ff8e77293270effa",
+          "file": "journey.e2e.ts",
+          "line": 435,
+          "column": 5
+        },
+        {
+          "title": "accounting-uncertainty: usage the engine did not report is held for reconciliation, never shown as a charge",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 951,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:38.695Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-bf2c412eb4a1946845ff",
+          "file": "journey.e2e.ts",
+          "line": 446,
+          "column": 5
+        },
+        {
+          "title": "rate-rejection: past the per-key active job cap the next request is refused 429 and admits nothing; the rest settle once after a worker replacement",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1582,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:39.658Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-248da6b1ebb80d3395fc",
+          "file": "journey.e2e.ts",
+          "line": 472,
+          "column": 5
+        },
+        {
+          "title": "low-funds: with almost nothing left the API refuses 402 and admits nothing; the console says so exactly",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1402,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:41.251Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-ddedf5c69fe8b4af1680",
+          "file": "journey.e2e.ts",
+          "line": 501,
+          "column": 5
+        },
+        {
+          "title": "provider-route-denial: provider and operator routes are not served to a consumer",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 851,
+                  "error": {
+                    "message": "Error: provider routes a consumer reached\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 5\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"/traces (200)\",\u001b[39m\n\u001b[31m+   \"/dedicated (200)\",\u001b[39m\n\u001b[31m+   \"/teams (200)\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+                    "stack": "Error: provider routes a consumer reached\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 5\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"/traces (200)\",\u001b[39m\n\u001b[31m+   \"/dedicated (200)\",\u001b[39m\n\u001b[31m+   \"/teams (200)\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts:532:56",
+                    "location": {
+                      "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                      "column": 56,
+                      "line": 532
+                    },
+                    "snippet": "\u001b[0m \u001b[90m 530 |\u001b[39m     \u001b[36mif\u001b[39m (reply\u001b[33m?\u001b[39m\u001b[33m.\u001b[39mstatus() \u001b[33m!==\u001b[39m \u001b[35m404\u001b[39m \u001b[33m&&\u001b[39m landed \u001b[33m===\u001b[39m route) served\u001b[33m.\u001b[39mpush(\u001b[32m`${route} (${reply?.status()})`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 531 |\u001b[39m   }\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 532 |\u001b[39m   expect(served\u001b[33m,\u001b[39m \u001b[32m\"provider routes a consumer reached\"\u001b[39m)\u001b[33m.\u001b[39mtoEqual([])\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 533 |\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 534 |\u001b[39m\n \u001b[90m 535 |\u001b[39m test(\u001b[32m\"operator-controls: operator actions are reachable only by an operator, with a reason, once\"\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                        "column": 56,
+                        "line": 532
+                      },
+                      "message": "Error: provider routes a consumer reached\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 5\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"/traces (200)\",\u001b[39m\n\u001b[31m+   \"/dedicated (200)\",\u001b[39m\n\u001b[31m+   \"/teams (200)\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  530 |     if (reply?.status() !== 404 && landed === route) served.push(`${route} (${reply?.status()})`);\n  531 |   }\n> 532 |   expect(served, \"provider routes a consumer reached\").toEqual([]);\n      |                                                        ^\n  533 | });\n  534 |\n  535 | test(\"operator-controls: operator actions are reachable only by an operator, with a reason, once\", async ({ page }) => {\n    at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts:532:56"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:42.671Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/p1/playwright-artifacts/journey.e2e.ts-provider-ro-befe5-re-not-served-to-a-consumer-chromium/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                    "column": 56,
+                    "line": 532
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-4888ac22978974a817db",
+          "file": "journey.e2e.ts",
+          "line": 523,
+          "column": 5
+        },
+        {
+          "title": "operator-controls: operator actions are reachable only by an operator, with a reason, once",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 550,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:43.970Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-4aa75e2fa99d6af6b182",
+          "file": "journey.e2e.ts",
+          "line": 535,
+          "column": 5
+        },
+        {
+          "title": "isolation: a second individual gets their own one grant and sees none of the first's requests, keys or results",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1671,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:44.615Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-8dbc16bbd3fb558f93be",
+          "file": "journey.e2e.ts",
+          "line": 543,
+          "column": 5
+        },
+        {
+          "title": "revoke-key: a key revoked in the App fails admission within the revocation bound",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 20257,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\nCall Log:\n- Timeout 20000ms exceeded while waiting on the predicate",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\nCall Log:\n- Timeout 20000ms exceeded while waiting on the predicate\n    at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts:585:108",
+                    "location": {
+                      "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                      "column": 108,
+                      "line": 585
+                    },
+                    "snippet": "\u001b[0m \u001b[90m 583 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m\"/api-keys\"\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 584 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByRole(\u001b[32m\"button\"\u001b[39m\u001b[33m,\u001b[39m { name\u001b[33m:\u001b[39m \u001b[35m/revoke/i\u001b[39m })\u001b[33m.\u001b[39mfirst()\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 585 |\u001b[39m   \u001b[36mawait\u001b[39m expect\u001b[33m.\u001b[39mpoll(\u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m (\u001b[36mawait\u001b[39m facts(state\u001b[33m.\u001b[39ma\u001b[33m!\u001b[39m))\u001b[33m.\u001b[39mkeys\u001b[33m.\u001b[39mfind((key) \u001b[33m=>\u001b[39m key\u001b[33m.\u001b[39mkey_id \u001b[33m===\u001b[39m keyId)\u001b[33m?\u001b[39m\u001b[33m.\u001b[39mrevoked)\u001b[33m.\u001b[39mtoBe(\u001b[36mtrue\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                                                            \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 586 |\u001b[39m   \u001b[36mawait\u001b[39m expect\n \u001b[90m 587 |\u001b[39m     \u001b[33m.\u001b[39mpoll(\u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m (\u001b[36mawait\u001b[39m api(state\u001b[33m.\u001b[39mkeyA\u001b[33m!\u001b[39m\u001b[33m,\u001b[39m \u001b[32m\"GET\"\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`/v1/jobs/${state.asyncHandle}`\u001b[39m))\u001b[33m.\u001b[39mstatus\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m75\u001b[39m_000\u001b[33m,\u001b[39m intervals\u001b[33m:\u001b[39m [\u001b[35m2\u001b[39m_000] })\n \u001b[90m 588 |\u001b[39m     \u001b[33m.\u001b[39mtoBe(\u001b[35m401\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                        "column": 108,
+                        "line": 585
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\nCall Log:\n- Timeout 20000ms exceeded while waiting on the predicate\n\n  583 |   await page.goto(\"/api-keys\");\n  584 |   await page.getByRole(\"button\", { name: /revoke/i }).first().click();\n> 585 |   await expect.poll(async () => (await facts(state.a!)).keys.find((key) => key.key_id === keyId)?.revoked).toBe(true);\n      |                                                                                                            ^\n  586 |   await expect\n  587 |     .poll(async () => (await api(state.keyA!, \"GET\", `/v1/jobs/${state.asyncHandle}`)).status, { timeout: 75_000, intervals: [2_000] })\n  588 |     .toBe(401);\n    at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts:585:108"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:10:46.297Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/fix/p1/playwright-artifacts/journey.e2e.ts-revoke-key--ad060-within-the-revocation-bound-chromium/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/probe/apps/app/tests/e2e/journey.e2e.ts",
+                    "column": 108,
+                    "line": 585
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-5d1a21d96aa6c92c489b",
+          "file": "journey.e2e.ts",
+          "line": 578,
+          "column": 5
+        },
+        {
+          "title": "expired-result: past its persisted expiry a result is gone (410), its metadata kept",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 76,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:11:07.008Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-6295fc39aa7021e9a7ea",
+          "file": "journey.e2e.ts",
+          "line": 595,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-26T01:10:18.168Z",
+    "duration": 49007.803,
+    "expected": 16,
+    "skipped": 0,
+    "unexpected": 3,
+    "flaky": 0
+  }
+}

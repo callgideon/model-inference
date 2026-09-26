@@ -1,0 +1,90 @@
+..FF...FFF.....                                                          [100%]
+=================================== FAILURES ===================================
+__________ test_all_green_is_pass_and_absent_or_skipped_is_never_pass __________
+
+    def test_all_green_is_pass_and_absent_or_skipped_is_never_pass():
+        """Oracle: a skip, a missing test or a deselected check counted as a pass."""
+        table = runner.cells(runner.classify(all_passed()))
+>       assert {c["journey"] for c in table} == {runner.PASS}
+                ^^^^^^^^^^^^
+E       KeyError: 'journey'
+
+tests/integration/app/test_e3a_runner.py:63: KeyError
+___________ test_cells_the_journey_does_not_exercise_are_never_pass ____________
+
+    def test_cells_the_journey_does_not_exercise_are_never_pass():
+        """Oracle (0-/1-E3A-PREP-R1): DUR-FENCE, DUR-OUTBOX, DUR-CAP or CREDIT-RATE reported PASS
+        although the journey never races a stale worker, loses Valkey state, admits concurrently
+        across keys/orgs or publishes a rate; or a red journey check under one of them hidden."""
+>       assert set(runner.DELEGATED) == {"DUR-CAP", "DUR-FENCE", "DUR-OUTBOX", "CREDIT-RATE"}
+                   ^^^^^^^^^^^^^^^^
+E       AttributeError: module 'e3a_runner' has no attribute 'DELEGATED'
+
+tests/integration/app/test_e3a_runner.py:81: AttributeError
+___________________ test_the_app_env_states_its_environment ____________________
+
+    def test_the_app_env_states_its_environment():
+        """Oracle (1-E3A-PREP-R2): `next start` (NODE_ENV=production) with neither VERCEL_ENV nor
+        INFRX_APP_ENVIRONMENT - I2A's instrumentation (lib/deploy/env.ts) refuses to serve, and the
+        run goes INVALID on any tree that carries it."""
+        env = runner.app_env("anon", "service", 56840)
+>       assert env["INFRX_APP_ENVIRONMENT"] == "development" and "VERCEL_ENV" not in env
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'INFRX_APP_ENVIRONMENT'
+
+tests/integration/app/test_e3a_runner.py:130: KeyError
+_______________ test_an_app_that_never_answers_leaves_no_process _______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x786f775bbb00>
+tmp_path = PosixPath('/tmp/pytest-of-rey/pytest-6002/test_an_app_that_never_answers0')
+
+    def test_an_app_that_never_answers_leaves_no_process(monkeypatch, tmp_path):
+        """Oracle (1-E3A-PREP-R3): `next start` exits or never answers, the runner raises, and its
+        process group keeps running (holding the App port into the next run's preflight)."""
+        import os
+        import signal
+        monkeypatch.setattr(runner.NextApp, "URL", "http://127.0.0.1:9/login")   # nothing answers
+        monkeypatch.setattr(runner.NextApp, "READY_S", 1.0)
+        for script in ("sleep 60 & exec sleep 60", "sleep 60 & exit 3"):
+            monkeypatch.setattr(runner.NextApp, "ARGV", ["sh", "-c", script])
+            app = runner.NextApp({"PATH": os.environ["PATH"]}, tmp_path)
+            with pytest.raises(RuntimeError):
+                app.__enter__()
+            try:
+                os.killpg(app.process.pid, 0)
+                os.killpg(app.process.pid, signal.SIGKILL)
+                alive = True
+            except ProcessLookupError:
+                alive = False
+>           assert not alive, f"{script!r}: its process group outlived the failed start"
+E           AssertionError: 'sleep 60 & exec sleep 60': its process group outlived the failed start
+E           assert not True
+
+tests/integration/app/test_e3a_runner.py:154: AssertionError
+_______________ test_teardown_counts_a_held_port_as_left_behind ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x786f7729b440>
+
+    def test_teardown_counts_a_held_port_as_left_behind(monkeypatch):
+        """Oracle (1-E3A-PREP-R3): teardown PASS while a process still holds one of the runner's
+        ports (it only looked at docker names)."""
+        import socket
+        from types import SimpleNamespace
+        monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: SimpleNamespace(
+            stdout="infrx-e4b-postgres\ninfrx-e3c-postgres\n"))
+        with socket.socket() as held:
+            held.bind(("127.0.0.1", 0))
+            held.listen()
+            port = held.getsockname()[1]
+>           assert runner.leftovers((port,)) == ["infrx-e4b-postgres", f"127.0.0.1:{port}"]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: leftovers() takes 0 positional arguments but 1 was given
+
+tests/integration/app/test_e3a_runner.py:168: TypeError
+=========================== short test summary info ============================
+FAILED tests/integration/app/test_e3a_runner.py::test_all_green_is_pass_and_absent_or_skipped_is_never_pass
+FAILED tests/integration/app/test_e3a_runner.py::test_cells_the_journey_does_not_exercise_are_never_pass
+FAILED tests/integration/app/test_e3a_runner.py::test_the_app_env_states_its_environment
+FAILED tests/integration/app/test_e3a_runner.py::test_an_app_that_never_answers_leaves_no_process
+FAILED tests/integration/app/test_e3a_runner.py::test_teardown_counts_a_held_port_as_left_behind
+5 failed, 10 passed in 1.23s

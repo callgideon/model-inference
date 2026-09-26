@@ -1,0 +1,65 @@
+{
+  "task": "E3A",
+  "slice": "E3A-PREP fix round (review of e315a5ee: 0-/1-E3A-PREP-R1, 0-E3A-PREP-R2, 0-E3A-PREP-R3, 1-E3A-PREP-R2, 1-E3A-PREP-R3); still a preparation lane, not the APP-LOCAL gate; manifest status stays planned",
+  "activity": "review",
+  "at": "2026-09-26T01:18:40Z",
+  "head": "31cf6f10",
+  "base": "fd40748c",
+  "worktree": ".claude/worktrees/codex-e3a-prep",
+  "branch": "codex/e3a-prep",
+  "owned_paths": [
+    "tests/integration/app/",
+    "apps/app/tests/e2e/",
+    "research/plan/evidence/e/E3A-prep-1bc9e63.md",
+    "research/plan/evidence/e/E3A-prep-1bc9e63/fix-31cf6f1/"
+  ],
+  "findings": {
+    "0-E3A-PREP-R1": "fixed: DUR-FENCE/DUR-OUTBOX (and DUR-CAP/CREDIT-RATE) are DELEGATED - verdict NOT RUN[delegated] naming the carrying E3C/E3B cases unless a check under them fails; the journey slice is reported separately as `journey`",
+    "1-E3A-PREP-R1": "fixed: same mechanism for all four cells; cells now carry {journey, verdict}",
+    "0-E3A-PREP-R2": "fixed: operator-controls skips NOT RUN[operator-action] regardless of the U3 flag; vacuous body removed",
+    "0-E3A-PREP-R3": "fixed: dialog accepted, `Revoke <name>` of the App-created key; revoke-key PASS on consumer-v1 merged (probe P3); exposed and fixed an ordering defect (expired-result now before revoke-key)",
+    "1-E3A-PREP-R2": "fixed: app_env() states INFRX_APP_ENVIRONMENT=development; merged-with-consumer-v1 probes serve under I2A's instrumentation",
+    "1-E3A-PREP-R3": "fixed: NextApp kills its whole group on a failed start (also after the leader exited); teardown fails on a held edge/control/App port"
+  },
+  "commands": [
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/app (new tests vs old behaviour)", "exit": 1, "summary": "5 failed, 10 passed: the fails-before record"},
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/app tests/integration/backend/e3c/test_e3c_runner.py tests/integration/test_preflight.py", "exit": 0, "summary": "107 passed (15 E3A + 34 E3C + 58 gates/preflight)"},
+    {"cmd": "make console-test && make console-lint && make console-typecheck", "exit": 0, "summary": "510 tests: 487 pass, 0 fail, 23 pre-existing env-gated skips; lint 2 pre-existing warnings; typecheck clean"},
+    {"cmd": "cd apps/app && pnpm install --frozen-lockfile", "exit": 0, "summary": "unchanged lockfile"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"},
+    {"cmd": "PLAYWRIGHT_BROWSERS_PATH=... runner.py --out <dir> (at 31cf6f10)", "exit": 1, "summary": "FAIL, 54 s: 13 passed, 2 failed (F-1, F-2), 4 NOT RUN; cells 8 PASS, 6 NOT RUN (2 lanes + 4 delegated with journey PASS), 3 FAIL; teardown PASS incl. ports"},
+    {"cmd": "runner.py --break-seam fixture-port / grant-guard (at 31cf6f10)", "exit": 1, "summary": "both seams detected (FAIL), 29 s / 35 s"},
+    {"cmd": "probe P1/P2/P3: runner.py in a scratch `git clone --shared` merging codex/e3a-prep (33b5a027 / 5285d88e / 31cf6f10) with claude/consumer-v1 6badd4e1", "exit": 1, "summary": "P1: stages PASS under I2A, operator-controls PASS vacuously, revoke-key FAIL (both reproduced); P2: revoke-key PASS, expired-result 401 (order defect); P3: 16 passed, 2 failed (F-1, F-2), 1 NOT RUN; cells 10 PASS / 4 NOT RUN (delegated) / 3 FAIL"}
+  ],
+  "measurements": {
+    "full_run_wall_s": 54.1,
+    "seam_runs_wall_s": [29.3, 35.3],
+    "merged_probe_p3_wall_s": 93.8,
+    "cells_own_tree": {"DUR-ADMIT": "NOT RUN", "DUR-CAP": "NOT RUN", "DUR-FENCE": "NOT RUN", "DUR-OUTPUT": "NOT RUN", "DUR-SETTLE": "PASS", "DUR-OUTBOX": "NOT RUN", "DUR-RLS": "FAIL", "MEDIA-SEC": "PASS", "API-MODES": "PASS", "API-STREAM": "PASS", "CONSOLE-FLOWS": "FAIL", "CREDIT-GRANT": "PASS", "CREDIT-IDENTITY": "PASS", "CREDIT-UNITS": "PASS", "CREDIT-RATE": "NOT RUN", "CREDIT-SPEND": "PASS", "APP-JOURNEY": "FAIL"},
+    "cells_merged_probe_p3": {"PASS": 10, "NOT RUN": 4, "FAIL": 3}
+  },
+  "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "E3A proper after E3C/E4C: create-key/request-detail/revoke-key already pass on consumer-v1; remaining = operator action (U3), resolve the 4 delegated cells (import E3C/E3B same-SHA results or journey injections; DUR-CAP cross-key race has no carrying case), F-1/F-2, WR-1/WR-2, merged-SHA reruns (~1.5 min each)",
+    "at": "2026-09-26T01:18:40Z"
+  },
+  "blockers": [
+    "E3C BACKEND-LOCAL not passed (E3A start dependency)",
+    "F-1: A2 first-login claim never runs (still FAIL on consumer-v1 6badd4e1)",
+    "F-2: /traces, /dedicated, /teams served (200) to a consumer (still FAIL on consumer-v1 6badd4e1)",
+    "DUR-CAP/DUR-FENCE/DUR-OUTBOX/CREDIT-RATE delegated: APP-LOCAL cannot PASS until E3A proper imports the carrying same-SHA results or adds journey injections",
+    "operator-controls NOT RUN until an operator action is written against U3"
+  ],
+  "wiring_requests": [
+    "unchanged: E3A-WR-1..4 (see research/plan/evidence/e/E3A-prep-1bc9e63.md)"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E3A-prep-1bc9e63.md#fix-round-2026-09-26-review-e3a-prep-r1r2r3",
+    "research/plan/evidence/e/E3A-prep-1bc9e63/fix-31cf6f1/full/verdict.json",
+    "research/plan/evidence/e/E3A-prep-1bc9e63/fix-31cf6f1/probe-p3/verdict.json",
+    "research/plan/evidence/e/E3A-prep-1bc9e63/fix-31cf6f1/probe-p1/verdict.json"
+  ]
+}

@@ -6,6 +6,7 @@
     tests/integration/backend-certify.sh  [--out DIR] [--certify-profile P] [--validate-only]
                                           [-- <certify.py flags>]
     tests/integration/app-e2e.sh          [--out DIR]
+                                          (last stage: E3A's app/runner.py, the browser journey)
 
 Each writes `<out>/verdict.json` and exits 0 PASS, 1 FAIL, 3 BLOCKED or NOT RUN, 4 INVALID.
 The gate is the WORST stage: FAIL > INVALID > BLOCKED > NOT RUN > PASS. A stage that could
@@ -54,6 +55,8 @@ SEAMS = {
 }
 # E3C's BACKEND-LOCAL runner (E3C WR-3): its own verdict.json, E2C's ranking and exit codes.
 E3C_RUNNER = REPO / "tests" / "integration" / "backend" / "e3c" / "runner.py"
+# E3A's APP-LOCAL runner (the same verdict.json contract): the app-e2e gate's browser journey.
+APP_RUNNER = REPO / "tests" / "integration" / "app" / "runner.py"
 # certify.py flags that point it at a deployed endpoint (its argparse also takes `--flag=v`
 # and unambiguous prefixes, allow_abbrev).
 REMOTE_FLAGS = ("--box", "--target")
@@ -217,14 +220,15 @@ def seam_stage(seam: str, out: Path) -> dict:
                                INVALID: "the runner proved nothing"}[verdict]}
 
 
-def e3c_stage(out: Path, runner: Path = E3C_RUNNER) -> dict:
-    """The corrective scenario matrix on real services. Its verdict.json decides, and it must
-    agree with the runner's exit code: a runner that says PASS and exits 1 proved nothing."""
-    name = "backend-local"
+def e3c_stage(out: Path, runner: Path = E3C_RUNNER, name: str = "backend-local",
+              sub: str = "e3c") -> dict:
+    """The corrective scenario matrix on real services (or, with E3A's runner, the browser
+    journey). Its verdict.json decides, and it must agree with the runner's exit code: a
+    runner that says PASS and exits 1 proved nothing."""
     if not runner.exists():
         return {"stage": name, "verdict": NOT_RUN,
-                "detail": f"{runner} is not on this tree (E3C, codex/e3c-integration)"}
-    target = out / "e3c"
+                "detail": f"{runner} is not on this tree ({sub.upper()})"}
+    target = out / sub
     argv = [str(PY), str(runner), "--out", str(target)]
     code, seconds, log = run(name, argv, REPO, out)
     row = {"stage": name, "command": " ".join(argv), "exit": code, "duration_s": seconds,
@@ -367,8 +371,7 @@ def app_e2e(args, out: Path) -> list[dict]:
         stages.append({"stage": target, "command": f"make {target}", "exit": code,
                        "duration_s": seconds, "verdict": PASS if code == 0 else FAIL,
                        "log": str(log), "tail": log.read_text().strip().splitlines()[-6:]})
-    stages.append({"stage": "browser-journey", "verdict": NOT_RUN,
-                   "detail": "E3A owns the browser journey (apps/app/tests/e2e); not built yet"})
+    stages.append(e3c_stage(out, APP_RUNNER, "browser-journey", "e3a"))
     return stages
 
 
