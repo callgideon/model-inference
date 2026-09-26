@@ -110,11 +110,11 @@ CARRIED = {"DUR-FENCE": "s14", "DUR-CAP": "s15", "CREDIT-RATE": "s16"}
 
 def test_delegated_cells_pass_only_on_the_e3c_final_reference():
     """Oracle (E3A item 4): a delegated cell reported as a bare PASS, PASS without the
-    E3C-FINAL reference (document absent, not the accepted run, a scenario row missing or not
+    E3C reference (E3C_FINAL) (document absent, not the accepted run, a scenario row missing or not
     PASS), or a red journey check under it hidden by the reference."""
     green = runner.classify(all_passed())
     table = {c["id"]: c for c in runner.cells(green, EVIDENCE)}
-    want = f"PASS[delegated to E3C-FINAL {HEAD} s05,s08]"
+    want = f"PASS[delegated to {runner.E3C_FINAL['name']} {HEAD} s05,s08]"
     assert table["DUR-OUTBOX"]["verdict"] == want, table["DUR-OUTBOX"]
     assert table["DUR-OUTBOX"]["reasons"][0].startswith(want) and \
         runner.E3C_FINAL["evidence"] in table["DUR-OUTBOX"]["reasons"][0]
@@ -146,7 +146,7 @@ def test_the_cells_e3c_now_carries_pass_only_on_their_own_scenario_rows():
     green = runner.classify(all_passed())
     table = {c["id"]: c for c in runner.cells(green, EVIDENCE)}
     for test_id, sid in CARRIED.items():
-        want = f"PASS[delegated to E3C-FINAL {HEAD} {sid}]"
+        want = f"PASS[delegated to {runner.E3C_FINAL['name']} {HEAD} {sid}]"
         assert (table[test_id]["verdict"], table[test_id]["journey"]) == (want, runner.PASS)
         assert table[test_id]["reasons"][0].startswith(want), table[test_id]
         rows = EVIDENCE.splitlines()
