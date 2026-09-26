@@ -6,8 +6,10 @@
 # (exit 1), never a partially reverted tree.
 #
 # nc-admission-ready (ADMISSION-READY, s04): the readiness barrier's product commits
-# reverse-applied newest first - the relay admitting through ReadinessStore.admit_ready
-# (W5-ADMIT-WIRING d58139f3 + its pilot anchor f5784d0c) and W5 item 1 itself (16ff5771,
+# reverse-applied newest first - W5-F5B's post-marker attach (0a230353), W5-F5's
+# no-recheck-after-the-marker (e592c6d0), the relay admitting through
+# ReadinessStore.admit_ready (W5-ADMIT-WIRING d58139f3 + its pilot anchor f5784d0c) and W5
+# item 1 itself (16ff5771,
 # 245dcb75, 53dc95ae) - then the worker's `readiness=PgLifecycle(...)` argument (W5 wiring 1,
 # fa446ae7) removed by hand: that commit also composed the reconciliation gauges and the
 # `PgLifecycle` import M6-WIRING now shares, so reverting it whole kills the worker (E3C
@@ -25,8 +27,7 @@ want=" ${*:-nc-admission-ready nc-retention-durable} "
 args=()
 repo=$(git rev-parse --show-toplevel)
 short=$(git -C "$repo" rev-parse --short=8 "$sha")
-ADMISSION_READY=(f5784d0c d58139f3 16ff5771 245dcb75 53dc95ae)
-WIRING_1="readiness=PgLifecycle(connect, limits=limits)"
+ADMISSION_READY=(0a230353 e592c6d0 f5784d0c d58139f3 16ff5771 245dcb75 53dc95ae)
 
 tree() {                                  # tree <name>: a fresh archive of <sha>
   local dir="$out/$1-$short"
@@ -40,19 +41,22 @@ ready=$(tree nc-admission-ready)
 for commit in "${ADMISSION_READY[@]}"; do
   git -C "$repo" merge-base --is-ancestor "$commit" "$sha" || {
     echo "nc-admission-ready: $commit is not in $sha" >&2; exit 1; }
+  # d58139f3's pilot hunk is rebased over WR-P25-1 (2e6931ea), which changed only the
+  # argument of the call it moves: `_pg_lifecycle(connect, settings.pilot)` -> `settings`.
   git -C "$repo" diff "$commit^" "$commit" -- apps/infrx-api/infrx \
+    | sed 's/_pg_lifecycle(connect, settings\.pilot)/_pg_lifecycle(connect, settings)/' \
     | patch -R -p1 -d "$ready" --no-backup-if-mismatch --forward --silent || {
       echo "nc-admission-ready: reverting $commit does not apply on $sha" >&2; exit 1; }
 done
 main="$ready/apps/infrx-api/infrx/worker/__main__.py"
-[[ $(grep -c "$WIRING_1" "$main") == 1 ]] || {
-  echo "nc-admission-ready: W5 wiring 1's argument is not exactly once in $main" >&2; exit 1; }
-python3 - "$main" "$WIRING_1" <<'PY'
+python3 - "$main" <<'PY'
 import re, sys
-path, arg = sys.argv[1], sys.argv[2]
+path = sys.argv[1]
 text = open(path).read()
-text, n = re.subn(r",\s*" + re.escape(arg), "", text)
-assert n == 1, n
+# W5 wiring 1's argument, in either spelling it has had (fa446ae7; W5-F5B 6dbaae64 shares
+# M6's lifecycle): exactly once, or the tree is not the one this control was written for.
+text, n = re.subn(r",\s*readiness=(?:lifecycle|PgLifecycle\(connect, limits=limits\))", "", text)
+assert n == 1, f"W5 wiring 1's readiness argument found {n} times in {path}"
 open(path, "w").write(text)
 PY
 if grep -rq "admit_ready\|readiness=" "$ready/apps/infrx-api/infrx/gateway" \
