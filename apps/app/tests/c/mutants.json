@@ -1264,16 +1264,6 @@
       ]
     },
     {
-      "id": "C0-LEDGER-01",
-      "note": "the ledger cursor is not bound to the wallet",
-      "file": "lib/services/console.ts",
-      "find": "cursorScope(account.walletId, \"credit_ledger\", query)",
-      "replace": "cursorScope(\"consumer\", \"credit_ledger\", query)",
-      "cases": [
-        "a ledger cursor minted for one account is refused for another"
-      ]
-    },
-    {
       "id": "C0-LEDGER-02",
       "note": "the consumer reads skip the per-row tenant check",
       "file": "lib/services/console.ts",
@@ -1300,7 +1290,39 @@
       "find": "        return error instanceof QueryPortError\n          ? fail(\"dependency_unavailable\",",
       "replace": "        return false\n          ? fail(\"dependency_unavailable\",",
       "cases": [
-        "a port failure on the ledger is dependency_unavailable; a limit over 100 is invalid_request"
+        "a port failure is dependency_unavailable (keys, the ledger RPC); a stale ledger cursor is invalid_cursor"
+      ]
+    },
+    {
+      "id": "C0-LEDGER-05",
+      "note": "APP-0024-WIRE: the look-ahead is not clamped, so limit 100 asks the RPC for 101 (refused 400 invalid_request)",
+      "file": "lib/services/console.ts",
+      "find": "const ask = Math.min(limit + 1, MAX_PAGE_LIMIT);",
+      "replace": "const ask = limit + 1;",
+      "cases": [
+        "the ledger's look-ahead is clamped at the read's 100 cap; a limit over 100 is refused before any call",
+        "requests: pages resume from the DB's cursor, including at the 100-row cap"
+      ]
+    },
+    {
+      "id": "C0-LEDGER-06",
+      "note": "APP-0024-WIRE: the ledger pages the security-barrier view again (O(rows before the cursor)) instead of consumer_credit_ledger",
+      "file": "lib/services/console.ts",
+      "find": "ledger: (query) => rpcPage(\"consumer_credit_ledger\", query, creditLedgerEntryOf),",
+      "replace": "ledger: (query) => badInput<Page<CreditLedgerEntry>>(query, PAGE_QUERY_FIELDS) ?? keysetPage(pg, cursorSecret, \"credit_ledger_page\", cursorScope(account.walletId, \"credit_ledger\", query), query, {}, account.walletId, creditLedgerEntryOf, (row) => ({ at: timestamp(row, \"created_at\"), id: text(row, \"entry_id\") })),",
+      "cases": [
+        "the CREDIT ledger pages through consumer_credit_ledger: no tenant argument, the DB's cursor, exact CREDIT",
+        "the ledger's look-ahead is clamped at the read's 100 cap; a limit over 100 is refused before any call"
+      ]
+    },
+    {
+      "id": "C0-LEDGER-07",
+      "note": "APP-0024-WIRE: a ledger amount is parsed as a number (a float round-trip of exact CREDIT)",
+      "file": "lib/services/console.ts",
+      "find": "    amount: parseCredit(amount),",
+      "replace": "    amount: Number(amount) as unknown as CreditLedgerEntry[\"amount\"],",
+      "cases": [
+        "the CREDIT ledger pages through consumer_credit_ledger: no tenant argument, the DB's cursor, exact CREDIT"
       ]
     },
     {

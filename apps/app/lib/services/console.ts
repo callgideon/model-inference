@@ -1396,6 +1396,34 @@ export function createConsumerReads(
     throw new Error("createConsumerReads needs a cursor signing secret of at least 16 characters");
   }
 
+  /**
+   * One page of a D10 `consumer_*` read. A limit over 100 is refused here, before any call; the
+   * RPC also caps `p_limit` at 100 (0024 refuses more), so the look-ahead is clamped there and a full
+   * capped page carries a cursor (the next page may be empty) rather than being read as the last.
+   * D10's cursor is its own keyset; the tenant is the JWT subject inside the function, so a cursor
+   * can only ever move within the caller's own rows, and a malformed one is its `invalid_cursor`.
+   */
+  async function rpcPage<T>(fn: string, query: PageQuery, project: (row: Row) => T): Promise<Result<Page<T>>> {
+    const rejected = badInput<Page<T>>(query, PAGE_QUERY_FIELDS);
+    if (rejected !== null) return rejected;
+    const limitProblem = badLimit(query.limit);
+    if (limitProblem !== null) return fail("invalid_request", limitProblem);
+    const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
+    const ask = Math.min(limit + 1, MAX_PAGE_LIMIT);
+    const cursor = query.cursor === undefined || query.cursor === "" ? null : query.cursor;
+    const { data, error } = await rpc.rpc(fn, { p_after: cursor, p_limit: ask });
+    if (error !== null) return rpcFailure(error);
+    if (!Array.isArray(data)) return fail("internal_error", "the read did not return rows");
+    const rows = data as Row[];
+    const shown = rows.slice(0, limit);
+    const more = rows.length > limit || (ask === limit && rows.length === limit);
+    const last = shown[shown.length - 1];
+    return ok({
+      items: shown.map(project),
+      next_cursor: more && last !== undefined ? text(last, "cursor") : null,
+    });
+  }
+
   const reads: ConsumerReads = {
     async balance() {
       const { data, error } = await rpc.rpc("console_wallet_summary", { p_user: account.userId });
@@ -1425,46 +1453,11 @@ export function createConsumerReads(
       });
     },
 
-    async ledger(query) {
-      const rejected = badInput<Page<CreditLedgerEntry>>(query, PAGE_QUERY_FIELDS);
-      if (rejected !== null) return rejected;
-      return keysetPage(
-        pg,
-        cursorSecret,
-        "credit_ledger_page",
-        cursorScope(account.walletId, "credit_ledger", query),
-        query,
-        {},
-        account.walletId,
-        creditLedgerEntryOf,
-        (row) => ({ at: timestamp(row, "created_at"), id: text(row, "entry_id") }),
-      );
-    },
+    // C0 WR-5 (0024): the JWT subject's own ledger, one index range stopped by its LIMIT - O(limit)
+    // however deep the cursor, where the view's page sorted every wallet row older than it.
+    ledger: (query) => rpcPage("consumer_credit_ledger", query, creditLedgerEntryOf),
 
-    async requests(query) {
-      const rejected = badInput<Page<ConsumerRequest>>(query, PAGE_QUERY_FIELDS);
-      if (rejected !== null) return rejected;
-      const limitProblem = badLimit(query.limit);
-      if (limitProblem !== null) return fail("invalid_request", limitProblem);
-      const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
-      // The RPC caps a page at 100, so the look-ahead row is not available at the cap: a full capped
-      // page then carries a cursor (the next page may be empty) rather than being read as the last.
-      const ask = Math.min(limit + 1, MAX_PAGE_LIMIT);
-      const cursor = query.cursor === undefined || query.cursor === "" ? null : query.cursor;
-      // D10's cursor is its own keyset; the tenant is the JWT subject inside the function, so a cursor
-      // can only ever move within the caller's own rows, and a malformed one is its `invalid_cursor`.
-      const { data, error } = await rpc.rpc("consumer_jobs", { p_after: cursor, p_limit: ask });
-      if (error !== null) return rpcFailure(error);
-      if (!Array.isArray(data)) return fail("internal_error", "the request list did not return rows");
-      const rows = data as Row[];
-      const shown = rows.slice(0, limit);
-      const more = rows.length > limit || (ask === limit && rows.length === limit);
-      const last = shown[shown.length - 1];
-      return ok({
-        items: shown.map(consumerRequestOf),
-        next_cursor: more && last !== undefined ? text(last, "cursor") : null,
-      });
-    },
+    requests: (query) => rpcPage("consumer_jobs", query, consumerRequestOf),
 
     async request(requestId) {
       if (typeof requestId !== "string" || !UUID.test(requestId)) return fail("not_found", RPC_REFUSALS.not_found!);
