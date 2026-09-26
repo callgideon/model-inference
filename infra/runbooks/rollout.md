@@ -222,10 +222,21 @@ credit-transition --to legacy_usd --drain-timeout-s 900 --idempotency-key revert
 at 0018); nothing converts, and a CREDIT job already accepted settles in CREDIT. Then the
 row's step, which reopens the edge. Before W7f (the W6 and W7 rows) there is nothing to reverse.
 
+Its drain needs the worker of the release it reverses: only a CREDIT worker finishes a CREDIT
+job, and one that a pause released (`drain.sh pause`: stop claiming, release the rest) stays
+in flight until a worker's reaper requeues it and a CREDIT worker runs it. So the reversal
+runs before any step that stops that worker (`30-pause.sh`, `95-maintenance.sh`, the rollout
+rollback's drain: [rollback.md](rollback.md#rollout-rollback) step 2, drill step 3); every
+row below runs it first, before its own step stops anything. If it exits 1 `in_flight` with the
+worker already stopped: on the box `systemctl start infrx-worker` (the current release's; the
+edge stays in maintenance, the engine still runs), the same-key rerun until it exits 0, then
+`systemctl stop infrx-worker`. Where no CREDIT worker can run (R4's dead host), it cannot
+finish: the host stays in maintenance.
+
 Its keys: one per reversal (`revert-<window id>`). A run stopped at the drain bound (exit 1,
 `in_flight` or `open_transactions`) has frozen `credit_admission`, left `legacy_usd_admission`
-off and audited nothing, so neither regime admits: rerun it under the **same** key once the
-CREDIT job has ended (it settles in CREDIT, at its card). A finished key's replay prints the
+off and audited nothing, so neither regime admits: rerun it under the **same** key while that
+worker runs, until the CREDIT job has ended (it settles in CREDIT, at its card). A finished key's replay prints the
 recorded result (no `replayed` field on this verb) and writes nothing, so W7f's own key never
 re-activates CREDIT: a roll-forward reruns W7f's `credit-transition --card …` under a **new**
 key. `--dry-run` writes nothing and needs no operator key. Proof on PostgreSQL:
@@ -360,3 +371,8 @@ Nothing here has run; every row's output goes into the I8 evidence record.
   drained, finished, replays) with three new `tests/g/ops` mutants; the reinstall rule (55
   after every 50-install of an R127 release, never after a pre-R127 target). Tests:
   `tests/integration/ops/test_runbook_reversal.py`. Not run on the box or hosted.
+- 2026-09-26 (RUNBOOK-3 fix round, review 0-RV3-1): §3 states that the reversal's drain needs
+  the worker of the release it reverses (a job a pause released stays in flight until a CREDIT
+  worker runs it), so it runs before any step that stops that worker, with the way out after
+  one did (`systemctl start infrx-worker`, the same-key rerun, `systemctl stop infrx-worker`).
+  Rows unchanged. Not run on the box or hosted.

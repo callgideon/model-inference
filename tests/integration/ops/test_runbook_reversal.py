@@ -4,6 +4,8 @@
   the known-good drill's install) names `credit-transition --to legacy_usd` before it, and
   rollout.md §3 names the verb's key rules and the PostgreSQL drill that proves them - a test
   that exists under that name;
+* the reversal drains while the release it reverses still has its worker: before any step that
+  stops it (review 0-RV3-1), with the way out named for a run after one did;
 * every 50-install of a release with R127's dedicated logins is followed by
   `55-runtime-login.sh` (preflight rewrites the env file from SSM: `DATABASE_URL` is the owner
   login again and `MONITOR_DATABASE_URL` is gone), and a pre-R127 target never gets it.
@@ -75,3 +77,23 @@ def test_runbook3_rv02_every_reinstall_is_followed_by_the_runtime_login_step():
             assert LOGIN in text, text
             if "50-install.sh" in text:
                 assert text.index("50-install.sh") < text.index(LOGIN), text
+
+
+def test_runbook3_rv03_the_reversal_drains_before_anything_stops_the_worker():
+    """Oracle (review 0-RV3-1): the reversal scheduled after a step that stops the worker
+    (30-pause.sh, the rollout rollback's drain): a CREDIT job that the drain released stays
+    in flight (the reaper is the worker's), so every same-key rerun exits 1 `in_flight` and
+    neither regime admits; or the roll-forward drains the target's USD jobs after its own
+    pause stopped them; or no way out is named for a run after a pause already did."""
+    rollout_rollback = section(ROLLBACK, "## Rollout rollback")
+    assert rollout_rollback.index(VERB) < rollout_rollback.index("**Drain and fence**"), \
+        rollout_rollback
+    drill = section(ROLLBACK, "## Known-good rollback drill")
+    assert drill.index(VERB) < drill.index("30-pause.sh"), drill
+    forward = next(s for s in steps(drill).values() if "**Roll forward" in s)
+    assert "step 3b" in forward, forward
+    assert forward.index("credit-transition --card") < forward.index("step 3b"), forward
+    reversal = flat(section(ROLLOUT, "## 3. Rollback triggers").split("| Trigger |")[0])
+    for text in (reversal, flat(drill)):
+        for way_out in ("systemctl start infrx-worker", "systemctl stop infrx-worker"):
+            assert way_out in text, (way_out, text)

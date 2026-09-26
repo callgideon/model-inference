@@ -45,7 +45,9 @@ def test_reversal_pg__credit_back_to_legacy_usd_drains_keeps_credit_exact_and_re
     """K1 activates CREDIT (W7f). A CREDIT job settles at the card; another stays in flight.
     The reversal's dry run writes nothing and names what would change. K2 past its drain
     bound freezes CREDIT and stops (exit 1, `in_flight`, nothing audited): neither regime
-    admits. The in-flight job settles IN CREDIT; K2's rerun enables legacy_usd only; CREDIT
+    admits, and a rerun before the worker has finished the job stops again, writing nothing
+    (so the runbooks run it while the worker runs). The in-flight job settles IN CREDIT
+    (`settle` plays the CREDIT worker); K2's rerun enables legacy_usd only; CREDIT
     admission is refused and legacy accepted. Every CREDIT row settled before stays exact.
     The two audit rows carry the operator key as actor, the regimes before and after and K1's
     card. Replays of K2 and of K1 answer the recorded results and write nothing, so a
@@ -82,7 +84,15 @@ def test_reversal_pg__credit_back_to_legacy_usd_drains_keeps_credit_exact_and_re
         run(admit_legacy(w, "usd-while-draining"))
     with pytest.raises(errors.DependencyUnavailable):            # CREDIT: frozen
         run(admit_credit(w, "credit-while-draining"))
+    # Review 0-RV3-1: nothing but a CREDIT worker ends the job, so a same-key rerun while none
+    # runs stops at the bound again and changes nothing - the runbooks reverse W7f before any
+    # step that stops the worker (rollback.md drill step 3 before 3b's pause).
+    stuck = footprint(w)
+    code, again, _ = cli_run(w, K2, capsys)
+    assert (code, codes(again), again["applied"]) == (1, {"in_flight"}, []), again
+    assert footprint(w) == stuck, "a rerun with no worker wrote"
 
+    # The worker, still running, finishes it
     _, _, (_, drained) = run(settle(w, flying_request, "credit"))  # settles IN CREDIT
     assert (str(drained.charged), drained.rate_card_version) == (str(CHARGE), FIXTURE_CARD), \
         drained
