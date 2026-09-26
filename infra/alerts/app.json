@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "description": "I3: App-side rules, evaluated with alerts.json and operations.json once infra/observe/rules.py merges this file (WR-I3-3). The App runs on Vercel with no exporter on the box; its one box-visible signal is the canary's anonymous probe of the App's release identity (WR-I3-2 adds it to canary.sh). Browser and server error rates live in Vercel's logs, not here: their thresholds are Vercel-side [OP] (infra/app/operations.md, Browser error monitoring). Same rule shape and threshold conventions as alerts.json.",
+  "pending_producers": {
+    "infrx_app_up": "WR-I3-2 (canary.sh probes GET <App origin>/api/version; I8's owner applies it)"
+  },
+  "rules": [
+    {
+      "name": "AppDown",
+      "severity": "page",
+      "summary": "The App's public release identity (GET /api/version on the App origin) did not answer 200 with a production environment and a full commit: the App is down, refusing to start (incomplete environment) or serving an unidentified build.",
+      "metric": "infrx_app_up",
+      "op": "<",
+      "threshold": 1,
+      "threshold_status": "exact: the gauge is 1 or 0",
+      "runbook": "infra/app/operations.md#app-down"
+    }
+  ]
+}
