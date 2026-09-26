@@ -104,7 +104,7 @@ CHECKS = {
 # reuses that directory, so the evidence document is the reference the runner reads). E3C-CELLS
 # added the scenarios that carry DUR-FENCE (s14), DUR-CAP (s15) and CREDIT-RATE (s16); its final
 # run (all 16 scenarios, 12 controls) is the reference.
-E3C_FINAL = {"run_head": "9227e9ed", "tip": "ea29c1f1",
+E3C_FINAL = {"name": "E3C-CELLS", "run_head": "9227e9ed", "tip": "cce9224c",
              "evidence": "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md",
              "verdict_json": "<scratchpad>/cells/final/verdict.json (E3C-CELLS final run)"}
 DELEGATED = {      # () = no E3C scenario carries the oracle: NOT RUN, the gap named
@@ -260,7 +260,7 @@ def cells(checks: dict, evidence: str | None = None) -> list[dict]:
             scenarios, what = DELEGATED[test_id]
             missing = delegated_reference(evidence, scenarios)
             label = (f"NOT RUN[delegated] {missing}" if missing else
-                     f"PASS[delegated to E3C-FINAL {E3C_FINAL['run_head']} "
+                     f"PASS[delegated to {E3C_FINAL['name']} {E3C_FINAL['run_head']} "
                      f"{','.join(scenarios)}]")
             oracle = NOT_RUN if missing else label
             verdict = worst([oracle, journey])     # a tie keeps the oracle's label
