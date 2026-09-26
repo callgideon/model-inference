@@ -24,11 +24,14 @@ def merge(directory: Path) -> dict:
         if name not in rules:
             raise SystemExit(f"override of an unknown rule: {name}")
         rules[name].update({k: v for k, v in override.items() if k != "reason"})
-    for rule in ops["rules"]:
+    # I3 (WR-I3-3): the App's rules, when present; same shape, same duplicate refusal.
+    app = json.loads((directory / "app.json").read_text()) if (directory / "app.json").is_file() else None
+    for rule in ops["rules"] + (app["rules"] if app else []):
         if rule["name"] in rules:
             raise SystemExit(f"rule defined twice: {rule['name']}")
         rules[rule["name"]] = rule
-    return {"version": f"a{alerts['version']}+o{ops['version']}", "rules": list(rules.values())}
+    version = f"a{alerts['version']}+o{ops['version']}" + (f"+p{app['version']}" if app else "")
+    return {"version": version, "rules": list(rules.values())}
 
 
 if __name__ == "__main__":

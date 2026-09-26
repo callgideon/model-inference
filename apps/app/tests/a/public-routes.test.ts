@@ -52,3 +52,9 @@ test("I2A-ROUTE-01 the release identity is public", () => {
   assert.ok(isPublic("/api/version"), "smoke S1 must reach /api/version without a session");
   assert.ok(!isPublic("/api/versions"), "only the exact identity route is public");
 });
+
+// I3 WR-I3-1: a signed-out page (login, signup) that fails must still reach the report route.
+test("I3-ROUTE-03 the browser error report route is public", () => {
+  assert.ok(isPublic("/api/client-errors"), "a signed-out page's error report would be redirected to /login");
+  assert.ok(!isPublic("/api/client-errorsx"), "only the exact report route is public");
+});

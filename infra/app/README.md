@@ -98,7 +98,9 @@ is the check that the entries cover `/auth/callback?next=...`.
 - **Known-good App release**: a deployment whose §6 smoke passed, recorded in the session record
   as `{commit, deployment, UTC, smoke output}` — by record, not by the existence of a deployment.
   Like `known-good.py` for the backend, a rollback target must be compatible with the applied
-  schema: its tree's newest migration ≤ the hosted applied migration (migrations are additive).
+  schema: its tree's newest migration = the hosted applied migration, or below it only with a
+  recorded schema proof (`infra/app/rollback.py --schema-proof`; not every migration is
+  additive, [operations.md](operations.md#app-rollback)).
 
 Deploy:
 

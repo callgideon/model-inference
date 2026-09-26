@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/api/version", "/login", "/signup", "/verify-email", "/forgot-password", "/auth"];
+const PUBLIC = ["/api/version", "/api/client-errors", "/login", "/signup", "/verify-email", "/forgot-password", "/auth"];
 
 /** Refreshes the Supabase session cookie and guards the console routes. */
 export async function updateSession(request: NextRequest) {

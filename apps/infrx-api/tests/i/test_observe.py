@@ -207,7 +207,7 @@ def test_ops_continuous__the_gateway_exports_no_gpu_gauge():
 
 def test_ops_continuous__the_merged_rule_set_is_versioned_and_well_formed():
     names = [rule["name"] for rule in RULES["rules"]]
-    assert len(names) == len(set(names)) and RULES["version"] == "a1+o2"
+    assert len(names) == len(set(names)) and RULES["version"] == "a1+o2+p1"
     anchors = {}
     for rule in RULES["rules"]:
         assert rule["op"] in evaluator.OPS and rule["severity"] in ("page", "ticket")

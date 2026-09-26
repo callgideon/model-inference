@@ -1381,6 +1381,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
     # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
     for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "alerts"),
+                 ("infra", "app"),              # I3 (WR-I3-3): AppDown's runbook section
                  ("apps", "app", "supabase", "migrations")):
         if REPO.joinpath(*part).exists():
             shutil.copytree(REPO.joinpath(*part), root.joinpath(*part), ignore=ignore)
