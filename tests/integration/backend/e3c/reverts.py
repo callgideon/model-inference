@@ -5,7 +5,7 @@
 The scratch tree gets a last migration `9999_e3c_<nc>.sql`: the function's LATEST definition
 in that tree's migrations with the one check changed (`REVERTS`). The anchor must occur
 exactly as often as written, or nothing is written and the exit is 1 - a moved check is a
-hard stop, never a partially reverted tree. Immutable 0001-0025 stay untouched; the
+hard stop, never a partially reverted tree. Immutable 0001-0026 stay untouched; the
 scratch tree is the only place such a migration ever exists.
 """
 from __future__ import annotations

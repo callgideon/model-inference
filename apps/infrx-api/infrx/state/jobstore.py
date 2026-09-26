@@ -371,10 +371,19 @@ class PgJobStore:
                                  "where request_id = %s", (job_id,))
         return bool(rows and rows[0][0])
 
-    async def put_result(self, job_id: str, text: str) -> str:
+    async def put_result(self, job_id: str, text: str, lease: Lease | None = None) -> str:
         """W2's result object writer (02 §7): immutable, first write wins; returns the
-        `infrx-result:<job_id>` reference `complete` carries (R30)."""
-        return await self._call("put_result", {"job_id": job_id, "text": text})
+        `infrx-result:<job_id>` reference `complete` carries (R30). R147 (0026): the
+        worker's lease fences it like `append` (`stale_lease`, `already_terminal`; the NULL
+        answer is R29's committed terminalization). Without a lease it is 0014's unfenced
+        write - a pre-0026 worker's call (the known-good rollback targets) and the rigs'."""
+        args = {"job_id": job_id, "text": text}
+        if lease is not None:
+            args |= {"lease": lease.model_dump(mode="json"), "limits": self._lease_limits()}
+        ref = await self._call("put_result", args)
+        if ref is None:
+            raise errors.AlreadyTerminal(f"job {job_id} passed its deadline (R29)")
+        return ref
 
     async def read_result(self, org_id: str, result_ref: str) -> str:
         rows = None

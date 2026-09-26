@@ -127,7 +127,7 @@ async def reap(h):
     runner = AttemptRunner(jobs=h.port, stream=h.extra["stream"], engine=engine,
                            clock=h.clock, worker_id="e3b2-worker",
                            count_prompt_tokens=lambda work: 0,
-                           put_result=lambda job_id, text: None)
+                           put_result=lambda job_id, text, lease=None: None)
     service = WorkerService(loop=WorkerLoop(scheduler=index, runner=runner,
                                             worker_id="e3b2-worker"),
                             jobs=h.port, engine=engine)

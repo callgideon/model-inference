@@ -190,7 +190,7 @@ class World:
                 await result
         await asyncio.sleep(0)
 
-    async def put_result(self, job_id: str, text: str) -> str:
+    async def put_result(self, job_id: str, text: str, lease=None) -> str:   # WR-D10F-1: the runner passes its lease (R147)
         self.results.setdefault(job_id, text)
         return f"infrx-result:{job_id}"
 

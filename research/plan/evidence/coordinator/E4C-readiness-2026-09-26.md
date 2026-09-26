@@ -39,7 +39,7 @@ Blockers the tracker does not list: `MEDIA_BASE_URL` (RB:182-186, operator-named
 
 ## 4. Risks and irreversibles
 
-- **Hosted 0019–0025** are not purely additive: 0021 revokes grants and drops a policy (`evidence/i/I3-prep-bf29b92.md:197`), 0023 revokes `admit`. They are never reverted (RR:52); rollback is R3 maintenance or restoring the dump into a new project (RS:152-166). Beyond 0023 there is no rollback target until the proof is extended (RR:51).
+- **Hosted 0019–0026** (0026 = D10-0026-FENCE, the fenced result write) are not purely additive: 0021 revokes grants and drops a policy (`evidence/i/I3-prep-bf29b92.md:197`), 0023 revokes `admit`. They are never reverted (RR:52); rollback is R3 maintenance or restoring the dump into a new project (RS:152-166). Beyond 0023 there is no rollback target until the proof is extended (RR:51).
 - **CREDIT flags:** revert with `credit-transition --to legacy_usd` (PI:161); both rollback targets only ever served legacy_usd, so a rollback after activation is unproven.
 - **Credits:** the tenant-2 grant of 10,000 cannot be reversed (PI:162); the +40,000 adjust reverses with a negative adjust (PI:168); the card is immutable (PI:160).
 - **Public-facing:** W5 serves maintenance 503; the edge stays open during certify and the P4 burst goes through the public edge (RB:50-54); the legacy shared key returns 401 after install (RR:77-81). Revert with 93-restore-edge or 95-maintenance.

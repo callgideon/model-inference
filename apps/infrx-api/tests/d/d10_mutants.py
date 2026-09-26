@@ -10,8 +10,8 @@ runner, `assertion_kill` underneath. They are in the default subset (`ALWAYS`).
 """
 from __future__ import annotations
 
-from . import (checks_content, checks_followup, checks_operator, checks_port, checks_reads,
-               checks_ready, pgharness)
+from . import (checks_content, checks_followup, checks_leases, checks_operator, checks_port,
+               checks_reads, checks_ready, pgharness)
 from . import migration_mutants as _d
 
 READY = _d.READY
@@ -23,6 +23,41 @@ FOLLOWUP = "0022_preparation_refusal_and_flag_writer.sql"
 PORT = "0024_console_read_port.sql"
 #: D10-0025: the operator console's audited RPCs and reads (U3 WR-U3-1, R143).
 OPERATOR = "0025_operator_console.sql"
+#: D10-0026: the worker's result write fenced like `append` (R147, E3C-CELLS F-1).
+FENCED = _d.FENCED_RESULT
+
+
+#: 0026's fence (R147): the call, the whole lease block, and the write it must precede -
+#: verbatim, so a stale anchor fails `test_the_mutant_list_is_well_formed`.
+_FENCE_CALL = (
+    "    if infrx.fence_lease(p_args->'lease', array['inference'],\n"
+    "                         infrx.lease_limit(p_args, 'unknown_usage_reconcile_s')) "
+    "is not null then\n"
+    "      return null;\n"
+    "    end if;\n")
+_LEASE_BLOCK = (
+    "  if p_args ? 'lease' then\n"
+    "    if (p_args->'lease'->>'job_id')::uuid is distinct from v_job then\n"
+    "      perform infrx.refuse('invalid_request', 'the lease does not fence job '\n"
+    "                           || coalesce(v_job::text, 'null'));\n"
+    "    end if;\n"
+    "    -- R29 terminalized the job in the fence: committed (R39), answered as NULL.\n"
+    + _FENCE_CALL +
+    "  end if;\n")
+_WRITE = (
+    "  select org_id into v_org from infrx.jobs where request_id = v_job;\n"
+    "  if not found then\n"
+    "    perform infrx.refuse('not_found', 'no job ' || v_job);\n"
+    "  end if;\n"
+    "  v_digest := 'sha256:' || encode(sha256(convert_to(v_text, 'UTF8')), 'hex');\n"
+    "  insert into infrx.job_results (request_id, org_id, digest, bytes, body)\n"
+    "  values (v_job, v_org, v_digest, octet_length(v_text), v_text)\n"
+    "  on conflict (request_id) do nothing;\n"
+    "  select * into r from infrx.job_results where request_id = v_job;\n"
+    "  if r.digest <> v_digest then\n"
+    "    perform infrx.refuse('state_conflict', 'job ' || v_job\n"
+    "                         || ' already stored a different result');\n"
+    "  end if;\n")
 
 
 def _m(name, file, old, new, check, why, **kw):
@@ -557,8 +592,36 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
     _m("d10_operator_below_zero", _d.SETTLE,
        "  if w.ledger_total + v_amount < w.reserved_total then", "  if false then",
        "operator_adjust", "a console correction below the holds is not refused typed"),
+    # --- 0026: the fenced result write (D10-0026, R147, E3C-CELLS F-1) ---------------------
+    _m("d10_result_unfenced", FENCED, _FENCE_CALL, "", "result_fence",
+       "F-1: a generation that lost its lease stores its text first and the live one ends "
+       "platform_error"),
+    _m("d10_result_fence_any_kind", FENCED, "array['inference'],",
+       "array['preparation', 'inference'],", "result_fence",
+       "a preparation lease writes a job's answer (R46: it fences media work only)"),
+    _m("d10_result_fence_any_job", FENCED,
+       "    if (p_args->'lease'->>'job_id')::uuid is distinct from v_job then",
+       "    if false then", "result_fence",
+       "one job's live lease writes another job's result"),
+    _m("d10_result_fenced_after_the_write", FENCED, _LEASE_BLOCK + _WRITE,
+       _WRITE + _LEASE_BLOCK, "result_fence",
+       "a lapsed generation meets the comparison (state_conflict), not its fence, and R29 "
+       "stores a result for the job it ended"),
+    _m("d10_result_r29_refusal_raised", FENCED, "      return null;\n",
+       "      perform infrx.refuse('already_terminal', 'passed its deadline');\n",
+       "result_fence", "R39: the refusal rolls R29's terminalization back; the job keeps "
+       "running past its deadline with its hold"),
+    _m("d10_result_writes_after_r29", FENCED, "      return null;\n", "      null;\n",
+       "result_fence", "R29 ends the job and the write goes on: a result for a failed job"),
+    _m("d10_result_leaseless_refused", FENCED, "  if p_args ? 'lease' then",
+       "  if true then", "result_fence",
+       "P-25: a rollback to a known-good target (its runtime sends {job_id, text}) fails "
+       "every success"),
 )
 
+_d._CHECKS.update({
+    "result_fence": checks_leases.check_result_fence,
+})
 _d._CHECKS.update({
     "operator_authority": checks_operator.check_operator_authority,
     "operator_idempotency": checks_operator.check_operator_idempotency,

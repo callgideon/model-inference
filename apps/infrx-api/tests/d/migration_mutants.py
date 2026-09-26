@@ -47,6 +47,7 @@ RESULTS = "0014_job_results.sql"
 READY = "0019_upload_readiness.sql"
 LIFECYCLE = "0020_content_lifecycle.sql"
 READS = "0021_read_authority.sql"
+FENCED_RESULT = "0026_fenced_result.sql"     # D10-0026: redefines 0014's put_result (R147)
 SEED = migrations.SEED_MARLIN.name           # an operator seed, not a migration
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
@@ -1587,7 +1588,8 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "       and true\n       and j.settled_at is not null",
        "admission", "outbox_gc", "an unconsumed usage projection is acknowledged away"),
     # --- 0014 and the prompt count --------------------------------------------------
-    _m("d2_result_rewritable", RESULTS, "  if r.digest <> v_digest then", "  if false then",
+    # D10: 0026 redefines `put_result` (the fence first, R147); 0014's body is dead SQL.
+    _m("d2_result_rewritable", FENCED_RESULT, "  if r.digest <> v_digest then", "  if false then",
        "admission", "results_and_prompt_tokens",
        "a second writer's answer silently stands for the stored one"),
     # D10: 0020 redefines `read_result` (the persisted expiry is its authority).

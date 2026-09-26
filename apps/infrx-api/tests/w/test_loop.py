@@ -77,7 +77,10 @@ class World:
                        for held in stored), "a chunk reached the relay before the journal"
         self.relayed.extend(chunks)
 
-    async def _put_result(self, job_id: str, text: str) -> str:
+    async def _put_result(self, job_id: str, text: str, lease) -> str:
+        # R147 (D10 0026): fenced like `append`, by the fake store's own fence.
+        async with self.jobs._lock:
+            self.jobs._fence(lease)
         self.results[job_id] = text
         return f"infrx-result:{job_id}"
 
@@ -537,6 +540,46 @@ def test_dur_fence__a_lost_fence_never_cancels_another_generation():
     run(case())
 
 
+def test_dur_fence__a_result_write_the_fence_refuses_settles_nothing():
+    """R147 (D10 0026): the result write is fenced like `append`. When the fence refuses it -
+    the lease lapsed after the last append (`stale_lease`), or the job ended under it
+    (`already_terminal`) - the attempt ends as a refused `complete` ends it: the refusal is
+    recorded, nothing is stored or settled, `complete` is never called and nothing is
+    proposed as a platform error. Oracle: a runner that reads the refusal as a failed
+    result store (`platform_error`) and goes on to settle."""
+    async def case(lose, refusal):
+        world = World()
+        request, admission = await queued(world)
+        engine = ScriptEngine(events=(PROGRESS, delta("done "), usage_event(Usage.of(1200, 1))))
+        settles, complete = [], world.jobs.complete
+
+        async def counted(lease, outcome):
+            settles.append(outcome.cause)
+            return await complete(lease, outcome)
+        world.jobs.complete = counted
+
+        async def lose_then_store(job_id, text, lease):
+            await lose(world, admission)
+            return await world._put_result(job_id, text, lease)
+
+        result = await world.runner(engine, put_result=lose_then_store).run(request.request_id)
+        assert (result.refusal, result.settled) == (refusal, False), result
+        assert settles == [], f"a refused result write went on to settle: {settles}"
+        assert result.proposed_cause is TerminalCause.completed, result.proposed_cause
+        assert "result store failed" not in result.detail, result.detail
+        assert result.cancelled is (refusal == "already_terminal") and world.results == {}
+        return world.outcome(request.request_id)
+
+    async def lapse(world, admission):
+        world.clock.advance(world.limits.lease_ttl_s + 1)
+
+    async def cancel(world, admission):
+        await world.jobs.cancel(b.ORG_A, admission.job_handle)
+
+    assert run(case(lapse, "stale_lease")) is None            # still running, for `recover`
+    assert run(case(cancel, "already_terminal")).cause is TerminalCause.client_cancelled
+
+
 def test_dur_fence__the_heartbeat_renews_inside_the_lease_and_is_what_a_silent_stream_polls():
     """Renewal is event driven and reads the **stored** lease back (r1 R29), and it is
     the cancellation poll for a stream that is producing nothing."""
@@ -738,7 +781,7 @@ def test_dur_settle__a_success_the_customer_cannot_fetch_is_not_a_success():
         request, _ = await queued(world)
         _, engine = adapter(world)
 
-        async def broken(job_id, text):
+        async def broken(job_id, text, lease):
             raise RuntimeError("object storage is down")
 
         result = await world.runner(engine, put_result=broken).run(request.request_id)
@@ -1433,7 +1476,7 @@ def test_gap__a_cancellation_that_lands_between_the_last_append_and_complete_set
         request, admission = await queued(world)
         engine = ScriptEngine(events=(PROGRESS, delta("done "), usage_event(Usage.of(1200, 1))))
 
-        async def cancel_then_store(job_id, text):
+        async def cancel_then_store(job_id, text, lease):
             await world.jobs.cancel(b.ORG_A, admission.job_handle)   # after the last append
             return f"infrx-result:{job_id}"
 
@@ -1449,7 +1492,7 @@ def test_gap__a_stale_complete_settles_nothing():
         request, _ = await queued(world)
         engine = ScriptEngine(events=(PROGRESS, delta("done "), usage_event(Usage.of(1200, 1))))
 
-        def expire_then_store(job_id, text):
+        def expire_then_store(job_id, text, lease):
             world.clock.advance(world.limits.lease_ttl_s + 1)
             return f"infrx-result:{job_id}"
 

@@ -216,6 +216,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
         "0024_console_read_port.sql",
         # D10-0025: the operator console's audited RPCs and reads (U3 WR-U3-1, R143)
         "0025_operator_console.sql",
+        # D10-0026: the worker's result write fenced like append (R147)
+        "0026_fenced_result.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()

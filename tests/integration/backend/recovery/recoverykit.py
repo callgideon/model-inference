@@ -182,7 +182,7 @@ class World:
 
     # --- workers ------------------------------------------------------------------
     def runner(self, engine, worker_id: str = "worker-a") -> AttemptRunner:
-        async def put_result(job_id: str, text: str) -> str:
+        async def put_result(job_id: str, text: str, lease=None) -> str:   # WR-D10F-2: the runner passes its lease (R147)
             self.results[job_id] = text
             return f"infrx-result:{job_id}"
         return AttemptRunner(jobs=self.jobs, stream=self.stream, engine=engine,

@@ -179,7 +179,7 @@ docker rm -f infrx-rollout-restore >/dev/null
 Pass: `HOSTED_APPLIED` is `0001 init, …, 0018 terminal_settlement` (0001-0018,
 [20-platform-handoff](../../research/plan/20-platform-handoff-2026-09-24.md) "Hosted Supabase"),
 anything else is a hosted change nobody recorded: stop; `check` exit 0 with `"equal": true`;
-`apply` prints every pending version (0019-0025 on this tree); flags as hosted's own at 0018:
+`apply` prints every pending version (0019-0026 on this tree); flags as hosted's own at 0018:
 `credit_admission` f, `legacy_usd_admission` t, `signup_grant` t (the prep-time `signup_grant` f
 was a 0002 hosted with no flag rows); `drift_rows` 0. Retention of
 `$BACKUP`: [restore.md A9](restore.md#a9-clean-up).
@@ -194,14 +194,14 @@ README step 6 runs the same `migrate.py` inside `infrx-runtime:$RELEASE`; either
 export MIGRATE_DATABASE_URL="$HOSTED"
 $PY apps/infrx-api/deploy/migrate.py plan        # applied: == $HOSTED_APPLIED (W6), digest == $COPY_DIGEST
 $PY apps/infrx-api/deploy/migrate.py apply --expect "$COPY_DIGEST"
-$PY apps/infrx-api/deploy/migrate.py plan        # applied: 0001 … 0025, nothing pending
+$PY apps/infrx-api/deploy/migrate.py plan        # applied: 0001 … 0026, nothing pending
 unset MIGRATE_DATABASE_URL PGPASSWORD
 ```
 
 At prep time (0018 at `8554b47`) hosted's plan listed **0003-0018, sixteen files**, digest
 `4524cbc0…`, the same digest as the restored copy's; a changed 0018 changes it.
 
-For the E4C candidate hosted goes from 0001-0018 to **0001-0025**: 0019-0023 are on the
+For the E4C candidate hosted goes from 0001-0018 to **0001-0026**: 0019-0023 are on the
 integration tip, 0024/0025 land from `codex/d10-merge-2`, and this page is written for a
 release tree that has them. On a tree that stops at 0023 the applied set ends there and E4C's
 freeze refuses (`migration_version` 0025 or newer, E4C-runbook §2). The known-good proof
@@ -357,7 +357,7 @@ Nothing here has run; every row's output goes into the I8 evidence record.
   drill does, so its `config` check is exercised rather than vacuous. Not run on the box.
 - 2026-09-26 (E4C-RUNBOOK-2): W6 seeds the copy's history from hosted's own read-only `plan`
   `applied:` line at the window (0001-0018 today; the literal 0001/0002 was stale), and its pass
-  line names hosted's flags at 0018; W7 expects 0001-0025 after the apply (0024/0025 from
+  line names hosted's flags at 0018; W7 expects 0001-0026 after the apply (0024/0025/0026 from
   `codex/d10-merge-2`); §1 installs `ACCOUNTING_REGIME=credit` with the P-01 card and states what
   the code does when the card or the activation is missing; W7f (CREDIT activation, E4C-runbook
   §1a) before W10; W10b `55-runtime-login.sh` (the dedicated logins); the Known-good record passes
