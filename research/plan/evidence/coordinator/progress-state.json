@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "dcce7775",
+  "integration_head": "e7b1c272",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 78,
-  "updated": "2026-09-26T04:20:12Z",
+  "revision": 80,
+  "updated": "2026-09-26T04:22:02Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -1934,9 +1934,9 @@
       },
       "activity": "queued",
       "started": "2026-09-26T01:18:15Z",
-      "updated": "2026-09-26T02:11:40Z",
+      "updated": "2026-09-26T04:22:02Z",
       "blocker": "I3 proper (operator run) needs BACKEND-READY, the I2A live half, P-01/P-05/P-24/P-25 (overlay keeps the lane queued: the gate dispatches after BACKEND-READY; the prep work is merged and recorded in head/evidence/commands)",
-      "next_action": "merged; WR-I3-1 (middleware PUBLIC + I3-ROUTE-03), WR-I3-2 (canary App probe), WR-I3-3 (rules.py merges app.json; test_observe pin a1+o2+p1; mutants layout) applied by the coordinator; GAP-I3-1 (audited signup_grant off) → after the union, point the cutover rollback at 0022's flag writer (I3R-7); I3 proper after BACKEND-READY: X0–X9, C1–C5, Vercel rollback drill, AppDown delivery",
+      "next_action": "merged; WR-I3-1 (middleware PUBLIC + I3-ROUTE-03), WR-I3-2 (canary App probe), WR-I3-3 (rules.py merges app.json; test_observe pin a1+o2+p1; mutants layout) applied by the coordinator; GAP-I3-1 (audited signup_grant off) → after the union, point the cutover rollback at 0022's flag writer (I3R-7); I3 proper after BACKEND-READY: X0–X9, C1–C5, Vercel rollback drill, AppDown delivery — GAP-I3-1 / I3R-7 CLOSED at e7b1c272 (G8-FLAG verb; cutover rollback step 2 rewritten).",
       "estimate": {
         "optimistic_h": 3,
         "likely_h": 6,
@@ -2244,17 +2244,17 @@
       "branch": "codex/g8-flag",
       "worktree": ".claude/worktrees/codex-g8-flag",
       "base": "34f0ed28",
-      "head": null,
+      "head": "5e45b79e",
       "isolation": {
         "ports": "g8 postgres 55447",
         "prefix": "infrx-g8-",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T04:20:12Z",
-      "updated": "2026-09-26T04:20:12Z",
+      "updated": "2026-09-26T04:22:02Z",
       "blocker": null,
-      "next_action": "verdict → coordinator merges --no-ff, suite check, R144 amendment if requested",
+      "next_action": "merged --no-ff at a30631a8; WR-G8FLAG-1/2/3 applied at e7b1c272 (operations.md step 2 → the flag verb + ops03 asserts; R144 amended: flag verb + the maintenance-drill exception); GAP-I3-1 / I3R-7 closed; minors carried: 0-G8FLAG-R2 audit operation unpinned in the test, R3 lock-bound mutants need PG, R4 write-then-audit crash window (shared with credit-transition), R6 --dry-run still needs --on/--off; fixed-clone checks running",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 2,
@@ -2263,7 +2263,9 @@
         "basis": "one verb + tests + two doc pointers; 2 lenses, one fix round",
         "at": "2026-09-26T04:20:12Z"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/g/G8-FLAG-3c5947f.md"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/operations/",
@@ -4287,6 +4289,44 @@
       "by": "coordinator (E4C)",
       "what": "E4C dispatch-readiness brief recorded (evidence/coordinator/E4C-readiness-2026-09-26.md): hosted at 0018 (0019–0025 to apply), P-06/P-25 known-good proof/runbook fixes coordinator-side, P-01/P-02/P-05/P-24/P-25 alert+PITR+dumps and MEDIA_BASE_URL operator-side; P-18 and P-26 rows resolved (enacted on the tip); the P-06 box inventory step was refused by the tool policy (Production Reads) → user",
       "source": "research/plan/evidence/coordinator/E4C-readiness-2026-09-26.md"
+    },
+    {
+      "at": "2026-09-26T04:22:02Z",
+      "by": "tracker",
+      "what": "rejected update: unknown activity 'implementation done; review next'",
+      "source": "updates/G8-FLAG-20260926T0356Z.json"
+    },
+    {
+      "at": "2026-09-26T04:22:02Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T04:14:00Z is not newer than lane G8-FLAG state 2026-09-26T04:20:12Z",
+      "source": "updates/G8-FLAG-20260926T0414Z.json"
+    },
+    {
+      "at": "2026-09-26T04:22:02Z",
+      "by": "tracker",
+      "what": "forecast E3C: 2026-09-26 04:37Z – 2026-09-26 05:13Z (likely 2026-09-26 04:37Z) → accepted 2026-09-26T04:07:41Z (because: explicit gate decision recorded)"
+    },
+    {
+      "at": "2026-09-26T04:22:02Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C)"
+    },
+    {
+      "at": "2026-09-26T04:22:02Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C)"
+    },
+    {
+      "at": "2026-09-26T04:22:02Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C)"
+    },
+    {
+      "at": "2026-09-26T04:22:02Z",
+      "by": "coordinator (G8-FLAG)",
+      "what": "G8-FLAG verified (lenses ACCEPT_WITH_FIXES ×2; REJECT only for the unowned wirings) and merged at a30631a8; WR-G8FLAG-1/2/3 applied at e7b1c272 (R144 amended; maintenance drill = recorded exception); GAP-I3-1/I3R-7 closed",
+      "source": "research/plan/evidence/g/G8-FLAG-3c5947f.md"
     }
   ],
   "history": {
@@ -4806,10 +4846,20 @@
     "E3C-FINAL-20260926T0406Z.json": {
       "status": "applied",
       "at": "2026-09-26T04:06:00Z"
+    },
+    "G8-FLAG-20260926T0356Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T03:56:00Z",
+      "reason": "unknown activity 'implementation done; review next'"
+    },
+    "G8-FLAG-20260926T0414Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T04:14:00Z",
+      "reason": "stale: at 2026-09-26T04:14:00Z is not newer than lane G8-FLAG state 2026-09-26T04:20:12Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T04:07:07Z",
+    "computed_at": "2026-09-26T04:22:02Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -4818,36 +4868,22 @@
     "milestones": {
       "E3C": {
         "gate": "BACKEND-LOCAL",
-        "status": "forecast",
-        "text": "2026-09-26 04:37Z – 2026-09-26 05:13Z (likely 2026-09-26 04:37Z)",
-        "constraint": "dependency path E3C",
-        "effort_h": [
-          0.5,
-          0.5,
-          1.1
-        ],
-        "wall_h": [
-          0.5,
-          0.5,
-          1.1
-        ],
-        "finish": [
-          "2026-09-26T04:37:07Z",
-          "2026-09-26T04:37:07Z",
-          "2026-09-26T05:13:07Z"
-        ],
+        "status": "accepted",
+        "text": "accepted 2026-09-26T04:07:41Z",
+        "constraint": "explicit gate decision recorded",
+        "effort_h": null,
+        "wall_h": null,
+        "finish": null,
         "conditional": null,
-        "confidence": "high",
-        "critical_path": [
-          "E3C"
-        ],
-        "stale": []
+        "confidence": null,
+        "critical_path": null,
+        "stale": null
       },
       "E4C": {
         "gate": "BACKEND-READY",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
+        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -4859,8 +4895,8 @@
       "E3A": {
         "gate": "APP-LOCAL",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
+        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -4872,8 +4908,8 @@
       "E4": {
         "gate": "APP-PILOT",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C",
+        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
