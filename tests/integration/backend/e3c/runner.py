@@ -103,7 +103,13 @@ CONTROLS = {
                           "mechanism": "bypass upload-local (both gateways)"},
     "nc-admission-ready": {"oracle": "ADMISSION-READY", "scenario": "s04",
                            "mechanism": "revert the F2C/D10/W5/G7 readiness-barrier commits",
-                           "revert": True},
+                           "revert": True,
+                           # The reverted tree admits through the pre-D10 `infrx.admit` door,
+                           # which 0021 does not grant the dedicated runtime login (R127: it
+                           # admits only through admit_ready); on it every admission is a 503
+                           # and the control judges nothing. The pre-D10 composition runs on
+                           # the owner login, as it did before 0021.
+                           "env": {"INFRX_E3C_RUNTIME_LOGIN": "0"}},
     "nc-retention-durable": {"oracle": "RETENTION-DURABLE", "scenario": "s06",
                              "mechanism": "revert the D10/M6 durable-liveness commits",
                              "revert": True},
@@ -192,6 +198,7 @@ REQUIRED = {
             "test_s12_a_revert_control_tree_claims_this_checkouts_stack",
             "test_s12_a_reverted_tree_that_does_not_start_is_invalid_not_a_detection",
             "test_s12_a_control_writes_its_cases_apart_from_the_main_run",
+            "test_s12_the_admission_control_runs_the_pre_d10_door_on_the_owner_login",
             *(f"test_s12_every_bypass_installs_on_this_tree[{n}]" for n in (
                 "upload-local", "expiry-recompute", "revoke-ignored", "tenant-blind"))),
 }
@@ -295,6 +302,14 @@ def reverted_status(entry: dict) -> tuple[str, list[str]]:
     dead = [reason for reason in entry["reasons"] if NO_START.search(reason)]
     if dead:
         return INVALID, [f"INVALID[harness] the reverted tree does not start: {dead[0][:300]}"]
+    # A case that could not judge (INVALID[harness]: a fault point never reached, a broken
+    # stack) proves nothing, and a FAIL beside it does not make the tree's failure the
+    # oracle's (E3C final run 1: three s04 cases never reached their fault point and the
+    # fourth met a 503 on the reverted tree - read as FAIL, the control "passed").
+    invalid = [name for name, status in entry["cases"].items() if status == INVALID]
+    if invalid:
+        return INVALID, [f"INVALID[harness] {len(invalid)} case(s) on the reverted tree could "
+                         f"not judge: {invalid}"]
     return entry["status"], []
 
 
@@ -346,7 +361,7 @@ def scenario_files(tree: Path | None = None) -> list[str]:
         [str(root / "test_e3c_runner.py")]
 
 
-def run_env(out: Path, tree: Path | None = None) -> dict:
+def run_env(out: Path, tree: Path | None = None, extra: dict | None = None) -> dict:
     """The scenarios' environment. A scratch tree (a revert-type control) brings its package,
     its migrations and its harness copy, but must claim THIS checkout's stack: the copy's
     compose directory is another checkout's identity (B1's ownership label), so without
@@ -359,6 +374,7 @@ def run_env(out: Path, tree: Path | None = None) -> dict:
         env.update(PYTHONPATH=str(tree / "apps/infrx-api"), INFRX_E2_REPO_ROOT=str(tree),
                    INFRX_E2_CHECKOUT=world.harness.working_dir(),
                    INFRX_E2_STATE_FILE=str(world.harness.STATE_FILE))
+    env.update(extra or {})
     return env
 
 
@@ -369,14 +385,14 @@ def case_out(out: Path, name: str, tree: Path | None) -> Path:
 
 
 def pytest_run(out: Path, name: str, files: list[str], keyword: str | None,
-               tree: Path | None = None) -> tuple[dict, str]:
+               tree: Path | None = None, extra: dict | None = None) -> tuple[dict, str]:
     """pytest in its own session, the whole output to `<out>/<name>.log`, JUnit beside it."""
     import subprocess
     junit, log = out / f"{name}.xml", out / f"{name}.log"
     import world
     # A control's cases (same names as the main run's) write under `<out>/<control>/cases`,
     # never over the main run's evidence.
-    env = run_env(case_out(out, name, tree), tree)
+    env = run_env(case_out(out, name, tree), tree, extra)
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
             "-o", "junit_family=xunit1", f"--junitxml={junit}", *files,
             *(["-k", keyword] if keyword else [])]
@@ -478,7 +494,8 @@ def main(argv: list[str] | None = None) -> int:
                     nc, _, tree = spec.partition("=")
                     control = CONTROLS[nc]
                     done, junit = pytest_run(out, nc, scenario_files(Path(tree)),
-                                             control["scenario"], Path(tree))
+                                             control["scenario"], Path(tree),
+                                             control.get("env"))
                     runs[nc] = done
                     on_tree = classify(junit or "<testsuites/>")["scenarios"][
                         control["scenario"]]

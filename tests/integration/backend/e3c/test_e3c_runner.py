@@ -168,6 +168,21 @@ def test_s12_a_reverted_tree_that_does_not_start_is_invalid_not_a_detection():
         "test_s10_x: AssertionError: the box cannot serve on the dedicated runtime login: "
         "the worker exited 2: ..."]}
     assert runner.reverted_status(quoted)[0] == "FAIL"
+    # E3C final run 1: INVALID cases beside a FAIL - the tree could not judge
+    mixed = {"status": "FAIL", "cases": {"a": "INVALID", "b": "FAIL"}, "reasons": [
+        "test_s04_a: INVALID[harness] AssertionError: the gateway never reached its fault point",
+        "test_s04_b: AssertionError: assert 503 == 202"]}
+    assert runner.control_verdict(runner.reverted_status(mixed)[0]) == "INVALID"
+
+
+def test_s12_the_admission_control_runs_the_pre_d10_door_on_the_owner_login(tmp_path):
+    """0021 grants the dedicated runtime login admit_ready only (R127); the reverted tree's
+    pre-D10 `infrx.admit` needs the owner login, or every admission is a 503 (E3C final run
+    1). The control's own environment says so; the main run keeps the runtime login."""
+    control = runner.CONTROLS["nc-admission-ready"]
+    env = runner.run_env(tmp_path, tmp_path / "t", control.get("env"))
+    assert env["INFRX_E3C_RUNTIME_LOGIN"] == "0"
+    assert "env" not in runner.CONTROLS["nc-retention-durable"]
 
 
 def test_s12_a_control_writes_its_cases_apart_from_the_main_run(tmp_path):
