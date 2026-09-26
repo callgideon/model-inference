@@ -350,3 +350,4 @@ What that document adds to the open questions above, rather than closing:
 
 - 2026-09-22 (S2M): Added this launch-profile note. No new measurement, no GPU run, no
   cloud operation; every estimate and open question above is unchanged.
+- 2026-09-26 (E1B-PREP): **Planned**: the E1B baseline and operating envelope (paired direct-engine and gateway legs, the cold/warm split, mixed forms and tenants, cancellation, burst, the SOP resume and an in-cap caption-parity re-run) is scheduled as window cells inside the E4C certificate window, in [`E1B-protocol.md` §7](../../../models/marlin2b/results/E1B-protocol.md). Nothing is measured yet, and no figure above changes.
