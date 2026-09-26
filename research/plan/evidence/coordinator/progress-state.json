@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 101,
-  "updated": "2026-09-26T06:04:00Z",
+  "revision": 102,
+  "updated": "2026-09-26T06:14:32Z",
   "agent_slots": {
     "total": 16,
     "active": 5,
@@ -2634,37 +2634,94 @@
     {
       "id": "APP-0024-WIRE-2",
       "task": null,
-      "slice": "APP-0024-WIRE carried minors: the U1R adapter clamps its look-ahead like C0 (CM-1), the usage-controls test renders the component (CM-2), dead credit_ledger_page/cursorSecret removed if unreferenced; workflow wf_ed73c041-0d5",
+      "slice": "C0/U1R follow-up: CM-1 (U1R rpcPage on C0's 100-cap rule), CM-2 (usage form render assertion), optional unused-read note (left, with reasons)",
       "agent": "opus",
       "branch": "codex/app-0024-wire-2",
       "worktree": ".claude/worktrees/codex-app-0024-wire-2",
       "base": "6c390bda",
-      "head": null,
+      "head": "2d4ea984",
       "isolation": {
         "ports": "app-u1r postgres 55457 (console-c0-real waits on app-c0's flock)",
         "prefix": "infrx-app-u1r-",
         "db": null
       },
-      "activity": "running",
+      "activity": "integration",
       "started": "2026-09-26T05:44:01Z",
-      "updated": "2026-09-26T05:44:01Z",
+      "updated": "2026-09-26T06:11:00Z",
       "blocker": null,
-      "next_action": "verdict → merge onto the tip",
+      "next_action": "merged --no-ff at a1807a09 (ACCEPT; lens heavy world 2,001 ledger / 156 jobs walked at limits 25/99/100, no duplicates, limit 101 issues no SQL); fixed-clone console targets + console-pg (deferred from cf977a4c) + c0-real running on a1807a09 → complete when green; minor R-1 carried (U1R-P08 assumes 101–199 rows per read; walk until next_cursor is null)",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 2,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "two small App changes + tests; 1 lens",
-        "at": "2026-09-26T05:44:01Z"
+        "optimistic_h": 0,
+        "likely_h": 0.2,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "merged; one fixed-clone console run left",
+        "at": "2026-09-26T06:11:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/app/APP-0024-WIRE-2-de46277.md"
+      ],
+      "commands": [
+        {
+          "cmd": "make console-test",
+          "exit": 0,
+          "summary": "663 tests / 607 pass / 0 fail / 56 skip"
+        },
+        {
+          "cmd": "make console-lint",
+          "exit": 0,
+          "summary": "0 errors, 2 pre-existing warnings"
+        },
+        {
+          "cmd": "make console-typecheck",
+          "exit": 0,
+          "summary": "clean"
+        },
+        {
+          "cmd": "make console-built",
+          "exit": 0,
+          "summary": "build ok; i2a 22/22"
+        },
+        {
+          "cmd": "make console-mutants",
+          "exit": 0,
+          "summary": "contracts 212/212; V 40/40; U 212/212 (+M41-M45); C 185/185 0 stale; A2 46/46; A3 46/46"
+        },
+        {
+          "cmd": "INFRX_D_TASK=app-u1r credit_world.py",
+          "exit": 0,
+          "summary": "8/8 (P08 new); before: 7/1 (ledger dependency_unavailable; jobs no next cursor); M41/M42/M43 each 7/1"
+        },
+        {
+          "cmd": "INFRX_D_TASK=app-u1r request_world.py",
+          "exit": 0,
+          "summary": "8/8"
+        },
+        {
+          "cmd": "make console-c0-real",
+          "exit": 0,
+          "summary": "15/15; blocks first 106, 2,000 deep 107"
+        },
+        {
+          "cmd": "python3 research/plan/scripts/validate_plan.py",
+          "exit": 0,
+          "summary": "PASS"
+        },
+        {
+          "cmd": "git diff --stat 6c390bda..de462778",
+          "exit": 0,
+          "summary": "6 files, owned paths only"
+        }
+      ],
       "owned_paths": [
-        "apps/app/app/(console)/billing/credit-reads.ts (rpcPage)",
-        "apps/app/lib/services/query.ts, console.ts (dead read only)",
-        "apps/app/tests/u/, tests/c/",
-        "research/plan/evidence/app/APP-0024-WIRE-2-*.md"
+        "apps/app/app/(console)/billing/credit-reads.ts",
+        "apps/app/tests/u/credit-reads.test.ts",
+        "apps/app/tests/u/credit-pg.test.ts",
+        "apps/app/tests/u/credit_world.py",
+        "apps/app/tests/u/usage-credits-view-model.test.ts",
+        "apps/app/tests/u/run-mutants.mjs",
+        "research/plan/evidence/app/APP-0024-WIRE-2-de46277.md",
+        "research/plan/evidence/coordinator/updates/APP-0024-WIRE-2-20260926T0605Z.json"
       ],
       "wiring_requests": []
     },
@@ -2859,7 +2916,14 @@
       "head": "d5e90cee"
     }
   ],
-  "integration_queue": [],
+  "integration_queue": [
+    {
+      "since": "2026-09-26T06:11:00Z",
+      "lane": "APP-0024-WIRE-2",
+      "task": "APP-0024-WIRE-2",
+      "head": "2d4ea984"
+    }
+  ],
   "resource_locks": [
     {
       "id": "gpu-box",
@@ -5041,6 +5105,18 @@
       "by": "coordinator (LINT-2)",
       "what": "LINT-2 launched from 8c9c72f9 on g8: the 118 ruff findings under apps/infrx-api/tests (ruff check infrx already clean after LINT-1 + WR-LINT-1); F811 shadowed tests are the substantive class",
       "source": "scratchpad checks-529249d0-ruff.log"
+    },
+    {
+      "at": "2026-09-26T06:05:00Z",
+      "by": "APP-0024-WIRE-2",
+      "what": "running → review; head de462778; estimate likely 2 → 0.5 h (all named checks green at de462778; review and merge remain)",
+      "source": "updates/APP-0024-WIRE-2-20260926T0605Z.json"
+    },
+    {
+      "at": "2026-09-26T06:11:00Z",
+      "by": "APP-0024-WIRE-2",
+      "what": "review → integration; head 2d4ea984; estimate likely 0.5 → 0.2 h (merged; one fixed-clone console run left)",
+      "source": "updates/APP-0024-WIRE-2-20260926T0611Z.json"
     }
   ],
   "history": {
@@ -5616,10 +5692,18 @@
       "status": "rejected",
       "at": "2026-09-26T05:40:00Z",
       "reason": "malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']"
+    },
+    "APP-0024-WIRE-2-20260926T0605Z.json": {
+      "status": "applied",
+      "at": "2026-09-26T06:05:00Z"
+    },
+    "APP-0024-WIRE-2-20260926T0611Z.json": {
+      "status": "applied",
+      "at": "2026-09-26T06:11:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T05:48:32Z",
+    "computed_at": "2026-09-26T06:14:32Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,

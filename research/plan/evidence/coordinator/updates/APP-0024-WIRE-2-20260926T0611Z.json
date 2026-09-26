@@ -1,0 +1,4 @@
+{"task": "APP-0024-WIRE-2", "activity": "integration", "at": "2026-09-26T06:11:00Z", "head": "2d4ea984",
+ "next_action": "merged --no-ff at a1807a09 (ACCEPT; lens heavy world 2,001 ledger / 156 jobs walked at limits 25/99/100, no duplicates, limit 101 issues no SQL); fixed-clone console targets + console-pg (deferred from cf977a4c) + c0-real running on a1807a09 → complete when green; minor R-1 carried (U1R-P08 assumes 101–199 rows per read; walk until next_cursor is null)",
+ "estimate": {"optimistic_h": 0, "likely_h": 0.2, "pessimistic_h": 0.5, "confidence": "high", "basis": "merged; one fixed-clone console run left", "at": "2026-09-26T06:11:00Z"},
+ "evidence": ["research/plan/evidence/app/APP-0024-WIRE-2-de46277.md"]}
