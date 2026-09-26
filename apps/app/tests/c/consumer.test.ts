@@ -738,3 +738,11 @@ test("U1R-AUTH-02 the layout's session, operator flag and credit reads take the 
   const layout = source("app/(console)/layout.tsx");
   for (const read of ["consumerSession()", "getSession()", "consumerCreditReads()"]) assert.ok(layout.includes(read), read);
 });
+
+test("C0-ORG-03 getSession takes its organization from personalOrg, never an inline membership pick", () => {
+  // Pinned as source for the same reason (R48): C0-ORG-01/02 prove the rule, this pins its call site.
+  const session = source("lib/session.ts");
+  assert.match(session, /personalOrg\(supabase as unknown as Parameters<typeof personalOrg>\[0\], user\.id\)/);
+  assert.doesNotMatch(session, /org_members/, "session.ts reads memberships itself");
+  assert.doesNotMatch(session, /\.limit\(1\)/, "session.ts picks the first row");
+});

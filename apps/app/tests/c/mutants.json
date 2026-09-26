@@ -1929,6 +1929,16 @@
       ]
     },
     {
+      "id": "C0-ORG-06",
+      "note": "C0 WR-6 call site: getSession's inline first-membership pick restored in place of personalOrg",
+      "file": "lib/session.ts",
+      "find": "    personalOrg(supabase as unknown as Parameters<typeof personalOrg>[0], user.id),\n",
+      "replace": "    supabase.from(\"org_members\").select(\"org_id, role, organizations(name)\").eq(\"user_id\", user.id).limit(1).maybeSingle().then(({ data: m }) => (m ? { orgId: m.org_id, orgName: \"Personal\" } : null)),\n",
+      "cases": [
+        "C0-ORG-03 getSession takes its organization from personalOrg, never an inline membership pick"
+      ]
+    },
+    {
       "id": "U1R-AUTH-01",
       "note": "U1R WR-6: the credit reads' own client restored (a second getUser per render)",
       "file": "app/(console)/billing/credit-context.ts",
