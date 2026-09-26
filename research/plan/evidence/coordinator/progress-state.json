@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 134,
-  "updated": "2026-09-26T19:46:00Z",
+  "revision": 136,
+  "updated": "2026-09-26T20:44:50Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -3387,27 +3387,35 @@
       "branch": "codex/backend-minors",
       "worktree": ".claude/worktrees/codex-backend-minors",
       "base": "b967a033",
-      "head": null,
+      "head": "42a37c6b",
       "isolation": {
         "ports": "d10 55442/55469, g8 55447/55492, w5 55445/55491, e3c block; never e2c/i8",
         "prefix": "",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T18:20:00Z",
-      "updated": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T20:44:00Z",
       "blocker": null,
-      "next_action": "handback → merge after the RELEASE freeze",
+      "next_action": "DONE: merged --no-ff at dfa338bd (before the freeze); WR-BM-3 applied; carried to the post-freeze sweep: WR-BM-1 (pgharness/vkstore lock path in /tmp so the worker_main/prep_worker PG mutant copies serialise with the host run), WR-BM-2 (split nc-dur-cap into per-scope controls so the scoped burst becomes a gate control; CM-1)",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 4,
-        "pessimistic_h": 6,
-        "confidence": "medium",
-        "basis": "six small items + one E3C final run; 2 lenses",
-        "at": "2026-09-26T18:20:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged and wired",
+        "at": "2026-09-26T20:44:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/BACKEND-MINORS-938b57c.md"
+      ],
+      "commands": [
+        {
+          "cmd": "tests/w on w5; W lists (INFRX_MUTANTS=all); tests/g/ops + mutants on g8; e3c unit; recovery observe; E3C final run on the e3c block",
+          "exit": 0,
+          "summary": "331 passed; 599 killed (15 S3-endpoint skips pre-existing); 97 + 118; 46; 16; gate PASS 16/16, 12/12 (14:56 wall; lens rerun 14:13)"
+        }
+      ],
       "owned_paths": [
         "apps/infrx-api/tests/w/",
         "apps/infrx-api/tests/g/ops/",
@@ -6110,6 +6118,18 @@
       "by": "tracker",
       "what": "rejected update: unknown task ID 'STEP55-FIX-2'",
       "source": "updates/STEP55-FIX-2-20260926T1940Z.json"
+    },
+    {
+      "at": "2026-09-26T20:44:00Z",
+      "by": "coordinator (BACKEND-MINORS)",
+      "what": "BACKEND-MINORS ACCEPT 42a37c6b merged at dfa338bd (RESULT_FENCE-killed lease mutant, W5 mutant-runner lock, G8 flag M1/M2 cases, s15 per-scope burst, deliver.py status int, ssm.sh header, tasklocal pooler port); WR-BM-3 applied; WR-BM-1/2 carried",
+      "source": "research/plan/evidence/coordinator/BACKEND-MINORS-938b57c.md"
+    },
+    {
+      "at": "2026-09-26T20:44:50Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T19:35:00Z is not newer than lane BACKEND-MINORS state 2026-09-26T20:44:00Z",
+      "source": "updates/BACKEND-MINORS-20260926T1935Z.json"
     }
   ],
   "history": {
@@ -6786,10 +6806,15 @@
       "status": "rejected",
       "at": "2026-09-26T19:40:00Z",
       "reason": "unknown task ID 'STEP55-FIX-2'"
+    },
+    "BACKEND-MINORS-20260926T1935Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T19:35:00Z",
+      "reason": "stale: at 2026-09-26T19:35:00Z is not newer than lane BACKEND-MINORS state 2026-09-26T20:44:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T19:46:12Z",
+    "computed_at": "2026-09-26T20:44:50Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,

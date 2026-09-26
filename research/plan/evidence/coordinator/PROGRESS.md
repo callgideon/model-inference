@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 19:46Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 134, updated 2026-09-26 19:46Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 20:44Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 136, updated 2026-09-26 20:44Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V4, V5, V6.
-- Agent slots: 16 total, 4 active lanes, 2 reserved.
-- Validation: 0 error(s), 19 warning(s).
+- Agent slots: 16 total, 3 active lanes, 2 reserved.
+- Validation: 0 error(s), 13 warning(s).
 
 ### Actionable blockers
 
@@ -93,7 +93,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (47.0 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (48.0 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -162,7 +162,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | RUNBOOK-4 | support (support lane; before the RELEASE freeze) window documents consistent: known-good proof 0026 in rollout.md/E4C-runbook.md, the E4C-RUNBOOK-2 carried minors as checklist lines, /api/version public, readiness-brief log; docs + text tests only | complete | codex/runbook-4 | b967a033 → f81e55c9 | ports none (no docker; never i8) | 2026-09-26 18:49Z | DONE: merged --no-ff at 647adce8; WR-RB4-1..5 at 88cb89eb (resume via ssm.sh local file, never 91-abort; a rerun is never a verification; the edge stays in maintenance after a put-back; freeze floor 0026 with 0026's source named; the F2 note; README row 8b order); the script-side fixes go to STEP55-FIX | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 18:49Z; basis: merged and wired |
 | E1B-PREP | E1B (preparation for E1B, no measurement) map slices a–c and PERF-ENVELOPE / MARLIN-SOP / MEDIA-PARITY onto the E4C certify run; name the extra box cells so one GPU window covers E1B; cost per successful video / video-second formula (est.; CREDIT and USD separate); D-13 disposition proposal | complete | codex/e1b-prep | b967a033 → c57de96a | ports none | 2026-09-26 19:03Z | DONE: merged --no-ff at 387cac69 (E1B-protocol §7 window cells WC-0..WC-9, the cost formula, D-13 proposal A); lens majors E1BP-1/2 fixed in the round; minors E1BP-3..11 carried (WC-5 oracle field, unassigned commands, WC-6 alert silence, canary timing, single-tenant cells vs §1 tenants ≥ 2, MEDIA-PARITY corrupt-media/pixel-area oracle, estimate basis, the P-01 est. label, WC-2(b) batch nondeterminism); WR-1..4 → E1B-WIRE | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 19:03Z; basis: merged; the cells run in the window |
 | APP-MINORS-2 | support (App follow-up under the App-ahead overrides) C0 WR-6 (no first-membership pick in lib/session.ts), U1R WR-6 (one shared credit port: getUser once per render), A2 WR-A2-3 (dead safeNext), E3A-RUN S-5/RV-3, AM1-L2/L3 | complete | codex/app-minors-2 | b967a033 → 3e969ce9 | ports app-c0 55451 / app-u1r 55457 / app-u4 55456, prefix infrx-app-c0- | 2026-09-26 19:45Z | DONE: merged 4db24c49; WR-AM2-1/2 c7bdb07f; fixed-clone console checks green; minors carried: AM2-L-2 (fail-closed throw for a user without exactly one owned org), AM2-L-3, AM1-L2 → an E3A journey check | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 19:45Z; basis: merged, wired and checked |
-| BACKEND-MINORS | support (support lane; after the freeze) RV-D10F-3 assertion / PG-backed runner case + the W5 mutant runner lock, G8F2-M1/M2 cases, CC-1 per-scope cap burst (+ E3C final run), ASN-V1 int() on HTTPStatusCode, RF-C1 ssm.sh usage header, the 55496 literal → tasklocal; no migrations | running | codex/backend-minors | b967a033 → — | ports d10 55442/55469, g8 55447/55492, w5 55445/55491, e3c block; never e2c/i8 | 2026-09-26 18:20Z | handback → merge after the RELEASE freeze | 2–6 h remaining (likely 4 h), confidence medium, estimated 2026-09-26 18:20Z; basis: six small items + one E3C final run; 2 lenses |
+| BACKEND-MINORS | support (support lane; after the freeze) RV-D10F-3 assertion / PG-backed runner case + the W5 mutant runner lock, G8F2-M1/M2 cases, CC-1 per-scope cap burst (+ E3C final run), ASN-V1 int() on HTTPStatusCode, RF-C1 ssm.sh usage header, the 55496 literal → tasklocal; no migrations | complete | codex/backend-minors | b967a033 → 42a37c6b | ports d10 55442/55469, g8 55447/55492, w5 55445/55491, e3c block; never e2c/i8 | 2026-09-26 20:44Z | DONE: merged --no-ff at dfa338bd (before the freeze); WR-BM-3 applied; carried to the post-freeze sweep: WR-BM-1 (pgharness/vkstore lock path in /tmp so the worker_main/prep_worker PG mutant copies serialise with the host run), WR-BM-2 (split nc-dur-cap into per-scope controls so the scoped burst becomes a gate control; CM-1) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 20:44Z; basis: merged and wired |
 | PREWINDOW-CHECKS | support (coordinator, read-only) X-06/X-07/X-08 before the window: box hairpin to the public edge, the env-file key rule, 85-known-good-box for both targets, O1 pool budget, known-good listing at --applied 0026 with the bundle check, the alert subscription state, hosted migrate.py plan, the P-02 credit-transition dry run | complete | — | b967a033 → — | ports SSM + hosted read-only; no local ports | 2026-09-26 18:25Z | DONE 2026-09-26: hairpin 200; MARLIN_API_KEY lines 0; 85-known-good-box: both target images cached; O1 PASS session (13+2 ≤ 15; WARN worker pool max 6 < 13 — runners wait ≤ 5 s); hosted migrate.py plan (read-only): applied 0001–0018, pending 0019–0026; known-good.py bda1586 --applied 0026 with the eight --set names and --bundles: KNOWN-GOOD (commit/preparation/migrations/config/record/bundle all ok — an earlier NOT-KNOWN-GOOD was a truncated --set name in the coordinator's call); alert subscription PendingConfirmation (user); the P-02 credit-transition --dry-run against hosted was refused by the tool policy ("Production Reads") → user runs it (B-07 key prefixes) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 18:20Z; basis: done |
 | MAIN-MERGE | support (GO-LIVE, user decision 2026-09-26: "skip the window, complete everything, get live, then keep running the test window on the side") the App release (merge to main) and the backend install proceed ahead of BACKEND-READY: freeze RELEASE → gates → a short install maintenance (W1–W5, W6 verified dump, W7 hosted apply 0019–0026, W7f activation, W8–W13) → App inputs (X3/X4) → merge main → smoke; E4C certify runs afterwards on the live system as the test window; the manifest gates record the reordering as a user decision (dispatch override), not as evidence | queued | — | b967a033 → — | ports none | 2026-09-26 19:09Z | GO-LIVE order: after G2-FIX + RELEASE gates: (1) hosted verified dump (user/operator), (2) W1–W5 + W7/W7f + W8–W13 install maintenance (~30–45 min; coordinator with the migrate.py / operations.cli allow rules), (3) Vercel production variables + P-05 auth settings (operator), (4) merge main (--no-ff, tree == APP_RELEASE) → Vercel deploy → smoke S1–S6 → known-good App release recorded, (5) E4C certify + E1B cells on the side | 0.3–1 h remaining (likely 0.5 h), confidence high, estimated 2026-09-26 18:20Z; basis: one --no-ff merge + push once authorized |
 | STEP55-FIX | support E4C window scripts (support lane; before the RELEASE freeze) | complete | codex/step55-fix | 88cb89eb → 6788c25b | ports e1c postgres 55449 (PG-backed cases); never i8/e2c, prefix infrx-e1c-, db e1c | 2026-09-26 19:35Z | DONE: merged --no-ff at cc23960e; WR-S55-1 applied (205e6dd9); minors → STEP55-FIX-2 (running) | 0.1–1 h remaining (likely 0.3 h), confidence high, estimated 2026-09-26 19:07Z; basis: committed, suites and mutants green; review remains |
@@ -184,20 +184,14 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: stale estimate: lane I3 estimated at 2026-09-26T02:11:40Z (older than 6 h)
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
-- warning: overlapping writers: E4C (queued) and BACKEND-MINORS (running) both own tests/integration/backend/ / tests/integration/backend/e3c/scenarios_capacity.py + reverts.py
 - warning: overlapping writers: E4C (queued) and E1B-WIRE (running) both own research/plan/evidence/e/ / research/plan/evidence/e/E1B-wire-*.md
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and G2-FIX (running) both own infra/ / infra/rollout/README.md §0
-- warning: overlapping writers: I2A (review) and BACKEND-MINORS (running) both own infra/ / infra/observe/deliver.py (+1 more)
 - warning: overlapping writers: I2A (review) and E1B-WIRE (running) both own infra/ / infra/rollout/e1b-window.sh
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and G2-FIX (running) both own tests/integration/ / tests/integration/gates.py
-- warning: overlapping writers: E3A (queued) and BACKEND-MINORS (running) both own tests/integration/ / tests/integration/backend/e3c/scenarios_capacity.py + reverts.py
 - warning: overlapping writers: I3 (queued) and G2-FIX (running) both own infra/ / infra/rollout/README.md §0 (+1 more)
-- warning: overlapping writers: I3 (queued) and BACKEND-MINORS (running) both own infra/ / infra/observe/deliver.py (+2 more)
 - warning: overlapping writers: I3 (queued) and E1B-WIRE (running) both own infra/ / infra/rollout/e1b-window.sh
-- warning: overlapping writers: G2-FIX (running) and BACKEND-MINORS (running) both own apps/infrx-api/tests/i/test_observe.py / apps/infrx-api/tests/i/test_observe.py
-- warning: overlapping writers: BACKEND-MINORS (running) and E1B-WIRE (running) both own apps/infrx-api/tests/w/ / apps/infrx-api/tests/w/
 
 ## Pending inputs
 
@@ -292,6 +286,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `APP-MINORS-2-20260926T1859Z.json`: stale: at 2026-09-26T18:59:00Z is not newer than lane APP-MINORS-2 state 2026-09-26T19:35:00Z
 - `APP-MINORS-2-20260926T1930Z.json`: unknown activity 'fix'
 - `STEP55-FIX-2-20260926T1940Z.json`: unknown task ID 'STEP55-FIX-2'
+- `BACKEND-MINORS-20260926T1935Z.json`: stale: at 2026-09-26T19:35:00Z is not newer than lane BACKEND-MINORS state 2026-09-26T20:44:00Z
 
 ## All manifest tasks
 
@@ -433,6 +428,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 20:44Z UTC, tracker: rejected update: stale: at 2026-09-26T19:35:00Z is not newer than lane BACKEND-MINORS state 2026-09-26T20:44:00Z
+- 2026-09-26 20:44Z UTC, coordinator (BACKEND-MINORS): BACKEND-MINORS ACCEPT 42a37c6b merged at dfa338bd (RESULT_FENCE-killed lease mutant, W5 mutant-runner lock, G8 flag M1/M2 cases, s15 per-scope burst, deliver.py status int, ssm.sh header, tasklocal pooler port); WR-BM-3 applied; WR-BM-1/2 carried
 - 2026-09-26 19:46Z UTC, tracker: rejected update: unknown task ID 'STEP55-FIX-2'
 - 2026-09-26 19:37Z UTC, coordinator (STEP55-FIX-2): STEP55-FIX-2 merged: the runtime-login step makes no failed pooler auth on a first run or a rerun (rolcanlogin read first); WR-S55F2-1 applied to the W10b cell
 - 2026-09-26 19:35Z UTC, tracker: rejected update: unknown activity 'fix'
