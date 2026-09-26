@@ -247,7 +247,7 @@ PG_MUTANTS = (
        MAIN, "connector(dsn, set_role=not pilot.dedicated_login(dsn))",
        "connector(dsn, set_role=True)", RECON_PG),
     _m("pg_privilege_refusal_every_tick",
-       "on PostgreSQL 0021's monitor login is refused once and disabled, not every tick",
+       "on PostgreSQL a login refused the views (the runtime's) is disabled once, not every tick",
        SERVICE, '            if getattr(failure, "sqlstate", None) == "42501":',
        "            if False:", RECON_PG),
     _m("pg_gateway_grace_dropped",
