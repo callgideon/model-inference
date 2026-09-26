@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 137,
-  "updated": "2026-09-26T20:56:00Z",
+  "revision": 139,
+  "updated": "2026-09-26T21:19:25Z",
   "agent_slots": {
     "total": 16,
-    "active": 2,
+    "active": 1,
     "reserved": 2,
-    "note": "Session 03: workflow G2-FIX (e2c + i8); E1B-WIRE-2 agent (w5); MAIN-MERGE queued for the go-live order; 2 slots reserved for verify-lane workflows."
+    "note": "Session 03: workflow G2-FIX (e2c + i8); MAIN-MERGE queued for the go-live order; 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -3661,27 +3661,35 @@
       "branch": "codex/e1b-wire-2",
       "worktree": ".claude/worktrees/codex-e1b-wire-2",
       "base": "aac38207",
-      "head": null,
+      "head": "cdc41389",
       "isolation": {
         "ports": "w5 postgres 55445 / valkey 55491; never i8/e2c",
         "prefix": "infrx-w5-",
         "db": "w5"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T20:56:00Z",
-      "updated": "2026-09-26T20:56:00Z",
+      "updated": "2026-09-26T21:19:00Z",
       "blocker": null,
-      "next_action": "handback → merge before the RELEASE freeze",
+      "next_action": "DONE: merged --no-ff; E1B is wired for the window (WC-1..WC-9 launcher + profiles + runbook §3/§4a/§5.0/§5.2); the cells run on the live system after go-live",
       "estimate": {
-        "optimistic_h": 0.7,
-        "likely_h": 1.5,
-        "pessimistic_h": 3,
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
         "confidence": "high",
-        "basis": "one-line product wiring + mutants + launcher hardening + runbook fills",
-        "at": "2026-09-26T20:56:00Z"
+        "basis": "merged",
+        "at": "2026-09-26T21:19:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/e/E1B-wire-2-c4fd7b4.md"
+      ],
+      "commands": [
+        {
+          "cmd": "INFRX_D_TASK=w5 tests/w; worker_main + loop mutants; bench mutant list; models/marlin2b/tests; test_rollout; test_runbooks; validate",
+          "exit": 0,
+          "summary": "333 passed; 120 killed; 116/116; 118; 15; 13; PASS"
+        }
+      ],
       "owned_paths": [
         "apps/infrx-api/infrx/worker/__main__.py (metrics kwarg)",
         "apps/infrx-api/infrx/worker/loop.py (timings guard)",
@@ -6198,6 +6206,18 @@
       "by": "coordinator (E1B)",
       "what": "E1B-WIRE-2 launched from aac38207 (WREQ-1/2/3 + the launcher minors)",
       "source": "research/plan/evidence/e/E1B-wire-fedf688.md"
+    },
+    {
+      "at": "2026-09-26T21:19:00Z",
+      "by": "coordinator (E1B)",
+      "what": "E1B-WIRE-2 merged: worker phase metrics reach the box, bench stop-token mutants in the list, launcher guard/log/wait hardening, E4C-runbook §3/§4a/§5.0/§5.2 fill and order the E1B cells",
+      "source": "research/plan/evidence/e/E1B-wire-2-c4fd7b4.md"
+    },
+    {
+      "at": "2026-09-26T21:19:25Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/E1B-WIRE-2-20260926T2116Z.json"
     }
   ],
   "history": {
@@ -6884,10 +6904,15 @@
       "status": "rejected",
       "at": "2026-09-26T21:05:00Z",
       "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "E1B-WIRE-2-20260926T2116Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T21:16:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T20:55:22Z",
+    "computed_at": "2026-09-26T21:19:25Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
