@@ -1939,6 +1939,16 @@
       ]
     },
     {
+      "id": "C0-ORG-07",
+      "note": "AM2-L-2: getSession builds a session with a guessed organization instead of failing closed",
+      "file": "lib/session.ts",
+      "find": "    throw new Error(\"No personal organization for this account yet — sign out and back in.\");\n",
+      "replace": "    return { userId: user.id, email: \"\", isOperator: false, orgId: \"\", orgName: \"Personal\", role: \"owner\" };\n",
+      "cases": [
+        "C0-ORG-04 getSession fails closed for a user without exactly one created-and-owned organization"
+      ]
+    },
+    {
       "id": "U1R-AUTH-01",
       "note": "U1R WR-6: the credit reads' own client restored (a second getUser per render)",
       "file": "app/(console)/billing/credit-context.ts",

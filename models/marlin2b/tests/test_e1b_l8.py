@@ -6,7 +6,12 @@ No box, no GPU, no docker: each script runs against a scratch NVME tree with stu
 
     python -m pytest models/marlin2b/tests/test_e1b_l8.py -q
 """
-import json, os, re, stat, subprocess, tempfile
+import json
+import os
+import re
+import stat
+import subprocess
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 E1B = os.path.join(os.path.dirname(HERE), "e1b")
