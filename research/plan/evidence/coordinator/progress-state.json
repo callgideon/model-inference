@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 62,
- "updated": "2026-09-26T00:41:44Z",
+ "revision": 63,
+ "updated": "2026-09-26T00:51:09Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -1827,6 +1827,74 @@
    },
    "evidence": [],
    "commands": []
+  },
+  {
+   "id": "P25-ENACT",
+   "task": null,
+   "slice": "P-25 enactment as configuration (I8/M6 support lane): retention grace 3,600 s, cache cap 50 GiB, intervals pinned, alert + runbooks",
+   "agent": "opus",
+   "branch": "codex/p25-enact",
+   "worktree": ".claude/worktrees/codex-p25-enact",
+   "base": "74183655",
+   "head": "a15393c5",
+   "isolation": {
+    "ports": "m6 block (postgres 55444), no Valkey/S3",
+    "prefix": "infrx-m6-",
+    "db": null
+   },
+   "activity": "review",
+   "started": "2026-09-25T23:58:00Z",
+   "updated": "2026-09-26T00:51:09Z",
+   "blocker": null,
+   "next_action": "verified ACCEPT_WITH_FIXES (P25R-1 gateway-grace gap recorded + WR-P25-1, A9 vs 7-newest cadence reconciled, known-good record with every --set); merges via the backend union round 3 with WR-P25-1..4",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the union round-3 merge and four coordinator wirings",
+    "at": "2026-09-26T00:51:09Z"
+   },
+   "evidence": [
+    "research/plan/evidence/i/P25-enact-5240bd8.md"
+   ],
+   "commands": [
+    {
+     "cmd": "INFRX_D_TASK=m6 pytest -q tests/w/test_prep_worker.py tests/w/test_worker_main.py tests/m/test_retention.py",
+     "exit": 0,
+     "summary": "161 passed, 7 skipped (MinIO/Valkey cases: no port in the m6 block)"
+    },
+    {
+     "cmd": "pytest -q tests/contracts/test_config_and_imports.py tests/i/test_packaging.py tests/i/test_envcheck.py",
+     "exit": 0,
+     "summary": "312 passed (7 failed before on config_and_imports)"
+    },
+    {
+     "cmd": "python -m tests.w.worker_main_mutants",
+     "exit": 0,
+     "summary": "40/40 killed (5 new: grace dropped/hardcoded/week default, cache 60 GiB, alert drift)"
+    },
+    {
+     "cmd": "pytest -q tests/i/test_observe.py",
+     "exit": 1,
+     "summary": "17 passed, 1 xfailed, 1 failed (pre-existing at base: KNOWN_UNPRODUCED lists UnsettleableJobs → WR-P25-4)"
+    }
+   ],
+   "owned_paths": [
+    "apps/infrx-api/infrx/config.py (retention/cache fields + pins)",
+    "apps/infrx-api/infrx/worker/__main__.py (composition lines)",
+    "apps/infrx-api/tests/w/, tests/m/",
+    "infra/alerts/operations.json (cache alert)",
+    "infra/README.md, infra/runbooks/restore.md, infra/runbooks/rollout.md",
+    "research/plan/evidence/i/P25-enact-5240bd8.md"
+   ],
+   "wiring_requests": [
+    "WR-P25-1 gateway pilot.py _pg_lifecycle passes grace_s=deployment.retention_grace_s (sources/payloads/upload_complete)",
+    "WR-P25-2 observe.md:189 wording",
+    "WR-P25-3 operations.json threshold_status wording (retention 300 s, 50 GiB) — thresholds unchanged",
+    "WR-P25-4 test_observe KNOWN_UNPRODUCED drop UnsettleableJobs",
+    "WR-P25-5 15-pending-inputs P-25 row: enactment recorded; schema_proof reaches 0023 (extend at 0024/0025)"
+   ]
   }
  ],
  "review_queue": [
@@ -2558,6 +2626,12 @@
   }
  ],
  "activity_log": [
+  {
+   "at": "2026-09-26T00:51:09Z",
+   "by": "coordinator",
+   "what": "P25-ENACT verified ACCEPT_WITH_FIXES at a15393c5 (wf_77ac74e5-386); routed into the backend union round 3 with WR-P25-1..4",
+   "source": "research/plan/evidence/i/P25-enact-5240bd8.md"
+  },
   {
    "at": "2026-09-26T00:41:44Z",
    "by": "coordinator",
