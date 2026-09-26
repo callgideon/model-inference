@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "400a7e94",
+  "integration_head": "01be4ccf",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 118,
-  "updated": "2026-09-26T10:12:00Z",
+  "revision": 120,
+  "updated": "2026-09-26T17:03:36Z",
   "agent_slots": {
     "total": 16,
-    "active": 3,
+    "active": 1,
     "reserved": 2,
-    "note": "Session 03 (09:20Z): workflow G-GATES (e2c); coordinator fixed-clone runs on 400a7e94 (e1c/i8 suite, e3c final run, e4b App gate); KNOWN-GOOD-PROOF-3 ready (i8 after the suite's tests/i); 2 slots reserved for verify-lane workflows."
+    "note": "Session 03 (10:50Z): workflow G2-FIX (e2c + i8); 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -2975,27 +2975,35 @@
       "branch": "codex/g-gates",
       "worktree": ".claude/worktrees/codex-g-gates",
       "base": "9b21339a",
-      "head": null,
+      "head": "3b0f843d",
       "isolation": {
         "ports": "e2c postgres 55448, valkey 55493/55494; rehearsal in its own network namespaces",
         "prefix": "infrx-e2c-",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T06:41:00Z",
-      "updated": "2026-09-26T06:41:00Z",
+      "updated": "2026-09-26T10:50:00Z",
       "blocker": null,
-      "next_action": "report → coordinator records what blocks RELEASE today; G4 stays FAIL until P-06",
+      "next_action": "DONE (evidence merged at 65d54b45): G1/G3/G4/G5 PASS at 9b21339a, G6 NOT RUN[operator], G2 FAIL → G2-FIX lane (F-1 Valkey adopt + gate ports, F-2 three stale anchors, F-3 durable_forgets_unknown_holds survives, F-5 tests/i task form, F-6 G4 does not gate P-06); what blocks RELEASE today: G2 red, P-06 digits, the G6 operator reads (hosted backup rehearsal, hosted G6B issue+revoke), the operator-held P-inputs, MEDIA_BASE_URL",
       "estimate": {
-        "optimistic_h": 1.5,
-        "likely_h": 2.5,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "make check ≈ 45–60 min, rehearsal ≈ 10 min, image build; evidence only",
-        "at": "2026-09-26T06:41:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged, wired and checked",
+        "at": "2026-09-26T10:50:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/G-GATES-9b21339.md"
+      ],
+      "commands": [
+        {
+          "cmd": "README §0 G1–G6 at 9b21339a (e2c; rehearsal ns infrx-ggates)",
+          "exit": 1,
+          "summary": "G1 PASS; G2 FAIL (api-test 2 q3 drills — shared Valkey port + adopt-a-foreign-listener; api-mutants 22 failed: 4 deterministic (3 stale anchors, 1 survivor) + 18 i8 contention; console/bench/E4B mutants green; tests/i under i8 failed twice, e2c 238/1x); G3 PASS (image + placeholder probe); G4 PASS (engine pin [] — P-06 digests unchecked); G5 PASS (48/48, 137 s); G6 NOT RUN[operator]"
+        }
+      ],
       "owned_paths": [
         "research/plan/evidence/coordinator/G-GATES-*.md"
       ],
@@ -3015,18 +3023,18 @@
         "prefix": "infrx-d4-",
         "db": "d4"
       },
-      "activity": "integration",
+      "activity": "complete",
       "started": "2026-09-26T07:18:00Z",
-      "updated": "2026-09-26T10:12:00Z",
+      "updated": "2026-09-26T10:50:00Z",
       "blocker": null,
-      "next_action": "merged --no-ff at 400a7e94 WITH WR-D10F-1..4 in the merge commit (coordinator decision: the lease-less call stays 0014's write for the P-25 rollback targets — R147 amended; follow-up migration recorded in P-25); fixed-clone checks (api-test with tests/i first, recovery, test_harness; E3C final run; App gate) running; KNOWN-GOOD-PROOF-3 next; minors carried: RV-D10F-3 (assertion for the runner-drops-the-lease mutant), O-1, the W5 mutant runner TMPDIR lock",
+      "next_action": "DONE: merged 400a7e94 with WR-D10F-1..4; fixed-clone suite on 400a7e94: api-test 4324 passed / 0 failed (tests/i deselected), tests/i on i8 231 passed + 8 setups refused by the shared lock (KNOWN-GOOD-PROOF-3 held i8 — environmental; tests/i 239 green on this tree in that lane's run), ruff clean, recovery 42/1 (rb09 literal → WR-D10F-5 01be4ccf), test_harness 140/1 (the pre-existing needle guard, user-held), validate PASS; E3C final run PASS 16/16 and App gate PASS 17/17 on 400a7e94; minors carried: RV-D10F-3, O-1, W5 TMPDIR lock",
       "estimate": {
-        "optimistic_h": 0.3,
-        "likely_h": 0.7,
-        "pessimistic_h": 1.5,
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
         "confidence": "high",
-        "basis": "merged and wired; three fixed-clone runs left",
-        "at": "2026-09-26T09:20:00Z"
+        "basis": "merged, wired and checked",
+        "at": "2026-09-26T10:50:00Z"
       },
       "evidence": [
         "research/plan/evidence/d/D10-0026-c353227.md"
@@ -3061,6 +3069,11 @@
           "cmd": "coordinator: make app-e2e on the fixed clone of 400a7e94",
           "exit": 0,
           "summary": "PASS exit 0; 17/17 cells; 77 hermetic unit tests"
+        },
+        {
+          "cmd": "coordinator: tests/i (i8) → ruff → api-test (e1c, --ignore=tests/i) → recovery (INFRX_I3B_PG=d) → test_harness + integration unit → validate (fixed clone of 400a7e94, 09:48–10:29Z)",
+          "exit": 1,
+          "summary": "231 passed + 8 i8 refusals (shared lock; environmental); ruff clean; 4324 passed / 0 failed; recovery 42 passed / 1 (rb09 literal 0001-0025 → fixed WR-D10F-5); 140 passed / 1 (needle guard, pre-existing, user-held); PASS"
         }
       ],
       "owned_paths": [
@@ -3089,32 +3102,91 @@
       "branch": "codex/known-good-proof-3",
       "worktree": ".claude/worktrees/codex-known-good-proof-3",
       "base": "400a7e94",
-      "head": null,
+      "head": "6df59057",
       "isolation": {
         "ports": "i8 postgres 55450 / valkey 55495 / pgbouncer 55496 (no other i8 user while it runs)",
         "prefix": "infrx-i8-",
         "db": "i8"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T09:20:00Z",
-      "updated": "2026-09-26T09:30:00Z",
+      "updated": "2026-09-26T10:50:00Z",
       "blocker": null,
-      "next_action": "handback → merge; P-25 row → 0026 (i8 shared with the coordinator's tests/i run on 400a7e94: the lane polls the lock)",
+      "next_action": "DONE: merged --no-ff at b96884f0; WR-KGP3-1/2 at 492ff447 (P-25 row and README say 0026); WR-KGP3-3 recorded (the R147 follow-up migration waits for the targets to leave the record); minors carried: m1 (log digests carry timings), m2 (the reviewer's full tests/i collided with the coordinator's i8 run)",
       "estimate": {
-        "optimistic_h": 1.5,
-        "likely_h": 2.5,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "the 0025 proof lane took ~2.3 h; one migration more",
-        "at": "2026-09-26T09:20:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged, wired and checked",
+        "at": "2026-09-26T10:50:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/i/KNOWN-GOOD-PROOF-3-af552ed.md"
+      ],
+      "commands": [
+        {
+          "cmd": "schema_proof.py <target> --candidate 400a7e94 --task i8 (plain and Supabase, both targets)",
+          "exit": 0,
+          "summary": "PASS through 0026 ×4: 26/26 suites, 384 passed, 13 deselected; 0019–0026 digest 4a6bffd9; 0026 changes no grant (3,431-line inventory identical)"
+        },
+        {
+          "cmd": "known-good.py --applied 0026 / 0027; --list --applied 0026",
+          "exit": 0,
+          "summary": "KNOWN-GOOD both at 0026; refused at 0027; list: 27af05a NOT-KNOWN-GOOD, 4226315/bda1586 KNOWN-GOOD"
+        },
+        {
+          "cmd": "INFRX_D_TASK=i8 pytest -q tests/i; known_good mutants",
+          "exit": 0,
+          "summary": "239 passed 1 xfailed; 20/20 killed"
+        }
+      ],
       "owned_paths": [
         "infra/rollout/known-good.json (schema_proof)",
         "infra/runbooks/schema_proof.py (SHAPE only if needed)",
         "apps/infrx-api/tests/i/ (known-good tests)",
         "research/plan/evidence/i/KNOWN-GOOD-PROOF-3-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "G2-FIX",
+      "task": null,
+      "slice": "(support lane; release gate G2) F-1 vkharness refuses a foreign listener (R63) and the E2C gate gives D2/Q distinct Valkey ports; F-2 three stale mutant anchors re-declared; F-3 a case that kills durable_forgets_unknown_holds; F-5 the tests/i task form settled and written into README §0 G2; F-6 a G4b P-06 digest row; the G2 row rerun as written; workflow (Opus implementer, 2 lenses, one fix round)",
+      "agent": "opus",
+      "branch": "codex/g2-fix",
+      "worktree": ".claude/worktrees/codex-g2-fix",
+      "base": "65d54b45",
+      "head": null,
+      "isolation": {
+        "ports": "e2c (55448/55493) and i8 (55450/55495/55496); no other user of either while it runs",
+        "prefix": "infrx-e2c-",
+        "db": "e2c"
+      },
+      "activity": "running",
+      "started": "2026-09-26T10:50:00Z",
+      "updated": "2026-09-26T10:50:00Z",
+      "blocker": null,
+      "next_action": "handback → merge → the G2 row green on the tip → tracker + push",
+      "estimate": {
+        "optimistic_h": 2,
+        "likely_h": 3.5,
+        "pessimistic_h": 6,
+        "confidence": "medium",
+        "basis": "a harness rule + a gate port + four mutant items + a make check run (~45 min) + tests/i and its mutant list on i8",
+        "at": "2026-09-26T10:50:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/infrx-api/tests/q/vkharness.py",
+        "tests/integration/gates.py",
+        "apps/infrx-api/infrx/contracts/tasklocal.py (port table only)",
+        "apps/infrx-api/tests/contracts/mutants.py",
+        "apps/infrx-api/tests/i/mutants.py",
+        "apps/infrx-api/tests/i/test_observe.py",
+        "infra/rollout/README.md §0",
+        "research/plan/evidence/coordinator/G2-FIX-*.md"
       ],
       "wiring_requests": []
     }
@@ -5577,6 +5649,24 @@
       "by": "coordinator (BACKEND-LOCAL)",
       "what": "E3C final run on the fixed clone of 400a7e94 (0026): PASS exit 0, 16 scenarios, all controls; BACKEND-LOCAL candidate refreshed to 400a7e94 (the first attempt failed on a relative E3C_OUT — coordinator error, rerun)",
       "source": "scratchpad/wave4b/e3c-400a7e94/verdict.json"
+    },
+    {
+      "at": "2026-09-26T10:50:00Z",
+      "by": "coordinator",
+      "what": "KNOWN-GOOD-PROOF-3 ACCEPT merged b96884f0 + WR-KGP3-1/2 (492ff447); G-GATES evidence merged 65d54b45 (G2 red: F-1..F-6 → G2-FIX launched); 0026 suite green outside the i8-shared tests/i and the rb09 literal (WR-D10F-5 01be4ccf); D10-0026-FENCE, KNOWN-GOOD-PROOF-3, G-GATES complete",
+      "source": "research/plan/evidence/coordinator/G-GATES-9b21339.md"
+    },
+    {
+      "at": "2026-09-26T17:03:36Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T10:30:00Z is not newer than lane KNOWN-GOOD-PROOF-3 state 2026-09-26T10:50:00Z",
+      "source": "updates/KNOWN-GOOD-PROOF-3-20260926T1030Z.json"
+    },
+    {
+      "at": "2026-09-26T17:03:36Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
+      "source": "updates/G-GATES-20260926T1121Z.json"
     }
   ],
   "history": {
@@ -6214,10 +6304,20 @@
       "status": "rejected",
       "at": "2026-09-26T09:31:07Z",
       "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "KNOWN-GOOD-PROOF-3-20260926T1030Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T10:30:00Z",
+      "reason": "stale: at 2026-09-26T10:30:00Z is not newer than lane KNOWN-GOOD-PROOF-3 state 2026-09-26T10:50:00Z"
+    },
+    "G-GATES-20260926T1121Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T11:21:00Z",
+      "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T09:48:27Z",
+    "computed_at": "2026-09-26T17:03:36Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
