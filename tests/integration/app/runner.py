@@ -16,9 +16,10 @@
 4. **browser**: Playwright (`apps/app/tests/e2e/`), one serial journey; each test is a check.
 5. **verdict**: `<out>/verdict.json` in E2C's gate shape, the manifest's E3A test_ids as
    cells. A cell's `journey` is the worst of the checks under it; its `verdict` is that, except
-   for a DELEGATED cell (an oracle the journey does not exercise), which is NOT RUN unless a
-   check under it fails. A check a lane has not merged yet is NOT RUN with the reason; an
-   absent check is NOT RUN. Gate = worst of cells and stages (FAIL > INVALID > BLOCKED >
+   for a DELEGATED cell (an oracle the journey does not exercise): `PASS[delegated to E3C-FINAL
+   <run head> <scenarios>]` when the committed E3C-FINAL evidence records each of its scenarios
+   PASS, NOT RUN when that reference is missing, and FAIL whenever a check under it fails. A
+   check a lane has not merged yet is NOT RUN with the reason; an absent check is NOT RUN. Gate = worst of cells and stages (FAIL > INVALID > BLOCKED >
    NOT RUN > PASS); exit 0 / 1 / 3 / 3 / 4.
 6. teardown of everything it started: no `infrx-e4b` container (`docker ps -a`) and the
    edge, control and App ports free again.
@@ -89,27 +90,47 @@ CHECKS = {
     "rate-rejection": (("DUR-CAP", "DUR-ADMIT", "DUR-FENCE", "DUR-OUTBOX"), ()),
     "low-funds": (("CREDIT-SPEND", "DUR-ADMIT"), ()),
     "provider-route-denial": (("DUR-RLS", "CONSOLE-FLOWS"), ()),
-    "operator-controls": (("CONSOLE-FLOWS",), ("U3",)),
+    "operator-controls": (("CONSOLE-FLOWS",), ("U3", "D10")),
     "isolation": (("DUR-RLS", "CREDIT-IDENTITY", "CREDIT-GRANT", "MEDIA-SEC"), ()),
     "revoke-key": (("CONSOLE-FLOWS", "DUR-ADMIT"), ("C3A", "U2")),
     "expired-result": (("DUR-OUTPUT",), ()),
+    "expired-display": (("DUR-OUTPUT", "CONSOLE-FLOWS"), ("U4",)),
 }
-# Cells whose 04-verification oracle the journey does not exercise. The checks under them are
-# a journey slice, reported as `journey`, never the oracle: NOT RUN unless one of them fails.
-# ponytail: text, not an import of E3C's same-SHA verdict; E3A proper imports it (s05, s08) or
-# adds journey injections (worker SIGKILL mid-lease, Valkey flush, rate publish, concurrency).
+# Cells whose 04-verification oracle the journey does not exercise. The checks under them are a
+# journey slice (`journey`); the oracle is E3C's final BACKEND-LOCAL run, bound here by scenario
+# id to its committed evidence (the scratch verdict.json it names is not durable: a later run
+# reuses that directory, so the evidence document is the reference the runner reads).
+E3C_FINAL = {"run_head": "27a69619", "tip": "04ae5e21",
+             "evidence": "research/plan/evidence/e3c/E3C-FINAL-27a6961.md",
+             "verdict_json": "<scratchpad>/final/verdict.json (final run 2)"}
 DELEGATED = {
-    "DUR-CAP": "concurrent admissions across keys/orgs: the journey admits on one key, one "
-               "request at a time; E3B dr02c/dr12 (a full key or index refused) and E3C s09 "
-               "(concurrent grants) carry parts, no case races admissions across keys",
-    "DUR-FENCE": "a stale worker generation racing a new one: the journey stops the worker "
-                 "before any lease; E3C s05 (worker crash at claim/output/settle), E3B "
-                 "dr03/dr05/db07/db11",
-    "DUR-OUTBOX": "Valkey data or ack lost, delivery replayed, dispatcher restarted: the journey "
-                  "loses nothing; E3C s05[outbox] and s08 (lost Valkey index), E3B dr13/db10",
-    "CREDIT-RATE": "a rate published while jobs wait or run: the journey publishes none; E3B "
-                   "dr07c/db13",
+    "DUR-CAP": (("s09",), "concurrent signup callbacks and CLI grants grant exactly once, and a "
+                          "transition meeting a parked admission refuses within its bound; NOT "
+                          "carried: a race of admissions across keys/orgs (no E3C case)"),
+    "DUR-FENCE": (("s05",), "a worker crash at claim/output/settle recovers once (9/9 points)"),
+    "DUR-OUTBOX": (("s05", "s08"), "a crash at the outbox step recovers once; a lost Valkey "
+                                   "index is rebuilt and loses no accepted job"),
+    "CREDIT-RATE": (("s09", "s13"), "a USD job admitted before CREDIT keeps its units and price "
+                                    "snapshot, an unapproved card is refused; discovery prices "
+                                    "only what admission serves"),
 }
+SCENARIO_ROW = re.compile(r"^\|\s*\**(s\d\d)\**[^|]*\|\s*\**([A-Z][A-Z ]*?)\**\s*\|", re.M)
+
+
+def delegated_reference(evidence: str | None, scenarios) -> str | None:
+    """Why the E3C-FINAL reference does not carry `scenarios` (None: it does). It must be the
+    evidence of the accepted run - gate PASS at the run head - with each scenario's row PASS."""
+    if not evidence:
+        return f"reference missing: {E3C_FINAL['evidence']} is not on this tree"
+    if "**Verdict: BACKEND-LOCAL PASS.**" not in evidence or E3C_FINAL["run_head"] not in \
+            evidence:
+        return f"{E3C_FINAL['evidence']} does not record BACKEND-LOCAL PASS at " \
+               f"{E3C_FINAL['run_head']}"
+    rows = dict(SCENARIO_ROW.findall(evidence))
+    bad = [f"{sid}: {rows.get(sid, 'no row')}" for sid in scenarios if rows.get(sid) != PASS]
+    return f"reference missing: {', '.join(bad)} in {E3C_FINAL['evidence']}" if bad else None
+
+
 SEAMS = {
     "fixture-port": {"checks": ("signup-verify-grant", "text-sync", "usage-balance"),
                      "what": "the App's reads answered from recorded fixtures (the first answer "
@@ -120,14 +141,6 @@ SEAMS = {
 }
 TITLE = re.compile(r"^([a-z][a-z-]+): ")
 MARK = re.compile(r"\b(BLOCKED|INVALID|NOT RUN)\[([^\]]*)\]")
-# Hosted Supabase's `auth.uid()` reads PostgREST v12+'s `request.jwt.claims`; the pinned image's
-# reads only the legacy per-claim GUC, so through the journey PostgREST every signed-in read would
-# see no user. The same replacement C0 (apps/app/tests/c/realdb/stack.py) and D10
-# (tests/d/test_postgrest_d10.py) apply; E3A-WR-2 asks for it in E3C's clone template.
-HOSTED_AUTH_UID = (
-    "create or replace function auth.uid() returns uuid language sql stable as $f$ select "
-    "coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''), nullif(nullif("
-    "current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', ''))::uuid $f$")
 PER_KEY_CAP = 2                   # MAX_ACTIVE_JOBS_PER_KEY on the box: rate-rejection reaches it
 
 
@@ -135,8 +148,13 @@ class Stop(Exception):
     """A stage could not go on; it is already recorded."""
 
 
+def base(status: str) -> str:
+    """`PASS[delegated to ...]` ranks as PASS."""
+    return status.split("[", 1)[0]
+
+
 def worst(statuses) -> str:
-    return max(statuses, key=RANK.__getitem__, default=NOT_RUN)
+    return max(statuses, key=lambda status: RANK[base(status)], default=NOT_RUN)
 
 
 # ------------------------------------------------------------------ pure rules (test_runner.py)
@@ -202,9 +220,11 @@ def classify(report: dict | None, selected: set[str] | None = None) -> dict:
     return checks
 
 
-def cells(checks: dict) -> list[dict]:
+def cells(checks: dict, evidence: str | None = None) -> list[dict]:
     """The E3A test_ids: `journey` = worst of the checks under each (APP-JOURNEY is every
-    check); `verdict` = that, or for a DELEGATED cell never better than NOT RUN."""
+    check); `verdict` = that, or for a DELEGATED cell the worst of it and the E3C-FINAL
+    reference (`evidence`, that document's text): `PASS[delegated to E3C-FINAL ...]`, never a
+    bare PASS, NOT RUN without the reference."""
     out = []
     for test_id in TEST_IDS:
         under = [name for name, (ids, _) in CHECKS.items()
@@ -212,12 +232,35 @@ def cells(checks: dict) -> list[dict]:
         journey = worst(checks[name]["status"] for name in under)
         reasons = [f"{name}: {checks[name]['status']} - {checks[name]['reason']}"
                    for name in under if checks[name]["status"] != PASS]
+        verdict = journey
         if test_id in DELEGATED:
-            reasons.insert(0, f"NOT RUN[delegated] {DELEGATED[test_id]}; rerun on the merged "
-                              f"SHA (journey slice {', '.join(under)}: {journey})")
+            scenarios, what = DELEGATED[test_id]
+            missing = delegated_reference(evidence, scenarios)
+            label = (f"NOT RUN[delegated] {missing}" if missing else
+                     f"PASS[delegated to E3C-FINAL {E3C_FINAL['run_head']} "
+                     f"{','.join(scenarios)}]")
+            oracle = NOT_RUN if missing else label
+            verdict = worst([oracle, journey])     # a tie keeps the oracle's label
+            reasons.insert(0, f"{label}: {what}; evidence {E3C_FINAL['evidence']} (verdict.json "
+                              f"{E3C_FINAL['verdict_json']}, run head {E3C_FINAL['run_head']} on "
+                              f"tip {E3C_FINAL['tip']}); journey slice {', '.join(under)}: "
+                              f"{journey}")
         out.append({"id": test_id, "journey": journey, "checks": under, "reasons": reasons,
-                    "verdict": worst([journey, NOT_RUN]) if test_id in DELEGATED else journey})
+                    "verdict": verdict})
     return out
+
+
+def missing_wirings(world, stack) -> list[str]:
+    """E3A-WR-1/2 are E3C's now: the runner no longer shims them, so a tree without them is
+    BLOCKED here rather than INVALID in the world stage or a vacuous signed-in read."""
+    import inspect
+    missing = []
+    if "INFRX_E2_NAMESPACE" not in inspect.getsource(world.need_stack):
+        missing.append("E3A-WR-1 (world.need_stack follows INFRX_E2_NAMESPACE)")
+    if not hasattr(stack, "HOSTED_AUTH_UID") or \
+            "HOSTED_AUTH_UID" not in inspect.getsource(stack._template):
+        missing.append("E3A-WR-2 (stack._template applies the hosted auth.uid())")
+    return missing
 
 
 def seam_stage(seam: str, checks: dict) -> dict:
@@ -279,6 +322,8 @@ def control_app(trip, edge, workdir: Path, world):
             "where j.org_id = %s order by j.created_at", org_id) if org_id else []
         keys = trip.db("select id::text, name, revoked_at is not null from public.api_keys "
                        "where org_id = %s order by created_at", org_id) if org_id else []
+        suspended = trip.one("select suspended from public.organizations where id = %s",
+                             org_id)[0] if org_id else None
         conserved = None
         if wallet:
             from types import SimpleNamespace
@@ -298,7 +343,36 @@ def control_app(trip, edge, workdir: Path, world):
             "jobs": [dict(zip(("request_id", "handle", "state", "settlement", "mode", "hold",
                                "hold_state", "charged", "debits"), row)) for row in jobs],
             "keys": [dict(zip(("key_id", "name", "revoked"), row)) for row in keys],
-            "conserved": conserved})
+            "suspended": suspended, "conserved": conserved})
+
+    async def operator(request):
+        """Make a signed-up individual a platform operator (`profiles.is_operator`), the flag
+        0001's `is_operator()` and the App's session read; the harness's side, never the App."""
+        user = user_of((await request.json())["email"])
+        trip.db("update public.profiles set is_operator = true where id = %s returning id",
+                user["id"])
+        return JSONResponse({"user_id": user["id"]})
+
+    def audit(request):
+        """The audit trail for one organization, oldest first."""
+        rows = trip.db("select actor_principal, action, reason, idempotency_key, after::text "
+                       "from infrx.audit_entries where target_org_id = %s order by at, id",
+                       request.query_params["org"])
+        return JSONResponse([dict(zip(("actor", "action", "reason", "key", "after"), row))
+                             for row in rows])
+
+    async def operator_rpc(request):
+        """One `public.operator_*` RPC through the journey PostgREST under the named user's
+        own JWT (a fresh session from the edge): what the App's operator port sends, for a
+        replay the form cannot make (it rotates its key after a commit)."""
+        import httpx
+        body = await request.json()
+        if not re.fullmatch(r"operator_[a-z_]+", body["fn"]):
+            raise ValueError("only public.operator_* RPCs")
+        token = edge.session(user_of(body["email"]))["access_token"]
+        reply = httpx.post(f"{edge.rest_url}/rpc/{body['fn']}", json=body["args"], timeout=30,
+                           headers={"authorization": f"Bearer {token}"})
+        return JSONResponse({"status": reply.status_code, "body": reply.json()})
 
     def mail(request):
         return JSONResponse({"links": list(edge.mail.get(
@@ -373,6 +447,8 @@ def control_app(trip, edge, workdir: Path, world):
 
     routes = [("/facts", facts, ["GET"]), ("/mail", mail, ["GET"]),
               ("/issue-key", issue_key, ["POST"]), ("/adjust", adjust, ["POST"]),
+              ("/operator", operator, ["POST"]), ("/audit", audit, ["GET"]),
+              ("/operator-rpc", operator_rpc, ["POST"]),
               ("/engine", engine, ["POST"]), ("/worker", worker, ["POST"]),
               ("/clock", clock, ["POST"]), ("/auth-ttl", auth_ttl, ["POST"]),
               ("/stats", stats, ["GET"]), ("/clip", clip, ["GET"]),
@@ -551,14 +627,15 @@ def main(argv: list[str] | None = None) -> int:
         e3c = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(e3c)
         import world                                   # e3c/world.py
-        # ponytail: world pins NAMESPACE = "e3c" for need_stack(); the harness it loads already
-        # follows INFRX_E2_NAMESPACE. Wiring request E3A-WR-1 makes world read it too.
-        world.NAMESPACE = NAMESPACE
         import run
         import stack
         harness = world.harness
         assert harness.NAMESPACE == NAMESPACE and set(harness.PORTS.values()) <= \
             set(range(56800, 56900)), harness.PORTS
+        missing = missing_wirings(world, stack)
+        if missing:
+            stage("wirings", BLOCKED, began, detail="not on this tree: " + "; ".join(missing))
+            raise Stop
         env = app_env(stack.jwt("anon", ttl_s=12 * 3600),
                       stack.jwt("service_role", ttl_s=12 * 3600), stack.GATEWAY_PORT)
 
@@ -589,18 +666,12 @@ def main(argv: list[str] | None = None) -> int:
                         from test_journey import _signup_grant_not_unique
                         assert stack.current_database() == trip.world.database
                         _signup_grant_not_unique()
-                    harness.run(["docker", "exec", "-i", harness.assert_ours(
-                        harness.container_of("postgres")), "psql", "-U", harness.PG_ADMIN_ROLE,
-                        "-d", trip.world.database, "-v", "ON_ERROR_STOP=1", "-c",
-                        HOSTED_AUTH_UID], timeout=120.0)
                     import edge as edge_mod
                     edge = edge_mod.Edge(harness.pg_dsn(trip.world.database),
                                          stack.postgrest_url(stack.JOURNEY_POSTGREST_PORT),
                                          stack.JWT_SECRET, APP_ORIGIN,
                                          freeze=args.break_seam == "fixture-port")
                     stage("world", PASS, began, database=trip.world.database,
-                          deviations=["auth.uid() replaced by the hosted form on the clone "
-                                      "(E3A-WR-2)"],
                           gateway=trip.box.url, runtime_login=True,
                           detail="gateway + worker on the runtime login, controlled engine")
                     with edge_mod.Served(edge_mod.app(edge), EDGE_PORT, "e3a-edge"), \
@@ -655,8 +726,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.break_seam and report is not None:
         stages.append(seam_stage(args.break_seam, checks))
         print(f"{stages[-1]['verdict']:8} {stages[-1]['stage']} {stages[-1]['detail']}")
-    table = cells(checks)
-    verdict = worst([*(row["verdict"] for row in stages), *(c["verdict"] for c in table)])
+    reference = REPO / E3C_FINAL["evidence"]
+    table = cells(checks, reference.read_text() if reference.is_file() else None)
+    verdict = base(worst([*(row["verdict"] for row in stages), *(c["verdict"] for c in table)]))
     payload = {
         "schema": "infrx.e2c.verdict/1", "gate": "APP-LOCAL", "task": "E3A",
         "verdict": verdict, "exit": EXIT[verdict], "head": source, "head_end": head(),

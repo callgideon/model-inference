@@ -90,6 +90,90 @@ def test_cells_the_journey_does_not_exercise_are_never_pass():
     assert {c["id"]: c["verdict"] for c in red}["DUR-FENCE"] == runner.FAIL
 
 
+# The E3C-FINAL evidence's verdict line and scenario rows, in both of its row styles.
+EVIDENCE = """- **Verdict: BACKEND-LOCAL PASS.** Gate PASS.
+3. **Final run 2 (`27a69619`): the evidence run. Gate PASS.** Verdict `/x/final/verdict.json`
+| Scenario | Status | Cases |
+|---|---|---|
+| s05 crash at each step | PASS | 9/9 |
+| s08 dependency outages | PASS | 3/3 |
+| s09 CREDIT transition, lock bound | PASS | 4/4 |
+| **s13** discovery vs admission | **PASS** | 2/2 |
+"""
+
+
+def test_delegated_cells_pass_only_on_the_e3c_final_reference():
+    """Oracle (E3A item 4): a delegated cell reported as a bare PASS, PASS without the
+    E3C-FINAL reference (document absent, not the accepted run, a scenario row missing or not
+    PASS), or a red journey check under it hidden by the reference."""
+    green = runner.classify(all_passed())
+    table = {c["id"]: c for c in runner.cells(green, EVIDENCE)}
+    for test_id, (scenarios, _) in runner.DELEGATED.items():
+        want = f"PASS[delegated to E3C-FINAL 27a69619 {','.join(scenarios)}]"
+        assert table[test_id]["verdict"] == want, table[test_id]
+        assert table[test_id]["reasons"][0].startswith(want) and \
+            runner.E3C_FINAL["evidence"] in table[test_id]["reasons"][0]
+    assert runner.base(runner.worst(c["verdict"] for c in table.values())) == runner.PASS
+    for evidence, why in ((None, "not on this tree"),
+                          (EVIDENCE.replace("BACKEND-LOCAL PASS", "BACKEND-LOCAL FAIL"),
+                           "does not record"),
+                          (EVIDENCE.replace("27a69619", "0000000"), "does not record"),
+                          (EVIDENCE.replace("| s08 dependency outages | PASS |",
+                                            "| s08 dependency outages | FAIL |"), "s08: FAIL"),
+                          (EVIDENCE.replace("| **s13** discovery vs admission | **PASS** | 2/2 |",
+                                            ""), "s13: no row")):
+        cell = {c["id"]: c for c in runner.cells(green, evidence)}
+        broken = "DUR-OUTBOX" if "s08" in why else "CREDIT-RATE" if "s13" in why else None
+        for test_id in runner.DELEGATED:
+            if broken in (None, test_id):
+                assert cell[test_id]["verdict"] == runner.NOT_RUN, (why, cell[test_id])
+                assert why in cell[test_id]["reasons"][0], (why, cell[test_id]["reasons"][0])
+            else:
+                assert cell[test_id]["verdict"].startswith("PASS[delegated"), (why, test_id)
+    tests = [(f"{name}: x", "passed", "", "") for name in runner.CHECKS if name != "rate-rejection"]
+    red = runner.cells(runner.classify(report(*tests, ("rate-rejection: x", "failed", "", "429"))),
+                       EVIDENCE)
+    assert {c["id"]: c["verdict"] for c in red}["DUR-FENCE"] == runner.FAIL
+
+
+def _need_stack_following_the_env():
+    import os
+    return os.environ.get("INFRX_E2_NAMESPACE", "e3c")
+
+
+def _need_stack_pinned():
+    return "e3c"
+
+
+def _template_with_hosted_uid():
+    return HOSTED_AUTH_UID  # noqa: F821 - read as source only
+
+
+def _template_without():
+    return None
+
+
+def test_the_runner_leaves_the_namespace_and_auth_uid_to_e3c():
+    """Oracle (E3A-WR-1/2 applied): the runner still pins `world.NAMESPACE` or replaces
+    `auth.uid()` per clone (two copies of E3C's harness rules), or runs on a tree without E3C's
+    wirings instead of saying BLOCKED (the world stage INVALID, or signed-in reads that see no
+    user and deny vacuously)."""
+    from types import SimpleNamespace
+    source = (HERE / "runner.py").read_text()
+    assert "world.NAMESPACE =" not in source and "HOSTED_AUTH_UID" not in source.replace(
+        '"HOSTED_AUTH_UID"', "").replace("hasattr(stack, ", "")
+    wired = runner.missing_wirings(SimpleNamespace(need_stack=_need_stack_following_the_env),
+                                   SimpleNamespace(HOSTED_AUTH_UID="x",
+                                                   _template=_template_with_hosted_uid))
+    assert wired == []
+    bare = runner.missing_wirings(SimpleNamespace(need_stack=_need_stack_pinned),
+                                  SimpleNamespace(_template=_template_without))
+    assert [m.split(" ")[0] for m in bare] == ["E3A-WR-1", "E3A-WR-2"]
+    half = runner.missing_wirings(SimpleNamespace(need_stack=_need_stack_following_the_env),
+                                  SimpleNamespace(HOSTED_AUTH_UID="x", _template=_template_without))
+    assert [m.split(" ")[0] for m in half] == ["E3A-WR-2"]
+
+
 def test_a_failure_fails_its_cells_and_a_harness_error_is_invalid():
     """Oracle: a red check hidden by a green sibling, or a harness fault reported as product."""
     tests = [(f"{name}: x", "passed", "", "") for name in runner.CHECKS if name != "low-funds"]
