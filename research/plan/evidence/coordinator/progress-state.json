@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 60,
- "updated": "2026-09-25T23:50:49Z",
+ "revision": 61,
+ "updated": "2026-09-26T00:33:19Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -1757,27 +1757,46 @@
    "branch": "codex/i2a-prep",
    "worktree": ".claude/worktrees/codex-i2a-prep",
    "base": "fd40748c",
-   "head": null,
+   "head": "8ca672d0",
    "isolation": {
     "ports": "none",
     "prefix": "infrx-i2a-prep-",
     "db": null
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-25T23:50:01Z",
-   "updated": "2026-09-25T23:50:01Z",
+   "updated": "2026-09-26T00:33:19Z",
    "blocker": null,
-   "next_action": "workflow wf_e714e949-a6a (implement → 2 lenses → fix → recheck); the live deploy waits for the accepted backend and the operator inputs (Vercel env, P-05 auth settings)",
+   "next_action": "I2A-PREP merged a5ca1cd1 (+ wiring 416da075: /api/version public, console-built in check, trailing-dot refusal); R134 numbered. The live half (Vercel env, staging project, P-05 auth settings, deploy + smoke + known-good record) runs after BACKEND-READY with the operator inputs listed in i/I2A-prep-9fe9484.md",
    "estimate": {
     "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
+    "likely_h": 5,
+    "pessimistic_h": 12,
     "confidence": "low",
-    "basis": "preparation lane; not yet inspected",
-    "at": "2026-09-25T23:50:01Z"
+    "basis": "prep merged; the live deploy waits for the accepted backend and seven operator inputs",
+    "at": "2026-09-26T00:33:19Z"
    },
-   "evidence": [],
-   "commands": []
+   "evidence": [
+    "research/plan/evidence/i/I2A-prep-9fe9484.md",
+    "infra/app/README.md"
+   ],
+   "commands": [
+    {
+     "cmd": "cd apps/app && pnpm test (at 8ca672d0, lane + both lenses)",
+     "exit": 0,
+     "summary": "528 tests, 505 pass, 0 fail, 23 skipped (I2A-BUILT cases run after pnpm build)"
+    },
+    {
+     "cmd": "node --test tests/i2a/*.test.ts",
+     "exit": 0,
+     "summary": "22/22 after the fix round (4 failed before it)"
+    },
+    {
+     "cmd": "pnpm lint / next typegen + tsc / next build",
+     "exit": 0,
+     "summary": "0 errors (2 pre-existing warnings) / clean / exit 0"
+    }
+   ]
   },
   {
    "id": "E3A",
@@ -2539,6 +2558,12 @@
   }
  ],
  "activity_log": [
+  {
+   "at": "2026-09-26T00:33:19Z",
+   "by": "coordinator",
+   "what": "I2A-PREP merged a5ca1cd1 + wiring 416da075 (ACCEPT_WITH_FIXES; I2A-R1..R3/F1 fixed, minors carried; coordinator ratified instrumentation.ts, app/api/version/route.ts and .env.example as I2A scope); R134 numbered; W5 rulings move to R135–R138",
+   "source": "research/plan/evidence/i/I2A-prep-9fe9484.md"
+  },
   {
    "at": "2026-09-24T21:30:00Z",
    "by": "coordinator",
