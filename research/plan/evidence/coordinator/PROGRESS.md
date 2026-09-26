@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 01:02Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 64, updated 2026-09-26 01:02Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 01:18Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 65, updated 2026-09-26 01:12Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -8,7 +8,7 @@ Generated 2026-09-26 01:02Z UTC by `python3 research/plan/scripts/progress.py` f
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V2 runtime repairs; bands with active work: V0, V1, V2, V3, V5, V6.
 - Agent slots: 16 total, 6 active lanes, 2 reserved.
-- Validation: 0 error(s), 7 warning(s).
+- Validation: 0 error(s), 11 warning(s).
 
 ### Actionable blockers
 
@@ -36,7 +36,7 @@ Generated 2026-09-26 01:02Z UTC by `python3 research/plan/scripts/progress.py` f
 - task-local services E3C held by E3C
 - E4C (BACKEND-READY): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C
 - E3A (APP-LOCAL): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C
-- E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C, I3
+- E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C
 
 ### Next ready work
 
@@ -60,10 +60,10 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Milestone | Gate | Status | Forecast | Controlling constraint | Effort o/l/p | Wall-clock o/l/p | Confidence |
 |---|---|---|---|---|---|---|---|
-| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 04:38Z – 2026-09-26 12:26Z (likely 2026-09-26 07:14Z) | dependency path W5 → E3C | 3.6 / 6.2 / 11.4 h | 3.6 / 6.2 / 11.4 h | medium |
+| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 04:54Z – 2026-09-26 12:42Z (likely 2026-09-26 07:30Z) | dependency path W5 → E3C | 3.6 / 6.2 / 11.4 h | 3.6 / 6.2 / 11.4 h | medium |
 | `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
 | `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
-| `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C, I3 | — | — | unknown |
+| `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C | — | — | unknown |
 
 ## Gates
 
@@ -106,7 +106,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (28.3 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (28.5 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -149,6 +149,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | I2A | I2A I2A-PREP: hosting configuration as code (env matrix, preview credential isolation, callback allowlists, private no-store, release identity) + App deploy/rollback runbook; no live deploy | review | codex/i2a-prep | fd40748c → 8ca672d0 | ports none, prefix infrx-i2a-prep- | 2026-09-26 00:33Z | I2A-PREP merged a5ca1cd1 (+ wiring 416da075: /api/version public, console-built in check, trailing-dot refusal); R134 numbered. The live half (Vercel env, staging project, P-05 auth settings, deploy + smoke + known-good record) runs after BACKEND-READY with the operator inputs listed in i/I2A-prep-9fe9484.md | 2–12 h remaining (likely 5 h), confidence low, estimated 2026-09-26 00:33Z; basis: prep merged; the live deploy waits for the accepted backend and seven operator inputs |
 | E3A | E3A E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b compose block; gate not claimed | queued | codex/e3a-prep | fd40748c → — | ports e4b compose block 56800–56899, prefix infrx-e3a-prep- | 2026-09-25 23:50Z | E3A proper dispatches after BACKEND-LOCAL/READY; E3A-PREP (coordinator preparation lane, workflow wf_06c06a68-c32) builds the harness now without claiming the gate | 2–8 h remaining (likely 4 h), confidence low, estimated 2026-09-25 23:50Z; basis: preparation lane; not yet inspected |
 | P25-ENACT | support P-25 enactment as configuration (I8/M6 support lane): retention grace 3,600 s, cache cap 50 GiB, intervals pinned, alert + runbooks | review | codex/p25-enact | 74183655 → a15393c5 | ports m6 block (postgres 55444), no Valkey/S3, prefix infrx-m6- | 2026-09-26 00:51Z | verified ACCEPT_WITH_FIXES (P25R-1 gateway-grace gap recorded + WR-P25-1, A9 vs 7-newest cadence reconciled, known-good record with every --set); merges via the backend union round 3 with WR-P25-1..4 | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 00:51Z; basis: lane verified; remaining is the union round-3 merge and four coordinator wirings |
+| I3 | I3 I3-PREP (coordinator): App recovery/alarm/rollback runbook, offline rollback-target tool, browser error reporting, operator release scenarios; gate not claimed | queued | codex/i3-prep | 6badd4e1 → — | ports no compose block; task-local PostgreSQL app-i3 55461 only if needed, prefix infrx-i3-prep- | 2026-09-26 01:18Z | I3 proper dispatches after BACKEND-READY and the I2A live half; I3-PREP (coordinator preparation lane, workflow wf_eed7ff75-8f5, user decision: App tasks run ahead of the gate) writes the App-side material now without claiming a gate | 2–8 h remaining (likely 4 h), confidence low, estimated 2026-09-26 01:18Z; basis: preparation lane; not yet inspected |
 
 ### Queues and locks
 
@@ -173,11 +174,15 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 - warning: stale estimate: lane E2C estimated at 2026-09-25T18:12Z (older than 6 h)
 - warning: stale estimate: lane M6 estimated at 2026-09-25T17:12:10Z (older than 6 h)
+- warning: overlapping writers: E2C (review) and I3 (queued) both own tests/integration/test_harness.py / tests/integration/ (+3 more)
 - warning: overlapping writers: W5 (review) and P25-ENACT (review) both own apps/infrx-api/infrx/worker/ / apps/infrx-api/infrx/worker/__main__.py (+1 more)
+- warning: overlapping writers: E3C (review) and I3 (queued) both own tests/integration/backend/e3c/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
+- warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and P25-ENACT (review) both own infra/ / infra/alerts/operations.json (+1 more)
-- warning: 10 update file(s) not applied yet: C3A-20260925T2305Z.json, C3A-20260925T2327Z.json, I2A-20260926T0010Z.json, I2A-20260926T0022Z.json, U2-20260925T2351Z.json, U2-20260926T0019Z.json, U3-20260926T0008Z.json, U3-20260926T0037Z.json, U4-20260925T2249Z.json, U4-20260925T2322Z.json (run apply-updates)
+- warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
+- warning: overlapping writers: P25-ENACT (review) and I3 (queued) both own infra/alerts/operations.json / infra/ (+1 more)
 
 ## Pending inputs
 
@@ -216,6 +221,16 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `ROLLOUT-FIXES-20260925T2125Z.json`: unknown task ID 'ROLLOUT-FIXES'
 - `APP-UNION-20260925T2325Z.json`: unknown task ID 'APP-UNION'
 - `G7-20260925T2326Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- `U4-20260925T2249Z.json`: stale: at 2026-09-25T22:49:10Z is not newer than lane U4 state 2026-09-26T01:02:22Z
+- `C3A-20260925T2305Z.json`: stale: at 2026-09-25T23:05:00Z is not newer than lane C3A state 2026-09-26T01:02:22Z
+- `U4-20260925T2322Z.json`: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']
+- `C3A-20260925T2327Z.json`: stale: at 2026-09-25T23:27:00Z is not newer than lane C3A state 2026-09-26T01:02:22Z
+- `U2-20260925T2351Z.json`: stale: at 2026-09-25T23:51:00Z is not newer than lane U2 state 2026-09-26T01:02:22Z
+- `U3-20260926T0008Z.json`: stale: at 2026-09-26T00:08:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z
+- `I2A-20260926T0010Z.json`: malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']
+- `U2-20260926T0019Z.json`: stale: at 2026-09-26T00:19:00Z is not newer than lane U2 state 2026-09-26T01:02:22Z
+- `I2A-20260926T0022Z.json`: malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']
+- `U3-20260926T0037Z.json`: stale: at 2026-09-26T00:37:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z
 
 ## All manifest tasks
 
@@ -260,7 +275,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `V3` | Judge score and calibration presentation | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `I1` | Read-only inventory and deploy design | Reused baseline | integrated | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I2` | Reproducible single-GPU deployment | Superseded | superseded-for-scheduling | unassigned | superseded: never scheduled; replaced by I2A, I2L |
-| `I3` | Recovery, alarms and rollback runbooks | App completion | planned | unassigned | blocked: gated: dispatch only after BACKEND-READY is accepted |
+| `I3` | Recovery, alarms and rollback runbooks | App completion | planned | queued | blocked: gated: dispatch only after BACKEND-READY is accepted |
 | `I4` | Separately gated fleet deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `E1` | Distinct corpus and authenticated benchmark client | Reused baseline | integrated | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E2` | Pinned integration services and fault harness | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
@@ -357,6 +372,19 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 01:18Z UTC, None: —
+- 2026-09-26 01:12Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C, I3)
+- 2026-09-26 01:12Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C)
+- 2026-09-26 01:12Z UTC, tracker: rejected update: stale: at 2026-09-26T00:37:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z
+- 2026-09-26 01:12Z UTC, tracker: rejected update: malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']
+- 2026-09-26 01:12Z UTC, tracker: rejected update: stale: at 2026-09-26T00:19:00Z is not newer than lane U2 state 2026-09-26T01:02:22Z
+- 2026-09-26 01:12Z UTC, tracker: rejected update: malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']
+- 2026-09-26 01:12Z UTC, tracker: rejected update: stale: at 2026-09-26T00:08:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z
+- 2026-09-26 01:12Z UTC, tracker: rejected update: stale: at 2026-09-25T23:51:00Z is not newer than lane U2 state 2026-09-26T01:02:22Z
+- 2026-09-26 01:12Z UTC, tracker: rejected update: stale: at 2026-09-25T23:27:00Z is not newer than lane C3A state 2026-09-26T01:02:22Z
+- 2026-09-26 01:12Z UTC, tracker: rejected update: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']
+- 2026-09-26 01:12Z UTC, tracker: rejected update: stale: at 2026-09-25T23:05:00Z is not newer than lane C3A state 2026-09-26T01:02:22Z
+- 2026-09-26 01:12Z UTC, tracker: rejected update: stale: at 2026-09-25T22:49:10Z is not newer than lane U4 state 2026-09-26T01:02:22Z
 - 2026-09-25 23:50Z UTC, coordinator: G7-PROVISIONAL merged 2b112a05; App union checks green; user override extended to I2A; I2A-PREP and E3A-PREP dispatched; union round 2 at 74183655; U2/U3 implementing
 - 2026-09-25 23:50Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
 - 2026-09-25 23:28Z UTC, coordinator: APP-UNION merged 68128815: C0, U1R, A2, A3 implemented (verified lanes + coordinator wirings); U4 verified, C3A in its fix round; D10-APP-SQL 0024 takes WR-U4-2 and WR-C3A-4

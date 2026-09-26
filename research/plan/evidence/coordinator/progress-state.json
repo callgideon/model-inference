@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 64,
- "updated": "2026-09-26T01:02:22Z",
+ "revision": 65,
+ "updated": "2026-09-26T01:12:32Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -1895,6 +1895,36 @@
     "WR-P25-4 test_observe KNOWN_UNPRODUCED drop UnsettleableJobs",
     "WR-P25-5 15-pending-inputs P-25 row: enactment recorded; schema_proof reaches 0023 (extend at 0024/0025)"
    ]
+  },
+  {
+   "id": "I3",
+   "task": "I3",
+   "slice": "I3-PREP (coordinator): App recovery/alarm/rollback runbook, offline rollback-target tool, browser error reporting, operator release scenarios; gate not claimed",
+   "agent": "opus",
+   "branch": "codex/i3-prep",
+   "worktree": ".claude/worktrees/codex-i3-prep",
+   "base": "6badd4e1",
+   "head": null,
+   "isolation": {
+    "ports": "no compose block; task-local PostgreSQL app-i3 55461 only if needed",
+    "prefix": "infrx-i3-prep-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-26T01:18:15Z",
+   "updated": "2026-09-26T01:18:15Z",
+   "blocker": "I3 proper dispatches after BACKEND-READY and the I2A live half; I3-PREP (coordinator preparation lane, workflow wf_eed7ff75-8f5, user decision: App tasks run ahead of the gate) writes the App-side material now without claiming a gate",
+   "next_action": "workflow wf_eed7ff75-8f5 (implement → 2 lenses → one fix round → rechecks); merge --no-ff onto claude/consumer-v1 after shared-clone checks; manifest I3 stays planned",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "low",
+    "basis": "preparation lane; not yet inspected",
+    "at": "2026-09-26T01:18:15Z"
+   },
+   "evidence": [],
+   "commands": []
   }
  ],
  "review_queue": [
@@ -3516,6 +3546,81 @@
    "by": "coordinator",
    "what": "G7-PROVISIONAL merged 2b112a05; App union checks green; user override extended to I2A; I2A-PREP and E3A-PREP dispatched; union round 2 at 74183655; U2/U3 implementing",
    "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-25T22:49:10Z is not newer than lane U4 state 2026-09-26T01:02:22Z",
+   "source": "updates/U4-20260925T2249Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-25T23:05:00Z is not newer than lane C3A state 2026-09-26T01:02:22Z",
+   "source": "updates/C3A-20260925T2305Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']",
+   "source": "updates/U4-20260925T2322Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-25T23:27:00Z is not newer than lane C3A state 2026-09-26T01:02:22Z",
+   "source": "updates/C3A-20260925T2327Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-25T23:51:00Z is not newer than lane U2 state 2026-09-26T01:02:22Z",
+   "source": "updates/U2-20260925T2351Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-26T00:08:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z",
+   "source": "updates/U3-20260926T0008Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']",
+   "source": "updates/I2A-20260926T0010Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-26T00:19:00Z is not newer than lane U2 state 2026-09-26T01:02:22Z",
+   "source": "updates/U2-20260926T0019Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']",
+   "source": "updates/I2A-20260926T0022Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "rejected update: stale: at 2026-09-26T00:37:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z",
+   "source": "updates/U3-20260926T0037Z.json"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C)"
+  },
+  {
+   "at": "2026-09-26T01:12:32Z",
+   "by": "tracker",
+   "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C, I3)"
+  },
+  {
+   "at": "2026-09-26T01:18:15Z",
+   "lane": "I3",
+   "event": "I3-PREP dispatched (wf_eed7ff75-8f5) on 6badd4e1: the last consumer-v1 task whose start dependencies allow a preparation lane; App union round-2 checks green; tip 6badd4e1 unpushed (push denied by the tool policy this window)"
   }
  ],
  "history": {
@@ -3856,10 +3961,60 @@
    "status": "rejected",
    "at": "2026-09-25T23:26:00Z",
    "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+  },
+  "U4-20260925T2249Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T22:49:10Z",
+   "reason": "stale: at 2026-09-25T22:49:10Z is not newer than lane U4 state 2026-09-26T01:02:22Z"
+  },
+  "C3A-20260925T2305Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T23:05:00Z",
+   "reason": "stale: at 2026-09-25T23:05:00Z is not newer than lane C3A state 2026-09-26T01:02:22Z"
+  },
+  "U4-20260925T2322Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T23:22:14Z",
+   "reason": "malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']"
+  },
+  "C3A-20260925T2327Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T23:27:00Z",
+   "reason": "stale: at 2026-09-25T23:27:00Z is not newer than lane C3A state 2026-09-26T01:02:22Z"
+  },
+  "U2-20260925T2351Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T23:51:00Z",
+   "reason": "stale: at 2026-09-25T23:51:00Z is not newer than lane U2 state 2026-09-26T01:02:22Z"
+  },
+  "U3-20260926T0008Z.json": {
+   "status": "rejected",
+   "at": "2026-09-26T00:08:00Z",
+   "reason": "stale: at 2026-09-26T00:08:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z"
+  },
+  "I2A-20260926T0010Z.json": {
+   "status": "rejected",
+   "at": "2026-09-26T00:10:00Z",
+   "reason": "malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']"
+  },
+  "U2-20260926T0019Z.json": {
+   "status": "rejected",
+   "at": "2026-09-26T00:19:00Z",
+   "reason": "stale: at 2026-09-26T00:19:00Z is not newer than lane U2 state 2026-09-26T01:02:22Z"
+  },
+  "I2A-20260926T0022Z.json": {
+   "status": "rejected",
+   "at": "2026-09-26T00:22:00Z",
+   "reason": "malformed: estimate confidence 'medium-low' not in ['unknown', 'low', 'medium', 'high']"
+  },
+  "U3-20260926T0037Z.json": {
+   "status": "rejected",
+   "at": "2026-09-26T00:37:00Z",
+   "reason": "stale: at 2026-09-26T00:37:00Z is not newer than lane U3 state 2026-09-26T01:02:22Z"
   }
  },
  "eta": {
-  "computed_at": "2026-09-25T23:50:01Z",
+  "computed_at": "2026-09-26T01:12:32Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
@@ -3869,7 +4024,7 @@
    "E3C": {
     "gate": "BACKEND-LOCAL",
     "status": "forecast",
-    "text": "2026-09-26 03:26Z – 2026-09-26 11:14Z (likely 2026-09-26 06:02Z)",
+    "text": "2026-09-26 04:48Z – 2026-09-26 12:36Z (likely 2026-09-26 07:24Z)",
     "constraint": "dependency path W5 → E3C",
     "effort_h": [
      3.6,
@@ -3882,9 +4037,9 @@
      11.4
     ],
     "finish": [
-     "2026-09-26T03:26:01Z",
-     "2026-09-26T06:02:01Z",
-     "2026-09-26T11:14:01Z"
+     "2026-09-26T04:48:32Z",
+     "2026-09-26T07:24:32Z",
+     "2026-09-26T12:36:32Z"
     ],
     "conditional": null,
     "confidence": "medium",
@@ -3911,7 +4066,7 @@
     "gate": "APP-LOCAL",
     "status": "blocked",
     "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26",
-    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E3A, E4C",
+    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
     "effort_h": null,
     "wall_h": null,
     "finish": null,
@@ -3924,7 +4079,7 @@
     "gate": "APP-PILOT",
     "status": "blocked",
     "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26",
-    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E3A, E4, E4C, I2A, I3",
+    "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C, I3",
     "effort_h": null,
     "wall_h": null,
     "finish": null,
