@@ -5,6 +5,8 @@
 `apps/app/tests/i2a/`). It changed nothing on Vercel, hosted Supabase, DNS, AWS or the pilot box.
 Every item marked **[OP]** is held by the operator; nothing here is a live-state claim.
 
+Operations after a release (combined checks, auth/credit cutover, error monitoring, alerts, App rollback): [operations.md](operations.md) (I3).
+
 The App reuses the independently deployed backend (I2B/I8, [rollout.md](../runbooks/rollout.md),
 [infra/rollout/README.md](../rollout/README.md)). It adds hosting, auth callbacks/signup and the
 browser journey; it never deploys or restarts runtime infrastructure.
