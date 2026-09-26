@@ -959,6 +959,8 @@ def check_role_matrix(conn) -> str:
     key, so the owner is made one for this check (rolled back): the key-insert attacks must
     then be refused by THEIR defenses (the column grant, the tenant), not by a missing
     wallet, and "owner creates a key" stays a real positive control."""
+    from . import checks_signup          # (it imports this module)
+    checks_signup.gotrue_columns(conn)   # the bare Supabase image has no email_confirmed_at
     allowed_when_it_should_not_be, refused_but_needed = [], []
     try:
         with conn.transaction():

@@ -460,7 +460,7 @@ _d._CHECKS.update({
     "port_jobs_filters": checks_port.check_consumer_jobs_filters,
     "port_privileges": checks_port.check_port_privileges,
     "port_result_withheld": checks_port.check_result_withheld,
-    "port_key_insert": checks_port.check_key_insert_needs_verified_wallet,
+    "port_key_insert": checks_port.check_key_insert_needs_verified_individual,
     "port_monitor": lambda conn: checks_port.check_monitor_reads_unknown_holds(conn, _d.MUT_DB),
 })
 _d._CHECKS.update({

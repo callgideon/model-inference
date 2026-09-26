@@ -10,7 +10,8 @@
   - U4 WR-U4-2: `public.consumer_job_result` refuses (`result_pending`) the success the API
     withholds - usage never reported (`held_unknown`) - after the ownership check.
   - C3A WR-C3A-4: a browser `api_keys` INSERT needs a verified individual (the claim path's
-    predicate) who holds a consumer wallet, besides 0001's owner/creator check.
+    predicate), besides 0001's owner/creator check; a wallet is not required, so a verified
+    legacy pilot owner keeps creating keys (1-D10R-2).
   - W5-F5 WR-W5F5-1: I8's read-only `infrx_monitor` login counts CREDIT unknown-usage holds
     (`infrx.credit_wallet_holds.state`, grant + RLS policy), so the worker's reconciliation
     gauges run on it.
@@ -27,6 +28,7 @@ from decimal import Decimal
 
 import psycopg
 from infrx.contracts.conformance import builders as b
+from infrx.state import pgtesting
 
 from . import checks, checks_admission as ca
 from . import checks_content as ck
@@ -34,6 +36,7 @@ from . import checks_credit as cc
 from . import checks_leases as cl
 from . import checks_ready as cr
 from . import checks_settle as cs
+from . import checks_signup
 from . import pgharness
 from .checks_reads import _copy_jobs, as_user
 
@@ -371,35 +374,47 @@ def check_result_withheld(conn) -> str:
     return ca._in_rollback(conn, body)
 
 
-def check_key_insert_needs_verified_wallet(conn) -> str:
-    """C3A WR-C3A-4: an individual's own-org key INSERT through the browser grant (0001's
-    column list, as PostgREST sends it) is accepted only for a verified individual
-    (`infrx.verified_user` evidence and a live email, the claim path's predicate) who holds
-    a consumer wallet; unverified with or without a wallet, and verified without one, are
-    refused by row-level security (42501)."""
+def check_key_insert_needs_verified_individual(conn) -> str:
+    """C3A WR-C3A-4: an owner's own-org key INSERT through the browser grant (0001's column
+    list, as PostgREST sends it) is accepted only for a verified individual
+    (`infrx.verified_user` evidence and a live email, the claim path's predicate). An
+    unverified caller is refused by row-level security (42501) with or without a wallet; a
+    verified owner is accepted with or without one - the positive controls include the
+    legacy USD pilot owner (1-D10R-2: C3A asked that pilot/invited owners keep working)."""
+    # GoTrue's columns: every hosted `auth.users` has them, the bare Supabase image does not
+    # (0-D10SQL-CM-1). Added before the rolled-back body: on Supabase it is `supabase_admin`
+    # DDL on another session, which must not wait on this one's row locks.
+    checks_signup.gotrue_columns(conn)
+    pilot = pgtesting.USERS[b.ORG_A]         # owns ORG_A, a legacy USD org, no consumer wallet
+
     def body():
         # The admission scenario grants through the A1 seam, which takes its evidence as an
         # argument: CONSUMER_1 has a wallet but no `email_confirmed_at` yet.
-        def insert(user: str):
+        def insert(user: str, org: str | None = None):
             return as_user(conn, user, "insert into public.api_keys (org_id, created_by, "
                            "name, prefix, key_hash) values (%s, %s, 'k', 'sk-infrx-c3a4key0', "
-                           "%s) returning id", (cc.personal_org(conn, user), user,
+                           "%s) returning id", (org or cc.personal_org(conn, user), user,
                                                 f"hash-c3a4-{user}"))
+        assert cc.wallet_of(conn, cc.CONSUMER_1) and not cc.wallet_of(conn, cc.UNGRANTED) \
+            and not cc.wallet_of(conn, pilot), "the fixture's wallets moved"
         refused = {"unverified, funded": insert(cc.CONSUMER_1),
-                   "unverified, no wallet": insert(cc.RACER)}
-        conn.execute("update auth.users set email_confirmed_at = infrx.now() "
-                     "where id in (%s, %s)", (cc.CONSUMER_1, cc.UNGRANTED))
-        refused["verified, no wallet"] = insert(cc.UNGRANTED)
+                   "unverified, no wallet": insert(cc.RACER),
+                   "unverified pilot owner": insert(pilot, b.ORG_A)}
         for case, (code, _rows) in refused.items():
             assert code == "42501", f"{case}: an api_keys insert was accepted ({code})"
-        code, rows = insert(cc.CONSUMER_1)
-        assert code is None and len(rows) == 1, f"a verified, funded individual: {code}"
+        conn.execute("update auth.users set email_confirmed_at = infrx.now() "
+                     "where id in (%s, %s, %s)", (cc.CONSUMER_1, cc.UNGRANTED, pilot))
+        accepted = {"verified, funded": insert(cc.CONSUMER_1),
+                    "verified, no wallet": insert(cc.UNGRANTED),
+                    "verified pilot owner (legacy USD org)": insert(pilot, b.ORG_A)}
+        for case, (code, rows) in accepted.items():
+            assert code is None and len(rows) == 1, f"{case}: refused ({code})"
         policy = conn.execute("select replace(pg_get_expr(polwithcheck, polrelid), "
                               "'public.', ''), polcmd, "
                               "polroles::regrole[]::text from pg_policy where polname = "
                               "'api_keys_insert_owner'").fetchall()
         assert policy == [(KEY_POLICY, "a", "{authenticated}")], policy
-        return f"refused {sorted(refused)}; a verified individual with a wallet accepted"
+        return f"refused {sorted(refused)}; accepted {sorted(accepted)}"
     return ca._in_rollback(conn, body)
 
 
@@ -467,6 +482,6 @@ def check_monitor_reads_unknown_holds(conn, database: str) -> str:
 
 
 __all__ = ["check_consumer_credit_ledger", "check_consumer_jobs_filters",
-           "check_credits_in_index", "check_key_insert_needs_verified_wallet",
+           "check_credits_in_index", "check_key_insert_needs_verified_individual",
            "check_ledger_page_plan", "check_monitor_reads_unknown_holds",
            "check_port_privileges", "check_result_withheld", "monitor_login"]

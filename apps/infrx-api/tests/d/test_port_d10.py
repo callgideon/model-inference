@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """D10-APP-SQL (0024) on real PostgreSQL (both images): C0's paginated consumer CREDIT ledger,
 U1R's credits-in partial index and consumer_jobs filters, U4's withheld result, C3A's
-verified-and-funded key insert, W5-F5's monitor read of unknown holds, their grants, the
+verified-individual key insert, W5-F5's monitor read of unknown holds, their grants, the
 re-run, and the immutability of 0001-0023.
 
     INFRX_D_TASK=revoke uv run --frozen pytest -q tests/d/test_port_d10.py
@@ -66,8 +66,8 @@ def test_the_owners_result_is_withheld_while_usage_is_unknown() -> None:
     print(cp.check_result_withheld(_db()))
 
 
-def test_a_browser_key_insert_needs_a_verified_individual_with_a_wallet() -> None:
-    print(cp.check_key_insert_needs_verified_wallet(_db()))
+def test_a_browser_key_insert_needs_a_verified_individual() -> None:
+    print(cp.check_key_insert_needs_verified_individual(_db()))
 
 
 def test_0024_is_re_runnable() -> None:
@@ -94,7 +94,7 @@ def test_0024_is_re_runnable() -> None:
                               if f[0] == PORT))
     assert conn.execute(snap).fetchall() == before, "0024 re-applied changed an object"
     print(cp.check_port_privileges(conn), cp.check_consumer_credit_ledger(conn),
-          cp.check_result_withheld(conn), cp.check_key_insert_needs_verified_wallet(conn))
+          cp.check_result_withheld(conn), cp.check_key_insert_needs_verified_individual(conn))
 
 
 def test_0001_to_0023_are_byte_identical_to_the_base() -> None:

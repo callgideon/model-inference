@@ -20,11 +20,13 @@ import subprocess
 import time
 
 import pytest
-from infrx.state import migrations
+from infrx.contracts.conformance import builders as b
+from infrx.state import migrations, pgtesting
 
 from . import checks_admission as ca
 from . import checks_content as ck
 from . import checks_credit as cc
+from . import checks_signup
 from . import pgharness
 
 POSTGREST = ("postgrest/postgrest@sha256:"
@@ -123,6 +125,7 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
     pgharness.recreate(DB)
     pgharness.apply(DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
     conn = pgharness.connect(DB)
+    checks_signup.gotrue_columns(conn)   # GoTrue's email_confirmed_at; the bare image lacks it
     ca.seed_admission(conn)
     world = ca.World(conn)
     settled, _ref = ck._settled_with_result(conn, world, result_ttl_s=600.0)
@@ -171,11 +174,12 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
             {r["request_id"] for r in by_key.json()}, by_key.text
         none = rpc("consumer_jobs", {"p_model": "nobody/none"}, _jwt(me))
         assert none.status_code == 200 and none.json() == [], none.text
-        # 0024 (C3A WR-C3A-4): a direct key INSERT needs a verified individual with a
-        # consumer wallet - `me` holds one but is not email-verified in this fixture
-        def mint(user, tag):
+        # 0024 (C3A WR-C3A-4): a direct key INSERT needs a verified individual - `me` holds a
+        # wallet but is not email-verified in this fixture; a verified legacy pilot owner
+        # (no consumer wallet) still mints through the deployed console's path (1-D10R-2)
+        def mint(user, tag, org=None):
             return httpx.post(f"{base}/api_keys", json={
-                "org_id": cc.personal_org(conn, user), "created_by": user, "name": "k",
+                "org_id": org or cc.personal_org(conn, user), "created_by": user, "name": "k",
                 "prefix": "sk-infrx-rest0000", "key_hash": f"hash-rest-{tag}"},
                 headers={"Authorization": f"Bearer {_jwt(user)}", "Prefer": "return=minimal",
                          "Content-Type": "application/json"}, timeout=10)
@@ -185,6 +189,10 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
         conn.execute("update auth.users set email_confirmed_at = now() where id = %s", (me,))
         verified = mint(me, "verified")
         assert verified.status_code == 201, verified.text
+        pilot = pgtesting.USERS[b.ORG_A]
+        conn.execute("update auth.users set email_confirmed_at = now() where id = %s", (pilot,))
+        owner = mint(pilot, "pilot", b.ORG_A)
+        assert owner.status_code == 201 and cc.wallet_of(conn, pilot) is None, owner.text
         # a browser session never writes a key's audience or provider scope
         patch = httpx.patch(f"{base}/api_keys?id=eq.{ca.C1_KEY}", json={"audience": "operator"},
                             headers={"Authorization": f"Bearer {_jwt(me)}",
