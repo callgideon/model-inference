@@ -1,0 +1,126 @@
+{
+ "schema": "infrx.run-profile/1",
+ "identity": {
+  "run_id": "e1b-w1-sop",
+  "source_sha": "FILL 40-hex: frozen candidate",
+  "deployed_sha": "FILL 40-hex: gateway infrx_build_info",
+  "image_digest": "FILL sha256: infrx-runtime:<release>",
+  "weights_sha256": "FILL sha256: shard-set digest (serving-version.json:8-11)",
+  "tokenizer_sha256": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+  "processor_sha256": "FILL sha256: P-06 served bytes",
+  "template_sha256": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+  "model_revision": "nemostation/marlin-2b@2026-09-01",
+  "preparation_profile": "v1",
+  "engine_options": {
+   "max_num_seqs": 8,
+   "max_video_seconds": 82
+  },
+  "migration_version": "FILL: newest applied (0025 per I8-20260925T0002Z.json:27)",
+  "config_version": "FILL: sha256 of /etc/marlin2b-gateway.env"
+ },
+ "target": {
+  "path": "direct-gateway",
+  "allowlist": [
+   "127.0.0.1:8001"
+  ],
+  "environment_owner": "coordinator (pilot box i-0e8449a4ffca29bab)",
+  "allowed_fault_targets": [],
+  "tenant_key_env": [
+   "INFRX_API_KEY"
+  ],
+  "test_key_ids": [
+   "142c7d81"
+  ],
+  "customer_traffic": false,
+  "maintenance_window": "FILL: coordinator-logged window id"
+ },
+ "bounds": {
+  "max_duration_s": 900,
+  "max_requests": 9,
+  "max_input_bytes": 1000000,
+  "max_input_tokens_per_request": 30720,
+  "max_output_tokens_per_request": 1024,
+  "max_output_tokens": 9216,
+  "max_concurrency": 1,
+  "max_drain_s": 600,
+  "spend": {
+   "currency": "CREDIT",
+   "max_spend": 121.6512,
+   "outstanding_holds": 0,
+   "rates": {
+    "input_per_mtok": 400,
+    "output_per_mtok": 1200,
+    "source": "P-01 card rc_marlin2b_20260925_launch, 400.00000000 / 1200.00000000 CREDIT per 1M input / output tokens (research/plan/15-pending-inputs.md, Decisions 2026-09-25)",
+    "as_of": "2026-09-25"
+   }
+  },
+  "stop_thresholds": {
+   "platform_error_rate": 0.01,
+   "host_growth_mib": 512,
+   "gpu_growth_mib": 256
+  }
+ },
+ "workload": {
+  "manifest_sha256": "5e2b71bacdd4e62a03a94ead831ab2346ca08351a00b3034a58273ccb116d1f9",
+  "data_source": "sop-synth-v1 in-cap clips sop00-sop08 (models/marlin2b/corpus-synth/manifest.json), the items JSONL infra/rollout/e1b-window.sh writes for WC-8",
+  "item_ids": [
+   "sop00-8s-640x360",
+   "sop01-8s-854x480-steps_within_one_second",
+   "sop02-8s-1280x720",
+   "sop03-30s-640x360",
+   "sop04-30s-854x480-steps_out_of_order",
+   "sop05-30s-1280x720",
+   "sop06-60s-640x360",
+   "sop07-60s-854x480-step_absent",
+   "sop08-60s-1280x720"
+  ],
+  "dataset_version": "e1b-w1-sop",
+  "seed": 20260922,
+  "forms": [
+   "upload"
+  ],
+  "max_tokens_mix": [
+   1024
+  ],
+  "max_clip_duration_s": 82,
+  "transport": "sse",
+  "tenants": 1,
+  "expected_invalid": []
+ },
+ "measurement": {
+  "profile_class": "P3",
+  "client": {
+   "location": "pilot box, same host as the gateway (infra/rollout/e1b-window.sh, one container per cell)",
+   "resources": "one process",
+   "clock": "time.perf_counter, one process"
+  },
+  "arrival": "closed-loop",
+  "rate_per_s": null,
+  "concurrency": 1,
+  "warmup_excluded": true,
+  "cache_regime": "unknown",
+  "max_driver_lag_s": 1.0,
+  "min_samples": 60,
+  "repeats": 1,
+  "thresholds": {
+   "ttft_s": null,
+   "e2e_s": null,
+   "max_error_rate": 0.01
+  },
+  "fault_schedule": [],
+  "telemetry": [],
+  "price": {
+   "usd_per_hour": 2.24208,
+   "instances": 1,
+   "source": "research/cross-cutting/cloud-pricing.md §3.1: g6e.2xlarge 1x L40S on-demand, AWS price sheet us-east-1 Linux (P-19); USD infrastructure cost, never converted to or from CREDIT",
+   "as_of": "2026-09-20"
+  }
+ },
+ "cleanup": {
+  "policy": "drain-then-cancel",
+  "owned_prefix": "infrx-e1b-",
+  "restore": "no target state changes except test-tenant jobs/ledger rows; uploads and results expire with their TTLs",
+  "max_cleanup_s": 900,
+  "evidence_destination": "models/marlin2b/results/E1B-window-<release7>/"
+ }
+}
