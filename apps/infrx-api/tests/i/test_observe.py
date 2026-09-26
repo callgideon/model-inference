@@ -33,7 +33,7 @@ from infrx.observe import alerts as evaluator
 
 from . import support
 from .pooler import PG_DIRECT, TXN
-from .test_ops_steps import calls, run_step, stubs
+from .test_ops_steps import run_step, stubs
 
 API = support.API_DIR
 OBSERVE = support.REPO / "infra" / "observe"
@@ -358,7 +358,7 @@ def test_ops_continuous__the_host_probe_reports_gpu_engine_units_disks_and_the_e
     done = run_step((OBSERVE / "host-probe.sh").read_text(), stub, env=env)
     assert done.returncode == 0, done.stderr
     samples = evaluator.parse(out.read_text())
-    labels = {(n, dict(l).get("unit") or dict(l).get("mount")): v for (n, l), v in samples.items()}
+    labels = {(n, dict(lb).get("unit") or dict(lb).get("mount")): v for (n, lb), v in samples.items()}
     assert labels[("infrx_gpu_up", None)] == 1 and labels[("infrx_engine_up", None)] == 1
     assert labels[("infrx_edge_maintenance", None)] == 1
     assert labels[("infrx_processing_cache_bytes", None)] == 12345
