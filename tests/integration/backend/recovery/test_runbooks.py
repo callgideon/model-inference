@@ -179,7 +179,8 @@ def test_e4c_rb09_the_copy_is_seeded_with_hosted_s_own_applied_history():
     rows = re.findall(r"\('(\d{4})', '([a-z0-9_]*)'\)", done.stdout)
     assert rows == sorted(applied.items()) and len(rows) == 18, done.stdout
     assert done.stdout == ",".join(f"('{v}', '{n}')" for v, n in rows), done.stdout
-    assert "0001-0018" in block and "0001-0025" in _section((RUNBOOKS / "rollout.md").read_text(), "### W7")
+    last = local[-1][0]                                   # the tree's newest migration (0026 today)
+    assert "0001-0018" in block and f"0001-{last}" in _section((RUNBOOKS / "rollout.md").read_text(), "### W7")
 
 
 def test_e4c_rb10_the_candidate_installs_the_credit_regime_with_the_p01_card():
