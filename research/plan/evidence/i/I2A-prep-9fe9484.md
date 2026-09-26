@@ -130,3 +130,50 @@ rollback promotes the recorded known-good deployment."
 Optimistic 2 h / likely 5 h / pessimistic 12 h, confidence medium-low (2026-09-26T00:10Z).
 Basis: code, tests and runbook done; remaining is WR-I2A-1, the operator inputs (staging project
 and SMTP are the pessimistic case), one production deploy + smoke after BACKEND-READY, and E4's journey.
+
+## Fix round (2026-09-26T00:22Z)
+
+Review head `98882cfbe8bb33bc6997a51af1256616c370f730`; fix code head
+`a8d9489d34c50c523db5b7dd77b965b15fbfd9f5` (this section and `updates/I2A-20260926T0022Z.json`
+are committed on top of it). Local only; no hosted system touched.
+
+| Finding | Resolution |
+|---|---|
+| 1-I2A-R2 (NEXT_PUBLIC_APP_URL required, unread) | `VARIABLES`: `required: []` (still checked when set: I2A-ENV-04/05). New I2A-ENV-09: a variable may be required only if the App's code reads it (same scan as ENV-08). Runbook §3 row → optional; §7 item 2 now lists the full production-required set (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `INFRX_API_BASE_URL`, `CONSOLE_CURSOR_SECRET`); §1 item 4 names **gate APP-MERGE**: the merge of `claude/consumer-v1` into `main` is the production App deploy (coordinator: add it to the tracker as a named gate). |
+| 1-I2A-R3 (INFRX_RELEASE_SHA overrides the host commit) | `releaseCommit`: `VERCEL_GIT_COMMIT_SHA` wins when present; `INFRX_RELEASE_SHA` is the off-Vercel build input only; both present and different → `"unknown"`; a present but malformed host value is never replaced. `next.config.ts` bakes each source as itself (no fold); the route reads both textually. Runbook §3 row "never set on Vercel", §5 clean-tree rule, §7 item 2. **Correction to the commands table above:** the `next start` probe's `"commit":"fd40748c…"` was a build of a **dirty tree** (uncommitted I2A code + the temporary WR-I2A-1 patch); it is not a release identity of any commit. |
+| 0-F1 / 1-I2A-R1 (paths outside the owned list) | `apps/app/README.md` restored to base (0 lines in `git diff fd40748c..HEAD`); its paragraph is now **WR-I2A-0** below. The other three stay, because the brief's fail-closed startup and release identity need them; the coordinator is asked to ratify them as I2A scope at merge: `apps/app/instrumentation.ts` (Next's only startup hook), `apps/app/app/api/version/route.ts` (the identity endpoint; Next fixes the path), `apps/app/.env.example` (+8, names only). No overlap with the in-flight app lanes (per both reviews). |
+
+### Fails-before (tests written first, run against 98882cfb's code)
+
+`node --test tests/i2a/*.test.ts` → 22 tests, 18 pass, **4 fail**:
+I2A-ENV-02 (`App environment refused (production): NEXT_PUBLIC_APP_URL is required in production`),
+I2A-ENV-09 (`["NEXT_PUBLIC_APP_URL"]` required but unread), I2A-REL-03 (stale `a…a` reported
+instead of `unknown`), I2A-REL-02 (`VERCEL_GIT_COMMIT_SHA` not read by the route / folded in
+`next.config.ts`). After the fix: 22/22.
+
+### Commands (apps/app unless stated)
+
+| Command | Exit | Result |
+|---|---|---|
+| `node --test tests/i2a/*.test.ts` (fix applied) | 0 | 22/22 pass, 0 skip |
+| `rm -rf .next && pnpm build` | 0 | 21.8 s; 19 routes; `/api/version` `ƒ` |
+| `rm -rf .next && INFRX_RELEASE_SHA=a×40 VERCEL_GIT_COMMIT_SHA=b×40 pnpm build` (placeholders) | 0 | the version route's server chunk carries `INFRX_RELEASE_SHA:"a…"` and `VERCEL_GIT_COMMIT_SHA:"b…"` separately (so `releaseIdentity` reports `unknown`, I2A-REL-03); 0 hits in `.next/static` |
+| `make console-test` (repo root, at `a8d9489d`, after that build) | 0 | 530 tests: 507 pass, 0 fail, 23 skip (the pre-existing 23); I2A 22/22 with both BUILT cases executed |
+| `make console-lint` | 0 | 0 errors, 2 pre-existing warnings |
+| `make console-typecheck` | 0 | clean |
+| `python3 research/plan/scripts/validate_plan.py` (repo root) | 0 | 4 PASS lines |
+
+### Wiring requests (added)
+
+- **WR-I2A-0** `apps/app/README.md` (closes A3 WR-3's README line): apply exactly the 4-line hunk
+  this fix round removed, i.e. `git diff fd40748c 98882cfb -- apps/app/README.md | git apply`
+  (a paragraph after "Never commit real values", pointing at `lib/deploy/env.ts` for the matrix
+  and at `infra/app/README.md` for deploy/rollback). Composed proof: documentation only;
+  `make console-test` passed with it present at 98882cfb (528 tests, 0 fail).
+- WR-I2A-1 and WR-I2A-2 unchanged.
+
+### Remaining effort (I2A as a whole)
+
+Unchanged: optimistic 2 h / likely 5 h / pessimistic 12 h, confidence medium-low
+(2026-09-26T00:22Z). Basis as above; the fix round removed one production outage path
+(an unset `NEXT_PUBLIC_APP_URL`) from the pessimistic case.
