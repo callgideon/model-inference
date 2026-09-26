@@ -56,6 +56,7 @@ type Journey = {
   keyB?: string;
   keySource?: string;
   appKeyId?: string;
+  appKeyName?: string;
   syncRequest?: string;
   syncKey?: string;
   asyncHandle?: string;
@@ -291,7 +292,7 @@ test("create-key: the individual creates a key in the App; its plaintext is show
   expect(key && !key.revoked, "the key is filed, unrevoked").toBeTruthy();
   await page.reload();
   expect(await page.content(), "the plaintext is never shown again").not.toContain(secret);
-  await remember({ keyA: secret, keySource: "App (C3A/U2)", appKeyId: key!.key_id });
+  await remember({ keyA: secret, keySource: "App (C3A/U2)", appKeyId: key!.key_id, appKeyName: name });
 });
 
 test("text-sync: an external text request is answered and settled exactly once", async () => {
@@ -532,12 +533,13 @@ test("provider-route-denial: provider and operator routes are not served to a co
   expect(served, "provider routes a consumer reached").toEqual([]);
 });
 
-test("operator-controls: operator actions are reachable only by an operator, with a reason, once", async ({ page }) => {
-  needsLanes("the minimal operator controls are absent", "U3");
-  const email = needs((await journey()).a, "user A");
-  await signIn(page, email);
-  const reply = await page.goto("/admin");
-  expect(reply?.status() === 404 || new URL(page.url()).pathname !== "/admin", "a consumer is refused /admin").toBeTruthy();
+test("operator-controls: operator actions are reachable only by an operator, with a reason, once", async () => {
+  // NOT RUN whatever the manifest says: U3's merge alone must not turn this into a pass while no
+  // operator action is performed. A consumer's /admin refusal is provider-route-denial's.
+  test.skip(
+    true,
+    "NOT RUN[operator-action] no operator action is exercised yet: E3A proper signs in an operator on the edge, performs one U3 action with a reason and asserts one audit row after a repeat",
+  );
 });
 
 test("isolation: a second individual gets their own one grant and sees none of the first's requests, keys or results", async ({ page }) => {
@@ -579,9 +581,12 @@ test("revoke-key: a key revoked in the App fails admission within the revocation
   needsLanes("key create/revoke actions and the keys page are absent", "C3A", "U2");
   const state = await journey();
   const keyId = needs(state.appKeyId, "the key created in the App");
+  const name = needs(state.appKeyName, "the name of the key created in the App");
   await signIn(page, state.a!);
   await page.goto("/api-keys");
-  await page.getByRole("button", { name: /revoke/i }).first().click();
+  // The App asks window.confirm() first; Playwright dismisses a dialog nobody handles.
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: `Revoke ${name}`, exact: true }).click();
   await expect.poll(async () => (await facts(state.a!)).keys.find((key) => key.key_id === keyId)?.revoked).toBe(true);
   await expect
     .poll(async () => (await api(state.keyA!, "GET", `/v1/jobs/${state.asyncHandle}`)).status, { timeout: 75_000, intervals: [2_000] })
