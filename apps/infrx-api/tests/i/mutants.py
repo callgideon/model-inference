@@ -1268,8 +1268,8 @@ MUTANTS += (
        'proven = (bool(proof.get("evidence"))',
        "test_ops_recover__a_schema_proof_reaches_exactly_its_through"),
     _m("known_good_record_unproven", "both known-good targets carry their schema proof",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0023", "result": "bda1586',
-       '"schema_proof_withdrawn": {"through": "0023", "result": "bda1586',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0025", "result": "bda1586',
+       '"schema_proof_withdrawn": {"through": "0025", "result": "bda1586',
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
     _m("schema_proof_trusts_moved_statements", "a migrated history that differs from the files is refused",
        PROOF_PY, "if parts != [files[v]] and not covers(", "if False and not covers(",
@@ -1299,6 +1299,18 @@ MUTANTS += (
        "revoke execute on function infrx.claim_preparation(jsonb) from infrx_runtime;",
        "revoke execute on function infrx.claim_preparation(jsonb) from infrx_runtime; ",
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
+    # KNOWN-GOOD-PROOF-2: the proof reaches 0025, and only those bytes
+    _m("known_good_record_stops_at_0023", "both targets are proven through 0025",
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0025", "result": "4226315',
+       '"schema_proof": {"through": "0023", "result": "4226315',
+       "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
+       "test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond"),
+    _m("known_good_record_proves_other_0025", "the proof's 0025 hash is this tree's 0025",
+       "../../apps/app/supabase/migrations/0025_operator_console.sql",
+       "-- Re-runnable: `create or replace`, and the grants restated.",
+       "-- Re-runnable: `create or replace`, and the grants restated. ",
+       "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
+       "test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond"),
 )
 
 # --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------

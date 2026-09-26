@@ -66,7 +66,7 @@ def test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema():
               if r.get("known_good") and r.get("schema_proof")}
     assert set(proven) == {"4226315", "bda1586"}
     for proof in proven.values():
-        assert proof["through"] >= "0022" and proof["through"] in tree
+        assert proof["through"] >= "0025" and proof["through"] in tree       # KNOWN-GOOD-PROOF-2
         assert any("KNOWN-GOOD-PROOF-" in p for p in proof["evidence"])
         # the bytes it ran on, beyond both targets' 0001-0018: a revised 0022/0023 fails here
         assert proof["files"] == {v: h for v, h in tree.items() if "0018" < v <= proof["through"]}
@@ -123,3 +123,16 @@ def test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order():
     # a "statement" that is text inside the file's comment is not one of its statements
     assert compare([("0001", stmts), ("0002", ["select 1", "drop table b"])], files) == \
         "statements differ from the candidate's files: ['0002']"
+
+
+def test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond():
+    """KNOWN-GOOD-PROOF-2 (RR:51): the real record on this checkout. Each target is KNOWN-GOOD
+    with hosted at 0025 (0024/0025 proven) and NOT at 0026, which no proof reaches."""
+    record = json.loads(RECORD.read_text())
+    judge = KNOWN_GOOD["judge"]
+    for sha in ("bda15866e5700f3856d7142580da842fba9bbd23", "422631591845fbd66b590c73d5ff4150318d9d7a"):
+        at = {applied: judge(sha, applied, ["MAX_VIDEO_SECONDS", "WORKER_CONCURRENCY"], None, record)
+              for applied in ("0024", "0025", "0026")}
+        assert at["0024"]["verdict"] == at["0025"]["verdict"] == "KNOWN-GOOD", at
+        assert at["0026"]["verdict"] == "NOT-KNOWN-GOOD"
+        assert [c["check"] for c in at["0026"]["checks"] if not c["ok"]] == ["migrations"]
