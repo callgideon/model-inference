@@ -65,6 +65,9 @@ PROGRESS_EVENT, ERROR_EVENT = "infrx.progress", "infrx.error"
 # Platform deadlines, rendered as the synchronous-deadline class (01: 504).
 DEADLINE_CAUSES = frozenset({TerminalCause.queue_wait_expired, TerminalCause.deadline_exceeded,
                              TerminalCause.sync_deadline})
+# W5-F5B: a refusal after `admit_ready`'s marker, logged and counted (by its code), never
+# answered. Recorded once `observe.metrics.FAMILIES` declares it (WR-W5F5B-1; `intake.record`).
+POST_MARKER_REFUSED = "infrx_post_marker_refusals_total"
 
 
 @dataclass(frozen=True)
@@ -247,8 +250,10 @@ class Relay:
         staged. Only an acceptance this process provably left unfinished is completed, from
         the record its first acceptance staged (M's staged payload: the prepared request
         and its refs): a job whose payload this process staged and whose refs it never
-        bound. M binds and prepares in this process (Limit 8), so that job cannot have been
-        prepared, let alone run - its rechecks may still refuse, and cancel, it. Any other
+        bound. On the pre-D10 door M binds and prepares in this process (Limit 8), so that
+        job cannot have been prepared, let alone run - its rechecks may still refuse, and
+        cancel, it. Through `admit_ready` the marker is committed and the job may have run:
+        `_admitted` then neither rechecks nor cancels (W5-F5, W5-F5B). Any other
         job in flight (bound, or staged by another process) may be running: it is answered
         as it stands - no recheck, no attach, never a cancel. The bound-gate reads M's
         attach wherever it is recorded (MPILOT: `attached` - this process's, else the durable
@@ -272,7 +277,8 @@ class Relay:
         of a job still in flight (`_resume`); both steps are idempotent. A definitive
         refusal cancels the job (nothing ran, nothing is billed) and is answered; a
         dependency that failed leaves the job for the same-key retry its 503 invites
-        (money-B2; the stored deadline ends it otherwise)."""
+        (money-B2; the stored deadline ends it otherwise). Both on the pre-D10 door only:
+        past `admit_ready`'s marker the job is answered its committed outcome (W5-F5B)."""
         try:
             # E3C F-5: through `admit_ready` the admission transaction itself checked the card
             # against this runtime's expectation and the PINNED revision's capability
@@ -295,6 +301,18 @@ class Relay:
             self._attaching[job.request_id] = job.org_id
             try:
                 await _dependency(self.media.attach(job.request_id, refs))
+            except errors.DomainError as refused:
+                if self.readiness is None:
+                    raise
+                # W5-F5B (0-W5F5-R2): past `admit_ready`'s marker the transaction already
+                # bound the manifest the worker reads (0019 `bind_source`; this attach only
+                # repeats it into this process's copy), and the job may have run and settled.
+                # Neither a refusal nor an outage here is the job's answer or a reason to
+                # cancel it - a 503 would invite an unkeyed retry, a second job beside the one
+                # that runs and is billed. Logged and counted; the committed outcome answers.
+                log.warning("job %s: attach refused past its execution-ready marker (%s); "
+                            "answering its committed outcome", job.handle, refused.code)
+                intake.record(self.registry, "inc", POST_MARKER_REFUSED, code=refused.code)
             finally:
                 self._attaching.pop(job.request_id, None)
         except errors.DependencyUnavailable:
