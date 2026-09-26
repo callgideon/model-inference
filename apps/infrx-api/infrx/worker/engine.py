@@ -984,7 +984,7 @@ class VllmEngine:
 
     async def _attempt(self, stream: "EngineStream",
                        key: tuple[str, int]) -> AsyncIterator[EngineEvent]:
-        lease, prepared = stream.lease, stream.prepared
+        prepared = stream.prepared
         await self._hold_media(stream)                   # released by `_generate`
         body = self.upstream_body(prepared)              # DomainError before anything runs
         ceiling = body["max_tokens"]
