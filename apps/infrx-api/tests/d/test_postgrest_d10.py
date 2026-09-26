@@ -18,6 +18,7 @@ import hmac
 import json
 import subprocess
 import time
+import uuid
 
 import pytest
 from infrx.contracts.conformance import builders as b
@@ -202,6 +203,48 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
         hidden = httpx.get(f"{base}/content_objects", headers={
             "Authorization": f"Bearer {_jwt(me)}"}, timeout=10)
         assert hidden.status_code == 404, hidden.text
+        # 0025 (D10-0025, U3 WR-U3-1, R143): the operator console's RPCs with each principal's
+        # own JWT - the operator commits once, then replays; the same key for another key id
+        # is idempotency_conflict; a consumer is refused by is_operator() (42501 -> 403); anon
+        # and the platform key hold no EXECUTE (42501 -> 401 / 403)
+        ops = "0d100000-0000-4000-8000-0000000000e1"
+        conn.execute("insert into auth.users (id, email) values (%s, 'ops@example.com')", (ops,))
+        conn.execute("update public.profiles set is_operator = true where id = %s", (ops,))
+        key = f"rest-{uuid.uuid4()}"
+        calls = {
+            "operator_adjust_credit": {"p_user": other, "p_amount": "2.5", "p_reason": "rest",
+                                       "p_idempotency_key": key},
+            "operator_set_suspension": {"p_org": cc.personal_org(conn, other),
+                                        "p_suspended": False, "p_reason": "rest",
+                                        "p_idempotency_key": key},
+            "operator_revoke_key": {"p_key": ca.C2_KEY, "p_reason": "rest",
+                                    "p_idempotency_key": key}}
+        for name, body in calls.items():
+            for token, status in ((_jwt(me), 403), (None, 401), (_jwt(None, "service_role"), 403)):
+                denied = rpc(name, body, token)
+                assert denied.status_code == status and "42501" in denied.text, \
+                    (name, denied.status_code, denied.text)
+            first = rpc(name, body, _jwt(ops))
+            assert first.status_code == 200 and first.json()["replayed"] is False, first.text
+            again = rpc(name, body, _jwt(ops))
+            assert again.status_code == 200 and again.json()["replayed"] is True, again.text
+        assert first.json() == {"replayed": False} and rpc(
+            "operator_adjust_credit", calls["operator_adjust_credit"], _jwt(ops)).json() == \
+            {"replayed": True, "unit": "CREDIT", "amount": "2.50000000"}
+        conflict = rpc("operator_revoke_key", {**calls["operator_revoke_key"],
+                                               "p_key": ca.C1_KEY}, _jwt(ops))
+        assert conflict.status_code == 400 and "idempotency_conflict" in conflict.text, \
+            conflict.text
+
+        def read(relation, sub):
+            headers = {"Authorization": f"Bearer {_jwt(sub)}"} if sub else {}
+            return httpx.get(f"{base}/{relation}", headers=headers, timeout=10)
+        for relation in ("operator_unknown_usage", "operator_wallet_drift"):
+            mine_ops = read(relation, ops)
+            assert mine_ops.status_code == 200 and isinstance(mine_ops.json(), list), \
+                mine_ops.text
+            assert read(relation, me).json() == [], f"a consumer read {relation}"
+            assert read(relation, None).status_code == 401, f"anon read {relation}"
         print(f"PostgREST {POSTGREST[-12:]}: own rows, isolation, result, anon {anon.status_code},"
               f" key scope {patch.status_code}, infrx hidden {hidden.status_code}")
     finally:

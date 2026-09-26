@@ -744,7 +744,9 @@ def check_no_unit_conversion(conn) -> str:
     # Row-per-request projections that label each amount with its own unit.
     side_by_side = {"public.console_usage", "infrx.usage_records", "infrx.active_holds",
                     # D10 (0021): C0/U4's own-jobs page, each amount in its job's unit
-                    "public.consumer_jobs"}
+                    "public.consumer_jobs",
+                    # D10-0025: the operator's unknown-usage queue, the hold in its unit
+                    "public.operator_unknown_usage"}
     found = []
     objects = conn.execute("""
         select n.nspname || '.' || p.proname, lower(p.prosrc) from pg_proc p

@@ -488,6 +488,13 @@ def check_reads_privileges(conn) -> str:
                          {"authenticated", "service_role"}),
                         ("public.consumer_job_result(uuid)", {"authenticated", "service_role"}),
                         ("public.consumer_org()", set()),
+                        # D10-0025 (R143): operator writes by the operator's JWT only
+                        ("public.operator_adjust_credit(uuid,text,text,text)",
+                         {"authenticated"}),
+                        ("public.operator_set_suspension(uuid,boolean,text,text)",
+                         {"authenticated"}),
+                        ("public.operator_revoke_key(uuid,text,text)", {"authenticated"}),
+                        ("infrx.console_operator(text,text)", set()),
                         ("infrx.resolve_usd_revision(text)", set()),
                         ("infrx.usd_price(text)", {"service_role", "infrx_runtime"})):
         for role in ("anon", "authenticated", "service_role", "infrx_runtime"):
