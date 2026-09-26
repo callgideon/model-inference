@@ -103,7 +103,9 @@ class Stack:
 
     def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
         self.users.update(extra_users or {})
-        path = Path("/tmp") / f"infrx-i8-pooler-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
         self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
         fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
         for name in (BOUNCER, PG):
