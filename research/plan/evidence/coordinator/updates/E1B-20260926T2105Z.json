@@ -1,0 +1,83 @@
+{
+  "task": "E1B",
+  "slice": "E1B-WIRE: WR-1 window profile bases, WR-2 infra/rollout/e1b-window.sh, WR-3 bench --target direct stop_token_ids, WR-4 WorkerLoop phase timings to the worker Registry",
+  "activity": "review",
+  "head": "fedf6888",
+  "worktree": ".claude/worktrees/codex-e1b-wire",
+  "branch": "codex/e1b-wire",
+  "owned_paths": [
+    "models/marlin2b/bench.py",
+    "models/marlin2b/tests/test_bench.py",
+    "apps/infrx-api/infrx/worker/loop.py",
+    "apps/infrx-api/tests/w/test_loop.py",
+    "apps/infrx-api/tests/w/loop_mutants.py",
+    "models/marlin2b/profiles/E1B-direct.base.json",
+    "models/marlin2b/profiles/E1B-box.base.json",
+    "models/marlin2b/profiles/E1B-box.forms.base.json",
+    "models/marlin2b/profiles/E1B-sop.base.json",
+    "models/marlin2b/profiles/E1B-edge.two-tenant.base.json",
+    "models/marlin2b/tests/test_profile.py",
+    "infra/rollout/e1b-window.sh",
+    "apps/infrx-api/tests/i/test_rollout.py",
+    "models/marlin2b/results/E1B-protocol.md",
+    "research/plan/evidence/e/E1B-wire-fedf688.md",
+    "research/plan/evidence/coordinator/updates/E1B-20260926T2105Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen --no-sync pytest -q ../../models/marlin2b/tests",
+      "exit": 0,
+      "summary": "118 passed (incl. protocol pin)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 uv run --frozen --no-sync pytest -q tests/w",
+      "exit": 0,
+      "summary": "331 passed, 10 skipped"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen --no-sync pytest -q tests/w/test_*mutants.py (7 lists)",
+      "exit": 0,
+      "summary": "600 passed, 15 skipped (no local S3)"
+    },
+    {
+      "cmd": "uv run --frozen --no-sync pytest -q tests/i/test_rollout.py",
+      "exit": 0,
+      "summary": "14 passed"
+    },
+    {
+      "cmd": "bash -n infra/rollout/e1b-window.sh; DRY_RUN=1 on a scratch profile dir",
+      "exit": 0,
+      "summary": "12 plan lines; CELLS=WC-7 1 line; SOP JSONL sha = base pin"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "all PASS"
+    },
+    {
+      "cmd": "git diff --stat 387cac69..HEAD",
+      "exit": 0,
+      "summary": "owned paths only"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "est.: WREQ-1..3 ~0.5 h; window cells 1.0-1.6 h of the E4C window (E1B-protocol §7.2); post-window analysis 2-4 h; pessimistic adds a pair re-run and a launcher fix on the box",
+    "at": "2026-09-26T21:05Z"
+  },
+  "blockers": [
+    "MEDIA_BASE_URL (operator-held) for the WC-5 URL form",
+    "WR-4 live only after WREQ-1 (worker/__main__.py:162 metrics=rt.metrics)"
+  ],
+  "wiring_requests": [
+    "WREQ-1 worker/__main__.py:162 WorkerLoop(..., metrics=rt.metrics) + test_worker_main case service.loop.metrics is service.metrics + worker_main mutant",
+    "WREQ-2 models/marlin2b/tests/mutants.py: add the 3 WR-3 mutants (select eos_ids)",
+    "WREQ-3 E4C-runbook §3/§5.0: fill E1B-{direct,box,box-forms,sop}.json and ~/e4c/E1B-two-tenant.json; run order launcher -> WC-6a -> CELLS=WC-7 -> WC-6b"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E1B-wire-fedf688.md"
+  ]
+}
