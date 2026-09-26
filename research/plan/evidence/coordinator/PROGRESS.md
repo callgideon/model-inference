@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 05:56Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 100, updated 2026-09-26 05:56Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 06:00Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 101, updated 2026-09-26 06:04Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `529249d0`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 5 active lanes, 2 reserved.
-- Validation: 0 error(s), 11 warning(s).
+- Agent slots: 16 total, 6 active lanes, 2 reserved.
+- Validation: 0 error(s), 12 warning(s).
 
 ### Actionable blockers
 
@@ -163,6 +163,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | APP-0024-WIRE-2 | support APP-0024-WIRE carried minors: the U1R adapter clamps its look-ahead like C0 (CM-1), the usage-controls test renders the component (CM-2), dead credit_ledger_page/cursorSecret removed if unreferenced; workflow wf_ed73c041-0d5 | running | codex/app-0024-wire-2 | 6c390bda → — | ports app-u1r postgres 55457 (console-c0-real waits on app-c0's flock), prefix infrx-app-u1r- | 2026-09-26 05:44Z | verdict → merge onto the tip | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 05:44Z; basis: two small App changes + tests; 1 lens |
 | LINT-1 | support clear the 12 pre-existing ruff findings in apps/infrx-api/infrx without behaviour change; tasklocal.py's repeated d2–d5 keys analysed (dead reservations); plain Opus agent with test proof | integration | codex/lint-1 | 6c390bda → e93439d9 | ports e1c postgres 55449 if a test needs PG, prefix infrx-e1c- | 2026-09-26 05:56Z | merged --no-ff at e81ddd3b; the 13th finding applied as WR-LINT-1 at 529249d0 (ruff check infrx clean); fixed-clone suite (api-test on e1c, worker mutant lists, integration unit tests) running → complete when green | 0–0.5 h remaining (likely 0.2 h), confidence high, estimated 2026-09-26 05:56Z; basis: merged; one fixed-clone suite run left |
 | E3C-CELLS | support (support lane for E3C; BACKEND-LOCAL stays accepted) three new E3C scenarios that carry the App-gate oracles no scenario covers — s14 DUR-FENCE (expired lease, stale generation refused at append/renew/settle/second capacity), s15 DUR-CAP (concurrent admissions across two orgs/keys at the cap: no negative balance, no oversubscription, no deadlock), s16 CREDIT-RATE (rate card / deployment publish while jobs wait and run: settlement at the admitted revision; unknown/private/unpriced model refused) — each with a negative control in control_trees.sh; final run on the e3c block; tests/integration/app/runner.py DELEGATED rebound to s14/s15/s16 and the new evidence; workflow wf_04200c8d-182 (Opus implementer, 2 lenses, one fix round) | running | codex/e3c-cells | ea29c1f1 → — | ports e3c compose block 56900–56999 (one run at a time), prefix infrx-e3c- | 2026-09-26 05:56Z | handback → coordinator merges; then one make app-e2e rerun on the merged tip fills DUR-FENCE/DUR-CAP/CREDIT-RATE | 3–9 h remaining (likely 5 h), confidence medium, estimated 2026-09-26 05:56Z; basis: three real-process scenarios with injections and controls (~12 min per final run), two lenses, one fix round; a product defect exposed stays a finding |
+| LINT-2 | support (support lane) the 118 ruff findings under apps/infrx-api/tests/ (F811 35 — shadowed tests resurrected or documented, E702 30, F401 17, F541 14, E741 7, E402 7, F841 6, E731 2) with no behaviour change: collect-only count must not drop, full api-test on g8, the touched directories' mutant lists; plain Opus agent | running | codex/lint-2 | 8c9c72f9 → — | ports g8 (postgres 55447, valkey 55492), prefix infrx-g8- | 2026-09-26 06:04Z | handback → coordinator merges after a fixed-clone api-test + mutant run | 0.7–3 h remaining (likely 1.5 h), confidence medium, estimated 2026-09-26 06:04Z; basis: mechanical rewrites; the F811 shadowed tests may resurrect failing cases that become findings |
 
 ### Queues and locks
 
@@ -196,6 +197,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E3A (queued) and E3C-CELLS (running) both own tests/integration/ / tests/integration/backend/e3c/ (+1 more)
 - warning: overlapping writers: I3 (queued) and KNOWN-GOOD-PROOF-2 (running) both own infra/ / infra/rollout/known-good.json
 - warning: overlapping writers: I3 (queued) and E3C-CELLS (running) both own tests/integration/ / tests/integration/backend/e3c/ (+1 more)
+- warning: overlapping writers: KNOWN-GOOD-PROOF-2 (running) and LINT-2 (running) both own apps/infrx-api/tests/i/ / apps/infrx-api/tests/
 
 ## Pending inputs
 
@@ -418,6 +420,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 06:04Z UTC, coordinator (LINT-2): LINT-2 launched from 8c9c72f9 on g8: the 118 ruff findings under apps/infrx-api/tests (ruff check infrx already clean after LINT-1 + WR-LINT-1); F811 shadowed tests are the substantive class
 - 2026-09-26 05:56Z UTC, coordinator (E3C-CELLS): E3C-CELLS launched from ea29c1f1 on the e3c block: s14 DUR-FENCE, s15 DUR-CAP, s16 CREDIT-RATE with negative controls; DELEGATED rebinding; workflow wf_04200c8d-182
 - 2026-09-26 05:56Z UTC, coordinator (LINT-1): LINT-1 e93439d9 merged --no-ff at e81ddd3b (12 ruff findings, no behaviour change; TASK_PORTS identical); WR-LINT-1 529249d0 drops the unused lease binding in worker/engine._attempt; ruff check infrx clean; fixed-clone suite running
 - 2026-09-26 05:56Z UTC, coordinator (E3A-RUN): make app-e2e on the fixed clone of 8a285b58: 76 hermetic unit tests pass before install; journey 20/20; APP-LOCAL cells recorded 14 PASS / 3 NOT RUN[delegated]; gate NOT RUN by design; decision pending BACKEND-READY + E3C-CELLS
