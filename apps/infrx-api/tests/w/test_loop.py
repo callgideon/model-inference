@@ -1128,6 +1128,30 @@ def test_ops_recover__the_loop_reports_each_attempts_phase_timings_in_seconds():
     run(case())
 
 
+def test_ops_recover__a_result_without_phase_timings_is_never_observed():
+    """E1B-WIRE lens (observe_phases assumed `result.timings`): a loop holding the Registry
+    over a runner whose result has no attempt timings (the preparation runner's
+    `PreparationResult`) still returns that result and observes nothing. Oracle: an unguarded
+    `result.timings` kills the runner task - the result is lost into `failures`."""
+    from infrx.worker.preparation import PreparationResult
+
+    class Timeless:
+        async def run(self, job_id):
+            return PreparationResult(job_id=job_id, cause="prepared")
+
+    async def case():
+        world = World()
+        request, _ = await queued(world)
+        await world.scheduler.enqueue(candidate(world, request))
+        metrics = Registry("worker")
+        loop = WorkerLoop(scheduler=world.scheduler, runner=Timeless(), worker_id="worker-a",
+                          limits=world.limits, metrics=metrics)
+        results = await loop.run()
+        assert loop.failures == [] and [r.cause for r in results] == ["prepared"]
+        assert "infrx_phase_seconds_count" not in metrics.render()
+    run(case())
+
+
 def test_ops_recover__a_lease_held_by_a_dead_worker_is_never_resumed():
     """OPS-RECOVER: a restart does not pick a lease back up. `recover` requeues the
     attempt as a **new** generation, which arrives as an ordinary candidate, and the

@@ -551,7 +551,7 @@ def test_e4c_certify__the_launcher_passes_exactly_certify_s_box_flags_and_no_sec
 E1B_WINDOW = ROLLOUT / "e1b-window.sh"
 MARLIN = support.REPO / "models" / "marlin2b"
 DOCKER_E1B = '''#!{python}
-import json, pathlib, sys
+import json, os, pathlib, signal, sqlite3, sys, time
 here = pathlib.Path(__file__).resolve().parent
 args = sys.argv[1:]
 with (here / "docker.log").open("a") as log:
@@ -562,8 +562,22 @@ elif args[0] == "inspect":                   # only the engine exists; a cell's 
     if args[-1] != "marlin2b-8000":
         sys.exit(1)
     print((here / "engine-args.txt").read_text())
-elif args[0] == "kill":
-    sys.exit(1)
+elif args[0] == "kill":                      # only a live WC-8 first half can be signalled
+    if not (here / "sop.pid").exists():
+        sys.exit(1)
+    os.kill(int((here / "sop.pid").read_text()), signal.SIGINT if "--signal" in args else signal.SIGKILL)
+elif args[0] == "run" and "--state" in args and (here / "sop-mode").exists() \\
+        and not (here / "sop.pid").exists():    # WC-8's first half: 3 done, then held
+    stuck = (here / "sop-mode").read_text() == "stuck"
+    signal.signal(signal.SIGINT, signal.SIG_IGN if stuck else lambda *_: sys.exit(130))
+    (here / "sop.pid").write_text(str(os.getpid()))
+    out = next(v.rsplit(":", 1)[0] for v in args if v.endswith(":/out"))
+    db = sqlite3.connect(out + "/sop.sqlite")
+    db.execute("create table items (state text)")
+    db.executemany("insert into items values (?)", [("done",)] * 3)
+    db.commit()
+    print("first half: 3 done", flush=True)
+    time.sleep(20)
 '''
 
 
@@ -662,12 +676,50 @@ def test_e1b_window__refuses_a_cell_that_would_overlap_or_run_off_the_pinned_eng
     started while a certify container exists (any name), while a previous cell's
     infrx-e1b-* container is left, or on an engine whose --max-num-seqs is not the filled
     profile's pin (the ladder's top rung would not be the served concurrency) - each must be
-    refused before any container runs."""
-    for ps, seqs, why in (("sharp_hopper infrx-certify:" + "c" * 40 + "\n", "8", "a certify run is live"),
+    refused before any container runs; a certify container at the top of a long listing too
+    (E1BW-R1: `grep -v | grep -q` under pipefail SIGPIPEs the first grep and the guard passed)."""
+    long = "sharp_hopper infrx-certify:" + "c" * 40 + "\n" + "".join(f"pg_{n} postgres:16\n" for n in range(50000))
+    for n, (ps, seqs, why) in enumerate((("sharp_hopper infrx-certify:" + "c" * 40 + "\n", "8", "a certify run is live"),
+                          (long, "8", "a certify run is live"),     # E1BW-R1: no SIGPIPE'd pipeline
                           ("infrx-e1b-L1-c1 infrx-certify:" + "c" * 40 + "\n", "8", "a previous cell left"),
-                          ("", "32", "not at the pinned max_num_seqs 8")):
-        _, stub, script = _e1b_box(tmp_path / why.replace(" ", "-"), ps=ps, seqs=seqs)
+                          ("", "32", "not at the pinned max_num_seqs 8"))):
+        _, stub, script = _e1b_box(tmp_path / str(n), ps=ps, seqs=seqs)
         done = _e1b_run(stub, script)
         assert done.returncode == 2 and why in done.stderr, (why, done.stderr)
         calls = [json.loads(line) for line in (stub / "docker.log").read_text().splitlines()]
         assert not [c for c in calls if c[0] == "run"], why
+
+
+def test_e1b_window__wc8_keeps_the_interrupted_half_and_bounds_its_exit(tmp_path):
+    """E1B-protocol §7.2 WC-8 (MARLIN-SOP's interrupt half). Oracle: the interrupted run's
+    output discarded (it ran detached into /dev/null, so the half the resume is judged
+    against left no log; E1BW-R2); a first half that ignores SIGINT holding the window
+    forever instead of being killed after the bound and recorded (E1BW-R3); the progress
+    poll creating the state file itself (a root-owned empty sop.sqlite the container's
+    dataset.py may not write)."""
+    for mode in ("exits", "stuck"):
+        _, stub, script = _e1b_box(tmp_path / mode)
+        (stub / "sop-mode").write_text(mode)
+        done = subprocess.run(["bash", "-c", script.replace("t < 120", "t < 2")],
+                              capture_output=True, text=True, timeout=120,
+                              env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}",
+                                   "RELEASE": "c" * 40, "CELLS": "WC-8"})
+        assert done.returncode == 0, (mode, done.stderr)
+        out = pathlib.Path(re.search(r"^out=(\S+)$", done.stdout, re.M).group(1))
+        assert (out / "sop-interrupted.log").read_text().startswith("first half: 3 done\n"), mode
+        assert "WC-8 SIGINT after 3 done" in done.stdout, (mode, done.stdout)
+        calls = [json.loads(line) for line in (stub / "docker.log").read_text().splitlines()]
+        kills = [c for c in calls if c[0] == "kill"]
+        rows = (out / "cells.tsv").read_text().splitlines()
+        if mode == "exits":
+            assert kills == [["kill", "--signal", "INT", "infrx-e1b-sop"]], kills
+            assert rows == ["WC-8 sop exit=0"], rows
+        else:
+            assert kills[-1] == ["kill", "infrx-e1b-sop"], kills
+            assert rows == ["WC-8 interrupt did not exit in 120 s: killed", "WC-8 sop exit=0"], rows
+        assert len([c for c in calls if c[0] == "run"]) == 3, mode      # half, resume, export
+    _, stub, script = _e1b_box(tmp_path / "unstarted")          # no state yet: the poll opens it read-only
+    done = _e1b_run(stub, script.replace("sleep 2\n", "sleep 0\n"), CELLS="WC-8")
+    assert done.returncode == 0, done.stderr
+    out = pathlib.Path(re.search(r"^out=(\S+)$", done.stdout, re.M).group(1))
+    assert not (out / "sop.sqlite").exists()

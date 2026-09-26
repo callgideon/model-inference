@@ -39,7 +39,8 @@ preflight() {                         # §7.1 rule 1: one engine, so nothing els
   local names args
   names=$(docker ps -a --format '{{.Names}} {{.Image}}')
   if grep -q '^infrx-e1b-' <<< "$names"; then refuse "$1" "a previous cell left $(grep -o '^infrx-e1b-[^ ]*' <<< "$names" | tr '\n' ' ')"; fi
-  if grep -v '^infrx-e1b-' <<< "$names" | grep -q ' infrx-certify:'; then refuse "$1" "a certify run is live"; fi
+  # awk, not `grep -v | grep -q`: under pipefail a long listing SIGPIPEs the first grep and passes
+  if awk '$2 ~ /^infrx-certify:/ {f=1} END {exit !f}' <<< "$names"; then refuse "$1" "a certify run is live"; fi
   args=$(docker inspect --format '{{json .Args}}' marlin2b-8000) || refuse "$1" "no engine container marlin2b-8000"
   grep -q "\"--max-num-seqs\",\"$seqs\"" <<< "$args" || refuse "$1" "the engine is not at the pinned max_num_seqs $seqs"
 }
@@ -98,14 +99,22 @@ PY
   echo "plan WC-8 $label ${run[*]}"; echo "plan WC-8 $label-resume ${run[*]}"; echo "plan WC-8 $label-export ${export[*]}"
   [ "${DRY_RUN:-0}" = 1 ] && return 0
   preflight "WC-8 $label"
-  container "$label" -d --env-file "$e4b/key.env" "infrx-certify:$RELEASE" "${run[@]}" > /dev/null
-  until [ "$n" -ge 3 ] || ! docker inspect "infrx-e1b-$label" > /dev/null 2>&1; do
+  # The interrupted half, attached in the background: its output is kept (--rm: the client
+  # returns once the container is removed). The poll opens the state read-only, never creating it.
+  container "$label" --env-file "$e4b/key.env" "infrx-certify:$RELEASE" "${run[@]}" > "$out/$label-interrupted.log" 2>&1 &
+  local first=$! t
+  until [ "$n" -ge 3 ] || ! kill -0 "$first" 2> /dev/null; do
     sleep 2
-    n=$(python3 -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute("select count(*) from items where state=?", ("done",)).fetchone()[0])' "$out/sop.sqlite" 2>/dev/null || echo 0)
+    n=$(python3 -c 'import sqlite3,sys; print(sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True).execute("select count(*) from items where state=?", ("done",)).fetchone()[0])' "$out/sop.sqlite" 2>/dev/null || echo 0)
   done
   if docker kill --signal INT "infrx-e1b-$label" > /dev/null 2>&1; then echo "WC-8 SIGINT after $n done"
   else echo "WC-8 finished before 3 done: not interrupted"; fi
-  while docker inspect "infrx-e1b-$label" > /dev/null 2>&1; do sleep 1; done   # exited and removed
+  for ((t = 0; t < 120; t++)); do kill -0 "$first" 2> /dev/null || break; sleep 1; done
+  if kill -0 "$first" 2> /dev/null; then
+    docker kill "infrx-e1b-$label" > /dev/null 2>&1 || true
+    echo "WC-8 interrupt did not exit in 120 s: killed" | tee -a "$out/cells.tsv"
+  fi
+  wait "$first" || true
   preflight "WC-8 $label-resume"
   container "$label" --env-file "$e4b/key.env" "infrx-certify:$RELEASE" "${run[@]}" > "$out/$label.log" 2>&1 || rc=$?
   echo "WC-8 $label exit=$rc" | tee -a "$out/cells.tsv"

@@ -187,6 +187,14 @@ MUTANTS = (
        SERVICE, "        report = await self.loop.drain(bound)\n",
        "        for task in self._housekeeping:\n            task.cancel()\n"
        "        report = await self.loop.drain(bound)\n", OWNER),
+    # E1B WREQ-1: the inference loop publishes each attempt's phase timings; preparation none
+    _m("main_loop_phases_unobserved", "the inference loop observes phases on the worker Registry",
+       MAIN, "limits=limits,\n                      metrics=rt.metrics)", "limits=limits)",
+       COMPOSITION),
+    _m("main_preparation_phases_observed", "the preparation loop holds no Registry",
+       MAIN, "                                 limits=limits, readiness=lifecycle),\n        limits=limits)",
+       "                                 limits=limits, readiness=lifecycle),\n"
+       "        limits=limits, metrics=rt.metrics)", COMPOSITION),
     _m("main_engine_unpinned", "the composed engine pins through the composed cache",
        MAIN, "pin=media.cache.pin, reprepare=", "pin=None, reprepare=", KEEPER, OWNER),
     _m("engine_gone_input_refused_at_once", "a gone input is prepared again once",
