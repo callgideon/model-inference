@@ -618,7 +618,8 @@ def test_ops_retention__each_rule_fires_on_its_fault_and_nothing_fires_when_heal
         spec = families[rule["metric"]]
         for label, value in rule.get("match", {}).items():
             assert value in dict(spec.labels)[label], rule["name"]
-        assert "⚠️ TO BE VERIFIED (P-25)" in rule["threshold_status"] or \
+        # every threshold is exact or rests on P-25 (open, or decided 2026-09-25: WR-P25-3)
+        assert "(P-25" in rule["threshold_status"] or \
             rule["threshold_status"].startswith("exact"), rule["name"]
     now = time.time()
     healthy = evaluator.parse(_healthy_m6(now))

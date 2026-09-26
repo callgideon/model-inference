@@ -290,7 +290,7 @@
       "agg": "max",
       "op": ">",
       "threshold": 900,
-      "threshold_status": "derived: M6's rule, claim TTL (lifecycle.CLAIM_TTL_S = 300 s) + 2 x the retention interval (300 s assumed; M6 wiring 1 leaves <RETENTION_INTERVAL_S> open); ⚠️ TO BE VERIFIED (P-25): the approved interval",
+      "threshold_status": "derived: M6's rule, claim TTL (lifecycle.CLAIM_TTL_S = 300 s) + 2 x the retention interval 300 s (P-25, decided 2026-09-25)",
       "runbook": "infra/runbooks/observe.md#retention-stalled"
     },
     {
@@ -313,7 +313,7 @@
       "age": true,
       "op": ">",
       "threshold": 1200,
-      "threshold_status": "derived: claim TTL 300 s + 3 x the retention interval (300 s assumed); ⚠️ TO BE VERIFIED (P-25): the approved interval",
+      "threshold_status": "derived: claim TTL 300 s + 3 x the retention interval 300 s (P-25, decided 2026-09-25)",
       "runbook": "infra/runbooks/observe.md#retention-stalled"
     },
     {
@@ -337,7 +337,7 @@
       "increase": true,
       "op": ">",
       "threshold": 0,
-      "threshold_status": "derived: every refusal is a caller's retry; ⚠️ TO BE VERIFIED (P-25): the high water (PROCESSING_CACHE_MAX_BYTES) itself",
+      "threshold_status": "derived: every refusal is a caller's retry; the 50 GiB high water (P-25)",
       "runbook": "infra/runbooks/observe.md#processing-cache-high-water"
     }
   ]
