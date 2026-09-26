@@ -83,6 +83,15 @@ SCENARIOS = {
     "s13": {"title": "discovery publishes only what admission serves (coordinator update 1)",
             "row": None, "test_ids": ["CATALOG-TRUTH"], "lanes": ["F2C", "G7"],
             "seam": "RV-01"},
+    # E3C-CELLS: the App gate's delegated cells (tests/integration/app/runner.py DELEGATED).
+    "s14": {"title": "stale generation race: a lapsed lease's generation at every mutation "
+                     "while the new one runs", "row": None, "test_ids": ["DUR-FENCE"],
+            "lanes": [], "seam": None},
+    "s15": {"title": "concurrent admissions across keys and orgs at the capacity and balance "
+                     "caps", "row": None, "test_ids": ["DUR-CAP"], "lanes": [], "seam": None},
+    "s16": {"title": "rate card and deployment published while jobs wait and run; unknown/"
+                     "private/unpriced refused", "row": None, "test_ids": ["CREDIT-RATE"],
+            "lanes": ["G8"], "seam": None},
     "s12": {"title": "the verdict itself: missing service BLOCKED, skip never PASS, broken "
                      "seam FAIL", "row": None, "test_ids": ["VERIFY-REPRO"], "lanes": ["E2C"],
             "seam": None},
@@ -125,6 +134,17 @@ CONTROLS = {
                           "mechanism": "DB defect: signup grant uniqueness dropped (E3B db09)"},
     "nc-verify-repro": {"oracle": "VERIFY-REPRO", "scenario": "s12",
                         "mechanism": "classify(): a skipped / missing required case"},
+    # E3C-CELLS (reverts.py): one SQL check removed by a last migration on a scratch tree.
+    "nc-dur-fence": {"oracle": "DUR-FENCE", "scenario": "s14",
+                     "mechanism": "revert fence_lease's generation check (0016)",
+                     "revert": True},
+    "nc-dur-cap": {"oracle": "DUR-CAP", "scenario": "s15",
+                   "mechanism": "admission_checks's active-job cap comparisons off by one (0011)",
+                   "revert": True},
+    "nc-credit-rate": {"oracle": "CREDIT-RATE", "scenario": "s16",
+                       "mechanism": "settlement debits at the current listing's card, not the "
+                                    "admitted one (0018 terminalize)",
+                       "revert": True},
 }
 # The required cases (0-MUT-2): a scenario missing any of these - deselected by `-k`/`--only`
 # or deleted - is NOT RUN, never PASS over the cases that happen to be there. s12 checks the
@@ -165,6 +185,12 @@ REQUIRED = {
             "test_s11_reconcile_never_recreates_scrubbed_content"),
     "s13": ("test_s13_discovery_claims_nothing_serving_contradicts",
             "test_s13_discovery_matches_the_running_serving_profile"),
+    "s14": tuple(f"test_s14_a_stale_generation_is_refused_at_every_mutation[{s}]"
+                 for s in ("another-process", "same-process")),
+    "s15": ("test_s15_a_burst_across_keys_and_orgs_admits_exactly_the_capacity",
+            "test_s15_a_burst_past_the_balance_admits_only_what_the_wallet_holds"),
+    "s16": ("test_s16_jobs_waiting_and_running_keep_their_admitted_revision_and_rates",
+            "test_s16_an_unknown_private_or_unpriced_model_is_refused_at_admission"),
     "s12": ("test_s12_a_missing_or_skipped_case_is_never_a_pass",
             "test_s12_the_gate_is_the_worst_status_and_exits_as_e2c_does",
             "test_s12_a_control_that_is_not_detected_fails_the_gate",
@@ -200,7 +226,13 @@ REQUIRED = {
             "test_s12_a_control_writes_its_cases_apart_from_the_main_run",
             "test_s12_the_admission_control_runs_the_pre_d10_door_on_the_owner_login",
             *(f"test_s12_every_bypass_installs_on_this_tree[{n}]" for n in (
-                "upload-local", "expiry-recompute", "revoke-ignored", "tenant-blind"))),
+                "upload-local", "expiry-recompute", "revoke-ignored", "tenant-blind")),
+            "test_s12_the_cells_carry_their_04_oracles_and_revert_controls",
+            *(f"test_s12_a_cell_scenario_passes_only_with_every_required_case[{c}]"
+              for c in ("cap", "fence", "rate")),
+            *(f"test_s12_every_sql_revert_applies_to_this_tree[{nc}]"
+              for nc in ("nc-dur-fence", "nc-dur-cap", "nc-credit-rate")),
+            "test_s12_every_revert_control_has_a_tree_builder"),
 }
 # 2-ACC-2: infrastructure that broke under a case (never a product gap): INVALID[harness].
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError|BypassTargetMissing)\b"

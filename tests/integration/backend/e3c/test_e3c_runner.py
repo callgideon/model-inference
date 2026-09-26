@@ -5,6 +5,7 @@ tests/integration` (layer 1) and by the runner (these are s12's cases)."""
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -52,7 +53,7 @@ def test_s12_the_gate_is_the_worst_status_and_exits_as_e2c_does():
                       *((f"test_nc_{nc[3:].replace('-', '_')}__{c['scenario']}_x", "pass", "")
                         for nc, c in runner.CONTROLS.items()))
     result = runner.classify(only_pass, required={})
-    # the two revert-type controls cannot run on one tree: the gate stays open
+    # the revert-type controls cannot run on one tree: the gate stays open
     assert {nc for nc, entry in result["controls"].items() if entry["status"] != "PASS"} == \
         {nc for nc, c in runner.CONTROLS.items() if c.get("revert")}
     assert runner.gate(result) == "NOT RUN" and runner.EXIT["NOT RUN"] == 3
@@ -429,3 +430,87 @@ def test_s12_the_dedicated_runtime_login_is_a_real_box_database():
     assert world.fake_only(real) == []
     elsewhere = runtime.replace(f":{parts.port}/", ":1/")
     assert world.fake_only({**real, "DATABASE_URL": elsewhere}) == ["DATABASE_URL"]
+
+
+# ------------------------------------------------------------------ E3C-CELLS (App gate cells)
+
+CELLS = {"fence": ("DUR-FENCE", "nc-dur-fence"), "cap": ("DUR-CAP", "nc-dur-cap"),
+         "rate": ("CREDIT-RATE", "nc-credit-rate")}
+
+
+def cell_scenario(oracle: str) -> str:
+    sids = [sid for sid, s in runner.SCENARIOS.items() if s["test_ids"] == [oracle]]
+    assert len(sids) == 1, f"{oracle} is carried by {sids}: the App gate binds exactly one"
+    return sids[0]
+
+
+def test_s12_the_cells_carry_their_04_oracles_and_revert_controls():
+    """The App gate (tests/integration/app/runner.py DELEGATED) binds DUR-FENCE, DUR-CAP and
+    CREDIT-RATE to one scenario each. Oracle: a renumbered scenario, a second scenario
+    claiming the cell, or a control that is missing, not revert-type, or guards another
+    scenario - each would let the App cell read a run that never judged it."""
+    import reverts
+    for oracle, nc in CELLS.values():
+        sid = cell_scenario(oracle)
+        assert [n for n, c in runner.CONTROLS.items() if c["oracle"] == oracle] == [nc]
+        assert runner.CONTROLS[nc]["scenario"] == sid and runner.CONTROLS[nc].get("revert")
+        assert nc in reverts.REVERTS and runner.REQUIRED[sid], (nc, sid)
+
+
+@pytest.mark.parametrize("cell", sorted(CELLS))
+def test_s12_a_cell_scenario_passes_only_with_every_required_case(cell):
+    """Oracle: a cell scenario read PASS with a red, skipped, missing or harness-broken case,
+    or its revert-type control counted without its reverted tree."""
+    oracle, nc = CELLS[cell]
+    sid = cell_scenario(oracle)
+    names = runner.REQUIRED[sid]
+    rest = [(name, "pass", "") for name in names[1:]]
+
+    def status(*cases):
+        return runner.classify(junit(*cases))["scenarios"][sid]["status"]
+    assert status((names[0], "pass", ""), *rest) == "PASS"
+    assert status((names[0], "fail", "AssertionError: accepted at ['settle']"), *rest) == "FAIL"
+    assert status(*rest) == "NOT RUN", "a required case absent"
+    assert status((names[0], "skip", "BLOCKED[G8] no publish-card"), *rest) == "BLOCKED"
+    assert status((names[0], "error", "harness.HarnessError: premise: generation 2 ended"),
+                  *rest) == "INVALID"
+    green = runner.classify(junit((names[0], "pass", ""), *rest))
+    assert green["controls"][nc]["status"] == "NOT RUN", "a revert control needs its tree"
+    assert (runner.control_verdict("FAIL"), runner.control_verdict("PASS")) == ("PASS", "FAIL")
+
+
+@pytest.mark.parametrize("nc", ["nc-dur-fence", "nc-dur-cap", "nc-credit-rate"])
+def test_s12_every_sql_revert_applies_to_this_tree(nc, tmp_path, monkeypatch):
+    """The three SQL reverts (reverts.py) on this tree's migrations: the check's anchor occurs
+    exactly as often as written, the last migration changes exactly those occurrences and
+    sorts after every real one. Oracle: a moved or duplicated check silently reverting
+    nothing (the control would then 'detect' on an unchanged tree, or build a tree where the
+    check survives) - it must refuse instead."""
+    import shutil
+
+    import reverts
+    root = HERE.parents[3]
+    function, anchor, replacement, count, _ = reverts.REVERTS[nc]
+    source = reverts.latest(root, function)
+    assert source and source.count(anchor) == count and replacement not in source
+    text = reverts.redefined(root, nc)
+    assert text.count(replacement) == count and anchor not in text
+    assert text.replace(replacement, anchor).split("\n", 1)[1].strip() == source.strip()
+    tree = tmp_path / "tree"
+    shutil.copytree(root / reverts.MIGRATIONS, tree / reverts.MIGRATIONS)
+    assert reverts.main(["reverts.py", str(tree), nc]) == 0
+    written = sorted((tree / reverts.MIGRATIONS).glob("*.sql"))
+    assert written[-1].name == f"9999_e3c_{nc.replace('-', '_')}.sql"
+    assert written[-1].read_text() == text
+    monkeypatch.setitem(reverts.REVERTS, nc, (function, "no such check", replacement, 1, "x"))
+    with pytest.raises(SystemExit, match="anchor 0 times"):
+        reverts.redefined(root, nc)
+
+
+def test_s12_every_revert_control_has_a_tree_builder():
+    """The coordinator's recipe builds the controls with `control_trees.sh HEAD <dir>` (no
+    ids): its default list must be every revert-type control, or the gate stays NOT RUN
+    (a control with no tree) however green the scenarios are."""
+    script = (HERE / "control_trees.sh").read_text()
+    default = re.search(r'want=" \$\{\*:-([^}]*)\} "', script).group(1).split()
+    assert set(default) == {nc for nc, c in runner.CONTROLS.items() if c.get("revert")}

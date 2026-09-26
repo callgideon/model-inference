@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# E3C revert-type negative controls: build the two scratch trees `runner.py --control` runs.
+# E3C revert-type negative controls: build the scratch trees `runner.py --control` runs.
 #   tests/integration/backend/e3c/control_trees.sh <sha> <outdir> [nc-id ...]
 # Prints `--control NC=TREE` arguments. Each tree is `git archive <sha>` with ONE fix removed;
 # nothing touches a ref, an index or a worktree. A patch that does not apply is a hard stop
-# (exit 1), never a partially reverted tree.
+# (exit 1), never a partially reverted tree. Default: all five controls below.
 #
 # nc-admission-ready (ADMISSION-READY, s04): the readiness barrier's product commits
 # reverse-applied newest first - W5-F5B's post-marker attach (0a230353), W5-F5's
@@ -21,9 +21,17 @@
 # G7 and M6 stand on, so the commit cannot be reverted whole). The tree adds a last
 # migration that redefines it as "nothing is referenced": the pre-D10 world, where no durable
 # record kept a live job's media. M6's collector then deletes whatever is past its grace.
+#
+# nc-dur-fence (DUR-FENCE, s14), nc-dur-cap (DUR-CAP, s15), nc-credit-rate (CREDIT-RATE, s16):
+# one check removed from one SQL function by a last migration holding that function's latest
+# definition in the tree with the check changed - fence_lease's generation check,
+# admission_checks's three active-job cap comparisons off by one, terminalize's debit read at
+# the alias's current listing instead of the admitted card. `reverts.py` holds each anchor
+# and refuses (exit 1) a tree where it does not occur exactly as often as written.
 set -euo pipefail
 sha=${1:?sha}; out=${2:?outdir}; shift 2
-want=" ${*:-nc-admission-ready nc-retention-durable} "
+want=" ${*:-nc-admission-ready nc-retention-durable nc-dur-fence nc-dur-cap nc-credit-rate} "
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 args=()
 repo=$(git rev-parse --show-toplevel)
 short=$(git -C "$repo" rev-parse --short=8 "$sha")
@@ -80,5 +88,13 @@ as $$ select null::text $$;
 SQL
 args+=(--control "nc-retention-durable=$durable")
 fi
+
+for nc in nc-dur-fence nc-dur-cap nc-credit-rate; do
+  [[ $want == *" $nc "* ]] || continue
+  dir=$(tree "$nc")
+  python3 "$here/reverts.py" "$dir" "$nc" || {
+    echo "$nc: the revert does not apply on $sha" >&2; exit 1; }
+  args+=(--control "$nc=$dir")
+done
 
 echo "${args[*]}"
