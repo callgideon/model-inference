@@ -305,7 +305,231 @@ Lane: 0 h pending review. Coordinator: W-D10A-1 (about 0.25 h) and a layer-3 rer
 - Estimate: optimistic 0.5 h, likely 1 h, pessimistic 3 h. Confidence medium.
 - Basis: SQL, tests, plans and mutants are green here. What remains is shared-file wiring and the App lanes' adoption.
 
+## Fix round (2026-09-26, code head `df21cfa6`)
+
+Findings 0-D10SQL-CM-1, 1-D10R-1 and 1-D10R-2 (review of handback `5055aae5`). One instance only; nothing else used this worktree or port 55459 during the round. No push, rebase, reset, amend or stash. No hosted DB, pilot box, AWS or SSM. The lane's containers and network were gone at the end (checked with `docker ps -a`).
+
+| Field | Value |
+|---|---|
+| Commits | `57ced756` tests first · `3b6dee82` 0024 + mutant · `df21cfa6` plain-image-only mutant declaration. This evidence is committed on top. |
+| 0024 sha256 | `8e0bfd6288ad716342de932053b7f7aca8c9517b551458e1b86a1a84acc394e0` (was `985d01ea…7d50` at `12f92a6f`). Only `consumer_may_create_key()`'s body and the header/section comments changed. The policy expression, grants and every other object are unchanged. |
+| 0001-0023 | `git diff --name-only 273990a0 -- apps/app/supabase/migrations/` lists only `0024_console_read_port.sql` |
+| Changed paths (all owned) | `apps/app/supabase/migrations/0024_console_read_port.sql`, and under `apps/infrx-api/tests/d/`: `checks.py`, `checks_credit.py`, `checks_port.py`, `d10_mutants.py`, `test_migration_mutants.py`, `test_port_d10.py`, `test_postgrest_d10.py` |
+
+| Finding | Status | What changed |
+|---|---|---|
+| 0-D10SQL-CM-1 and 1-D10R-1 (fixtures write `auth.users.email_confirmed_at`, which the bare Supabase image lacks) | **fixed** | Each of the four fixtures now calls `checks_signup.gotrue_columns(conn)` first: `checks.check_role_matrix`, `checks_credit.check_operator_seams`, `checks_port`'s key-insert check and `test_postgrest_d10`. The call runs before any rolled-back body, because on Supabase it is `supabase_admin` DDL in another session and must not wait on this session's row locks. `checks.py` and `checks_credit.py` import it locally, since `checks_signup` imports both. `check_operator_seams` had an `information_schema` probe; now that the column always exists, its verified path runs unconditionally and the probe is removed. |
+| 1-D10R-2 (the INSERT policy shut out org owners with no consumer wallet) | **fixed, pending the coordinator's ruling text** | `consumer_may_create_key()` no longer joins `infrx.credit_wallets`. A browser key INSERT now needs 0001's owner/creator check AND a **verified individual**: the claim path's predicate, `verified_user` evidence plus a live, non-empty email. A verified pilot or invited owner with no wallet passes. See "The predicate chosen" below. |
+
+**The predicate chosen.** C3A's first form was "owns a consumer wallet OR verified" (C3A-3f4e5f1.md:247). Its restated form was "the creator is verified; D10 must check pilot/invited owners still pass" (:310). The fix takes the verified branch.
+
+- A consumer wallet is created only by a verified claim (`claim_signup_grant`, or G6B `grant_initial` through `verified_user`). So the wallet branch adds only one case: a wallet holder who is no longer verified (soft-deleted, or email unconfirmed). 04-app §2 refuses that case: "Unverified users cannot issue a funded consumer key".
+- A verified owner with no wallet gets a key with no funds, and admission refuses it. That is the same outcome as before 0024.
+- **Remaining narrowing versus 0001:** an **unverified** owner, for example a pilot owner whose email was never confirmed, now needs the operator seam. The coordinator can check hosted `auth.users` for owners with a null `email_confirmed_at` who created keys in the browser. This lane cannot query the hosted database.
+
+### Tests first: fails-before
+
+| Head | Command (worktree `apps/infrx-api`, `INFRX_D_TASK=revoke`) | Exit | Result |
+|---|---|---|---|
+| `5055aae5` (handback) | `INFRX_D1_IMAGE=supabase uv run --frozen --no-sync pytest -q -rs tests/d/test_port_d10.py tests/d/test_postgrest_d10.py tests/d/test_schema_postgres.py tests/d/test_credit_schema.py` | 1 | **5 failed**, 45 passed, 1 skipped, all `UndefinedColumn: column "email_confirmed_at"`. Failing cases: the key insert, the re-run, the PostgREST matrix, `test_dur_rls__browser_roles_cannot_reach_protected_state` and `test_operator_seams__…`. This reproduces the finding. |
+| `57ced756` (tests only, old 0024) | same | 1 | **3 failed**, 47 passed, 1 skipped. The two D1/D1R suites pass again. The key insert and the re-run fail with `verified, no wallet: refused (42501)`. The PostgREST case fails on the verified pilot owner's `POST /api_keys`: 42501, "new row violates row-level security policy". |
+| `57ced756` | same, plain image | 1 | **2 failed**, 48 passed, 1 skipped (`verified, no wallet: refused (42501)`) |
+
+The new cases, and the broken behaviour each one catches:
+
+- `check_key_insert_needs_verified_individual` (renamed from `…_verified_wallet`).
+  - Refused with 42501: unverified with a wallet (`CONSUMER_1`), unverified with no wallet (`RACER`), and the unverified pilot owner (`pgtesting.USERS[ORG_A]` into `ORG_A`, a legacy USD org).
+  - Accepted: verified with a wallet, verified with no wallet (`UNGRANTED`), and the **verified pilot owner**.
+  - It first asserts which fixture users hold wallets, so a moved wallet cannot make a control vacuous.
+  - Catches: a policy that requires a wallet (the 1-D10R-2 regression), and a policy that ignores verification.
+- `test_postgrest_d10`: the verified pilot owner's `POST /api_keys` returns 201 through PostgREST v13.0.4 with a signed JWT. That is the deployed console's own insert path.
+
+### Commands at the final code head
+
+| Head | Command | Exit | Result |
+|---|---|---|---|
+| `3b6dee82` | `INFRX_D1_IMAGE=supabase … pytest -q -rs tests/d/test_port_d10.py tests/d/test_postgrest_d10.py tests/d/test_schema_postgres.py tests/d/test_credit_schema.py` | 0 | 50 passed, 1 skipped (the declared auto_explain plan case) |
+| `3b6dee82` | `INFRX_D1_IMAGE=supabase … pytest -q -rs tests/d/test_port_d10.py tests/d/test_postgrest_d10.py tests/d/test_reads.py tests/d/test_followup_d10.py tests/d/test_upgrade_d10.py tests/d/test_schema_postgres.py tests/d/test_credit_schema.py` (the handback's Supabase commands plus the two regressed D suites) | 0 | **100 passed, 1 skipped, 3 xfailed** |
+| `3b6dee82` | `… pytest -q -rs tests/d --deselect tests/d/test_migration_mutants.py` (plain PG 16, all of `tests/d`) | 1 | **600 passed, 2 failed, 1 skipped, 8 xfailed**. The 2 failures are the two the coordinator recorded as pre-existing at `12f92a6f`: `test_composition_pg::test_f_base…dedicated_login` (the DOOR-REVOKE W5 gate, `dependency_unavailable`) and `test_lifecycle_conformance::…replay_exactly` (`retention_durable__…`). The skip is PostgREST, which needs the Supabase image. `df21cfa6` changes only the mutant runner's Supabase skip. |
+| `df21cfa6` | `INFRX_MUTANTS=all … pytest -q -rs tests/d/test_migration_mutants.py -k 'd10_ or well_formed or superseded or api_keys_insert'` (plain) | 0 | **98 passed**: 93 D10 mutants killed (the new `d10_key_insert_needs_a_wallet` among them), `api_keys_insert_is_table_wide` (0001, role matrix) killed, the two D2 `superseded` mutants killed, the list is well formed, and the supersession guard passes |
+| `df21cfa6` | same, `INFRX_D1_IMAGE=supabase` | 0 | **97 passed, 1 skipped**: 92 D10 mutants killed plus the same five other cases. The skip is `d10_ledger_page_sorts` (see below). `d10_key_insert_unverified`, `d10_key_insert_verification_ignored` and `d10_key_insert_needs_a_wallet` are **KILLED** on Supabase, where before they ended as SETUP_ERROR. |
+| `3b6dee82` | Supabase run of the same subset, before `df21cfa6` | 1 | 97 passed, 1 failed: `d10_ledger_page_sorts` SETUP_ERROR, `InsufficientPrivilege: access to library "auto_explain" is not allowed` |
+
+Mutant kill details on Supabase (`-s`):
+
+- `d10_key_insert_unverified` → `unverified, funded: an api_keys insert was accepted`
+- `d10_key_insert_verification_ignored` → same message
+- `d10_key_insert_needs_a_wallet` (**new**: the `credit_wallets` join put back, i.e. the AND form) → `verified, no wallet: refused (42501)`
+- `api_keys_insert_is_table_wide` → `browser roles reached protected state` (plain and Supabase)
+
+**Outside the findings: `d10_ledger_page_sorts`.** Its check reads the nested plan through auto_explain, and Supabase's non-superuser `postgres` cannot LOAD that library. The suite case is already a declared skip there. `d10_mutants.PLAIN_IMAGE_ONLY` names this one mutant, and `test_mutant_is_killed` skips it visibly on Supabase. It is still KILLED on the plain image.
+
+### Wiring W-D10A-1 v2 (replaces W-D10A-1 above; the coordinator applies it)
+
+v1 had two defects. It gave `owner_alpha` a wallet the predicate no longer needs. More importantly, it wrote `auth.users.email_confirmed_at`, which E2's pinned image does not have: this is the same defect as 0-D10SQL-CM-1. Measured on the D harness's Supabase container with v1 applied:
+
+- `INFRX_I3B_PG=d INFRX_D_TASK=revoke INFRX_D1_IMAGE=supabase apps/infrx-api/.venv/bin/python -m pytest -q -rs tests/integration/backend/recovery/test_restore.py` gave exit 1, **5 failed, 12 errors**, `UndefinedColumn`.
+- The same command without any wiring gives 28 passed, 1 skipped.
+
+v2 changes:
+
+- **E2's template.** v2 adds GoTrue's two columns to E2's template, which is what `backend/stack.py:155-161` already does for its own template. Because the copy and every I3B restore target then match the source, bk01's `auth.dump` restores column for column.
+- **The `owner_alpha` hunk.** It only confirms the email.
+- **Pinned statement test.** `test_run.py`'s pinned-statement test now expects the template call first.
+- **Unchanged hunks.** The other hunks are v1's.
+- **Base.** `git apply --check -p1` is clean on this branch, where `tests/integration` is identical to `273990a0`. Patch sha256: `6c55c1c9…88db`.
+
+```diff
+diff -ru a/tests/integration/backend/e3c/scenarios_surface.py b/tests/integration/backend/e3c/scenarios_surface.py
+--- a/tests/integration/backend/e3c/scenarios_surface.py
++++ b/tests/integration/backend/e3c/scenarios_surface.py
+@@ -33,7 +33,9 @@
+     "public.console_legacy_usd_statement"}
+ # 0021 (D10, C0/U4): the signed-in consumer's own reads, auth.uid()-scoped, granted to
+ # `authenticated` only - never `anon` (anon executing them is still reported).
+-SIGNED_IN_FUNCTIONS = {"public.consumer_jobs", "public.consumer_job_result"}
++SIGNED_IN_FUNCTIONS = {"public.consumer_jobs", "public.consumer_job_result",
++                       "public.consumer_credit_ledger",              # 0024 (D10-APP-SQL)
++                       "public.consumer_may_create_key"}             # 0024 (C3A WR-C3A-4)
+ BROWSER_WRITES = {("public.profiles", "UPDATE"), ("public.organizations", "UPDATE"),
+                   ("public.api_keys", "UPDATE")}
+ 
+diff -ru a/tests/integration/backend/recovery/test_restore.py b/tests/integration/backend/recovery/test_restore.py
+--- a/tests/integration/backend/recovery/test_restore.py
++++ b/tests/integration/backend/recovery/test_restore.py
+@@ -162,6 +162,7 @@
+ 
+ def _create(name: str) -> None:
+     if ON_D:
++        d_harness()._sb(harness.PG_TEMPLATE_SOURCE, harness.GOTRUE_COLUMNS)   # as E2's template
+         d_harness().recreate(name)                  # the Supabase template's copy
+         return
+     terminate = ("select pg_terminate_backend(pid) from pg_stat_activity "
+diff -ru a/tests/integration/harness.py b/tests/integration/harness.py
+--- a/tests/integration/harness.py
++++ b/tests/integration/harness.py
+@@ -79,6 +79,11 @@
+ PG_DATABASE = f"infrx_{NAMESPACE}"
+ PG_ADMIN_ROLE = "supabase_admin"     # the image's superuser; `postgres` is not one
+ PG_TEMPLATE_SOURCE = "postgres"
++# GoTrue's own `auth.users` columns: every hosted project has them (GoTrue's migrations), the
++# pinned image's bare auth schema does not, and A1/0024 derive verification from the first.
++# Added to the TEMPLATE, so every copy - and every I3B restore target - matches its source.
++GOTRUE_COLUMNS = ("alter table auth.users add column if not exists email_confirmed_at "
++                  "timestamptz, add column if not exists deleted_at timestamptz")
+ CH_USER, CH_PASSWORD, CH_DATABASE = "infrx_e2", "infrx-e2-local", "infrx_e2"
+ S3_ACCESS_KEY, S3_SECRET_KEY = "infrxe2minio", "infrx-e2-local-secret"
+ S3_BUCKET = PROJECT
+@@ -454,6 +459,8 @@
+     `database` defaults to E2's; E3B phase 2 builds its JobStore template the same way.
+     """
+     container = assert_ours(container_of("postgres"))
++    run(["docker", "exec", "-i", container, "psql", "-U", PG_ADMIN_ROLE, "-d",
++         PG_TEMPLATE_SOURCE, "-v", "ON_ERROR_STOP=1", "-c", GOTRUE_COLUMNS], timeout=120.0)
+     terminate = (f"select pg_terminate_backend(pid) from pg_stat_activity "
+                  f"where datname = '{PG_TEMPLATE_SOURCE}' and pid <> pg_backend_pid()")
+     attempts = []
+diff -ru a/tests/integration/pgstate.py b/tests/integration/pgstate.py
+--- a/tests/integration/pgstate.py
++++ b/tests/integration/pgstate.py
+@@ -292,6 +292,12 @@
+     # to administer.
+     conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, 'member')",
+                  (fixtures.orgs["alpha"], fixtures.user("member_alpha")))
++    # 0024 (C3A WR-C3A-4): a browser key INSERT needs a verified individual, so owner_alpha
++    # is one: E2-RLS-30 stays a positive control and E2-RLS-20/31/32 stay refused by the
++    # owner/tenant/authorship checks, not by verification. GoTrue's column is on the
++    # template (`harness.GOTRUE_COLUMNS`).
++    conn.execute("update auth.users set email_confirmed_at = now() where id = %s",
++                 (fixtures.user("owner_alpha"),))
+ 
+     model_id = conn.execute("select id from public.models order by sort, id limit 1").fetchone()
+     if model_id is None:
+@@ -811,7 +817,12 @@
+     "public.claim_signup_grant(uuid,text,uuid)": SERVICE,
+     # 0021:420-428 (D10): the signed-in consumer reads; the org resolver is nobody's
+     "public.consumer_job_result(uuid)": BROWSER,
+-    "public.consumer_jobs(text,integer,uuid)": BROWSER,
++    # 0024 (D10-APP-SQL): consumer_jobs gains four defaulted filters (0021's signature is
++    # dropped and recreated), and C0 WR-5's own-ledger page
++    "public.consumer_credit_ledger(text,integer)": BROWSER,
++    "public.consumer_may_create_key()": BROWSER,   # 0024: the api_keys INSERT predicate
++    "public.consumer_jobs(text,integer,uuid,text,uuid,timestamp with time zone,"
++    "timestamp with time zone)": BROWSER,
+     "public.consumer_org()": NOBODY,
+     "public.handle_new_user()": SERVICE,
+     "public.is_operator()": BROWSER,
+@@ -1000,7 +1011,9 @@
+                 "kind", "acknowledged_at", "claimed_at", "available_at")]
+             + [f"infrx.credit_holds.{c}:SELECT" for c in (
+                 "request_id", "state", "reconcile_after")]
+-            + ["infrx.stream_chunks.expires_at:SELECT", "infrx.job_results.request_id:SELECT"])),
++            + ["infrx.stream_chunks.expires_at:SELECT", "infrx.job_results.request_id:SELECT",
++               # 0024 (W5-F5 WR-W5F5-1): the CREDIT holds' state, with a monitor policy
++               "infrx.credit_wallet_holds.state:SELECT"])),
+     },
+ }
+ _LOGIN_ATTRIBUTES = ("rolsuper", "rolinherit", "rolcreaterole", "rolcreatedb", "rolcanlogin",
+diff -ru a/tests/integration/test_harness.py b/tests/integration/test_harness.py
+--- a/tests/integration/test_harness.py
++++ b/tests/integration/test_harness.py
+@@ -208,6 +208,8 @@
+         "0018_terminal_settlement.sql",
+         # D10 (upload readiness, content lifecycle, read authority + the dedicated logins)
+         "0019_upload_readiness.sql", "0020_content_lifecycle.sql", "0021_read_authority.sql",
++        # (W-DR1 v2 adds 0022/0023 here) D10-APP-SQL: the console read port
++        "0024_console_read_port.sql",
+     ]
+     assert files[0].parent == harness.MIGRATIONS_DIR
+     digests = pgstate.migration_digests()
+diff -ru a/tests/integration/test_run.py b/tests/integration/test_run.py
+--- a/tests/integration/test_run.py
++++ b/tests/integration/test_run.py
+@@ -870,8 +870,11 @@
+ 
+     with patched(harness, run=fake_run, assert_ours=lambda name: name):
+         detail = harness.provision_database()
+-    assert len(issued) == 1, issued
+-    argv = issued[0]
++    # 0024 (W-D10A-1): GoTrue's columns go onto the template first, so the copy has them
++    assert len(issued) == 2, issued
++    assert issued[0][-2:] == ["-c", harness.GOTRUE_COLUMNS] and \
++        issued[0][issued[0].index("-d") + 1] == harness.PG_TEMPLATE_SOURCE, issued[0]
++    argv = issued[1]
+     assert argv[:3] == ["docker", "exec", "-i"], argv[:3]
+     assert argv[3] == f"{harness.PREFIX}postgres"
+     assert argv[4:8] == ["psql", "-U", harness.PG_ADMIN_ROLE, "-d"], argv[4:8]
+```
+
+Proof, with v2 applied in this worktree and then removed (`git checkout -- tests/integration`, confirmed clean):
+
+| Command | Exit | Result |
+|---|---|---|
+| `INFRX_I3B_PG=d INFRX_D_TASK=revoke INFRX_D1_IMAGE=supabase …/python -m pytest -q -rs tests/integration/backend/recovery/test_restore.py` | 0 | 28 passed, 1 skipped (bk03 needs E2's stack): the same as with no wiring |
+| `…/python -m pytest -q tests/integration/test_run.py` (layer 1) | 0 | 53 passed, including the pinned `provision_database` statements |
+| Scratch script: on the D Supabase harness, add the GoTrue columns to the template the way `provision_database` does, then run `pgstate.apply_migrations`, `install_test_clock`, `seed_fixtures`, `run_role_matrix` and `catalog_objects`. This is E2's layer-3 RLS stage without E2's compose stack. | 0 | **886 rows, 2 failed**. E2-RLS-30 passed (rowcount 1). E2-RLS-20, 31 and 32 passed (42501). Every 0024 row passed. The two failures belong to 0022/0023, which W-DR1 v2 covers, not 0024: `E3B-RLS-infrx.jobs_result_expiry_guard()-service_role` (0022 revokes it) and `L3-LOGIN-infrx_runtime-functions` (0023). Two functions have no row, also 0022's: `fail_preparation(jsonb)` and `set_feature_flag(text,boolean,text,text)`. |
+
+E2's own layer-3 run (`tests/integration/run.py --layer 3`, namespace e2) was **not run**. This lane does not own that namespace. The coordinator should run it on the merged SHA together with W-DR1 v2.
+
+### Proposed ruling (replaces the key-insert sentence above)
+
+> A browser `api_keys` INSERT requires, besides 0001's owner/creator check, a verified individual (the claim path's predicate: `verified_user` evidence and a live, non-empty email). A consumer wallet is not required, so verified pilot or invited owners keep creating keys. An unverified owner's keys are issued through the service/operator seams.
+
+### Open issues (fix round)
+
+- **Unverified owners.** The coordinator should confirm on hosted that no live owner with a null `email_confirmed_at` relies on browser key creation. This lane may not query the hosted database.
+- **W-D10A-1 v2** must land with W-DR1 v2. Neither is applied here.
+- **Pre-existing plain-image failures.** Both are unchanged: the W5 gate and the lifecycle replay.
+
+### Remaining effort (fix round)
+
+- **Lane:** 0 h, pending review.
+- **Coordinator:** apply W-D10A-1 v2 with W-DR1 v2 and run layer 3 (about 0.5 h), plus the hosted owner check (about 0.25 h).
+- **Estimate:** optimistic 0.5 h, likely 1 h, pessimistic 2.5 h. Confidence medium.
+- **Basis:** both images and both mutant runs are green at `df21cfa6`. The E2 layer-3 proof is partial: the role matrix passed on the D harness, but E2's compose stack was not run.
+
 ## Verification log
 
 - 2026-09-25: evidence written at code head `b6c01566`, and every command above with head `b6c01566` was run at that head. The Supabase skip marker for the plan case was committed by the parallel agent inside `d90933c8` and was NOT rerun on Supabase by this lane.
 - 2026-09-26: appended "Concurrency and WR-W5F5-1". The final branch head is `12f92a6f` plus this evidence commit.
+- 2026-09-26: appended "Fix round" (0-D10SQL-CM-1, 1-D10R-1, 1-D10R-2); code head `df21cfa6`, 0024 sha256 `8e0bfd62…94e0`; every command in that section was run at the head it names.

@@ -1,0 +1,75 @@
+{
+ "task": "D10",
+ "slice": "D10-APP-SQL fix round: 0-D10SQL-CM-1 + 1-D10R-1 (GoTrue columns before every email_confirmed_at fixture; Supabase green), 1-D10R-2 (0024 key-insert predicate = verified individual, no wallet required; verified pilot owner positive control; new mutant d10_key_insert_needs_a_wallet); W-D10A-1 v2",
+ "activity": "review",
+ "head": "df21cfa6 + evidence commit",
+ "worktree": ".claude/worktrees/codex-d10-app-sql",
+ "branch": "codex/d10-app-sql",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0024_console_read_port.sql",
+  "apps/infrx-api/tests/d/",
+  "research/plan/evidence/d/D10-APP-SQL-b6c0156.md"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=revoke INFRX_D1_IMAGE=supabase pytest -q tests/d/test_port_d10.py test_postgrest_d10.py test_schema_postgres.py test_credit_schema.py @5055aae5",
+   "exit": 1,
+   "summary": "reproduced: 5 failed (UndefinedColumn email_confirmed_at), 45 passed, 1 skipped"
+  },
+  {
+   "cmd": "same @57ced756 (tests first, old 0024)",
+   "exit": 1,
+   "summary": "3 failed (verified no-wallet / verified pilot owner refused 42501), 47 passed; plain: 2 failed, 48 passed"
+  },
+  {
+   "cmd": "INFRX_D1_IMAGE=supabase pytest -q test_port_d10 test_postgrest_d10 test_reads test_followup_d10 test_upgrade_d10 test_schema_postgres test_credit_schema @3b6dee82",
+   "exit": 0,
+   "summary": "100 passed, 1 skipped (auto_explain plan case), 3 xfailed"
+  },
+  {
+   "cmd": "pytest -q tests/d --deselect tests/d/test_migration_mutants.py (plain) @3b6dee82",
+   "exit": 1,
+   "summary": "600 passed, 2 failed (pre-existing: composition_pg dedicated_login W5 gate; lifecycle_conformance replay), 1 skipped, 8 xfailed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k 'd10_ or well_formed or superseded or api_keys_insert' (plain) @df21cfa6",
+   "exit": 0,
+   "summary": "98 passed (93 d10 mutants killed incl. new d10_key_insert_needs_a_wallet)"
+  },
+  {
+   "cmd": "same, INFRX_D1_IMAGE=supabase @df21cfa6",
+   "exit": 0,
+   "summary": "97 passed, 1 skipped (d10_ledger_page_sorts: auto_explain, declared plain-image only); key-insert mutants KILLED, no SETUP_ERROR"
+  },
+  {
+   "cmd": "INFRX_I3B_PG=d INFRX_D_TASK=revoke INFRX_D1_IMAGE=supabase pytest tests/integration/backend/recovery/test_restore.py with W-D10A-1 v1 / v2 applied temporarily",
+   "exit": 0,
+   "summary": "v1: 5 failed + 12 errors (UndefinedColumn); v2: 28 passed, 1 skipped; test_run.py 53 passed; pgstate role matrix on D Supabase harness: 886 rows, 2 failed (0022/0023, W-DR1 v2), E2-RLS-30 passes"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py",
+   "exit": 0,
+   "summary": "PASS"
+  },
+  {
+   "cmd": "git diff --name-only 273990a0 -- apps/app/supabase/migrations/",
+   "exit": 0,
+   "summary": "only 0024 (0001-0023 byte-identical); 0024 sha256 8e0bfd6288ad716342de932053b7f7aca8c9517b551458e1b86a1a84acc394e0"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.0,
+  "pessimistic_h": 2.5,
+  "confidence": "medium",
+  "basis": "both images and both mutant subsets green at df21cfa6; remaining is coordinator wiring (W-D10A-1 v2 with W-DR1 v2), E2 layer-3 rerun, hosted check for unverified owners",
+  "at": "2026-09-26T01:30Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "W-D10A-1 v2 (replaces v1; exact patch in the evidence Fix round): pgstate function rows + owner_alpha email confirmed (no wallet), harness.GOTRUE_COLUMNS on E2's template in provision_database (+ test_run pinned statements), test_restore ON_D template, e3c SIGNED_IN_FUNCTIONS, test_harness migration list, monitor column"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/D10-APP-SQL-b6c0156.md"
+ ]
+}
