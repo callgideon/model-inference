@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 61,
- "updated": "2026-09-26T00:33:19Z",
+ "revision": 62,
+ "updated": "2026-09-26T00:41:44Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -1632,12 +1632,12 @@
   {
    "id": "C3A",
    "task": "C3A",
-   "slice": "C3A trusted consumer actions (keys, grant retry, settings, operator actions via narrow ports; idempotency/CSRF)",
+   "slice": "fix round done: 0-C3A-VCM-1/2, 1-C3A-V-1/2 fixed; 1-C3A-V-3 (unverified-JWT key insert) closes with 0024 WR-C3A-4",
    "agent": "opus",
    "branch": "codex/app-c3a",
    "worktree": ".claude/worktrees/codex-app-c3a",
    "base": "46776646",
-   "head": "33b88daf",
+   "head": "91af4caf",
    "isolation": {
     "ports": "app-c3a postgres 55452",
     "prefix": "infrx-app-c3a-",
@@ -1645,16 +1645,16 @@
    },
    "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T23:50:01Z",
+   "updated": "2026-09-26T00:41:44Z",
    "blocker": null,
-   "next_action": "fix round done, rechecks in; merges with U4 in APP-UNION round 2",
+   "next_action": "APP-UNION round 2 (codex/app-union-2 from 35bd43dd) merges C3A + U4 + U2 + U3 with the coordinator wirings; then the 0024 flip",
    "estimate": {
     "optimistic_h": 0.5,
-    "likely_h": 1.5,
-    "pessimistic_h": 3,
+    "likely_h": 1,
+    "pessimistic_h": 2,
     "confidence": "medium",
-    "basis": "in-workflow verification + union round 2",
-    "at": "2026-09-25T23:28:33Z"
+    "basis": "lane verified; remaining is the union merge + coordinator wirings (+ the 0024 flip for C3A/U4)",
+    "at": "2026-09-26T00:41:44Z"
    },
    "evidence": [],
    "commands": []
@@ -1662,7 +1662,7 @@
   {
    "id": "U4",
    "task": "U4",
-   "slice": "U4 owned request detail and result lifecycle (bounded polling, expiry, two-tenant probes)",
+   "slice": "verified ACCEPT_WITH_FIXES: V-01/V-02 fixed; V-03 (unknown-usage result served) closes with 0024 WR-U4-2",
    "agent": "opus",
    "branch": "codex/app-u4",
    "worktree": ".claude/worktrees/codex-app-u4",
@@ -1675,16 +1675,16 @@
    },
    "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T23:28:33Z",
+   "updated": "2026-09-26T00:41:44Z",
    "blocker": null,
-   "next_action": "verified ACCEPT_WITH_FIXES (V-01/V-02 fixed; V-03 → WR-U4-2 D10 SQL in 0024); merges with C3A in APP-UNION round 2",
+   "next_action": "APP-UNION round 2; WR-U4-1 console-pg target applied there",
    "estimate": {
     "optimistic_h": 0.5,
-    "likely_h": 1.5,
-    "pessimistic_h": 3,
+    "likely_h": 1,
+    "pessimistic_h": 2,
     "confidence": "medium",
-    "basis": "in-workflow verification + union round 2",
-    "at": "2026-09-25T23:28:33Z"
+    "basis": "lane verified; remaining is the union merge + coordinator wirings (+ the 0024 flip for C3A/U4)",
+    "at": "2026-09-26T00:41:44Z"
    },
    "evidence": [],
    "commands": []
@@ -1692,29 +1692,29 @@
   {
    "id": "U2",
    "task": "U2",
-   "slice": "U2 keys and supported settings (one-time plaintext, rotation, truthful privacy copy)",
+   "slice": "verified ACCEPT_WITH_FIXES: U2-V-1..5 fixed and rechecked (failed key read never renders as empty; redaction; stuck pending; plaintext/lost-key seams; wiring tests)",
    "agent": "opus",
    "branch": "codex/app-u2",
    "worktree": ".claude/worktrees/codex-app-u2",
    "base": "46776646",
-   "head": null,
+   "head": "2bd04497",
    "isolation": {
     "ports": "fakes only",
     "prefix": "infrx-app-u2-",
     "db": null
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T23:50:01Z",
+   "updated": "2026-09-26T00:41:44Z",
    "blocker": null,
-   "next_action": "implementing (App wave wf_77b93903-38d) on top of U1R + C3A",
+   "next_action": "APP-UNION round 2; WR-U2-1/2/3 applied there",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the union merge + coordinator wirings (+ the 0024 flip for C3A/U4)",
+    "at": "2026-09-26T00:41:44Z"
    },
    "evidence": [],
    "commands": []
@@ -1722,29 +1722,29 @@
   {
    "id": "U3",
    "task": "U3",
-   "slice": "U3 minimal operator controls (rate publication, reasoned adjust/grant, suspension, audited idempotent ops)",
+   "slice": "verified ACCEPT_WITH_FIXES: U3-V1..V3 fixed and rechecked (DUR-RLS on operator views can fail; form retry protection wired; Unavailable rendering tested)",
    "agent": "opus",
    "branch": "codex/app-u3",
    "worktree": ".claude/worktrees/codex-app-u3",
    "base": "46776646",
-   "head": null,
+   "head": "b80c4cd8",
    "isolation": {
     "ports": "app-u3 postgres 55453",
     "prefix": "infrx-app-u3-",
     "db": null
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T23:50:01Z",
+   "updated": "2026-09-26T00:41:44Z",
    "blocker": null,
-   "next_action": "implementing (App wave) on top of U1R + C3A",
+   "next_action": "APP-UNION round 2 (WR-U3-2 operator port, WR-U3-4); WR-U3-1 operator RPC SQL → D10 0025 lane after 0024",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "low",
-    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
-    "at": "2026-09-25T21:11:40Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "lane verified; remaining is the union merge + coordinator wirings (+ the 0024 flip for C3A/U4)",
+    "at": "2026-09-26T00:41:44Z"
    },
    "evidence": [],
    "commands": []
@@ -2558,6 +2558,12 @@
   }
  ],
  "activity_log": [
+  {
+   "at": "2026-09-26T00:41:44Z",
+   "by": "coordinator",
+   "what": "App wave wf_77b93903-38d complete (64 agents): C3A 91af4caf, U4 d76f912f, U2 2bd04497, U3 b80c4cd8 all ACCEPT_WITH_FIXES; APP-UNION round 2 dispatched (agent af6ff64e5e1803c28 resumed) with WR-U4-1, WR-U3-2, WR-U2-1/2/3, WR-U3-4 and the real-DB stacks",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
   {
    "at": "2026-09-26T00:33:19Z",
    "by": "coordinator",
