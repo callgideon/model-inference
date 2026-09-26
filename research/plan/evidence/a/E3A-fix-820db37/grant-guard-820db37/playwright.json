@@ -1,0 +1,153 @@
+{
+  "config": {
+    "argv": [
+      "/usr/bin/node",
+      "<worktree>/apps/app/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "tests/e2e/playwright.config.ts",
+      "--grep",
+      "(^|\\s)(signup-verify-grant): "
+    ],
+    "configFile": "<worktree>/apps/app/tests/e2e/playwright.config.ts",
+    "rootDir": "<worktree>/apps/app/tests/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "<scratchpad>/seam-grant-guard/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "<worktree>/apps/app/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "/.*\\.e2e\\.ts$/"
+        ],
+        "timeout": 240000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json",
+        {
+          "outputFile": "<scratchpad>/seam-grant-guard/playwright.json"
+        }
+      ],
+      [
+        "list",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "journey.e2e.ts",
+      "file": "journey.e2e.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "signup-verify-grant: a fresh individual verifies once and is granted 10,000 CREDIT exactly once",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 1319,
+                  "error": {
+                    "message": "Error: one grant despite the repeated callback\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 3\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[2m  Array [\u001b[22m\n\u001b[32m-   1,\u001b[39m\n\u001b[32m-   1,\u001b[39m\n\u001b[32m-   \"10000\",\u001b[39m\n\u001b[31m+   2,\u001b[39m\n\u001b[31m+   2,\u001b[39m\n\u001b[31m+   \"20000\",\u001b[39m\n\u001b[2m  ]\u001b[22m",
+                    "stack": "Error: one grant despite the repeated callback\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 3\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[2m  Array [\u001b[22m\n\u001b[32m-   1,\u001b[39m\n\u001b[32m-   1,\u001b[39m\n\u001b[32m-   \"10000\",\u001b[39m\n\u001b[31m+   2,\u001b[39m\n\u001b[31m+   2,\u001b[39m\n\u001b[31m+   \"20000\",\u001b[39m\n\u001b[2m  ]\u001b[22m\n    at <worktree>/apps/app/tests/e2e/journey.e2e.ts:257:119",
+                    "location": {
+                      "file": "<worktree>/apps/app/tests/e2e/journey.e2e.ts",
+                      "column": 119,
+                      "line": 257
+                    },
+                    "snippet": "\u001b[0m \u001b[90m 255 |\u001b[39m   expect(after[\u001b[32m\"rpc/claim_signup_grant:200\"\u001b[39m] \u001b[33m?\u001b[39m\u001b[33m?\u001b[39m \u001b[35m0\u001b[39m\u001b[33m,\u001b[39m \u001b[32m\"the recovery callback claimed again\"\u001b[39m)\u001b[33m.\u001b[39mtoBe((claims[\u001b[32m\"rpc/claim_signup_grant:200\"\u001b[39m] \u001b[33m?\u001b[39m\u001b[33m?\u001b[39m \u001b[35m0\u001b[39m) \u001b[33m+\u001b[39m \u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 256 |\u001b[39m   books \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m facts(email)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 257 |\u001b[39m   expect([books\u001b[33m.\u001b[39mentitlements\u001b[33m,\u001b[39m books\u001b[33m.\u001b[39mgrant_rows\u001b[33m,\u001b[39m exact(books\u001b[33m.\u001b[39mgrant_total)]\u001b[33m,\u001b[39m \u001b[32m\"one grant despite the repeated callback\"\u001b[39m)\u001b[33m.\u001b[39mtoEqual([\u001b[35m1\u001b[39m\u001b[33m,\u001b[39m \u001b[35m1\u001b[39m\u001b[33m,\u001b[39m \u001b[32m\"10000\"\u001b[39m])\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                                                                       \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 258 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m\"/welcome\"\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 259 |\u001b[39m   expect(\u001b[36mawait\u001b[39m welcomeBalance(page))\u001b[33m.\u001b[39mtoBe(\u001b[32m\"10000\"\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 260 |\u001b[39m\u001b[0m"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "<worktree>/apps/app/tests/e2e/journey.e2e.ts",
+                        "column": 119,
+                        "line": 257
+                      },
+                      "message": "Error: one grant despite the repeated callback\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 3\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[2m  Array [\u001b[22m\n\u001b[32m-   1,\u001b[39m\n\u001b[32m-   1,\u001b[39m\n\u001b[32m-   \"10000\",\u001b[39m\n\u001b[31m+   2,\u001b[39m\n\u001b[31m+   2,\u001b[39m\n\u001b[31m+   \"20000\",\u001b[39m\n\u001b[2m  ]\u001b[22m\n\n  255 |   expect(after[\"rpc/claim_signup_grant:200\"] ?? 0, \"the recovery callback claimed again\").toBe((claims[\"rpc/claim_signup_grant:200\"] ?? 0) + 1);\n  256 |   books = await facts(email);\n> 257 |   expect([books.entitlements, books.grant_rows, exact(books.grant_total)], \"one grant despite the repeated callback\").toEqual([1, 1, \"10000\"]);\n      |                                                                                                                       ^\n  258 |   await page.goto(\"/welcome\");\n  259 |   expect(await welcomeBalance(page)).toBe(\"10000\");\n  260 |\n    at <worktree>/apps/app/tests/e2e/journey.e2e.ts:257:119"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-26T01:57:53.392Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "<scratchpad>/seam-grant-guard/playwright-artifacts/journey.e2e.ts-signup-veri-04e95--10-000-CREDIT-exactly-once-chromium/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "<worktree>/apps/app/tests/e2e/journey.e2e.ts",
+                    "column": 119,
+                    "line": 257
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "66663eddcc5ea25c0af2-11fcca230849e7391066",
+          "file": "journey.e2e.ts",
+          "line": 223,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-26T01:57:52.955Z",
+    "duration": 1906.537,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

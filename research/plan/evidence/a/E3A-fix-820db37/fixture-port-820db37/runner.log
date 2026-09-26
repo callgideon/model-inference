@@ -1,0 +1,31 @@
+PASS     preflight 
+PASS     app-build 
+[ok  ] preflight: {"docker": "29.6.2", "images": {"postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb678…
+[ok  ] services: {"containers": ["infrx-e4b-clickhouse", "infrx-e4b-postgres", "infrx-e4b-s3", "infrx-e4b-valkey"], "versions": {"postgres": "PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit", "valkey": "8.1.1…
+[ok  ] migrate: {"applied": [["0001_init.sql", "b31ab5ad6117a88005cfa9dfbb878b15bcefba135b5d3151eaf2d8171831d2bc"], ["0002_seed_models.sql", "9f186e47ad8c88a1b7a97555f5ad0d6a49c3c3d5b8a66b78247e823fca629d38"], ["0003_pilot_durable_schem…
+PASS     stack provisioned
+PASS     world gateway + worker on the runtime login, controlled engine
+PASS     app 
+PASS     browser 
+[ok  ] backend-teardown: {"removed": []}
+[ok  ] teardown: {"removed": ["infrx-e4b-clickhouse", "infrx-e4b-postgres", "infrx-e4b-s3", "infrx-e4b-valkey"], "still_named_ours_but_not_ours": []}
+PASS     teardown no infrx-e4b container; ports 56860, 56861, 56870 free
+FAIL     seam:fixture-port broken seam detected: the gate fails
+ NOT RUN  DUR-ADMIT  (journey NOT RUN)
+ NOT RUN  DUR-CAP  (journey NOT RUN)
+ NOT RUN  DUR-FENCE  (journey NOT RUN)
+ NOT RUN  DUR-OUTPUT  (journey NOT RUN)
+    FAIL  DUR-SETTLE  (journey FAIL)
+ NOT RUN  DUR-OUTBOX  (journey NOT RUN)
+ NOT RUN  DUR-RLS  (journey NOT RUN)
+ NOT RUN  MEDIA-SEC  (journey NOT RUN)
+ NOT RUN  API-MODES  (journey NOT RUN)
+ NOT RUN  API-STREAM  (journey NOT RUN)
+    FAIL  CONSOLE-FLOWS  (journey FAIL)
+ NOT RUN  CREDIT-GRANT  (journey NOT RUN)
+ NOT RUN  CREDIT-IDENTITY  (journey NOT RUN)
+    FAIL  CREDIT-UNITS  (journey FAIL)
+    FAIL  CREDIT-RATE  (journey FAIL)
+    FAIL  CREDIT-SPEND  (journey FAIL)
+    FAIL  APP-JOURNEY  (journey FAIL)
+APP-LOCAL: FAIL (exit 1) - <scratchpad>/seam-fixture-port/verdict.json

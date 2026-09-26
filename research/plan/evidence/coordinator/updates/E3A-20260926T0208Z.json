@@ -1,0 +1,121 @@
+{
+  "task": "E3A",
+  "lane": "APP-E3A-FIX",
+  "slice": "support lane: F-1 (sign-in claim, A2 middleware) + F-2 (provider routes 404 for a consumer) + journey fitting; E3A gate NOT claimed, manifest stays planned",
+  "activity": "review",
+  "at": "2026-09-26T02:08:32Z",
+  "head": "820db37e",
+  "base": "6d55c5e0",
+  "worktree": ".claude/worktrees/codex-app-e3a-fix",
+  "branch": "codex/app-e3a-fix",
+  "owned_paths": [
+    "apps/app/lib/supabase/middleware.ts",
+    "apps/app/lib/services/console.ts (additive providerRoute)",
+    "apps/app/app/(console)/traces/",
+    "apps/app/app/(console)/dedicated/",
+    "apps/app/app/(console)/teams/",
+    "apps/app/tests/a/",
+    "apps/app/tests/c/",
+    "apps/app/tests/e2e/journey.e2e.ts",
+    "research/plan/evidence/a/E3A-fix-820db37.md",
+    "research/plan/evidence/a/E3A-fix-820db37/",
+    "research/plan/evidence/coordinator/updates/E3A-20260926T0208Z.json"
+  ],
+  "findings": [
+    {
+      "id": "F-1",
+      "fixed": true,
+      "note": "signed-in redirect of /login,/signup on GET/HEAD only; claimOnboarding POST runs; signin-claim FAIL->PASS; onboarded user lands on next (/models)"
+    },
+    {
+      "id": "F-2",
+      "fixed": true,
+      "note": "providerRoute() 404 unless isOperator===true, first statement of /traces,/dedicated,/teams; traces/loading.tsx removed (Suspense streamed the 404 under 200); provider-route-denial FAIL->PASS"
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "node --test tests/a/middleware.test.ts (before/after fix)",
+      "exit": 0,
+      "summary": "before: 1 fail (A2-MW-02); after 3/3"
+    },
+    {
+      "cmd": "node --test tests/c/provider-routes.test.ts (before/after)",
+      "exit": 0,
+      "summary": "before: no export / traces unwired / loading.tsx present; after 2/2"
+    },
+    {
+      "cmd": "runner.py --out before @6d55c5e0",
+      "exit": 1,
+      "summary": "FAIL 16 PASS/2 FAIL/1 NOT RUN, 106.4s"
+    },
+    {
+      "cmd": "runner.py --out after @3c816729",
+      "exit": 1,
+      "summary": "FAIL 17/1/1 (/traces 200 streamed 404)"
+    },
+    {
+      "cmd": "runner.py --out after @820db37e",
+      "exit": 3,
+      "summary": "NOT RUN 18 PASS/0 FAIL/1 NOT RUN (operator-controls); cells 11 PASS/6 NOT RUN/0 FAIL; 93.7s; teardown clean"
+    },
+    {
+      "cmd": "runner.py --break-seam fixture-port / grant-guard @820db37e",
+      "exit": 1,
+      "summary": "both detected (usage-balance; signup-verify-grant)"
+    },
+    {
+      "cmd": "make console-test",
+      "exit": 0,
+      "summary": "643: 594 pass, 0 fail, 49 skipped (env-gated)"
+    },
+    {
+      "cmd": "make console-lint / console-typecheck",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings / clean"
+    },
+    {
+      "cmd": "cd apps/app && pnpm build && node --test tests/i2a/*.test.ts",
+      "exit": 0,
+      "summary": "build ok; 22/22"
+    },
+    {
+      "cmd": "node tests/a/run-mutants.mjs",
+      "exit": 0,
+      "summary": "46/46 (MW-POST killed)"
+    },
+    {
+      "cmd": "node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs",
+      "exit": 0,
+      "summary": "4/4; 183/183 (PROV-01..07 killed)"
+    },
+    {
+      "cmd": "contracts/v/u/a-catalog mutant lists",
+      "exit": 0,
+      "summary": "212/212, 40/40, 204/204, 46/46"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "medium",
+    "basis": "E3A proper after E3C: F-1/F-2 closed and every non-operator check passes; remaining operator action, delegated cells (widest spread), WR-1/WR-2, merged-SHA reruns (~1.5 min each)",
+    "at": "2026-09-26T02:08:32Z"
+  },
+  "blockers": [],
+  "incidents": [
+    "worktree was created at infrx-impl/apps/codex-app-e3a-fix (relative path from the wrong cwd); moved to the assigned path with git worktree move",
+    "a shell `cd \u2026 &` slip ran one frozen pnpm install (ignored node_modules only) and one read-only a/c mutant pass with the coordinator's tree as cwd; git status there unchanged; reruns done here"
+  ],
+  "wiring_requests": [],
+  "evidence": [
+    "research/plan/evidence/a/E3A-fix-820db37.md",
+    "research/plan/evidence/a/E3A-fix-820db37/"
+  ]
+}

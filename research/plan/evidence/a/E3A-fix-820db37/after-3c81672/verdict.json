@@ -1,0 +1,673 @@
+{
+  "schema": "infrx.e2c.verdict/1",
+  "gate": "APP-LOCAL",
+  "task": "E3A",
+  "verdict": "FAIL",
+  "exit": 1,
+  "head": {
+    "sha": "3c816729f4c679eb4a062005dfa4bd8dc54e422d",
+    "dirty": false
+  },
+  "head_end": {
+    "sha": "3c816729f4c679eb4a062005dfa4bd8dc54e422d",
+    "dirty": false
+  },
+  "started": "2026-09-26T01:52:44+00:00",
+  "finished": "2026-09-26T01:54:17+00:00",
+  "seconds": 93.5,
+  "argv": [
+    "--out",
+    "<scratchpad>/after"
+  ],
+  "label": "the App in a real browser on real auth-stand-in/PostgREST/PostgreSQL/Valkey/S3-compatible/gateway/worker processes with a controlled engine; not Marlin quality, not GPU capacity, not hosted behaviour, not a real email",
+  "namespace": "e4b",
+  "ports": {
+    "edge": 56860,
+    "control": 56861,
+    "app": 56870,
+    "block": "56800-56899"
+  },
+  "lanes_merged": [
+    "A1",
+    "A2",
+    "A3",
+    "C0",
+    "C1",
+    "C3A",
+    "D1",
+    "D10",
+    "D1R",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "E1",
+    "E1C",
+    "E2",
+    "E2C",
+    "E2R",
+    "E3B",
+    "E4B",
+    "F1",
+    "F2",
+    "F2C",
+    "F2P",
+    "F2R",
+    "G1",
+    "G1R",
+    "G2",
+    "G3",
+    "G4U",
+    "G6B",
+    "G7",
+    "G8",
+    "I0",
+    "I1",
+    "I2B",
+    "I3B",
+    "I8",
+    "J1",
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "M5",
+    "M6",
+    "Q1",
+    "Q2",
+    "Q3",
+    "S1",
+    "S2M",
+    "S3",
+    "T1",
+    "U1",
+    "U1R",
+    "U2",
+    "U3",
+    "U4",
+    "V1",
+    "W1",
+    "W2",
+    "W3",
+    "W4"
+  ],
+  "break_seam": null,
+  "selected": null,
+  "stages": [
+    {
+      "stage": "preflight",
+      "verdict": "PASS",
+      "seconds": 0.0,
+      "lanes_merged": [
+        "A1",
+        "A2",
+        "A3",
+        "C0",
+        "C1",
+        "C3A",
+        "D1",
+        "D10",
+        "D1R",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "E1",
+        "E1C",
+        "E2",
+        "E2C",
+        "E2R",
+        "E3B",
+        "E4B",
+        "F1",
+        "F2",
+        "F2C",
+        "F2P",
+        "F2R",
+        "G1",
+        "G1R",
+        "G2",
+        "G3",
+        "G4U",
+        "G6B",
+        "G7",
+        "G8",
+        "I0",
+        "I1",
+        "I2B",
+        "I3B",
+        "I8",
+        "J1",
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "M5",
+        "M6",
+        "Q1",
+        "Q2",
+        "Q3",
+        "S1",
+        "S2M",
+        "S3",
+        "T1",
+        "U1",
+        "U1R",
+        "U2",
+        "U3",
+        "U4",
+        "V1",
+        "W1",
+        "W2",
+        "W3",
+        "W4"
+      ]
+    },
+    {
+      "stage": "app-build",
+      "verdict": "PASS",
+      "seconds": 7.4,
+      "exit": 0,
+      "log": "<scratchpad>/after/app-build.log"
+    },
+    {
+      "stage": "stack",
+      "verdict": "PASS",
+      "seconds": 8.1,
+      "detail": "provisioned",
+      "services": [
+        {
+          "stage": "preflight",
+          "status": "PASS",
+          "seconds": 0.9
+        },
+        {
+          "stage": "services",
+          "status": "PASS",
+          "seconds": 6.8
+        },
+        {
+          "stage": "migrate",
+          "status": "PASS",
+          "seconds": 0.4
+        }
+      ]
+    },
+    {
+      "stage": "world",
+      "verdict": "PASS",
+      "seconds": 5.1,
+      "database": "infrx_e4b_2036176_1",
+      "deviations": [
+        "auth.uid() replaced by the hosted form on the clone (E3A-WR-2)"
+      ],
+      "gateway": "http://127.0.0.1:56840",
+      "runtime_login": true,
+      "detail": "gateway + worker on the runtime login, controlled engine"
+    },
+    {
+      "stage": "app",
+      "verdict": "PASS",
+      "seconds": 0.9,
+      "url": "http://localhost:56870",
+      "bound": "127.0.0.1:56870"
+    },
+    {
+      "stage": "browser",
+      "verdict": "PASS",
+      "seconds": 66.3,
+      "exit": 1,
+      "edge": {
+        "signups": 2,
+        "verified": 3,
+        "rest": 260,
+        "rpc/claim_signup_grant:200": 12,
+        "rpc/console_wallet_summary:200": 3,
+        "verify_refused": 1,
+        "rpc/consumer_jobs:200": 10,
+        "password_grants": 9,
+        "refresh_grants": 1,
+        "rpc/consumer_job_result:200": 1
+      },
+      "detail": ""
+    },
+    {
+      "stage": "teardown",
+      "verdict": "PASS",
+      "seconds": 4.1,
+      "detail": "no infrx-e4b container; ports 56860, 56861, 56870 free"
+    }
+  ],
+  "cells": [
+    {
+      "id": "DUR-ADMIT",
+      "journey": "PASS",
+      "checks": [
+        "text-sync",
+        "rate-rejection",
+        "low-funds",
+        "revoke-key"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "DUR-CAP",
+      "journey": "PASS",
+      "checks": [
+        "rate-rejection"
+      ],
+      "reasons": [
+        "NOT RUN[delegated] concurrent admissions across keys/orgs: the journey admits on one key, one request at a time; E3B dr02c/dr12 (a full key or index refused) and E3C s09 (concurrent grants) carry parts, no case races admissions across keys; rerun on the merged SHA (journey slice rate-rejection: PASS)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-FENCE",
+      "journey": "PASS",
+      "checks": [
+        "rate-rejection"
+      ],
+      "reasons": [
+        "NOT RUN[delegated] a stale worker generation racing a new one: the journey stops the worker before any lease; E3C s05 (worker crash at claim/output/settle), E3B dr03/dr05/db07/db11; rerun on the merged SHA (journey slice rate-rejection: PASS)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-OUTPUT",
+      "journey": "PASS",
+      "checks": [
+        "sse-stream",
+        "async-poll",
+        "request-detail",
+        "expired-result"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "DUR-SETTLE",
+      "journey": "PASS",
+      "checks": [
+        "text-sync",
+        "retry",
+        "usage-balance",
+        "accounting-uncertainty"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "DUR-OUTBOX",
+      "journey": "PASS",
+      "checks": [
+        "async-poll",
+        "rate-rejection"
+      ],
+      "reasons": [
+        "NOT RUN[delegated] Valkey data or ack lost, delivery replayed, dispatcher restarted: the journey loses nothing; E3C s05[outbox] and s08 (lost Valkey index), E3B dr13/db10; rerun on the merged SHA (journey slice async-poll, rate-rejection: PASS)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "DUR-RLS",
+      "journey": "FAIL",
+      "checks": [
+        "provider-route-denial",
+        "isolation"
+      ],
+      "reasons": [
+        "provider-route-denial: FAIL - Error: provider routes a consumer reached\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 3\n\n- Array []\n+ Array [\n+   \"/traces (200)\",\n+ ]\n\n  535 |     if (reply?.status() !== 404 && landed === route) served.push(`${route} (${reply?.status()})`);\n  536 |   }\n> 537 |   expect(served, \"provider routes a consumer reached\").toEqual([]);\n      |                                                        ^\n  538 | });\n  539 |\n  540 | test(\"operator-controls: operator actions are reachable only by an operator, with a reason, once\", async () => {\n    at /home/rey/worksp"
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "MEDIA-SEC",
+      "journey": "PASS",
+      "checks": [
+        "video-upload",
+        "isolation"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "API-MODES",
+      "journey": "PASS",
+      "checks": [
+        "text-sync",
+        "async-poll",
+        "video-upload"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "API-STREAM",
+      "journey": "PASS",
+      "checks": [
+        "sse-stream"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "CONSOLE-FLOWS",
+      "journey": "FAIL",
+      "checks": [
+        "signup-verify-grant",
+        "signin-claim",
+        "create-key",
+        "usage-balance",
+        "refresh",
+        "request-detail",
+        "provider-route-denial",
+        "operator-controls",
+        "revoke-key"
+      ],
+      "reasons": [
+        "provider-route-denial: FAIL - Error: provider routes a consumer reached\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 3\n\n- Array []\n+ Array [\n+   \"/traces (200)\",\n+ ]\n\n  535 |     if (reply?.status() !== 404 && landed === route) served.push(`${route} (${reply?.status()})`);\n  536 |   }\n> 537 |   expect(served, \"provider routes a consumer reached\").toEqual([]);\n      |                                                        ^\n  538 | });\n  539 |\n  540 | test(\"operator-controls: operator actions are reachable only by an operator, with a reason, once\", async () => {\n    at /home/rey/worksp",
+        "operator-controls: NOT RUN - NOT RUN[operator-action] no operator action is exercised yet: E3A proper signs in an operator on the edge, performs one U3 action with a reason and asserts one audit row after a repeat"
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "CREDIT-GRANT",
+      "journey": "PASS",
+      "checks": [
+        "signup-verify-grant",
+        "isolation"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "CREDIT-IDENTITY",
+      "journey": "PASS",
+      "checks": [
+        "signup-verify-grant",
+        "isolation"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "CREDIT-UNITS",
+      "journey": "PASS",
+      "checks": [
+        "signup-verify-grant",
+        "usage-balance"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "CREDIT-RATE",
+      "journey": "PASS",
+      "checks": [
+        "usage-balance"
+      ],
+      "reasons": [
+        "NOT RUN[delegated] a rate published while jobs wait or run: the journey publishes none; E3B dr07c/db13; rerun on the merged SHA (journey slice usage-balance: PASS)"
+      ],
+      "verdict": "NOT RUN"
+    },
+    {
+      "id": "CREDIT-SPEND",
+      "journey": "PASS",
+      "checks": [
+        "retry",
+        "usage-balance",
+        "accounting-uncertainty",
+        "low-funds"
+      ],
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "APP-JOURNEY",
+      "journey": "FAIL",
+      "checks": [
+        "signup-verify-grant",
+        "signin-claim",
+        "create-key",
+        "text-sync",
+        "sse-stream",
+        "async-poll",
+        "video-upload",
+        "retry",
+        "usage-balance",
+        "refresh",
+        "request-detail",
+        "accounting-uncertainty",
+        "rate-rejection",
+        "low-funds",
+        "provider-route-denial",
+        "operator-controls",
+        "isolation",
+        "revoke-key",
+        "expired-result"
+      ],
+      "reasons": [
+        "provider-route-denial: FAIL - Error: provider routes a consumer reached\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 3\n\n- Array []\n+ Array [\n+   \"/traces (200)\",\n+ ]\n\n  535 |     if (reply?.status() !== 404 && landed === route) served.push(`${route} (${reply?.status()})`);\n  536 |   }\n> 537 |   expect(served, \"provider routes a consumer reached\").toEqual([]);\n      |                                                        ^\n  538 | });\n  539 |\n  540 | test(\"operator-controls: operator actions are reachable only by an operator, with a reason, once\", async () => {\n    at /home/rey/worksp",
+        "operator-controls: NOT RUN - NOT RUN[operator-action] no operator action is exercised yet: E3A proper signs in an operator on the edge, performs one U3 action with a reason and asserts one audit row after a repeat"
+      ],
+      "verdict": "FAIL"
+    }
+  ],
+  "checks": [
+    {
+      "id": "signup-verify-grant",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "CREDIT-GRANT",
+        "CREDIT-IDENTITY",
+        "CREDIT-UNITS",
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "signin-claim",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "create-key",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "needs": [
+        "C3A",
+        "U2"
+      ]
+    },
+    {
+      "id": "text-sync",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "API-MODES",
+        "DUR-ADMIT",
+        "DUR-SETTLE"
+      ],
+      "needs": []
+    },
+    {
+      "id": "sse-stream",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "API-STREAM",
+        "DUR-OUTPUT"
+      ],
+      "needs": []
+    },
+    {
+      "id": "async-poll",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "API-MODES",
+        "DUR-OUTPUT",
+        "DUR-OUTBOX"
+      ],
+      "needs": []
+    },
+    {
+      "id": "video-upload",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "API-MODES",
+        "MEDIA-SEC"
+      ],
+      "needs": []
+    },
+    {
+      "id": "retry",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "DUR-SETTLE",
+        "CREDIT-SPEND"
+      ],
+      "needs": []
+    },
+    {
+      "id": "usage-balance",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "CREDIT-SPEND",
+        "CREDIT-UNITS",
+        "CREDIT-RATE",
+        "DUR-SETTLE",
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "refresh",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "request-detail",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "CONSOLE-FLOWS",
+        "DUR-OUTPUT"
+      ],
+      "needs": [
+        "U4"
+      ]
+    },
+    {
+      "id": "accounting-uncertainty",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "DUR-SETTLE",
+        "CREDIT-SPEND"
+      ],
+      "needs": []
+    },
+    {
+      "id": "rate-rejection",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "DUR-CAP",
+        "DUR-ADMIT",
+        "DUR-FENCE",
+        "DUR-OUTBOX"
+      ],
+      "needs": []
+    },
+    {
+      "id": "low-funds",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "CREDIT-SPEND",
+        "DUR-ADMIT"
+      ],
+      "needs": []
+    },
+    {
+      "id": "provider-route-denial",
+      "status": "FAIL",
+      "reason": "Error: provider routes a consumer reached\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 3\n\n- Array []\n+ Array [\n+   \"/traces (200)\",\n+ ]\n\n  535 |     if (reply?.status() !== 404 && landed === route) served.push(`${route} (${reply?.status()})`);\n  536 |   }\n> 537 |   expect(served, \"provider routes a consumer reached\").toEqual([]);\n      |                                                        ^\n  538 | });\n  539 |\n  540 | test(\"operator-controls: operator actions are reachable only by an operator, with a reason, once\", async () => {\n    at /home/rey/worksp",
+      "test_ids": [
+        "DUR-RLS",
+        "CONSOLE-FLOWS"
+      ],
+      "needs": []
+    },
+    {
+      "id": "operator-controls",
+      "status": "NOT RUN",
+      "reason": "NOT RUN[operator-action] no operator action is exercised yet: E3A proper signs in an operator on the edge, performs one U3 action with a reason and asserts one audit row after a repeat",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "needs": [
+        "U3"
+      ]
+    },
+    {
+      "id": "isolation",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "DUR-RLS",
+        "CREDIT-IDENTITY",
+        "CREDIT-GRANT",
+        "MEDIA-SEC"
+      ],
+      "needs": []
+    },
+    {
+      "id": "revoke-key",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "CONSOLE-FLOWS",
+        "DUR-ADMIT"
+      ],
+      "needs": [
+        "C3A",
+        "U2"
+      ]
+    },
+    {
+      "id": "expired-result",
+      "status": "PASS",
+      "reason": "",
+      "test_ids": [
+        "DUR-OUTPUT"
+      ],
+      "needs": []
+    }
+  ],
+  "evidence": {
+    "browser_report": "<scratchpad>/after/playwright.json",
+    "browser_log": "<scratchpad>/after/browser.log",
+    "app_log": "<scratchpad>/after/app.log",
+    "box_logs": "<scratchpad>/after/cases/journey"
+  },
+  "reproduce": "PLAYWRIGHT_BROWSERS_PATH=<dir> apps/infrx-api/.venv/bin/python tests/integration/app/runner.py --out <dir>"
+}
