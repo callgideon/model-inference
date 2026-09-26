@@ -125,7 +125,7 @@ ALLOWED_LEGACY_CHANGES = {
     ("constraint", "infrx.audit_entries", "audit_entries_action_check"):
         "six headless operator actions appended",
     # D10-APP-SQL (0024, C3A WR-C3A-4): the browser key INSERT also needs a verified
-    # individual with a consumer wallet; the exact expression is pinned by
+    # individual (no wallet required); the exact expression is pinned by
     # `checks_port.check_key_insert_needs_verified_individual`.
     ("policy", "public.api_keys", "api_keys_insert_owner"):
         "0001's check AND public.consumer_may_create_key()",
@@ -2062,8 +2062,8 @@ def check_operator_seams(conn) -> str:
     ), "operator seam controls")
     with conn.transaction():
         # The deployed console's own insert: the individual is its creator (0024: a verified
-        # individual with a consumer wallet - this fixture's grant seam leaves the email
-        # unconfirmed, so it is confirmed here, rolled back with the rest).
+        # individual - this fixture's grant seam leaves the email unconfirmed, so it is
+        # confirmed here, rolled back with the rest).
         conn.execute("update auth.users set email_confirmed_at = infrx.now() where id = %s",
                      (CONSUMER_1,))
         conn.execute(checks._jwt(CONSUMER_1))

@@ -955,10 +955,10 @@ def check_role_matrix(conn) -> str:
     job ownership, author provenance, `by_operator` or platform roles, nor read another
     tenant's durable state, nor call a mutation boundary.
 
-    0024 (C3A WR-C3A-4) lets only a verified individual holding a consumer wallet insert a
-    key, so the owner is made one for this check (rolled back): the key-insert attacks must
-    then be refused by THEIR defenses (the column grant, the tenant), not by a missing
-    wallet, and "owner creates a key" stays a real positive control."""
+    0024 (C3A WR-C3A-4) lets only a verified individual insert a key, so the owner's email
+    is confirmed for this check (rolled back): the key-insert attacks must then be refused
+    by THEIR defenses (the column grant, the tenant), not by a missing verification, and
+    "owner creates a key" stays a real positive control."""
     from . import checks_signup          # (it imports this module)
     checks_signup.gotrue_columns(conn)   # the bare Supabase image has no email_confirmed_at
     allowed_when_it_should_not_be, refused_but_needed = [], []
@@ -966,8 +966,6 @@ def check_role_matrix(conn) -> str:
         with conn.transaction():
             conn.execute("update auth.users set email_confirmed_at = '2026-01-01T00:00:00Z' "
                          "where id = %s", (USER_OWNER,))
-            conn.execute("insert into infrx.credit_wallets (kind, owner_user_id, "
-                         "personal_org_id) values ('consumer', %s, %s)", (USER_OWNER, ORG_A))
             for label, sql in ATTACKS:
                 for session in BROWSER_SESSIONS:
                     refusal = _attempt(conn, session, sql)

@@ -38,15 +38,16 @@
 --   api_keys_insert_owner (0001's)        C3A WR-C3A-4: a browser key INSERT also needs
 --     + public.consumer_may_create_key()  the caller to be a verified individual (the claim
 --                                         path's predicate: `infrx.verified_user` evidence
---                                         and a live, non-empty email) holding a consumer
---                                         wallet. 0001's owner/creator check is kept; the
+--                                         and a live, non-empty email). No wallet is
+--                                         required: a verified owner without one (a legacy
+--                                         USD pilot owner, an invited owner) keeps creating
+--                                         keys. 0001's owner/creator check is kept; the
 --                                         policy is dropped and recreated here, 0001 stays
 --                                         as it is. The predicate is SECURITY DEFINER (the
 --                                         policy runs as the caller, who cannot read
 --                                         `infrx`) and answers one boolean about the caller.
---                                         Consequence: an org owner with no consumer wallet
---                                         (a legacy USD pilot owner) creates keys through
---                                         the operator/service seams, not the browser.
+--                                         Consequence: an UNVERIFIED owner creates keys
+--                                         through the operator/service seams only.
 --   infrx_monitor on credit_wallet_holds  W5-F5 WR-W5F5-1: the worker's reconciliation
 --                                         gauges (S3 F4) count both regimes' unknown-usage
 --                                         holds on I8's read-only login. 0021 gave it
@@ -218,14 +219,15 @@ begin
 end $$;
 
 -- ====================================== C3A WR-C3A-4: who may create a key in the browser ===
--- The caller is a verified individual (claim_signup_grant's predicate, 0015) who holds a
--- consumer wallet (which only a verified claim creates).
+-- The caller is a verified individual: claim_signup_grant's predicate (0015:187-190). No
+-- consumer wallet is required, so pilot and invited owners pass once verified (C3A asked
+-- for that). C3A's "wallet OR verified" is kept as "verified": a wallet exists only after a
+-- verified claim, so the wallet branch would only admit a holder who is no longer verified.
 create or replace function public.consumer_may_create_key() returns boolean
 language sql stable security definer set search_path = public, infrx, pg_temp as $$
   select exists (
     select 1 from infrx.verified_user(auth.uid()) v
       join auth.users u on u.id = v.user_id
-      join infrx.credit_wallets w on w.owner_user_id = v.user_id and w.kind = 'consumer'
      where v.verification_evidence_ref is not null
        and to_jsonb(u)->>'deleted_at' is null
        and length(btrim(coalesce(to_jsonb(u)->>'email', ''))) > 0);

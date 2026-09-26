@@ -437,7 +437,14 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
     _m("d10_key_insert_verification_ignored", PORT,
        "     where v.verification_evidence_ref is not null\n",
        "     where true\n", "port_key_insert",
-       "a wallet holder whose email is not verified mints keys (the claim path's predicate)"),
+       "an individual whose email is not verified mints keys (the claim path's predicate)"),
+    _m("d10_key_insert_needs_a_wallet", PORT,
+       "      join auth.users u on u.id = v.user_id\n",
+       "      join auth.users u on u.id = v.user_id\n"
+       "      join infrx.credit_wallets w on w.owner_user_id = v.user_id and w.kind = 'consumer'\n",
+       "port_key_insert",
+       "a verified owner without a consumer wallet - a legacy USD pilot owner - can no longer "
+       "create keys in the browser (1-D10R-2)"),
     _m("d10_monitor_holds_ungranted", PORT,
        "grant select (state) on infrx.credit_wallet_holds to infrx_monitor;\n", "",
        "port_monitor", "the worker's gauges on the monitor login fail on CREDIT holds (W5-F5)"),
