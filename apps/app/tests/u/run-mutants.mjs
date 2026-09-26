@@ -12,7 +12,7 @@
 //
 // Usage: node tests/u/run-mutants.mjs [--only ID,ID] [--timeout MS] [--keep]
 import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +42,7 @@ const CREDITS = "app/(console)/billing/credit-view-model.ts";
 const JOBS = "app/(console)/usage/credit-view-model.ts";
 const GATE = "app/(console)/usage/fake-console-context.ts";
 const SOURCE = "app/(console)/billing/credit-fixture.ts";
+const CONTROLS = "app/(console)/usage/usage-controls.tsx";
 
 // U4: the owned request detail — reads, view model, and the three route files the cases read as
 // source (request-pg.test.ts needs a database and skips here; request_world.py is its oracle).
@@ -847,6 +848,13 @@ const MUTANTS = [
     cases: [T.rCap] },
   { id: "U1R-M43", what: "a limit over 100 is not refused before the call", file: READS,
     find: " || limit > MAX_PAGE_LIMIT) {", replace: ") {", cases: [T.rCap] },
+  // APP-0024-WIRE-2 (CM-2): the usage form, judged by its rendered markup (U06), not its source.
+  { id: "U1R-M44", what: "the key field is renamed, so the page never sees the key filter", file: CONTROLS,
+    find: "<Select name=\"key\"", replace: "<Select name=\"keyId\"", cases: [T.uHrefs] },
+  { id: "U1R-M45", what: "the form carries the old walk's cursor (applying a filter resumes mid-walk)", file: CONTROLS,
+    find: "      <Input\n        name=\"model\"",
+    replace: "      <input type=\"hidden\" name={\"cursor\"} value={filters.cursor ?? \"\"} />\n      <Input\n        name=\"model\"",
+    cases: [T.uHrefs] },
   // Fix round (0-U1R-V-01): the production/preview seam in front of the CREDIT fixture.
   { id: "U1R-M30", what: "the fixture gate is forced open (reviewer P1)", file: GATE,
     find: "  return consoleContext(env) !== null;", replace: "  return true;", cases: [T.gGate] },
@@ -1168,6 +1176,8 @@ function prepareCopy() {
     dereference: false,
     filter: (source) => !/(node_modules|\.next|\.git)(\/|$)/.test(source.slice(appRoot.length)),
   });
+  // U06 renders the usage form with React and TypeScript's transpiler (as tests/c and tests/a do).
+  symlinkSync(join(appRoot, "node_modules"), join(app, "node_modules"), "dir");
   return { root, app };
 }
 
