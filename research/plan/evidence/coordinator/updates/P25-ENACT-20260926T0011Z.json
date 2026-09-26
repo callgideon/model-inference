@@ -1,0 +1,13 @@
+{"task": "P25-ENACT", "slice": "I8/M6 (P-25 enactment)", "activity": "review", "head": "5240bd8c",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-p25-enact", "branch": "codex/p25-enact",
+ "owned_paths": ["apps/infrx-api/infrx/config.py", "apps/infrx-api/infrx/worker/__main__.py", "apps/infrx-api/tests/w/", "apps/infrx-api/tests/m/", "apps/infrx-api/deploy/preflight.py", "infra/alerts/operations.json", "infra/README.md", "infra/runbooks/restore.md", "infra/runbooks/rollout.md", "research/plan/evidence/i/P25-enact-5240bd8.md"],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=m6 pytest -q tests/w/test_prep_worker.py tests/w/test_worker_main.py tests/m/test_retention.py", "exit": 0, "summary": "161 passed, 7 skipped (MinIO/Valkey cases; no Valkey in the m6 block)"},
+  {"cmd": "pytest -q tests/contracts/test_config_and_imports.py tests/i/test_packaging.py tests/i/test_envcheck.py", "exit": 0, "summary": "312 passed"},
+  {"cmd": "pytest -q tests/i/test_observe.py", "exit": 1, "summary": "17 passed, 1 xfailed, 1 pre-existing failure (KNOWN_UNPRODUCED UnsettleableJobs; fails at base)"},
+  {"cmd": "python -m tests.w.worker_main_mutants", "exit": 0, "summary": "40/40 killed (5 new)"},
+  {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}],
+ "estimate": {"optimistic_h": 0.25, "likely_h": 0.75, "pessimistic_h": 1.5, "confidence": "medium", "basis": "code, tests, docs done; review, WR-P25-1..5, union _pg__ run remain", "at": "2026-09-26T00:11Z"},
+ "blockers": [],
+ "wiring_requests": ["WR-P25-1 gateway/pilot.py _pg_lifecycle grace_s", "WR-P25-2 observe.md:189", "WR-P25-3 operations.json retention/refusing statuses", "WR-P25-4 test_observe KNOWN_UNPRODUCED (pre-existing)", "WR-P25-5 15-pending-inputs P-25 row record"],
+ "evidence": ["research/plan/evidence/i/P25-enact-5240bd8.md"]}
