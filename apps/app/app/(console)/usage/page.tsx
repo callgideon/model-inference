@@ -25,10 +25,12 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
   const { reads, preview, now } = await consumerCreditReads();
   const filters = parseJobFilters(params);
 
-  const [wallet, jobs] = await Promise.all([reads.wallet(), reads.jobs(jobsPageRequest(filters))]);
-  const creditsIn = wallet.ok && wallet.value !== null ? await reads.creditsIn(wallet.value.walletId) : null;
+  const [wallet, jobs] = await Promise.all([reads.wallet(), reads.jobs(jobsPageRequest(filters, now))]);
+  const found = wallet.ok ? wallet.value : null;
+  const [creditsIn, keys] =
+    found === null ? [null, null] : await Promise.all([reads.creditsIn(found.walletId), reads.keys(found.orgId)]);
   const card = creditCardState(wallet, creditsIn);
-  const model = jobsPageModel({ filters, jobs, now });
+  const model = jobsPageModel({ filters, jobs });
 
   return (
     <>
@@ -36,7 +38,7 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
       <PageHeader
         title="Usage"
         subtitle="Your requests, newest first, with what each one charged or holds."
-        action={<UsageControls filters={model.filters} />}
+        action={<UsageControls filters={model.filters} keys={keys?.ok ? keys.value : []} />}
       />
 
       {card.kind === "ready" ? <CreditBalanceCard model={card.value} /> : null}
@@ -99,8 +101,7 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
           <p className="mt-2 text-xs text-muted-foreground">
             <strong>Charged</strong> is what settlement took from your balance, in the unit shown.{" "}
             <strong>Held</strong> is reserved while a request runs or awaits reconciliation — it is
-            not a charge, and usage that was not reported is never estimated into one. Filtering by
-            API key or model is not available yet.
+            not a charge, and usage that was not reported is never estimated into one.
           </p>
         </>
       ) : null}

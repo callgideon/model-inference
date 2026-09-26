@@ -9,6 +9,7 @@ import test from "node:test";
 
 import {
   CREDITS_IN_BOUND,
+  KEYS_BOUND,
   postgrestCreditReads,
   type Answer,
   type CreditClient,
@@ -101,8 +102,10 @@ function jobRow(over: Record<string, unknown> = {}) {
 
 const T = {
   wallet: "U1R-R01 the wallet is the caller's own consumer wallet, read exactly, and none is an explicit state",
-  ledgerScope: "U1R-R02 the ledger is filtered to the caller's wallet, keyset-ordered, and a forged cursor never reaches a filter",
+  ledgerScope: "U1R-R02 the ledger is the caller's own consumer_credit_ledger page on D10's cursor, never a caller-named wallet",
   jobs: "U1R-R03 jobs page through consumer_jobs on its own cursor, one extra row decides the next page",
+  filters: "U1R-R08 the model, key and window filters reach consumer_jobs each as its own parameter; unset ones are not sent",
+  keys: "U1R-R09 the key filter's options are the personal organization's keys, bounded",
   unavailable: "U1R-R04 an error, a transport failure or an inexact row is an explicit failure, never a zero",
   units: "U1R-R05 a job's unit follows its regime, and a CREDIT row labelled USD is refused",
   creditsIn: "U1R-R06 credits-in is a bounded read of the non-debit entries, and past the bound it is unknown",
@@ -142,46 +145,29 @@ test(T.ledgerScope, async () => {
     unit: "CREDIT",
     request_id: `b1000000-0000-4000-8000-00000000000${n}`,
     reason: "inference",
+    cursor: `2026-09-20 12:00:00+00|e1000000-0000-4000-8000-00000000000${n}`,
   });
   const { client, calls } = recording({
-    console_credit_ledger: [ok([entry(1), entry(2), entry(3)]), ok([entry(3)])],
+    consumer_credit_ledger: [ok([entry(1), entry(2), entry(3)]), ok([entry(3)])],
   });
   const reads = postgrestCreditReads(client, USER);
-  const first = await reads.ledger(WALLET, { limit: 2, cursor: null });
+  const first = await reads.ledger({ limit: 2, cursor: null });
   assert.ok(first.ok);
   assert.equal(first.value.items.length, 2, "the extra row is a probe, not an item");
   assert.equal(first.value.items[0].amount, "-1.00000000");
   assert.equal(first.value.items[0].requestId, "b1000000-0000-4000-8000-000000000001");
-  assert.notEqual(first.value.next_cursor, null);
-  assert.deepEqual(calls[0].ops.find(([op]) => op === "eq"), ["eq", "wallet_id", WALLET]);
-  // No `actor`: the view computes visible_principal() for it on EVERY wallet row before the sort
-  // and limit (1.5 s a page at 10k entries, 8 ms without), and a consumer only ever sees `platform`.
-  assert.deepEqual(calls[0].ops[0], ["select", "entry_id, created_at, kind, amount, unit, request_id, reason"]);
-  assert.deepEqual(calls[0].ops.find(([op]) => op === "limit"), ["limit", 3]);
-  assert.deepEqual(
-    calls[0].ops.filter(([op]) => op === "order"),
-    [["order", "created_at", { ascending: false }], ["order", "entry_id", { ascending: false }]],
-  );
-  const second = await reads.ledger(WALLET, { limit: 2, cursor: first.value.next_cursor });
+  // C0 WR-5 / WR-3(c) (0024): the JWT subject's own wallet, one index range stopped by its LIMIT; no
+  // view, no wallet argument, no `actor` (the view's visible_principal() per row).
+  assert.deepEqual(calls[0], { fn: "consumer_credit_ledger", args: { p_after: null, p_limit: 3 }, ops: [] });
+  assert.equal(first.value.next_cursor, entry(2).cursor, "the next page resumes after the last row shown");
+  const second = await reads.ledger({ limit: 2, cursor: first.value.next_cursor });
   assert.ok(second.ok);
+  assert.deepEqual(calls[1].args, { p_after: entry(2).cursor, p_limit: 3 }, "D10's cursor is a bound parameter, passed as is");
   assert.equal(second.value.next_cursor, null);
-  const keyset = calls[1].ops.find(([op]) => op === "or");
-  assert.deepEqual(keyset, [
-    "or",
-    'created_at.lt."2026-09-20T12:00:00.000000Z",and(created_at.eq."2026-09-20T12:00:00.000000Z",entry_id.lt.e1000000-0000-4000-8000-000000000002)',
-  ]);
-  // A cursor from a URL is untrusted: anything but the shape this adapter mints is refused before
-  // the client is called, so it can never widen the PostgREST filter it would be spliced into.
-  for (const forged of [
-    "2026-09-20T12:00:00.000000Z|x),or(wallet_id.neq.0",
-    "2026-09-20T12:00:00.000000Z|e1000000-0000-4000-8000-000000000002,created_at.gt.0",
-    "",
-  ]) {
-    const before = calls.length;
-    const refused = await reads.ledger(WALLET, { limit: 2, cursor: forged });
-    assert.deepEqual(refused.ok ? null : refused.error.code, "invalid_cursor", forged);
-    assert.equal(calls.length, before, "a forged cursor reached the client");
-  }
+  assert.ok(calls.every((c) => c.relation === undefined), "no page through console_credit_ledger");
+  const { client: stale } = recording({ consumer_credit_ledger: [failed("P0001", "invalid_cursor: not a cursor this read issued")] });
+  const refused = await postgrestCreditReads(stale, USER).ledger({ limit: 2, cursor: "x),or(wallet_id.neq.0" });
+  assert.equal(refused.ok ? null : refused.error.code, "invalid_cursor");
 });
 
 test(T.jobs, async () => {
@@ -203,6 +189,42 @@ test(T.jobs, async () => {
   assert.ok(last.ok);
   assert.deepEqual(calls[1].args, { p_after: "c2", p_limit: 3 });
   assert.equal(last.value.next_cursor, null);
+});
+
+test(T.filters, async () => {
+  const { client, calls } = recording({ consumer_jobs: [ok([]), ok([]), ok([])] });
+  const reads = postgrestCreditReads(client, USER);
+  const KEY = "c7000000-0000-4000-8000-0000000000c1";
+  await reads.jobs({ limit: 2, cursor: "c1", model: "m@1", keyId: KEY, from: "2026-09-19T12:00:00.000000Z", to: "2026-09-20T12:00:00.000000Z" });
+  assert.deepEqual(calls[0].args, {
+    p_after: "c1",
+    p_limit: 3,
+    p_model: "m@1",
+    p_key_id: KEY,
+    p_from: "2026-09-19T12:00:00.000000Z",
+    p_to: "2026-09-20T12:00:00.000000Z",
+  });
+  // An empty filter is 0021's unfiltered call exactly (U4's detail read shares this adapter).
+  await reads.jobs({ limit: 2, cursor: null, model: null, keyId: null, from: null, to: null });
+  await reads.jobs({ limit: 2, cursor: null });
+  assert.deepEqual(calls[1].args, { p_after: null, p_limit: 3 });
+  assert.deepEqual(calls[2].args, calls[1].args);
+});
+
+test(T.keys, async () => {
+  const { client, calls } = recording({
+    api_keys: [ok([{ id: "k1", name: "laptop", prefix: "sk-infrx-abcd" }]), ok([{ id: "k1", name: 7, prefix: "x" }])],
+  });
+  const reads = postgrestCreditReads(client, USER);
+  assert.deepEqual(await reads.keys(ORG), { ok: true, value: [{ id: "k1", name: "laptop", prefix: "sk-infrx-abcd" }] });
+  assert.deepEqual(calls[0].ops, [
+    ["select", "id, name, prefix"],
+    ["eq", "org_id", ORG],
+    ["order", "created_at", { ascending: false }],
+    ["limit", KEYS_BOUND],
+  ]);
+  const bad = await reads.keys(ORG);
+  assert.equal(bad.ok ? null : bad.error.code, "internal_error");
 });
 
 test(T.unavailable, async () => {

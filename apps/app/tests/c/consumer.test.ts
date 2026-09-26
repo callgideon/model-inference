@@ -26,11 +26,10 @@ import {
   type ConsumerAccount,
   type AuthUser,
   type ConsumerClient,
-  type CreditLedgerEntry,
   type RpcClient,
 } from "../../lib/services/console.ts";
 import { creditBalanceOf, sidebarCredit } from "../../lib/services/credits.ts";
-import type { Page, Result } from "../../lib/contracts/types.ts";
+import type { Result } from "../../lib/contracts/types.ts";
 import { createMemoryPort, type Dataset } from "./harness.ts";
 
 /** Success, or a failure that prints the code that came back (the mutant runner reads it). */

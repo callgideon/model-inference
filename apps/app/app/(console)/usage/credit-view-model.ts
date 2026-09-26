@@ -6,17 +6,16 @@
  * - A hold is not a charge and unknown usage is not a zero: only a settled job shows a charged
  *   amount, and a settled job whose charge cannot be read says "Unavailable".
  * - A legacy USD job is labelled USD; nothing here adds CREDIT and USD.
- * - The date window is cut on the ordered keyset stream (`created_at desc`): rows before its start
- *   are dropped and the walk ends there, so it stays one indexed read per page and a window's rows
- *   are exactly those at or after its start. `consumer_jobs` takes no key/model filter (wiring
- *   request to D10 in the U1R evidence), so the page offers none.
+ * - The filters are `consumer_jobs`' own (0024): the model (requested or revision), the key, and the
+ *   window [now - range, now). The database applies them inside its keyset scan, so every page is
+ *   one read and a window's rows are exactly those in it. A row names no key (0024 note 3).
  *
  * Pure `.ts` with relative imports (R48).
  */
 
 import { amount, num } from "../../../lib/format.ts";
 import type { Page, Result } from "../../../lib/contracts/types.ts";
-import type { ConsumerJob } from "../billing/credit-reads.ts";
+import type { ConsumerJob, JobsRequest } from "../billing/credit-reads.ts";
 import { requestDetailHref } from "../billing/credit-view-model.ts";
 import {
   PAGE_SIZE,
@@ -45,13 +44,28 @@ export type JobRange = keyof typeof JOB_RANGES | "all";
 export const DEFAULT_JOB_RANGE: JobRange = "all";
 export const JOB_PAGE_SIZE = PAGE_SIZE;
 
-export type JobFilters = PageCursor & { range: JobRange };
+export type JobFilters = PageCursor & { range: JobRange; model: string | null; keyId: string | null };
 
+/** A model name longer than any catalog id is not a filter; the URL is untrusted. */
+export const MAX_MODEL_CHARS = 200;
+const KEY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function last(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[value.length - 1] : value;
+}
+
+/**
+ * Unrecognised values are dropped: a key that is not a uuid (the form's "all" included) or an empty
+ * or oversized model is no filter, never a database error.
+ */
 export function parseJobFilters(params: SearchParams): JobFilters {
-  const raw = params.range;
-  const range = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+  const range = last(params.range);
+  const model = last(params.model)?.trim() ?? "";
+  const key = last(params.key) ?? "";
   return {
     range: range !== undefined && Object.hasOwn(JOB_RANGES, range) ? (range as JobRange) : DEFAULT_JOB_RANGE,
+    model: model !== "" && model.length <= MAX_MODEL_CHARS ? model : null,
+    keyId: KEY_ID.test(key) ? key : null,
     ...parsePageCursor(params),
   };
 }
@@ -59,24 +73,34 @@ export function parseJobFilters(params: SearchParams): JobFilters {
 export function jobsHref(filters: JobFilters): string {
   const search = new URLSearchParams();
   if (filters.range !== DEFAULT_JOB_RANGE) search.set("range", filters.range);
+  if (filters.keyId !== null) search.set("key", filters.keyId);
+  if (filters.model !== null) search.set("model", filters.model);
   if (filters.cursor !== null) search.set("cursor", filters.cursor);
   for (const cursor of filters.trail) search.append("trail", cursor);
   return hrefWith("/usage", search.toString());
 }
 
-/** A window change starts the walk again: the cursor was a position in the old window. */
-export function withJobRange(filters: JobFilters, range: JobRange): JobFilters {
-  return { range, cursor: null, trail: [] };
+/** In the DTO's instant form (`consumer_jobs` takes it as timestamptz). */
+function instantOf(at: Date): string {
+  return at.toISOString().replace(/Z$/, "000Z");
 }
 
-export function jobsPageRequest(filters: JobFilters): { limit: number; cursor: string | null } {
-  return { limit: JOB_PAGE_SIZE, cursor: filters.cursor };
+/** One page of `consumer_jobs`, narrowed by the filters; the window is [now - range, now). */
+export function jobsPageRequest(filters: JobFilters, now: Date): JobsRequest {
+  return {
+    limit: JOB_PAGE_SIZE,
+    cursor: filters.cursor,
+    model: filters.model,
+    keyId: filters.keyId,
+    from: windowStart(filters.range, now),
+    to: filters.range === "all" ? null : instantOf(now),
+  };
 }
 
 /** The window's inclusive start in the DTO's instant form, or null for all history. */
 export function windowStart(range: JobRange, now: Date): string | null {
   if (range === "all") return null;
-  return new Date(now.getTime() - JOB_RANGES[range]).toISOString().replace(/Z$/, "000Z");
+  return instantOf(new Date(now.getTime() - JOB_RANGES[range]));
 }
 
 // ---------------------------------------------------------------------------
@@ -231,28 +255,14 @@ export type JobsPageModel = {
   emptyText: string;
 };
 
-export function jobsPageModel(input: {
-  filters: JobFilters;
-  jobs: Result<Page<ConsumerJob>>;
-  now: Date;
-}): JobsPageModel {
+export function jobsPageModel(input: { filters: JobFilters; jobs: Result<Page<ConsumerJob>> }): JobsPageModel {
   const { filters } = input;
-  const start = windowStart(filters.range, input.now);
   const firstHref = jobsHref(firstCursorState(filters));
-  // Newest first, so the first row before the window's start ends the window.
-  const inWindow = (page: Page<ConsumerJob>): Page<ConsumerJob> => {
-    if (start === null) return page;
-    const kept = page.items.filter((job) => job.createdAt >= start);
-    return kept.length === page.items.length ? page : { items: kept, next_cursor: null };
-  };
-  const windowed: Result<Page<ConsumerJob>> = input.jobs.ok
-    ? { ok: true, value: inWindow(input.jobs.value) }
-    : input.jobs;
   return {
     filters,
     here: jobsHref(filters),
     firstHref,
-    rows: mapState(viewStateOf(windowed, (page) => page.items.length === 0), (page) => ({
+    rows: mapState(viewStateOf(input.jobs, (page) => page.items.length === 0), (page) => ({
       rows: page.items.map(jobRowView),
       page: pageNumberOf(filters),
       firstHref,
@@ -260,8 +270,10 @@ export function jobsPageModel(input: {
       nextHref: page.next_cursor === null ? null : jobsHref(nextCursorState(filters, page.next_cursor)),
     })),
     emptyText:
-      filters.range === "all"
-        ? "No requests yet. Requests you send with an API key appear here, newest first."
-        : `No requests in the last ${filters.range}. Choose a longer window to see earlier requests.`,
+      filters.model !== null || filters.keyId !== null
+        ? "No requests match this model or key. Clear the filters to see every request."
+        : filters.range === "all"
+          ? "No requests yet. Requests you send with an API key appear here, newest first."
+          : `No requests in the last ${filters.range}. Choose a longer window to see earlier requests.`,
   };
 }

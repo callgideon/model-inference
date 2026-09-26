@@ -105,12 +105,6 @@ function pgClient(user: string): CreditClient {
         where.push(`${ident(c)} <> ${lit(v)}`);
         return chain;
       },
-      or(filter) {
-        const keyset = /^created_at\.lt\."([^"]+)",and\(created_at\.eq\."([^"]+)",entry_id\.lt\.([0-9a-f-]{36})\)$/.exec(filter);
-        if (keyset === null || keyset[1] !== keyset[2]) throw new TypeError(`unsupported filter ${filter}`);
-        where.push(`(created_at < ${lit(keyset[1])} or (created_at = ${lit(keyset[1])} and entry_id < ${lit(keyset[3])}))`);
-        return chain;
-      },
       order(c, o) {
         order.push(`${ident(c)} ${o.ascending ? "asc" : "desc"}`);
         return chain;
@@ -128,9 +122,11 @@ function pgClient(user: string): CreditClient {
   return {
     from: (relation) => ({ select: (columns) => query(relation, columns) }),
     rpc: (fn, args) =>
-      Promise.resolve().then(() =>
-        sql(user, `select * from public.${ident(fn)}(${Object.entries(args).map(([k, v]) => `${ident(k)} => ${lit(v)}`).join(", ")})`),
-      ),
+      Promise.resolve().then(() => {
+        const statement = `select * from public.${ident(fn)}(${Object.entries(args).map(([k, v]) => `${ident(k)} => ${lit(v)}`).join(", ")})`;
+        issued.push(statement);
+        return sql(user, statement);
+      }),
   };
 }
 
@@ -156,12 +152,12 @@ function paramsOf(href: string): Record<string, string | string[]> {
   return params;
 }
 
-async function walkJobs(reads: CreditReads, limit: number, now: Date, range = "all") {
-  let filters = parseJobFilters({ range });
+async function walkJobs(reads: CreditReads, limit: number, now: Date, range = "all", more: Record<string, string> = {}) {
+  let filters = parseJobFilters({ range, ...more });
   const jobs = [];
   for (let guard = 0; guard < 100; guard += 1) {
-    const result = await reads.jobs({ ...jobsPageRequest(filters), limit });
-    const model = jobsPageModel({ filters, jobs: result, now });
+    const result = await reads.jobs({ ...jobsPageRequest(filters, now), limit });
+    const model = jobsPageModel({ filters, jobs: result });
     assert.notEqual(model.rows.kind, "error", JSON.stringify(result));
     if (model.rows.kind !== "ready" || !result.ok) break;
     jobs.push(...result.value.items.slice(0, model.rows.value.rows.length).map((job, n) => ({ job, row: model.rows.kind === "ready" ? model.rows.value.rows[n] : null })));
@@ -178,6 +174,7 @@ const T = {
   legacy: "U1R-P04 legacy USD equals the historical USD ledger, labelled USD, never counted in credits",
   tenant: "U1R-P05 another individual's session sees none of this wallet, ledger, jobs or legacy history",
   window: "U1R-P06 the date window is exact on real rows: inside it everything, past it nothing",
+  filters: "U1R-P07 the model, key and window filters narrow the rows exactly as the durable jobs say; an empty filter is the unfiltered page",
 };
 
 test(T.card, { skip }, async () => {
@@ -220,7 +217,7 @@ test(T.ledger, { skip }, async () => {
   const ids: string[] = [];
   const amounts: Credit[] = [];
   for (let guard = 0; guard < 100; guard += 1) {
-    const ledger = await reads.ledger(own.wallet_id, { limit: 2, cursor: state.cursor });
+    const ledger = await reads.ledger({ limit: 2, cursor: state.cursor });
     const model = creditsPageModel({ state, wallet, creditsIn: into, ledger, legacy: null });
     assert.ok(model.ledger.kind === "ready" && ledger.ok, JSON.stringify(ledger));
     ids.push(...model.ledger.value.rows.map((r) => r.id));
@@ -232,15 +229,18 @@ test(T.ledger, { skip }, async () => {
   assert.equal(ids.length, count.n, "an entry was lost");
   assert.equal(new Set(ids).size, ids.length, "an entry was repeated");
   assert.equal(totalCredit(amounts), own.ledger_total);
-  // The page stays indexed: selecting `actor` makes the view run visible_principal() on every row of
-  // the wallet before the sort and limit (1.5 s a page at 10k entries). Neither the select list nor
-  // the plan PostgreSQL chose for the browser principal may carry it.
-  const pages = issued.filter((q) => q.includes("from public.console_credit_ledger") && q.includes(" order by "));
+  // WR-3(c) / C0 WR-5 (0024): every page is consumer_credit_ledger - one index range stopped by its
+  // LIMIT, no `actor` (the view ran visible_principal() on every wallet row: 1.5 s a page at 10k) -
+  // and none is a top-N sort of the security-barrier view.
+  const pages = issued.filter((q) => q.includes("public.consumer_credit_ledger("));
   assert.ok(pages.length > 1, "no ledger page reached the database");
-  for (const page of pages) assert.doesNotMatch(page.slice(0, page.indexOf(" from ")), /\bactor\b/, page);
-  const plan = psql(WORLD.user, `explain (verbose, costs off) ${pages[0]}`);
-  assert.equal(plan.status, 0, plan.stderr);
-  assert.doesNotMatch(plan.stdout, /visible_principal/, "the ledger page evaluates visible_principal() per row");
+  assert.ok(!issued.some((q) => q.includes("from public.console_credit_ledger") && q.includes(" order by ")), "a ledger page read the view");
+  // WR-3(b): "Spent" reads only the wallet's grant and adjustments, through their own partial index.
+  const creditsIn = issued.find((q) => q.includes("kind <> 'inference_debit'"));
+  assert.ok(creditsIn !== undefined, "the credits-in read did not reach the database");
+  const inPlan = psql(WORLD.user, `set local enable_seqscan = off; explain (costs off) ${creditsIn}`);
+  assert.equal(inPlan.status, 0, inPlan.stderr);
+  assert.match(inPlan.stdout, /credit_ledger_wallet_credits_in_idx/, "credits-in filters every wallet entry by kind");
 });
 
 test(T.jobs, { skip }, async () => {
@@ -298,8 +298,10 @@ test(T.tenant, { skip }, async () => {
   const mineIds = new Set(durable<{ request_id: string }>(`select request_id::text from infrx.jobs where org_id = ${lit(own.org_id)}`).map((r) => r.request_id));
   assert.ok(walked.length >= 1, "the other individual's own job is missing");
   assert.ok(walked.every((w) => !mineIds.has(w.job.requestId)), "another individual's job was listed");
-  const ledger = await theirs.ledger(own.wallet_id, { limit: 5, cursor: null });
-  assert.ok(ledger.ok && ledger.value.items.length === 0, "a guessed wallet id read another ledger");
+  const mineEntries = new Set(durable<{ entry_id: string }>(`select entry_id::text from infrx.credit_ledger where wallet_id = ${lit(own.wallet_id)}`).map((r) => r.entry_id));
+  const ledger = await theirs.ledger({ limit: 50, cursor: null });
+  assert.ok(ledger.ok, JSON.stringify(ledger));
+  assert.ok(ledger.value.items.every((e) => !mineEntries.has(e.id)), "another individual's ledger entry was listed");
   const into = await theirs.creditsIn(own.wallet_id);
   assert.deepEqual(into, { ok: true, value: "0.00000000" });
   const legacy = await theirs.legacyUsd(own.org_id);
@@ -315,4 +317,56 @@ test(T.window, { skip }, async () => {
   assert.equal(inside.length, all.length);
   const later = await walkJobs(reads, 3, new Date(newest.getTime() + 8 * 86_400_000), "7d");
   assert.equal(later.length, 0);
+});
+
+test(T.filters, { skip }, async () => {
+  const reads = postgrestCreditReads(pgClient(WORLD.user), WORLD.user);
+  const own = mine();
+  const ids = (walked: { job: { requestId: string } }[]) => walked.map((w) => w.job.requestId).sort();
+  const expect = (where: string) =>
+    durable<{ request_id: string }>(`select request_id::text from infrx.jobs where org_id = ${lit(own.org_id)} and ${where}`)
+      .map((r) => r.request_id)
+      .sort();
+  const all = ids(await walkJobs(reads, 3, new Date()));
+  assert.deepEqual(all, expect("true"));
+  // An empty filter (the form's "all" key and blank model) is the unfiltered page, call for call.
+  assert.deepEqual(ids(await walkJobs(reads, 3, new Date(), "all", { key: "all", model: "" })), all);
+  const unfiltered = await reads.jobs({ limit: 100, cursor: null });
+  assert.deepEqual(await reads.jobs({ limit: 100, cursor: null, model: null, keyId: null, from: null, to: null }), unfiltered);
+
+  // Model: the requested string or the canonical revision, each narrowing to exactly its rows.
+  const models = durable<{ m: string }>(`select distinct m from infrx.jobs j, lateral (values (j.requested_model), (j.model_revision)) v(m) where org_id = ${lit(own.org_id)} and m is not null`);
+  assert.ok(models.length >= 1, "the world's jobs name no model");
+  for (const { m } of models) {
+    const got = ids(await walkJobs(reads, 3, new Date(), "all", { model: m }));
+    assert.deepEqual(got, expect(`${lit(m)} in (requested_model, model_revision)`), `model ${m}`);
+    assert.ok(got.length >= 1);
+  }
+  assert.deepEqual(ids(await walkJobs(reads, 3, new Date(), "all", { model: "no/such-model" })), []);
+
+  // Key: own key, another individual's key and an unknown key.
+  const keys = durable<{ key_id: string }>(`select distinct key_id::text from infrx.jobs where org_id = ${lit(own.org_id)} and key_id is not null`);
+  assert.ok(keys.length >= 1);
+  for (const { key_id } of keys) {
+    assert.deepEqual(ids(await walkJobs(reads, 3, new Date(), "all", { key: key_id })), expect(`key_id = ${lit(key_id)}`), `key ${key_id}`);
+  }
+  const [theirKey] = durable<{ key_id: string }>(`select key_id::text from infrx.jobs where org_id <> ${lit(own.org_id)} and key_id is not null limit 1`);
+  assert.deepEqual(ids(await walkJobs(reads, 3, new Date(), "all", { key: theirKey.key_id })), [], "another individual's key lists nothing");
+
+  // Window [now - 30d, now): `now` at the newest job's instant (the harness clock is frozen, so
+  // jobs share instants) leaves those jobs out - the end is exclusive - and 1 ms later lets them in.
+  const [{ at }] = durable<{ at: string }>(`select to_char(max(created_at) at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at from infrx.jobs where org_id = ${lit(own.org_id)}`);
+  const now = new Date(at);
+  const bound = now.toISOString().replace(/Z$/, "000Z");
+  const windowed = ids(await walkJobs(reads, 3, now, "30d"));
+  const inside = expect(`created_at >= ${lit(bound)}::timestamptz - interval '30 days' and created_at < ${lit(bound)}::timestamptz`);
+  assert.deepEqual(windowed, inside);
+  assert.ok(inside.length < all.length, `the newest jobs are at or after the window's end: ${inside.length} of ${all.length}`);
+  assert.deepEqual(ids(await walkJobs(reads, 3, new Date(now.getTime() + 1), "30d")), all);
+  // Combined: the window and the model together.
+  const [{ m: first }] = models;
+  assert.deepEqual(
+    ids(await walkJobs(reads, 3, now, "30d", { model: first })),
+    expect(`${lit(first)} in (requested_model, model_revision) and created_at >= ${lit(bound)}::timestamptz - interval '30 days' and created_at < ${lit(bound)}::timestamptz`),
+  );
 });

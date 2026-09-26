@@ -17,6 +17,8 @@ import type {
   CreditLedgerEntry,
   CreditReads,
   CreditWallet,
+  JobsRequest,
+  KeyOption,
   LegacyUsd,
   PageRequest,
 } from "./credit-reads.ts";
@@ -31,6 +33,8 @@ export type CreditFixture = {
 const MODEL = "nemostation/marlin-2b";
 const REVISION = "nemostation/marlin-2b@2026-09-01";
 const WALLET = "a1000000-0000-4000-8000-00000000000a";
+/** Every fixture job was sent with this key (a job row names no key; the filter is the database's). */
+export const FIXTURE_KEY: KeyOption = { id: "c7000000-0000-4000-8000-0000000000f1", name: "preview", prefix: "sk-infrx-previ" };
 
 function job(n: number, createdAt: string, over: Partial<ConsumerJob>): ConsumerJob {
   return {
@@ -123,11 +127,26 @@ export function fixtureCreditReads(fixture: CreditFixture = defaultCreditFixture
   );
   return {
     wallet: () => ok(fixture.wallet),
-    ledger: (_walletId, request) => ok(page(ledger, (e) => `${e.createdAt}|${e.id}`, request)),
+    ledger: (request) => ok(page(ledger, (e) => `${e.createdAt}|${e.id}`, request)),
     creditsIn: () =>
       ok(ledger.filter((e) => e.kind !== "inference_debit").reduce((sum, e) => addCredit(sum, e.amount), ZERO_CREDIT)),
     legacyUsd: () => ok(fixture.legacy),
-    jobs: (request) => ok(page(jobs, (j) => `${j.createdAt}|${j.requestId}`, request)),
+    // As consumer_jobs filters (0024): model = requested or revision, the key, [from, to).
+    jobs: (request: JobsRequest) =>
+      ok(
+        page(
+          jobs.filter(
+            (j) =>
+              (!request.model || request.model === j.requestedModel || request.model === j.modelRevision) &&
+              (!request.keyId || request.keyId === FIXTURE_KEY.id) &&
+              (!request.from || j.createdAt >= request.from) &&
+              (!request.to || j.createdAt < request.to),
+          ),
+          (j) => `${j.createdAt}|${j.requestId}`,
+          request,
+        ),
+      ),
+    keys: () => ok([FIXTURE_KEY]),
   };
 }
 
