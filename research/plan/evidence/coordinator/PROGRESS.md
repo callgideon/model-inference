@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 05:02Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 82, updated 2026-09-26 05:02Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 05:02Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 83, updated 2026-09-26 05:02Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -8,7 +8,7 @@ Generated 2026-09-26 05:02Z UTC by `python3 research/plan/scripts/progress.py` f
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V3, V5, V6.
 - Agent slots: 16 total, 10 active lanes, 2 reserved.
-- Validation: 1 error(s), 31 warning(s).
+- Validation: 0 error(s), 31 warning(s).
 
 ### Actionable blockers
 
@@ -48,7 +48,7 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 | Category | Implemented/integrated | Active | Acceptance cells PASS |
 |---|---|---|---|
 | Backend corrections | 12 / 14 | E3C | BACKEND-LOCAL 7/7; BACKEND-READY 0/6 |
-| App completion | 8 / 12 | E3A, I2A | APP-LOCAL 0/17; APP-PILOT 0/5 |
+| App completion | 8 / 12 | I2A | APP-LOCAL 0/17; APP-PILOT 0/5 |
 | Deferred Lab / hosting / later | 0 / 57 | none | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
 | Superseded | 0 / 6 | none | n/a |
@@ -82,7 +82,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | RV-03 | open | D10 (complete), M6 (complete), I8 (complete), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-04 | open | S3 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-05 | open | F2C (complete), D10 (complete), W5 (complete), G7 (complete), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-06 | open | C0 (complete), C3A (complete), A2 (complete), A3 (complete), U1R (complete), U2 (complete), U3 (complete), U4 (complete), E3A (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-06 | open | C0 (complete), C3A (complete), A2 (complete), A3 (complete), U1R (complete), U2 (complete), U3 (complete), U4 (complete), E3A (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-07 | open | E1C (complete), M5 (complete), G7 (complete) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-08 | open | E1C (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-09 | open | D10 (complete), I8 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
@@ -158,7 +158,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | E4C-RUNBOOK-2 | support E4C window-runbook corrections from the readiness brief: W6 copy-history seed 0001–0018, install regime settings (ACCOUNTING_REGIME=credit + card version), CREDIT activation moved after the hosted apply, E4C flags in the certify launcher, a runtime-login provisioning step (55-runtime-login.sh, SSM names only); self-verifying workflow | running | codex/e4c-runbook-2 | 6cbb6a45 → — | ports none (e1c 55449 only if a test needs PostgreSQL), prefix infrx-e4c-runbook-2- | 2026-09-26 04:20Z | verdict → coordinator merges --no-ff; the window then follows the corrected sequence | 1.5–5 h remaining (likely 3 h), confidence medium, estimated 2026-09-26 04:20Z; basis: five documented defects with file:line references; runbook + one script + tests; 2 lenses, one fix round |
 | KNOWN-GOOD-PROOF-2 | support P-25 / E4C prerequisite: extend both rollback targets' schema_proof from 0023 to 0025 on the D harness (i8), known-good.py --applied 0025 KNOWN-GOOD; from the D10-MERGE-2 head 9e4e34ca; workflow wf_13c39cc6-5bd | running | codex/known-good-proof-2 | 9e4e34ca → — | ports i8 postgres 55450 / valkey 55495 / pgbouncer 55496, prefix infrx-i8- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; 15-pending-inputs P-25 row | 1.5–4 h remaining (likely 2.5 h), confidence medium, estimated 2026-09-26 05:02Z; basis: the last proof lane took 128 min; two targets × 0024/0025 |
 | APP-0024-WIRE | support C0/U1R consume 0024: creditLedger via rpc consumer_credit_ledger (limit+1 ≤ 100), U1R P02 lines + usage filters via consumer_jobs parameters; from the D10-MERGE-2 head 9e4e34ca; workflow wf_26299e6f-6a4 | running | codex/app-0024-wire | 9e4e34ca → — | ports app-c0 postgres 55451, prefix infrx-app-c0- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; C0/U1R closure notes updated | 2–6 h remaining (likely 4 h), confidence medium, estimated 2026-09-26 05:02Z; basis: two App files + tests + mutants; real-PG stacks; 2 lenses, one fix round |
-| E3A-RUN | E3A E3A journey gate run on the merged SHA after BACKEND-LOCAL: E3C's two E3A wirings, operator-controls check on 0025, expired-content display, the four delegated cells bound to E3C-FINAL, runner + seam controls on the e4b block; from the D10-MERGE-2 head 9e4e34ca (dispatched ahead of BACKEND-READY under the user's App-ahead decision; the APP-LOCAL decision stays the coordinator's); workflow wf_9ffa037f-60d | running | codex/e3a-run | 9e4e34ca → — | ports e4b compose block 56800–56899 (edge 56860, control 56861, App 56870; one runner), prefix infrx-e4b- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; APP-LOCAL cells from the runner's verdict; gate decision after BACKEND-READY per the manifest | 3–8 h remaining (likely 5 h), confidence medium, estimated 2026-09-26 05:02Z; basis: two new checks + wirings + a journey run of ~2 min; 2 lenses, one fix round |
+| E3A-RUN | support (support lane for E3A, like E3A-PREP: the manifest gate BACKEND-READY is unchanged) E3A journey gate run on the merged SHA after BACKEND-LOCAL: E3C's two E3A wirings, operator-controls check on 0025, expired-content display, the four delegated cells bound to E3C-FINAL, runner + seam controls on the e4b block; from the D10-MERGE-2 head 9e4e34ca (dispatched ahead of BACKEND-READY under the user's App-ahead decision; the APP-LOCAL decision stays the coordinator's); workflow wf_9ffa037f-60d | running | codex/e3a-run | 9e4e34ca → — | ports e4b compose block 56800–56899 (edge 56860, control 56861, App 56870; one runner), prefix infrx-e4b- | 2026-09-26 05:02Z | verdict → merge after D10-MERGE-2; APP-LOCAL cells from the runner's verdict; gate decision after BACKEND-READY per the manifest | 3–8 h remaining (likely 5 h), confidence medium, estimated 2026-09-26 05:02Z; basis: two new checks + wirings + a journey run of ~2 min; 2 lenses, one fix round |
 | G8-FLAG-2 | support G8-FLAG carried minors R2/R3/R6 (audit operation pinned, lock-bound mutants runner-visible, --dry-run without a direction); from the tip 44ba44a9; workflow wf_ca5e636a-0d7 | running | codex/g8-flag-2 | 44ba44a9 → — | ports g8 postgres 55447 / valkey 55492, prefix infrx-g8- | 2026-09-26 05:02Z | verdict → merge onto the tip | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 05:02Z; basis: three small test/verb changes; 1 lens |
 
 ### Queues and locks
@@ -182,7 +182,6 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Validation
 
-- error: impossible gate transition: lane E3A-RUN is running but E3A dispatches only after BACKEND-READY is accepted
 - warning: overlapping writers: E3C (running) and I3 (queued) both own tests/integration/backend/e3c/ / tests/integration/ (+1 more)
 - warning: overlapping writers: E3C (running) and D10-MERGE-2 (running) both own tests/integration/backend/e3c/ / tests/integration/ (+1 more)
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
@@ -359,7 +358,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `L4` | Model/deployment/publication UI and aggregate health | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `I2A` | Reproducible App and single-GPU runtime deployment | App completion | planned | review | active: lane active |
 | `I2L` | Independent Lab app and control-service deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `E3A` | Consumer failure, security and signup-to-spend integration gate | App completion | planned | running | blocked: gated: dispatch only after BACKEND-READY is accepted |
+| `E3A` | Consumer failure, security and signup-to-spend integration gate | App completion | planned | queued | blocked: gated: dispatch only after BACKEND-READY is accepted |
 | `E3L` | Provider access, publication and rollback integration gate | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `E5L` | Provider traces, review and evaluation integration gate | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `F2R` | Close remaining wave-2 contract and verification carryovers | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
