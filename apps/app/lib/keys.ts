@@ -23,29 +23,6 @@ export function keyPrefix(key: string): string {
   return key.slice(0, PREFIX_LENGTH);
 }
 
-const STORE_PREFIX = "infrx:key:";
-
-/**
- * Keep a freshly minted secret for this browser tab only, so the catalog snippets
- * are copy-and-runnable right after the key is created. Never leaves the browser:
- * sessionStorage dies with the tab and the server only ever sees the hash.
- */
-export function rememberKey(id: string, key: string): void {
-  try {
-    sessionStorage.setItem(STORE_PREFIX + id, key);
-  } catch {
-    // private mode, blocked site data: the snippet just falls back to the prefix.
-  }
-}
-
-export function recallKey(id: string): string | null {
-  try {
-    return sessionStorage.getItem(STORE_PREFIX + id);
-  } catch {
-    return null;
-  }
-}
-
 /** SHA-256 hex, the same digest the gateway computes on the bearer token. */
 export async function hashKey(key: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));

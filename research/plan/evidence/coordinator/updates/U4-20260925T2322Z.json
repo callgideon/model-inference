@@ -1,0 +1,46 @@
+{
+  "task": "U4",
+  "lane": "U4",
+  "slice": "fix round for review of 313ee915: 0-U4-V-01 browser result lifecycle drivers, 0-U4-V-02 poll loop stop + page mount decision, 0-U4-V-03 WR-U4-2 strict P08 regression (D10 SQL)",
+  "activity": "review",
+  "at": "2026-09-25T23:22:14Z",
+  "head": "ee447470",
+  "base": "46776646",
+  "predecessors": {"U1R": "7482c21a (merged as bd6ff5d2)"},
+  "worktree": ".claude/worktrees/codex-app-u4",
+  "branch": "codex/app-u4",
+  "owned_paths": [
+    "apps/app/app/(console)/usage/[requestId]/",
+    "apps/app/tests/u/ (request-detail.test.ts, request-pg.test.ts, request_world.py, U4 entries in run-mutants.mjs)",
+    "research/plan/evidence/u/U4-5bf1bc2.md",
+    "research/plan/evidence/coordinator/updates/U4-20260925T2322Z.json"
+  ],
+  "findings": [
+    {"id": "0-U4-V-01", "fixed": true, "note": "watchExpiry/watchResult/readResult drivers + V10/V11/V12/S02; review mutants A,B,F,K killed in driver and wiring form"},
+    {"id": "0-U4-V-02", "fixed": true, "note": "pollLoop + pollsFor + V09/S02; review mutants D,E killed in driver and wiring form"},
+    {"id": "0-U4-V-03", "fixed": false, "note": "D10 SQL outside owned paths: WR-U4-2; strict P08 in tree as TODO; fails on current schema, passes with the patch on task-local PG"}
+  ],
+  "commands": [
+    {"cmd": "node --test tests/u/request-detail.test.ts (99395a20, regressions first)", "exit": 1, "summary": "missing export pollLoop; 21/21 at ee447470"},
+    {"cmd": "cd apps/app && pnpm test", "exit": 0, "summary": "417 tests: 403 pass, 0 fail, 14 skipped (credit-pg 6 + request-pg 8)"},
+    {"cmd": "pnpm lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "pnpm exec next typegen && pnpm exec tsc --noEmit", "exit": 0, "summary": "clean"},
+    {"cmd": "node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants", "exit": 0, "summary": "14/14 self-tests; 212/212 killed"},
+    {"cmd": "node tests/v/run-mutants.mjs", "exit": 0, "summary": "40/40 killed"},
+    {"cmd": "node tests/u/run-mutants.mjs", "exit": 0, "summary": "2/2 self-checks; 140/140 killed (+18 fix-round U4-M26..M43)"},
+    {"cmd": "node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs", "exit": 0, "summary": "4/4; 104/104"},
+    {"cmd": "cd apps/app && pnpm build", "exit": 0, "summary": "both routes dynamic; no secret/fixture/RPC strings in .next/static"},
+    {"cmd": "cd apps/infrx-api && INFRX_D_TASK=app-u4 uv run --frozen python ../app/tests/u/request_world.py", "exit": 0, "summary": "7 pass + P08 not ok # TODO (consumer_job_result served an unknown-usage result)"},
+    {"cmd": "same world with WR-U4-2 SQL applied after migrations (scratchpad wrapper)", "exit": 0, "summary": "7 pass + P08 ok # TODO: patch proven"}
+  ],
+  "estimate": {"optimistic_h": 0.25, "likely_h": 0.75, "pessimistic_h": 2, "confidence": "medium-high", "basis": "browser findings closed with named kills; remaining WR-U4-2 is D10 SQL proven on task-local PostgreSQL", "at": "2026-09-25T23:22:14Z"},
+  "blockers": [],
+  "incidents": ["23:04-~23:22Z a foreign container infrx-q3-valkey-55456 held app-u4's reserved port 127.0.0.1:55456 (q3's reservation is 55462); not touched, lane waited"],
+  "wiring_requests": [
+    "WR-U4-1 Makefile: console-pg target running credit_world.py (app-u1r) and request_world.py (app-u4)",
+    "WR-U4-2 D10 SQL (0024 if D10-APP-SQL still open, else 0025): consumer_job_result refuses result_pending for held_unknown / usage-less successes; then delete `todo: WR_U4_2` and the WR_U4_2 const in request-pg.test.ts P08 (proven: ok 8 with the patch)",
+    "WR-U4-3 optional U1R credit-reads.ts: expose job_handle and settled_at on ConsumerJob",
+    "WR-U4-4 C0 overlap: only request-context.ts changes if C0's port subsumes the reads"
+  ],
+  "evidence": ["research/plan/evidence/u/U4-5bf1bc2.md"]
+}

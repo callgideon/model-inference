@@ -1,0 +1,46 @@
+{
+  "task": "U2",
+  "slice": "keys (C0 reads + C3A actions, one-time plaintext, lost-key rotation, P-26 revocation copy) and truthful Settings (no controls; capture off, no sharing/training, retention via Docs)",
+  "activity": "review",
+  "head": "9f4f0b06",
+  "worktree": ".claude/worktrees/codex-app-u2",
+  "branch": "codex/app-u2",
+  "owned_paths": [
+    "apps/app/app/(console)/api-keys/",
+    "apps/app/app/(console)/settings/",
+    "apps/app/tests/u/ (keys/settings tests; U2 entries appended to run-mutants.mjs)",
+    "research/plan/evidence/u/U2-9f4f0b0.md"
+  ],
+  "commands": [
+    {"cmd": "git merge --no-ff codex/app-u1r; git merge --no-ff codex/app-c3a", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && node --test tests/u/keys-source.test.ts (at 05a5fca4, old code)", "exit": 1, "summary": "fails before by assertion: S01 plaintext remembered, S02 leaky local actions, S03 direct read, S04 no settings page"},
+    {"cmd": "cd apps/app && node --test tests/u/keys-view-model.test.ts tests/u/settings-view-model.test.ts (at 05a5fca4)", "exit": 1, "summary": "fails before: view models absent"},
+    {"cmd": "cd apps/app && node --test tests/u/keys-view-model.test.ts tests/u/keys-source.test.ts tests/u/settings-view-model.test.ts", "exit": 0, "summary": "15/15 pass"},
+    {"cmd": "cd apps/app && pnpm test", "exit": 0, "summary": "472 tests: 445 pass, 0 fail, 27 skipped (real-stack files)"},
+    {"cmd": "cd apps/app && pnpm lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && pnpm build", "exit": 0, "summary": "compiles; no privileged names in .next/static"},
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs", "exit": 0, "summary": "119/119 killed (97 prior + 22 U2)"},
+    {"cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants", "exit": 0, "summary": "212/212 killed"},
+    {"cmd": "cd apps/app && node tests/v/run-mutants.mjs", "exit": 0, "summary": "40/40 killed"},
+    {"cmd": "cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs", "exit": 0, "summary": "176/176 killed"},
+    {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/g/jobs/test_revocation.py", "exit": 0, "summary": "1 passed (R131 revocation bound)"},
+    {"cmd": "WR-U2-1/2 applied in tree, tsc/lint/test + proof test, then git restore", "exit": 0, "summary": "474 tests, 447 pass, 0 fail, 27 skip; proof 2/2"}
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "U2 code done pending review/fix round; coordinator applies WR-U2-1/2/3 (proven composed)",
+    "at": "2026-09-25T23:51Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-U2-1 (coordinator): components/sidebar.tsx NAV adds { href: \"/settings\", label: \"Settings\", icon: Settings } (lucide Settings import)",
+    "WR-U2-2 (coordinator/A3): remove rememberKey/recallKey/STORE_PREFIX from lib/keys.ts and the recallKey read + 'full key available in this browser session' copy from components/snippet.tsx",
+    "WR-U2-3 (coordinator at U2+A3 merge): api-keys/view-model.ts re-exports REVOCATION_COPY from ../docs/content.ts (A3); settings SUPPORT_EMAIL likewise",
+    "Open (C0/C3A): keys_list has no audience filter and a silent 100-row cap"
+  ],
+  "evidence": ["research/plan/evidence/u/U2-9f4f0b0.md"]
+}

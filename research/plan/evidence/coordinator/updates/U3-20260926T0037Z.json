@@ -1,0 +1,41 @@
+{
+  "task": "U3",
+  "slice": "fix round: 0-U3-V1 (drift view DUR-RLS falsifiable via a seeded drifting provider_dev wallet), 0-U3-V2 (form key wiring pinned, U3-S04 + M21/M22), 0-U3-V3 (page Unavailable branch pinned, U3-S05 + M23/M24)",
+  "activity": "review",
+  "head": "2f4bb5ce",
+  "worktree": ".claude/worktrees/codex-app-u3",
+  "branch": "codex/app-u3",
+  "owned_paths": [
+    "apps/app/app/(console)/admin/",
+    "apps/app/tests/u/ (operator tests)",
+    "research/plan/evidence/u/U3-d8da867.md"
+  ],
+  "commands": [
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs --only U3-M21,U3-M22,U3-M23,U3-M24 (before U3-S04/S05)", "exit": 1, "summary": "fails before: 4/4 survived"},
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs --only U3-M21,U3-M22,U3-M23,U3-M24", "exit": 0, "summary": "4/4 killed"},
+    {"cmd": "operator_stack.py with SQL mutant S4 (drift guard removed), old tests", "exit": 0, "summary": "fails before: S4 survives 9/9"},
+    {"cmd": "operator_stack.py with SQL mutant S4, new tests; then git checkout the SQL", "exit": 1, "summary": "S4 killed by U3-DB02 (8/9)"},
+    {"cmd": "cd apps/infrx-api && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/u/operator_stack.py", "exit": 0, "summary": "9/9 pass; durable read-back clean; containers removed"},
+    {"cmd": "cd apps/app && pnpm test", "exit": 0, "summary": "485 tests: 449 pass, 0 fail, 36 skipped"},
+    {"cmd": "cd apps/app && pnpm lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs", "exit": 0, "summary": "121/121 killed (24 U3)"},
+    {"cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants", "exit": 0, "summary": "212/212 killed"},
+    {"cmd": "cd apps/app && node tests/v/run-mutants.mjs", "exit": 0, "summary": "40/40 killed"}
+  ],
+  "estimate": {
+    "optimistic_h": 2.5,
+    "likely_h": 4,
+    "pessimistic_h": 7,
+    "confidence": "medium",
+    "basis": "U3 code done pending re-review; remaining is D10 WR-U3-1 (verbatim SQL + ACL registration, 2/3/5 h) and coordinator WR-U3-2/3/4 (0.5/1/2 h); unchanged by this fix round",
+    "at": "2026-09-26T00:37Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-U3-1..4 unchanged (see research/plan/evidence/u/U3-d8da867.md)"
+  ],
+  "evidence": [
+    "research/plan/evidence/u/U3-d8da867.md"
+  ]
+}

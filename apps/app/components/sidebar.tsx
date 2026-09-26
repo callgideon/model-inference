@@ -16,6 +16,7 @@ import {
   ChevronsUpDown,
   LogOut,
   Lock,
+  Settings,
   ShieldCheck,
 } from "lucide-react";
 import { signOut } from "@/app/actions";
@@ -35,6 +36,7 @@ const NAV = [
   { href: "/usage", label: "Usage", icon: BarChart3 },
   { href: "/billing", label: "Credits", icon: CreditCard },
   { href: "/api-keys", label: "API Keys", icon: KeyRound },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar({
@@ -100,7 +102,7 @@ export function Sidebar({
           {isOperator ? (
             <NavLink href="/admin" active={pathname.startsWith("/admin")} onClick={close}>
               <ShieldCheck className="size-4" />
-              Admin
+              Operator
             </NavLink>
           ) : null}
         </nav>

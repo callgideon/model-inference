@@ -78,6 +78,16 @@ function isClientModule(file: string): boolean {
 
 const SERVER_ONLY = join(appRoot, "lib", "services");
 
+/**
+ * A `"use server"` module is the one legitimate crossing: the bundler replaces its exports with
+ * action references, so its own imports (C3A's `app/actions.ts` -> `lib/services/actions.ts`) never
+ * reach a browser chunk. Every other module is followed.
+ */
+function isServerActionModule(file: string): boolean {
+  const head = readFileSync(file, "utf8").slice(0, 400);
+  return /^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*["']use server["']/.test(head);
+}
+
 /** The first path from a client module to a server-only one, or null. */
 function pathToServices(entry: string): string[] | null {
   const seen = new Set<string>();
@@ -91,6 +101,7 @@ function pathToServices(entry: string): string[] | null {
       const resolved = resolveImport(file, specifier);
       if (resolved === null) continue;
       if (resolved.startsWith(SERVER_ONLY)) return [...trail, resolved];
+      if (isServerActionModule(resolved)) continue;
       queue.push({ file: resolved, trail: [...trail, resolved] });
     }
   }
@@ -107,6 +118,9 @@ test("the walker actually finds client modules and can follow an import", () => 
   assert.ok(resolved.some((file) => file !== null), "the resolver must resolve at least one local import");
   // And the detector is not simply always-true.
   assert.ok(!isClientModule(join(appRoot, "lib", "services", "query.ts")), "a server module is not a client one");
+  // The action boundary is recognised, and only there: a server-only service module is not one.
+  assert.ok(isServerActionModule(join(appRoot, "app", "actions.ts")), "app/actions.ts is a server action module");
+  assert.ok(!isServerActionModule(join(appRoot, "lib", "services", "actions.ts")), "the adapter is not an action module");
 });
 
 test("no client component reaches lib/services, however indirectly", () => {

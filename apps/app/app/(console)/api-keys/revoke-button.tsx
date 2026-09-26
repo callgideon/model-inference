@@ -4,23 +4,23 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { revokeConsumerKey } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { revokeApiKey } from "./actions";
+import { REVOKE_LOST, revokeConfirmText, settle } from "./view-model";
 
 export function RevokeButton({ id, name }: { id: string; name: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
   async function revoke() {
-    if (!confirm(`Revoke "${name}"? Calls using it start failing within a minute.`)) return;
+    if (pending || !confirm(revokeConfirmText(name))) return;
     setPending(true);
-    const { error } = await revokeApiKey(id);
+    const result = await settle(() => revokeConsumerKey(id), REVOKE_LOST);
     setPending(false);
-    if (error) toast.error(error);
-    else {
-      toast.success(`Revoked ${name}`);
-      router.refresh();
-    }
+    if (!result.ok) toast.error(result.error.message);
+    else toast.success(`Revoked ${name}`);
+    // Either way the list re-reads committed state: a failed revoke may still have landed.
+    router.refresh();
   }
 
   return (

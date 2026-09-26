@@ -1,0 +1,46 @@
+{
+  "task": "U3",
+  "slice": "minimal operator controls: legacy USD balance edit deleted; operator reads (accounts, unknown-usage queue, drift, audit) via the operator's own JWT; audited idempotent adjust/suspend/revoke through C3A's operatorAction and an RPC OperatorPort; real-DB DUR-RLS/DUR-CAP stack; WR-U3-1 SQL for D10",
+  "activity": "review",
+  "head": "d8da867e",
+  "worktree": ".claude/worktrees/codex-app-u3",
+  "branch": "codex/app-u3",
+  "owned_paths": [
+    "apps/app/app/(console)/admin/",
+    "apps/app/tests/u/ (operator tests)",
+    "research/plan/evidence/u/U3-d8da867.md"
+  ],
+  "commands": [
+    {"cmd": "git merge --no-ff codex/app-u1r (7482c21a); git merge --no-ff codex/app-c3a (91af4caf)", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && node --test tests/u/operator-console.test.ts (at 95a111d7, tests only)", "exit": 1, "summary": "fails before: operator-port.ts absent; legacy admin/actions.ts present"},
+    {"cmd": "cd apps/app && node --test tests/u/operator-console.test.ts", "exit": 0, "summary": "17/17 pass"},
+    {"cmd": "cd apps/infrx-api && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/u/operator_stack.py (without WR-U3-1 SQL)", "exit": 1, "summary": "fails before: 0/9; every change 'not confirmed', never a fake success"},
+    {"cmd": "cd apps/infrx-api && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/u/operator_stack.py", "exit": 0, "summary": "9/9 pass; durable: 4 adjustments = 4 distinct operations, actor operator:<uid>, no negative available, no drift"},
+    {"cmd": "cd apps/app && pnpm test", "exit": 0, "summary": "483 tests: 447 pass, 0 fail, 36 skipped (real-stack files)"},
+    {"cmd": "cd apps/app && pnpm lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs", "exit": 0, "summary": "117/117 killed (20 U3)"},
+    {"cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants", "exit": 0, "summary": "212/212 killed"},
+    {"cmd": "cd apps/app && node tests/v/run-mutants.mjs", "exit": 0, "summary": "40/40 killed"},
+    {"cmd": "cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs", "exit": 0, "summary": "176/176 killed"},
+    {"cmd": "WR-U3-2 applied to app/actions.ts in tree; tsc, lint, pnpm test; then git checkout", "exit": 0, "summary": "composed: clean; 483/447/0/36"}
+  ],
+  "estimate": {
+    "optimistic_h": 2.5,
+    "likely_h": 4,
+    "pessimistic_h": 7,
+    "confidence": "medium",
+    "basis": "U3 code done pending review; remaining is D10 WR-U3-1 (verbatim SQL + ACL registration, 2/3/5 h) and coordinator WR-U3-2/3/4 (0.5/1/2 h)",
+    "at": "2026-09-26T00:08Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-U3-1 (D10): ship apps/app/tests/u/operator_rpc_proposed.sql verbatim as the next migration (public.operator_adjust_credit/set_suspension/revoke_key over grant_credit/set_suspension/revoke_key, is_operator() in SQL, actor from auth.uid(); operator_wallet_drift and operator_unknown_usage views); register in D ACL checks; then drop the proposed-SQL apply line in operator_stack.py",
+    "WR-U3-2 (coordinator, app/actions.ts): pass operator: operatorRpcPort(async () => (await createClient()) as unknown as OperatorRpcClient) to consoleActions (exact diff in evidence; proven by U3-DB09); closes WR-C3A-2/WR-C3A-3(a)",
+    "WR-U3-3 (coordinator, optional): Makefile console-u3-real target",
+    "WR-U3-4 (coordinator, optional): sidebar label Admin -> Operator"
+  ],
+  "evidence": [
+    "research/plan/evidence/u/U3-d8da867.md"
+  ]
+}
