@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 80,
-  "updated": "2026-09-26T04:22:02Z",
+  "revision": 81,
+  "updated": "2026-09-26T04:27:51Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -2252,9 +2252,9 @@
       },
       "activity": "complete",
       "started": "2026-09-26T04:20:12Z",
-      "updated": "2026-09-26T04:22:02Z",
+      "updated": "2026-09-26T04:27:51Z",
       "blocker": null,
-      "next_action": "merged --no-ff at a30631a8; WR-G8FLAG-1/2/3 applied at e7b1c272 (operations.md step 2 → the flag verb + ops03 asserts; R144 amended: flag verb + the maintenance-drill exception); GAP-I3-1 / I3R-7 closed; minors carried: 0-G8FLAG-R2 audit operation unpinned in the test, R3 lock-bound mutants need PG, R4 write-then-audit crash window (shared with credit-transition), R6 --dry-run still needs --on/--off; fixed-clone checks running",
+      "next_action": "merged a30631a8 + wirings e7b1c272; fixed-clone checks green; minors carried (session record 05:05Z)",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 2,
@@ -2266,7 +2266,28 @@
       "evidence": [
         "research/plan/evidence/g/G8-FLAG-3c5947f.md"
       ],
-      "commands": [],
+      "commands": [
+        {
+          "cmd": "INFRX_D_TASK=g8 pytest tests/g/ops tests/g/test_mutants.py -k 'ops or flag or transition' (fixed clone e7b1c272)",
+          "exit": 0,
+          "summary": "95 passed"
+        },
+        {
+          "cmd": "INFRX_D_TASK=g8 INFRX_MUTANTS=all pytest tests/g/ops/test_mutants.py",
+          "exit": 0,
+          "summary": "108 passed (102/102 killed)"
+        },
+        {
+          "cmd": "pytest tests/integration/ops tests/integration/backend/recovery/test_runbooks.py",
+          "exit": 0,
+          "summary": "33 passed (ops03 asserts the flag verb)"
+        },
+        {
+          "cmd": "python3 research/plan/scripts/validate_plan.py",
+          "exit": 0,
+          "summary": "PASS"
+        }
+      ],
       "owned_paths": [
         "apps/infrx-api/infrx/operations/",
         "apps/infrx-api/tests/g/ops/",
