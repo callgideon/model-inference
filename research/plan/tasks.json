@@ -2365,7 +2365,7 @@
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
       },
-      "closure_note": "2026-09-25: implemented on claude/consumer-v1 via codex/app-union 7ebed92d (lane ab0b5179, verified ACCEPT_WITH_FIXES; wirings WR-1/WR-3/WR-4 applied). OPEN: WR-5 (D10 paginated consumer_credit_ledger, 0024 via D10-APP-SQL), WR-6 (lib/session.ts membership pick → A2/U3), WR-7 (rerun console-c0-real on the merged SHA once 0022 lands), the console layout calls getUser() twice (U1R WR-6 shared port)."
+      "closure_note": "2026-09-25: implemented on claude/consumer-v1 via codex/app-union 7ebed92d (lane ab0b5179, verified ACCEPT_WITH_FIXES; wirings WR-1/WR-3/WR-4 applied). OPEN: WR-5 (D10 paginated consumer_credit_ledger, 0024 via D10-APP-SQL), WR-6 (lib/session.ts membership pick → A2/U3), WR-7 (rerun console-c0-real on the merged SHA once 0022 lands), the console layout calls getUser() twice (U1R WR-6 shared port). 2026-09-26: WR-5 adopted at the APP-0024-WIRE merge — creditLedger reads public.consumer_credit_ledger (0024) through rpcPage; console-c0-real 15/15."
     },
     {
       "id": "I0",
@@ -2501,7 +2501,7 @@
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
       },
-      "closure_note": "2026-09-25: implemented on claude/consumer-v1 via codex/app-union 7ebed92d (lane 7482c21a, verified ACCEPT_WITH_FIXES; WR-1/WR-2 sidebar credits composed). OPEN: WR-3(a)(b)(c) D10 SQL (0024 via D10-APP-SQL: credits-in partial index, consumer_jobs filters), WR-4 (U4 route), WR-5 (money display in A3/U3), WR-6 (one shared credit port)."
+      "closure_note": "2026-09-25: implemented on claude/consumer-v1 via codex/app-union 7ebed92d (lane 7482c21a, verified ACCEPT_WITH_FIXES; WR-1/WR-2 sidebar credits composed). OPEN: WR-3(a)(b)(c) D10 SQL (0024 via D10-APP-SQL: credits-in partial index, consumer_jobs filters), WR-4 (U4 route), WR-5 (money display in A3/U3), WR-6 (one shared credit port). 2026-09-26: WR-3(a)/(b)/(c) adopted at the APP-0024-WIRE merge — credit-reads.ts ledger on consumer_credit_ledger, consumer_jobs filters wired to the Usage controls (range/key/model), P02 plan lines + P07 real-PG cases; carried minor CM-1: the adapter's limit+1 is unclamped at the 100 edge (page sizes are 25; C0's rpcPage clamps)."
     },
     {
       "id": "F3",
