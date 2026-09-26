@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 19:05Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 126, updated 2026-09-26 19:05Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 19:06Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 127, updated 2026-09-26 19:06Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -435,6 +435,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 19:06Z UTC, coordinator (X-14): box staged for the current tip a434e2a8 outside the window: release-bundle.sh uploaded <sha>.bundle/.sha256 to s3://llm-bootcamp-641134885443/releases/, the box fetched and verified it (SSM dd7fe2ab; working tree untouched), 20-prepull pulled the pinned engine image vllm/vllm-openai@sha256:4cbfd34a… (SSM 2ce71e28); the final RELEASE repeats the ~14 MB bundle step only
 - 2026-09-26 19:05Z UTC, coordinator: user: "let's go with A, but warp up immediately" — MAIN-MERGE = route A (APP-MERGE after BACKEND-READY, the W7 hosted apply and the App inputs); the coordinator compresses its side: staging the box for RELEASE now (bundle/fetch/prepull), the release-gate run scripted to start on the G2-FIX merge, both gate candidates re-proven at RELEASE; the window itself and the hosted items stay operator-scheduled
 - 2026-09-26 19:03Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25 → blocked pending P-01, P-02, P-05, P-17, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4, E4C; no remaining-effort estimate for E4, E4C)
 - 2026-09-26 19:03Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25 → blocked pending P-01, P-02, P-05, P-17, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E4C)

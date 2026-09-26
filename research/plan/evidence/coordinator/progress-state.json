@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 126,
-  "updated": "2026-09-26T19:05:00Z",
+  "revision": 127,
+  "updated": "2026-09-26T19:06:00Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -5993,6 +5993,12 @@
       "at": "2026-09-26T19:05:00Z",
       "by": "coordinator",
       "what": "user: \"let's go with A, but warp up immediately\" — MAIN-MERGE = route A (APP-MERGE after BACKEND-READY, the W7 hosted apply and the App inputs); the coordinator compresses its side: staging the box for RELEASE now (bundle/fetch/prepull), the release-gate run scripted to start on the G2-FIX merge, both gate candidates re-proven at RELEASE; the window itself and the hosted items stay operator-scheduled",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+    },
+    {
+      "at": "2026-09-26T19:06:00Z",
+      "by": "coordinator (X-14)",
+      "what": "box staged for the current tip a434e2a8 outside the window: release-bundle.sh uploaded <sha>.bundle/.sha256 to s3://llm-bootcamp-641134885443/releases/, the box fetched and verified it (SSM dd7fe2ab; working tree untouched), 20-prepull pulled the pinned engine image vllm/vllm-openai@sha256:4cbfd34a… (SSM 2ce71e28); the final RELEASE repeats the ~14 MB bundle step only",
       "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     }
   ],
