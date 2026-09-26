@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 04:18Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 77, updated 2026-09-26 04:18Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 04:20Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 78, updated 2026-09-26 04:20Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `dcce7775`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 4 active lanes, 2 reserved.
-- Validation: 0 error(s), 14 warning(s).
+- Agent slots: 16 total, 6 active lanes, 2 reserved.
+- Validation: 0 error(s), 21 warning(s).
 
 ### Actionable blockers
 
@@ -105,7 +105,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (31.5 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (31.6 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -154,6 +154,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | D10-0025 | support D10 migration 0025 (WR-U3-1, R143): the App's operator RPCs (adjust CREDIT, suspension, key revocation) as a committed migration; U3's in-test apply removed; D-style tests, mutants and privilege tables | review | codex/d10-0025 | 8f453b98 → b5fc2fbc | ports revoke postgres 55459 (shared with D10-APP-SQL, which is done), prefix infrx-revoke- | 2026-09-26 03:35Z | verified ACCEPT_WITH_FIXES at b5fc2fbc (wf_1b0b99b9-75e; 1-F1 → W-D10B-1 v2, rechecked); the D10-MERGE-2 lane composes it with 0024 and the wirings on codex/d10-merge-2 | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 01:59Z; basis: proposal SQL exists and is exercised by U3's 9-case stack; D10 conventions, mutants and both images remain |
 | W5-F5B | support W5 follow-up (W5-F5 R2, union F3, WR-W5F5-3): a refusal or outage of the gateway's post-marker attach is logged and counted, never answered; one PgLifecycle in the worker composition; FakeLifecycle.admit_ready mirrors 0019's check_pinned_capability; E3C s04 late case asserts the pre-D10 door; verified ACCEPT_WITH_FIXES | complete | codex/w5-f5b | 1ea5047f → 009af6b1 | ports e2c postgres 55448 / valkey 55493 / s3 55494, prefix infrx-e2c- | 2026-09-26 03:35Z | merged --no-ff at 04ae5e21 (keep-both in tests/g; WR-W5F5B-1 applied: metrics FAMILIES declares infrx_post_marker_refusals_total); R139 numbered | 0.1–1 h remaining (likely 0.3 h), confidence medium, estimated 2026-09-26 02:34Z; basis: lane verified; remaining is the ordered merge with one wiring |
 | D10-MERGE-2 | support merge lane: migrations 0024 (codex/d10-app-sql 8f453b98 + W-D10A-1 v2) and 0025 (codex/d10-0025 b5fc2fbc + W-D10B-1 v2 + WR-D10B-2) onto the tip 34f0ed28; C3A case 9 / U4-P08 flips; D suites both images, harness, api-test, console targets | running | codex/d10-merge-2 | 34f0ed28 → — | ports revoke postgres 55459 (D10-0025 done), prefix infrx-revoke- | 2026-09-26 03:35Z | handback → coordinator merges codex/d10-merge-2 --no-ff, numbers 1-D10R-2 + R143 amendment, flips nothing until checks; then APP-0024-WIRE | 1.5–5 h remaining (likely 3 h), confidence medium, estimated 2026-09-26 03:35Z; basis: two clean merges in the D10-0025 verifier's scratch clone; api-test ~40 min; console targets ~15 min |
+| G8-FLAG | support G8 micro-lane (GAP-I3-1, I3R-7, R144): an audited `flag` CLI verb that sets one non-regime feature flag (signup_grant off alone) only through 0022 infrx.set_feature_flag; the cutover rollback runbook points at it; self-verifying workflow wf_3b2a85e9-f9d | running | codex/g8-flag | 34f0ed28 → — | ports g8 postgres 55447, prefix infrx-g8- | 2026-09-26 04:20Z | verdict → coordinator merges --no-ff, suite check, R144 amendment if requested | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 04:20Z; basis: one verb + tests + two doc pointers; 2 lenses, one fix round |
+| E4C-RUNBOOK-2 | support E4C window-runbook corrections from the readiness brief: W6 copy-history seed 0001–0018, install regime settings (ACCOUNTING_REGIME=credit + card version), CREDIT activation moved after the hosted apply, E4C flags in the certify launcher, a runtime-login provisioning step (55-runtime-login.sh, SSM names only); self-verifying workflow | running | codex/e4c-runbook-2 | 6cbb6a45 → — | ports none (e1c 55449 only if a test needs PostgreSQL), prefix infrx-e4c-runbook-2- | 2026-09-26 04:20Z | verdict → coordinator merges --no-ff; the window then follows the corrected sequence | 1.5–5 h remaining (likely 3 h), confidence medium, estimated 2026-09-26 04:20Z; basis: five documented defects with file:line references; runbook + one script + tests; 2 lenses, one fix round |
 
 ### Queues and locks
 
@@ -179,17 +181,24 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and D10-MERGE-2 (running) both own tests/integration/backend/ / tests/integration/
+- warning: overlapping writers: E4C (queued) and E4C-RUNBOOK-2 (running) both own tests/integration/backend/ / tests/integration/backend/recovery/test_runbooks.py (+2 more)
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and D10-APP-SQL (review) both own apps/app/ / apps/app/supabase/migrations/0024_console_read_port.sql
 - warning: overlapping writers: I2A (review) and D10-0025 (review) both own apps/app/ / apps/app/supabase/migrations/0025_*.sql (+2 more)
 - warning: overlapping writers: I2A (review) and D10-MERGE-2 (running) both own apps/app/ / apps/app/supabase/migrations/ (+1 more)
+- warning: overlapping writers: I2A (review) and G8-FLAG (running) both own infra/ / infra/runbooks/rollback.md (+1 more)
+- warning: overlapping writers: I2A (review) and E4C-RUNBOOK-2 (running) both own infra/ / infra/runbooks/rollout.md (+2 more)
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and D10-0025 (review) both own apps/app/tests/ / apps/app/tests/u/operator_stack.py (+1 more)
 - warning: overlapping writers: E3A (queued) and D10-MERGE-2 (running) both own tests/integration/ / tests/integration/ (+1 more)
+- warning: overlapping writers: E3A (queued) and E4C-RUNBOOK-2 (running) both own tests/integration/ / tests/integration/backend/recovery/test_runbooks.py
 - warning: overlapping writers: I3 (queued) and D10-MERGE-2 (running) both own tests/integration/ / tests/integration/
+- warning: overlapping writers: I3 (queued) and G8-FLAG (running) both own infra/ / infra/runbooks/rollback.md (+1 more)
+- warning: overlapping writers: I3 (queued) and E4C-RUNBOOK-2 (running) both own infra/ / infra/runbooks/rollout.md (+3 more)
 - warning: overlapping writers: D10-APP-SQL (review) and D10-0025 (review) both own apps/infrx-api/tests/d/ / apps/infrx-api/tests/d/
 - warning: overlapping writers: D10-APP-SQL (review) and D10-MERGE-2 (running) both own apps/app/supabase/migrations/0024_console_read_port.sql / apps/app/supabase/migrations/ (+1 more)
 - warning: overlapping writers: D10-0025 (review) and D10-MERGE-2 (running) both own apps/app/supabase/migrations/0025_*.sql / apps/app/supabase/migrations/ (+3 more)
+- warning: overlapping writers: D10-MERGE-2 (running) and E4C-RUNBOOK-2 (running) both own tests/integration/ / tests/integration/backend/recovery/test_runbooks.py
 
 ## Pending inputs
 

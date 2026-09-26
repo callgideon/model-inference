@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 77,
-  "updated": "2026-09-26T04:18:40Z",
+  "revision": 78,
+  "updated": "2026-09-26T04:20:12Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -2233,6 +2233,85 @@
         "tests/integration/",
         "apps/app/tests/u/",
         "research/plan/evidence/coordinator/d10-merge-2-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "G8-FLAG",
+      "task": null,
+      "slice": "G8 micro-lane (GAP-I3-1, I3R-7, R144): an audited `flag` CLI verb that sets one non-regime feature flag (signup_grant off alone) only through 0022 infrx.set_feature_flag; the cutover rollback runbook points at it; self-verifying workflow wf_3b2a85e9-f9d",
+      "agent": "opus",
+      "branch": "codex/g8-flag",
+      "worktree": ".claude/worktrees/codex-g8-flag",
+      "base": "34f0ed28",
+      "head": null,
+      "isolation": {
+        "ports": "g8 postgres 55447",
+        "prefix": "infrx-g8-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T04:20:12Z",
+      "updated": "2026-09-26T04:20:12Z",
+      "blocker": null,
+      "next_action": "verdict → coordinator merges --no-ff, suite check, R144 amendment if requested",
+      "estimate": {
+        "optimistic_h": 1,
+        "likely_h": 2,
+        "pessimistic_h": 4,
+        "confidence": "medium",
+        "basis": "one verb + tests + two doc pointers; 2 lenses, one fix round",
+        "at": "2026-09-26T04:20:12Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/infrx-api/infrx/operations/",
+        "apps/infrx-api/tests/g/ops/",
+        "infra/runbooks/rollback.md (flag-write sentences)",
+        "infra/app/README.md (signup_grant row)",
+        "research/plan/evidence/g/G8-FLAG-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "E4C-RUNBOOK-2",
+      "task": null,
+      "slice": "E4C window-runbook corrections from the readiness brief: W6 copy-history seed 0001–0018, install regime settings (ACCOUNTING_REGIME=credit + card version), CREDIT activation moved after the hosted apply, E4C flags in the certify launcher, a runtime-login provisioning step (55-runtime-login.sh, SSM names only); self-verifying workflow",
+      "agent": "opus",
+      "branch": "codex/e4c-runbook-2",
+      "worktree": ".claude/worktrees/codex-e4c-runbook-2",
+      "base": "6cbb6a45",
+      "head": null,
+      "isolation": {
+        "ports": "none (e1c 55449 only if a test needs PostgreSQL)",
+        "prefix": "infrx-e4c-runbook-2-",
+        "db": null
+      },
+      "activity": "running",
+      "started": "2026-09-26T04:20:12Z",
+      "updated": "2026-09-26T04:20:12Z",
+      "blocker": null,
+      "next_action": "verdict → coordinator merges --no-ff; the window then follows the corrected sequence",
+      "estimate": {
+        "optimistic_h": 1.5,
+        "likely_h": 3,
+        "pessimistic_h": 5,
+        "confidence": "medium",
+        "basis": "five documented defects with file:line references; runbook + one script + tests; 2 lenses, one fix round",
+        "at": "2026-09-26T04:20:12Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "infra/runbooks/rollout.md",
+        "models/marlin2b/results/E4C-runbook.md",
+        "infra/rollout/steps/55-runtime-login.sh (new)",
+        "infra/rollout/README.md",
+        "research/plan/evidence/coordinator/session-03-tools/rollout/e4b-certify3.sh",
+        "tests/integration/backend/recovery/test_runbooks.py",
+        "apps/infrx-api/tests/i/",
+        "research/plan/evidence/e/E4C-runbook-2-*.md"
       ],
       "wiring_requests": []
     }
