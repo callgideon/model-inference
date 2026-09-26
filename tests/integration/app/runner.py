@@ -15,10 +15,13 @@
    (never a hosted URL or key; `local_env` refuses anything else).
 4. **browser**: Playwright (`apps/app/tests/e2e/`), one serial journey; each test is a check.
 5. **verdict**: `<out>/verdict.json` in E2C's gate shape, the manifest's E3A test_ids as
-   cells. A cell is PASS only if every check under it ran green; a check a lane has not
-   merged yet is NOT RUN with the reason; an absent check is NOT RUN. Gate = worst of cells
-   and stages (FAIL > INVALID > BLOCKED > NOT RUN > PASS); exit 0 / 1 / 3 / 3 / 4.
-6. teardown of everything it started; `docker ps -a` must show no `infrx-e4b` container.
+   cells. A cell's `journey` is the worst of the checks under it; its `verdict` is that, except
+   for a DELEGATED cell (an oracle the journey does not exercise), which is NOT RUN unless a
+   check under it fails. A check a lane has not merged yet is NOT RUN with the reason; an
+   absent check is NOT RUN. Gate = worst of cells and stages (FAIL > INVALID > BLOCKED >
+   NOT RUN > PASS); exit 0 / 1 / 3 / 3 / 4.
+6. teardown of everything it started: no `infrx-e4b` container (`docker ps -a`) and the
+   edge, control and App ports free again.
 
 `--break-seam` removes one control and runs the checks guarding it; the gate must FAIL:
 `fixture-port` answers the App's reads from recorded fixtures (a mocked C0 port) and
@@ -90,6 +93,22 @@ CHECKS = {
     "isolation": (("DUR-RLS", "CREDIT-IDENTITY", "CREDIT-GRANT", "MEDIA-SEC"), ()),
     "revoke-key": (("CONSOLE-FLOWS", "DUR-ADMIT"), ("C3A", "U2")),
     "expired-result": (("DUR-OUTPUT",), ()),
+}
+# Cells whose 04-verification oracle the journey does not exercise. The checks under them are
+# a journey slice, reported as `journey`, never the oracle: NOT RUN unless one of them fails.
+# ponytail: text, not an import of E3C's same-SHA verdict; E3A proper imports it (s05, s08) or
+# adds journey injections (worker SIGKILL mid-lease, Valkey flush, rate publish, concurrency).
+DELEGATED = {
+    "DUR-CAP": "concurrent admissions across keys/orgs: the journey admits on one key, one "
+               "request at a time; E3B dr02c/dr12 (a full key or index refused) and E3C s09 "
+               "(concurrent grants) carry parts, no case races admissions across keys",
+    "DUR-FENCE": "a stale worker generation racing a new one: the journey stops the worker "
+                 "before any lease; E3C s05 (worker crash at claim/output/settle), E3B "
+                 "dr03/dr05/db07/db11",
+    "DUR-OUTBOX": "Valkey data or ack lost, delivery replayed, dispatcher restarted: the journey "
+                  "loses nothing; E3C s05[outbox] and s08 (lost Valkey index), E3B dr13/db10",
+    "CREDIT-RATE": "a rate published while jobs wait or run: the journey publishes none; E3B "
+                   "dr07c/db13",
 }
 SEAMS = {
     "fixture-port": {"checks": ("signup-verify-grant", "text-sync", "usage-balance"),
@@ -184,15 +203,20 @@ def classify(report: dict | None, selected: set[str] | None = None) -> dict:
 
 
 def cells(checks: dict) -> list[dict]:
-    """The E3A test_ids: worst of the checks under each; APP-JOURNEY is every check."""
+    """The E3A test_ids: `journey` = worst of the checks under each (APP-JOURNEY is every
+    check); `verdict` = that, or for a DELEGATED cell never better than NOT RUN."""
     out = []
     for test_id in TEST_IDS:
         under = [name for name, (ids, _) in CHECKS.items()
                  if test_id == "APP-JOURNEY" or test_id in ids]
-        verdict = worst(checks[name]["status"] for name in under)
-        out.append({"id": test_id, "verdict": verdict, "checks": under,
-                    "reasons": [f"{name}: {checks[name]['status']} - {checks[name]['reason']}"
-                                for name in under if checks[name]["status"] != PASS]})
+        journey = worst(checks[name]["status"] for name in under)
+        reasons = [f"{name}: {checks[name]['status']} - {checks[name]['reason']}"
+                   for name in under if checks[name]["status"] != PASS]
+        if test_id in DELEGATED:
+            reasons.insert(0, f"NOT RUN[delegated] {DELEGATED[test_id]}; rerun on the merged "
+                              f"SHA (journey slice {', '.join(under)}: {journey})")
+        out.append({"id": test_id, "journey": journey, "checks": under, "reasons": reasons,
+                    "verdict": worst([journey, NOT_RUN]) if test_id in DELEGATED else journey})
     return out
 
 
@@ -378,47 +402,75 @@ def base_env() -> dict:
             if k in os.environ} | {"NEXT_TELEMETRY_DISABLED": "1", "CI": "1"}
 
 
+def app_env(anon: str, service_role: str, gateway_port: int) -> dict[str, str]:
+    """The App's environment: only local values (`local_env`). `next start` runs with
+    NODE_ENV=production, and I2A's instrumentation (lib/deploy/env.ts) refuses a production
+    build that states neither VERCEL_ENV nor INFRX_APP_ENVIRONMENT; `development` is the one
+    whose loopback origins it accepts."""
+    return local_env({**base_env(), "INFRX_APP_ENVIRONMENT": "development",
+                      "NEXT_PUBLIC_SUPABASE_URL": f"http://127.0.0.1:{EDGE_PORT}",
+                      "NEXT_PUBLIC_SUPABASE_ANON_KEY": anon,
+                      "SUPABASE_SERVICE_ROLE_KEY": service_role,
+                      "INFRX_API_BASE_URL": f"http://127.0.0.1:{gateway_port}",
+                      "CONSOLE_CURSOR_SECRET": secrets.token_hex(24)})
+
+
 class NextApp:
     """`next start` in its own process group on 127.0.0.1:APP_PORT."""
 
     def __init__(self, env: dict, out: Path) -> None:
         self.env, self.out, self.process = env, out, None
 
+    ARGV = ["pnpm", "exec", "next", "start", "-H", "127.0.0.1", "-p", str(APP_PORT)]
+    URL = f"http://127.0.0.1:{APP_PORT}/login"
+    READY_S = 90.0
+
     def __enter__(self) -> "NextApp":
         import httpx
         log = (self.out / "app.log").open("w")
         self.process = subprocess.Popen(
-            ["pnpm", "exec", "next", "start", "-H", "127.0.0.1", "-p", str(APP_PORT)],
-            cwd=APP_DIR, env=self.env, stdout=log, stderr=subprocess.STDOUT,
+            self.ARGV, cwd=APP_DIR, env=self.env, stdout=log, stderr=subprocess.STDOUT,
             start_new_session=True)
         log.close()
-        end = time.monotonic() + 90
-        while time.monotonic() < end:
-            if self.process.poll() is not None:
-                raise RuntimeError(f"next start exited {self.process.returncode}")
-            try:
-                if httpx.get(f"http://127.0.0.1:{APP_PORT}/login", timeout=5).status_code < 500:
-                    return self
-            except httpx.HTTPError:
-                pass
-            time.sleep(0.5)
-        raise RuntimeError("next start never answered /login")
+        try:
+            end = time.monotonic() + self.READY_S
+            while time.monotonic() < end:
+                if self.process.poll() is not None:
+                    raise RuntimeError(f"next start exited {self.process.returncode}")
+                try:
+                    if httpx.get(self.URL, timeout=5).status_code < 500:
+                        return self
+                except httpx.HTTPError:
+                    pass
+                time.sleep(0.5)
+            raise RuntimeError("next start never answered /login")
+        except BaseException:
+            self.__exit__()                    # `with` calls __exit__ only after __enter__ returned
+            raise
 
     def __exit__(self, *exc) -> None:
-        if self.process and self.process.poll() is None:
-            for signum in (signal.SIGTERM, signal.SIGKILL):
-                try:
-                    os.killpg(self.process.pid, signum)
-                    self.process.wait(timeout=15)
-                    break
-                except (ProcessLookupError, subprocess.TimeoutExpired):
-                    continue
+        """SIGTERM, then SIGKILL, the whole group until none of it is left - also when its
+        leader already exited (a child of it may still hold the port)."""
+        if self.process is None:
+            return
+        for signum in (signal.SIGTERM, signal.SIGKILL):
+            end = time.monotonic() + 15
+            try:
+                os.killpg(self.process.pid, signum)
+                while time.monotonic() < end:
+                    self.process.poll()        # reap the leader
+                    os.killpg(self.process.pid, 0)
+                    time.sleep(0.2)
+            except ProcessLookupError:
+                return
 
 
-def leftovers() -> list[str]:
+def leftovers(ports=(EDGE_PORT, CONTROL_PORT, APP_PORT)) -> list[str]:
+    """What a run left behind: its containers, and any of its ports something still holds."""
     names = subprocess.run(["docker", "ps", "-a", "--format", "{{.Names}}"],
                            capture_output=True, text=True).stdout.split()
-    return [name for name in names if name.startswith(f"infrx-{NAMESPACE}")]
+    return [name for name in names if name.startswith(f"infrx-{NAMESPACE}")] + \
+        [f"127.0.0.1:{port}" for port in ports if not port_free(port)]
 
 
 def head() -> dict:
@@ -507,13 +559,8 @@ def main(argv: list[str] | None = None) -> int:
         harness = world.harness
         assert harness.NAMESPACE == NAMESPACE and set(harness.PORTS.values()) <= \
             set(range(56800, 56900)), harness.PORTS
-        edge_url = f"http://127.0.0.1:{EDGE_PORT}"
-        anon = stack.jwt("anon", ttl_s=12 * 3600)
-        env = local_env({**base_env(), "NEXT_PUBLIC_SUPABASE_URL": edge_url,
-                         "NEXT_PUBLIC_SUPABASE_ANON_KEY": anon,
-                         "SUPABASE_SERVICE_ROLE_KEY": stack.jwt("service_role", ttl_s=12 * 3600),
-                         "INFRX_API_BASE_URL": f"http://127.0.0.1:{stack.GATEWAY_PORT}",
-                         "CONSOLE_CURSOR_SECRET": secrets.token_hex(24)})
+        env = app_env(stack.jwt("anon", ttl_s=12 * 3600),
+                      stack.jwt("service_role", ttl_s=12 * 3600), stack.GATEWAY_PORT)
 
         began = time.monotonic()
         code, seconds = run_logged("app-build", ["pnpm", "exec", "next", "build"], out, env,
@@ -596,7 +643,8 @@ def main(argv: list[str] | None = None) -> int:
                     e3c.teardown(rep)
                 left = leftovers()
                 stage("teardown", PASS if not left else FAIL, began,
-                      detail=f"no infrx-{NAMESPACE} container" if not left else f"left {left}")
+                      detail=f"no infrx-{NAMESPACE} container; ports {EDGE_PORT}, "
+                             f"{CONTROL_PORT}, {APP_PORT} free" if not left else f"left {left}")
     except Stop:
         pass
     except BaseException as exc:                          # a signal: unfinished checks NOT RUN
@@ -633,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     (out / "verdict.json").write_text(json.dumps(payload, indent=2, default=str) + "\n")
     for row in table:
-        print(f"{row['verdict']:>8}  {row['id']}")
+        print(f"{row['verdict']:>8}  {row['id']}  (journey {row['journey']})")
     print(f"APP-LOCAL: {verdict} (exit {EXIT[verdict]}) - {out / 'verdict.json'}")
     return EXIT[verdict]
 

@@ -59,8 +59,9 @@ def test_every_check_is_a_journey_test_title():
 
 def test_all_green_is_pass_and_absent_or_skipped_is_never_pass():
     """Oracle: a skip, a missing test or a deselected check counted as a pass."""
-    checks = runner.classify(all_passed())
-    assert {c["verdict"] for c in runner.cells(checks)} == {runner.PASS}
+    table = runner.cells(runner.classify(all_passed()))
+    assert {c["journey"] for c in table} == {runner.PASS}
+    assert {c["id"] for c in table if c["verdict"] != runner.PASS} == set(runner.DELEGATED)
     checks = runner.classify(report(("text-sync: x", "passed", "", "")))
     table = {c["id"]: c["verdict"] for c in runner.cells(checks)}
     assert table["API-MODES"] == runner.NOT_RUN and table["APP-JOURNEY"] == runner.NOT_RUN
@@ -71,6 +72,22 @@ def test_all_green_is_pass_and_absent_or_skipped_is_never_pass():
     only = runner.classify(all_passed(), {"text-sync"})
     assert only["usage-balance"]["status"] == runner.NOT_RUN
     assert only["text-sync"]["status"] == runner.PASS
+
+
+def test_cells_the_journey_does_not_exercise_are_never_pass():
+    """Oracle (0-/1-E3A-PREP-R1): DUR-FENCE, DUR-OUTBOX, DUR-CAP or CREDIT-RATE reported PASS
+    although the journey never races a stale worker, loses Valkey state, admits concurrently
+    across keys/orgs or publishes a rate; or a red journey check under one of them hidden."""
+    assert set(runner.DELEGATED) == {"DUR-CAP", "DUR-FENCE", "DUR-OUTBOX", "CREDIT-RATE"}
+    table = {c["id"]: c for c in runner.cells(runner.classify(all_passed()))}
+    for test_id in runner.DELEGATED:
+        cell = table[test_id]
+        assert (cell["verdict"], cell["journey"]) == (runner.NOT_RUN, runner.PASS), cell
+        assert cell["reasons"][0].startswith("NOT RUN[delegated]"), cell
+    assert table["API-MODES"]["verdict"] == table["API-MODES"]["journey"] == runner.PASS
+    tests = [(f"{name}: x", "passed", "", "") for name in runner.CHECKS if name != "rate-rejection"]
+    red = runner.cells(runner.classify(report(*tests, ("rate-rejection: x", "failed", "", "429"))))
+    assert {c["id"]: c["verdict"] for c in red}["DUR-FENCE"] == runner.FAIL
 
 
 def test_a_failure_fails_its_cells_and_a_harness_error_is_invalid():
@@ -103,6 +120,54 @@ def test_the_app_env_is_loopback_in_the_block_only():
         with pytest.raises(ValueError):
             runner.local_env({"NEXT_PUBLIC_SUPABASE_URL": bad})
     assert {runner.EDGE_PORT, runner.CONTROL_PORT, runner.APP_PORT} <= set(runner.BLOCK)
+
+
+def test_the_app_env_states_its_environment():
+    """Oracle (1-E3A-PREP-R2): `next start` (NODE_ENV=production) with neither VERCEL_ENV nor
+    INFRX_APP_ENVIRONMENT - I2A's instrumentation (lib/deploy/env.ts) refuses to serve, and the
+    run goes INVALID on any tree that carries it."""
+    env = runner.app_env("anon", "service", 56840)
+    assert env["INFRX_APP_ENVIRONMENT"] == "development" and "VERCEL_ENV" not in env
+    assert "NODE_ENV" not in env                          # next start sets production itself
+    assert env["INFRX_API_BASE_URL"] == "http://127.0.0.1:56840"
+    assert env["NEXT_PUBLIC_SUPABASE_URL"] == f"http://127.0.0.1:{runner.EDGE_PORT}"
+
+
+def test_an_app_that_never_answers_leaves_no_process(monkeypatch, tmp_path):
+    """Oracle (1-E3A-PREP-R3): `next start` exits or never answers, the runner raises, and its
+    process group keeps running (holding the App port into the next run's preflight)."""
+    import os
+    import signal
+    monkeypatch.setattr(runner.NextApp, "URL", "http://127.0.0.1:9/login")   # nothing answers
+    monkeypatch.setattr(runner.NextApp, "READY_S", 1.0)
+    for script in ("sleep 60 & exec sleep 60", "sleep 60 & exit 3"):
+        monkeypatch.setattr(runner.NextApp, "ARGV", ["sh", "-c", script])
+        app = runner.NextApp({"PATH": os.environ["PATH"]}, tmp_path)
+        with pytest.raises(RuntimeError):
+            app.__enter__()
+        try:
+            os.killpg(app.process.pid, 0)
+            os.killpg(app.process.pid, signal.SIGKILL)
+            alive = True
+        except ProcessLookupError:
+            alive = False
+        assert not alive, f"{script!r}: its process group outlived the failed start"
+
+
+def test_teardown_counts_a_held_port_as_left_behind(monkeypatch):
+    """Oracle (1-E3A-PREP-R3): teardown PASS while a process still holds one of the runner's
+    ports (it only looked at docker names)."""
+    import socket
+    from types import SimpleNamespace
+    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        stdout="infrx-e4b-postgres\ninfrx-e3c-postgres\n"))
+    with socket.socket() as held:
+        held.bind(("127.0.0.1", 0))
+        held.listen()
+        port = held.getsockname()[1]
+        assert runner.leftovers((port,)) == ["infrx-e4b-postgres", f"127.0.0.1:{port}"]
+    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=""))
+    assert runner.leftovers((port,)) == []
 
 
 def test_merged_lanes_follow_the_manifest_status():
