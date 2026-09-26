@@ -1,0 +1,66 @@
+{
+ "task": "G-GATES",
+ "slice": "README \u00a70 go/no-go gates G1-G6 at the tip",
+ "activity": "review",
+ "head": "9b21339a0ec15a14aa019d969a88a118cb418c70",
+ "worktree": ".claude/worktrees/codex-g-gates",
+ "branch": "codex/g-gates",
+ "owned_paths": [
+  "research/plan/evidence/coordinator/G-GATES-9b21339.md",
+  "research/plan/evidence/coordinator/updates/G-GATES-20260926T1121Z.json"
+ ],
+ "commands": [
+  {
+   "cmd": "G1: make api-env; git rev-parse HEAD; git status --porcelain",
+   "exit": 0,
+   "summary": "PASS: 9b21339a0ec15a14aa019d969a88a118cb418c70, porcelain empty"
+  },
+  {
+   "cmd": "G2: INFRX_D_TASK=e2c (+ e2c valkey 55493 for D2/Q) make check",
+   "exit": 2,
+   "summary": "FAIL in api-test: 2 failed (tests/q/test_reconcile.py q3 drills: shared valkey port in one process + vkharness adopts a foreign listener), 4544 passed, 42 skipped, 9 xfailed; supplement make -k of the rest: api-mutants 22 failed (4 deterministic: 3 stale anchors + 1 survived; 18 i8 contention, not reproduced alone), console-*/bench-test green, E4B mutants 255 passed"
+  },
+  {
+   "cmd": "G2: cd apps/infrx-api && INFRX_D_TASK=i8 uv run --frozen --no-sync pytest -q tests/i",
+   "exit": 1,
+   "summary": "FAIL twice (i8 stand-in not ready; 3F+4E, then 44F+1E); control with INFRX_D_TASK=e2c: 238 passed, 1 xfailed"
+  },
+  {
+   "cmd": "G3: docker build ... -t infrx-runtime:9b21339a...; placeholder env | docker run --rm -i --network none ... preflight.py probe --mode pilot",
+   "exit": 0,
+   "summary": "PASS: {\"ok\": true, problems []}"
+  },
+  {
+   "cmd": "G4: preflight.engine_problems(serve.sh, 'pilot')",
+   "exit": 0,
+   "summary": "PASS: [] (does not check P-06 processor digests, still null)"
+  },
+  {
+   "cmd": "G5: REHEARSAL_NS=infrx-ggates apps/infrx-api/deploy/rehearse.sh; teardown scan",
+   "exit": 0,
+   "summary": "PASS: REHEARSAL PASSED, 48 PASS / 0 FAIL, nothing left"
+  },
+  {
+   "cmd": "G6: documents only (rollout.md \u00a71, 15-pending-inputs.md P-24/P-25, G6B/I3B evidence)",
+   "exit": null,
+   "summary": "NOT RUN[operator]: pg_journal_url recorded (not re-read); hosted backup rehearsal not on record; hosted G6B issue+revoke not on record"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 4,
+  "likely_h": 8,
+  "pessimistic_h": 16,
+  "confidence": "low",
+  "basis": "G2 green needs 3 anchor re-declarations + 1 case fix by owning lanes, a G2 command/harness ruling (F-1, F-5), then a ~3.5 h uncontended rerun; G6/P-06 are operator/coordinator-held and not estimated here",
+  "at": "2026-09-26T11:21Z"
+ },
+ "blockers": [
+  "G2 FAIL (F-1..F-5)",
+  "P-06 processor digests null (G4 does not gate it)",
+  "G6 operator reads: hosted backup rehearsal, hosted G6B issue+revoke"
+ ],
+ "wiring_requests": [],
+ "evidence": [
+  "research/plan/evidence/coordinator/G-GATES-9b21339.md"
+ ]
+}
