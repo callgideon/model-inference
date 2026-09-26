@@ -60,6 +60,8 @@ const SUITE = [
 // U2: the API Keys and Settings page models and the two key controls (read as source by keys-source).
 const KEYS_VM = "app/(console)/api-keys/view-model.ts";
 const DIALOG = "app/(console)/api-keys/create-key-dialog.tsx";
+const KEYS_PAGE = "app/(console)/api-keys/page.tsx";
+const REVOKE = "app/(console)/api-keys/revoke-button.tsx";
 const SETTINGS_VM = "app/(console)/settings/view-model.ts";
 const SETTINGS_PAGE = "app/(console)/settings/page.tsx";
 
@@ -129,6 +131,8 @@ const T = {
   kCopy: "U2-K06 revocation and lost-key copy is the decided public text (P-26), never 'within a minute'",
   sSecret: "U2-S01 the plaintext secret is never stored, logged, put in a URL or sent anywhere but the screen",
   sActions: "U2-S02 the keys controls call the shared C3A actions; the leaky page-local actions are gone",
+  sRead: "U2-S03 the keys page reads through the consumer session and never turns a failed read into an empty list",
+  sCopy: "U2-S06 the one-time and lost-key copy is on screen where it applies, and closing the dialog forgets the plaintext",
   sSettings: "U2-S04 settings has no fake controls: nothing on it saves, toggles or posts",
   pFacts: "U2-P01 every privacy row is a fixed fact with its availability, and none is a control",
   pTruthful: "U2-P02 privacy copy states real serving retention and makes no zero-retention, never-stored or 120-second claim",
@@ -811,6 +815,37 @@ const MUTANTS = [
     find: "      setAttempt(crypto.randomUUID());\n", replace: "", cases: [T.sActions] },
   { id: "U2-M14", what: "creation is sent without an idempotency key, so a double submit mints twice", file: DIALOG,
     find: "createConsumerKey({ name, idempotency_key: attempt })", replace: "createConsumerKey({ name })", cases: [T.sActions] },
+
+  // Fix round (review 0-U2-V-1..5): the page and control seams a view model cannot see.
+  { id: "U2-M23", what: "a failed key read renders 'No keys yet' in the page (review V03b)", file: KEYS_PAGE,
+    find: "<p>{model.list.message}</p>", replace: "<p>No keys yet.</p>", cases: [T.sRead] },
+  { id: "U2-M24", what: "the plaintext is put in the URL fragment (review V07)", file: DIALOG,
+    find: 'if (outcome.kind === "secret") setSecret(outcome.secret);',
+    replace: 'if (outcome.kind === "secret") { setSecret(outcome.secret); history.replaceState(null, "", "#" + outcome.secret); }',
+    cases: [T.sSecret] },
+  { id: "U2-M25", what: "the plaintext is sent over XMLHttpRequest (review V08)", file: DIALOG,
+    find: 'if (outcome.kind === "secret") setSecret(outcome.secret);',
+    replace: 'if (outcome.kind === "secret") { setSecret(outcome.secret); new XMLHttpRequest().send(outcome.secret); }',
+    cases: [T.sSecret] },
+  { id: "U2-M26", what: "the plaintext is interpolated into a toast (review V10)", file: DIALOG,
+    find: 'toast.success("API key copied");', replace: "toast.success(`API key ${secret} copied`);", cases: [T.sSecret] },
+  { id: "U2-M27", what: "a reopened dialog shows the previous key's plaintext again (review V09)", file: DIALOG,
+    find: "      setSecret(null);\n", replace: "", cases: [T.sCopy] },
+  { id: "U2-M28", what: "the dialog drops the one-time copy (review V24)", file: DIALOG,
+    find: "<DialogDescription>{ONE_TIME_COPY}</DialogDescription>", replace: "<DialogDescription>Keep it safe.</DialogDescription>",
+    cases: [T.sCopy] },
+  { id: "U2-M29", what: "the page drops the lost-key copy (review V25)", file: KEYS_PAGE,
+    find: "          <p>{LOST_KEY_COPY}</p>\n", replace: "", cases: [T.sCopy] },
+  { id: "U2-M30", what: "the revoke control skips the confirmation (review V11)", file: REVOKE,
+    find: "!confirm(revokeConfirmText(name))", replace: "!revokeConfirmText(name)", cases: [T.sActions] },
+  { id: "U2-M31", what: "revoke sends the key's name, so every revoke is not_found (review V12)", file: REVOKE,
+    find: "revokeConsumerKey(id)", replace: "revokeConsumerKey(name)", cases: [T.sActions] },
+  { id: "U2-M32", what: "the list is not re-read after a revoke (review V13)", file: REVOKE,
+    find: "    router.refresh();\n", replace: "", cases: [T.sActions] },
+  { id: "U2-M33", what: "the dialog asks for trace capture, so C3A refuses every creation (review V14)", file: DIALOG,
+    find: "idempotency_key: attempt })", replace: 'idempotency_key: attempt, trace_mode: "on" })', cases: [T.sActions] },
+  { id: "U2-M34", what: "a row's revoke control is bound to the key name instead of its id", file: KEYS_PAGE,
+    find: "<RevokeButton id={k.id} name={k.name} />", replace: "<RevokeButton id={k.name} name={k.name} />", cases: [T.sActions] },
 
   // --- U2: settings --------------------------------------------------------------------------
   { id: "U2-M15", what: "consumer trace capture is presented as on", file: SETTINGS_VM,

@@ -4,17 +4,21 @@
 // is decided here from C0's consumer context and C0's `reads.keys()` result, and every outcome the
 // create dialog shows from C3A's `createConsumerKey` result. Failure oracles are named per case.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { ApiKeyCreated, ApiKeySummary, Result } from "../../lib/contracts/types.ts";
 import {
+  CREATE_LOST,
   LOST_KEY_COPY,
   ONE_TIME_COPY,
   REPLAYED_COPY,
   REVOCATION_COPY,
+  REVOKE_LOST,
   createOutcome,
   keysPageModel,
   revokeConfirmText,
+  settle,
 } from "../../app/(console)/api-keys/view-model.ts";
 
 const ACCOUNT = { userId: "u", email: "a@example.com", walletId: "w", orgId: "o", suspended: false };
@@ -47,6 +51,7 @@ export const T = {
   suspended: "U2-K04 a suspended individual keeps the list and can still revoke (R33)",
   once: "U2-K05 the plaintext is shown only for a first, non-replayed creation; a replay or a failure never shows one",
   copy: "U2-K06 revocation and lost-key copy is the decided public text (P-26), never 'within a minute'",
+  lost: "U2-K07 a create or revoke call that rejects settles to a fixed notice, never a stuck control or the raw error",
 };
 
 test(T.gate, () => {
@@ -136,4 +141,28 @@ test(T.copy, () => {
   assert.match(confirm, /immediately/);
   assert.match(confirm, /cannot be undone/i);
   assert.doesNotMatch(confirm, /within a minute/);
+});
+
+test(T.lost, async () => {
+  // A server action that rejects (network drop, deploy skew, a 5xx from the action endpoint). A settle
+  // that lets the rejection escape is caught here as a value, so it fails by assertion.
+  const escaped = (e: unknown) => ({ escaped: String(e) });
+  const created = await settle(() => Promise.reject(new Error("fetch failed at 10.0.0.7")), CREATE_LOST).catch(escaped);
+  assert.deepEqual(created, { ok: false, error: { code: "dependency_unavailable", message: CREATE_LOST } });
+  // Through the dialog's own mapping, the individual reads C3A's lost-response words, not the error.
+  assert.deepEqual(createOutcome(created as Result<ApiKeyCreated>), { kind: "notice", message: CREATE_LOST });
+  const thrown = await settle((): Promise<Result<ApiKeySummary>> => {
+    throw new TypeError("synchronous throw");
+  }, REVOKE_LOST).catch(escaped);
+  assert.deepEqual(thrown, { ok: false, error: { code: "dependency_unavailable", message: REVOKE_LOST } });
+  // A settled call passes through untouched, refusals included.
+  assert.deepEqual(await settle(async () => ok([key()]), CREATE_LOST), ok([key()]));
+  assert.deepEqual(await settle(async () => down, CREATE_LOST), down);
+  // CREATE_LOST is C3A's CREATE_UNKNOWN verbatim (it is not exported to the browser): if a new key
+  // appears after a lost response, the individual is told to revoke it either way.
+  const c3a = readFileSync(new URL("../../lib/services/actions.ts", import.meta.url), "utf8");
+  assert.ok(c3a.includes(JSON.stringify(CREATE_LOST)), "the lost-create text matches C3A's CREATE_UNKNOWN");
+  assert.match(CREATE_LOST, /revoke it/);
+  assert.match(REVOKE_LOST, /could not be confirmed/);
+  assert.match(REVOKE_LOST, /refresh/i);
 });
