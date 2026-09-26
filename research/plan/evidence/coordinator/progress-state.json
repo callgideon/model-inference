@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "88cb89eb",
+  "integration_head": "387cac69",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 124,
-  "updated": "2026-09-26T18:49:00Z",
+  "revision": 126,
+  "updated": "2026-09-26T19:03:37Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -3291,27 +3291,35 @@
       "branch": "codex/e1b-prep",
       "worktree": ".claude/worktrees/codex-e1b-prep",
       "base": "b967a033",
-      "head": null,
+      "head": "c57de96a",
       "isolation": {
         "ports": "none",
         "prefix": "",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T18:20:00Z",
-      "updated": "2026-09-26T18:20:00Z",
+      "updated": "2026-09-26T19:03:00Z",
       "blocker": null,
-      "next_action": "handback → merge; the window cells join the E4C window plan",
+      "next_action": "DONE: merged --no-ff at 387cac69 (E1B-protocol §7 window cells WC-0..WC-9, the cost formula, D-13 proposal A); lens majors E1BP-1/2 fixed in the round; minors E1BP-3..11 carried (WC-5 oracle field, unassigned commands, WC-6 alert silence, canary timing, single-tenant cells vs §1 tenants ≥ 2, MEDIA-PARITY corrupt-media/pixel-area oracle, estimate basis, the P-01 est. label, WC-2(b) batch nondeterminism); WR-1..4 → E1B-WIRE",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 2,
-        "pessimistic_h": 3,
-        "confidence": "medium",
-        "basis": "mapping + formulas; the cells run in the window",
-        "at": "2026-09-26T18:20:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged; the cells run in the window",
+        "at": "2026-09-26T19:03:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/e/E1B-prep-fc3d66a.md"
+      ],
+      "commands": [
+        {
+          "cmd": "models/marlin2b/tests (incl. the protocol pin); validate_plan",
+          "exit": 0,
+          "summary": "116 passed; PASS"
+        }
+      ],
       "owned_paths": [
         "research/plan/evidence/e/E1B-prep-*.md",
         "models/marlin2b/results/E1B-protocol.md (window cells)",
@@ -3524,6 +3532,47 @@
         "infra/rollout/README.md (rows 8b/8c)",
         "apps/infrx-api/tests/i/test_ops_steps.py, test_rollout.py, mutants.py (login_ entries)",
         "research/plan/evidence/i/STEP55-FIX-*.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "E1B-WIRE",
+      "task": "E1B",
+      "slice": "(window wiring; no measurement) WR-3 bench --target direct sends the worker's stop_token_ids; WR-4 the worker publishes AttemptResult.timings as phase metrics; WR-1 the E1B window profile bases validate as §7 writes them; WR-2 a committed e1b-window.sh runs WC-1..WC-8 in order with the no-overlap preconditions; workflow (Opus implementer, 2 lenses, one fix round)",
+      "agent": "opus",
+      "branch": "codex/e1b-wire",
+      "worktree": ".claude/worktrees/codex-e1b-wire",
+      "base": "387cac69",
+      "head": null,
+      "isolation": {
+        "ports": "w5 postgres 55445 / valkey 55491; never i8/e2c",
+        "prefix": "infrx-w5-",
+        "db": "w5"
+      },
+      "activity": "running",
+      "started": "2026-09-26T19:03:00Z",
+      "updated": "2026-09-26T19:03:00Z",
+      "blocker": null,
+      "next_action": "handback → merge before the RELEASE freeze (bench/worker code + profiles + launcher)",
+      "estimate": {
+        "optimistic_h": 2,
+        "likely_h": 3.5,
+        "pessimistic_h": 6,
+        "confidence": "medium",
+        "basis": "two one-line code wirings with tests/mutants, four profile bases, one launcher with flag tests",
+        "at": "2026-09-26T19:03:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "models/marlin2b/bench.py (direct payload)",
+        "apps/infrx-api/infrx/worker/loop.py (observe_phases call)",
+        "apps/infrx-api/tests/w/",
+        "models/marlin2b/profiles/ (E1B bases)",
+        "models/marlin2b/tests/",
+        "infra/rollout/e1b-window.sh (new)",
+        "apps/infrx-api/tests/i/test_rollout.py",
+        "research/plan/evidence/e/E1B-wire-*.md"
       ],
       "wiring_requests": []
     }
@@ -5906,6 +5955,39 @@
       "by": "coordinator (RUNBOOK-4)",
       "what": "RUNBOOK-4 ACCEPT f81e55c9 merged at 647adce8 (window documents consistent: proof 0026, the carried minors as checklist sentences); WR-RB4-1..5 at 88cb89eb (resume via ssm.sh, no rerun-to-verify, edge stays in maintenance after a put-back, freeze floor 0026, F2 note, README 8b order); STEP55-FIX launched for the script-side fixes",
       "source": "research/plan/evidence/i/RUNBOOK-4-79bd359.md"
+    },
+    {
+      "at": "2026-09-26T19:03:00Z",
+      "by": "coordinator (E1B)",
+      "what": "E1B-PREP ACCEPT_WITH_FIXES c57de96a merged at 387cac69 (window cells WC-0..WC-9, cost formula, D-13 proposal A); E1B-WIRE launched for WR-1..4 (bench direct stop tokens, worker phase metrics, profile bases, window launcher)",
+      "source": "research/plan/evidence/e/E1B-prep-fc3d66a.md"
+    },
+    {
+      "at": "2026-09-26T19:03:37Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T18:36:00Z is not newer than lane RUNBOOK-4 state 2026-09-26T18:49:00Z",
+      "source": "updates/RUNBOOK-4-20260926T1836Z.json"
+    },
+    {
+      "at": "2026-09-26T19:03:37Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/E1B-20260926T1842Z.json"
+    },
+    {
+      "at": "2026-09-26T19:03:37Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25 → blocked pending P-01, P-02, P-05, P-17, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E4C)"
+    },
+    {
+      "at": "2026-09-26T19:03:37Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25 → blocked pending P-01, P-02, P-05, P-17, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E4C)"
+    },
+    {
+      "at": "2026-09-26T19:03:37Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25 → blocked pending P-01, P-02, P-05, P-17, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4, E4C; no remaining-effort estimate for E4, E4C)"
     }
   ],
   "history": {
@@ -6553,10 +6635,20 @@
       "status": "rejected",
       "at": "2026-09-26T11:21:00Z",
       "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "RUNBOOK-4-20260926T1836Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T18:36:00Z",
+      "reason": "stale: at 2026-09-26T18:36:00Z is not newer than lane RUNBOOK-4 state 2026-09-26T18:49:00Z"
+    },
+    "E1B-20260926T1842Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T18:42:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T17:03:36Z",
+    "computed_at": "2026-09-26T19:03:37Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -6579,8 +6671,8 @@
       "E4C": {
         "gate": "BACKEND-READY",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
+        "text": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25",
+        "constraint": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E4C",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -6592,8 +6684,8 @@
       "E3A": {
         "gate": "APP-LOCAL",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
+        "text": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25",
+        "constraint": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E4C",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -6607,8 +6699,8 @@
       "E4": {
         "gate": "APP-PILOT",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for E1B, E4, E4C",
+        "text": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25",
+        "constraint": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4, E4C; no remaining-effort estimate for E4, E4C",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
