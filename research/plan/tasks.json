@@ -4276,7 +4276,7 @@
       "track": "W",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4305,7 +4305,16 @@
       ],
       "acceptance": "No preparation before eligibility; accepted work terminates or recovers within bounds without double settlement.",
       "failure_oracle": "Remove readiness barrier and text-only canary fails; unsupported media cannot loop indefinitely.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/w/W5-27afab7.md",
+        "research/plan/evidence/w/W5-merge-09d83a9.md",
+        "research/plan/evidence/w/W5-admit-wiring-f5784d0.md",
+        "research/plan/evidence/w/W5-F5-3a6195b.md",
+        "research/plan/evidence/w/W5-F5B-406cd93.md",
+        "research/plan/evidence/coordinator/wave4b-union-d9e72c9.md"
+      ],
+      "closure_note": "2026-09-26: merged on claude/consumer-v1 at 51c1644d (backend union codex/wave4b-union d9e72c9c: W5 + W5-ADMIT-WIRING + W5-F5) and 04ae5e21 (W5-F5B 009af6b1 with WR-W5F5B-1); rulings R135–R139; make api-test 4510 passed at d9e72c9c; implemented = reviewed code + real-PG proofs on the task-local harness; the E3C final run on 04ae5e21 (BACKEND-LOCAL) and the box window (E4C) remain."
     },
     {
       "id": "G7",
