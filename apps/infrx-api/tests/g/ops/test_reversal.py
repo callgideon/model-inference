@@ -60,7 +60,7 @@ def test_reversal__credit_is_frozen_drained_then_legacy_enabled_audited_once_as_
     assert entry.before == {"flags": CREDIT_ON}
     assert entry.after["request"] == {"target": "legacy_usd", "card": None, "input_rate": None,
                                       "output_rate": None, "freeze_only": False}
-    assert entry.after["result"] == result
+    assert entry.after["result"] == {k: v for k, v in result.items() if k != "replayed"}   # WR-RB3-1: the write is audited; the replay flag is the answer's
     seen = len(store.calls)
     assert back(w, store, "revert-w1")[0] == result
     assert store.calls[seen:] == [] and len(w.audit.entries) == 1       # the key's replay
