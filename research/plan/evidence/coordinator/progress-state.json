@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "e0087a8f",
+  "integration_head": "0d049e7c",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 107,
-  "updated": "2026-09-26T07:18:00Z",
+  "revision": 108,
+  "updated": "2026-09-26T07:22:56Z",
   "agent_slots": {
     "total": 16,
     "active": 8,
@@ -2377,33 +2377,61 @@
       "branch": "codex/known-good-proof-2",
       "worktree": ".claude/worktrees/codex-known-good-proof-2",
       "base": "9e4e34ca",
-      "head": null,
+      "head": "a4561868",
       "isolation": {
         "ports": "i8 postgres 55450 / valkey 55495 / pgbouncer 55496",
         "prefix": "infrx-i8-",
         "db": null
       },
-      "activity": "running",
+      "activity": "integration",
       "started": "2026-09-26T05:02:17Z",
-      "updated": "2026-09-26T05:02:17Z",
+      "updated": "2026-09-26T07:24:00Z",
       "blocker": null,
-      "next_action": "verdict → merge after D10-MERGE-2; 15-pending-inputs P-25 row",
+      "next_action": "merged --no-ff at 47a8a3e4; WR-KGP2-2/3/4 applied at 0d049e7c (README rows + P-25 row say 0025; the i8 pooler locks the D harness's file); fixed-clone record tests + mutants + runbook tests running → complete when green; minors carried: RV-3 (deselected browser role matrix drops the old target's denials — rerun with a confirmed-email owner at the next proof)",
       "estimate": {
-        "optimistic_h": 1.5,
-        "likely_h": 2.5,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "the last proof lane took 128 min; two targets × 0024/0025",
-        "at": "2026-09-26T05:02:17Z"
+        "optimistic_h": 0,
+        "likely_h": 0.2,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "merged and wired; one fixed-clone check left",
+        "at": "2026-09-26T07:24:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/i/KNOWN-GOOD-PROOF-2-3f7df77.md"
+      ],
+      "commands": [
+        {
+          "cmd": "schema_proof.py <bda1586|4226315> --candidate 9e4e34ca --task i8 (plain 16.14 and the Supabase image, from an empty database)",
+          "exit": 0,
+          "summary": "PASS through 0025 for both targets on both images: 26/26 suites, 384 passed, 13 SHAPE deselected, 5 xfailed"
+        },
+        {
+          "cmd": "known-good.py <target> --applied 0025 / --applied 0026",
+          "exit": 0,
+          "summary": "KNOWN-GOOD for both at 0025; NOT-KNOWN-GOOD at 0026 naming the unproven range"
+        },
+        {
+          "cmd": "INFRX_D_TASK=i8 pytest -q tests/i; KNOWN-GOOD mutants",
+          "exit": 0,
+          "summary": "237 passed, 1 xfailed; 14/14 killed"
+        },
+        {
+          "cmd": "recheck: committed schema_proof.py alone (SHAPE +3) on a Supabase stand-in, both targets",
+          "exit": 0,
+          "summary": "PASS through 0025, no wrapper"
+        }
+      ],
       "owned_paths": [
         "infra/rollout/known-good.json (schema_proof)",
         "apps/infrx-api/tests/i/ (known-good tests)",
         "research/plan/evidence/i/KNOWN-GOOD-PROOF-2-*.md"
       ],
-      "wiring_requests": []
+      "wiring_requests": [
+        "WR-KGP2-1 (applied in the lane's fix round: schema_proof.py SHAPE +3)",
+        "WR-KGP2-2 README rows (applied 0d049e7c)",
+        "WR-KGP2-3 P-25 row (applied 0d049e7c)",
+        "WR-KGP2-4 one lock file per i8 port (applied 0d049e7c: pooler → the D harness's file)"
+      ]
     },
     {
       "id": "APP-0024-WIRE",
@@ -2757,18 +2785,18 @@
         "prefix": "infrx-e3c-",
         "db": null
       },
-      "activity": "integration",
+      "activity": "complete",
       "started": "2026-09-26T05:56:00Z",
-      "updated": "2026-09-26T07:18:00Z",
+      "updated": "2026-09-26T07:25:00Z",
       "blocker": null,
-      "next_action": "merged --no-ff at cce9224c; WR-E3CC-1 + R147 at e0087a8f; App gate rerun on the fixed clone of e0087a8f running (fills the three cells) → complete when recorded; minors carried: CC-1 (per-scope cap burst); F-1 → D10-0026-FENCE",
+      "next_action": "DONE: merged cce9224c; WR-E3CC-1/2 e0087a8f/2b29c617; R147; App gate PASS with the four delegated cells reading this evidence; minors carried: CC-1 (per-scope cap burst); F-1 → D10-0026-FENCE",
       "estimate": {
         "optimistic_h": 0,
-        "likely_h": 0.3,
-        "pessimistic_h": 1,
+        "likely_h": 0,
+        "pessimistic_h": 0,
         "confidence": "high",
-        "basis": "merged; one App gate rerun left",
-        "at": "2026-09-26T07:18:00Z"
+        "basis": "merged, gate rerun PASS",
+        "at": "2026-09-26T07:25:00Z"
       },
       "evidence": [
         "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
@@ -2788,6 +2816,11 @@
           "cmd": "pytest tests/integration/backend/e3c; tests/integration/app",
           "exit": 0,
           "summary": "46 passed (8 new; 5 fail on the base); 19 passed"
+        },
+        {
+          "cmd": "coordinator: make app-e2e on the fixed clone of 2b29c617 (unit tests before pnpm install)",
+          "exit": 0,
+          "summary": "77 passed hermetic; app-e2e PASS exit 0; 17/17 cells PASS (4 delegated to E3C-CELLS 9227e9ed); 07:18–07:21Z"
         }
       ],
       "owned_paths": [
@@ -3328,9 +3361,9 @@
     },
     "APP-LOCAL": {
       "candidate": {
-        "source": "8a285b58 (claude/consumer-v1 with E3A-RUN a53a194d + WR-E3A-1)",
-        "deployed": "task-local e4b stack on the fixed clone (App 56870, edge 56860, control 56861); fixed shared clone of 8a285b58 (dirty false), make app-e2e → tests/integration/app/runner.py on the e4b block, run /tmp/infrx-e2c-app-e2e-7vwjus7i (05:49–05:51Z; browser journey 108 s; teardown clean: no infrx-e4b container, 56860/56861/56870 free)",
-        "config": "harness e4b, controlled engine, runtime login; unit tests hermetic before pnpm install (76 passed)"
+        "source": "2b29c617 (claude/consumer-v1 with E3C-CELLS cce9224c + WR-E3CC-1/2)",
+        "deployed": "task-local e4b stack on the fixed shared clone of 2b29c617 (dirty false): App 56870, edge 56860, control 56861; make app-e2e run /tmp/infrx-e2c-app-e2e-ktmvfe4s (07:18–07:21Z); teardown clean",
+        "config": "harness e4b, controlled engine, runtime login; 77 gate unit tests hermetic before pnpm install; PLAYWRIGHT_BROWSERS_PATH scratch chromium-headless-shell"
       },
       "cells": [
         {
@@ -3339,23 +3372,25 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "DUR-CAP",
-          "verdict": "NOT RUN",
+          "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
           ],
-          "note": "NOT RUN[delegated: no E3C scenario carries the concurrent cross-key/org admission race → E3C-CELLS s15]"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s15] (04-verification oracle carried by the E3C scenario; journey slice PASS)"
         },
         {
           "id": "DUR-FENCE",
-          "verdict": "NOT RUN",
+          "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
           ],
-          "note": "NOT RUN[delegated: no E3C scenario carries the stale/new generation race at every mutation → E3C-CELLS s14]"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s14] (04-verification oracle carried by the E3C scenario; journey slice PASS)"
         },
         {
           "id": "DUR-OUTPUT",
@@ -3363,7 +3398,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "DUR-SETTLE",
@@ -3371,16 +3406,16 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "DUR-OUTBOX",
           "verdict": "PASS",
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md",
-            "research/plan/evidence/e3c/E3C-FINAL-27a6961.md"
+            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
           ],
-          "note": "PASS[delegated to E3C-FINAL 27a69619 s05,s08]; journey PASS on the fixed clone"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s05,s08] (04-verification oracle carried by the E3C scenario; journey slice PASS)"
         },
         {
           "id": "DUR-RLS",
@@ -3388,7 +3423,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "MEDIA-SEC",
@@ -3396,7 +3431,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "API-MODES",
@@ -3404,7 +3439,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "API-STREAM",
@@ -3412,7 +3447,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "CONSOLE-FLOWS",
@@ -3420,7 +3455,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "CREDIT-GRANT",
@@ -3428,7 +3463,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "CREDIT-IDENTITY",
@@ -3436,7 +3471,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "CREDIT-UNITS",
@@ -3444,15 +3479,16 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "CREDIT-RATE",
-          "verdict": "NOT RUN",
+          "verdict": "PASS",
           "evidence": [
-            "research/plan/evidence/e/E3A-run-555355d.md"
+            "research/plan/evidence/e/E3A-run-555355d.md",
+            "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
           ],
-          "note": "NOT RUN[delegated: no E3C scenario carries a rate/deployment publish while jobs wait/run → E3C-CELLS s16]"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s16] (04-verification oracle carried by the E3C scenario; journey slice PASS)"
         },
         {
           "id": "CREDIT-SPEND",
@@ -3460,7 +3496,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         },
         {
           "id": "APP-JOURNEY",
@@ -3468,12 +3504,12 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 8a285b58 (20/20 checks)"
+          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
         }
       ],
       "decision": null,
       "decided_at": null,
-      "note": "Cells from the coordinator rerun of make app-e2e on the fixed clone of 8a285b58: 14 PASS (13 journey + DUR-OUTBOX delegated to E3C-FINAL s05,s08), 3 NOT RUN (delegated with no carrying E3C scenario); the gate exits 3 = NOT RUN by design. Decision pending: BACKEND-READY (manifest gate) and the three cells carried by the E3C-CELLS lane, then one more app-e2e rerun on that tip."
+      "note": "17/17 cells PASS on the fixed clone of 2b29c617 (13 journey + 4 delegated to E3C-CELLS 9227e9ed: DUR-FENCE s14, DUR-CAP s15, CREDIT-RATE s16, DUR-OUTBOX s05+s08); app-e2e PASS exit 0. The candidate is ready for acceptance; the decision is recorded when E3A dispatches after BACKEND-READY (the manifest gate is unchanged under the 2026-09-25 App-ahead decision). A 0026 merge (D10-0026-FENCE) refreshes the candidate with one more app-e2e run."
     },
     "APP-PILOT": {
       "candidate": {
@@ -3727,6 +3763,13 @@
         "result": "4494 passed; failures only in tests/i (i8 harness held by KNOWN-GOOD-PROOF-2 → rerun in G-GATES G2); mutants 145/145; integration unit 192/192",
         "at": "2026-09-26T07:00:57Z",
         "candidate": "529249d0"
+      },
+      {
+        "name": "app-e2e (APP-LOCAL gate)",
+        "cmd": "make app-e2e (fixed clone of 2b29c617; unit tests before pnpm install; PLAYWRIGHT_BROWSERS_PATH scratch)",
+        "result": "PASS exit 0: journey PASS, 17/17 cells (4 delegated to E3C-CELLS 9227e9ed); 77 hermetic unit tests",
+        "at": "2026-09-26T07:21:30Z",
+        "candidate": "2b29c617"
       }
     ]
   },
@@ -3818,7 +3861,7 @@
     {
       "id": "P-25",
       "status": "open",
-      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle [2026-09-26: known-good schema_proof reaches 0025 for both targets (KNOWN-GOOD-PROOF-2); extend at 0026]",
       "owner": "M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read)",
       "blocks": [
         "E4C"
@@ -5292,6 +5335,36 @@
       "by": "tracker",
       "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
       "source": "updates/E3C-CELLS-20260926T0654Z.json"
+    },
+    {
+      "at": "2026-09-26T07:24:00Z",
+      "by": "coordinator (KNOWN-GOOD-PROOF-2)",
+      "what": "KNOWN-GOOD-PROOF-2 ACCEPT_WITH_FIXES a4561868 merged at 47a8a3e4: both rollback targets proven through 0025 on plain PostgreSQL and the Supabase image; WR-KGP2-2/3/4 applied at 0d049e7c (README, P-25 row, shared i8 lock file)",
+      "source": "research/plan/evidence/i/KNOWN-GOOD-PROOF-2-3f7df77.md"
+    },
+    {
+      "at": "2026-09-26T07:24:00Z",
+      "by": "coordinator (E3C-CELLS)",
+      "what": "App gate on the fixed clone of 2b29c617 (E3C-CELLS + WR-E3CC-1/2): app-e2e PASS exit 0 — 77 hermetic unit tests, journey PASS, the delegated cells now read PASS[delegated to E3C-CELLS 9227e9ed]; APP-LOCAL cells refreshed",
+      "source": "/tmp/infrx-e2c-app-e2e-ktmvfe4s/verdict.json"
+    },
+    {
+      "at": "2026-09-26T07:25:00Z",
+      "by": "coordinator (APP-LOCAL)",
+      "what": "APP-LOCAL cells 17/17 PASS on the fixed clone of 2b29c617 (four delegated to E3C-CELLS); candidate recorded; decision waits for E3A's dispatch after BACKEND-READY (gates unchanged)",
+      "source": "/tmp/infrx-e2c-app-e2e-ktmvfe4s/verdict.json"
+    },
+    {
+      "at": "2026-09-26T07:22:56Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T05:54:00Z is not newer than lane KNOWN-GOOD-PROOF-2 state 2026-09-26T07:24:00Z",
+      "source": "updates/KNOWN-GOOD-PROOF-2-20260926T0554Z.json"
+    },
+    {
+      "at": "2026-09-26T07:22:56Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T07:20:00Z is not newer than lane KNOWN-GOOD-PROOF-2 state 2026-09-26T07:24:00Z",
+      "source": "updates/KNOWN-GOOD-PROOF-2-20260926T0720Z.json"
     }
   ],
   "history": {
@@ -5888,10 +5961,20 @@
       "status": "rejected",
       "at": "2026-09-26T06:54:39Z",
       "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "KNOWN-GOOD-PROOF-2-20260926T0554Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T05:54:00Z",
+      "reason": "stale: at 2026-09-26T05:54:00Z is not newer than lane KNOWN-GOOD-PROOF-2 state 2026-09-26T07:24:00Z"
+    },
+    "KNOWN-GOOD-PROOF-2-20260926T0720Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T07:20:00Z",
+      "reason": "stale: at 2026-09-26T07:20:00Z is not newer than lane KNOWN-GOOD-PROOF-2 state 2026-09-26T07:24:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T07:16:30Z",
+    "computed_at": "2026-09-26T07:22:56Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
