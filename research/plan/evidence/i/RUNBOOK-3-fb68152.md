@@ -228,6 +228,92 @@ Optimistic 0.1 h, likely 0.3 h, pessimistic 1 h; confidence medium. Basis: every
 committed and green, tests/i docker cases included. What remains is review and a fix loop if
 review finds something.
 
+## Fix round (review 0-RV3-1) — code head `8c7885ab`
+
+Handback head `1ae73bbc`, fix commit `8c7885ab` on `codex/runbook-3`. Owned paths only; nothing
+under `apps/infrx-api/infrx/`, the box, AWS, SSM or hosted.
+
+**The finding (major).** The reversal ran after the step that stops the worker. Drill step 3
+(`30-pause.sh` → `drain.sh pause` → `systemctl stop infrx-worker marlin2b-gateway`) came before
+3b, and the rollout rollback's step 3 "Drain and fence" came before step 4's reversal. The
+drain releases what it could not finish to the store. `transition.py` counts
+preparing/queued/running as `in_flight`, and the reaper lives in `infrx/worker`
+(`service.py` `reap_once`), so a released CREDIT job never leaves flight while no CREDIT
+worker runs. A legacy worker cannot take it over either: `worker/__main__.py:139` wraps the
+store in `CreditWork` only for `ACCOUNTING_REGIME=credit`, and 4226315/bda1586 predate CREDIT.
+Every same-key rerun then exits 1 `in_flight`, with `credit_admission` and
+`legacy_usd_admission` both off. Confirmed on the drill world (below). The PG drill had hidden
+it because `settle()` plays a live CREDIT worker.
+
+**The fix: the reversal drains while the reversed release's worker still runs.**
+
+| Path | Change |
+|---|---|
+| `infra/runbooks/rollback.md` Rollout rollback | Step 2 (after maintenance, before step 3's drain) runs `credit-transition --to legacy_usd` when the step-4 target runs `legacy_usd`, and says why: step 3 stops the worker. A worker that cannot finish its CREDIT jobs means maintenance. Step 4 restores a `legacy_usd` backup only once step 2's reversal has exited 0 (rb08's `rollback.sh "$BACKUP"` line is unchanged). |
+| `infra/runbooks/rollback.md` drill | Step 3 is now **Reverse W7f first, while the current release still runs**. Its drain needs that worker. A CREDIT submission answers 503 from the freeze on. Exit 1: rerun under the same key while the worker runs. The way out after a pause: on the box `systemctl start infrx-worker` (edge stays in maintenance), the same-key rerun until exit 0, then `systemctl stop infrx-worker`. **3b** is the unchanged Close admission (`30-pause.sh`, `EXPECT=maintenance`). Step 4 reads "after step 3". Step 6 (roll forward) runs W7f's `credit-transition --card` (new key) before 3b as well, because the same drain then needs the legacy target's worker for USD jobs (its unit is also `infrx-worker`: `git show 4226315:…/lib.sh`, `bda1586` the same). |
+| `infra/runbooks/rollout.md` §3 | A new paragraph after the reversal paragraph. The drain needs the worker of the release it reverses, so the reversal runs before any step that stops it (`30-pause.sh`, `95-maintenance.sh`, the rollout rollback's drain). Every §3 row already runs it first, before its own step stops anything. It also names the way out and says that where no CREDIT worker can run (R4's dead host) the host stays in maintenance. "Its keys" now reads "rerun … under the same key while that worker runs". No row changed. |
+| `tests/integration/ops/test_runbook_reversal.py` | **rv03** (new). The reversal precedes `**Drain and fence**` in the rollout rollback and precedes `30-pause.sh` in the drill. The roll-forward's `credit-transition --card` precedes "step 3b". Both §3 and the drill name `systemctl start infrx-worker` and `systemctl stop infrx-worker`. |
+| `apps/infrx-api/tests/g/ops/test_reversal_pg.py` | After K2 stops at the bound, a second K2 with no worker also exits 1 with `in_flight` and `applied == []`, and `footprint` is unchanged: nothing but a CREDIT worker ends the job. Then `settle` (the worker, still running) finishes it, as before. |
+
+Both runbooks got verification-log entries. `50-install.sh`, `55-runtime-login.sh`,
+`install.sh` and `infra/rollout/README.md` are unchanged: no step changed.
+
+**Why the fallback is a box command, not a step.** `ssm.sh` sends only step files, and a
+worker-only start/stop step would be a new file under `infra/rollout/steps/`, which this lane
+does not own. The runbook already uses direct box commands for undo paths: W5's `drain.sh
+resume` and W10's `docker exec caddy caddy reload`. The ordering fix means the drill and the
+rollout rollback never need the fallback. Wiring request 3 is an optional step script.
+
+### Commands (fix round)
+
+| Command | Exit | Result |
+|---|---|---|
+| fails-before, root: `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/ops/test_runbook_reversal.py` with rv03 on the `1ae73bbc` runbooks | 1 | 1 failed, 2 passed: rv03 at its first assertion (the rollout rollback's reversal after `**Drain and fence**`) |
+| scratch: rv03 with each old part swapped back into the new runbooks, one at a time | — | each fails: old rollout rollback, old drill order, old roll forward, old rollout.md §3, drill without `systemctl stop infrx-worker`. The new text passes |
+| root: `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/ops tests/integration/backend/recovery/test_runbooks.py` | 0 | **41 passed** (40 + rv03; rb03/rb05/rb08 still green, i3bm52/54/56/93 anchors intact) |
+| api: `INFRX_D_TASK=revoke uv run --frozen --no-sync pytest -q tests/g/ops/test_reversal_pg.py` | 0 | 1 passed (the no-worker rerun included) |
+| api: `INFRX_D_TASK=revoke uv run --frozen --no-sync pytest -q tests/g/ops` | 0 | **96 passed** (2 warnings) |
+| api: `INFRX_MUTANTS=all uv run --frozen --no-sync pytest -q tests/g/ops/test_mutants.py` | 0 | **118 passed** in 267 s: every mutant killed |
+| api: `uv run --frozen --no-sync pytest -q tests/w/test_p25_runbooks.py` | 0 | 2 passed |
+| api: `pytest -q` on every `tests/i/test_*.py` except the four i8-stack files and `test_mutants.py` | 0 | **152 passed** |
+| api: `uv run --frozen --no-sync ruff check` on the two edited test files | 0 | all checks passed |
+| `bash -n` on `55-runtime-login.sh` and `50-install.sh` (unchanged) | 0 | parse |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS; 942 links across 263 documents |
+| `git diff --stat 1ae73bbc..8c7885ab` | 0 | 4 files, owned paths only |
+| api: `uv run --frozen --no-sync pytest -q -rf tests/i` (all cases, i8 stack included) | 0 | **238 passed, 1 xfailed** in 250 s. i8 was busy with another lane at 08:02-08:06Z (an earlier overlapping run was refused: 43 `test_mutants` `broken_runner`, the pristine baseline's i8 cases HarnessBusy, environmental) and was free at 08:07Z |
+
+### New findings (not fixed: outside this finding or this lane's paths)
+
+- **F-2: W7f's forward drain has the same shape** (the W7f row, not a reversal row). W5
+  (`30-pause.sh`) stops the previous pilot release's worker, which runs `legacy_usd` on
+  `infrx.jobs`. A legacy job queued or released there stays in flight. W7f's
+  `credit-transition --card` drains `legacy_usd`, so it would exit 1 `in_flight` on every
+  rerun. The row says `--freeze-only` is not needed because the edge has been in maintenance
+  since W5, which is true for admissions but not for the drain. Proposed row text: "exit 1
+  `in_flight` (legacy jobs the W5 pause released): on the box `systemctl start infrx-worker`
+  (the previous release's; the edge stays in maintenance) until the same-key rerun exits 0,
+  then `systemctl stop infrx-worker`". Or: H2 with `--freeze-only` before W5 and the enable
+  after it. This is for the coordinator or the E4C runbook owner.
+- **F-3: the rollout rollback's step 6 after the reversal.** "Resume admission: maintenance,
+  exit" is the maintenance statement with `enabled = true`, which sets `credit_admission` back
+  to true after step 2's reversal has left it off (and has already enabled
+  `legacy_usd_admission`). This predates the fix round: the reversal already followed step 2's
+  maintenance. Proposed clause for step 6: "after step 2's W7f reversal, nothing: it enabled
+  `legacy_usd_admission`, and the exit statement would turn `credit_admission` back on".
+
+### Wiring requests (added)
+
+3. **Optional: a worker-only step** (`infra/rollout/steps/`, not owned). Proposed:
+   `56-worker.sh ACTION=start|stop` running `systemctl $ACTION infrx-worker`, so the way out
+   travels through `ssm.sh` like every other box action. Composed test: `tests/i/test_ops_steps.py`
+   stubs `systemctl` and asserts the argv. Until it lands, the runbooks name the direct command.
+
+### Remaining effort (after the fix round)
+
+Optimistic 0.1 h, likely 0.2 h, pessimistic 0.5 h; confidence medium. Basis: the fix is
+committed and green; what remains is the recheck.
+
 ## Verification log
 
 - 2026-09-26: written at implementation head fb681526; the commands above ran in this worktree.
+- 2026-09-26: fix round (review 0-RV3-1) at code head 8c7885ab: the reversal drains before anything stops the reversed release's worker; the commands in §"Fix round" ran in this worktree.
