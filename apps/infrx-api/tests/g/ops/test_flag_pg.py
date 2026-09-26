@@ -78,9 +78,10 @@ def test_flag_pg__signup_grant_off_off_on_is_audited_once_per_key_and_read_at_on
     assert code == 0 and (on["changed"], on["enabled_after"]) == (True, True), on
     assert runtime_reads(w, "signup_grant") is True
     assert w.owner.execute(
-        "select idempotency_key, actor_principal, action from infrx.audit_entries "
-        "where idempotency_key in ('k1', 'k2', 'k3') order by idempotency_key").fetchall() == \
-        [(k, actor, "admin_set_entitlements") for k in ("k1", "k2", "k3")]
+        "select idempotency_key, actor_principal, action, after->>'operation' "
+        "from infrx.audit_entries where idempotency_key in ('k1', 'k2', 'k3') "
+        "order by idempotency_key").fetchall() == \
+        [(k, actor, "admin_set_entitlements", "flag") for k in ("k1", "k2", "k3")]
     assert actor == w.one("select id::text from public.api_keys where audience = 'operator' "
                           "and revoked_at is null")
     code, replay, _ = cli_run(w, flag("signup_grant", "--off", "k1"), capsys)
@@ -102,10 +103,13 @@ def test_flag_pg__regime_unknown_and_dry_run_write_nothing(capsys):
         assert code == 1 and '"invalid_request"' in err and "credit-transition" in err, err
     code, _, err = cli_run(w, flag("no_such_flag", "--on", "u"), capsys)
     assert code == 1 and '"not_found"' in err, err
-    code, current, _ = cli_run(w, ["flag", "--name", "signup_grant", "--off", "--dry-run"],
+    code, current, _ = cli_run(w, ["flag", "--name", "signup_grant", "--dry-run"],
                                capsys, operator=False)
     assert code == 0 and current["name"] == "signup_grant" and current["enabled"] is True
     assert {"updated_by", "reason", "updated_at"} <= set(current), current
+    code, would, _ = cli_run(w, [*flag("signup_grant", "--off", "d"), "--dry-run"], capsys,
+                             operator=False)                  # 1-G8FLAG-R6: key given, no write
+    assert code == 0 and would == {**current, "enabled_after": False, "changed": True}, would
     assert footprint(w) == before
 
 
