@@ -49,6 +49,7 @@ const O_PORT = "app/(console)/admin/operator-port.ts";
 const O_READS = "app/(console)/admin/operator-reads.ts";
 const O_FORM = "app/(console)/admin/operator-form.ts";
 const O_PAGE = "app/(console)/admin/page.tsx";
+const O_FORMS = "app/(console)/admin/operator-forms.tsx";
 
 const SUITE = [
   "tests/u/usage-view-model.test.ts",
@@ -136,6 +137,8 @@ const O = {
   key: "U3-F01 a form keeps its idempotency key across every failure and rotates it only after a committed change",
   outcome: "U3-F02 outcomes say what committed: once, already applied, refused, or not confirmed",
   input: "U3-F03 a form submits exactly the allowlisted fields of its operation, plus its key",
+  wiring: "U3-S04 the form submits the key it holds and keeps it through nextKey(); a fresh key is only the initial state or the rotation",
+  sections: "U3-S05 every page section goes through Section, and a failed read renders 'Unavailable', never its table",
 };
 
 /** One single edit each, and one named invariant each. */
@@ -823,6 +826,16 @@ const MUTANTS = [
   { id: "U3-M20", what: "the page reads with the service key instead of the operator's session", file: O_PAGE,
     find: "operatorReads((await createClient()) as unknown as ReadClient)", replace: "operatorReads(createAdminClient() as unknown as ReadClient)",
     cases: [O.gate, O.noEdit] },
+  { id: "U3-M21", what: "the form rotates its key after every answer (a 'not confirmed' retry applies twice)", file: O_FORMS,
+    find: "setKey(nextKey(key, result, newKey));", replace: "setKey(newKey());", cases: [O.wiring] },
+  { id: "U3-M22", what: "the form submits a fresh key instead of the one it holds", file: O_FORMS,
+    find: "String(data.get(name)) : null), key);", replace: "String(data.get(name)) : null), newKey());", cases: [O.wiring] },
+  { id: "U3-M23", what: "a failed section renders its empty table ('everything reconciles')", file: O_PAGE,
+    find: "  if (!result.ok) {\n    return (\n      <p role=\"status\" className=\"p-4 text-sm text-destructive\">\n        Unavailable: {result.error.message}.\n      </p>\n    );\n  }\n",
+    replace: "  if (!result.ok) return <>{children([] as T)}</>;\n", cases: [O.sections] },
+  { id: "U3-M24", what: "a failed drift read bypasses Section and shows as no drift", file: O_PAGE,
+    find: "<Section result={view.drift}>", replace: "<Section result={view.drift.ok ? view.drift : { ok: true, value: [] }}>",
+    cases: [O.sections] },
 ];
 
 /**

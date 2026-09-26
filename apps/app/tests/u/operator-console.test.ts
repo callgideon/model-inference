@@ -72,6 +72,40 @@ test("U3-S03 the forms call the shared audited server action and show no unsuppo
   );
 });
 
+// The `.tsx` files cannot load under node --test, so their wiring is pinned as source (as S02 does).
+test("U3-S04 the form submits the key it holds and keeps it through nextKey(); a fresh key is only the initial state or the rotation", () => {
+  const forms = readFileSync(join(ADMIN, "operator-forms.tsx"), "utf8");
+  const count = (pattern: RegExp) => forms.match(pattern)?.length ?? 0;
+  // The submission carries the held key...
+  assert.match(forms, /const input = formInput\(form\.action, [^;]+, key\);/, "the form submits the key held in state");
+  assert.match(forms, /await operatorAction\(input\)/);
+  // ...and the only key change is nextKey(): kept after any failure, rotated after a commit.
+  assert.equal(count(/setKey\(/g), 1, "exactly one place changes the key");
+  assert.match(forms, /setKey\(nextKey\(key, result, newKey\)\);/, "the key changes only through nextKey()");
+  // newKey is defined once and used only as the initial state and nextKey's rotation argument.
+  assert.equal(count(/\bnewKey\b/g), 3, "newKey: its definition, the initial state, the rotation");
+  assert.match(forms, /const newKey = \(\) => crypto\.randomUUID\(\);/);
+  assert.match(forms, /useState\(newKey\)/);
+  assert.equal(count(/randomUUID/g), 1, "no other fresh key");
+});
+
+test("U3-S05 every page section goes through Section, and a failed read renders 'Unavailable', never its table", () => {
+  const page = readFileSync(join(ADMIN, "page.tsx"), "utf8");
+  const section = /\nfunction Section<T>\([^\n]*\{\n([\s\S]*?)\n\}\n/.exec(page)?.[1];
+  assert.ok(section !== undefined, "the Section component is present");
+  const failed = section.indexOf("if (!result.ok) {");
+  const unavailable = section.indexOf("Unavailable: {result.error.message}.");
+  const rendered = section.indexOf("children(");
+  assert.ok(failed >= 0 && unavailable > failed, "a failed read returns the 'Unavailable' status");
+  assert.ok(rendered > unavailable, "the section's content renders only after the failure branch returned");
+  assert.equal(section.split("children(").length - 1, 1, "the content renders once");
+  assert.match(section, /return <>\{children\(result\.value\)\}<\/>;\n?$/, "and only from a successful read's value");
+  // Each of the four reads reaches the page once, and only as a Section's result.
+  const reads = [...page.matchAll(/\bview\.(\w+)/g)].map((m) => m[0]).sort();
+  assert.deepEqual(reads, ["view.accounts", "view.audit", "view.drift", "view.unknownUsage"]);
+  for (const read of reads) assert.ok(page.includes(`<Section result={${read}}>`), `${read} renders through Section`);
+});
+
 // --------------------------------------------------------------------------------------- port
 
 type Call = { fn: string; args: Record<string, unknown> };
