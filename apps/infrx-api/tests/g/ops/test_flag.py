@@ -151,6 +151,23 @@ def test_flag__the_dry_run_reads_without_a_key_and_writes_nothing(capsys):
     assert w.ops.transitions.writes == [] and w.audit.entries == []
 
 
+def test_flag__a_dry_run_with_a_direction_writes_nothing_even_for_a_valid_operator():
+    """G8F2-M1: `dispatch` called directly with the operator's own credential and a full
+    write's arguments (direction, key, reason) plus `--dry-run`: only the dry-run branch
+    stands between it and the writer, and it answers the row and the would-be change with
+    no write and no audit. Oracle: a dry run that falls through to the writer writes and
+    audits here (through `main` the empty dry-run credential refuses it first, so that
+    case cannot see the write)."""
+    w = world()
+    a = cli.parser().parse_args([*flag("signup_grant", "--off", "d"), "--dry-run"])
+    row = asyncio.run(cli.dispatch(w.ops, w.operator_secret, a))
+    assert w.ops.transitions.writes == [] and w.audit.entries == [], "a dry run wrote"
+    assert w.ops.transitions.flags["signup_grant"]["enabled"] is True
+    assert row == {"name": "signup_grant", "enabled": True, "updated_by": "seed",
+                   "reason": "seed", "updated_at": "t0", "enabled_after": False,
+                   "changed": True}, row
+
+
 class Recorder:
     """A connection that records its statements and answers `changed`."""
 

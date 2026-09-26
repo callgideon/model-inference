@@ -481,7 +481,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("flag_dry_run_writes", "a dry run with a direction writes nothing (1-G8FLAG-R6)",
        C, "        if a.dry_run:           # read-only",
        "        if a.dry_run and getattr(a, \"enabled\", None) is None:  # read-only",
-       "test_flag__the_dry_run_reads_without_a_key_and_writes_nothing"),
+       "test_flag__the_dry_run_reads_without_a_key_and_writes_nothing",
+       # G8F2-M1: the case above sees the empty-credential refusal; this one the write
+       "test_flag__a_dry_run_with_a_direction_writes_nothing_even_for_a_valid_operator"),
     _m("flag_dry_run_change_misreported", "a dry run reports the would-be change (1-G8FLAG-R6)",
        C, "\"changed\": row[\"enabled\"] != a.enabled}", "\"changed\": True}",
        "test_flag__the_dry_run_reads_without_a_key_and_writes_nothing"),

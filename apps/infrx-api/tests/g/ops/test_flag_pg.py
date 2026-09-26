@@ -94,8 +94,10 @@ def test_flag_pg__signup_grant_off_off_on_is_audited_once_per_key_and_read_at_on
 
 def test_flag_pg__regime_unknown_and_dry_run_write_nothing(capsys):
     """A regime flag is refused naming credit-transition (R133/R144), an unknown name is
-    not_found, and `--dry-run` prints the current row with no operator key: none of them
-    changes a flag, an audit row or money (the whole footprint)."""
+    not_found, and `--dry-run` prints the current row with no operator key, and with a
+    direction the would-be change: `--off` changes it, `--on` (already on) does not (G8F2-M2:
+    a dry run reporting every direction as a change). None of them changes a flag, an audit
+    row or money (the whole footprint)."""
     w = pgworld.world("g8_flag_refuse")
     before = footprint(w)
     for regime in ("credit_admission", "legacy_usd_admission"):
