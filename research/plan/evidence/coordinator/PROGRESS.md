@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 09:49Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 116, updated 2026-09-26 09:30Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 09:51Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 117, updated 2026-09-26 09:55Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -70,7 +70,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 |---|---|---|---|---|---|
 | BACKEND-LOCAL **ACCEPTED** | E3C (implemented) | 7 / 7 | — | accepted | Accepted at the E3C final run on the integration tip 04ae5e21 (run head 27a69619, merged as dcce7775): 13/13 scenarios (85 cases) PASS, 9/9 negative controls detected for the right reason (both revert controls on the owner login), 11:55 wall, task-local e3c harness with INFRX_E3C_RUNTIME_LOGIN=1; evidence research/plan/evidence/e3c/E3C-FINAL-27a6961.md. Local gate only: the box window (E4C) remains. Re-proven 2026-09-26 on the 0024/0025 tree (E3C rerun 8b824cd0, merged with codex/e3c-rerun 1bfc327d): 13/13 scenarios, 9/9 controls, s10 with the 0024/0025 surface; evidence research/plan/evidence/e3c/E3C-RERUN-0025-8b824cd.md. |
 | BACKEND-READY **PENDING** | E4C (planned) | 0 / 6 | BACKEND-JOURNEY NOT RUN, LOAD-CLOSEDLOOP NOT RUN, PERF-ENVELOPE NOT RUN, OPS-CONTINUOUS NOT RUN, CREDIT-CUTOVER NOT RUN, MARLIN-SOP NOT RUN | none | Pending. Open list: RV-01…RV-12, all OPEN at dff31efc (S3); see findings. |
-| APP-LOCAL **PENDING** | E3A (planned) | 17 / 17 | — | none | 17/17 cells PASS on the fixed clone of 2b29c617 (13 journey + 4 delegated to E3C-CELLS 9227e9ed: DUR-FENCE s14, DUR-CAP s15, CREDIT-RATE s16, DUR-OUTBOX s05+s08); app-e2e PASS exit 0. The candidate is ready for acceptance; the decision is recorded when E3A dispatches after BACKEND-READY (the manifest gate is unchanged under the 2026-09-25 App-ahead decision). A 0026 merge (D10-0026-FENCE) refreshes the candidate with one more app-e2e run. |
+| APP-LOCAL **PENDING** | E3A (planned) | 17 / 17 | — | none | 17/17 cells PASS on the fixed clone of 400a7e94 (0026 on the tree; 13 journey + 4 delegated to E3C-CELLS 9227e9ed — the E3C final run on 400a7e94 is running and refreshes the delegated reference); app-e2e PASS exit 0 (earlier: 17/17 on 2b29c617). The candidate is ready for acceptance; the decision is recorded when E3A dispatches after BACKEND-READY (the manifest gate is unchanged under the 2026-09-25 App-ahead decision). |
 | APP-PILOT **PENDING** | E4 (planned) | 0 / 5 | PERF-PILOT NOT RUN, OPS-RECOVER NOT RUN, MEDIA-PARITY NOT RUN, APP-JOURNEY NOT RUN, CREDIT-SPEND NOT RUN | none | Pending; no decision recorded. |
 
 ### Readiness findings (RV)
@@ -432,6 +432,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 09:55Z UTC, coordinator (APP-LOCAL): App gate on the fixed clone of 400a7e94 (0026): app-e2e PASS exit 0, 17/17 cells; APP-LOCAL candidate refreshed to 400a7e94
 - 2026-09-26 09:30Z UTC, coordinator (KNOWN-GOOD-PROOF-3): KNOWN-GOOD-PROOF-3 launched from 400a7e94 on i8 (schema_proof 0025 → 0026 for both rollback targets, plain and Supabase image)
 - 2026-09-26 09:48Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
 - 2026-09-26 09:20Z UTC, coordinator (D10-0026-FENCE): D10-0026-FENCE (lenses ACCEPT_WITH_FIXES ×2; REJECT only for coordinator items) merged at 400a7e94 with WR-D10F-1..4 in the merge commit; R147 amended (lease-less put_result stays 0014's write for the P-25 rollback targets; follow-up migration recorded); fixed-clone suite, E3C final run and App gate rerun launched; KNOWN-GOOD-PROOF-3 prepared

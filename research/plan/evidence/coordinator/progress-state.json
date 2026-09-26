@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 116,
-  "updated": "2026-09-26T09:30:00Z",
+  "revision": 117,
+  "updated": "2026-09-26T09:55:00Z",
   "agent_slots": {
     "total": 16,
     "active": 3,
@@ -3445,9 +3445,9 @@
     },
     "APP-LOCAL": {
       "candidate": {
-        "source": "2b29c617 (claude/consumer-v1 with E3C-CELLS cce9224c + WR-E3CC-1/2)",
-        "deployed": "task-local e4b stack on the fixed shared clone of 2b29c617 (dirty false): App 56870, edge 56860, control 56861; make app-e2e run /tmp/infrx-e2c-app-e2e-ktmvfe4s (07:18–07:21Z); teardown clean",
-        "config": "harness e4b, controlled engine, runtime login; 77 gate unit tests hermetic before pnpm install; PLAYWRIGHT_BROWSERS_PATH scratch chromium-headless-shell"
+        "source": "400a7e94 (claude/consumer-v1 with D10-0026-FENCE + WR-D10F-1..4)",
+        "deployed": "task-local e4b stack on the fixed shared clone of 400a7e94 (dirty false): App 56870, edge 56860, control 56861; make app-e2e run /tmp/infrx-e2c-app-e2e-bqnhjzf4 (09:48–09:51Z); teardown clean",
+        "config": "harness e4b, controlled engine, runtime login; 77 gate unit tests hermetic before pnpm install; PLAYWRIGHT_BROWSERS_PATH scratch chromium-headless-shell; migrations 0001–0026"
       },
       "cells": [
         {
@@ -3456,7 +3456,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "DUR-CAP",
@@ -3465,7 +3465,7 @@
             "research/plan/evidence/e/E3A-run-555355d.md",
             "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
           ],
-          "note": "PASS[delegated to E3C-CELLS 9227e9ed s15] (04-verification oracle carried by the E3C scenario; journey slice PASS)"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s15] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree)"
         },
         {
           "id": "DUR-FENCE",
@@ -3474,7 +3474,7 @@
             "research/plan/evidence/e/E3A-run-555355d.md",
             "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
           ],
-          "note": "PASS[delegated to E3C-CELLS 9227e9ed s14] (04-verification oracle carried by the E3C scenario; journey slice PASS)"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s14] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree)"
         },
         {
           "id": "DUR-OUTPUT",
@@ -3482,7 +3482,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "DUR-SETTLE",
@@ -3490,7 +3490,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "DUR-OUTBOX",
@@ -3499,7 +3499,7 @@
             "research/plan/evidence/e/E3A-run-555355d.md",
             "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
           ],
-          "note": "PASS[delegated to E3C-CELLS 9227e9ed s05,s08] (04-verification oracle carried by the E3C scenario; journey slice PASS)"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s05,s08] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree)"
         },
         {
           "id": "DUR-RLS",
@@ -3507,7 +3507,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "MEDIA-SEC",
@@ -3515,7 +3515,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "API-MODES",
@@ -3523,7 +3523,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "API-STREAM",
@@ -3531,7 +3531,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "CONSOLE-FLOWS",
@@ -3539,7 +3539,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "CREDIT-GRANT",
@@ -3547,7 +3547,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "CREDIT-IDENTITY",
@@ -3555,7 +3555,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "CREDIT-UNITS",
@@ -3563,7 +3563,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "CREDIT-RATE",
@@ -3572,7 +3572,7 @@
             "research/plan/evidence/e/E3A-run-555355d.md",
             "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md"
           ],
-          "note": "PASS[delegated to E3C-CELLS 9227e9ed s16] (04-verification oracle carried by the E3C scenario; journey slice PASS)"
+          "note": "PASS[delegated to E3C-CELLS 9227e9ed s16] (04-verification oracle carried by the E3C scenario; journey slice PASS); re-proven on the fixed clone of 400a7e94 (0026 on the tree)"
         },
         {
           "id": "CREDIT-SPEND",
@@ -3580,7 +3580,7 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         },
         {
           "id": "APP-JOURNEY",
@@ -3588,12 +3588,12 @@
           "evidence": [
             "research/plan/evidence/e/E3A-run-555355d.md"
           ],
-          "note": "journey PASS on the fixed clone of 2b29c617 (app-e2e PASS exit 0)"
+          "note": "journey PASS on the fixed clone of 400a7e94 (0026 on the tree) (app-e2e PASS exit 0)"
         }
       ],
       "decision": null,
       "decided_at": null,
-      "note": "17/17 cells PASS on the fixed clone of 2b29c617 (13 journey + 4 delegated to E3C-CELLS 9227e9ed: DUR-FENCE s14, DUR-CAP s15, CREDIT-RATE s16, DUR-OUTBOX s05+s08); app-e2e PASS exit 0. The candidate is ready for acceptance; the decision is recorded when E3A dispatches after BACKEND-READY (the manifest gate is unchanged under the 2026-09-25 App-ahead decision). A 0026 merge (D10-0026-FENCE) refreshes the candidate with one more app-e2e run."
+      "note": "17/17 cells PASS on the fixed clone of 400a7e94 (0026 on the tree; 13 journey + 4 delegated to E3C-CELLS 9227e9ed — the E3C final run on 400a7e94 is running and refreshes the delegated reference); app-e2e PASS exit 0 (earlier: 17/17 on 2b29c617). The candidate is ready for acceptance; the decision is recorded when E3A dispatches after BACKEND-READY (the manifest gate is unchanged under the 2026-09-25 App-ahead decision)."
     },
     "APP-PILOT": {
       "candidate": {
@@ -3868,6 +3868,13 @@
         "result": "96 passed; 118/118 mutants; tests/i 239 passed 1 xfailed on i8; 112 integration unit; bash -n clean; validate PASS",
         "at": "2026-09-26T08:37:35Z",
         "candidate": "fe6cb51e"
+      },
+      {
+        "name": "app-e2e (APP-LOCAL gate)",
+        "cmd": "make app-e2e (fixed clone of 400a7e94; unit tests before pnpm install)",
+        "result": "PASS exit 0: journey PASS, 17/17 cells (4 delegated to E3C-CELLS 9227e9ed); 77 hermetic unit tests",
+        "at": "2026-09-26T09:51:19Z",
+        "candidate": "400a7e94"
       }
     ]
   },
@@ -5541,6 +5548,12 @@
       "by": "coordinator (KNOWN-GOOD-PROOF-3)",
       "what": "KNOWN-GOOD-PROOF-3 launched from 400a7e94 on i8 (schema_proof 0025 → 0026 for both rollback targets, plain and Supabase image)",
       "source": "research/plan/15-pending-inputs.md"
+    },
+    {
+      "at": "2026-09-26T09:55:00Z",
+      "by": "coordinator (APP-LOCAL)",
+      "what": "App gate on the fixed clone of 400a7e94 (0026): app-e2e PASS exit 0, 17/17 cells; APP-LOCAL candidate refreshed to 400a7e94",
+      "source": "/tmp/infrx-e2c-app-e2e-bqnhjzf4/verdict.json"
     }
   ],
   "history": {
