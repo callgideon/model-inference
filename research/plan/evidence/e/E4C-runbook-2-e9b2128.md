@@ -86,3 +86,50 @@ Remaining for this lane: optimistic 0.25 h, likely 0.5 h, pessimistic 1.5 h; con
 ## Verification log
 
 - 2026-09-26: written at implementation head e9b21287; the commands above ran in this worktree.
+
+## Fix round (review of handback 7b0c689c; fix head 13a30bb5)
+
+Base of the round `7b0c689c`; fix commit `13a30bb5` (this section and the refreshed coordinator update are committed after it). Owned paths only: `infra/runbooks/rollout.md`, `infra/rollout/README.md`, `infra/rollout/steps/55-runtime-login.sh`, `tests/integration/backend/recovery/test_runbooks.py`, `apps/infrx-api/tests/i/test_ops_steps.py`, `apps/infrx-api/tests/i/mutants.py`. `models/marlin2b/results/E4C-runbook.md` is unchanged: its §1 already defers every rollback to rollout.md §2/§3. Nothing ran against the box, AWS, SSM or hosted.
+
+| Finding | Change | Test: fails before → passes |
+|---|---|---|
+| 0-CS-1 (major) rollbacks after W7f restart a `legacy_usd` release while hosted is in CREDIT | Chose the first fix: W7f stays before W8, so H3-H6 and §1a's structure are unchanged. Moving W7f alone would not have covered W10-W12. rollout.md §3 now opens with **the W7f reversal**. It runs `credit-transition --to legacy_usd --drain-timeout-s 900 --idempotency-key revert-<window id> --reason …` with `OPERATIONS_DATABASE_URL` (owner) and `INFRX_OPERATOR_KEY`, as in PI P-02 and G8-6a075c5.md step 6. It says why: `legacy_usd_admission` f makes 0006's guard refuse every admission of the previous release and of both known-good targets. It also states what the command changes: `credit_admission` f and `legacy_usd_admission` t, with `signup_grant` left t (`transition.plan`: `--to legacy_usd` needs no card). The window cells W8, W9, W10, W11 and W12 name the reversal before their abort or revert. So do §3's rows W9, W10 exit 2, W10 exit 4, R2 and R4 (R4 was added because the W2 snapshot's release is also `legacy_usd`), and the README's R1, R2 and R4. Each one says "first", before the step that reopens the edge. | `test_e4c_rb12_every_way_back_after_the_activation_reverses_it_first`. Before the fix it FAILED with `('W8', '`91-abort.sh` returns the previous checkout')`. It checks that every window cell after W7f that reaches 91-abort, 90-revert, R1/R2/R4 or the root-volume swap names the reversal first, and that the list is exactly W8-W12. It checks that §3 defines `--to legacy_usd` above its table, that all five late §3 rows put the reversal first, and that README R1, R2 and R4 put `--to legacy_usd` before their step. |
+| 0-CS-2 (major) the README step table installs CREDIT with no activation step | README row **6b** sits between 6 (the hosted apply) and 7 (the checkout). It is rollout.md W7f, which is E4C-runbook §1a H1 `publish-card` and H2 `credit-transition` (dry run, then `--card`). The row says what happens without it: exit 4 on `price_source`, or 503 on every admission. It says R1, R2 and R4 reverse it. Step 8 now says: with `ACCOUNTING_REGIME=credit` in `INFRX_SET`, only after 6b ran. | `test_e4c_rb13_the_readme_window_activates_credit_before_the_credit_install`. Before the fix it FAILED with `'6b' is not in list`. It checks the order 6 < 6b < 7 < 8, that 6b links rollout.md W7f and E4C-runbook §1a and names publish-card, credit-transition, the regime and the reversal, and that step 8 requires 6b for the credit regime. |
+| 0-CS-3 (major) after W10b, observe's fallback DSN is `infrx_runtime`, so O5's `infrx_durable_up 1` fails | Chose the first fix. Step 55 now also writes `MONITOR_DATABASE_URL` alone into `/etc/infrx-observe.env` (override `OBSERVE_ENV`): 0600, by rename, the same pattern as 72's `write_env`. It writes the file on success and on an `unchanged` rerun, and never on exits 1-4. 50-install never touches that file, so the monitor login survives a reinstall. rollout.md W10b and README 8b say this. O4 no longer takes `MONITOR_DSN_PARAM`; a parameter given still replaces the file, since 72 is unchanged. O4 is blocked on W10b, not on "D10". | The step-55 case now runs one real `infra/observe/observe.sh` cycle after the step, with only its `/etc/infrx-observe.env` path redirected. The durable exporter's `--env-file` must carry `MONITOR_DATABASE_URL`. Before the fix it FAILED with `['DATABASE_URL'] == ['MONITOR_DATABASE_URL']`, which is the fallback to `infrx_runtime`. The case also checks that the file holds exactly the monitor line at 0600, that the `unchanged` rerun rewrites it, and that an envcheck-red run (exit 3) leaves it absent. Two new mutants: `login_observe_gets_runtime_dsn` and `login_observe_not_written`. |
+
+### Commands (fix round; worktree root unless noted; `api` = `apps/infrx-api`)
+
+| Command | Exit | Result |
+|---|---|---|
+| fails-before, api: `pytest -q ../../tests/integration/backend/recovery/test_runbooks.py -k "rb12 or rb13"` (new tests, old docs) | 1 | 2 failed (reasons above) |
+| fails-before, api: `pytest -q tests/i/test_ops_steps.py -k login` (new assertions, old step) | 1 | 1 failed: `['DATABASE_URL'] == ['MONITOR_DATABASE_URL']` |
+| `bash -n infra/rollout/steps/55-runtime-login.sh` | 0 | parses |
+| api: `uv run --frozen --no-sync ruff check tests/i/test_ops_steps.py tests/i/mutants.py ../../tests/integration/backend/recovery/test_runbooks.py` | 0 | All checks passed |
+| api: `pytest -q ../../tests/integration/backend/recovery/test_runbooks.py tests/i/test_ops_steps.py tests/i/test_rollout.py` | 0 | **35 passed** (was 33; +rb12, rb13) |
+| api: `pytest -q tests/i/test_mutants.py -k "well_formed or every_case"` | 0 | 2 passed (the list is well formed, and every case is covered, with 2 new mutants) |
+| api: manual kill check of the 7 `login_*` mutants: each `old→new` applied to the step, `pytest -k login`, then the original bytes restored | 1 ×7 / 0 | **7/7 killed**, including the 2 new ones. The pristine case passed (1 passed) and the tree was clean afterwards |
+| api: `INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k "login_ or …"` | 1 | **broken_runner, not a survivor.** The runner's pristine baseline runs the whole list's cases. Its I8 pooler cases could not get `127.0.0.1:55450`, which another lane's `infrx-i8-postgres-supabase` / `infrx-i8-postgres` held during this round. See the note below |
+| api: `pytest -q tests/i` | 1 | 187 passed, 1 xfailed, 43 failed, 8 errors. The **43 failures are all `test_mutant_is_killed[...]` subset mutants reporting `broken_runner`**: same baseline, 0 survived. The **8 errors** are the I8 harness refusing the foreign `infrx-i8-postgres` (label `ai.infrx.d1.checkout=…/kgp2/work-plain/bda1586`, another lane's schema-proof run), or finding 55450 taken. None of these touches a file this round changed. At the implementation head the same command gave 238 passed, 1 xfailed |
+| api: `pytest -q ../../tests/integration/backend/recovery` | 1 | 42 passed, 33 skipped, 1 failed: `test_i3b_ob10` (pre-existing, outside this lane; unchanged from the first round) |
+| `apps/infrx-api/.venv/bin/python -m pytest -q models/marlin2b/tests/test_profile.py` | 0 | 25 passed |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS; 942 links across 251 documents |
+
+**Shared-resource note.** One of my own retries created `infrx-i8-postgres` at 05:20:03Z and could not bind 55450, so the container stayed `created`. I removed it, since it had never started. I did not touch any other container. The coordinator should rerun `INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py` and `pytest -q tests/i` once 55450 is free. Expected: every mutant killed, and `tests/i` 238 passed, 1 xfailed, as at the implementation head (this round added assertions and two non-subset mutants, no `tests/i` case).
+
+### Open issues after the round
+
+- The reversal path, W7f and then `--to legacy_usd` with a legacy release restored, has never been drilled. Same as the first round's "Unproven rollback", now written down step by step.
+- `72-observe-install.sh`'s header still reads "`MONITOR_DSN_PARAM` unset = the runtime DSN on 6543". After W10b, unset leaves step 55's file in place. 72 is not an owned step and CS-3 did not name it: wiring request 5 below.
+- The worker's `MONITOR_DATABASE_URL`, the one in the env file, is still dropped by a reinstall until step 55 reruns. That was the first round's open issue. Observe's copy now survives a reinstall.
+
+### Wiring requests added
+
+5. **`infra/rollout/steps/72-observe-install.sh:16`**, comment only: "`MONITOR_DSN_PARAM` SSM name of a monitor DSN; unset = `/etc/infrx-observe.env` as 55-runtime-login.sh wrote it (else observe falls back to the runtime DSN)".
+
+### Remaining effort (fix round)
+
+Optimistic 0.1 h, likely 0.25 h, pessimistic 1 h; confidence medium. What remains is the coordinator's rerun of the mutant list on a free 55449/55450 and review. The window itself is not included.
+
+### Verification log (fix round)
+
+- 2026-09-26: fix round appended at fix head 13a30bb5; the commands above ran in this worktree.
