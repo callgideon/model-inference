@@ -1889,7 +1889,7 @@
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
       },
-      "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane 91af4caf, verified ACCEPT_WITH_FIXES; WR-C3A-1 by U2, WR-C3A-2 by U3, WR-C3A-3(a) by U3 WR-U3-2, WR-C3A-5 withdrawn, WR-C3A-6 make target). OPEN until 0024 merges: 1-C3A-V-3 / WR-C3A-4 (unverified-JWT api_keys insert refused by consumer_may_create_key(); tests/c/actions-postgrest case 9 flips from ACCEPTED (gap)). D10 WR-C3A-3(b) (operator HTTP surface) deferred."
+      "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane 91af4caf, verified ACCEPT_WITH_FIXES; WR-C3A-1 by U2, WR-C3A-2 by U3, WR-C3A-3(a) by U3 WR-U3-2, WR-C3A-5 withdrawn, WR-C3A-6 make target). OPEN until 0024 merges: 1-C3A-V-3 / WR-C3A-4 (unverified-JWT api_keys insert refused by consumer_may_create_key(); tests/c/actions-postgrest case 9 flips from ACCEPTED (gap)). D10 WR-C3A-3(b) (operator HTTP surface) deferred. 2026-09-26: 1-C3A-V-3 closed at the 0024 merge (f95377b9): case 9 is a real assertion — an unverified individual's direct api_keys insert is refused 42501 (R146); console-c3a-real 9/9."
     },
     {
       "id": "C3F",
@@ -4196,7 +4196,7 @@
       "acceptance": "Cross-process lifecycle and exact accounting remain correct under races; immutable applied migrations preserved.",
       "failure_oracle": "Real DB races detect premature execution, deletion of live content, forged ownership or changed historical expiry.",
       "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
-      "closure_note": "2026-09-25: merged on claude/consumer-v1 via codex/d10-merge dfc4fa75 (--no-ff of 483d9eca) after the verify-lane fix round (ACCEPT_WITH_FIXES; 3 lenses, 14 rechecks); implemented = 0019–0021 + PgLifecycle/read authority/dedicated logins with real-PG proofs (tests/d 811 passed; Supabase image 126; 741 D mutants killed; rulings R122–R127); OPEN: revoke infrx.admit/claim_preparation from infrx_runtime once W5/G7 wire the ready doors (readiness_cutover_check().runtime_unmarked_doors must read []); W5 fail_preparation SQL (R104/R133); pilot.py composition of the runtime login (E3C F-1: configure_connection still sets service_role) is coordinator wiring after G7; P-25 values."
+      "closure_note": "2026-09-25: merged on claude/consumer-v1 via codex/d10-merge dfc4fa75 (--no-ff of 483d9eca) after the verify-lane fix round (ACCEPT_WITH_FIXES; 3 lenses, 14 rechecks); implemented = 0019–0021 + PgLifecycle/read authority/dedicated logins with real-PG proofs (tests/d 811 passed; Supabase image 126; 741 D mutants killed; rulings R122–R127); OPEN: revoke infrx.admit/claim_preparation from infrx_runtime once W5/G7 wire the ready doors (readiness_cutover_check().runtime_unmarked_doors must read []); W5 fail_preparation SQL (R104/R133); pilot.py composition of the runtime login (E3C F-1: configure_connection still sets service_role) is coordinator wiring after G7; P-25 values. 2026-09-26: 0024 (console read port) and 0025 (operator console RPCs) merged at f95377b9 via D10-MERGE-2 with W-D10A-1 v2 / W-D10B-1 v2 / WR-D10B-2; R146 and the R143 amendment; migrations 0001–0025 immutable; hosted apply pending (hosted at 0018)."
     },
     {
       "id": "M5",
@@ -4626,7 +4626,7 @@
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
       },
-      "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane d76f912f, verified ACCEPT_WITH_FIXES; WR-U4-1 console-pg target applied). OPEN until 0024 merges: 0-U4-V-03 / WR-U4-2 (consumer_job_result withholds an unknown-usage result; request_world U4-P08 flips from todo). WR-U4-3 optional."
+      "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane d76f912f, verified ACCEPT_WITH_FIXES; WR-U4-1 console-pg target applied). OPEN until 0024 merges: 0-U4-V-03 / WR-U4-2 (consumer_job_result withholds an unknown-usage result; request_world U4-P08 flips from todo). WR-U4-3 optional. 2026-09-26: U4-P08 closed at the 0024 merge (f95377b9): consumer_job_result withholds an unknown-usage success (result_pending); console-pg request_world 8/8, todo 0."
     }
   ],
   "product_revision": "2026-09-21-two-platforms-individual-grant",
