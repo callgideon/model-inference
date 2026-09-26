@@ -13,8 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .codec import compact_bytes
 from . import errors, ids
-from .limits import MAX_FEEDBACK_TEXT_CHARS, MAX_IDEMPOTENCY_KEY_CHARS, MAX_PAGE_LIMIT
-from .records import (FEEDBACK_INPUT_NAMES, PLATFORM_ACTOR, AuthorRole, ChunkEventType,
+from .limits import MAX_FEEDBACK_TEXT_CHARS, MAX_IDEMPOTENCY_KEY_CHARS
+from .records import PLATFORM_ACTOR  # noqa: F401 - re-export: conformance/services.py and test_parity_console read it from wire
+from .records import (FEEDBACK_INPUT_NAMES, AuthorRole, ChunkEventType,
                       ContentState, ExecutionMode, Feedback, FeedbackChannel, FeedbackName,
                       JobState, JsonObject, MediaRef, TerminalCause, Timestamp, TraceEnvelope,
                       TraceLossReason, TraceMode, UploadState, Usage, UuidStr,

@@ -1571,7 +1571,7 @@ def tracesink_cases():
 # ==========================================================================
 async def _owned_request(harness):
     from dataclasses import replace
-    from .jobs import _admit, _prepare
+    from .jobs import _admit
     jobs = hook(harness, "jobs")
     request, admission = await _admit(replace(harness, port=jobs))
     return request, admission

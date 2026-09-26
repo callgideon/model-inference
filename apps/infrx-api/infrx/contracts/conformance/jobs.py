@@ -1843,7 +1843,7 @@ async def dur_output__queue_time_is_time_spent_queued(factory):
     assert queued.queue_deadline_at == harness.clock.at(100)
 
     harness.clock.advance(40)                      # 40s queued
-    lease = await harness.port.claim(request.request_id, "worker-a")
+    await harness.port.claim(request.request_id, "worker-a")
     running, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
     assert running.queue_wait_used_s == 40, running.queue_wait_used_s
 

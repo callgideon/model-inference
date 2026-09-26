@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 # migration while C1's console suite holds a database is the normal case, and they used to
 # be handed the same 55432. A task not listed here falls back to its track's port.
 TASK_PORTS: dict[str, dict[str, int]] = {
-    "d1": {"postgres": 55432}, "d2": {"postgres": 55433}, "d3": {"postgres": 55434},
-    "d4": {"postgres": 55435}, "d5": {"postgres": 55436}, "d6": {"postgres": 55437},
+    # D2-D5: their R48 PostgreSQL ports sit on their rows below, beside the Valkey they gained
+    "d1": {"postgres": 55432}, "d6": {"postgres": 55437},
     "c1": {"postgres": 55441},
     # R63: per-task Valkey ports for Q lanes (the track port 56379 stays the shared default)
     "q2": {"valkey": 55461}, "q3": {"valkey": 55462},
