@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 20:55Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 137, updated 2026-09-26 20:55Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 20:56Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 137, updated 2026-09-26 20:56Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
-- Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 2 active lanes, 2 reserved.
-- Validation: 0 error(s), 10 warning(s).
+- Lowest open band: V4 measured backend; bands with active work: V4, V5, V6.
+- Agent slots: 16 total, 3 active lanes, 2 reserved.
+- Validation: 0 error(s), 13 warning(s).
 
 ### Actionable blockers
 
@@ -35,7 +35,7 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 
 | Category | Implemented/integrated | Active | Acceptance cells PASS |
 |---|---|---|---|
-| Backend corrections | 12 / 14 | none | BACKEND-LOCAL 7/7; BACKEND-READY 0/6 |
+| Backend corrections | 12 / 14 | E1B | BACKEND-LOCAL 7/7; BACKEND-READY 0/6 |
 | App completion | 8 / 12 | I2A | APP-LOCAL 17/17; APP-PILOT 0/5 |
 | Deferred Lab / hosting / later | 0 / 57 | none | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
@@ -167,6 +167,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | MAIN-MERGE | support (GO-LIVE, user decision 2026-09-26: "skip the window, complete everything, get live, then keep running the test window on the side") the App release (merge to main) and the backend install proceed ahead of BACKEND-READY: freeze RELEASE → gates → a short install maintenance (W1–W5, W6 verified dump, W7 hosted apply 0019–0026, W7f activation, W8–W13) → App inputs (X3/X4) → merge main → smoke; E4C certify runs afterwards on the live system as the test window; the manifest gates record the reordering as a user decision (dispatch override), not as evidence | queued | — | b967a033 → — | ports none | 2026-09-26 19:09Z | GO-LIVE order: after G2-FIX + RELEASE gates: (1) hosted verified dump (user/operator), (2) W1–W5 + W7/W7f + W8–W13 install maintenance (~30–45 min; coordinator with the migrate.py / operations.cli allow rules), (3) Vercel production variables + P-05 auth settings (operator), (4) merge main (--no-ff, tree == APP_RELEASE) → Vercel deploy → smoke S1–S6 → known-good App release recorded, (5) E4C certify + E1B cells on the side | 0.3–1 h remaining (likely 0.5 h), confidence high, estimated 2026-09-26 18:20Z; basis: one --no-ff merge + push once authorized |
 | STEP55-FIX | support E4C window scripts (support lane; before the RELEASE freeze) | complete | codex/step55-fix | 88cb89eb → 6788c25b | ports e1c postgres 55449 (PG-backed cases); never i8/e2c, prefix infrx-e1c-, db e1c | 2026-09-26 19:35Z | DONE: merged --no-ff at cc23960e; WR-S55-1 applied (205e6dd9); minors → STEP55-FIX-2 (running) | 0.1–1 h remaining (likely 0.3 h), confidence high, estimated 2026-09-26 19:07Z; basis: committed, suites and mutants green; review remains |
 | E1B-WIRE | E1B (window wiring; no measurement) WR-3 bench --target direct sends the worker's stop_token_ids; WR-4 the worker publishes AttemptResult.timings as phase metrics; WR-1 the E1B window profile bases validate as §7 writes them; WR-2 a committed e1b-window.sh runs WC-1..WC-8 in order with the no-overlap preconditions; workflow (Opus implementer, 2 lenses, one fix round) | complete | codex/e1b-wire | 387cac69 → b608d8b1 | ports w5 postgres 55445 / valkey 55491; never i8/e2c, prefix infrx-w5-, db w5 | 2026-09-26 20:55Z | DONE: merged --no-ff (test_rollout.py conflict resolved: the tip's F2 assertions kept inside the e4c test, the E1B section after it); WREQ-1/2/3 + the lens minors → E1B-WIRE-2 (before the freeze) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 20:55Z; basis: merged |
+| E1B-WIRE-2 | E1B (window wiring, follow-up) WREQ-1 the worker passes its metrics registry to the inference loop (phase timings reach the box) with a timings guard for the preparation loop; WREQ-2 the three bench stop_token mutants in the list; WREQ-3 E4C-runbook §3/§5.0 fill the E1B profiles and state the window order (e1b-window.sh after §4, WC-6a, WC-7 alone, WC-6b, §5, WC-9; no certify/soak/journey/drills while it runs); launcher minors E1BW-R1 (pipefail guard), R2 (interrupted-run log kept), R3 (bounded waits); plain Opus agent | running | codex/e1b-wire-2 | aac38207 → — | ports w5 postgres 55445 / valkey 55491; never i8/e2c, prefix infrx-w5-, db w5 | 2026-09-26 20:56Z | handback → merge before the RELEASE freeze | 0.7–3 h remaining (likely 1.5 h), confidence high, estimated 2026-09-26 20:56Z; basis: one-line product wiring + mutants + launcher hardening + runbook fills |
 
 ### Queues and locks
 
@@ -184,11 +185,14 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: stale estimate: lane I3 estimated at 2026-09-26T02:11:40Z (older than 6 h)
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
+- warning: overlapping writers: E4C (queued) and E1B-WIRE-2 (running) both own models/marlin2b/results/ / models/marlin2b/results/E4C-runbook.md §3/§5.0 (+2 more)
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and G2-FIX (running) both own infra/ / infra/rollout/README.md §0
+- warning: overlapping writers: I2A (review) and E1B-WIRE-2 (running) both own infra/ / infra/rollout/e1b-window.sh
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and G2-FIX (running) both own tests/integration/ / tests/integration/gates.py
 - warning: overlapping writers: I3 (queued) and G2-FIX (running) both own infra/ / infra/rollout/README.md §0 (+1 more)
+- warning: overlapping writers: I3 (queued) and E1B-WIRE-2 (running) both own infra/ / infra/rollout/e1b-window.sh
 
 ## Pending inputs
 
@@ -405,7 +409,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `E3B` | Backend-only durability, security and protocol integration gate | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I2B` | Reproducible Marlin endpoint deployment independent of frontends | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I3B` | Backend recovery, observability, restore and rollback proof | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `E1B` | Measure the end-to-end Marlin baseline and operating envelope | Backend corrections | planned | complete | complete: every lane complete; the coordinator updates the manifest status from the evidence |
+| `E1B` | Measure the end-to-end Marlin baseline and operating envelope | Backend corrections | planned | running | active: lane active |
 | `M4` | Optimize bounded video retrieval, decoding and preparation | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `W4` | Tune Marlin GPU serving and scheduler admission from measured evidence | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E4B` | Certify the robust and measured Marlin endpoint release candidate | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
@@ -426,6 +430,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 20:56Z UTC, coordinator (E1B): E1B-WIRE-2 launched from aac38207 (WREQ-1/2/3 + the launcher minors)
 - 2026-09-26 20:55Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - 2026-09-26 20:55Z UTC, coordinator (E1B): E1B-WIRE ACCEPT b608d8b1 merged (bench direct stop tokens, worker phase metrics, five E1B profile bases, e1b-window.sh launcher; one test_rollout.py conflict resolved keeping both hunks); E1B-WIRE-2 next for WREQ-1/2/3 and the lens minors
 - 2026-09-26 20:44Z UTC, tracker: rejected update: stale: at 2026-09-26T19:35:00Z is not newer than lane BACKEND-MINORS state 2026-09-26T20:44:00Z

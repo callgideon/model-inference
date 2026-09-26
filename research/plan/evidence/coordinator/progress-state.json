@@ -20,12 +20,12 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 137,
-  "updated": "2026-09-26T20:55:22Z",
+  "updated": "2026-09-26T20:56:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 6,
+    "active": 2,
     "reserved": 2,
-    "note": "Session 03: workflows G2-FIX (e2c + i8), E1B-PREP, APP-MINORS-2 (app-*), BACKEND-MINORS (d10/g8/w5 + e3c), STEP55-FIX (e1c); MAIN-MERGE blocked on B-01; 2 slots reserved for verify-lane workflows."
+    "note": "Session 03: workflow G2-FIX (e2c + i8); E1B-WIRE-2 agent (w5); MAIN-MERGE queued for the go-live order; 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -3652,6 +3652,48 @@
         "research/plan/evidence/e/E1B-wire-*.md"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "E1B-WIRE-2",
+      "task": "E1B",
+      "slice": "(window wiring, follow-up) WREQ-1 the worker passes its metrics registry to the inference loop (phase timings reach the box) with a timings guard for the preparation loop; WREQ-2 the three bench stop_token mutants in the list; WREQ-3 E4C-runbook §3/§5.0 fill the E1B profiles and state the window order (e1b-window.sh after §4, WC-6a, WC-7 alone, WC-6b, §5, WC-9; no certify/soak/journey/drills while it runs); launcher minors E1BW-R1 (pipefail guard), R2 (interrupted-run log kept), R3 (bounded waits); plain Opus agent",
+      "agent": "opus",
+      "branch": "codex/e1b-wire-2",
+      "worktree": ".claude/worktrees/codex-e1b-wire-2",
+      "base": "aac38207",
+      "head": null,
+      "isolation": {
+        "ports": "w5 postgres 55445 / valkey 55491; never i8/e2c",
+        "prefix": "infrx-w5-",
+        "db": "w5"
+      },
+      "activity": "running",
+      "started": "2026-09-26T20:56:00Z",
+      "updated": "2026-09-26T20:56:00Z",
+      "blocker": null,
+      "next_action": "handback → merge before the RELEASE freeze",
+      "estimate": {
+        "optimistic_h": 0.7,
+        "likely_h": 1.5,
+        "pessimistic_h": 3,
+        "confidence": "high",
+        "basis": "one-line product wiring + mutants + launcher hardening + runbook fills",
+        "at": "2026-09-26T20:56:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "apps/infrx-api/infrx/worker/__main__.py (metrics kwarg)",
+        "apps/infrx-api/infrx/worker/loop.py (timings guard)",
+        "apps/infrx-api/tests/w/",
+        "models/marlin2b/tests/mutants.py",
+        "infra/rollout/e1b-window.sh",
+        "apps/infrx-api/tests/i/test_rollout.py",
+        "models/marlin2b/results/E4C-runbook.md §3/§5.0",
+        "models/marlin2b/results/E1B-protocol.md §7.2 sentence",
+        "research/plan/evidence/e/E1B-wire-2-*.md"
+      ],
+      "wiring_requests": []
     }
   ],
   "review_queue": [],
@@ -6150,6 +6192,12 @@
       "by": "tracker",
       "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
       "source": "updates/E1B-20260926T2105Z.json"
+    },
+    {
+      "at": "2026-09-26T20:56:00Z",
+      "by": "coordinator (E1B)",
+      "what": "E1B-WIRE-2 launched from aac38207 (WREQ-1/2/3 + the launcher minors)",
+      "source": "research/plan/evidence/e/E1B-wire-fedf688.md"
     }
   ],
   "history": {
