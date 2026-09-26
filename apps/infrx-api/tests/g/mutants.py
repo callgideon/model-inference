@@ -1764,7 +1764,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "a job admit_ready made ready is never answered a post-admission refusal (E3C F-5)",
        R, "            if self.regime == CREDIT and self.readiness is None:",
        "            if self.regime == CREDIT:",
-       "test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal"),
+       "test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal",
+       "test_w5_f5b__e3c_s04_late_is_202_and_runs_on_the_readiness_door"),
     _m("w5_f5_legacy_recheck_dropped",
        "the pre-D10 door still rechecks the pinned revision before the refs (G1R Limit 2)",
        R, "            if self.regime == CREDIT and self.readiness is None:",
@@ -1775,6 +1776,23 @@ MUTANTS: tuple[Mutant, ...] = (
        "gateway/routes/jobs.py", "                                idempotency_replayed=replayed)",
        "                                idempotency_replayed=False)",
        "test_app_journey__every_docs_example_is_served_by_the_mounted_routes"),
+    # --- W5-F5B (0-W5F5-R2): no refusal after the marker is the answer or a cancel -------
+    _m("w5_f5b_post_marker_refusal_cancels",
+       "a refusal after admit_ready's marker never cancels the job nor is its answer",
+       R, "                if self.readiness is None:\n                    raise\n",
+       "                raise\n",
+       "test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal"),
+    _m("w5_f5b_post_marker_refusal_uncounted",
+       "a refusal swallowed after the marker is counted by its code (the operator sees it)",
+       R, '                intake.record(self.registry, "inc", POST_MARKER_REFUSED, '
+          'code=refused.code)',
+       "                pass",
+       "test_w5_f5__a_ready_job_is_answered_its_committed_outcome_never_a_late_refusal"),
+    _m("w5_f5b_pre_d10_attach_refusal_swallowed",
+       "the pre-D10 door still cancels a refused attach and answers it (and 503s an outage)",
+       R, "                if self.readiness is None:\n                    raise\n",
+       "                if False:\n                    raise\n",
+       "test_w5_f5b__the_pre_d10_door_still_answers_a_post_admission_attach_failure"),
 )
 
 

@@ -36,7 +36,9 @@ SUBSET = ("body_cap_removed", "anonymous_request_accepted", "unhandled_exception
           "approved_profile_gate_removed", "admission_ceiling_below_advertised",
           "release_refusal_removed",
           # W5-F5 (E3C F-5): a ready job answered a late refusal after it ran and was charged
-          "w5_f5_late_recheck_restored")
+          "w5_f5_late_recheck_restored",
+          # W5-F5B (0-W5F5-R2): the same, from the attach after the marker
+          "w5_f5b_post_marker_refusal_cancels", "w5_f5b_post_marker_refusal_uncounted")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

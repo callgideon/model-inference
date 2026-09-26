@@ -2295,9 +2295,23 @@ MUTANTS: tuple[Mutant, ...] = (
        "                if False:",
        "admission_ready__a_refused_expectation_or_capability_admits_nothing"),
     _m("lc_capability_ignored", "the PINNED revision must take the request's media",
-       LCF, '                if sources and "video" not in capability.input_modalities:',
-       "                if False:",
+       LCF, "    if not needed <= set(capability.input_modalities):",
+       "    if False:",
        "admission_ready__a_refused_expectation_or_capability_admits_nothing"),
+    # W5-F5B (WR-W5F5-3): the fake refuses what 0019 `check_pinned_capability` refuses
+    _m("lc_capability_text_unchecked", "a text part outside the pinned modalities is refused",
+       LCF, '            needed.add("text")', "            pass",
+       "test_the_fake_refuses_what_check_pinned_capability_refuses"),
+    _m("lc_capability_legacy_unchecked", "a legacy <alias>@<label> is checked against its "
+       "revision", LCF, "                if serving is not None:             # a pre-catalog",
+       "                if False:             # a pre-catalog",
+       "test_the_fake_refuses_what_check_pinned_capability_refuses"),
+    _m("lc_pinned_revision_missing_crashes", "a pinned revision missing from the catalog is "
+       "not_found", LCF,
+       "                if serving is None:\n                    raise errors.NotFound(",
+       "                if False:\n                    raise errors.NotFound(",
+       "test_the_fake_answers_a_pinned_revision_missing_from_the_catalog_not_found",
+       dies_by=("AttributeError",)),
     _m("lc_replay_loses_the_marker", "a replay answers the recorded marker",
        LCF, "        return admission, self.d.readiness.get(admission.request_id)",
        "        return admission, None", "admission_ready__a_replay_answers_the_recorded_marker"),
@@ -2472,8 +2486,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "                         key=lambda t: (t.expires_at, t.upload_handle))",
        "upload_restart__the_window_bounds_completion_and_use"),
     _m("lc_stream_output_unchecked", "the pinned revision must stream a stream request (F5)",
-       LCF, "                if request.execution_mode is ExecutionMode.stream and not capability.stream_output:",
-       "                if False:",
+       LCF, "    if request.execution_mode is ExecutionMode.stream and not capability.stream_output:",
+       "    if False:",
        "admission_ready__a_refused_expectation_or_capability_admits_nothing"),
     _m("lc_manifest_any_kind", "only source content is a manifest source (F5)",
        LCF, "                    or row.identity.kind is not ContentKind.source \\\n",
@@ -2988,6 +3002,7 @@ CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.
                                               "tests/contracts/test_config_and_imports.py",
                                               "tests/contracts/v2/test_conformance_v2.py",
                                               "tests/contracts/v2/test_lifecycle.py",
+                                              "tests/contracts/v2/test_lifecycle_capability.py",
                                               "tests/contracts/test_cancel_cause.py"))
 
 
