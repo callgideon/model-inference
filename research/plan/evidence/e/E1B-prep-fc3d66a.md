@@ -28,7 +28,7 @@ command sketches, wall times, CREDIT ceilings and oracles.
 | **E1B.c** recommended capacity and bottlenecks | `supported_rate_per_s`, `measured_passing_rate_per_s`, bench `video_s_per_s`, `req_per_s`, `peak_in_flight`, `resources` | Where the time goes (the bottleneck) | WC-0 + WC-2 give per-phase gateway − engine deltas. WC-1 gives the engine's own batching curve at the pinned limit |
 | **PERF-ENVELOPE** (04-verification.md:138) | Envelope, soak and overload, with raw denominators and sample-supported percentiles (bench rule p95 ≥ 60) | Paired direct/gateway, cold/warm paths and full cost | WC-2, WC-7, §7.3. Full-service cost is ⚠️ TO BE VERIFIED: `cloud-pricing.md` has no control-plane row |
 | **MARLIN-SOP** (04-verification.md:95) | `e4b.a.dataset-resume`: 24 items, interrupt after 8, resume, `sop` property and the ledger half exact. `e4b.b.config-pin`: profile v1, `max_video_seconds` 82. Journey: over-cap typed 400 (unsupported mode) | The SOP client (`dataset.py`) is never run on the live gateway. The certify drill is bench on E1 clips. There are no SOP-oriented finite clips. "Snippets match real capabilities" is App/A3, not a box cell | WC-8 (`dataset.py` on sop-synth sop00–sop08, interrupt and resume). The snippet half is out of scope for this lane |
-| **MEDIA-PARITY** (04-verification.md:23) | `e4b.a.sop-parity`: `parity.py` at c = 1 vs the E0 baseline, **over only 2 in-cap clips** (c039 at 2 s, c024 at 72 s). 7 of the 9 `PARITY_SET` clips exceed 82 s (4 × 112 s, 3 × 120 s; `measure/parity.py:36`) and are judged as the typed over-cap 400 | Parity on orientation and aspect extremes within the cap. Gateway vs engine token-budget parity. Caption-event parity vs the transformers reference within the cap (D-13) | WC-2(a) (`prompt_tokens` equality per clip across all 60 in-cap clips, both paths). WC-5 (the same across forms). WC-6 (L8 on in-cap clips) |
+| **MEDIA-PARITY** (04-verification.md:23) | `e4b.a.sop-parity`: `parity.py` at c = 1 vs the E0 baseline, **over only 2 in-cap clips** (c039 at 2 s, c024 at 72 s). 7 of the 9 `PARITY_SET` clips exceed 82 s (4 × 112 s, 3 × 120 s; `measure/parity.py:36`) and are judged as the typed over-cap 400 | Parity on orientation and aspect extremes within the cap. Gateway vs engine token-budget parity. Caption-event parity vs the transformers reference within the cap (D-13). (SWEEP-1, E1BP-8) **Corrupt media**: the corpus's 4 negatives (`manifest.json` `negatives`: truncated, wrong container, zero length, not video) are sent by no certify or window cell (bench draws only `clips`); the refusal is covered locally by `apps/infrx-api/tests/m/test_prepare.py::test_media_the_profile_refuses_is_never_stored` (truncated, corrupt, looping, unservable codec, audio-only, 65535² → `unsupported_media`, nothing stored), and on the box it is a named limit. **Pixel area ≤ 200,704 per frame, no upsize**: the budget the engine receives (`size.longest_edge` = frames × 200,704, `shortest_edge` 4096, from the measured duration) is pinned per clip by `tests/m/test_parity.py` (the 64-clip corpus and `sop-synth-v1` when the corpus cache is present) and `tests/m/test_prepare.py`; the per-frame area and the no-upsize rule are the engine processor's resize, which no committed test or window cell measures on the served path. WC-2(a)'s per-clip `prompt_tokens` equality is the only indirect check (named limit) | WC-2(a) (`prompt_tokens` equality per clip across all 60 in-cap clips, both paths). WC-5 (the same across forms). WC-6 (L8 on in-cap clips) |
 
 ## 2. Findings from the code read (no run)
 
@@ -60,7 +60,9 @@ The formula is over bench's counters × the P-19 row. The worked lower bounds ar
 USD per video-hour and soak at 0.4479 USD per video-hour. They agree with P-01's run3-based
 0.239 and 0.449 (`15-pending-inputs.md`, P-01 row). CREDIT per video comes from the ledger
 only. The window's added instance time is `est.` 1.0–1.6 h, which is 2.24–3.59 USD at the list
-price.
+price. (SWEEP-1, E1BP-9) That is the critical path, and it equals the summed cells: the cells never
+overlap (§7.1 rule 1), so 51–73 min of cells (WC-2 now 6–8 min: 276.3 + 69.1 s of arrivals plus
+≤ 60 s of tail each) plus 10–20 min of transitions.
 
 ## 4. D-13 (proposal; the coordinator decides)
 
@@ -117,6 +119,11 @@ protocol test still pins §1–§6.
 
 ## 7. Open issues
 
+- (SWEEP-1, E1BP-4) The commands §7.2 left unassigned are committed: WC-6a/WC-6b's L8 copies as
+  `models/marlin2b/e1b/l8ref.sh` and `l8served.sh` (11 clips, the sop00–sop08 precondition, WC-6a's
+  declared stop; `models/marlin2b/tests/test_e1b_l8.py`), and WC-8's items-JSONL generator as
+  `infra/rollout/e1b-window.sh` `sop()` (E1B-WIRE-2; its plan validated by
+  `models/marlin2b/tests/test_profile.py`).
 - WR-1…WR-4 must land before the window, or the affected halves are recorded as NOT PAIRED
   (WR-3) or `declared_missing` (WR-4), or the cells are refused by bench (WR-1/2).
 - The URL form (WC-5) and the whole journey stay BLOCKED on `MEDIA_BASE_URL`, which is
