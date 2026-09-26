@@ -180,3 +180,74 @@ Optimistic 3 h / likely 6 h / pessimistic 14 h, confidence low. Basis: the build
 remainder is merge of WR-I3-1..3 (≈0.5 h), the operator cutover window and drills (≈3–5 h once
 BACKEND-READY, P-01, P-05 and the I2A live half exist), fixes from the first hosted run. The
 dates are gated on inputs outside this lane.
+
+## Fix round (review of handback `35647804`; code head `1bfce02a`)
+
+Base `6badd4e1`; previous code head `bf29b92b`; fix commit `1bfce02a` (8 files, +337/−140, all
+owned paths); this section and `updates/I3-20260926T0206Z.json` are committed on top. Tests were
+written first and recorded failing against `bf29b92b` (below), then the code was changed. No
+gate claimed; manifest stays `planned`. Nothing hosted, Vercel, DNS, AWS or box was read.
+
+| Finding | Fix | Regression (fails-before at `bf29b92b`) |
+|---|---|---|
+| 0-I3R-1 (blocking), 1-I3R-3 | The browser report no longer sends or logs `message`. `ErrorLine.message` → `name`: the error's class name, kept only in the shape `^[A-Za-z]{0,40}(Error\|Exception)$`, else `null` (server lines carry it too). `route` is reduced segment by segment to an allowlist — the App's route words (lowercase letters, hyphens, optional leading `_`) and Next's patterns (`[requestId]`, `(console)`); every other segment (id, email, name, anything percent-encoded) reads `[id]`. `browserReport` applies the same reductions in the browser, so there is no client-side truncation before sanitising. `redact()` and its denylist are deleted. operations.md "What a report carries, and nothing else" states exactly this | I3-SAN-01 (the review's six leaks as cases: `%40` email, `{"password":"hunter2"}`, relative URL with `?email=`, V8 `JSON.parse` body excerpt, non-ASCII email, the 29-char straddled hex run; plus smuggled `name` values) and I3-SAN-02 (`/a/…%40…` → `/a/[id]`, `/a/Some%20Person/x` → `/a/[id]/x`) — both `not ok` before |
+| 0-I3R-2 | Origin is judged by `Sec-Fetch-Site` (403 when present and not `same-origin`), never by `request.url`. A browser without the header cannot POST `application/json` cross-origin: the preflight gets Next's automatic `OPTIONS` (204, `allow: OPTIONS, POST`, no `Access-Control-*`, probed live). OPS-APP-11 now names the same-origin acceptance behind Vercel ⚠️ TO BE VERIFIED | I3-ROUTE-04: Origin `http://127.0.0.1:55461`, `https://app.callbill.ai`, `https://app.example.test` with `sec-fetch-site: same-origin` against a request.url of `https://app.example.test` → 204; before: 403 |
+| 1-I3R-1 | The route reads `request.body` with a reader that stops once past 2 KiB and cancels the stream (413); a declared `Content-Length` over 2 KiB is still refused unread. The size check moved out of `parseClientReport` (the route guarantees it). operations.md states both paths | I3-ROUTE-05: a 64 MiB `ReadableStream` body with no Content-Length → 413 with ≤ 4 KiB pulled; before: `65537 KiB pulled before the refusal` |
+| 1-I3R-2 | Cutover X4 = P-05 auth settings (signup still off, staging first), X5 = App deploy, matching README §1 item 2 (hosted inputs before the release) | ops03 asserts every step setting a hosted App input (`P-05`, `App variables`) precedes the deploy step; before: `X5 sets a hosted App input after the deploy (X4)` |
+| 1-I3R-4 | `rollback.py`: `newest == applied` passes; `newest < applied` passes only with `--schema-proof NNNN` reaching `--applied` and `--evidence` files that exist inside this checkout (as `known-good.py`'s `schema_proof`); the refusal names the unproven range. operations.md App rollback states the rule and why (0021 revokes column grants, drops a policy). README §5 still says "additive": **WR-I3-5** below | rb08 (hosted ahead with no proof / proof short of applied / no evidence / missing evidence / evidence outside the checkout / evidence without a number → REFUSED; proof reaching applied → COMPATIBLE); rb01 reduced to the equal case; rb06 now kills two mutants (equality dropped; `newest <= applied` additivity assumed again). Before: rb08 and both rb06 cases failed |
+
+Manual console mutants on the new code (each applied, run, restored): Sec-Fetch-Site check off →
+ROUTE-01; `request.text()` back → ROUTE-01, ROUTE-05; old `request.url` origin rule back →
+ROUTE-04; any `name` accepted → SAN-01; segments not reduced → SAN-02, ROUTE-01; browser sends
+`message` → SAN-01, PAGE-01; server `name` dropped → SHAPE-01. 7/7 killed.
+
+Live probe (`next start -H 127.0.0.1 -p 55461`, this lane's port, WR-I3-1 applied temporarily,
+rebuilt, stopped, `middleware.ts` restored and rebuilt clean; placeholder public Supabase values,
+`INFRX_APP_ENVIRONMENT=development`, local build so `commit` reads `unknown`): same-origin from
+`http://127.0.0.1:55461` 204; `Host: app.callbill.ai` + Origin `https://app.callbill.ai` +
+same-origin 204 (also with `x-forwarded-host/proto`); `sec-fetch-site: cross-site` 403,
+`same-site` 403; `text/plain` 415; 3 KB declared 413; 64 MiB chunked with no length 413 (the
+route stops reading; the Node server still drains the socket, so curl reports the whole upload —
+the transport-level cap is Next's/Vercel's [OP]); GET 405; `Cache-Control: private, no-store,
+max-age=0`; `OPTIONS` preflight from a foreign origin 204 with no `Access-Control-*`. A report
+posted with the review's message (`user someone.person%40example.com / Some Person phone …`,
+route `/a/someone.person%40example.com`) logged
+`{"event":"app_error","source":"browser",…,"route":"/a/[id]","digest":"11","name":"TypeError"}`;
+`name: "Error: hunter2"` logged `"name":null`; 0 occurrences of the email, name, phone or
+`hunter2` in the server log. A non-browser client with a foreign Origin and no Sec-Fetch-Site
+is accepted (it can forge any header; the per-instance ceiling and the Firewall rule [OP] bound it).
+
+| Command (at `1bfce02a`) | Exit | Counts |
+|---|---|---|
+| `node --test tests/i3/report.test.ts` before the fix (stub `safeName` export so the module loads) | 1 | 11: 4 pass, 7 fail (SAN-01/02, SHAPE-01, ROUTE-01/04/05, PAGE-01) |
+| `pytest tests/integration/ops` before the fix | 1 | 4 failed (ops03, rb06 ×2, rb08), 20 passed |
+| `make console-test` | 0 | 648 tests: 599 pass, 0 fail, 49 skip (pre-existing task-local stack/DSN skips) |
+| `make console-lint` | 0 | 0 errors, 2 pre-existing warnings |
+| `make console-typecheck` | 0 | clean |
+| `cd apps/app && pnpm build` (placeholder public Supabase values) | 0 | `/api/client-errors` ƒ dynamic |
+| `node --test tests/i3/*.test.ts tests/i2a/*.test.ts` (after build) | 0 | 33/33 (I3 11, I2A 22 incl. both BUILT) |
+| `apps/infrx-api/.venv/bin/python -m pytest tests/integration/ops tests/integration/backend/recovery/test_runbooks.py` | 0 | 33 passed (ops 25: rb 15, ops 10; runbooks 8) |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | 4 PASS |
+
+**WR-I3-5** (I2A owner, `infra/app/README.md` §5) — state rollback.py's migration rule, so the
+two App runbooks agree (exact text = `README_OLD`/`README_NEW` in
+`tests/integration/ops/test_i3_operations.py`; ops07 composes it and checks the link resolves):
+```diff
+--- a/infra/app/README.md
++++ b/infra/app/README.md
+@@ §5 Known-good App release
+   Like `known-good.py` for the backend, a rollback target must be compatible with the applied
+-  schema: its tree's newest migration ≤ the hosted applied migration (migrations are additive).
++  schema: its tree's newest migration = the hosted applied migration, or below it only with a
++  recorded schema proof (`infra/app/rollback.py --schema-proof`; not every migration is
++  additive, [operations.md](operations.md#app-rollback)).
+```
+WR-I3-1..4 are unchanged (WR-I3-1's `I3-ROUTE-03` id is still free: this round added ROUTE-04/05).
+
+Open after this round: whether Vercel forwards `Sec-Fetch-Site` unchanged and accepts a
+same-origin report on the custom domain (OPS-APP-11, ⚠️ TO BE VERIFIED [OP]); a schema proof
+for any older known-good App target once hosted is ahead of it (none exists yet [OP]).
+
+Remaining effort (unchanged basis): optimistic 3 h / likely 6 h / pessimistic 14 h, confidence
+low — merge of WR-I3-1..3 and 5, then the operator cutover and drills once BACKEND-READY, P-01,
+P-05, P-24, P-25 and the I2A live half exist.
