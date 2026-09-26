@@ -125,14 +125,28 @@ def test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order():
         "statements differ from the candidate's files: ['0002']"
 
 
-def test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond():
-    """KNOWN-GOOD-PROOF-2 (RR:51): the real record on this checkout. Each target is KNOWN-GOOD
-    with hosted at 0025 (0024/0025 proven) and NOT at 0026, which no proof reaches."""
-    record = json.loads(RECORD.read_text())
+def test_ops_recover__both_targets_are_known_good_through_0025_and_not_beyond(tmp_path):
+    """KNOWN-GOOD-PROOF-2 (RR:51): each target's REAL record entry, judged against this
+    checkout's real 0019-0025 bytes, is KNOWN-GOOD with hosted at 0024/0025 and NOT at 0026,
+    which no proof reaches. The target tree is a stand-in commit (0001-0018 and the
+    preparation loop, as both targets carry) because mutation copies are not git checkouts;
+    the real-sha verdicts are the evidence's `known-good.py <sha> --applied 0025|0026` runs."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "trunk")
+    target = _commit(repo, {MAIN: "PreparationRunner(jobs)\n", PREP: "class PreparationRunner: ...\n",
+                            f"{MIG}/0018_x.sql": "", PREFLIGHT: "TUNABLE = (\n)\n"})
+    for real in sorted((support.REPO / MIG).glob("[0-9][0-9][0-9][0-9]_*.sql")):
+        if real.name[:4] > "0018":
+            (repo / MIG / real.name).write_bytes(real.read_bytes())
     judge = KNOWN_GOOD["judge"]
-    for sha in ("bda15866e5700f3856d7142580da842fba9bbd23", "422631591845fbd66b590c73d5ff4150318d9d7a"):
-        at = {applied: judge(sha, applied, ["MAX_VIDEO_SECONDS", "WORKER_CONCURRENCY"], None, record)
+    for real in (r for r in json.loads(RECORD.read_text())["releases"] if r.get("schema_proof")):
+        entry = {**real, "sha": target}
+        for path in entry["evidence"] + entry["schema_proof"]["evidence"]:
+            (repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (repo / path).touch()
+        at = {applied: judge(target, applied, [], None, {"releases": [entry]}, repo)
               for applied in ("0024", "0025", "0026")}
-        assert at["0024"]["verdict"] == at["0025"]["verdict"] == "KNOWN-GOOD", at
+        assert at["0024"]["verdict"] == at["0025"]["verdict"] == "KNOWN-GOOD", (real["sha"], at)
         assert at["0026"]["verdict"] == "NOT-KNOWN-GOOD"
         assert [c["check"] for c in at["0026"]["checks"] if not c["ok"]] == ["migrations"]
