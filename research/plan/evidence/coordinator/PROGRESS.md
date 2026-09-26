@@ -1,13 +1,13 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-26 09:48Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 116, updated 2026-09-26 09:48Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-26 09:49Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 116, updated 2026-09-26 09:30Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `400a7e94`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 3 active lanes, 2 reserved.
+- Agent slots: 16 total, 4 active lanes, 2 reserved.
 - Validation: 0 error(s), 13 warning(s).
 
 ### Actionable blockers
@@ -105,7 +105,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (37.0 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (37.1 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -168,7 +168,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | APP-MINORS-1 | support (support lane) App-side carried minors: APP-0024-WIRE-2 R-1 (U1R-P08 walks until the cursor is null at any capped count) and the I3-PREP minors I3R-5/6/8 as far as they are App-side (segment error boundaries reporting through the allowlisted client report; the Vercel-state assertion; the MAJOR/MINOR compare); workflow (Opus implementer, 1 lens, one fix round) | complete | codex/app-minors-1 | 9b21339a → bc5e9720 | ports app-u1r postgres 55457; app-c0 55451 for c0-real, prefix infrx-app-u1r-, db app-u1r | 2026-09-26 08:30Z | DONE: merged and wired; fixed-clone suite on 76ec3a5e green — ruff clean; api-test 4495 passed / 43 skipped / 9 xfailed with every failure/error in tests/i (the i8 harness was held by another run: the shared lock refused the setups; environmental — tests/i on i8 covered by checks-fe6cb51e / G-GATES G2); console-test 608 pass, lint 0 errors, typecheck clean, built 22, mutants 46/46, console-pg 8/8, c0-real 15/15; integration unit 109 passed; validate PASS | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 08:30Z; basis: merged, wired and suite-checked |
 | G-GATES | support (support lane; evidence only) pre-run of the release go/no-go gates G1–G6 (infra/rollout/README.md §0) on the tip: make check + tests/i (e2c; i8 when free), the pilot-runtime image start, the engine pin (expected to name P-06's missing digests), the local rehearsal, G6 from the documents; a completeness lens and one rerun round | running | codex/g-gates | 9b21339a → — | ports e2c postgres 55448, valkey 55493/55494; rehearsal in its own network namespaces, prefix infrx-e2c- | 2026-09-26 06:41Z | report → coordinator records what blocks RELEASE today; G4 stays FAIL until P-06 | 1.5–4 h remaining (likely 2.5 h), confidence medium, estimated 2026-09-26 06:41Z; basis: make check ≈ 45–60 min, rehearsal ≈ 10 min, image build; evidence only |
 | D10-0026-FENCE | support (support lane for D10 + the W port; R147 / E3C-CELLS F-1) migration 0026 redefines infrx.put_result to take the worker's lease and call fence_lease first (stale/foreign/missing lease refused before any insert; same-generation dedupe and state_conflict kept); jobstore.put_result and AttemptRunner._settle pass the lease; fakes/conformance model the fence; E3C s14 gains the result door; final run on the e3c block; wiring requests for rollout.md W7 (0026), known-good.json schema_proof (0026), the readiness brief; workflow (Opus implementer, 2 lenses, one fix round) | integration | codex/d10-0026-fence | e0087a8f → ef4553c9 | ports d4 postgres 55435 / valkey 55465; e3c block 56900–56999 for the final run, prefix infrx-d4-, db d4 | 2026-09-26 09:20Z | merged --no-ff at 400a7e94 WITH WR-D10F-1..4 in the merge commit (coordinator decision: the lease-less call stays 0014's write for the P-25 rollback targets — R147 amended; follow-up migration recorded in P-25); fixed-clone checks (api-test with tests/i first, recovery, test_harness; E3C final run; App gate) running; KNOWN-GOOD-PROOF-3 next; minors carried: RV-D10F-3 (assertion for the runner-drops-the-lease mutant), O-1, the W5 mutant runner TMPDIR lock | 0.3–1.5 h remaining (likely 0.7 h), confidence high, estimated 2026-09-26 09:20Z; basis: merged and wired; three fixed-clone runs left |
-| KNOWN-GOOD-PROOF-3 | support (support lane; P-25 / E4C prerequisite) extend both rollback targets' schema_proof from 0025 to 0026 on i8 (plain PostgreSQL and the Supabase image), known-good.py --applied 0026 KNOWN-GOOD / 0027 refused; workflow (Opus implementer, 1 lens, one fix round) | ready | codex/known-good-proof-3 | 400a7e94 → — | ports i8 postgres 55450 / valkey 55495 / pgbouncer 55496 (no other i8 user while it runs), prefix infrx-i8-, db i8 | 2026-09-26 09:20Z | launch after the tests/i pass of the 400a7e94 suite (i8 shared); handback → merge; P-25 row → 0026 | 1.5–4 h remaining (likely 2.5 h), confidence medium, estimated 2026-09-26 09:20Z; basis: the 0025 proof lane took ~2.3 h; one migration more |
+| KNOWN-GOOD-PROOF-3 | support (support lane; P-25 / E4C prerequisite) extend both rollback targets' schema_proof from 0025 to 0026 on i8 (plain PostgreSQL and the Supabase image), known-good.py --applied 0026 KNOWN-GOOD / 0027 refused; workflow (Opus implementer, 1 lens, one fix round) | running | codex/known-good-proof-3 | 400a7e94 → — | ports i8 postgres 55450 / valkey 55495 / pgbouncer 55496 (no other i8 user while it runs), prefix infrx-i8-, db i8 | 2026-09-26 09:30Z | handback → merge; P-25 row → 0026 (i8 shared with the coordinator's tests/i run on 400a7e94: the lane polls the lock) | 1.5–4 h remaining (likely 2.5 h), confidence medium, estimated 2026-09-26 09:20Z; basis: the 0025 proof lane took ~2.3 h; one migration more |
 
 ### Queues and locks
 
@@ -199,11 +199,11 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E4C (queued) and D10-0026-FENCE (integration) both own tests/integration/backend/ / tests/integration/backend/e3c/scenarios_fence.py
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and D10-0026-FENCE (integration) both own apps/app/ / apps/app/supabase/migrations/0026_*.sql
-- warning: overlapping writers: I2A (review) and KNOWN-GOOD-PROOF-3 (ready) both own infra/ / infra/rollout/known-good.json (+1 more)
+- warning: overlapping writers: I2A (review) and KNOWN-GOOD-PROOF-3 (running) both own infra/ / infra/rollout/known-good.json (+1 more)
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and D10-0026-FENCE (integration) both own tests/integration/ / tests/integration/backend/e3c/scenarios_fence.py
 - warning: overlapping writers: I3 (queued) and D10-0026-FENCE (integration) both own tests/integration/ / tests/integration/backend/e3c/scenarios_fence.py
-- warning: overlapping writers: I3 (queued) and KNOWN-GOOD-PROOF-3 (ready) both own infra/ / infra/rollout/known-good.json (+1 more)
+- warning: overlapping writers: I3 (queued) and KNOWN-GOOD-PROOF-3 (running) both own infra/ / infra/rollout/known-good.json (+1 more)
 
 ## Pending inputs
 
@@ -432,6 +432,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-26 09:30Z UTC, coordinator (KNOWN-GOOD-PROOF-3): KNOWN-GOOD-PROOF-3 launched from 400a7e94 on i8 (schema_proof 0025 → 0026 for both rollback targets, plain and Supabase image)
 - 2026-09-26 09:48Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
 - 2026-09-26 09:20Z UTC, coordinator (D10-0026-FENCE): D10-0026-FENCE (lenses ACCEPT_WITH_FIXES ×2; REJECT only for coordinator items) merged at 400a7e94 with WR-D10F-1..4 in the merge commit; R147 amended (lease-less put_result stays 0014's write for the P-25 rollback targets; follow-up migration recorded); fixed-clone suite, E3C final run and App gate rerun launched; KNOWN-GOOD-PROOF-3 prepared
 - 2026-09-26 09:00Z UTC, coordinator: user: "do not wait on me, you have complete AWS access" / "do not block push": push allowed on retry (origin at fde1527a); SNS topic infrx-pilot-alerts created; refused by the classifier and left to the user with exact commands: SSM put-parameter ×3 (Secret-Store Writes), the P-06 inventory step (Production Reads), the IAM sns:Publish grant (Permission Grant)

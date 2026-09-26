@@ -20,10 +20,10 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 116,
-  "updated": "2026-09-26T09:48:27Z",
+  "updated": "2026-09-26T09:30:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 2,
+    "active": 3,
     "reserved": 2,
     "note": "Session 03 (09:20Z): workflow G-GATES (e2c); coordinator fixed-clone runs on 400a7e94 (e1c/i8 suite, e3c final run, e4b App gate); KNOWN-GOOD-PROOF-3 ready (i8 after the suite's tests/i); 2 slots reserved for verify-lane workflows."
   },
@@ -3085,11 +3085,11 @@
         "prefix": "infrx-i8-",
         "db": "i8"
       },
-      "activity": "ready",
+      "activity": "running",
       "started": "2026-09-26T09:20:00Z",
-      "updated": "2026-09-26T09:20:00Z",
+      "updated": "2026-09-26T09:30:00Z",
       "blocker": null,
-      "next_action": "launch after the tests/i pass of the 400a7e94 suite (i8 shared); handback → merge; P-25 row → 0026",
+      "next_action": "handback → merge; P-25 row → 0026 (i8 shared with the coordinator's tests/i run on 400a7e94: the lane polls the lock)",
       "estimate": {
         "optimistic_h": 1.5,
         "likely_h": 2.5,
@@ -5535,6 +5535,12 @@
       "by": "tracker",
       "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
       "source": "updates/D10-20260926T0901Z.json"
+    },
+    {
+      "at": "2026-09-26T09:30:00Z",
+      "by": "coordinator (KNOWN-GOOD-PROOF-3)",
+      "what": "KNOWN-GOOD-PROOF-3 launched from 400a7e94 on i8 (schema_proof 0025 → 0026 for both rollback targets, plain and Supabase image)",
+      "source": "research/plan/15-pending-inputs.md"
     }
   ],
   "history": {
