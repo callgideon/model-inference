@@ -37,6 +37,8 @@ class Mutant:
     must_survive: bool = False
 
 
+EOS_IDS = "test_the_direct_leg_supplies_both_eos_ids_and_the_gateway_leg_neither"
+
 MUTANTS: tuple[Mutant, ...] = (
     # ---------------- controls (must survive)
     Mutant("e1bc01", "CONTROL: a comment-only edit in bench.py changes nothing",
@@ -219,9 +221,10 @@ MUTANTS: tuple[Mutant, ...] = (
 
     # ---------------- E1B.c: the pre-registration cannot drift
     Mutant("e1bm17", "the protocol's frozen seed is the seed the runs use",
-           "results/E1B-protocol.md", "`--seed 20260922`", "`--seed 7`",
+           "results/E1B-protocol.md", "--seed 20260922", "--seed 7",     # §1 row, §7.1 rule 3, §7.2 x2
            "predeclared_protocol",
-           cases=("test_the_predeclared_protocol_matches_the_client_that_implements_it",)),
+           cases=("test_the_predeclared_protocol_matches_the_client_that_implements_it",),
+           occurrences=4),
     Mutant("e1bm18", "the absent latency criterion stays absent",
            "results/E1B-protocol.md", "| **explicitly absent** |", "| **provisional (P-18)** |",
            "predeclared_protocol",
@@ -657,6 +660,17 @@ MUTANTS: tuple[Mutant, ...] = (
            '            "failed", row["error_class"], "state_conflict", True):',
            "cancelled_by_the_interruption",
            cases=("test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interruption",)),
+    # ---------------- E1B-WIRE WR-3: the direct leg carries the worker's two EOS ids (WC-2 pairing)
+    Mutant("e1bm32", "the direct leg sends the worker's stop_token_ids",
+           "bench.py", '        payload["stop_token_ids"] = [248044, 248046]\n', "",
+           "eos_ids", cases=(EOS_IDS,)),
+    Mutant("e1bm33", "both EOS ids, not one: a direct answer ends where the worker's does",
+           "bench.py", "[248044, 248046]", "[248046]",
+           "eos_ids", cases=(EOS_IDS,)),
+    Mutant("e1bm34", "the gateway leg carries no stop_token_ids (its parameter set is closed)",
+           "bench.py", '        payload["stop_token_ids"] = [248044, 248046]',
+           '    payload["stop_token_ids"] = [248044, 248046]',
+           "eos_ids", cases=(EOS_IDS,)),
 )
 
 

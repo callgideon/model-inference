@@ -172,10 +172,13 @@ def test_worker_main__the_composition_is_the_pilots_stores_and_settings(tmp_path
     """The stores are D's on the pool `DATABASE_URL` builds; the engine is VllmEngine on
     `UPSTREAM` with the shared media root; the pool and the port are the settings'. The
     CREDIT regime runs W's runner through `load_work_credit`/`complete_credit`; the legacy
-    one through the v1 doors."""
+    one through the v1 doors. E1B WREQ-1: the inference loop observes each attempt's phase
+    timings on the worker's own Registry (else journal/persist/settle are published nowhere);
+    the preparation loop's results carry no attempt timings, so it holds none."""
     port = free_port()
     service, pool = composed(environment(tmp_path, WORKER_HEALTH_PORT=str(port)))
     runner = service.loop.runner
+    assert service.loop.metrics is service.metrics and service.preparation.metrics is None
     assert type(runner.jobs) is PgJobStore and runner.jobs is service.jobs
     assert type(runner.stream) is PgStreamStore
     assert runner.put_result.__self__ is runner.jobs and pool.closed

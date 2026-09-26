@@ -159,7 +159,8 @@ def compose(settings, *, objects=None, index=None):
                            count_prompt_tokens=lambda work: work.prompt_tokens,
                            put_result=store.put_result, limits=limits)
     scheduler = index if index is not None else pilot.valkey_index(limits)
-    loop = WorkerLoop(scheduler=scheduler, runner=runner, worker_id=worker_id, limits=limits)
+    loop = WorkerLoop(scheduler=scheduler, runner=runner, worker_id=worker_id, limits=limits,
+                      metrics=rt.metrics)     # E1B WR-4: each attempt's phase timings
     preparation = WorkerLoop(
         scheduler=scheduler, worker_id=worker_id, kind=OutboxKind.prepare_dispatch,
         runner=PreparationRunner(jobs=jobs, media=media, engine=engine, worker_id=worker_id,

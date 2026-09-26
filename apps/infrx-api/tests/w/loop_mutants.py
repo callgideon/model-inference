@@ -68,6 +68,7 @@ REFUSED = ("test_dur_settle__a_request_the_engine_cannot_accept_settles_free_and
            "nothing")
 CLAIM_ALL = "test_ops_recover__the_loop_claims_acknowledges_and_settles_every_candidate"
 PHASES = "test_ops_recover__the_loop_reports_each_attempts_phase_timings_in_seconds"
+TIMELESS = "test_ops_recover__a_result_without_phase_timings_is_never_observed"
 LOSER = "test_ops_recover__a_candidate_whose_claim_loses_is_still_acknowledged"
 NOT_RESUMED = "test_ops_recover__a_lease_held_by_a_dead_worker_is_never_resumed"
 DRAIN_RELEASE = "test_ops_recover__a_drain_stops_claiming_and_releases_what_it_cannot_finish"
@@ -321,10 +322,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("candidate_never_acknowledged", "every candidate this worker consumed is acknowledged",
        L, "            await self._acknowledge(candidate)", "            pass", CLAIM_ALL),
     _m("phase_timings_never_observed", "E1B WR-4: each attempt's phases reach the worker /metrics",
-       L, "            self.metrics.observe_phases({k: v / 1000 for k, v in result.timings.items()})",
+       L, "            self.metrics.observe_phases({k: v / 1000 for k, v in timings.items()})",
        "            pass", PHASES),
     _m("phase_timings_in_milliseconds", "the histogram takes seconds; the attempt keeps ms",
-       L, "{k: v / 1000 for k, v in result.timings.items()}", "result.timings", PHASES),
+       L, "{k: v / 1000 for k, v in timings.items()}", "timings", PHASES),
+    _m("phase_timings_read_unguarded", "a result with no attempt timings is returned, not lost",
+       L, 'getattr(result, "timings", None)', "result.timings", TIMELESS),
+    _m("phase_timings_observed_when_absent", "a result with no timings observes nothing",
+       L, "        if self.metrics is not None and timings:",
+       "        if self.metrics is not None:", TIMELESS),
     _m("only_winners_acknowledged", "a candidate whose claim lost is consumed too",
        L, "            await self._acknowledge(candidate)",
        "            if result.settled:\n                await self._acknowledge(candidate)",

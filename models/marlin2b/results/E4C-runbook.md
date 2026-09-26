@@ -105,6 +105,17 @@ Copy the committed bases to `/opt/dlami/nvme/e4b/e4c/` on the box:
 The journey profile, `E4C-two-tenant.json` from `E4C-box.two-tenant.base.json`, is filled in §5.0, after the
 tenant-2 key exists.
 
+E1B's window cells ([E1B-protocol.md](E1B-protocol.md) §7.2, run in §4a) take their own bases, copied from
+`models/marlin2b/profiles/` to the same directory:
+
+- `E1B-direct.json` from `E1B-direct.base.json`
+- `E1B-box.json` from `E1B-box.base.json`
+- `E1B-box-forms.json` from `E1B-box.forms.base.json`
+- `E1B-sop.json` from `E1B-sop.base.json`
+
+WC-9's profile, `~/e4c/E1B-two-tenant.json` from `E1B-edge.two-tenant.base.json`, is filled in §5.0 with the
+journey profile.
+
 Replace every `FILL` from §2, and change nothing else. **Changing a bound or a rate is a new profile version,
 not a fill** (R133). Record the sha256 of each committed base and of each filled copy. The committed base
 `E4C-box.base.json` is `c0d4aa1b…d2ff`.
@@ -114,6 +125,8 @@ not a fill** (R133). Record the sha256 of each committed base and of each filled
 | box | `source_sha`, `deployed_sha`, `image_digest`, `weights_sha256`, `processor_sha256`, `migration_version`, `config_version`, `allowed_fault_targets[1]`, `allowed_fault_targets[2]`, `maintenance_window` |
 | edge | The same identity fields and `maintenance_window`. It has no fault targets |
 | two-tenant (§5.0) | The same identity fields, `maintenance_window` and `test_key_ids[1]` |
+| E1B direct, box, box-forms, sop | The same identity fields and `maintenance_window`, as for box. They have no fault targets. `E1B-direct.json` keeps `model_revision` `marlin2b`, the engine's served name |
+| E1B two-tenant (§5.0) | The same identity fields, `maintenance_window` and `test_key_ids[1]` |
 
 Then validate both filled profiles with bench `--validate-only` against the certify inventory. Each must exit 0
 with `runnable: true` and no errors, blocks or warnings, and neither may create `--out`. Run them with
@@ -186,10 +199,28 @@ A failed cell follows the automatic fix loop in
 new start timestamps, and the criteria are unchanged. A certify rerun after §5.0 first revokes the tenant-2 key
 (and turns the canary off again), then retakes H6.
 
+### 4a. E1B's window cells (after §4, before §5)
+
+**[coordinator]**, in [E1B-protocol.md](E1B-protocol.md) §7.2's order, after §4's report is fetched:
+
+1. `TIMEOUT_S=7200 infra/rollout/ssm.sh infra/rollout/e1b-window.sh RELEASE=$RELEASE` runs WC-1 to WC-5 and WC-8
+   (45–60 min, `est.`). It prints `out=<dir>`; each cell's log is `<dir>/<cell>.log`, WC-8's interrupted half is
+   `<dir>/sop-interrupted.log`, and `<dir>/cells.tsv` records every exit.
+2. WC-6a: the reference half, then the restore, which must print `restored=yes`.
+3. `infra/rollout/ssm.sh infra/rollout/e1b-window.sh RELEASE=$RELEASE CELLS=WC-7`, right after WC-6a's
+   `restored=yes`, with no request to the engine in between.
+4. WC-6b: the served half and the compare.
+
+WC-0, the scrape sidecar, starts with §4 and stops after the last window cell (§5.2). While `e1b-window.sh`
+runs, no certify run, soak, journey leg or drill is started: there is one engine, so any other request is foreign
+traffic in both (E1B-protocol §7.1 rule 1). The launcher refuses a cell while a certify container exists, but it
+cannot see a journey or a drill. A window cell's result has no effect on the certify report or on P-17
+(§7.1 rule 4).
+
 ## 5. The two-tenant headless journey (P-17 check 5)
 
 **[coordinator]**, on the coordinator host, from outside the box, through the public edge. It starts only after
-§4's report is fetched. The corpus cache must be built there (`CORPUS_CACHE`). Both keys are read with `read -rs`
+§4's report is fetched and §4a's last cell has ended. The corpus cache must be built there (`CORPUS_CACHE`). Both keys are read with `read -rs`
 and exported under their own names. `MARLIN_API_KEY` must be unset.
 
 ### 5.0 The second tenant's key, the journey inventory and the media prefix
@@ -197,7 +228,8 @@ and exported under their own names. `MARLIN_API_KEY` must be unset.
 1. **[operator-held]** The coordinator runs `issue-key --user <uuid2> --name e4c-tenant2 --secret-file <0600 new
    path> --idempotency-key key-tenant2-20260925 --reason "E4C second test tenant"`. Record the **prefix** only.
 2. Fill `~/e4c/E4C-two-tenant.json` from `E4C-box.two-tenant.base.json` with the §2 values, `maintenance_window`,
-   and `test_key_ids[1]` = the new prefix. Record both sha256 values.
+   and `test_key_ids[1]` = the new prefix. Record both sha256 values. Fill `~/e4c/E1B-two-tenant.json` from
+   `E1B-edge.two-tenant.base.json` the same way, with the same prefix, for WC-9 (§5.2).
 3. **The journey inventory.** Run a fresh read-only `credit-transition --dry-run`, as in H6. The active prefixes
    must be exactly `142c7d81` and the new prefix. Otherwise stop, as in H6. Then write the inventory:
    `~/e4c/keys-journey.json` = `{"active_key_id_prefixes": ["142c7d81", "<tenant-2 prefix>"], "taken_at": "<as_of of this dry-run>", "source": "G8 credit-transition --dry-run sha256:<this dry-run's JSON sha256>"}`
@@ -285,6 +317,12 @@ done
 and BACKEND-READY stays pending with the leg named. That includes the SSE journey without an approved
 `MEDIA_BASE_URL`, and a sync leg that was not run.
 
+### 5.2 E1B's WC-9 (mixed tenants)
+
+**[coordinator]**, from the coordinator host through the edge, after every §5.1 leg and before §6: E1B-protocol
+§7.2's WC-9 line as written there, with `--profile ~/e4c/E1B-two-tenant.json --key-inventory
+~/e4c/keys-journey.json`. It is not a §5.1 leg and has no effect on check 5.
+
 ## 6. Drills, reconciliation, operations (P-17 checks 6 and 7)
 
 **Drill record format.** Write one line per drill into `drills.md`. Each measured recovery time is printed next to
@@ -324,7 +362,7 @@ models/marlin2b/results/E4C-box-<release7>/run<N>-<UTC>/   # the profiles' evide
   journey/  journey.jsonl  journey-raw.jsonl  replay.jsonl  verify-journey-<tenant>.txt  sync.txt  foreign.txt
 research/plan/evidence/e/E4C-<release7>/
   freeze.json          # §2 identities, certify --hashes, bundle SHA256SUMS, command ids
-  profiles.sha256      # the 3 committed bases + the 3 filled copies (filled copies committed too)
+  profiles.sha256      # the E4C and E1B committed bases + their filled copies (filled copies committed too)
   keys-certify.json    # H6's inventory (142c7d81 only) + its dry-run JSON sha256
   keys-journey.json    # §5.0's inventory (142c7d81 + tenant 2) + its dry-run JSON sha256
   drills.md            # §6 records, one line per drill
@@ -371,3 +409,8 @@ Evidence directories are append-only. A failed attempt keeps its own `run<N>`.
 - 2026-09-26 (RUNBOOK-4): §1 step 1 and §1a now read 0001–0026 and 0019–0026, as rollout.md W6/W7 do. §4 records
   that the launcher's missing-`pg_journal_url` exit is the aws CLI's code (E4C-RUNBOOK-2 F2). Nothing here has run
   against the box, AWS or hosted.
+- 2026-09-26 (E1B-WIRE-2): §3 fills E1B's four window bases (`E1B-{direct,box,box-forms,sop}.json`) with the §2
+  identity and `maintenance_window`, as box. §4a runs `e1b-window.sh` after §4, then WC-6a, then `CELLS=WC-7`,
+  then WC-6b, and starts no certify run, soak, journey or drill while the launcher runs; §5 starts after §4a.
+  §5.0 step 2 fills `E1B-two-tenant.json`, and §5.2 places WC-9 after §5.1. No bench command is added here.
+  Nothing here has run against the box, AWS or hosted.
