@@ -464,12 +464,18 @@ elif args[-2:] == ["python", "-"]:           # the step's own program, on FAKE_P
 #: psycopg as 55's program uses it, over a roles file: the owner (postgres.*) always connects;
 #: a role logs in only with LOGIN and the password its verifier was made from; ALTER ROLE
 #: stores a freshly salted verifier (as PostgreSQL's SCRAM does), so an unchanged verifier
-#: means no ALTER ran.
+#: means no ALTER ran. pg.log records, in order, each role login (`login`/`failed`: a failed
+#: one is a failed pooler authentication from the box) and each ALTER.
 FAKE_PSYCOPG = {
     "__init__.py": '''import json, os, pathlib, secrets
 from . import conninfo, sql
 
 ROLES = pathlib.Path(os.environ["FAKE_PG_ROLES"])
+
+
+def _log(event):
+    with (ROLES.parent / "pg.log").open("a") as log:
+        log.write(event + "\\n")
 
 
 class OperationalError(Exception):
@@ -492,15 +498,20 @@ class _Conn:
     def __exit__(self, *exc):
         return False
 
-    def execute(self, query):
+    def execute(self, query, params=()):
         if isinstance(query, sql.Composed):
             role, verifier = query.args
             roles = json.loads(ROLES.read_text())
             roles[role] = {"login": True, "verifier": verifier}
             ROLES.write_text(json.dumps(roles))
+            _log("alter " + role)
             return None
-        assert query == "select current_user", query
-        return type("Cursor", (), {"fetchone": lambda _: (self.user,)})()
+        if query == "select rolcanlogin from pg_roles where rolname = %s":
+            row = (json.loads(ROLES.read_text())[params[0]]["login"],)
+        else:
+            assert query == "select current_user", query
+            row = (self.user,)
+        return type("Cursor", (), {"fetchone": lambda _: row})()
 
 
 def connect(dsn, autocommit=False):
@@ -508,7 +519,10 @@ def connect(dsn, autocommit=False):
     user = where["user"].split(".")[0]
     role = json.loads(ROLES.read_text()).get(user)
     if role is not None and not (role["login"] and role["verifier"].endswith(":" + where["password"])):
+        _log("failed " + user)
         raise OperationalError(f"password authentication failed for user {user}")
+    if role is not None:
+        _log("login " + user)
     return _Conn(user)
 ''',
     "sql.py": '''class Identifier(str):
@@ -702,6 +716,7 @@ def _login_world(tmp_path, **roles):
 
     def run(**extra):
         (stub / "calls.log").unlink(missing_ok=True)
+        (stub / "pg.log").unlink(missing_ok=True)
         done = run_step(step, stub, env={**env, **extra})
         assert support.MARKER not in done.stdout + done.stderr, "a value in the output"
         return done, calls(stub)
@@ -712,21 +727,31 @@ def _verifiers(stub):
     return {r: v["verifier"] for r, v in json.loads((stub / "roles.json").read_text()).items()}
 
 
+def _pg_log(stub):
+    return (stub / "pg.log").read_text().splitlines() if (stub / "pg.log").exists() else []
+
+
 def test_ops_login__a_rerun_touches_no_role_and_a_rotated_password_is_set_again(tmp_path):
     """E4C-RUNBOOK-2 CS-4: the step ran ALTER ROLE ... PASSWORD before its `unchanged` check,
     so every rerun re-set both SCRAM verifiers on hosted (a new salt each time) and "never
     rerun to verify" was a runbook rule. Now each role is first tried with the SSM password on
     :6543 and ALTERed only when that login fails (first run: NOLOGIN; a rotated password).
-    Oracle: a rerun changes a verifier or restarts a unit; a rotated password is not set, or
-    the other role is re-set with it."""
+    STEP55-FIX-2 (S55F-2): that probe cost the first run one failed pooler authentication per
+    role from the box; a role pg_roles shows NOLOGIN is now ALTERed with no probe, and only a
+    LOGIN role is probed. Oracle: a rerun changes a verifier or restarts a unit; a rotated
+    password is not set, or the other role is re-set with it; any failed login but the
+    rotated role's one."""
     stub, env_file, before, run = _login_world(tmp_path)
     done, made = run()                                            # first run: both set
     assert done.returncode == 0, done.stderr
     first = _verifiers(stub)
     assert all(first.values()) and "infrx_runtime.ref" in env_file.read_text()
+    assert _pg_log(stub) == ["alter infrx_runtime", "login infrx_runtime",
+                             "alter infrx_monitor", "login infrx_monitor"], "a NOLOGIN role was probed"
     done, made = run()                                            # rerun: a true no-op
     assert done.returncode == 0 and "unchanged" in done.stdout, done.stderr
     assert _verifiers(stub) == first, "a rerun re-set a role's verifier"
+    assert _pg_log(stub) == ["login infrx_runtime", "login infrx_monitor"]
     assert not [c for c in made if c["tool"] == "systemctl"]
     ssm = json.loads((stub / "ssm.json").read_text())             # the monitor password rotated
     ssm[MONITOR_PASSWORD_PARAM] = f"{support.MARKER}-mon2"
@@ -735,6 +760,8 @@ def test_ops_login__a_rerun_touches_no_role_and_a_rotated_password_is_set_again(
     assert done.returncode == 0, done.stderr
     now = _verifiers(stub)
     assert now["infrx_runtime"] == first["infrx_runtime"] and now["infrx_monitor"] != first["infrx_monitor"]
+    assert _pg_log(stub) == ["login infrx_runtime", "failed infrx_monitor",   # one failed auth
+                             "alter infrx_monitor", "login infrx_monitor"]
     assert f"{support.MARKER}-mon2@" in env_file.read_text()
     assert [c["argv"] for c in made if c["tool"] == "systemctl"] == [["restart", "marlin2b-gateway", "infrx-worker"]]
 
@@ -781,10 +808,12 @@ def test_ops_login__each_failure_has_its_exit_and_leaves_the_file_and_no_staged_
 
 def test_ops_login__on_postgresql_the_first_run_sets_both_and_a_rerun_neither(tmp_path):
     """CS-4 against a real server (task-local PostgreSQL 16; INFRX_D_TASK, skipped without
-    it): the program's login probe fails with OperationalError on a NOLOGIN role and on a
-    wrong password, so the first run ALTERs both; a rerun leaves pg_authid.rolpassword (a
-    freshly salted SCRAM verifier on every ALTER) unchanged. Oracle: a verifier that moves on
-    the rerun, or a probe whose exception escapes and stops the first run."""
+    it): the first run ALTERs both NOLOGIN roles; a rerun leaves pg_authid.rolpassword (a
+    freshly salted SCRAM verifier on every ALTER) unchanged; a rotated password fails its
+    probe with OperationalError and only that role is set again. S55F-2: every role login
+    the program attempts is logged (psycopg.connect wrapped); a NOLOGIN role is set with no
+    login attempted before it. Oracle: a verifier that moves on the rerun, a probe whose
+    exception escapes, or any failed login but the rotated role's one."""
     import os
     import pytest
     if not os.environ.get("INFRX_D_TASK"):
@@ -796,6 +825,12 @@ def test_ops_login__on_postgresql_the_first_run_sets_both_and_a_rerun_neither(tm
     step = (STEPS / "55-runtime-login.sh").read_text()
     program = step.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0].replace(
         ":6543/", f":{pgharness.PORT}/")
+    logged = (  # every login the program makes, in order, on stderr
+        "import sys, psycopg\nfrom psycopg.conninfo import conninfo_to_dict\n_connect = psycopg.connect\n"
+        "def _logged(dsn, **kw):\n    user = conninfo_to_dict(dsn)['user']\n    try:\n"
+        "        conn = _connect(dsn, **kw)\n    except psycopg.OperationalError:\n"
+        "        print('failed', user, file=sys.stderr); raise\n"
+        "    print('login', user, file=sys.stderr); return conn\npsycopg.connect = _logged\n")
     roles = ("infrx_runtime", "infrx_monitor")
     with pgharness.connect("postgres") as db:
         for role in roles:
@@ -805,18 +840,26 @@ def test_ops_login__on_postgresql_the_first_run_sets_both_and_a_rerun_neither(tm
                "RUNTIME_PASSWORD": "rt-local-1", "MONITOR_PASSWORD": "mon-local-1"}
 
     def run():
-        done = subprocess.run([sys.executable, "-"], input=program, capture_output=True, text=True,
-                              env={**os.environ, **secrets})
+        done = subprocess.run([sys.executable, "-"], input=logged + program, capture_output=True,
+                              text=True, env={**os.environ, **secrets})
         assert done.returncode == 0, done.stderr
         with pgharness.connect("postgres") as db:
             rows = db.execute("select rolname, rolpassword from pg_authid where rolname = any(%s)"
                               " order by rolname", [list(roles)]).fetchall()
-        return done.stdout, dict(rows)
+        logins = [line for line in done.stderr.splitlines() if line.split(" ")[-1] in roles]
+        return done.stdout, dict(rows), logins
 
-    out, first = run()
+    out, first, logins = run()
     assert out.count("\n") == 2 and all(v and v.startswith("SCRAM-SHA-256$") for v in first.values())
-    again, second = run()
+    assert logins == ["login infrx_runtime", "login infrx_monitor"], logins   # none before an ALTER
+    again, second, logins = run()
     assert again == out and second == first, "the rerun ALTERed a role"
+    assert logins == ["login infrx_runtime", "login infrx_monitor"], logins
+    secrets["MONITOR_PASSWORD"] = "mon-local-2"                   # rotated: one failed login
+    rotated, third, logins = run()
+    assert third["infrx_runtime"] == first["infrx_runtime"] and third["infrx_monitor"] != first["infrx_monitor"]
+    assert logins == ["login infrx_runtime", "failed infrx_monitor", "login infrx_monitor"], logins
+    assert "mon-local-2@" in rotated
 
 
 def test_ops_resume__the_w10b_resume_runs_the_release_s_drain_and_checks_nothing_out(tmp_path):
