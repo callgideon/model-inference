@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 113,
-  "updated": "2026-09-26T08:38:08Z",
+  "revision": 114,
+  "updated": "2026-09-26T09:00:00Z",
   "agent_slots": {
     "total": 16,
     "active": 2,
@@ -3895,7 +3895,7 @@
     {
       "id": "P-25",
       "status": "open",
-      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle [2026-09-26: known-good schema_proof reaches 0025 for both targets (KNOWN-GOOD-PROOF-2); extend at 0026]",
+      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle [2026-09-26: known-good schema_proof reaches 0025 for both targets (KNOWN-GOOD-PROOF-2); extend at 0026] [2026-09-26 09:00Z: SNS topic arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts created (no subscription yet; the box role's sns:Publish grant is user-run — classifier)]",
       "owner": "M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read)",
       "blocks": [
         "E4C"
@@ -5453,6 +5453,12 @@
       "by": "RUNBOOK-3",
       "what": "integration → complete; head c586e8b4; estimate likely 0.2 → 0 h (merged, wired and checked)",
       "source": "updates/RUNBOOK-3-20260926T0840Z.json"
+    },
+    {
+      "at": "2026-09-26T09:00:00Z",
+      "by": "coordinator",
+      "what": "user: \"do not wait on me, you have complete AWS access\" / \"do not block push\": push allowed on retry (origin at fde1527a); SNS topic infrx-pilot-alerts created; refused by the classifier and left to the user with exact commands: SSM put-parameter ×3 (Secret-Store Writes), the P-06 inventory step (Production Reads), the IAM sns:Publish grant (Permission Grant)",
+      "source": "research/plan/15-pending-inputs.md"
     }
   ],
   "history": {

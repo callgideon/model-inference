@@ -56,3 +56,5 @@ Window estimate (once every input is in hand): W1–W5 0.5–1 h (est.); W6–W7
 ## Verification log
 
 - 2026-09-26 04:40Z: brief written from the agent's handback (tip f76ddc58); the coordinator verified the P-26 copy (`content.ts` REVOCATION_COPY) and the P-18 CRITERIA in `certify.py` before acting on §3.
+- 2026-09-26 09:00Z (coordinator): SNS topic `arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts` created (P-25 alert destination; no subscription yet; the box role's sns:Publish grant refused by the tool policy → user-run, command in 15-pending-inputs). Push allowed on retry: origin at fde1527a. SSM password/monitor-DSN parameters and the P-06 inventory step remain user-run (classifier). Known-good proof reaches 0025 (KNOWN-GOOD-PROOF-2); 0026 (D10-0026-FENCE) will need KNOWN-GOOD-PROOF-3 (script prepared).
+
