@@ -1,0 +1,17 @@
+{"task": "D10", "slice": "D10-APP-SQL: 0024_console_read_port (C0 WR-5 consumer_credit_ledger, U1R WR-3(b) credits-in index, U1R WR-3(a) consumer_jobs filters); WR-W5F5-1 found already committed by a parallel agent (12f92a6f), reviewed, not duplicated",
+ "activity": "review", "head": "12f92a6f + evidence commit", "worktree": ".claude/worktrees/codex-d10-app-sql", "branch": "codex/d10-app-sql",
+ "owned_paths": ["apps/app/supabase/migrations/0024_console_read_port.sql", "apps/infrx-api/tests/d/", "research/plan/evidence/d/D10-APP-SQL-b6c0156.md"],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=revoke pytest -q tests/d/test_port_d10.py (base + tests, no 0024)", "exit": 1, "summary": "fails before: 6 failed, 1 passed"},
+  {"cmd": "same with 0024 @b6c01566", "exit": 0, "summary": "7 passed"},
+  {"cmd": "INFRX_D_TASK=revoke pytest -q test_port_d10 test_reads test_followup_d10 test_upgrade_d10 test_schema_postgres test_credit_schema test_postgrest_d10 test_composition_pg tests/g/test_composition.py @b6c01566", "exit": 1, "summary": "125 passed, 1 failed (composition_pg dedicated login: W5 gate, fails identically without 0024), 1 skipped (PostgREST on plain), 3 xfailed"},
+  {"cmd": "INFRX_D_TASK=revoke INFRX_D1_IMAGE=supabase pytest -q test_port_d10 test_postgrest_d10 test_reads test_followup_d10 test_upgrade_d10 @b6c01566", "exit": 1, "summary": "57 passed, 1 failed (auto_explain LOAD refused on Supabase; now a declared skip), 3 xfailed; PostgREST cases for the new RPCs pass"},
+  {"cmd": "pytest -q tests/d/test_migration_mutants.py -k 'well_formed or superseded or d10_ledger or d10_credits_in or d10_jobs_key or d10_consumer' @b6c01566", "exit": 0, "summary": "14 passed (6 new mutants killed, 3 re-anchored killed, supersession guard green)"},
+  {"cmd": "INFRX_MUTANTS=all whole D list", "exit": -1, "summary": "not completed: interrupted when a parallel agent took port 55459"},
+  {"cmd": "suites + d10 mutants @12f92a6f", "exit": 1, "summary": "not a result: HarnessRefused (55459 flock held by the parallel agent)"},
+  {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"},
+  {"cmd": "git diff --name-only 273990a0 12f92a6f -- apps/app/supabase/migrations/", "exit": 0, "summary": "only 0024 (0001-0023 byte-identical)"}],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1.0, "pessimistic_h": 3.0, "confidence": "medium", "basis": "0024 core green at b6c01566; final-head rerun (suites + d10 mutants, both images) outstanding because of the port contention; W-D10A-1 wiring", "at": "2026-09-26T00:10Z"},
+ "blockers": ["final-head (12f92a6f) verification not run by this lane: port 55459 and the worktree are shared with a parallel D10-APP-SQL agent"],
+ "wiring_requests": ["W-D10A-1: tests/integration/pgstate.py (consumer_jobs new signature, consumer_credit_ledger BROWSER; plus the parallel agent's consumer_may_create_key and credit_wallet_holds monitor rows), backend/e3c/scenarios_surface.py SIGNED_IN_FUNCTIONS += consumer_credit_ledger, test_harness.py migration list += 0024", "C0: creditLedger -> rpc consumer_credit_ledger(p_after, p_limit<=100)", "U1R: land P02 WR-3(b) lines; wire p_model/p_key_id/p_from/p_to"],
+ "evidence": ["research/plan/evidence/d/D10-APP-SQL-b6c0156.md"]}

@@ -124,6 +124,11 @@ ALLOWED_LEGACY_CHANGES = {
     # its four 0003 values kept.
     ("constraint", "infrx.audit_entries", "audit_entries_action_check"):
         "six headless operator actions appended",
+    # D10-APP-SQL (0024, C3A WR-C3A-4): the browser key INSERT also needs a verified
+    # individual (no wallet required); the exact expression is pinned by
+    # `checks_port.check_key_insert_needs_verified_individual`.
+    ("policy", "public.api_keys", "api_keys_insert_owner"):
+        "0001's check AND public.consumer_may_create_key()",
 }
 
 #: D2 fills the bodies of the 0004 boundaries it owns. The BODY may change; SECURITY
@@ -2001,6 +2006,8 @@ def check_operator_seams(conn) -> str:
     """AuditAction extended and idempotent; key audience/scope/revocation rules; one
     audited operator key from a hash; verified_user; audited, replayable suspension;
     UsageRecordV2-shaped usage and per-regime holds - all as the platform role."""
+    from . import checks_signup          # (it imports this module)
+    checks_signup.gotrue_columns(conn)   # the bare Supabase image has no email_confirmed_at
     o1, w1 = personal_org(conn, CONSUMER_1), wallet_of(conn, CONSUMER_1)
     key = ("insert into public.api_keys (org_id, created_by, name, prefix, key_hash, audience, "
            "user_id, provider_org_id, endpoint_id) values ")
@@ -2054,7 +2061,11 @@ def check_operator_seams(conn) -> str:
                f"'{NEMO}', '{DEV_ENDPOINT}')"),
     ), "operator seam controls")
     with conn.transaction():
-        # The deployed console's own insert: the individual is its creator.
+        # The deployed console's own insert: the individual is its creator (0024: a verified
+        # individual - this fixture's grant seam leaves the email unconfirmed, so it is
+        # confirmed here, rolled back with the rest).
+        conn.execute("update auth.users set email_confirmed_at = infrx.now() where id = %s",
+                     (CONSUMER_1,))
         conn.execute(checks._jwt(CONSUMER_1))
         conn.execute("insert into public.api_keys (org_id, created_by, name, prefix, key_hash) "
                      "values (%s, %s, 'mine', 'sk-infrx-mine0001', 'hash-mine')",
@@ -2097,20 +2108,14 @@ def check_operator_seams(conn) -> str:
     unverified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)).fetchone()
     assert unverified[2] is None and str(unverified[1]) == personal_org(conn, UNGRANTED), \
         f"an unconfirmed user reads as verified: {unverified}"
-    # GoTrue's column: the shim has it; the bare supabase/postgres image's auth.users does
-    # not (GoTrue adds it on a hosted project), so the verified path runs where it exists.
-    verified_path = "not run (auth.users has no email_confirmed_at on this image)"
-    if conn.execute("select count(*) from information_schema.columns where table_schema = "
-                    "'auth' and table_name = 'users' and column_name = 'email_confirmed_at'"
-                    ).fetchone()[0]:
-        with conn.transaction():
-            conn.execute("update auth.users set email_confirmed_at = '2026-09-22T12:00:00Z' "
-                         "where id = %s", (UNGRANTED,))
-            verified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)
-                                    ).fetchone()
-            raise psycopg.Rollback()
-        assert verified[2] and verified[2].startswith("email_confirmed_at/"), verified
-        verified_path = "verified path checked"
+    with conn.transaction():
+        conn.execute("update auth.users set email_confirmed_at = '2026-09-22T12:00:00Z' "
+                     "where id = %s", (UNGRANTED,))
+        verified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)
+                                ).fetchone()
+        raise psycopg.Rollback()
+    assert verified[2] and verified[2].startswith("email_confirmed_at/"), verified
+    verified_path = "verified path checked"
     with conn.transaction():
         conn.execute(_admission_cases(conn)[1][0][1])       # a settled CREDIT request
         conn.execute(credit_job("5c000000-0000-4000-8000-0000000000c2", "job_h", o1, w1) + "; "
