@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "15f499b3",
+  "integration_head": "3773f38f",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 91,
-  "updated": "2026-09-26T05:29:35Z",
+  "revision": 93,
+  "updated": "2026-09-26T05:34:56Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -1226,9 +1226,9 @@
       },
       "activity": "queued",
       "started": null,
-      "updated": "2026-09-25T22:42:57Z",
+      "updated": "2026-09-26T05:34:56Z",
       "blocker": "after E3C; needs an allocated GPU window",
-      "next_action": "E4C-RUNBOOK merged 2f2ca075 (window runbook, public-edge overload + two-tenant journey profile bases, certify edge-profile validation); E4C-PREP merged dafd4030 (R133). The run waits on BACKEND-LOCAL and the operator-held items (publish-card, adjust +40,000 CREDIT, tenant-2 + scoped keys via the P-02 dry-run, hosted rehearsal).",
+      "next_action": "E4C-RUNBOOK-2 merged 0b97c7cd: the window sequence is W1–W5, W6 (operator dump) / W7 hosted apply 0019–0025, W7f card + CREDIT activation, W8–W10 install with ACCOUNTING_REGIME=credit + ACTIVE_RATE_CARD_VERSION, W10b runtime logins (SSM password parameters first), W11–W13, O3–O6, freeze, certify via infra/rollout/e4c-certify.sh, journey, drills; prerequisites still open: P-06 inventory (operator), known-good proof to 0025 (lane running), MEDIA_BASE_URL, SNS/webhook, PITR token, tenant-2 email confirmation, key revocations, verified dump, needle guard.",
       "estimate": {
         "optimistic_h": null,
         "likely_h": null,
@@ -2295,43 +2295,139 @@
     {
       "id": "E4C-RUNBOOK-2",
       "task": null,
-      "slice": "E4C window-runbook corrections from the readiness brief: W6 copy-history seed 0001–0018, install regime settings (ACCOUNTING_REGIME=credit + card version), CREDIT activation moved after the hosted apply, E4C flags in the certify launcher, a runtime-login provisioning step (55-runtime-login.sh, SSM names only); self-verifying workflow",
+      "slice": "E4C window runbook corrections: W6 seed, CREDIT regime settings, hosted-order of card/activation, certify launcher flags, runtime-login step; fix round: W7f reversal on every rollback after it (0-CS-1), README step 6b (0-CS-2), observe on the monitor login (0-CS-3)",
       "agent": "opus",
       "branch": "codex/e4c-runbook-2",
       "worktree": ".claude/worktrees/codex-e4c-runbook-2",
       "base": "6cbb6a45",
-      "head": null,
+      "head": "f49d1be3",
       "isolation": {
         "ports": "none (e1c 55449 only if a test needs PostgreSQL)",
         "prefix": "infrx-e4c-runbook-2-",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T04:20:12Z",
-      "updated": "2026-09-26T04:20:12Z",
+      "updated": "2026-09-26T05:34:56Z",
       "blocker": null,
-      "next_action": "verdict → coordinator merges --no-ff; the window then follows the corrected sequence",
+      "next_action": "merged --no-ff at 0b97c7cd + wirings 3773f38f (rollback.md --list names, infra/README.md D10 wiring 6, 15-pending-inputs SSM password parameters); minors carried CS-4/5/6, F2/F3/F5 (run 55 before reopening the edge at the window; exit-code doc; W7f --freeze-only; 0600 leftover); fixed-clone checks running",
       "estimate": {
-        "optimistic_h": 1.5,
-        "likely_h": 3,
-        "pessimistic_h": 5,
+        "optimistic_h": 0.1,
+        "likely_h": 0.25,
+        "pessimistic_h": 1.0,
         "confidence": "medium",
-        "basis": "five documented defects with file:line references; runbook + one script + tests; 2 lenses, one fix round",
-        "at": "2026-09-26T04:20:12Z"
+        "basis": "three review findings fixed and tested; remaining: coordinator rerun of the tests/i mutant list once 55450 is free, and review",
+        "at": "2026-09-26T05:25Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/e/E4C-runbook-2-e9b2128.md"
+      ],
+      "commands": [
+        {
+          "cmd": "pytest -q tests/integration/backend/recovery/test_runbooks.py tests/i/test_ops_steps.py tests/i/test_rollout.py (base 6cbb6a45)",
+          "exit": 0,
+          "summary": "28 passed"
+        },
+        {
+          "cmd": "same set with the new cases before the fixes",
+          "exit": 1,
+          "summary": "rb09/rb10/rb11 + step-55 + launcher cases FAILED (fails-before)"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend/recovery/test_runbooks.py tests/i/test_ops_steps.py tests/i/test_rollout.py",
+          "exit": 0,
+          "summary": "33 passed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'login_ or launcher_ or well_formed or every_case'",
+          "exit": 0,
+          "summary": "10 passed; 8/8 new mutants killed"
+        },
+        {
+          "cmd": "pytest -q tests/i",
+          "exit": 0,
+          "summary": "238 passed, 1 xfailed"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend/recovery",
+          "exit": 1,
+          "summary": "40 passed, 33 skipped, 1 failed: test_i3b_ob10 (infrx_post_marker_refusals_total has no panel; outside this lane)"
+        },
+        {
+          "cmd": "pytest -q models/marlin2b/tests/test_profile.py",
+          "exit": 0,
+          "summary": "25 passed"
+        },
+        {
+          "cmd": "bash -n infra/rollout/e4c-certify.sh infra/rollout/steps/55-runtime-login.sh; ruff check (touched python)",
+          "exit": 0,
+          "summary": "clean; shellcheck not installed"
+        },
+        {
+          "cmd": "python3 research/plan/scripts/validate_plan.py",
+          "exit": 0,
+          "summary": "PASS, 942 links"
+        },
+        {
+          "cmd": "step 55's SQL on task-local PostgreSQL 16 (127.0.0.1:55449), twice",
+          "exit": 0,
+          "summary": "both roles rolcanlogin t, SCRAM verifiers; DSNs pass preflight pg_dsn; container removed"
+        },
+        {
+          "cmd": "fix round fails-before: pytest -k 'rb12 or rb13' (test_runbooks.py) and -k login (test_ops_steps.py)",
+          "exit": 1,
+          "summary": "rb12, rb13 and the step-55 observe cycle FAILED on the old docs/step"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend/recovery/test_runbooks.py tests/i/test_ops_steps.py tests/i/test_rollout.py",
+          "exit": 0,
+          "summary": "35 passed"
+        },
+        {
+          "cmd": "manual kill check of the 7 login_* mutants (apply, pytest -k login, restore)",
+          "exit": 0,
+          "summary": "7/7 killed incl. 2 new; pristine passes"
+        },
+        {
+          "cmd": "pytest -q tests/i/test_mutants.py -k 'well_formed or every_case'",
+          "exit": 0,
+          "summary": "2 passed"
+        },
+        {
+          "cmd": "pytest -q tests/i",
+          "exit": 1,
+          "summary": "187 passed, 1 xfailed; 43 subset mutants broken_runner + 8 errors: another lane held 127.0.0.1:55450 / infrx-i8-postgres; 0 survived; rerun when free (expected 238 passed, 1 xfailed)"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend/recovery",
+          "exit": 1,
+          "summary": "42 passed, 33 skipped, 1 failed: test_i3b_ob10 (pre-existing, outside this lane)"
+        },
+        {
+          "cmd": "bash -n 55-runtime-login.sh; ruff check (touched python); validate_plan.py; test_profile.py",
+          "exit": 0,
+          "summary": "clean; PASS 942 links; 25 passed"
+        }
+      ],
       "owned_paths": [
         "infra/runbooks/rollout.md",
         "models/marlin2b/results/E4C-runbook.md",
-        "infra/rollout/steps/55-runtime-login.sh (new)",
+        "infra/rollout/steps/55-runtime-login.sh",
+        "infra/rollout/e4c-certify.sh",
         "infra/rollout/README.md",
-        "research/plan/evidence/coordinator/session-03-tools/rollout/e4b-certify3.sh",
         "tests/integration/backend/recovery/test_runbooks.py",
-        "apps/infrx-api/tests/i/",
-        "research/plan/evidence/e/E4C-runbook-2-*.md"
+        "apps/infrx-api/tests/i/test_rollout.py",
+        "apps/infrx-api/tests/i/test_ops_steps.py",
+        "apps/infrx-api/tests/i/mutants.py",
+        "research/plan/evidence/e/E4C-runbook-2-e9b2128.md"
       ],
-      "wiring_requests": []
+      "wiring_requests": [
+        "15-pending-inputs.md: SSM /model-inference/infrx_runtime_password and /model-inference/infrx_monitor_password (SecureString, coordinator-generated) needed before rollout.md W10b",
+        "I8 README/evidence: D10 wiring 6 login provisioning = infra/rollout/steps/55-runtime-login.sh (W10b)",
+        "infra/runbooks/rollback.md:62: add --set ENGINE_MAX_NUM_SEQS --set ACCOUNTING_REGIME --set ACTIVE_RATE_CARD_VERSION to the drill's known-good.py line",
+        "tracker: E4C-RUNBOOK-2 -> review; brief §5 item (2) done",
+        "infra/rollout/steps/72-observe-install.sh:16 comment: MONITOR_DSN_PARAM unset = /etc/infrx-observe.env as 55-runtime-login.sh wrote it (else the runtime DSN)"
+      ]
     },
     {
       "id": "KNOWN-GOOD-PROOF-2",
@@ -2544,6 +2640,12 @@
       "lane": "G8-FLAG-2",
       "task": "G8-FLAG-2",
       "head": "223a3bd5"
+    },
+    {
+      "since": "2026-09-26T04:51:00Z",
+      "lane": "E4C-RUNBOOK-2",
+      "task": "E4C-RUNBOOK-2",
+      "head": "13a30bb5"
     }
   ],
   "integration_queue": [],
@@ -4590,6 +4692,18 @@
       "by": "coordinator",
       "what": "L3-RERUN-0025 on 7e0b7b95: rls 916/0 (all 0024/0025 rows as expected); ob10 → WR-W5F5B-4 dashboard panel applied at 7eb9e69b; G8-FLAG-2 ACCEPT b108556f merged at 15f499b3",
       "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+    },
+    {
+      "at": "2026-09-26T04:51:00Z",
+      "by": "E4C-RUNBOOK-2",
+      "what": "running → review; head 13a30bb5; estimate likely 3 → 0.25 h (three review findings fixed and tested; remaining: coordinator rerun of the tests/i mutant list once 55450 is free, and review)",
+      "source": "updates/E4C-RUNBOOK-2-20260926T0451Z.json"
+    },
+    {
+      "at": "2026-09-26T05:34:56Z",
+      "by": "coordinator (E4C-RUNBOOK-2)",
+      "what": "E4C-RUNBOOK-2 ACCEPT_WITH_FIXES f49d1be3 merged at 0b97c7cd; wirings at 3773f38f; the window runbook now carries the corrected sequence (W7f activation, W10b runtime logins, rollback reversal first)",
+      "source": "research/plan/evidence/e/E4C-runbook-2-e9b2128.md"
     }
   ],
   "history": {
@@ -5147,10 +5261,14 @@
     "G8-FLAG-2-20260926T0512Z.json": {
       "status": "applied",
       "at": "2026-09-26T05:12:00Z"
+    },
+    "E4C-RUNBOOK-2-20260926T0451Z.json": {
+      "status": "applied",
+      "at": "2026-09-26T04:51:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T05:23:13Z",
+    "computed_at": "2026-09-26T05:34:56Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
