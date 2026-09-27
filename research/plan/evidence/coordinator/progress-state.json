@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 158,
-  "updated": "2026-09-27T07:35:00Z",
+  "revision": 159,
+  "updated": "2026-09-27T08:45:00Z",
   "agent_slots": {
     "total": 16,
     "active": 1,
@@ -3500,24 +3500,24 @@
       "branch": "—",
       "worktree": ".claude/worktrees/main-merge (to be created off origin/main)",
       "base": "b967a033",
-      "head": null,
+      "head": "d3a99e01",
       "isolation": {
         "ports": "none",
         "prefix": "",
         "db": null
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-26T18:20:00Z",
-      "updated": "2026-09-27T07:35:00Z",
+      "updated": "2026-09-27T08:45:00Z",
       "blocker": null,
-      "next_action": "Operator: main push of RELEASE (go-live-remaining.sh --step main, or git push origin d3a99e01…:refs/heads/main) → Vercel production build → smoke S1–S6 → known-good App release record → certify + E1B cells (E4C-runbook §4/§4a) + H4/H5/H6",
+      "next_action": "DONE: v1 platform LIVE (backend + App). Next: E4C certify + E1B cells on the live system (BACKEND-READY), the E4 journey on the live App (APP-PILOT), H4/H5/H6",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 1.5,
-        "pessimistic_h": 3,
-        "confidence": "medium",
-        "basis": "after G2 green + the user-run W1/W6/W7 + Vercel inputs: detached worktree off origin/main, merge d3a99e01 --no-ff, push HEAD:refs/heads/main, smoke S1–S6",
-        "at": "2026-09-27T00:24:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "released",
+        "at": "2026-09-27T08:45:00Z"
       },
       "evidence": [],
       "commands": [
@@ -3525,6 +3525,11 @@
           "cmd": "go-live-remaining.sh (operator): H3, W8, W9, W10, W10b, W11, test user, W12",
           "exit": 0,
           "summary": "backend LIVE on d3a99e01 (public /health 200 07:32Z); W11 green; test user granted 10000 CREDIT; verify-external 16/16"
+        },
+        {
+          "cmd": "git push origin d3a99e01…:refs/heads/main (operator) → Vercel production build → smoke S1/S2/S3/S6",
+          "exit": 0,
+          "summary": "main = RELEASE; deployment dpl_Caw24aNxTj57zQuBGs74partZ67H serves commit d3a99e01 in production; smoke green (S4/S5 not applicable)"
         }
       ],
       "owned_paths": [
@@ -6709,6 +6714,12 @@
       "at": "2026-09-27T07:35:00Z",
       "by": "coordinator (GO-LIVE)",
       "what": "BACKEND LIVE: RELEASE d3a99e01 installed and serving in the CREDIT regime (W8–W11 green, W12 smoke 16/16, test user created with 10,000 CREDIT); W13 recorded; the App release (main push → Vercel) is the operator's next line",
+      "source": "research/plan/evidence/coordinator/RELEASE-d3a99e01.md"
+    },
+    {
+      "at": "2026-09-27T08:45:00Z",
+      "by": "coordinator (GO-LIVE)",
+      "what": "v1 PLATFORM LIVE: App release deployed from main = RELEASE d3a99e01 (deployment dpl_Caw24aNxTj57zQuBGs74partZ67H), smoke green; known-good App release recorded. Post-launch: LW0 lane running (wave5-plan §3), certify/E1B preparation running, tracker v1 launch scope updates",
       "source": "research/plan/evidence/coordinator/RELEASE-d3a99e01.md"
     }
   ],

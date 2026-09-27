@@ -1,10 +1,10 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-27 05:38Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 157, updated 2026-09-27 05:38Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-27 08:45Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 159, updated 2026-09-27 08:45Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
-**21 / 30** — backend corrections + App completion + 4 go-live steps. Lab, hosting and later work is listed at the end under “Later” and not counted; superseded tasks are not shown.
+**22 / 30** — backend corrections + App completion + 4 go-live steps. Lab, hosting and later work is listed at the end under “Later” and not counted; superseded tasks are not shown.
 
 - Backend corrections 12 / 14
   - `E1B` window-bound: runs on the live system as the post-go-live test window; now: every lane complete; the coordinator updates the manifest status from the evidence
@@ -17,22 +17,21 @@ Generated 2026-09-27 05:38Z UTC by `python3 research/plan/scripts/progress.py` f
 
 Remaining, in order:
 
-1. `MAIN-MERGE` install maintenance W1–W13, merge main (App release), deploy, smoke
-2. `E1B` window-bound: runs on the live system as the post-go-live test window; now: every lane complete; the coordinator updates the manifest status from the evidence
-3. `E4C` window-bound: runs on the live system as the post-go-live test window; now: start dependencies met
-4. `BACKEND-READY` E4C certify + E1B cells on the live system, then the decision
-5. `I2A` go-live-bound: follows the live release and the BACKEND-READY decision; now: lane active
-6. `E3A` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
-7. `I3` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
-8. `E4` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
-9. `APP-PILOT` E4 on the live App, then the decision
+1. `E1B` window-bound: runs on the live system as the post-go-live test window; now: every lane complete; the coordinator updates the manifest status from the evidence
+2. `E4C` window-bound: runs on the live system as the post-go-live test window; now: start dependencies met
+3. `BACKEND-READY` E4C certify + E1B cells on the live system, then the decision
+4. `I2A` go-live-bound: follows the live release and the BACKEND-READY decision; now: lane active
+5. `E3A` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+6. `I3` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+7. `E4` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+8. `APP-PILOT` E4 on the live App, then the decision
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 2 active lanes, 2 reserved.
+- Agent slots: 16 total, 1 active lanes, 2 reserved.
 - Validation: 0 error(s), 7 warning(s).
 
 ### Actionable blockers
@@ -116,7 +115,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (56.9 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (60.0 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -187,7 +186,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | APP-MINORS-2 | support (App follow-up under the App-ahead overrides) C0 WR-6 (no first-membership pick in lib/session.ts), U1R WR-6 (one shared credit port: getUser once per render), A2 WR-A2-3 (dead safeNext), E3A-RUN S-5/RV-3, AM1-L2/L3 | complete | codex/app-minors-2 | b967a033 → 3e969ce9 | ports app-c0 55451 / app-u1r 55457 / app-u4 55456, prefix infrx-app-c0- | 2026-09-26 19:45Z | DONE: merged 4db24c49; WR-AM2-1/2 c7bdb07f; fixed-clone console checks green; minors carried: AM2-L-2 (fail-closed throw for a user without exactly one owned org), AM2-L-3, AM1-L2 → an E3A journey check | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 19:45Z; basis: merged, wired and checked |
 | BACKEND-MINORS | support (support lane; after the freeze) RV-D10F-3 assertion / PG-backed runner case + the W5 mutant runner lock, G8F2-M1/M2 cases, CC-1 per-scope cap burst (+ E3C final run), ASN-V1 int() on HTTPStatusCode, RF-C1 ssm.sh usage header, the 55496 literal → tasklocal; no migrations | complete | codex/backend-minors | b967a033 → 42a37c6b | ports d10 55442/55469, g8 55447/55492, w5 55445/55491, e3c block; never e2c/i8 | 2026-09-26 20:44Z | DONE: merged --no-ff at dfa338bd (before the freeze); WR-BM-3 applied; carried to the post-freeze sweep: WR-BM-1 (pgharness/vkstore lock path in /tmp so the worker_main/prep_worker PG mutant copies serialise with the host run), WR-BM-2 (split nc-dur-cap into per-scope controls so the scoped burst becomes a gate control; CM-1) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 20:44Z; basis: merged and wired |
 | PREWINDOW-CHECKS | support (coordinator, read-only) X-06/X-07/X-08 before the window: box hairpin to the public edge, the env-file key rule, 85-known-good-box for both targets, O1 pool budget, known-good listing at --applied 0026 with the bundle check, the alert subscription state, hosted migrate.py plan, the P-02 credit-transition dry run | complete | — | b967a033 → — | ports SSM + hosted read-only; no local ports | 2026-09-26 18:25Z | DONE 2026-09-26: hairpin 200; MARLIN_API_KEY lines 0; 85-known-good-box: both target images cached; O1 PASS session (13+2 ≤ 15; WARN worker pool max 6 < 13 — runners wait ≤ 5 s); hosted migrate.py plan (read-only): applied 0001–0018, pending 0019–0026; known-good.py bda1586 --applied 0026 with the eight --set names and --bundles: KNOWN-GOOD (commit/preparation/migrations/config/record/bundle all ok — an earlier NOT-KNOWN-GOOD was a truncated --set name in the coordinator's call); alert subscription PendingConfirmation (user); the P-02 credit-transition --dry-run against hosted was refused by the tool policy ("Production Reads") → user runs it (B-07 key prefixes) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 18:20Z; basis: done |
-| MAIN-MERGE | support (GO-LIVE, user decision 2026-09-26: "skip the window, complete everything, get live, then keep running the test window on the side") the App release (merge to main) and the backend install proceed ahead of BACKEND-READY: freeze RELEASE → gates → a short install maintenance (W1–W5, W6 verified dump, W7 hosted apply 0019–0026, W7f activation, W8–W13) → App inputs (X3/X4) → merge main → smoke; E4C certify runs afterwards on the live system as the test window; the manifest gates record the reordering as a user decision (dispatch override), not as evidence | running | — | b967a033 → — | ports none | 2026-09-27 05:25Z | W6/W6b rehearsal (hosted-migrate.sh --through w6b, no hosted write) → W5 pause → hosted-migrate.sh --through w7 → W7f (H1/H2) → W8–W11 → W12 smoke → W13 → main fast-forward + Vercel variables (after the user's permissions command) → deploy + smoke S1–S6 → test user | 1–3 h remaining (likely 1.5 h), confidence medium, estimated 2026-09-27 00:24Z; basis: after G2 green + the user-run W1/W6/W7 + Vercel inputs: detached worktree off origin/main, merge d3a99e01 --no-ff, push HEAD:refs/heads/main, smoke S1–S6 |
+| MAIN-MERGE | support (GO-LIVE, user decision 2026-09-26: "skip the window, complete everything, get live, then keep running the test window on the side") the App release (merge to main) and the backend install proceed ahead of BACKEND-READY: freeze RELEASE → gates → a short install maintenance (W1–W5, W6 verified dump, W7 hosted apply 0019–0026, W7f activation, W8–W13) → App inputs (X3/X4) → merge main → smoke; E4C certify runs afterwards on the live system as the test window; the manifest gates record the reordering as a user decision (dispatch override), not as evidence | complete | — | b967a033 → d3a99e01 | ports none | 2026-09-27 08:45Z | DONE: v1 platform LIVE (backend + App). Next: E4C certify + E1B cells on the live system (BACKEND-READY), the E4 journey on the live App (APP-PILOT), H4/H5/H6 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 08:45Z; basis: released |
 | STEP55-FIX | support E4C window scripts (support lane; before the RELEASE freeze) | complete | codex/step55-fix | 88cb89eb → 6788c25b | ports e1c postgres 55449 (PG-backed cases); never i8/e2c, prefix infrx-e1c-, db e1c | 2026-09-26 19:35Z | DONE: merged --no-ff at cc23960e; WR-S55-1 applied (205e6dd9); minors → STEP55-FIX-2 (running) | 0.1–1 h remaining (likely 0.3 h), confidence high, estimated 2026-09-26 19:07Z; basis: committed, suites and mutants green; review remains |
 | E1B-WIRE | E1B (window wiring; no measurement) WR-3 bench --target direct sends the worker's stop_token_ids; WR-4 the worker publishes AttemptResult.timings as phase metrics; WR-1 the E1B window profile bases validate as §7 writes them; WR-2 a committed e1b-window.sh runs WC-1..WC-8 in order with the no-overlap preconditions; workflow (Opus implementer, 2 lenses, one fix round) | complete | codex/e1b-wire | 387cac69 → b608d8b1 | ports w5 postgres 55445 / valkey 55491; never i8/e2c, prefix infrx-w5-, db w5 | 2026-09-26 20:55Z | DONE: merged --no-ff (test_rollout.py conflict resolved: the tip's F2 assertions kept inside the e4c test, the E1B section after it); WREQ-1/2/3 + the lens minors → E1B-WIRE-2 (before the freeze) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 20:55Z; basis: merged |
 | E1B-WIRE-2 | E1B (window wiring, follow-up) WREQ-1 the worker passes its metrics registry to the inference loop (phase timings reach the box) with a timings guard for the preparation loop; WREQ-2 the three bench stop_token mutants in the list; WREQ-3 E4C-runbook §3/§5.0 fill the E1B profiles and state the window order (e1b-window.sh after §4, WC-6a, WC-7 alone, WC-6b, §5, WC-9; no certify/soak/journey/drills while it runs); launcher minors E1BW-R1 (pipefail guard), R2 (interrupted-run log kept), R3 (bounded waits); plain Opus agent | complete | codex/e1b-wire-2 | aac38207 → cdc41389 | ports w5 postgres 55445 / valkey 55491; never i8/e2c, prefix infrx-w5-, db w5 | 2026-09-26 21:19Z | DONE: merged --no-ff; E1B is wired for the window (WC-1..WC-9 launcher + profiles + runbook §3/§4a/§5.0/§5.2); the cells run on the live system after go-live | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 21:19Z; basis: merged |
@@ -399,6 +398,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-27 08:45Z UTC, coordinator (GO-LIVE): v1 PLATFORM LIVE: App release deployed from main = RELEASE d3a99e01 (deployment dpl_Caw24aNxTj57zQuBGs74partZ67H), smoke green; known-good App release recorded. Post-launch: LW0 lane running (wave5-plan §3), certify/E1B preparation running, tracker v1 launch scope updates
+- 2026-09-27 07:35Z UTC, coordinator (GO-LIVE): BACKEND LIVE: RELEASE d3a99e01 installed and serving in the CREDIT regime (W8–W11 green, W12 smoke 16/16, test user created with 10,000 CREDIT); W13 recorded; the App release (main push → Vercel) is the operator's next line
 - 2026-09-27 05:38Z UTC, tracker: rejected update: stale: at 2026-09-27T05:06:00Z is not newer than lane TEST-USER state 2026-09-27T05:10:00Z
 - 2026-09-27 05:38Z UTC, tracker: rejected update: stale: at 2026-09-27T04:52:00Z is not newer than lane TEST-USER state 2026-09-27T05:10:00Z
 - 2026-09-27 05:25Z UTC, coordinator (RELEASE): RELEASE d3a99e01 FREEZE COMPLETE: G2 run 2 PASS (make check exit 0 in 3 h 20 min; tests/i PASS) — every gate green. Install maintenance starts (W6/W6b rehearsal first). hosted-migrate.sh committed after two reviews (53a7c64f)
