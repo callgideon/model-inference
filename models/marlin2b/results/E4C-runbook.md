@@ -71,8 +71,8 @@ the `ACCOUNTING_REGIME` row). The operator CLI runs from the coordinator host wi
 | H2 | coordinator | **P-02 dry-run.** `credit-transition --dry-run --card rc_marlin2b_20260925_launch --input-rate 400 --output-rate 1200` must exit 0 with `drift == []`. Then activate CREDIT (G8 step 3): `credit-transition --card rc_marlin2b_20260925_launch --input-rate 400 --output-rate 1200 --drain-timeout-s 900 --idempotency-key cutover-20260925-launch --reason "E4C CREDIT activation (P-01, P-02)"` with `INFRX_OPERATOR_KEY` exported from the secure store. It writes the flags through 0022's `infrx.set_feature_flag` (`infrx/operations/transition.py:206`), which is why H1-H2 follow W7. The ledger half must run in CREDIT, not in `legacy_usd`. | JSON sha256, `keys` block (prefixes only), exit code |
 | H3 | **[operator-held]** | **Revoke the pre-cutover keys.** The two pre-cutover consumer keys must be revoked (`revoke-key`, logged), or the H2 `keys` block must show `revoked_at` on both. Otherwise the run is refused: any active prefix outside `test_key_ids` is an error. | prefixes, `revoked_at` |
 | H4 | **[operator-held]** | **P-05 second tenant: the account only.** Read `auth.users.email_confirmed_at`, and confirm the second user if needed. The coordinator then runs `grant --user <uuid2> --idempotency-key grant-tenant2-20260925 --reason "E4C second test tenant"`. **Do not issue its key here.** It is issued in §5.0, after certify. An active tenant-2 key is outside the box and edge profiles' `test_key_ids` (`["142c7d81"]`), so every certify cell would be refused. | tenant-2 user id (opaque), grant id |
-| H5 | **[operator-held]** | **P-24 funding.** Run `python -m infrx.operations.cli adjust --user <certify tenant> --amount 40000 --idempotency-key adj-e4c-20260925 --reason "E4C test allocation"`. This is test funding, not a second grant. The tenant then holds 10,000 + 40,000 = 50,000 CREDIT, which is the per-cell cap. | adjustment id, balance after |
-| H6 | coordinator | **The certify key inventory**, taken after H3 and H4. Run a fresh read-only `credit-transition --dry-run` (same flags as H2's dry-run; it writes nothing and needs no operator key). List every prefix in its `keys` block whose `revoked_at` is null. The list must be exactly `142c7d81`. For any other active prefix (a pre-cutover key, a tenant-2 key issued early, a canary key), **stop**: the operator revokes it, then retake H6. Write `keys-certify.json`: `{"active_key_id_prefixes": ["142c7d81"], "taken_at": "<as_of of this dry-run>", "source": "G8 credit-transition --dry-run sha256:<this dry-run's JSON sha256>"}` as `/opt/dlami/nvme/e4b/e4c/keys-certify.json` on the box. It holds prefixes only. No key may be issued or restored between H6 and the end of §4; if one is, retake H6 before the next cell. | dry-run JSON sha256, `as_of`, file sha256 |
+| H5 | **[operator-held]** | **P-24 funding.** Run `python -m infrx.operations.cli adjust --user <certify tenant> --amount 40000 --idempotency-key adj-e4c-20260925 --reason "E4C test allocation"`. This is test funding, not a second grant. The tenant then holds about 50,000 CREDIT (10,000 + 40,000 less the W12 smoke debits), the per-cell cap being 50,000. | adjustment id, balance after |
+| H6 | coordinator | **The certify key inventory**, taken after H3 and H4. Run a fresh read-only `credit-transition --dry-run` (same flags as H2's dry-run; it writes nothing and needs no operator key). List the **key id prefix** (`key_id[:8]`, never the block's `prefix` field, which is the secret's first 17 characters) of every key whose `revoked_at` is null and whose audience is not `operator`. The list must be exactly `142c7d81`. The operator key (`d554db80`) spends nothing, stays active for H5 and §5.0, and is recorded apart. For any other active consumer or provider key (a pre-cutover key, a tenant-2 key issued early, a canary key), **stop**: the operator revokes it, then retake H6. `infra/rollout/certify-h6.sh` implements this rule. Write `keys-certify.json`: `{"active_key_id_prefixes": ["142c7d81"], "taken_at": "<as_of of this dry-run>", "source": "G8 credit-transition --dry-run sha256:<this dry-run's JSON sha256>"}` as `/opt/dlami/nvme/e4b/e4c/keys-certify.json` on the box. It holds prefixes only. No key may be issued or restored between H6 and the end of §4; if one is, retake H6 before the next cell. | dry-run JSON sha256, `as_of`, file sha256 |
 
 ## 2. Freeze the candidate (P-06, P-17 check 2)
 
@@ -90,12 +90,22 @@ Every value is read from the served build, never typed from memory. Record them 
 | `config_version` | `sha256:` plus `sudo sha256sum /etc/marlin2b-gateway.env`. Hash only; the file itself is never printed |
 | `allowed_fault_targets[1..2]` (box base only) | The worker and Valkey unit names installed by W10: `infrx-worker` and `infrx-valkey` (`apps/infrx-api/deploy/*.service`). Check with `systemctl list-units 'infrx-*'` |
 | `maintenance_window` | The window id logged in the lock record (step 1) |
-| `test_key_ids[1]` (two-tenant only) | The tenant-2 prefix, issued in §5.0 after certify. It is filled there, not in §3 |
+| `test_key_ids[1]` (two-tenant only) | The tenant-2 key's key id prefix (`key_id[:8]`), issued in §5.0 after certify. It is filled there, not in §3 |
 | certify hashes | `python tests/integration/backend/certify.py --hashes` from the checkout (serving version, engine options, migrations, deploy and rollout trees, alerts, lock) |
 | rollout bundle | `release-bundle.sh` `SHA256SUMS` from W1 |
 | workload manifest | `models/marlin2b/corpus/manifest.json` sha256 `386a2d89…095e18` (`e1-2026-09-20`) |
 
 ## 3. Fill every FILL and validate (no request leaves)
+
+**First, on the box** (`infra/rollout/ssm.sh infra/rollout/steps/76-e4c-prepare.sh RELEASE=$RELEASE`): §1 step
+4's edge check, then the three preconditions no rollout step performs. The measurement checkout
+`/opt/dlami/nvme/w3-checkout` moves to `RELEASE` from W1's verified bundle (certify, `e1b-window.sh` and the WC-6
+scripts run from it; W8's `40-checkout.sh` moves only the deploy checkout). The certify image
+`infrx-certify:$RELEASE` is built (the runtime image plus git). `/opt/dlami/nvme/e4b/inventory.txt`, certify's
+`--inventory`, is retaken after W10's engine install. Then `infra/rollout/steps/77-e4c-profiles.sh` does this
+section on the box: it reads every §2 identity, fills and places the six copies and H6's `keys-certify.json`,
+validates them in the certify image with no network, and prints `certify --hashes`.
+`infra/rollout/certify-window.sh` runs the whole window in order.
 
 Copy the committed bases to `/opt/dlami/nvme/e4b/e4c/` on the box:
 
@@ -192,7 +202,10 @@ Two more checks on the report:
 - Poll the run with `infra/rollout/steps/78-e4b-report.sh`.
 
 Certify passes the same `keys-certify.json` to every cell. The tenant-2 key does not exist yet (H4), so
-no cell is refused for it.
+no cell is refused for it. bench reads the inventory only at each cell's start, and the live App can issue a
+consumer key at any time, so **retake H6 when §4 ends and again when §4a ends** (`certify-h6.sh <dir>
+h6-after-s4`, `h6-after-s4a`). A spending key created during §4 or §4a makes every cell after its `created_at`
+INVALID.
 
 A failed cell follows the automatic fix loop in
 [05 §7](../../../research/plan/consumer-v1/05-client-and-load-testing.md). A rerun is a new qualifying run with
@@ -230,13 +243,13 @@ and exported under their own names. `MARLIN_API_KEY` must be unset.
 ### 5.0 The second tenant's key, the journey inventory and the media prefix
 
 1. **[operator-held]** The coordinator runs `issue-key --user <uuid2> --name e4c-tenant2 --secret-file <0600 new
-   path> --idempotency-key key-tenant2-20260925 --reason "E4C second test tenant"`. Record the **prefix** only.
+   path> --idempotency-key key-tenant2-20260925 --reason "E4C second test tenant"`. Record the **key id prefix** (`key_id[:8]` of the JSON's `key_id`) only, never its `prefix` field (the secret's first 17 characters).
 2. Fill `~/e4c/E4C-two-tenant.json` from `E4C-box.two-tenant.base.json` with the §2 values, `maintenance_window`,
-   and `test_key_ids[1]` = the new prefix. Record both sha256 values. Fill `~/e4c/E1B-two-tenant.json` from
+   and `test_key_ids[1]` = the new key id prefix. Record both sha256 values. Fill `~/e4c/E1B-two-tenant.json` from
    `E1B-edge.two-tenant.base.json` the same way, with the same prefix, for WC-9 (§5.2).
 3. **The journey inventory.** Run a fresh read-only `credit-transition --dry-run`, as in H6. The active prefixes
-   must be exactly `142c7d81` and the new prefix. Otherwise stop, as in H6. Then write the inventory:
-   `~/e4c/keys-journey.json` = `{"active_key_id_prefixes": ["142c7d81", "<tenant-2 prefix>"], "taken_at": "<as_of of this dry-run>", "source": "G8 credit-transition --dry-run sha256:<this dry-run's JSON sha256>"}`
+   must be exactly `142c7d81` and the new key id prefix (consumer keys only, as in H6). Otherwise stop, as in H6. Then write the inventory:
+   `~/e4c/keys-journey.json` = `{"active_key_id_prefixes": ["142c7d81", "<tenant-2 key id prefix>"], "taken_at": "<as_of of this dry-run>", "source": "G8 credit-transition --dry-run sha256:<this dry-run's JSON sha256>"}`
 4. **[operator-held] `MEDIA_BASE_URL`.** This is an https prefix, approved by the operator, that serves every corpus
    clip file under its manifest basename (`<prefix>/<basename of the clip's file>`). The gateway fetches it
    itself, so it must be publicly reachable. No such prefix is named in the repository or in the 2026-09-25
@@ -339,7 +352,7 @@ drill=<name> runbook=<file#section> ssm=<command id> t0=<UTC> recovered=<UTC> me
 | Drill | Runbook | Bound (§5, P-18) |
 |---|---|---|
 | engine restart | [restart.md § Engine](../../../infra/runbooks/restart.md) | `/readyz` 200 ≤ 300 s |
-| worker SIGKILL (`docker kill --signal=KILL infrx-worker`) | [restart.md § Worker](../../../infra/runbooks/restart.md) | ≤ 30 s |
+| worker SIGKILL (`systemctl kill -s KILL infrx-worker.service`, then start) | [restart.md § Worker](../../../infra/runbooks/restart.md) | ≤ 30 s |
 | Valkey index loss | [index-loss.md](../../../infra/runbooks/index-loss.md) | ≤ 30 s; the only gateway 5xx allowed is 503 `dependency_unavailable` |
 | DB or object-store stall | E3C s08 | retryable 503/504 within 45 s |
 | restore | [restore.md](../../../infra/runbooks/restore.md) (hosted A-steps; box B1) | restored and checked |
@@ -419,3 +432,8 @@ Evidence directories are append-only. A failed attempt keeps its own `run<N>`.
   §5.0 step 2 fills `E1B-two-tenant.json`, and §5.2 places WC-9 after §5.1. No bench command is added here.
   Nothing here has run against the box, AWS or hosted.
 - 2026-09-26 (SWEEP-1): §4a steps 2 and 4 name the committed WC-6 copies (`models/marlin2b/e1b/l8ref.sh`, `l8served.sh`); WC-6a's engine stop is declared (`infrx-observe.timer` stopped for its span, a `drills.md` line); the canary stays off through WC-9 and is re-enabled before the §6 drills (E1BP-4/5/6). Nothing run.
+- 2026-09-27 (CERTIFY-WINDOW, certify-prep defects 1, 2, 7, 8): H6 and §5.0 name the key id prefix
+  (`key_id[:8]`) and exclude the operator key; §3 names the preconditions `76-e4c-prepare.sh` performs and
+  `77-e4c-profiles.sh`; §4 adds the closing H6 after §4 and §4a; H5 says about 50,000; the worker drill is
+  restart.md's `systemctl kill`. The window's sequencer is `infra/rollout/certify-window.sh`. Wording only;
+  nothing here has run against the box, AWS or hosted.

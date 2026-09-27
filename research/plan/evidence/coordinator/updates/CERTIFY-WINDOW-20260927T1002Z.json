@@ -1,0 +1,27 @@
+{
+  "task": "CERTIFY-WINDOW",
+  "slice": "E4C certify window on the live RELEASE d3a99e01: box steps 76/77/79-wc0/80-e4b-fetch, 78 default-run fix, certify-window.sh sequencer, certify-h6.sh, certify-fill.py/certify-validate.py, runbook defects 1/2/7/8, README §5",
+  "activity": "review",
+  "head": "19d3c229",
+  "worktree": ".claude/worktrees/codex-certify-window",
+  "branch": "codex/certify-window",
+  "owned_paths": ["infra/rollout/steps/76-e4c-prepare.sh", "infra/rollout/steps/77-e4c-profiles.sh", "infra/rollout/steps/78-e4b-report.sh",
+                  "infra/rollout/steps/79-wc0-scrape.sh", "infra/rollout/steps/80-e4b-fetch.sh", "infra/rollout/certify-window.sh",
+                  "infra/rollout/certify-h6.sh", "infra/rollout/certify-fill.py", "infra/rollout/certify-validate.py", "infra/rollout/README.md",
+                  "models/marlin2b/results/E4C-runbook.md", "apps/infrx-api/tests/i/test_ops_steps.py", "apps/infrx-api/tests/i/test_rollout.py",
+                  "apps/infrx-api/tests/i/mutants.py", "research/plan/evidence/e/CERTIFY-WINDOW-19d3c22.md"],
+  "commands": [
+    {"cmd": "bash -n (certify-window.sh, certify-h6.sh, steps 76/77/78/79-wc0/80-e4b-fetch)", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/i/test_rollout.py tests/i/test_ops_steps.py", "exit": 0, "summary": "39 passed, 1 skipped (existing INFRX_D_TASK-only case)"},
+    {"cmd": "uv run --frozen pytest -q tests/i/test_mutants.py -k 'well_formed or every_case'", "exit": 0, "summary": "2 passed"},
+    {"cmd": "uv run --frozen python tests/i/mutants.py <certify_* login_* launcher_* e1b_window_*>", "exit": 0, "summary": "75/75 killed (48 new); first run 48/49, the survivor's redundant guard half removed"},
+    {"cmd": "uv run --frozen pytest -q ../../tests/integration/backend/recovery/test_runbooks.py", "exit": 0, "summary": "13 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS x3"},
+    {"cmd": "DRY_RUN=1 LOGDIR=<scratch> bash infra/rollout/certify-window.sh", "exit": 0, "summary": "44 plan lines + 19 stop conditions in order; no stand-in called"}
+  ],
+  "estimate": {"optimistic_h": 8, "likely_h": 10, "pessimistic_h": 14, "confidence": "medium",
+               "basis": "certify-prep §4: the 4 h soak, 1.0-1.6 h E1B cells, 1-3 h drills; pessimistic adds one certify rerun", "at": "2026-09-27T10:02Z"},
+  "blockers": ["SSE journey + replay: MEDIA_BASE_URL unnamed", "canary re-enable: P-24", "BACKEND-READY stays PENDING (P-17 checks 1, 5, 7)"],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/e/CERTIFY-WINDOW-19d3c22.md"]
+}

@@ -1,0 +1,75 @@
+{
+ "task": "CERTIFY-WINDOW",
+ "slice": "fix round: 1-CW-R1 (blocking), 0-CW-1/1-CW-R2, 0-CW-2, 0-CW-3 — per-LOGDIR flock, no step on a live cell, no step after report before certify's exit N; 78 prints certify exit N first; engine drill probes :8002/readyz and needs the outage seen",
+ "activity": "review",
+ "head": "9e62f07f",
+ "worktree": ".claude/worktrees/codex-certify-window",
+ "branch": "codex/certify-window",
+ "owned_paths": [
+  "infra/rollout/certify-window.sh",
+  "infra/rollout/steps/78-e4b-report.sh",
+  "infra/rollout/README.md",
+  "apps/infrx-api/tests/i/test_rollout.py",
+  "apps/infrx-api/tests/i/mutants.py",
+  "research/plan/evidence/e/CERTIFY-WINDOW-19d3c22.md"
+ ],
+ "commands": [
+  {
+   "cmd": "new cases against the handback scripts (f60636b1)",
+   "exit": 1,
+   "summary": "4 failed as the findings describe; the lock-inheritance guard passed (no lock before)"
+  },
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/i/test_rollout.py tests/i/test_ops_steps.py",
+   "exit": 0,
+   "summary": "43 passed, 1 skipped (existing INFRX_D_TASK case); certify-window subset 8/8 runs green"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/i/test_mutants.py -k 'well_formed or every_case'",
+   "exit": 0,
+   "summary": "2 passed"
+  },
+  {
+   "cmd": "uv run --frozen python tests/i/mutants.py <certify_* login_* launcher_* e1b_window_*>",
+   "exit": 0,
+   "summary": "85/85 killed (10 new)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q ../../tests/integration/backend/recovery/test_runbooks.py",
+   "exit": 0,
+   "summary": "13 passed"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py",
+   "exit": 0,
+   "summary": "PASS x3"
+  },
+  {
+   "cmd": "DRY_RUN=1 LOGDIR=<scratch> PATH=<fakes>:$PATH bash infra/rollout/certify-window.sh",
+   "exit": 0,
+   "summary": "44 plan + 19 expect lines; no fake called"
+  },
+  {
+   "cmd": "E4B_ROOT=<copy of run1> RUN=20260924T165408Z ONLY=report.json bash 78-e4b-report.sh | head -c 24000",
+   "exit": 0,
+   "summary": "old: no exit line in 24,000 of 25,103; new: 'certify exit 1' present"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 8,
+  "likely_h": 10,
+  "pessimistic_h": 14,
+  "confidence": "medium",
+  "basis": "certify-prep §4 (window itself, coordinator): 4 h soak, 1.0-1.6 h E1B cells, 1-3 h drills; pessimistic adds one certify rerun; the fix round adds no box time",
+  "at": "2026-09-27T10:46Z"
+ },
+ "blockers": [
+  "SSE journey + replay: MEDIA_BASE_URL unnamed",
+  "canary re-enable: P-24",
+  "BACKEND-READY stays PENDING (P-17 checks 1, 5, 7)"
+ ],
+ "wiring_requests": [],
+ "evidence": [
+  "research/plan/evidence/e/CERTIFY-WINDOW-19d3c22.md"
+ ]
+}

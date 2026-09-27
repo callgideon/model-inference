@@ -1542,6 +1542,155 @@ MUTANTS += (
        E1B_SH, '    docker kill "infrx-e1b-$label" > /dev/null 2>&1 || true\n', "", E1B_WC8),
 )
 
+# CERTIFY-WINDOW: the E4C window's box steps (76/77/79/78/80), the fill and validator, H6 and the
+# sequencer; one mutant per decision their cases claim
+R = "../../infra/rollout/"
+S76, S77, S79, S78, S80 = (R + "steps/" + n for n in ("76-e4c-prepare.sh", "77-e4c-profiles.sh",
+                                                        "79-wc0-scrape.sh", "78-e4b-report.sh", "80-e4b-fetch.sh"))
+WIN = R + "certify-window.sh"
+P76 = "test_certify_prepare__76_moves_the_measurement_checkout_builds_once_and_keeps_a_good_inventory"
+P77 = "test_certify_profiles__77_fills_from_the_served_build_and_validates_offline"
+WC0 = "test_certify_wc0__79_runs_one_detached_sidecar_and_stops_it"
+R78 = "test_e4b_report__78_defaults_to_the_newest_certify_run_never_e4c_or_e1b"
+F80 = "test_e4b_fetch__80_uploads_the_named_run_only"
+FILLV = "test_certify_fill__the_bases_fill_to_the_prepared_copies_which_validate_runnable"
+H6C = "test_certify_h6__only_consumer_key_ids_and_the_operator_key_stays_out"
+DRY = "test_certify_window__dry_run_prints_the_whole_plan_in_order_and_calls_nothing"
+H5C = "test_certify_window__h5_funds_only_the_certify_org_and_shreds_its_key_file"
+LONG = "test_certify_window__a_long_cell_is_re_attached_never_started_twice_and_certify_never_relaunched"
+REP = "test_certify_window__report_polls_78_with_the_run_until_certify_exits"
+MUTANTS += (
+    _m("certify_76_edge_unchecked", "76 changes nothing unless the public edge answers 200 (A1)",
+       S76, '[ "$code" = 200 ] || { echo "the edge is not open (maintenance?): nothing changed" >&2; exit 2; }',
+       "true", P76),
+    _m("certify_76_dirty_checkout_moved", "a dirty w3-checkout is refused, not moved",
+       S76, "g status --porcelain | head -10 >&2; exit 2", "g status --porcelain | head -10 >&2", P76),
+    _m("certify_76_bundle_unverified", "the release bundle is fetched only after its sha256 checks",
+       S76, '|| { echo "the release bundle fails its sha256: nothing changed" >&2; exit 2; }', "|| true", P76),
+    _m("certify_76_image_rebuilt", "infrx-certify:$RELEASE is built once",
+       S76, 'docker image inspect "infrx-certify:$RELEASE" > /dev/null 2>&1 || \\', "false || \\", P76),
+    _m("certify_76_image_from_another_base", "the certify image is the release's runtime image + git",
+       S76, "'FROM infrx-runtime:%s\\n", "'FROM infrx-runtime:latest%.0s\\n", P76),
+    _m("certify_76_unpinned_inventory_installed", "an inventory without image_equals_pin=yes never replaces the file",
+       S76, """if ! grep -qx 'image_equals_pin=yes' "$inv.new"; then""", "if false; then", P76),
+    _m("certify_76_previous_inventory_dropped", "the replaced inventory is kept as .prev",
+       S76, 'if [ -s "$inv" ]; then cp -p', "if false; then cp -p", P76),
+    _m("certify_77_worker_revision_unchecked", "77 fills only when gateway AND worker serve RELEASE",
+       S77, '[ "$gw" = "$RELEASE" ] && [ "$wk" = "$RELEASE" ]', '[ "$gw" = "$RELEASE" ]', P77),
+    _m("certify_77_gateway_image_unchecked", "77 fills only when infrx-gateway runs infrx-runtime:$RELEASE",
+       S77, '|| refuse "infrx-gateway does not run infrx-runtime:$RELEASE"', "|| true", P77),
+    _m("certify_77_unit_unchecked", "77 fills only with marlin2b-vllm, infrx-worker and infrx-valkey active",
+       S77, '|| refuse "$u is not active"', "|| true", P77),
+    _m("certify_77_inventory_sha_unchecked", "H6's dry-run sha256 is 64 hex before any file is written",
+       S77, """|| refuse "KEYS_SOURCE_SHA256 is the dry-run JSON's 64-hex sha256\"""", "|| true", P77),
+    _m("certify_77_config_version_not_the_env_file", "config_version is the env file's sha256",
+       S77, 'CONFIG_VERSION=sha256:$(sha256sum "$env_file"', "CONFIG_VERSION=sha256:$(sha256sum /dev/null", P77),
+    _m("certify_77_validation_networked", "the placed profiles validate with no network",
+       S77, "verdict=$(docker run --rm --network none", "verdict=$(docker run --rm --network host", P77),
+    _m("certify_77_unrunnable_accepted", "a placed profile that does not validate is exit 3",
+       S77, """sys.exit(0 if d["runnable"] and not d["errors"] else 3)' "$verdict\"""", """sys.exit(0)' "$verdict\"""", P77),
+    _m("certify_77_heredoc_drifts", "77 fills with certify-fill.py verbatim",
+       S77, 'int(env["MIGRATION_VERSION"]) < 26', 'int(env["MIGRATION_VERSION"]) < 25', FILLV),
+    _m("certify_fill_deployed_mismatch_accepted", "the fill refuses a deployed build other than RELEASE",
+       R + "certify-fill.py", 'if env["DEPLOYED_SHA"] != env["RELEASE"]:', "if False:", FILLV),
+    _m("certify_fill_old_migration_accepted", "the fill refuses a migration below 0026 (R147)",
+       R + "certify-fill.py", 'int(env["MIGRATION_VERSION"]) < 26', 'int(env["MIGRATION_VERSION"]) < 25', FILLV),
+    _m("certify_fill_tenant2_unchecked", "a two-tenant base needs the tenant-2 key-id prefix",
+       R + "certify-fill.py", 'if not re.fullmatch(r"[0-9a-f]{8,12}", t2):', "if False:", FILLV),
+    _m("certify_fill_rewrites_the_base", "the fill changes FILL values only (the prepared bytes)",
+       R + "certify-fill.py", "json.dumps(p, indent=1)", "json.dumps(p, indent=2)", FILLV),
+    _m("certify_validate_always_passes", "the validator exits non-zero when a cell is not runnable",
+       R + "certify-validate.py", "sys.exit(0 if ok else 1)", "sys.exit(0)", FILLV),
+    _m("certify_wc0_second_start", "one WC-0 sidecar at a time",
+       S79, '[ ! -s "$pidf" ] || { echo "WC-0 already running', 'false && { echo "WC-0 already running', WC0),
+    _m("certify_wc0_stop_keeps_pidfile", "a stop removes the pid file",
+       S79, 'rm -f "$pidf"; ls -l', "ls -l", WC0),
+    _m("certify_wc0_empty_accepted", "a start with no scrape line is exit 3",
+       S79, '[ "$n" -gt 0 ] || { echo "no scrape line', 'true || { echo "no scrape line', WC0),
+    _m("certify_78_default_any_dir", "78's default run is the newest UTC-named certify run (defect 3)",
+       S78, "-regextype posix-extended \\\n               -regex '.*/[0-9]{8}T[0-9]{6}Z' ", "", R78),
+    _m("certify_78_no_run_accepted", "78 with no run at all is exit 3",
+       S78, '[ -n "$run" ] && [ -d "$dir" ]', '[ -d "$dir" ]', R78),
+    _m("certify_80_run_unvalidated", "80's RUN is a UTC run name",
+       S80, '[[ $RUN =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || {', "true || {", F80),
+    _m("certify_80_unfinished_uploaded", "80 uploads only a finished run (report.json)",
+       S80, '[ -s "$O/report.json" ] || {', "true || {", F80),
+    _m("certify_80_other_object", "80 uploads to w4/e4b-box/<RUN>.tgz",
+       S80, "w4/e4b-box/$RUN.tgz", "w4/e4b-box/run.tgz", F80),
+    _m("certify_h6_operator_counted", "the operator key is not a spending key (defect 1b)",
+       R + "certify-h6.sh", 'for k in active if k["audience"] != "operator")', "for k in active)", H6C),
+    _m("certify_h6_secret_prefix_used", "the inventory holds key_id[:8], never the secret's prefix (defect 1a)",
+       R + "certify-h6.sh", 'spenders = sorted(k["key_id"][:8]', 'spenders = sorted(k["prefix"][9:17]', H6C),
+    _m("certify_h6_extra_key_passes", "any other active spending key is a STOP",
+       R + "certify-h6.sh", "if spenders != want:", "if False:", H6C),
+    _m("certify_h6_failed_dry_run_passes", "a failed dry run is a STOP",
+       R + "certify-h6.sh", '[ "$rc" = 0 ] || { echo "STOP: the dry run exited $rc', 'true || { echo "STOP: the dry run exited $rc', H6C),
+    _m("certify_h6_dry_run_world_readable", "the dry-run JSON is 0600",
+       R + "certify-h6.sh", "umask 077; f=", "umask 022; f=", H6C),
+    _m("certify_window_h6_after_profiles", "H6 precedes 77 (the profiles carry its inventory)",
+       WIN, "h5 h6 profiles77", "h5 profiles77 h6", DRY),
+    _m("certify_window_wc7_not_after_wc6a", "WC-7 runs right after WC-6a's restore",
+       WIN, "e1b wc6a wc7\n       wc6b", "e1b wc6a wc6b\n       wc7", DRY),
+    _m("certify_window_report_without_run", "78 is polled with the launched run (defect 3)",
+       WIN, '"$ST/78-e4b-report.sh" RUN="$r" ONLY=report.json', '"$ST/78-e4b-report.sh" ONLY=report.json', DRY, REP),
+    _m("certify_window_e1b_short_timeout", "the E1B window's SSM call has TIMEOUT_S=7200",
+       WIN, "long e1b env TIMEOUT_S=7200", "long e1b env TIMEOUT_S=3600", DRY),
+    _m("certify_window_key_on_argv", "the certify key reaches statement as a 0600 file, never argv",
+       WIN, '"$CLI" statement --key-file "$LOGDIR/certify.key"', '"$CLI" statement --key "$(cat "$LOGDIR/certify.key")"',
+       DRY, H5C),
+    _m("certify_window_key_kept_until_exit", "the certify key file is shredded right after statement",
+       WIN, "  shred_keys\n  jexpect h5-statement", "  jexpect h5-statement", H5C),
+    _m("certify_window_org_unchecked", "H5 funds only the certify org",
+       WIN, """jexpect h5-statement "d['org_id'] == '$CERTIFY_ORG'\"""", 'jexpect h5-statement "True"', H5C),
+    _m("certify_window_balance_unchecked", "H5 checks the balance moved by +40,000 (or a replay)",
+       WIN, 'sys.exit(0 if a["replayed"] or delta == Decimal("40000") else 1)', "sys.exit(0)", H5C),
+    _m("certify_window_live_cell_relaunched", "a resume re-attaches a live detached cell",
+       WIN, 'if [ ! -e "$b.rc" ] && [ -s "$b.pid" ] && kill -0 "$(cat "$b.pid")" 2>/dev/null; then',
+       "if false; then", LONG),
+    _m("certify_window_failed_cell_not_retried", "a resume starts a failed detached cell again",
+       WIN, 'if [ "$(cat "$b.rc" 2>/dev/null)" = 0 ]; then say', 'if [ -e "$b.rc" ]; then say', LONG),
+    _m("certify_window_certify_relaunched", "a certify run launched from the LOGDIR is never relaunched",
+       WIN, """if [ "$DRY" != 1 ] && grep -q '^out=' "$LOGDIR/certify.log" 2>/dev/null; then""", "if false; then", LONG),
+    _m("certify_window_report_first_answer", "the poll waits for certify's `exit N`",
+       WIN, 'if [ -n "$code" ]; then', "if true; then", REP),
+    _m("certify_window_report_fail_passes", "certify exit 1 (a FAIL cell) stops the window",
+       WIN, '[ "$code" != 1 ] || fail REPORT', "true || fail REPORT", REP),
+    _m("certify_window_unknown_step", "an unknown step is refused",
+       WIN, '[ -n "$START" ] || { echo "unknown step', 'true || { echo "unknown step', DRY),
+    _m("certify_window_dry_run_calls", "DRY_RUN calls nothing",
+       WIN, """printf ' %q' "$@"; printf '\\n'; return 0; fi\n  say "== $name\"""", """printf ' %q' "$@"; printf '\\n'; fi\n  say "== $name\"""", DRY),
+)
+
+# CERTIFY-WINDOW fix round (1-CW-R1, 0-CW-1/1-CW-R2, 0-CW-2, 0-CW-3)
+REP2 = "test_certify_window__report_sees_certify_exit_past_ssm_24000_characters"
+GUARD = "test_certify_window__no_step_starts_on_a_live_cell_a_running_certify_or_a_second_sequencer"
+KILLED = "test_certify_window__a_killed_sequencer_leaves_its_live_cell_resumable"
+DRILL = "test_certify_window__a_drill_passes_only_after_its_probe_saw_the_outage_and_the_engine_back"
+MUTANTS += (
+    _m("certify_78_exit_after_the_json", "78 prints certify's `exit N` before report.json (SSM keeps 24,000 characters)",
+       S78, """sed -En 's/^exit ([0-9]+)$/certify exit \\1/p' "$dir/certify.log" 2> /dev/null | tail -n 1 || true\n""", "", REP2),
+    _m("certify_window_report_reads_the_tail", "the poll reads 78's leading `certify exit N`, not the cut log tail",
+       WIN, """sed -En 's/^certify exit ([0-9]+)$/\\1/p' "$LOGDIR/report.log\"""",
+       """sed -En 's/^exit ([0-9]+)$/\\1/p' "$LOGDIR/report.log\"""", REP2),
+    _m("certify_window_finish_unrecorded_on_fail", "a certify exit 1 is recorded as finished before the STOP",
+       WIN, 'say "certify finished: exit $code (run $r)"   # the run has ended: the steps after `report` may start\n'
+            '      [ "$code" != 1 ] || fail REPORT', '[ "$code" != 1 ] || fail REPORT', REP),
+    _m("certify_window_live_cell_ignored", "no step starts while another detached cell of the LOGDIR is live",
+       WIN, '[ ! -s "$p" ] || [ "$n" = "$s" ]', 'true || [ "$n" = "$s" ]', GUARD),
+    _m("certify_window_cell_during_certify", "no step after `report` starts before the certify run was seen to end",
+       WIN, '[ "$1" -gt "$REPORT_AT" ] || return 0', "return 0", GUARD),
+    _m("certify_window_finish_of_any_run", "the finish seen is the launched run's, not an earlier one's",
+       WIN, 'exit [0-9]* (run ${r:-none})$"', 'exit [0-9]* (run "', GUARD),
+    _m("certify_window_no_lock", "one sequencer per LOGDIR",
+       WIN, "flock -n 9 || {", "true || {", GUARD),
+    _m("certify_window_cell_holds_the_lock", "a detached cell does not inherit the sequencer's LOGDIR lock",
+       WIN, '_ "$b" "$@" 9>&-\n', '_ "$b" "$@"\n', KILLED),
+    _m("certify_window_engine_drill_gateway_probe", "the engine drill probes the engine's readiness, not the gateway's",
+       WIN, "systemctl restart marlin2b-vllm.service|8002/readyz", "systemctl restart marlin2b-vllm.service|8001/readyz", DRILL),
+    _m("certify_window_drill_outage_unseen", "a drill passes only when its probe saw the outage",
+       WIN, "v=FAIL; [ \\$down = yes ] && [ \\$up = yes ]", "v=FAIL; [ \\$up = yes ]", DRILL),
+)
+
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 
@@ -1575,7 +1724,9 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
                  ("models", "marlin2b", "results", "E4C-runbook.md"),
                  # E1B-MUTANTS: the window cases read both clients' parsers and WC-8's corpus
                  ("models", "marlin2b", "bench.py"), ("models", "marlin2b", "dataset.py"),
-                 ("models", "marlin2b", "corpus-synth", "manifest.json")):
+                 ("models", "marlin2b", "corpus-synth", "manifest.json"),
+                 # CERTIFY-WINDOW: the validator imports runprofile and reads the corpus manifest
+                 ("models", "marlin2b", "runprofile.py"), ("models", "marlin2b", "corpus", "manifest.json")):
         root.joinpath(*part[:-1]).mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO.joinpath(*part), root.joinpath(*part))
     for name in ("pyproject.toml", "uv.lock"):

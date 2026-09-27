@@ -7,8 +7,10 @@ exit code) and that no secret value reached an argument or the output.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -878,3 +880,321 @@ def test_ops_resume__the_w10b_resume_runs_the_release_s_drain_and_checks_nothing
     done = run_step(step, stub, env={"RELEASE": "c" * 40})
     assert done.returncode == 0, done.stderr
     assert (tmp_path / "drain.log").read_text() == "drain resume\n" and calls(stub) == []
+
+
+# --- CERTIFY-WINDOW: the E4C window's box steps 76/77/79/78/80 (certify-prep P-a..P-d, defects 3/6) ----
+
+GIT_ID = ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "init.defaultBranch=main"]
+
+
+def _git(repo, *args) -> str:
+    return subprocess.run(["git", *GIT_ID, "-C", str(repo), *args], check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+DOCKER_76 = '''#!{python}
+import json, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+stdin = sys.stdin.read() if args[:1] == ["build"] else ""
+with (here / "calls.log").open("a") as log:
+    log.write(json.dumps({{"tool": "docker", "argv": args, "stdin": stdin}}) + "\\n")
+if args[:1] == ["build"]:
+    (here / "built").touch()
+elif args[:2] == ["image", "inspect"] and not (here / "built").exists():
+    sys.exit(1)
+elif "--format" in args:
+    print("sha256:" + "d" * 64)
+'''
+
+
+def test_certify_prepare__76_moves_the_measurement_checkout_builds_once_and_keeps_a_good_inventory(tmp_path):
+    """certify-prep P-a..P-c: certify, e1b-window.sh and l8*.sh run from /opt/dlami/nvme/w3-checkout,
+    which no step moved (40-checkout.sh moves the deploy checkout only), the certify image had no
+    step, and the certify inventory predated W10. Oracle: 76 changes anything when the edge is not
+    200, the checkout is dirty or the bundle fails its sha256; it builds infrx-certify:$RELEASE
+    other than once, FROM the release's runtime image; it installs an inventory from a failed
+    inventory.sh or an engine off the pin (the previous file must stay); it drops the previous
+    inventory instead of keeping it as .prev."""
+    src, nvme = tmp_path / "src", tmp_path / "nvme"
+    src.mkdir()
+    _git(src, "init", "-q")
+    (src / "README").write_text("old\n")
+    _git(src, "add", "-A"), _git(src, "commit", "-qm", "old")
+    old = _git(src, "rev-parse", "HEAD")
+    checkout = nvme / "w3-checkout"
+    subprocess.run(["git", "clone", "-q", str(src), str(checkout)], check=True)
+    _git(checkout, "checkout", "-q", "--detach", old)
+    inventory = src / "models" / "marlin2b" / "measure" / "inventory.sh"
+    inventory.parent.mkdir(parents=True)
+    inventory.write_text('cat "$WEIGHTS/inventory.out"; exit "$(cat "$WEIGHTS/inventory.rc" 2>/dev/null || echo 0)"\n')
+    _git(src, "add", "-A"), _git(src, "commit", "-qm", "release")
+    release = _git(src, "rev-parse", "HEAD")
+    releases = nvme / "releases"
+    releases.mkdir(parents=True)
+    _git(src, "update-ref", "refs/infrx/release", release)
+    _git(src, "bundle", "create", "-q", str(releases / f"{release}.bundle"), "refs/infrx/release")
+    good_sum = subprocess.run(["sha256sum", f"{release}.bundle"], cwd=releases, check=True,
+                              capture_output=True, text=True).stdout
+    (releases / f"{release}.sha256").write_text(good_sum)
+    weights = nvme / "marlin2b"
+    weights.mkdir()
+    (weights / "inventory.out").write_text('image_equals_pin=yes\nargs=["--max-num-seqs","8"]\n')
+    (nvme / "e4b").mkdir()
+    (nvme / "e4b" / "inventory.txt").write_text("old inventory\n")
+    stub = stubs(tmp_path, "curl", outputs={"curl": "503"})
+    (stub / "docker").write_text(DOCKER_76.format(python=sys.executable))
+    (stub / "docker").chmod(0o755)
+    step = (STEPS / "76-e4c-prepare.sh").read_text()
+    env = {"RELEASE": release, "NVME": str(nvme), "HOME": str(tmp_path)}
+    head = lambda: _git(checkout, "rev-parse", "HEAD")
+
+    closed = run_step(step, stub, env=env)                       # the edge is in maintenance
+    assert closed.returncode == 2 and head() == old, closed.stderr
+    assert [c for c in calls(stub) if c["tool"] == "docker"] == []
+    (stub / "curl.out").write_text("200")
+    (checkout / "stray").write_text("x")                        # a dirty measurement checkout
+    dirty = run_step(step, stub, env=env)
+    assert dirty.returncode == 2 and "dirty" in dirty.stderr and head() == old, dirty.stderr
+    (checkout / "stray").unlink()
+    (releases / f"{release}.sha256").write_text(f"{'0' * 64}  {release}.bundle\n")
+    forged = run_step(step, stub, env=env)
+    assert forged.returncode == 2 and "sha256" in forged.stderr and head() == old, forged.stderr
+    assert [c for c in calls(stub) if c["tool"] == "docker"] == []
+    (releases / f"{release}.sha256").write_text(good_sum)
+
+    done = run_step(step, stub, env=env)
+    assert done.returncode == 0, done.stderr
+    assert head() == release and _git(checkout, "status", "--porcelain") == ""
+    assert f"w3-checkout at {release} (clean)" in done.stdout
+    assert f"bundle {good_sum.split()[0]} {release}.bundle" in done.stdout
+    assert (nvme / "e4b" / "inventory.txt").read_text().startswith("image_equals_pin=yes\n")
+    assert [p.read_text() for p in (nvme / "e4b").glob("inventory.*.prev")] == ["old inventory\n"]
+    again = run_step(step, stub, env=env)                        # idempotent: the image exists
+    assert again.returncode == 0, again.stderr
+    builds = [c for c in calls(stub) if c["tool"] == "docker" and c["argv"][:1] == ["build"]]
+    assert len(builds) == 1 and builds[0]["argv"][-3:] == ["-t", f"infrx-certify:{release}", "-"]
+    assert builds[0]["stdin"].startswith(f"FROM infrx-runtime:{release}\n") and "git" in builds[0]["stdin"]
+
+    installed = (nvme / "e4b" / "inventory.txt").read_text()
+    for out, rc in (("image_equals_pin=no\n", "0"), ("precondition=failed: no container\n", "2")):
+        (weights / "inventory.out").write_text(out)
+        (weights / "inventory.rc").write_text(rc)
+        bad = run_step(step, stub, env=env)
+        assert bad.returncode == 3, (out, bad.stderr)
+        assert (nvme / "e4b" / "inventory.txt").read_text() == installed
+        assert not (nvme / "e4b" / "inventory.txt.new").exists()
+
+
+CURL_METRICS = '''#!{python}
+import pathlib, re, sys
+here = pathlib.Path(__file__).resolve().parent
+port = re.search(r":(\\d+)/metrics", " ".join(sys.argv)).group(1)
+print((here / f"metrics-{{port}}").read_text(), end="")
+'''
+DOCKER_77 = '''#!{python}
+import json, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+with (here / "calls.log").open("a") as log:
+    log.write(json.dumps({{"tool": "docker", "argv": args, "stdin": ""}}) + "\\n")
+if args[:1] == ["inspect"]:
+    print((here / "gateway-image").read_text())
+elif args[:2] == ["image", "inspect"]:
+    print("sha256:" + "e" * 64)
+elif "certify.py" in " ".join(args):
+    print(json.dumps({{"git": {{"sha": "x", "dirty": False}}, "engine_options_digest": "sha256:" + "3" * 64}}, indent=2))
+elif "bench.py" in " ".join(args):
+    print((here / "verdict.json").read_text())
+'''
+
+
+def test_certify_profiles__77_fills_from_the_served_build_and_validates_offline(tmp_path):
+    """E4C-runbook §2/§3 + H6 on the box (certify-prep §2). Oracle: a filled copy written when the
+    worker's build revision, the gateway's image or a W10 unit disagrees with RELEASE; H6's inventory
+    sha256 not 64-hex; config_version not the env file's hash (or the file's content printed); a
+    placed profile that does not validate accepted; a validation with network. Filled values are
+    exactly the served reads (source/deployed = RELEASE, the runtime image id)."""
+    nvme = tmp_path / "nvme"
+    repo = nvme / "w3-checkout"
+    (repo / "models" / "marlin2b" / "profiles").mkdir(parents=True)
+    marlin = support.REPO / "models" / "marlin2b"
+    (repo / "models" / "marlin2b" / "serving-version.json").write_bytes((marlin / "serving-version.json").read_bytes())
+    for base in (marlin / "profiles").glob("*.base.json"):
+        (repo / "models" / "marlin2b" / "profiles" / base.name).write_bytes(base.read_bytes())
+    _git(repo, "init", "-q"), _git(repo, "add", "-A"), _git(repo, "commit", "-qm", "release")
+    release = _git(repo, "rev-parse", "HEAD")
+    env_file = tmp_path / "gateway.env"
+    env_file.write_bytes(f"DATABASE_URL=postgresql://u:{support.MARKER}@h/d\n".encode())
+    stub = stubs(tmp_path, "systemctl", outputs={"systemctl": "active\n"})
+    for tool, body in (("curl", CURL_METRICS), ("docker", DOCKER_77)):
+        (stub / tool).write_text(body.format(python=sys.executable))
+        (stub / tool).chmod(0o755)
+    info = lambda rev: f'infrx_build_info{{image="x",revision="{rev}"}} 1\n'
+    (stub / "metrics-8001").write_text(info(release))
+    (stub / "metrics-8002").write_text(info(release))
+    (stub / "gateway-image").write_text("sha256:" + "e" * 64)
+    verdict = {"runnable": True, "errors": [], "blocks": [], "warnings": [], "derived": {"projected_spend": "1"}}
+    (stub / "verdict.json").write_text(json.dumps(verdict, indent=2))
+    step = (STEPS / "77-e4c-profiles.sh").read_text()
+    h6 = "a" * 64
+    env = {"RELEASE": release, "MIGRATION_VERSION": "0026", "MAINTENANCE_WINDOW": "e4c-side-test",
+           "KEYS_TAKEN_AT": "2026-09-27T10:00:00Z", "KEYS_SOURCE_SHA256": h6, "ACTIVE_PREFIXES": "142c7d81",
+           "NVME": str(nvme), "ENV_FILE": str(env_file), "HOME": str(tmp_path)}
+    e4c = nvme / "e4b" / "e4c"
+
+    def refused(why, **change):
+        done = run_step(step, stub, env={**env, **change})
+        assert done.returncode == 2 and not e4c.exists(), (why, done.stdout, done.stderr)
+    (stub / "metrics-8002").write_text(info("f" * 40))            # the worker runs another build
+    refused("worker revision")
+    (stub / "metrics-8002").write_text(info(release))
+    (stub / "gateway-image").write_text("sha256:" + "9" * 64)     # the gateway is not the release image
+    refused("gateway image")
+    (stub / "gateway-image").write_text("sha256:" + "e" * 64)
+    (stub / "systemctl.out").write_text("inactive\n")             # a W10 unit down
+    refused("unit")
+    (stub / "systemctl.out").write_text("active\n")
+    refused("inventory sha", KEYS_SOURCE_SHA256="not-a-sha")
+
+    done = run_step(step, stub, env=env)
+    assert done.returncode == 0, done.stderr
+    assert support.MARKER not in done.stdout + done.stderr
+    names = ["E1B-box-forms.json", "E1B-box.json", "E1B-direct.json", "E1B-sop.json", "E4C-box.json",
+             "E4C-edge.json", "keys-certify.json"]
+    assert sorted(p.name for p in e4c.iterdir()) == names
+    assert all((e4c / n).stat().st_mode & 0o777 == 0o644 for n in names)
+    box = json.loads((e4c / "E4C-box.json").read_text())
+    ident = box["identity"]
+    assert (ident["source_sha"], ident["deployed_sha"], ident["image_digest"], ident["migration_version"]) == \
+        (release, release, "sha256:" + "e" * 64, "0026")
+    assert ident["config_version"] == "sha256:" + hashlib.sha256(env_file.read_bytes()).hexdigest()
+    assert box["target"]["allowed_fault_targets"] == ["marlin2b-vllm", "infrx-worker", "infrx-valkey"]
+    assert box["target"]["maintenance_window"] == "e4c-side-test"
+    assert json.loads((e4c / "keys-certify.json").read_text()) == {
+        "active_key_id_prefixes": ["142c7d81"], "taken_at": "2026-09-27T10:00:00Z",
+        "source": f"G8 credit-transition --dry-run sha256:{h6}"}
+    runs = [c["argv"] for c in calls(stub) if c["tool"] == "docker" and c["argv"][:1] == ["run"]]
+    assert len(runs) == 6 and all(r[r.index("--network") + 1] == "none" for r in runs)
+    bench = [r for r in runs if "models/marlin2b/bench.py" in r]
+    assert len(bench) == 5 and all(r[-1] == "--validate-only" for r in bench)
+    assert "--hashes" in runs[-1] and '"engine_options_digest"' in done.stdout
+    (stub / "verdict.json").write_text(json.dumps({**verdict, "runnable": False}))
+    unrunnable = run_step(step, stub, env=env)
+    assert unrunnable.returncode == 3, unrunnable.stdout
+
+
+def test_certify_wc0__79_runs_one_detached_sidecar_and_stops_it(tmp_path):
+    """E1B-protocol §7.2 WC-0 had no launcher (certify-prep P-d). Oracle: a second start while one
+    runs (two sidecars double every scrape); a stop that leaves either process or the pid file; a
+    start that reports success with no scrape line."""
+    logs = tmp_path / "logs"
+    stub = stubs(tmp_path, outputs={})
+    (stub / "curl").write_text('#!/bin/sh\n[ -e "$(dirname "$0")/silent" ] || echo "vllm:num_requests_running 0"\n')
+    (stub / "vmstat").write_text("#!/bin/sh\nwhile :; do echo vm; sleep 1; done\n")
+    for tool in ("curl", "vmstat"):
+        (stub / tool).chmod(0o755)
+    step = (STEPS / "79-wc0-scrape.sh").read_text().replace("sleep 35", "sleep 2").replace("sleep 30", "sleep 1")
+    env = {"E1B_LOGS": str(logs)}
+    pids = []
+    try:
+        started = run_step(step, stub, env={**env, "ACTION": "start"})
+        assert started.returncode == 0, started.stderr
+        assert re.search(r"lines=[1-9]", started.stdout), started.stdout
+        pids = [int(p) for p in (logs / "wc0.pid").read_text().split()]
+        assert len(pids) == 2 and all(_alive(p) for p in pids)
+        twice = run_step(step, stub, env={**env, "ACTION": "start"})
+        assert twice.returncode == 2 and (logs / "wc0.pid").read_text().split() == [str(p) for p in pids]
+        stopped = run_step(step, stub, env={**env, "ACTION": "stop"})
+        assert stopped.returncode == 0, stopped.stderr
+        assert not (logs / "wc0.pid").exists() and _gone(pids)
+        assert run_step(step, stub, env={**env, "ACTION": "stop"}).returncode == 2
+        (stub / "silent").touch()                                  # no scrape line: not a success
+        silent = run_step(step, stub, env={**env, "ACTION": "start"})
+        pids = [int(p) for p in (logs / "wc0.pid").read_text().split()]
+        assert silent.returncode == 3 and "lines=0" in silent.stdout, silent.stdout
+    finally:
+        for pid in pids:
+            for target in (-pid, pid):
+                try:
+                    os.kill(target, 9)
+                except OSError:
+                    pass
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return not Path(f"/proc/{pid}/stat").read_text().split(") ")[-1].startswith("Z")
+
+
+def _gone(pids) -> bool:
+    import time
+    for _ in range(50):
+        if not any(_alive(p) for p in pids):
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def test_e4b_report__78_defaults_to_the_newest_certify_run_never_e4c_or_e1b(tmp_path):
+    """certify-prep defect 3: 78 picked the lexically last directory, and E4C's own e4c/ and
+    e1b-* sort after every UTC name, so the poll read the profiles instead of the run. Oracle:
+    no RUN reads a non-UTC directory; RUN is taken as given; no run at all is exit 3."""
+    root = tmp_path / "e4b"
+    for d in ("20260927T090000Z", "20260927T100000Z", "e4c", "e1b-20260927T120000Z"):
+        (root / d).mkdir(parents=True)
+        (root / d / "report.json").write_text(f'{{"dir": "{d}"}}\n')
+    step = (STEPS / "78-e4b-report.sh").read_text()
+    stub = stubs(tmp_path)
+    newest = run_step(step, stub, env={"E4B_ROOT": str(root)})
+    assert newest.returncode == 0 and newest.stdout.startswith("== run 20260927T100000Z\n"), newest.stdout
+    named = run_step(step, stub, env={"E4B_ROOT": str(root), "RUN": "20260927T090000Z"})
+    assert named.stdout.startswith("== run 20260927T090000Z\n") and '"dir": "20260927T090000Z"' in named.stdout
+    for d in ("20260927T090000Z", "20260927T100000Z"):
+        import shutil
+        shutil.rmtree(root / d)
+    assert run_step(step, stub, env={"E4B_ROOT": str(root)}).returncode == 3
+
+
+AWS_UPLOAD = '''#!{python}
+import json, pathlib, shutil, sys
+here = pathlib.Path(__file__).resolve().parent
+with (here / "calls.log").open("a") as log:
+    log.write(json.dumps({{"tool": "aws", "argv": sys.argv[1:], "stdin": ""}}) + "\\n")
+shutil.copy(sys.argv[3], here / "uploaded.tgz")
+'''
+
+
+def test_e4b_fetch__80_uploads_the_named_run_only(tmp_path):
+    """certify-prep defect 6: session-03's e4b-fetch3.sh hardcoded run3's directory, so the E4C run
+    needed a hand-edited copy. Oracle: 80 packs any directory but RUN (or runs without it, or with
+    a RUN that is not a UTC run name), uploads an unfinished run, or names another object."""
+    import tarfile
+    run = "20260927T100000Z"
+    root = tmp_path / "e4b"
+    (root / run / "work").mkdir(parents=True)
+    (root / run / "report.json").write_text("{}\n")
+    (root / run / "certify.log").write_text("[ok  ] x\n\nexit 3\n")
+    (root / run / "work" / "cell.jsonl").write_text("{}\n")
+    (root / "20260927T110000Z").mkdir()                             # unfinished: no report yet
+    stub = stubs(tmp_path)
+    (stub / "aws").write_text(AWS_UPLOAD.format(python=sys.executable))
+    (stub / "aws").chmod(0o755)
+    step = (STEPS / "80-e4b-fetch.sh").read_text()
+    env = {"E4B_ROOT": str(root), "TMPDIR": str(tmp_path)}
+    assert run_step(step, stub, env=env).returncode != 0
+    assert run_step(step, stub, env={**env, "RUN": "../e4c"}).returncode == 2
+    assert run_step(step, stub, env={**env, "RUN": "20260927T110000Z"}).returncode == 3
+    assert calls(stub) == []
+    done = run_step(step, stub, env={**env, "RUN": run})
+    assert done.returncode == 0, done.stderr
+    (call,) = calls(stub)
+    assert call["argv"][:2] == ["s3", "cp"] and call["argv"][3] == f"s3://llm-bootcamp-641134885443/w4/e4b-box/{run}.tgz"
+    digest = hashlib.sha256((stub / "uploaded.tgz").read_bytes()).hexdigest()
+    assert f"uploaded s3://llm-bootcamp-641134885443/w4/e4b-box/{run}.tgz {digest}" in done.stdout
+    with tarfile.open(stub / "uploaded.tgz") as tgz:
+        assert sorted(tgz.getnames()) == ["certify.log", "report.json", "work", "work/cell.jsonl"]
+    assert "exit 3" in done.stdout and not list(tmp_path.glob("tmp.*.tgz"))

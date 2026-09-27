@@ -54,15 +54,16 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
                                        "50-install.sh", "55-runtime-login.sh", "56-resume.sh",
                                        "60-verify-local.sh", "71-pool-budget.sh",
                                        "72-observe-install.sh", "73-observe-status.sh",
-                                       "74-alert-test.sh", "78-e4b-report.sh", "79-evidence-export.sh",
-                                       "80-mirror-artifacts.sh",
+                                       "74-alert-test.sh", "76-e4c-prepare.sh", "77-e4c-profiles.sh",
+                                       "78-e4b-report.sh", "79-evidence-export.sh", "79-wc0-scrape.sh",
+                                       "80-e4b-fetch.sh", "80-mirror-artifacts.sh",
                                        "81-restore-artifacts.sh", "85-known-good-box.sh",
                                        "86-cleanup.sh",
                                        "90-revert.sh", "91-abort.sh",
                                        "93-restore-edge.sh", "95-maintenance.sh"]
     for path in [*STEPS, ROLLOUT / "ssm.sh", ROLLOUT / "verify-external.sh",
                  ROLLOUT / "verify-journey.sh", ROLLOUT / "e4c-certify.sh",
-                 ROLLOUT / "e1b-window.sh"]:
+                 ROLLOUT / "e1b-window.sh", ROLLOUT / "certify-window.sh", ROLLOUT / "certify-h6.sh"]:
         text = path.read_text()
         done = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
         assert done.returncode == 0, (path.name, done.stderr)
@@ -728,3 +729,447 @@ def test_e1b_window__wc8_keeps_the_interrupted_half_and_bounds_its_exit(tmp_path
     assert done.returncode == 0, done.stderr
     out = pathlib.Path(re.search(r"^out=(\S+)$", done.stdout, re.M).group(1))
     assert not (out / "sop.sqlite").exists()
+
+
+# --- CERTIFY-WINDOW: the fill, the validator, H6 and the window sequencer (certify-prep.md) ----------
+
+FILL = ROLLOUT / "certify-fill.py"
+RELEASE_D3 = "d3a99e01869b6b9c85173e25888abbbf9ed4dd29"
+#: certify-prep §1: the six committed bases filled with RELEASE d3a99e01's identities (the box-only
+#: config_version as the prep's marker), byte for byte the prep's validated local-e4c copies.
+PREPARED = {"E4C-box.json": "471a58d90e69efb58b6fa7dd8fe257dee4973b0c89c3e3ae57bc13cfda77b931",
+            "E4C-edge.json": "f9545c9602ea141b511c709129d8ab8db9a1d6e941b1e8bc97f84262dbd9c5d3",
+            "E1B-direct.json": "d8cf29ddd663f5d6e84999c8816a9a142a90f2e9662f40445d380f9e9ea895b6",
+            "E1B-box.json": "54a55e33950fd089a762b4896e9fcd8cba4b5c1512dda5d3aacc6fed484b827e",
+            "E1B-box-forms.json": "016801f9454bf429adb03956955aa554702321776fdac89744dd4aff310c933b",
+            "E1B-sop.json": "bf5a915b14cf28ebc3b86741db22706d0fef9af3e5d1fa158c7bbcb2d9e95764"}
+SIX = ("E4C-box.json=E4C-box.base.json", "E4C-edge.json=E4C-edge.overload.base.json",
+       "E1B-direct.json=E1B-direct.base.json", "E1B-box.json=E1B-box.base.json",
+       "E1B-box-forms.json=E1B-box.forms.base.json", "E1B-sop.json=E1B-sop.base.json")
+IDENTITIES = {"RELEASE": RELEASE_D3, "DEPLOYED_SHA": RELEASE_D3,
+              "IMAGE_DIGEST": "sha256:faa5b681878d441b2c4571409dcc73ead01ee957e3123e80517cdc9b8e9ccd5e",
+              "CONFIG_VERSION": "BOX-READ sha256 of /etc/marlin2b-gateway.env (77-e4c-profiles.sh)",
+              "MIGRATION_VERSION": "0026", "MAINTENANCE_WINDOW": "e4c-side-d3a99e01-20260927"}
+
+
+def _fill(dest, *pairs, **env):
+    return subprocess.run([sys.executable, str(FILL), str(support.REPO), str(dest), *pairs],
+                          capture_output=True, text=True, env={**os.environ, **IDENTITIES, **env})
+
+
+def test_certify_fill__the_bases_fill_to_the_prepared_copies_which_validate_runnable(tmp_path):
+    """certify-prep §1: the six bases, filled with RELEASE d3a99e01's identities, are the prep's
+    validated copies byte for byte, and every window cell validates runnable on them
+    (certify-validate.py over e1b-window.sh's DRY_RUN plan). 77 carries certify-fill.py verbatim.
+    Oracle: a fill that accepts a deployed build other than RELEASE, a migration below 0026 (R147),
+    a two-tenant base without the tenant-2 key-id prefix, or changes anything but a FILL (the
+    prepared sha256 moves); a validator that exits 0 when a cell is not runnable."""
+    e4c = tmp_path / "nvme" / "e4b" / "e4c"
+    done = _fill(e4c, *SIX)
+    assert done.returncode == 0, done.stderr
+    assert {n: hashlib.sha256((e4c / n).read_bytes()).hexdigest() for n in PREPARED} == PREPARED
+    for why, env in (("deployed", {"DEPLOYED_SHA": "f" * 40}), ("migration", {"MIGRATION_VERSION": "0025"})):
+        refused = _fill(tmp_path / why, *SIX, **env)
+        assert refused.returncode == 2 and not (tmp_path / why).exists(), (why, refused.stderr)
+    pair = "E4C-two-tenant.json=E4C-box.two-tenant.base.json"
+    assert _fill(tmp_path / "t2", pair).returncode == 2 and not (tmp_path / "t2").exists()
+    assert _fill(tmp_path / "t2", pair, TENANT2_PREFIX="abcd1234").returncode == 0
+    assert json.loads((tmp_path / "t2" / "E4C-two-tenant.json").read_text())["target"]["test_key_ids"] == \
+        ["142c7d81", "abcd1234"]
+
+    (e4c / "keys-certify.json").write_text('{"active_key_id_prefixes": ["142c7d81"]}')
+    nvme = tmp_path / "nvme"
+    (nvme / "w3-checkout").symlink_to(support.REPO)
+    (nvme / "e4b" / "key.env").write_text("INFRX_API_KEY=x\n")
+    plan = subprocess.run(["bash", "-c", E1B_WINDOW.read_text().replace("/opt/dlami/nvme", str(nvme))],
+                          capture_output=True, text=True, env={**os.environ, "RELEASE": RELEASE_D3, "DRY_RUN": "1"})
+    assert plan.returncode == 0, plan.stderr
+    (tmp_path / "plan.txt").write_text(plan.stdout)
+    validate = [sys.executable, str(ROLLOUT / "certify-validate.py"), str(support.REPO), str(e4c), str(tmp_path / "plan.txt")]
+    runnable = subprocess.run(validate, capture_output=True, text=True, cwd=tmp_path)
+    assert runnable.returncode == 0 and runnable.stdout.endswith("ALL RUNNABLE\n"), runnable.stdout[-2000:]
+    assert runnable.stdout.count("runnable True") == 18, runnable.stdout
+    (e4c / "keys-certify.json").write_text('{"active_key_id_prefixes": ["142c7d81", "deadbeef"]}')
+    foreign = subprocess.run(validate, capture_output=True, text=True, cwd=tmp_path)
+    assert foreign.returncode == 1 and "NOT ALL RUNNABLE" in foreign.stdout, foreign.stdout[-2000:]
+    step = (ROLLOUT / "steps" / "77-e4c-profiles.sh").read_text()        # the box runs this same fill
+    assert step.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0] + "\n" == FILL.read_text()
+
+
+OPERATOR_CLI = '''#!{python}
+import json, os, pathlib, stat, sys
+here = pathlib.Path(os.environ["STUBS"])
+args = sys.argv[1:]
+with (here / "cli.log").open("a") as log:
+    log.write(json.dumps(args) + "\\n")
+verb = args[0]
+if verb == "credit-transition":
+    print((here / "dryrun.json").read_text(), end="")
+    sys.exit(int((here / "dryrun.rc").read_text()) if (here / "dryrun.rc").exists() else 0)
+if verb == "statement":
+    key = pathlib.Path(args[args.index("--key-file") + 1])
+    assert stat.S_IMODE(key.stat().st_mode) == 0o600 and key.read_text().startswith("MARKER"), "key file"
+    print(json.dumps({{"org_id": (here / "org").read_text(), "user_id": "u-1", "credit": {{"available": "9999.5"}}}}))
+elif verb == "account":
+    n = len([l for l in (here / "cli.log").read_text().splitlines() if '"account"' in l])
+    after = (here / "after").read_text() if (here / "after").exists() else "49999.5"
+    print(json.dumps({{"credit": {{"available": "9999.5" if n == 1 else after}}, "verification_evidence_ref": "r"}}))
+elif verb == "adjust":
+    assert not (pathlib.Path(os.environ["LOGDIR"]) / "certify.key").exists(), "the key file outlived statement"
+    print(json.dumps({{"amount": "40000.00000000", "entry_id": "e", "replayed": False, "wallet_id": "w"}}))
+'''
+
+
+def _dryrun(*keys):
+    return json.dumps({"as_of": "2026-09-27T10:00:00Z", "blockers": [], "inventory": {"drift": [], "keys": [
+        {"key_id": k + "-0000-0000-0000-000000000000", "prefix": "sk-infrx-" + "Q" * 8, "audience": a,
+         "org_id": "15e766d0-8c4d-47a8-986f-22ed32f390c3", "created_at": "2026-09-25T00:00:00Z",
+         "revoked_at": r, "last_used_at": None} for k, a, r in keys]}}) + "\n"
+
+
+def _window_root(tmp_path, *, dry=False):
+    """A scratch repo root: the real window scripts, recording stand-ins for ssm.sh/operator-cli.sh/
+    verify-journey.sh and aws/git/curl on PATH (each logs its argv; DRY_RUN must call none)."""
+    root, stub = tmp_path / "root", tmp_path / "bin"
+    (root / "infra" / "rollout").mkdir(parents=True)
+    (root / "models" / "marlin2b" / "results").mkdir(parents=True)
+    (root / "models" / "marlin2b" / "results" / "E4C-runbook.md").write_text(
+        (MARLIN / "results" / "E4C-runbook.md").read_text())
+    for name in ("certify-window.sh", "certify-h6.sh", "certify-fill.py"):
+        (root / "infra" / "rollout" / name).write_text((ROLLOUT / name).read_text())
+    (root / "apps" / "infrx-api" / ".venv" / "bin").mkdir(parents=True)
+    (root / "apps" / "infrx-api" / ".venv" / "bin" / "python").symlink_to(sys.executable)
+    stub.mkdir()
+    record = '#!{python}\nimport json, os, pathlib, sys\nhere = pathlib.Path(os.environ["STUBS"])\n' \
+             'n = pathlib.Path(sys.argv[0]).name\nlog = here / (n + ".log")\n' \
+             'with log.open("a") as f: f.write(json.dumps(sys.argv[1:]) + "\\n")\n' \
+             'step = pathlib.Path(sys.argv[1]).name if n == "ssm.sh" and len(sys.argv) > 1 else n\n' \
+             'k = len(log.read_text().splitlines())\n' \
+             'for out in (here / "out" / f"{{step}}.{{k}}", here / "out" / step):\n' \
+             '    if out.exists():\n        print(out.read_text(), end=""); break\n'
+    for path in (root / "infra" / "rollout" / "ssm.sh", root / "infra" / "rollout" / "verify-journey.sh",
+                 stub / "aws", stub / "git", stub / "curl"):
+        path.write_text(record.format(python=sys.executable))
+        path.chmod(0o755)
+    (stub / "out").mkdir()
+    cli = root / "infra" / "rollout" / "operator-cli.sh"
+    cli.write_text(OPERATOR_CLI.format(python=sys.executable))
+    cli.chmod(0o755)
+    (stub / "org").write_text("15e766d0-8c4d-47a8-986f-22ed32f390c3")
+    return root, stub
+
+
+def _window(root, stub, *args, input="", **env):
+    return subprocess.run(["bash", "infra/rollout/certify-window.sh", *args], cwd=root, capture_output=True,
+                          text=True, timeout=120, input=input,
+                          env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}",
+                               "HOME": str(root), "STUBS": str(stub), "POLL_S": "0.2", **env})
+
+
+def _certified(logdir, run="20260927T100000Z", finished=None):
+    """A LOGDIR whose certify run `run` was launched and whose `report` saw it end (`finished`,
+    default the same run): what every step after `report` needs."""
+    logdir.mkdir(exist_ok=True)
+    (logdir / "certify.log").write_text(f"out=/opt/dlami/nvme/e4b/{run}\n")
+    (logdir / "window.log").write_text("" if finished is False else
+                                       f"2026-09-27T14:00:00Z certify finished: exit 0 (run {finished or run})\n")
+
+
+def _logged(stub, name):
+    log = stub / f"{name}.log"
+    return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+
+def test_certify_h6__only_consumer_key_ids_and_the_operator_key_stays_out(tmp_path):
+    """E4C-runbook H6 as written (every key with revoked_at null must be exactly 142c7d81) always
+    stopped on the operator key d554db80, which H5 and §5.0 need, and the keys block's `prefix` is
+    the SECRET's first 17 characters (certify-prep defect 1). Oracle: the operator key counted, the
+    `prefix` field used instead of key_id[:8], an extra active consumer or provider_dev key
+    passing, a failed dry run passing, the dry-run JSON readable by others."""
+    root, stub = _window_root(tmp_path)
+    logdir = tmp_path / "log"
+    logdir.mkdir()
+    keys = [("142c7d81", "consumer", None), ("d554db80", "operator", None),
+            ("b5b74b8e", "consumer", "2026-09-27T06:50:00Z")]
+    (stub / "dryrun.json").write_text(_dryrun(*keys))
+    h6 = lambda **env: subprocess.run(["bash", "infra/rollout/certify-h6.sh", str(logdir), "h6"], cwd=root,
+                                      capture_output=True, text=True, env={**os.environ, "STUBS": str(stub), **env})
+    done = h6()
+    assert done.returncode == 0, done.stderr
+    raw = (stub / "dryrun.json").read_bytes()
+    line = next(l for l in done.stdout.splitlines() if l.startswith("INVENTORY "))
+    assert json.loads(line[10:]) == {"active_key_id_prefixes": ["142c7d81"], "taken_at": "2026-09-27T10:00:00Z",
+                                     "source": "G8 credit-transition --dry-run sha256:" + hashlib.sha256(raw).hexdigest()}
+    assert f"KEYS_TAKEN_AT=2026-09-27T10:00:00Z KEYS_SOURCE_SHA256={hashlib.sha256(raw).hexdigest()} " \
+           "ACTIVE_PREFIXES=142c7d81" in done.stdout
+    assert re.search(r"^active d554db80 operator .*excluded", done.stdout, re.M), done.stdout
+    assert "sk-infrx-" not in done.stdout and (logdir / "h6-dryrun.json").stat().st_mode & 0o077 == 0
+    for extra in (("abcd1234", "consumer", None), ("abcd1234", "provider_dev", None)):
+        (stub / "dryrun.json").write_text(_dryrun(*keys, extra))
+        stop = h6()
+        assert stop.returncode == 1 and "STOP:" in stop.stderr, (extra, stop.stderr)
+    assert h6(EXPECT="142c7d81,abcd1234").returncode == 0
+    (stub / "dryrun.rc").write_text("1")
+    failed = h6(EXPECT="142c7d81,abcd1234")
+    assert failed.returncode == 1 and "STOP: the dry run exited 1" in failed.stderr
+
+
+#: the window's order (certify-prep §4, A1-A7), as `DRY_RUN=1` prints it: one plan line per call
+WINDOW_PLAN = ["prep76", "o3", "h4-grant", "h4-account", "h5-key", "h5-statement", "h5-account-before",
+               "h5-adjust", "h5-account-after", "h6", "profiles77", "freeze", "wc0-start", "certify", "report",
+               "fetch", "fetch-get", "fetch-unpack", "cells", "h6-after-s4", "e1b-budget", "e1b", "wc6a", "wc7",
+               "wc6b", "wc6b-compare", "h6-after-s4a", "tenant2-key", "rel-tree", "two-tenant-fill", "h6-journey",
+               "journey-async-a", "journey-async-b", "journey-sync", "journey-foreign", "journey-discovery",
+               "wc9-validate", "wc9", "wc0-stop", "drill-engine-restart", "drill-worker-sigkill", "drift-end",
+               "cleanup-dry", "cleanup"]
+
+
+def test_certify_window__dry_run_prints_the_whole_plan_in_order_and_calls_nothing(tmp_path):
+    """The sequencer (certify-prep §4 A1-A7) in DRY_RUN: every call, in order, with its flags; no
+    stand-in is called. Oracle: a step out of order (H6 after the profiles, WC-7 not right after
+    WC-6a, the tenant-2 key before §4a's closing inventory); 78 polled without RUN (defect 3);
+    the E1B window without TIMEOUT_S=7200; the certify key on a command line rather than
+    statement's --key-file; certify-fill.py not the two-tenant fill; an unknown step accepted."""
+    root, stub = _window_root(tmp_path)
+    done = _window(root, stub, DRY_RUN="1", LOGDIR=str(tmp_path / "log"))
+    assert done.returncode == 0, done.stderr
+    for tool in ("ssm.sh", "verify-journey.sh", "aws", "git", "curl", "cli"):
+        assert _logged(stub, tool) == [], tool
+    plans = re.findall(r"^plan (\S+?)(?::| \()", done.stdout, re.M)
+    assert plans == WINDOW_PLAN, plans
+    line = {p: next(l for l in done.stdout.splitlines() if re.match(rf"plan {re.escape(p)}[: ]", l)) for p in plans}
+    assert line["report"].endswith(r"78-e4b-report.sh RUN=\<r\> ONLY=report.json")
+    assert line["e1b"].endswith(f"env TIMEOUT_S=7200 infra/rollout/ssm.sh infra/rollout/e1b-window.sh RELEASE={RELEASE_D3}")
+    assert line["wc7"].endswith("CELLS=WC-7") and "(detached)" in line["wc7"]
+    assert " statement --key-file " in line["h5-statement"] and "certify.key" in line["h5-statement"]
+    assert "infra/rollout/certify-fill.py" in line["two-tenant-fill"] and "TENANT2_PREFIX=" in line["two-tenant-fill"]
+    assert "E1B-two-tenant.json=E1B-edge.two-tenant.base.json" in line["two-tenant-fill"]
+    assert r"--tenant-keys INFRX_API_KEY\,INFRX_API_KEY_B" in line["wc9"] and "--validate-only" in line["wc9-validate"]
+    assert line["cleanup"].endswith("86-cleanup.sh DRY_RUN=0") and line["cleanup-dry"].endswith("86-cleanup.sh")
+    only = _window(root, stub, "--only", "certify", DRY_RUN="1", LOGDIR=str(tmp_path / "log"))
+    assert re.findall(r"^plan (\S+?):", only.stdout, re.M) == ["certify"], only.stdout
+    bad = _window(root, stub, "--step", "nope", DRY_RUN="1", LOGDIR=str(tmp_path / "log"))
+    assert bad.returncode == 2 and "unknown step nope" in bad.stderr
+
+
+def test_certify_window__h5_funds_only_the_certify_org_and_shreds_its_key_file(tmp_path):
+    """H5 (certify-prep §3): the certify tenant's user comes from `statement --key-file` with the
+    SSM secret in a 0600 file, shredded; +40,000 CREDIT only when the key's org is the certify org.
+    Oracle: the secret on any argv or in any log; the key file left behind; an adjust for a key
+    of another org; a balance that did not move by 40,000 accepted; the key file still on disk
+    when adjust runs (the EXIT trap alone would keep it for the whole window)."""
+    root, stub = _window_root(tmp_path)
+    (stub / "out" / "aws").write_text(f"{support.MARKER}-certify-key\n")
+    logdir = tmp_path / "log"
+    done = _window(root, stub, "--only", "h5", LOGDIR=str(logdir))
+    assert done.returncode == 0, done.stdout + done.stderr
+    cli = _logged(stub, "cli")
+    assert [c[0] for c in cli] == ["statement", "account", "adjust", "account"]
+    assert cli[2][:3] == ["adjust", "--user", "u-1"] and "adj-e4c-20260925" in cli[2]
+    assert not (logdir / "certify.key").exists()
+    seen = "".join(p.read_text() for p in logdir.glob("*.log")) + done.stdout + done.stderr + json.dumps(cli)
+    assert support.MARKER not in seen
+    assert "--with-decryption" in _logged(stub, "aws")[0] and "/model-inference/e4b_api_key" in _logged(stub, "aws")[0]
+    (stub / "org").write_text("a349a382-bc66-4f28-b9b7-df866af42a33")      # the key is another org's
+    (stub / "cli.log").unlink()
+    other = _window(root, stub, "--only", "h5", LOGDIR=str(tmp_path / "log2"))
+    assert other.returncode == 1 and "nothing funded" in other.stdout, other.stdout
+    assert [c[0] for c in _logged(stub, "cli")] == ["statement"] and not (tmp_path / "log2" / "certify.key").exists()
+    (stub / "org").write_text("15e766d0-8c4d-47a8-986f-22ed32f390c3")
+    (stub / "after").write_text("9999.5")                               # the balance did not move
+    (stub / "cli.log").unlink()
+    unmoved = _window(root, stub, "--only", "h5", LOGDIR=str(tmp_path / "log3"))
+    assert unmoved.returncode == 1 and "did not move" in unmoved.stdout, unmoved.stdout
+
+
+def test_certify_window__a_long_cell_is_re_attached_never_started_twice_and_certify_never_relaunched(tmp_path):
+    """Resumability (`--step/--logdir`): a detached cell still running is polled, not started again
+    (a second e1b-window.sh or WC-7 would overlap on one engine); a failed one is started again with
+    its log kept; a certify run already launched from the LOGDIR is never relaunched (e4c-certify.sh
+    kills the running container). Oracle: ssm.sh called for a live cell or a launched certify run;
+    a failed cell not retried."""
+    root, stub = _window_root(tmp_path)
+    logdir = tmp_path / "log"
+    _certified(logdir)
+    live = subprocess.Popen(["bash", "-c", f'sleep 1; echo "WC-7 cold exit=0" > {logdir}/wc7.log; echo 0 > {logdir}/wc7.rc'])
+    (logdir / "wc7.pid").write_text(str(live.pid))
+    attached = _window(root, stub, "--only", "wc7", LOGDIR=str(logdir))
+    live.wait()
+    assert attached.returncode == 0 and "still running" in attached.stdout, attached.stdout + attached.stderr
+    assert _logged(stub, "ssm.sh") == []
+    (logdir / "wc7.rc").write_text("1")                               # a failed WC-7: started again
+    (stub / "out" / "e1b-window.sh").write_text("WC-7 cold exit=0\n")
+    retried = _window(root, stub, "--only", "wc7", LOGDIR=str(logdir))
+    assert retried.returncode == 0, retried.stdout + retried.stderr
+    assert [c[-1] for c in _logged(stub, "ssm.sh")] == ["CELLS=WC-7"]
+    assert list(logdir.glob("wc7.failed-*.log"))
+    (logdir / "certify.log").write_text("out=/opt/dlami/nvme/e4b/20260927T100000Z\n")
+    again = _window(root, stub, "--only", "certify", LOGDIR=str(logdir))
+    assert again.returncode == 1 and "already launched" in again.stdout, again.stdout
+    assert len(_logged(stub, "ssm.sh")) == 1
+
+
+def test_certify_window__report_polls_78_with_the_run_until_certify_exits(tmp_path):
+    """§4's poll (certify-prep A4): 78 with RUN=<the launched run> (defect 3: without it 78 read e4c/)
+    until certify.log ends `exit N`; exit 1 (a FAIL cell) stops the window for the 05 §7 fix loop.
+    Oracle: a poll without RUN; the first answer taken as the end; exit 1 passed on."""
+    root, stub = _window_root(tmp_path)
+    logdir = tmp_path / "log"
+    logdir.mkdir()
+    (logdir / "certify.log").write_text("out=/opt/dlami/nvme/e4b/20260927T100000Z\n[ok  ] x\n")
+    (stub / "out" / "78-e4b-report.sh.1").write_text("== run 20260927T100000Z\n== log tail certify.log\n[ok  ] x\n")
+    (stub / "out" / "78-e4b-report.sh.2").write_text("== run 20260927T100000Z\ncertify exit 3\n== log tail certify.log\n"
+                                                     "[PEND] y\n\nexit 3\n")
+    done = _window(root, stub, "--only", "report", LOGDIR=str(logdir), REPORT_POLL_S="0")
+    assert done.returncode == 0 and "certify finished: exit 3 (run 20260927T100000Z)" in done.stdout, done.stdout + done.stderr
+    polls = _logged(stub, "ssm.sh")
+    assert [p[1:] for p in polls] == [["RUN=20260927T100000Z", "ONLY=report.json"]] * 2
+    (stub / "ssm.sh.log").unlink()
+    (stub / "out" / "78-e4b-report.sh.1").write_text("== run 20260927T100000Z\ncertify exit 1\n== log tail certify.log\n"
+                                                     "[FAIL] z\n\nexit 1\n")
+    failed = _window(root, stub, "--only", "report", LOGDIR=str(logdir), REPORT_POLL_S="0")
+    assert failed.returncode == 1 and "fix loop" in failed.stdout and len(_logged(stub, "ssm.sh")) == 1
+    # the run has ended either way: the steps after `report` may start (no box certify run is live)
+    assert "certify finished: exit 1 (run 20260927T100000Z)" in (logdir / "window.log").read_text()
+
+
+def test_certify_window__report_sees_certify_exit_past_ssm_24000_characters(tmp_path):
+    """0-CW-1/1-CW-R2: 78 printed the listing, then report.json (up to 24,000 bytes), then certify.log's
+    tail, and SSM keeps the first 24,000 characters: once report.json existed the closing `exit N`
+    never reached the poll, which idled to REPORT_MAX_S and STOPped with a false "no exit N" (run1's
+    output is 25,103 characters, `exit 1` at 25,096). The real 78 runs here behind an ssm.sh stand-in
+    that keeps 24,000 characters, as SSM does. Oracle: 78 printing certify's exit only in the log
+    tail; the poll reading the tail's `exit N` instead of 78's leading line."""
+    root, stub = _window_root(tmp_path)
+    (root / "infra" / "rollout" / "steps").mkdir()
+    (root / "infra" / "rollout" / "steps" / "78-e4b-report.sh").write_text((ROLLOUT / "steps" / "78-e4b-report.sh").read_text())
+    (root / "infra" / "rollout" / "ssm.sh").write_text(
+        '#!/usr/bin/env bash\nstep=$1; shift\necho "$step $*" >> "$STUBS/ssm.calls"\n'
+        '(export "$@"; bash "$step") 2>&1 | head -c 24000\n')
+    run = tmp_path / "e4b" / "20260927T100000Z"
+    (run / "work").mkdir(parents=True)
+    (run / "report.json").write_text(json.dumps({"stages": [{"stage": "e4b.b.soak", "detail": "x" * 25000}]}))
+    (run / "certify.log").write_text("[ok  ] e4b.b.soak\n" + '  "exit 1",\n' + "\nexit 0\n")
+    logdir = tmp_path / "log"
+    _certified(logdir, finished=False)
+    done = _window(root, stub, "--only", "report", LOGDIR=str(logdir), E4B_ROOT=str(tmp_path / "e4b"),
+                   REPORT_POLL_S="0", REPORT_MAX_S="0")
+    assert done.returncode == 0 and "certify finished: exit 0 (run 20260927T100000Z)" in done.stdout, done.stdout
+    assert (logdir / "report.log").stat().st_size >= 24000                   # the answer was cut, as on the box
+    (run / "certify.log").write_text("[ok  ] e4b.b.soak\n")                  # still running: no exit yet
+    _certified(tmp_path / "log2", finished=False)
+    running = _window(root, stub, "--only", "report", LOGDIR=str(tmp_path / "log2"), E4B_ROOT=str(tmp_path / "e4b"),
+                      REPORT_POLL_S="0", REPORT_MAX_S="0")
+    assert running.returncode == 1 and "no 'exit N'" in running.stdout, running.stdout
+
+
+def _alive():
+    return subprocess.Popen(["sleep", "60"])
+
+
+def test_certify_window__no_step_starts_on_a_live_cell_a_running_certify_or_a_second_sequencer(tmp_path):
+    """1-CW-R1/0-CW-3: a detached cell (setsid -f) outlives its sequencer, and `--step`/`--only` resume
+    anywhere: WC-6a's engine stop was dispatched while WC-7 ran, and `--step drills` could start
+    during certify's 4.5-6 h run. Now one sequencer holds the LOGDIR (flock), no step starts while
+    another cell of the LOGDIR is live, and no step after `report` starts before `report` saw the
+    launched run's `exit N`. Oracle: ssm.sh called for WC-6a with WC-7 live, with the certify run
+    launched and not seen to end (or only an older run seen to end), or with another sequencer on
+    the LOGDIR; a finished cell or a finished certify run still blocking."""
+    root, stub = _window_root(tmp_path)
+    (stub / "out" / "l8ref.sh").write_text("restored=yes\n")
+    logdir = tmp_path / "log"
+    _certified(logdir)
+    wc7 = _alive()
+    try:
+        (logdir / "wc7.pid").write_text(str(wc7.pid))
+        on_wc7 = _window(root, stub, "--only", "wc6a", LOGDIR=str(logdir))
+        assert on_wc7.returncode == 1 and f"wc7 (pid {wc7.pid}) is still running" in on_wc7.stdout, on_wc7.stdout
+        assert _logged(stub, "ssm.sh") == []
+    finally:
+        wc7.kill()
+        wc7.wait()
+    (logdir / "wc7.rc").write_text("0")
+    for finished, why in ((False, "no finish seen"), ("20260926T100000Z", "an older run's finish")):
+        _certified(logdir, finished=finished)
+        early = _window(root, stub, "--only", "wc6a", LOGDIR=str(logdir))
+        assert early.returncode == 1 and "has not been seen to finish" in early.stdout, (why, early.stdout)
+        assert _logged(stub, "ssm.sh") == [], why
+    _certified(logdir)
+    import fcntl
+    with open(logdir / ".lock", "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        second = _window(root, stub, "--only", "wc6a", LOGDIR=str(logdir))
+    assert second.returncode == 2 and "another certify-window.sh holds" in second.stderr, second.stdout + second.stderr
+    assert _logged(stub, "ssm.sh") == []
+    done = _window(root, stub, "--only", "wc6a", LOGDIR=str(logdir))
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert [c[0] for c in _logged(stub, "ssm.sh")] == ["models/marlin2b/e1b/l8ref.sh"]
+
+
+def test_certify_window__a_killed_sequencer_leaves_its_live_cell_resumable(tmp_path):
+    """The LOGDIR lock is the sequencer's alone: a detached cell (or a poll's sleep) that inherited it
+    would hold it after the sequencer was killed, and the documented resume (`--only <cell>`
+    re-attaches) would be refused for the cell's whole run. Oracle: the setsid cell keeping the
+    lock's descriptor; the cell started a second time."""
+    root, stub = _window_root(tmp_path)
+    (root / "infra" / "rollout" / "ssm.sh").write_text(
+        '#!/usr/bin/env bash\necho "$*" >> "$STUBS/ssm.calls"\nsleep 4\necho "WC-7 cold exit=0"\n')
+    logdir = tmp_path / "log"
+    _certified(logdir)
+    env = {"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "HOME": str(root), "STUBS": str(stub),
+           "POLL_S": "0.2", "LOGDIR": str(logdir)}
+    first = subprocess.Popen(["bash", "infra/rollout/certify-window.sh", "--only", "wc7"], cwd=root, env=env,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(100):
+        if (logdir / "wc7.pid").exists() and (logdir / "wc7.pid").read_text().strip():
+            break
+        subprocess.run(["sleep", "0.05"])
+    first.terminate()
+    first.wait()
+    # the killed sequencer's own short children (a 0.1 s pid wait, a `tee`) end within this; the 4 s cell does not
+    subprocess.run(["sleep", "0.5"])
+    resumed = _window(root, stub, "--only", "wc7", LOGDIR=str(logdir))
+    assert resumed.returncode == 0 and "still running" in resumed.stdout, resumed.stdout + resumed.stderr
+    assert len((stub / "ssm.calls").read_text().splitlines()) == 1
+
+
+FAKE_PROBE = """#!/usr/bin/env bash
+echo "$*" >> "$D/curl.calls"
+[ -e "$D/never-down" ] && exit 0
+[ "$(wc -l < "$D/curl.calls")" -gt 3 ]
+"""
+
+
+def test_certify_window__a_drill_passes_only_after_its_probe_saw_the_outage_and_the_engine_back(tmp_path):
+    """0-CW-2: the engine drill probed the gateway's :8001/readyz, which checks only price_source and
+    journal and answers 200 while vLLM loads the model, and the probe loop took its first 200: it
+    wrote a measured_s of the docker stop and verdict=PASS (P-17 check 7 evidence). The engine
+    drill now probes the worker's :8002/readyz (the engine's readiness; E4C §6 `/readyz` 200 within
+    300 s), and a drill passes only when its probe went non-200 first. Oracle: the gateway probe;
+    PASS from a probe that never saw the outage; FAIL for one that did and recovered."""
+    root, stub = _window_root(tmp_path)
+    logdir = tmp_path / "log"
+    _certified(logdir)
+    _window(root, stub, "--only", "drills", LOGDIR=str(logdir), input="yes\n")
+    script = logdir / "drill-engine-restart.sh"
+    assert script.exists()
+    box = tmp_path / "box"
+    box.mkdir()
+    (box / "curl").write_text(FAKE_PROBE)
+    (box / "systemctl").write_text('#!/usr/bin/env bash\necho "$*" >> "$D/systemctl.calls"\n')
+    (box / "sleep").write_text("#!/usr/bin/env bash\n")                 # no waiting: 2 x bound tries at once
+    for f in ("curl", "systemctl", "sleep"):
+        (box / f).chmod(0o755)
+    drill = lambda: subprocess.run(["bash", str(script)], capture_output=True, text=True, timeout=60,
+                                   env={**os.environ, "PATH": f"{box}{os.pathsep}{os.environ['PATH']}", "D": str(box)})
+    (box / "never-down").write_text("")
+    blind = drill()
+    line = next(l for l in blind.stdout.splitlines() if l.startswith("drill="))
+    assert "verdict=FAIL" in line, blind.stdout
+    assert {l.split()[-1] for l in (box / "curl.calls").read_text().splitlines()} == {"127.0.0.1:8002/readyz"}
+    assert (box / "systemctl.calls").read_text() == "restart marlin2b-vllm.service\n"
+    (box / "never-down").unlink()
+    (box / "curl.calls").unlink()
+    seen = drill()
+    line = next(l for l in seen.stdout.splitlines() if l.startswith("drill="))
+    assert "verdict=PASS" in line and "bound_s=300" in line, seen.stdout
