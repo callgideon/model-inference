@@ -104,7 +104,7 @@ class PgWorld:
         from infrx.state.jobstore import connector
         from infrx.state.lab_access import PgAccessStore
         self.conn = conn
-        self.C1, self.C2 = cc.personal_org(conn, self.BOTH), cc.personal_org(conn, self.CONSUMER_ONLY)
+        self.C1, self.C2 = (cc.personal_org(conn, user) for user in (self.BOTH, self.CONSUMER_ONLY))
         self.owner = {self.C1: self.BOTH, self.C2: self.CONSUMER_ONLY}
         self.REVISIONS = {provider: [r for (r,) in conn.execute(
             "select distinct j.deployment_revision_id::text from infrx.jobs j join "
