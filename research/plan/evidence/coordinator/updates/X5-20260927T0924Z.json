@@ -1,0 +1,22 @@
+{
+  "task": "X5",
+  "lane": "discovery",
+  "slice": "X5.a-c (discovery draft; approval BLOCKED on P-15; no purchase)",
+  "activity": "review",
+  "at": "2026-09-27T09:24:00Z",
+  "head": "1205cea",
+  "base": "9a6c3685",
+  "worktree": ".claude/worktrees/codex-w5-discovery",
+  "branch": "codex/w5-discovery",
+  "owned_paths": ["research/workloads/hardware/", "research/workloads/video/check_discovery.py", "research/plan/evidence/x/X5-1205cea.md", "research/plan/evidence/coordinator/updates/X5-20260927T0924Z.json"],
+  "commands": [
+    {"cmd": "cd research/workloads/video && python3 -m unittest test_check_discovery (spec registered, doc absent)", "exit": 1, "summary": "seam failure: hardware document missing"},
+    {"cmd": "cd research/workloads/video && python3 -m unittest test_check_discovery test_mutants", "exit": 0, "summary": "14 tests OK; 10/10 mutants killed"},
+    {"cmd": "cd research/workloads/video && python3 check_discovery.py", "exit": 0, "summary": "3 documents, 0 errors"},
+    {"cmd": "cd research/plan/scripts && python3 validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium", "basis": "one review round over three documents + checker; owner approval (P-13/14/15) is outside lane effort", "at": "2026-09-27T09:24:00Z"},
+  "blockers": ["P-15: chip/model/runtime choice, hardware access and go/no-go thresholds (approval only; discovery done)"],
+  "wiring_requests": ["research/workloads/README.md: add index row for hardware/non-nvidia-backend.md"],
+  "evidence": ["research/plan/evidence/x/X5-1205cea.md"]
+}
