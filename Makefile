@@ -111,7 +111,7 @@ lab-build:
 # Lab mutant runners join here as their lanes merge (and console-mutants' tests/v line when V1M
 # removes tests/v); each exits non-zero on a survivor.
 lab-mutants:
-	cd apps/lab && node tests/l/shell/run-mutants.mjs
+	cd apps/lab && node tests/l/shell/run-mutants.mjs && node tests/l/ui/run-mutants.mjs
 
 check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
 
