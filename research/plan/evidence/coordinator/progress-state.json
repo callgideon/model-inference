@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 150,
-  "updated": "2026-09-27T02:01:00Z",
+  "revision": 151,
+  "updated": "2026-09-27T02:07:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 1,
+    "active": 0,
     "reserved": 2,
     "note": "Session 03: RELEASE freeze d3a99e01 G2 running (coordinator; e2c/i8 held); no lane running; MAIN-MERGE waits for the go-live inputs."
   },
@@ -3907,27 +3907,35 @@
       "branch": "codex/bench-sigint",
       "worktree": ".claude/worktrees/codex-bench-sigint",
       "base": "92ed083a",
-      "head": null,
+      "head": "9d09be8b",
       "isolation": {
         "ports": "none",
         "prefix": "-",
         "db": "-"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-27T02:01:00Z",
-      "updated": "2026-09-27T02:01:00Z",
+      "updated": "2026-09-27T02:07:00Z",
       "blocker": null,
-      "next_action": "handback → merge onto the tip (models/marlin2b/tests under both dispositions; bench mutant list)",
+      "next_action": "DONE: merged --no-ff onto the tip (after RELEASE d3a99e01); the gate form as a background job now passes bench-test",
       "estimate": {
-        "optimistic_h": 0.2,
-        "likely_h": 0.4,
-        "pessimistic_h": 1,
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
         "confidence": "high",
-        "basis": "one test fixture change",
-        "at": "2026-09-27T02:01:00Z"
+        "basis": "merged",
+        "at": "2026-09-27T02:07:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/e/BENCH-sigint-11c17f2.md"
+      ],
+      "commands": [
+        {
+          "cmd": "models/marlin2b/tests plain / under SIGINT ignored / as a & job; mutants.py --report; ruff",
+          "exit": 0,
+          "summary": "121 passed ×3 (was 1 failed under SIGINT ignored); 119 mutants, 116 killed, 3 controls; no new findings"
+        }
+      ],
       "owned_paths": [
         "models/marlin2b/tests/test_leaks.py",
         "research/plan/evidence/e/BENCH-sigint-<head7>.md"
@@ -6555,6 +6563,12 @@
       "by": "coordinator (RELEASE)",
       "what": "G2 run 1 at d3a99e01 FAIL at its last stage (bench-test): the SIGINT test pins the inherited handler as the default and the freeze ran as an async job (SIGINT ignored). Not a tree defect: bench-test alone passes under setsid (118). G2 run 2 started under setsid -f; RELEASE stays d3a99e01; BENCH-SIGINT fixes the test assumption on the tip",
       "source": "research/plan/evidence/coordinator/RELEASE-d3a99e01.md"
+    },
+    {
+      "at": "2026-09-27T02:07:00Z",
+      "by": "coordinator (BENCH-SIGINT)",
+      "what": "BENCH-SIGINT merged onto the tip: the SIGINT test establishes its own precondition (121 passed as a & job); RELEASE d3a99e01 unchanged, G2 run 2 under setsid continues",
+      "source": "research/plan/evidence/e/BENCH-sigint-11c17f2.md"
     }
   ],
   "history": {
