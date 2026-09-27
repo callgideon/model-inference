@@ -2,7 +2,7 @@
  "task": "J2",
  "slice": "LW3 judge lane task 1: consent/budget coordinated submission and collection over a fake D6J ledger (real L2 on PG j2, real T2I read_content)",
  "activity": "review",
- "head": "16660999",
+ "head": "ededb413",
  "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-judge",
  "branch": "codex/w5-judge",
  "owned_paths": [
@@ -40,6 +40,21 @@
    "cmd": "INFRX_D_TASK=j2 rerun tests/d/test_outbox_relay.py + tests/i pooler suites alone",
    "exit": 1,
    "summary": "41 passed, 7 failed + 8 errors: same locks still held by other lanes"
+  },
+  {
+   "cmd": "fix round 0-J2-C1: uv run --frozen pytest -q tests/j/submit -m 'not pg' -k skipped (before fix)",
+   "exit": 1,
+   "summary": "1 failed (red)"
+  },
+  {
+   "cmd": "fix round: INFRX_D_TASK=j2 uv run --frozen pytest -q tests/j",
+   "exit": 0,
+   "summary": "298 passed (PG world ran)"
+  },
+  {
+   "cmd": "fix round: INFRX_D_TASK=j2 INFRX_MUTANTS=all uv run --frozen pytest -q tests/j/submit/test_mutants.py tests/j/test_mutants.py",
+   "exit": 0,
+   "summary": "160 passed: 33/33 J2 mutants (+skipped_sample_projected, +requested_ids_recorded_as_sent) and J1 list killed"
   }
  ],
  "estimate": {
@@ -47,7 +62,7 @@
   "likely_h": 2,
   "pessimistic_h": 5,
   "confidence": "medium",
-  "basis": "align JudgeLedger to lab-sql-lw2's D6J repository and rerun 29 items + 31 mutants on its merge (D10-0025 analogue 1/2/5)",
+  "basis": "align JudgeLedger to lab-sql-lw2's D6J repository and rerun 29 items + 33 mutants on its merge (D10-0025 analogue 1/2/5)",
   "at": "2026-09-27T21:49Z"
  },
  "blockers": [
@@ -57,7 +72,7 @@
   "WR-J2-1 Makefile api-mutants line 1 += tests/j/submit/test_mutants.py",
   "WR-J2-2 (optional, = WR-LW1I-5) register the pg marker in apps/infrx-api/pyproject.toml",
   "WR-J2-3 (deferred) judge worker entry point after D6J + SR-C3L-1, behind JUDGE_MODE=live (default dry_run = OFF)",
-  "SR-J2-1 (schema request, lab-sql D6J) lab_judge_* tables and RPCs per research/plan/evidence/j/J2-1666099.md"
+  "SR-J2-1 (schema request, lab-sql D6J) lab_judge_* tables and RPCs incl. sent_sample_ids + lab_judge_record_sent (fix round 0-J2-C1) per research/plan/evidence/j/J2-1666099.md"
  ],
  "evidence": [
   "research/plan/evidence/j/J2-1666099.md"
