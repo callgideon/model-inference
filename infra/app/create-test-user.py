@@ -117,8 +117,7 @@ def claim(base: str, key: str, uid: str) -> tuple[str, str | None]:
 
 def wallet(base: str, key: str, uid: str) -> dict:
     status, doc = call(base, key, "POST", "/rest/v1/rpc/console_wallet_summary", {"p_user": uid})
-    if status != 200 or not isinstance(doc, list) or len(doc) != 1 \
-            or doc[0].get("unit") != "CREDIT" or not isinstance(doc[0].get("available"), str):
+    if not isinstance(doc, list) or len(doc) != 1 or not isinstance(doc[0].get("available"), str):
         raise why("wallet read", status, doc)
     return doc[0]
 

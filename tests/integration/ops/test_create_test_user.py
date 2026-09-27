@@ -46,7 +46,9 @@ class Fake:
         self.flag = True
         self.auth_status: int | None = None     # every /auth/v1 call answers this, when set
         self.confirms = True                    # False: GoTrue ignores email_confirm
-        self.redirect = False                   # the create answers 307 to /leak
+        self.redirect = False                   # the create answers 302 to /leak
+        self.stall_s = 0.0                      # the create answers only after this long
+        self.wallet_status = 200                # console_wallet_summary's HTTP status
         self.claim_status: str | None = None    # a canned claim answer (e.g. identity_reused)
         self.upstream: str | None = None        # forward /rest/v1 here (tu11)
 
@@ -68,7 +70,8 @@ class Fake:
                                           "msg": f"invalid JWT {KEY} {PASSWORD}"}
             if url.path == "/auth/v1/admin/users" and method == "POST":
                 if self.redirect:
-                    return 307, None
+                    return 302, None
+                time.sleep(self.stall_s)
                 if any(u["email"].lower() == body["email"].lower() for u in self.users.values()):
                     return 422, {"code": 422, "error_code": "email_exists"}
                 uid = self.add(body["email"])
@@ -101,6 +104,8 @@ class Fake:
             return 200, [{"status": "replayed" if replay else "granted", "user_id": uid,
                           "wallet_id": f"w-{uid}", "amount": GRANT,
                           "granted_at": "2026-09-27T00:00:03Z"}]
+        if url.path == "/rest/v1/rpc/console_wallet_summary" and self.wallet_status != 200:
+            return self.wallet_status, {"code": "XX000", "message": f"boom {KEY}"}
         if url.path == "/rest/v1/rpc/console_wallet_summary":
             uid = body["p_user"]
             granted = uid in self.granted
@@ -138,7 +143,7 @@ def serve(fake: Fake):
                 status, doc = fake.answer(method, self.path, body)
                 out = b"" if doc is None else json.dumps(doc).encode()
             self.send_response(status)
-            if status == 307:
+            if status == 302:
                 self.send_header("Location", "/leak")
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(out)))
@@ -263,7 +268,7 @@ def test_tu06_secrets_never_reach_the_output(fake):
     (("--email", EMAIL, "--password-env", "OTHER_PW"), {}, "OTHER_PW"),
     (("--email", EMAIL), {"SUPABASE_SERVICE_ROLE_KEY": ""}, "SUPABASE_SERVICE_ROLE_KEY"),
     (("--email", EMAIL), {"SUPABASE_URL": ""}, "SUPABASE_URL"),
-    (("--email", EMAIL), {"SUPABASE_URL": "http://project.supabase.co"}, "https"),
+    (("--email", EMAIL), {"SUPABASE_URL": "http://project.invalid"}, "https"),
 ], ids=["email", "password", "password-env", "key", "url", "plain-http-remote"])
 def test_tu07_bad_input_exits_2_and_calls_nothing(fake, args, env, why):
     code, out, err = run(fake, *args, env=env)
@@ -275,7 +280,7 @@ def test_tu07_bad_input_exits_2_and_calls_nothing(fake, args, env, why):
 def test_tu08_a_redirect_is_never_followed_with_the_key(fake):
     fake.redirect = True
     code, _, err = run(fake, "--email", EMAIL)
-    assert code == 3 and "307" in err
+    assert code == 3 and "302" in err
     assert fake.paths() == ["POST /auth/v1/admin/users"]
 
 
@@ -292,6 +297,21 @@ def test_tu10_a_held_grant_is_unavailable_and_exits_3(fake):
     doc = json.loads(out)
     assert code == 3, err
     assert (doc["grant"], doc["grant_detail"]) == ("unavailable", "identity_reused")
+
+
+def test_tu12_every_call_gives_up_after_5_s(fake):
+    fake.stall_s = 7.0
+    started = time.monotonic()
+    code, out, err = run(fake, "--email", EMAIL)
+    assert code == 3 and out == "" and "timeout" in err.lower()
+    assert time.monotonic() - started < 6.5
+
+
+def test_tu13_a_failed_wallet_read_is_a_failure_not_a_zero(fake):
+    fake.wallet_status = 500
+    code, out, err = run(fake, "--email", EMAIL)
+    assert code == 3 and out == "" and "wallet read: HTTP 500 (XX000)" in err
+    assert_no_secret(out, err)
 
 
 # ---------------------------------------------------------------- layer 2: app-c0 ---
