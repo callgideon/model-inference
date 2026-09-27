@@ -1,0 +1,27 @@
+{
+  "task": "T2I",
+  "slice": "T2I: spool -> ClickHouse projection + content objects (TRACE-RECOVER, TRACE-TENANT)",
+  "activity": "review",
+  "head": "c9ed0e4b",
+  "worktree": ".claude/worktrees/codex-w5-trace-ship",
+  "branch": "codex/w5-trace-ship",
+  "owned_paths": ["apps/infrx-api/infrx/traces/ship/", "apps/infrx-api/tests/t/ship/"],
+  "commands": [
+    {"cmd": "uv run --frozen pytest -q tests/t/ship (before implementation)", "exit": 2, "summary": "RED: ImportError, infrx.traces.ship absent"},
+    {"cmd": "uv run --frozen pytest -q tests/t/ship/test_ship.py", "exit": 0, "summary": "11 passed, 9 skipped (stack half)"},
+    {"cmd": "INFRX_T2I_STACK=1 uv run --frozen pytest -q tests/t/ship/test_ship.py", "exit": 0, "summary": "20 passed (real ClickHouse 57540 + MinIO 57542)"},
+    {"cmd": "INFRX_T2I_STACK=1 INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/ship/test_mutants.py", "exit": 0, "summary": "24 passed; 19/19 mutants killed"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/ship/test_mutants.py", "exit": 0, "summary": "22 passed, 2 skipped (ClickHouse-only mutants)"},
+    {"cmd": "uv run --frozen pytest -q tests/t/test_trace_spool.py tests/t/test_trace_mutants.py tests/contracts/test_config_and_imports.py", "exit": 0, "summary": "349 passed"},
+    {"cmd": "make api-test", "exit": 2, "summary": "3795 passed, 810 failed (all HarnessBusy: 55432 held by codex-w5-lab-access), 63 skipped, 1 xfailed"},
+    {"cmd": "uv run --frozen pytest -q --lf (55432 free)", "exit": 0, "summary": "802 passed, 8 xfailed"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium", "basis": "lane checks green in ~2.5 h; one verify round + WR-1..3 wiring (D5 PG pins lookup proof is the unknown)", "at": "2026-09-27T10:13Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-1 tests/integration/harness.py apply_trace_schema() after wait_all (+ test_services EXISTS TABLE proof)",
+    "WR-2 Makefile:21 api-mutants += tests/t/ship/test_mutants.py",
+    "WR-3 composition (flag OFF): Shipper only when ship.shipping_enabled(limits); D5 pins lookup from infrx.jobs by (org_id, request_id); PG port for its proof"
+  ],
+  "evidence": ["research/plan/evidence/t/T2I-c9ed0e4.md"]
+}
