@@ -74,7 +74,7 @@ const MUTANTS = [
   m("L1-X15", "a malformed row is skipped instead of failing the read", MEMBERS, "if (typeof id !== \"string\" || !UUID.test(id)) return { ok: false };", "if (typeof id !== \"string\" || !UUID.test(id)) continue;", [C.m03]),
   m("L1-X16", "a duplicate provider row is accepted", MEMBERS, "    if (memberships.some((m) => m.providerId === id)) return { ok: false };\n", "", [C.m03]),
   m("L1-X17", "an empty provider name is accepted", MEMBERS, 'typeof name !== "string" || name === ""', 'typeof name !== "string"', [C.m03]),
-  m("L1-X18", "the RPC name drifts from the requested L2 read", MEMBERS, '"lab_my_provider_memberships"', '"lab_provider_memberships"', [C.m01]),
+  m("L1-X18", "the RPC name drifts from the one membership read (R156)", MEMBERS, '"lab_provider_memberships"', '"lab_my_provider_memberships"', [C.m01]),
   m("L1-X20", "production accepts an http origin", CONFIG, '  if (production && url.protocol !== "https:") return null;\n', "", [C.c01]),
   m("L1-X21", "an origin with a path is accepted", CONFIG, '  if (url.origin !== raw.replace(/\\/$/, "")) return null; // an origin, no path\n', "", [C.c01]),
   m("L1-X19", "a missing Supabase URL is not a misconfiguration", CONFIG, "!supabaseUrl || !anonKey", "!anonKey", [C.c01]),

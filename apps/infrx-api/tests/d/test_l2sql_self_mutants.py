@@ -41,7 +41,7 @@ MUTANTS = (
     _s("self_revoked_at_its_instant", "infrx.now() < (r->>'revoked_at')",
        "infrx.now() <= (r->>'revoked_at')", INSTANT,
        "a revocation takes effect after its instant, unlike the contract and L2"),
-    _s("self_anon_calls", "from public, anon;", "from public;", DOOR,
+    _s("self_anon_calls", "to authenticated;", "to anon, authenticated;", DOOR,
        "a signed-out caller reaches the membership read"),
     _s("self_runs_as_caller", "language sql stable security definer set search_path = public",
        "language sql stable security invoker set search_path = public", DOOR,

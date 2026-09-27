@@ -1,8 +1,10 @@
-// L1 adapter over the L2 membership read: a named RPC on the user's own session (RLS/auth.uid() in
-// the database decides whose rows), so no identity is ever sent. Any bad row fails the read closed.
+// L1 adapter over THE membership read (R156): 0030's public.lab_provider_memberships() on the user's
+// own session. The database takes the identity from auth.uid() and judges currency on its own clock,
+// the same set L2's port answers (apps/infrx-api/tests/d/test_l2sql_self.py), so no identity is ever
+// sent. Any bad row fails the read closed.
 import { ROLES, type Membership, type MembershipRead, type Role } from "./access.ts";
 
-export const MEMBERSHIPS_RPC = "lab_my_provider_memberships";
+export const MEMBERSHIPS_RPC = "lab_provider_memberships";
 export type RpcClient = { rpc: (name: string) => PromiseLike<{ data: unknown; error: unknown }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

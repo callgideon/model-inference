@@ -99,7 +99,7 @@ test("L1-M01 the membership read is the named RPC over the user's own session, w
   };
   assert.deepEqual(await readMemberships(client), { ok: true, memberships: [A] });
   assert.deepEqual(calls, [[MEMBERSHIPS_RPC]]);
-  assert.equal(MEMBERSHIPS_RPC, "lab_my_provider_memberships");
+  assert.equal(MEMBERSHIPS_RPC, "lab_provider_memberships");
 });
 
 test("L1-M02 an RPC error or a thrown transport is unavailable", async () => {

@@ -107,8 +107,9 @@ def check_the_session_reads_its_own_current_workspaces_as_the_port_does(conn, ds
 
 
 def check_only_a_signed_in_session_calls_it(conn, dsn) -> str:
-    """The browser door: anon is refused (42501); `authenticated` is the only grantee besides
-    the owner; the function runs as its owner, since schema `infrx` is closed to browsers."""
+    """The browser door: anon is refused (42501); `authenticated` is the only browser grantee
+    (the platform role holds every function by 0004's default and reads `[]`: no auth.uid());
+    the function runs as its owner, since schema `infrx` is closed to browsers."""
     got = cc.refused_as(conn, "anon", READ)
     assert got is not None and got.startswith("42501"), f"anon: {got or 'allowed'}"
     got = cc.refused_as(conn, "consumer", READ)
@@ -116,7 +117,7 @@ def check_only_a_signed_in_session_calls_it(conn, dsn) -> str:
     acl = conn.execute("select coalesce(proacl::text, '') from pg_proc where oid = "
                        "'public.lab_provider_memberships()'::regprocedure").fetchone()[0]
     grantees = {item.split("=", 1)[0] for item in acl.strip("{}").split(",") if item}
-    assert grantees == {"postgres", "authenticated"}, f"grantees: {acl}"
+    assert grantees == {"postgres", "authenticated", "service_role"}, f"grantees: {acl}"
     return "anon 42501; authenticated only"
 
 

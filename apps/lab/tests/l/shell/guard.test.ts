@@ -83,5 +83,5 @@ test("L1-G03 the guard reads through the Lab's own session client and sends no i
   assert.equal(world.clients.length, 1);
   const [url, key, options] = world.clients[0] as [string, string, { cookieOptions?: { name: string } }];
   assert.deepEqual([url, key, options.cookieOptions?.name], [ENV.NEXT_PUBLIC_SUPABASE_URL, ENV.NEXT_PUBLIC_SUPABASE_ANON_KEY, AUTH_COOKIE]);
-  assert.deepEqual(world.rpcs, [["lab_my_provider_memberships"]]);
+  assert.deepEqual(world.rpcs, [["lab_provider_memberships"]]);
 });
