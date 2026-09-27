@@ -859,10 +859,20 @@ def _window_root(tmp_path, *, dry=False):
     return root, stub
 
 
-def _window(root, stub, *args, **env):
+def _window(root, stub, *args, input="", **env):
     return subprocess.run(["bash", "infra/rollout/certify-window.sh", *args], cwd=root, capture_output=True,
-                          text=True, timeout=120, env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}",
-                                                       "HOME": str(root), "STUBS": str(stub), "POLL_S": "0.2", **env})
+                          text=True, timeout=120, input=input,
+                          env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}",
+                               "HOME": str(root), "STUBS": str(stub), "POLL_S": "0.2", **env})
+
+
+def _certified(logdir, run="20260927T100000Z", finished=None):
+    """A LOGDIR whose certify run `run` was launched and whose `report` saw it end (`finished`,
+    default the same run): what every step after `report` needs."""
+    logdir.mkdir(exist_ok=True)
+    (logdir / "certify.log").write_text(f"out=/opt/dlami/nvme/e4b/{run}\n")
+    (logdir / "window.log").write_text("" if finished is False else
+                                       f"2026-09-27T14:00:00Z certify finished: exit 0 (run {finished or run})\n")
 
 
 def _logged(stub, name):
@@ -980,7 +990,7 @@ def test_certify_window__a_long_cell_is_re_attached_never_started_twice_and_cert
     a failed cell not retried."""
     root, stub = _window_root(tmp_path)
     logdir = tmp_path / "log"
-    logdir.mkdir()
+    _certified(logdir)
     live = subprocess.Popen(["bash", "-c", f'sleep 1; echo "WC-7 cold exit=0" > {logdir}/wc7.log; echo 0 > {logdir}/wc7.rc'])
     (logdir / "wc7.pid").write_text(str(live.pid))
     attached = _window(root, stub, "--only", "wc7", LOGDIR=str(logdir))
@@ -1008,12 +1018,156 @@ def test_certify_window__report_polls_78_with_the_run_until_certify_exits(tmp_pa
     logdir.mkdir()
     (logdir / "certify.log").write_text("out=/opt/dlami/nvme/e4b/20260927T100000Z\n[ok  ] x\n")
     (stub / "out" / "78-e4b-report.sh.1").write_text("== run 20260927T100000Z\n== log tail certify.log\n[ok  ] x\n")
-    (stub / "out" / "78-e4b-report.sh.2").write_text("== log tail certify.log\n[PEND] y\n\nexit 3\n")
+    (stub / "out" / "78-e4b-report.sh.2").write_text("== run 20260927T100000Z\ncertify exit 3\n== log tail certify.log\n"
+                                                     "[PEND] y\n\nexit 3\n")
     done = _window(root, stub, "--only", "report", LOGDIR=str(logdir), REPORT_POLL_S="0")
-    assert done.returncode == 0 and "certify finished: exit 3" in done.stdout, done.stdout + done.stderr
+    assert done.returncode == 0 and "certify finished: exit 3 (run 20260927T100000Z)" in done.stdout, done.stdout + done.stderr
     polls = _logged(stub, "ssm.sh")
     assert [p[1:] for p in polls] == [["RUN=20260927T100000Z", "ONLY=report.json"]] * 2
     (stub / "ssm.sh.log").unlink()
-    (stub / "out" / "78-e4b-report.sh.1").write_text("== log tail certify.log\n[FAIL] z\n\nexit 1\n")
+    (stub / "out" / "78-e4b-report.sh.1").write_text("== run 20260927T100000Z\ncertify exit 1\n== log tail certify.log\n"
+                                                     "[FAIL] z\n\nexit 1\n")
     failed = _window(root, stub, "--only", "report", LOGDIR=str(logdir), REPORT_POLL_S="0")
     assert failed.returncode == 1 and "fix loop" in failed.stdout and len(_logged(stub, "ssm.sh")) == 1
+    # the run has ended either way: the steps after `report` may start (no box certify run is live)
+    assert "certify finished: exit 1 (run 20260927T100000Z)" in (logdir / "window.log").read_text()
+
+
+def test_certify_window__report_sees_certify_exit_past_ssm_24000_characters(tmp_path):
+    """0-CW-1/1-CW-R2: 78 printed the listing, then report.json (up to 24,000 bytes), then certify.log's
+    tail, and SSM keeps the first 24,000 characters: once report.json existed the closing `exit N`
+    never reached the poll, which idled to REPORT_MAX_S and STOPped with a false "no exit N" (run1's
+    output is 25,103 characters, `exit 1` at 25,096). The real 78 runs here behind an ssm.sh stand-in
+    that keeps 24,000 characters, as SSM does. Oracle: 78 printing certify's exit only in the log
+    tail; the poll reading the tail's `exit N` instead of 78's leading line."""
+    root, stub = _window_root(tmp_path)
+    (root / "infra" / "rollout" / "steps").mkdir()
+    (root / "infra" / "rollout" / "steps" / "78-e4b-report.sh").write_text((ROLLOUT / "steps" / "78-e4b-report.sh").read_text())
+    (root / "infra" / "rollout" / "ssm.sh").write_text(
+        '#!/usr/bin/env bash\nstep=$1; shift\necho "$step $*" >> "$STUBS/ssm.calls"\n'
+        '(export "$@"; bash "$step") 2>&1 | head -c 24000\n')
+    run = tmp_path / "e4b" / "20260927T100000Z"
+    (run / "work").mkdir(parents=True)
+    (run / "report.json").write_text(json.dumps({"stages": [{"stage": "e4b.b.soak", "detail": "x" * 25000}]}))
+    (run / "certify.log").write_text("[ok  ] e4b.b.soak\n" + '  "exit 1",\n' + "\nexit 0\n")
+    logdir = tmp_path / "log"
+    _certified(logdir, finished=False)
+    done = _window(root, stub, "--only", "report", LOGDIR=str(logdir), E4B_ROOT=str(tmp_path / "e4b"),
+                   REPORT_POLL_S="0", REPORT_MAX_S="0")
+    assert done.returncode == 0 and "certify finished: exit 0 (run 20260927T100000Z)" in done.stdout, done.stdout
+    assert (logdir / "report.log").stat().st_size >= 24000                   # the answer was cut, as on the box
+    (run / "certify.log").write_text("[ok  ] e4b.b.soak\n")                  # still running: no exit yet
+    _certified(tmp_path / "log2", finished=False)
+    running = _window(root, stub, "--only", "report", LOGDIR=str(tmp_path / "log2"), E4B_ROOT=str(tmp_path / "e4b"),
+                      REPORT_POLL_S="0", REPORT_MAX_S="0")
+    assert running.returncode == 1 and "no 'exit N'" in running.stdout, running.stdout
+
+
+def _alive():
+    return subprocess.Popen(["sleep", "60"])
+
+
+def test_certify_window__no_step_starts_on_a_live_cell_a_running_certify_or_a_second_sequencer(tmp_path):
+    """1-CW-R1/0-CW-3: a detached cell (setsid -f) outlives its sequencer, and `--step`/`--only` resume
+    anywhere: WC-6a's engine stop was dispatched while WC-7 ran, and `--step drills` could start
+    during certify's 4.5-6 h run. Now one sequencer holds the LOGDIR (flock), no step starts while
+    another cell of the LOGDIR is live, and no step after `report` starts before `report` saw the
+    launched run's `exit N`. Oracle: ssm.sh called for WC-6a with WC-7 live, with the certify run
+    launched and not seen to end (or only an older run seen to end), or with another sequencer on
+    the LOGDIR; a finished cell or a finished certify run still blocking."""
+    root, stub = _window_root(tmp_path)
+    (stub / "out" / "l8ref.sh").write_text("restored=yes\n")
+    logdir = tmp_path / "log"
+    _certified(logdir)
+    wc7 = _alive()
+    try:
+        (logdir / "wc7.pid").write_text(str(wc7.pid))
+        on_wc7 = _window(root, stub, "--only", "wc6a", LOGDIR=str(logdir))
+        assert on_wc7.returncode == 1 and f"wc7 (pid {wc7.pid}) is still running" in on_wc7.stdout, on_wc7.stdout
+        assert _logged(stub, "ssm.sh") == []
+    finally:
+        wc7.kill()
+        wc7.wait()
+    (logdir / "wc7.rc").write_text("0")
+    for finished, why in ((False, "no finish seen"), ("20260926T100000Z", "an older run's finish")):
+        _certified(logdir, finished=finished)
+        early = _window(root, stub, "--only", "wc6a", LOGDIR=str(logdir))
+        assert early.returncode == 1 and "has not been seen to finish" in early.stdout, (why, early.stdout)
+        assert _logged(stub, "ssm.sh") == [], why
+    _certified(logdir)
+    import fcntl
+    with open(logdir / ".lock", "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        second = _window(root, stub, "--only", "wc6a", LOGDIR=str(logdir))
+    assert second.returncode == 2 and "another certify-window.sh holds" in second.stderr, second.stdout + second.stderr
+    assert _logged(stub, "ssm.sh") == []
+    done = _window(root, stub, "--only", "wc6a", LOGDIR=str(logdir))
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert [c[0] for c in _logged(stub, "ssm.sh")] == ["models/marlin2b/e1b/l8ref.sh"]
+
+
+def test_certify_window__a_killed_sequencer_leaves_its_live_cell_resumable(tmp_path):
+    """The LOGDIR lock is the sequencer's alone: a detached cell (or a poll's sleep) that inherited it
+    would hold it after the sequencer was killed, and the documented resume (`--only <cell>`
+    re-attaches) would be refused for the cell's whole run. Oracle: the setsid cell keeping the
+    lock's descriptor; the cell started a second time."""
+    root, stub = _window_root(tmp_path)
+    (root / "infra" / "rollout" / "ssm.sh").write_text(
+        '#!/usr/bin/env bash\necho "$*" >> "$STUBS/ssm.calls"\nsleep 3\necho "WC-7 cold exit=0"\n')
+    logdir = tmp_path / "log"
+    _certified(logdir)
+    env = {"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "HOME": str(root), "STUBS": str(stub),
+           "POLL_S": "0.2", "LOGDIR": str(logdir)}
+    first = subprocess.Popen(["bash", "infra/rollout/certify-window.sh", "--only", "wc7"], cwd=root, env=env,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(100):
+        if (logdir / "wc7.pid").exists() and (logdir / "wc7.pid").read_text().strip():
+            break
+        subprocess.run(["sleep", "0.05"])
+    first.terminate()
+    first.wait()
+    resumed = _window(root, stub, "--only", "wc7", LOGDIR=str(logdir))
+    assert resumed.returncode == 0 and "still running" in resumed.stdout, resumed.stdout + resumed.stderr
+    assert len((stub / "ssm.calls").read_text().splitlines()) == 1
+
+
+FAKE_PROBE = """#!/usr/bin/env bash
+echo "$*" >> "$D/curl.calls"
+[ -e "$D/never-down" ] && exit 0
+[ "$(wc -l < "$D/curl.calls")" -gt 3 ]
+"""
+
+
+def test_certify_window__a_drill_passes_only_after_its_probe_saw_the_outage_and_the_engine_back(tmp_path):
+    """0-CW-2: the engine drill probed the gateway's :8001/readyz, which checks only price_source and
+    journal and answers 200 while vLLM loads the model, and the probe loop took its first 200: it
+    wrote a measured_s of the docker stop and verdict=PASS (P-17 check 7 evidence). The engine
+    drill now probes the worker's :8002/readyz (the engine's readiness; E4C §6 `/readyz` 200 within
+    300 s), and a drill passes only when its probe went non-200 first. Oracle: the gateway probe;
+    PASS from a probe that never saw the outage; FAIL for one that did and recovered."""
+    root, stub = _window_root(tmp_path)
+    logdir = tmp_path / "log"
+    _certified(logdir)
+    _window(root, stub, "--only", "drills", LOGDIR=str(logdir), input="yes\n")
+    script = logdir / "drill-engine-restart.sh"
+    assert script.exists()
+    box = tmp_path / "box"
+    box.mkdir()
+    (box / "curl").write_text(FAKE_PROBE)
+    (box / "systemctl").write_text('#!/usr/bin/env bash\necho "$*" >> "$D/systemctl.calls"\n')
+    (box / "sleep").write_text("#!/usr/bin/env bash\n")                 # no waiting: 2 x bound tries at once
+    for f in ("curl", "systemctl", "sleep"):
+        (box / f).chmod(0o755)
+    drill = lambda: subprocess.run(["bash", str(script)], capture_output=True, text=True, timeout=60,
+                                   env={**os.environ, "PATH": f"{box}{os.pathsep}{os.environ['PATH']}", "D": str(box)})
+    (box / "never-down").write_text("")
+    blind = drill()
+    line = next(l for l in blind.stdout.splitlines() if l.startswith("drill="))
+    assert "verdict=FAIL" in line, blind.stdout
+    assert {l.split()[-1] for l in (box / "curl.calls").read_text().splitlines()} == {"127.0.0.1:8002/readyz"}
+    assert (box / "systemctl.calls").read_text() == "restart marlin2b-vllm.service\n"
+    (box / "never-down").unlink()
+    (box / "curl.calls").unlink()
+    seen = drill()
+    line = next(l for l in seen.stdout.splitlines() if l.startswith("drill="))
+    assert "verdict=PASS" in line and "bound_s=300" in line, seen.stdout

@@ -11,7 +11,10 @@
 # in-cap clip on this host) for journey-legs; CORPUS_CACHE (the host corpus cache) for wc9.
 # Long cells (76, 80, E1B, WC-6/7, WC-9) run detached (setsid -f) and are polled: a resume re-attaches
 # to one still running and never starts it twice. The certify run is detached on the box; `report` polls
-# 78-e4b-report.sh with its RUN. Skipped by the user's decision: O4-O6 (alerts) and the canary.
+# 78-e4b-report.sh with its RUN. One sequencer per LOGDIR (flock on $LOGDIR/.lock); no step starts while
+# another detached cell of the LOGDIR is live, and no step after `report` starts before `report` has seen
+# the launched certify run's `exit N` (a resume never starts a cell on top of a live one or the soak).
+# Skipped by the user's decision: O4-O6 (alerts) and the canary.
 # BLOCKED and recorded: the SSE journey + replay (MEDIA_BASE_URL unnamed), the canary re-enable (P-24).
 # Secrets: the certify key goes from SSM into a 0600 file for `statement --key-file` and is shredded;
 # tenant 2's key is issue-key's 0600 file, shredded after WC-9; keys reach bench/curl through the
@@ -40,6 +43,8 @@ umask 077; mkdir -p "$LOGDIR"; chmod 700 "$LOGDIR"
 if [ "$DRY" != 1 ]; then
   [ -x apps/infrx-api/.venv/bin/python ] || { echo "run from the repo root after make api-env" >&2; exit 2; }
   git rev-parse --verify -q "$RELEASE^{commit}" > /dev/null || { echo "RELEASE $RELEASE is not in this repository" >&2; exit 2; }
+  exec 9> "$LOGDIR/.lock"   # held until this process exits; detached cells and sleeps close it (9>&-)
+  flock -n 9 || { echo "another certify-window.sh holds $LOGDIR/.lock: one sequencer per LOGDIR" >&2; exit 2; }
 fi
 aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
 say() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOGDIR/window.log"; }
@@ -63,13 +68,13 @@ long() {
   else
     if [ -e "$b.rc" ]; then mv "$b.log" "$b.failed-$(date -u +%H%M%S).log"; rm -f "$b.rc"; fi
     rm -f "$b.pid"; say "== $name (detached; $b.log)"
-    setsid -f bash -c 'b=$1; shift; echo $$ > "$b.pid"; "$@" > "$b.log" 2>&1; echo $? > "$b.rc.new"; mv "$b.rc.new" "$b.rc"' _ "$b" "$@"
+    setsid -f bash -c 'b=$1; shift; echo $$ > "$b.pid"; "$@" > "$b.log" 2>&1; echo $? > "$b.rc.new"; mv "$b.rc.new" "$b.rc"' _ "$b" "$@" 9>&-
     for _ in $(seq 100); do [ -s "$b.pid" ] && break; sleep 0.1; done
   fi
   until [ -e "$b.rc" ]; do
     kill -0 "$(cat "$b.pid" 2>/dev/null || echo none)" 2>/dev/null || [ -e "$b.rc" ] \
       || { say "$name died without an exit status ($b.log)"; return 1; }
-    sleep "$POLL_S"
+    sleep "$POLL_S" 9>&-
   done
   local rc; rc=$(cat "$b.rc"); say "$name exit $rc — $b.log"; return "$rc"
 }
@@ -203,13 +208,15 @@ do_report() {
   while :; do
     run report "$SSM" "$ST/78-e4b-report.sh" RUN="$r" ONLY=report.json || fail REPORT "78 failed (exit 3: no run $r on the box)"
     [ "$DRY" = 1 ] && { echo "  poll every ${REPORT_POLL_S}s until certify.log ends 'exit N'; N=1 (a FAIL cell) STOPs: 05 §7 fix loop"; return 0; }
-    code=$(grep -Eo '^exit [0-9]+' "$LOGDIR/report.log" | tail -n 1 | cut -d' ' -f2 || true)
+    # 78's leading `certify exit N` line: SSM keeps 24,000 characters, and report.json pushes the log tail past them
+    code=$(sed -En 's/^certify exit ([0-9]+)$/\1/p' "$LOGDIR/report.log" | head -n 1)
     if [ -n "$code" ]; then
+      say "certify finished: exit $code (run $r)"   # the run has ended: the steps after `report` may start
       [ "$code" != 1 ] || fail REPORT "certify exit 1: a FAIL cell — the 05 §7 fix loop (a rerun is a new qualifying run; criteria unchanged)"
-      say "certify finished: exit $code"; return 0
+      return 0
     fi
     [ $((SECONDS - t0)) -lt "$REPORT_MAX_S" ] || fail REPORT "no 'exit N' after ${REPORT_MAX_S}s: read $LOGDIR/report.log"
-    sleep "$REPORT_POLL_S"
+    sleep "$REPORT_POLL_S" 9>&-
   done
 }
 do_fetch() {
@@ -329,7 +336,9 @@ do_wc9() {
 do_wc0-stop() { run wc0-stop "$SSM" "$ST/79-wc0-scrape.sh" ACTION=stop || fail WC-0 "79 stop failed"; say "canary re-enable: BLOCKED (P-24) — it stays off"; }
 # E4C-runbook §6 drills: two have a box form here (each prints one drill= line, measured on the box); the
 # others are the runbook's own procedures, recorded NOT RUN unless the operator runs them. Each asks first.
-DRILLS=("engine-restart|infra/runbooks/restart.md#engine|300|systemctl restart marlin2b-vllm.service|8001/readyz"
+# The engine drill probes the worker's /readyz (200 only when the engine answers ready); the gateway's :8001
+# /readyz checks price_source and journal only and answers 200 while vLLM loads the model.
+DRILLS=("engine-restart|infra/runbooks/restart.md#engine|300|systemctl restart marlin2b-vllm.service|8002/readyz"
         "worker-sigkill|infra/runbooks/restart.md#worker|30|systemctl kill -s KILL infrx-worker.service; systemctl start infrx-worker.service|8002/readyz"
         "valkey-index-loss|infra/runbooks/index-loss.md|30||" "db-object-store-stall|E3C s08|45||"
         "restore|infra/runbooks/restore.md (hosted A-steps: the W6 block)|0||" "known-good-rollback|infra/runbooks/rollback.md#known-good-rollback-drill (steps 1-7)|0||")
@@ -342,15 +351,24 @@ do_drills() {
       say "drill $name: no box form here — run $book by hand if the user wants it"
       [ "$DRY" = 1 ] || echo "drill=$name runbook=$book ssm=- verdict=NOT RUN correctness=-" >> "$LOGDIR/drills.md"; continue
     fi
-    if [ "$DRY" = 1 ]; then echo "plan drill-$name (asks first; an outage on the live platform): $act; /$probe 200 within ${bound}s"; continue; fi
+    if [ "$DRY" = 1 ]; then echo "plan drill-$name (asks first; an outage on the live platform): $act; /$probe non-200, then 200 within ${bound}s"; continue; fi
     read -rp "drill $name on the LIVE platform ($book, bound ${bound}s) — type yes to run, anything else skips: " ok
     if [ "$ok" != yes ]; then echo "drill=$name runbook=$book ssm=- verdict=NOT RUN correctness=-" >> "$LOGDIR/drills.md"; continue; fi
-    printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' 't0=$(date -u +%s)' "$act" \
-      "for i in \$(seq $((bound * 2))); do curl -fs -o /dev/null -m 5 127.0.0.1:$probe && break; sleep 1; done" \
-      't1=$(date -u +%s); m=$((t1 - t0)); curl -fs -o /dev/null -m 5 127.0.0.1:'"$probe"' && up=yes || up=no' \
-      "v=FAIL; [ \$up = yes ] && [ \$m -le $bound ] && v=PASS" \
-      "echo \"drill=$name runbook=$book ssm=FILL t0=\$(date -u -d @\$t0 +%FT%TZ) recovered=\$(date -u -d @\$t1 +%FT%TZ) measured_s=\$m bound_s=$bound verdict=\$v correctness=see-drift\"" \
-      > "$LOGDIR/drill-$name.sh"
+    # PASS needs the probe to go non-200 (a background sampler sees the outage) and answer 200 again in bound
+    cat > "$LOGDIR/drill-$name.sh" <<EOF
+#!/usr/bin/env bash
+set -uo pipefail
+p=127.0.0.1:$probe; seen=\$(mktemp)
+(until [ -s "\$seen" ]; do curl -fs -o /dev/null -m 2 "\$p" || echo down > "\$seen"; sleep 0.2; done) & s=\$!
+t0=\$(date -u +%s)
+$act
+for i in \$(seq $((bound * 2))); do [ -s "\$seen" ] && curl -fs -o /dev/null -m 5 "\$p" && break; sleep 1; done
+t1=\$(date -u +%s); m=\$((t1 - t0)); kill \$s 2> /dev/null
+down=no; [ -s "\$seen" ] && down=yes; up=no; curl -fs -o /dev/null -m 5 "\$p" && up=yes; rm -f "\$seen"
+echo "probe \$p: outage seen \$down, answering \$up"
+v=FAIL; [ \$down = yes ] && [ \$up = yes ] && [ \$m -le $bound ] && v=PASS
+echo "drill=$name runbook=$book ssm=FILL t0=\$(date -u -d @\$t0 +%FT%TZ) recovered=\$(date -u -d @\$t1 +%FT%TZ) measured_s=\$m bound_s=$bound verdict=\$v correctness=see-drift"
+EOF
     run "drill-$name" "$SSM" "$LOGDIR/drill-$name.sh" || true
     drill_line "drill-$name"
     expect "drill-$name" '^drill=.* verdict=PASS' "drill $name FAILED its ${bound}s bound: restart.md; the window stops"
@@ -367,9 +385,24 @@ do_cleanup() {
   [ "$DRY" = 1 ] || { local ok; read -rp "cleanup-dry.log reviewed (allowlisted paths only)? type yes: " ok; [ "$ok" = yes ] || fail CLEANUP "not confirmed; nothing removed"; }
   run cleanup "$SSM" "$ST/86-cleanup.sh" DRY_RUN=0 || fail CLEANUP "86 failed"
 }
+# guard <i>: no other detached cell of this LOGDIR is live (a resume never starts a step on top of one), and
+# a step after `report` waits for `report` to have seen the launched certify run end (its `exit N`).
+REPORT_AT=$(for i in "${!ORDER[@]}"; do [ "${ORDER[$i]}" != report ] || echo "$i"; done)
+guard() {
+  local s=${ORDER[$1]} p n r
+  for p in "$LOGDIR"/*.pid; do
+    n=$(basename "$p" .pid)
+    [ ! -s "$p" ] || [ "$n" = "$s" ] || [ -e "$LOGDIR/$n.rc" ] || ! kill -0 "$(cat "$p")" 2> /dev/null \
+      || fail "$s" "the detached cell $n (pid $(cat "$p")) is still running: wait for it (--only $n re-attaches); start nothing on top of it"
+  done
+  [ "$1" -gt "$REPORT_AT" ] || return 0
+  r=$(sed -En 's/^out=\/opt\/dlami\/nvme\/e4b\/([0-9]{8}T[0-9]{6}Z).*$/\1/p' "$LOGDIR/certify.log" 2> /dev/null | head -n 1)
+  grep -q " certify finished: exit [0-9]* (run ${r:-none})$" "$LOGDIR/window.log" \
+    || fail "$s" "the certify run ${r:-(none launched from this LOGDIR)} has not been seen to finish: --only report polls it to its 'exit N'"
+}
 last=""
 for ((i = START; i < ${#ORDER[@]}; i++)); do
-  last=${ORDER[$i]}; "do_$last"
+  last=${ORDER[$i]}; [ "$DRY" = 1 ] || guard "$i"; "do_$last"
   [ -z "$ONLY" ] || break
 done
 say "done through $last. E4C-runbook §7: copy freeze.json, profiles.sha256, drills.md and the h6 inventories into research/plan/evidence/e/E4C-${RELEASE:0:7}/; BACKEND-READY stays PENDING (P-17 checks 1, 5, 7)."

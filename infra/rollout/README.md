@@ -105,13 +105,15 @@ that residual risk and its bound).
 `infra/rollout/certify-window.sh` runs the E4C certificate run and E1B's cells on the installed RELEASE in
 [E4C-runbook](../../models/marlin2b/results/E4C-runbook.md) order, from the repo root after `make api-env`,
 logging every step to its 0700 `LOGDIR`; `--step <step> --logdir <dir>` resumes, `--only <step>` runs one step,
-`DRY_RUN=1` prints the plan and its stop conditions and calls nothing. Its steps and helpers:
+`DRY_RUN=1` prints the plan and its stop conditions and calls nothing. One sequencer holds a LOGDIR (`flock` on
+`$LOGDIR/.lock`); no step starts while another detached cell of the LOGDIR is live, and no step after `report` starts
+before `report` has seen the launched certify run's `exit N`. Its steps and helpers:
 
 | Script | Where | What | Stops / exits |
 |---|---|---|---|
 | `steps/76-e4c-prepare.sh RELEASE=` | box | A1 edge 200; `/opt/dlami/nvme/w3-checkout` to RELEASE from W1's verified bundle (the deploy checkout is not touched); `infrx-certify:$RELEASE` built once; `e4b/inventory.txt` retaken (the previous kept as `.prev`) | 2: edge not 200, dirty checkout, bundle sha256 mismatch (nothing changed); 3: inventory failed or the engine is off the pin (old file kept) |
 | `steps/77-e4c-profiles.sh RELEASE= MIGRATION_VERSION= MAINTENANCE_WINDOW= KEYS_TAKEN_AT= KEYS_SOURCE_SHA256= ACTIVE_PREFIXES=` | box | E4C-runbook §2/§3: reads every identity from the served build, fills the six bases (`certify-fill.py` verbatim) and writes `keys-certify.json` into `e4b/e4c/`, validates each in the certify image with `--network none`, prints `certify --hashes` | 2: a read disagrees (nothing written); 3: a profile does not validate |
-| `steps/78-e4b-report.sh RUN=` | box | the certify run's outputs; with no `RUN`, the newest UTC-named run (never `e4c/` or `e1b-*`) | 3: no run |
+| `steps/78-e4b-report.sh RUN=` | box | the certify run's outputs: `certify exit N` (certify.log's closing line, first, inside SSM's 24,000 characters), the listing, the JSON, the log tails; with no `RUN`, the newest UTC-named run (never `e4c/` or `e1b-*`) | 3: no run |
 | `steps/79-wc0-scrape.sh ACTION=start\|stop` | box | E1B WC-0: the metrics/vmstat scrape sidecar, detached, one at a time | 2: a second start or a stop with none; 3: no scrape line |
 | `steps/80-e4b-fetch.sh RUN=` | box | packs one finished run (report, log, work) to `s3://…/w4/e4b-box/<RUN>.tgz`, prints its sha256 | 2: not a UTC run name; 3: no report.json |
 | `certify-h6.sh <LOGDIR> <tag>` | host | H6 and the closing inventories: `credit-transition --dry-run`, key id prefixes of active non-operator keys; the operator key printed apart | 1: `STOP:` (another spending key, or the dry run failed) |
@@ -120,7 +122,9 @@ logging every step to its 0700 `LOGDIR`; `--step <step> --logdir <dir>` resumes,
 
 Skipped by the user's decision: O4–O6 (alerts) and the canary. BLOCKED and recorded: the SSE journey and replay
 (`MEDIA_BASE_URL`), the canary re-enable (P-24). Each §6 drill asks first; the engine restart and worker
-SIGKILL have a box form, the others are recorded NOT RUN unless run by hand.
+SIGKILL have a box form, both probing the worker's `127.0.0.1:8002/readyz` (200 only when the engine answers ready),
+and pass only when the probe went non-200 and answered 200 again within the bound; the others are recorded NOT RUN
+unless run by hand.
 
 ## Verification log
 
@@ -160,3 +164,4 @@ SIGKILL have a box form, the others are recorded NOT RUN unless run by hand.
 - 2026-09-26 (STEP55-FIX-2): step 8b reads each role's `rolcanlogin` over the owner login and sets a NOLOGIN role (the first run) with no :6543 login attempt, so the first run and a rerun make no failed pooler authentication; only a rotated password costs one, for that role (S55F-2). Row 8b's rerun sentence now matches rollout.md W10b (S55F-1). Tested against stubs and a task-local PostgreSQL 16 (`apps/infrx-api/tests/i/test_ops_steps.py`). Not run on the box or hosted.
 - 2026-09-26 (G2-FIX): G2 names its full command (the E2C gate env with Q on e2c's own `valkey-q` 55430, `tests/i` with `INFRX_D_TASK=e2c`, e2c and i8 held free); G4 says it does not read the processor digests and G4b (P-06) fails while they are null. Evidence `research/plan/evidence/coordinator/G2-FIX-041d6f6.md`.
 - 2026-09-27 (CERTIFY-WINDOW): §5 added: `certify-window.sh` (the E4C window sequencer), steps 76/77 (E4C preconditions and profiles), 79-wc0-scrape and 80-e4b-fetch, `certify-h6.sh`/`certify-fill.py`/`certify-validate.py`; 78's default run is the newest UTC-named run. Tested against stubs and a DRY_RUN (`apps/infrx-api/tests/i/test_ops_steps.py`, `test_rollout.py`); not run on the box, AWS or hosted.
+- 2026-09-27 (CERTIFY-WINDOW fix round): `certify-window.sh` holds a per-LOGDIR lock, starts no step on a live detached cell and no step after `report` before the certify run's `exit N`; 78 prints `certify exit N` first (SSM keeps 24,000 characters); the engine drill probes `:8002/readyz` and a drill needs the outage seen. Tested against stubs (`apps/infrx-api/tests/i/test_rollout.py`); not run on the box, AWS or hosted.

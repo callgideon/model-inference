@@ -1661,6 +1661,36 @@ MUTANTS += (
        WIN, """printf ' %q' "$@"; printf '\\n'; return 0; fi\n  say "== $name\"""", """printf ' %q' "$@"; printf '\\n'; fi\n  say "== $name\"""", DRY),
 )
 
+# CERTIFY-WINDOW fix round (1-CW-R1, 0-CW-1/1-CW-R2, 0-CW-2, 0-CW-3)
+REP2 = "test_certify_window__report_sees_certify_exit_past_ssm_24000_characters"
+GUARD = "test_certify_window__no_step_starts_on_a_live_cell_a_running_certify_or_a_second_sequencer"
+KILLED = "test_certify_window__a_killed_sequencer_leaves_its_live_cell_resumable"
+DRILL = "test_certify_window__a_drill_passes_only_after_its_probe_saw_the_outage_and_the_engine_back"
+MUTANTS += (
+    _m("certify_78_exit_after_the_json", "78 prints certify's `exit N` before report.json (SSM keeps 24,000 characters)",
+       S78, """sed -En 's/^exit ([0-9]+)$/certify exit \\1/p' "$dir/certify.log" 2> /dev/null | tail -n 1 || true\n""", "", REP2),
+    _m("certify_window_report_reads_the_tail", "the poll reads 78's leading `certify exit N`, not the cut log tail",
+       WIN, """sed -En 's/^certify exit ([0-9]+)$/\\1/p' "$LOGDIR/report.log\"""",
+       """sed -En 's/^exit ([0-9]+)$/\\1/p' "$LOGDIR/report.log\"""", REP2),
+    _m("certify_window_finish_unrecorded_on_fail", "a certify exit 1 is recorded as finished before the STOP",
+       WIN, 'say "certify finished: exit $code (run $r)"   # the run has ended: the steps after `report` may start\n'
+            '      [ "$code" != 1 ] || fail REPORT', '[ "$code" != 1 ] || fail REPORT', REP),
+    _m("certify_window_live_cell_ignored", "no step starts while another detached cell of the LOGDIR is live",
+       WIN, '[ ! -s "$p" ] || [ "$n" = "$s" ]', 'true || [ "$n" = "$s" ]', GUARD),
+    _m("certify_window_cell_during_certify", "no step after `report` starts before the certify run was seen to end",
+       WIN, '[ "$1" -gt "$REPORT_AT" ] || return 0', "return 0", GUARD),
+    _m("certify_window_finish_of_any_run", "the finish seen is the launched run's, not an earlier one's",
+       WIN, 'exit [0-9]* (run ${r:-none})$"', 'exit [0-9]* (run "', GUARD),
+    _m("certify_window_no_lock", "one sequencer per LOGDIR",
+       WIN, "flock -n 9 || {", "true || {", GUARD),
+    _m("certify_window_cell_holds_the_lock", "a detached cell does not inherit the sequencer's LOGDIR lock",
+       WIN, '_ "$b" "$@" 9>&-\n', '_ "$b" "$@"\n', KILLED),
+    _m("certify_window_engine_drill_gateway_probe", "the engine drill probes the engine's readiness, not the gateway's",
+       WIN, "systemctl restart marlin2b-vllm.service|8002/readyz", "systemctl restart marlin2b-vllm.service|8001/readyz", DRILL),
+    _m("certify_window_drill_outage_unseen", "a drill passes only when its probe saw the outage",
+       WIN, "v=FAIL; [ \\$down = yes ] && [ \\$up = yes ]", "v=FAIL; [ \\$up = yes ]", DRILL),
+)
+
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 
