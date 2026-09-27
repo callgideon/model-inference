@@ -6,8 +6,10 @@
 #   W7  hosted `plan` must show the same applied list and the same digest, then `apply --expect`,
 #       then `plan` = 0001–0026 with nothing pending and the same flags/drift as the copy
 #
-#   RELEASE=<40 hex> infra/rollout/hosted-migrate.sh --through w6b             # no hosted write (default)
-#   RELEASE=<40 hex> infra/rollout/hosted-migrate.sh --through w7 --expect <COPY_DIGEST from a w6b run>
+#   infra/rollout/hosted-migrate.sh --release <40 hex> --through w6b             # no hosted write (default)
+#   infra/rollout/hosted-migrate.sh --release <40 hex> --through w7 --expect <COPY_DIGEST from a w6b run>
+#   (RELEASE may also come from the environment; the migration inputs of the checkout must be byte-identical
+#   to the release commit's — the checkout itself may be a later tip)
 #   BACKUP_ROOT (default ~/infrx-backups, 0700), PGPORT_LOCAL (default 55697)
 #
 # Both forms rerun W6 and W6b in full. Exit codes: 2 usage / precondition, 3 host environment,
@@ -17,14 +19,16 @@
 # Secrets: PGPASSWORD comes from SSM /INFRX-SUPABASE-PROD/db_password into the environment and is never
 # printed; the local copy's password is a throwaway literal (restore.md A4's documented exception).
 set -euo pipefail
-THROUGH=w6b; EXPECT=
-while [ $# -gt 0 ]; do case "$1" in --through) THROUGH=$2; shift 2;; --expect) EXPECT=$2; shift 2;; *) echo "unknown argument $1" >&2; exit 2;; esac; done
+THROUGH=w6b; EXPECT=; RELEASE=${RELEASE:-}
+while [ $# -gt 0 ]; do case "$1" in --through) THROUGH=$2; shift 2;; --expect) EXPECT=$2; shift 2;; --release) RELEASE=$2; shift 2;; *) echo "unknown argument $1" >&2; exit 2;; esac; done
 case "$THROUGH" in w6b|w7) ;; *) echo "--through must be w6b or w7" >&2; exit 2;; esac
 if [ "$THROUGH" = w7 ]; then [[ $EXPECT =~ ^[0-9a-f]{64}$ ]] || { echo "--through w7 needs --expect <the COPY_DIGEST of a green w6b run>" >&2; exit 2; }; fi
-: "${RELEASE:?export RELEASE=<the release commit, 40 hex> (rollout.md preamble)}"
+[ -n "$RELEASE" ] || { echo "--release <the release commit, 40 hex> is required (rollout.md preamble)" >&2; exit 2; }
 [[ $RELEASE =~ ^[0-9a-f]{40}$ ]] || { echo "RELEASE is not a full commit id" >&2; exit 2; }
-[ "$(git rev-parse HEAD)" = "$RELEASE" ] || { echo "HEAD $(git rev-parse --short HEAD) is not RELEASE=$RELEASE" >&2; exit 2; }
-[ -z "$(git status --porcelain -- apps/app/supabase/migrations apps/infrx-api/deploy/migrate.py apps/infrx-api/infrx/state/migrations.py)" ] || { echo "uncommitted or untracked changes in the migration inputs" >&2; exit 2; }   # pgrestore.py is the dump tool, not a migration input
+INPUTS=(apps/app/supabase/migrations apps/infrx-api/deploy/migrate.py apps/infrx-api/infrx/state/migrations.py)
+git rev-parse --verify -q "$RELEASE^{commit}" >/dev/null || { echo "RELEASE $RELEASE is not a commit in this repository" >&2; exit 2; }
+git diff --quiet "$RELEASE" HEAD -- "${INPUTS[@]}" || { echo "HEAD $(git rev-parse --short HEAD): the migration inputs differ from RELEASE $RELEASE" >&2; exit 2; }
+[ -z "$(git status --porcelain -- "${INPUTS[@]}")" ] || { echo "uncommitted or untracked changes in the migration inputs" >&2; exit 2; }   # pgrestore.py is the dump tool, not a migration input
 [ -x apps/infrx-api/.venv/bin/python ] || { echo "run from the repo root after make api-env" >&2; exit 2; }
 PY=apps/infrx-api/.venv/bin/python
 HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscgsymzdykendbrc dbname=postgres sslmode=require"
