@@ -77,6 +77,14 @@ def spec_key(provider: str, import_id: str) -> str:
     return f"lab/{provider}/imports/{import_id}/spec.json"
 
 
+async def write_once(objects, key: str, data: bytes, content_type: str = "application/json"
+                     ) -> None:
+    """The same bytes again are a no-op, other bytes a `Conflict`."""
+    if not await objects.put_if_absent(key, data, content_type) and \
+            await objects.head(key) != digest_of(data):
+        raise errors.Conflict(f"{key} already holds other bytes")
+
+
 # --- the spec ---------------------------------------------------------------------------------
 class _Model(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
@@ -256,10 +264,7 @@ class Importer:
         self.limits, self.chunk_rows = limits, chunk_rows
 
     async def _once(self, key: str, data: bytes) -> None:
-        """Write-once: the same bytes again are a no-op, other bytes a conflict."""
-        if not await self.objects.put_if_absent(key, data, "application/json") and \
-                await self.objects.head(key) != digest_of(data):
-            raise errors.Conflict(f"{key} already holds other bytes")
+        await write_once(self.objects, key, data)
 
     async def run(self, payload: Any, pieces: AsyncIterable[bytes], *, provider_org_id: str,
                   actor: str, accept_rejects: bool = False) -> ImportReport:

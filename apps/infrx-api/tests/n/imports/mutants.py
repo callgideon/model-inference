@@ -152,7 +152,7 @@ MUTANTS: tuple[Mutant, ...] = (
       "if block and (number - 1) // self.chunk_rows != block[0][0] // self.chunk_rows:",
       "if False:", CRASH),
     m("n1_write_once_unchecked", "other bytes at a staged key are a conflict",
-      "await self.objects.head(key) != digest_of(data):", "False:", REPLAY),
+      "await objects.head(key) != digest_of(data):", "False:", REPLAY),
     # --- publication
     m("n1_rejects_published_silently", "rejects block publication unless accepted",
       "if not accepted or (rejected and not accept_rejects):", "if not accepted:", MAL),
