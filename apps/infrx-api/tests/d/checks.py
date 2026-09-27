@@ -1725,6 +1725,7 @@ EXPECTED_FUNCTION_CALLERS = {
     # (evaluated by the api_keys INSERT policy as the caller, so the caller executes it).
     "public.consumer_credit_ledger(text,integer)": {"authenticated", "service_role"},
     "public.consumer_may_create_key()": {"authenticated", "service_role"},
+"public.lab_provider_memberships()": {"authenticated", "service_role"},   # 0030 (Lab, local-only): the R156 session door
     # D10-0025 (U3 WR-U3-1, R143): the operator console's writes, with the operator's own
     # JWT (is_operator() inside); never the platform key - service_role holds no EXECUTE.
     "public.operator_adjust_credit(uuid,text,text,text)": {"authenticated"},

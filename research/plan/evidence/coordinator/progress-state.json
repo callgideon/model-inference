@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 176,
-  "updated": "2026-09-27T16:22:00Z",
+  "revision": 178,
+  "updated": "2026-09-27T18:13:13Z",
   "agent_slots": {
     "total": 16,
-    "active": 3,
+    "active": 2,
     "reserved": 2,
     "note": "Session 03 post-launch: lab-access (L2) + lab-sql-d7 running; certify window awaits the operator start; LW2 after L2 + the L1 integration round."
   },
@@ -4188,18 +4188,18 @@
         "prefix": "infrx-l2-",
         "db": "l2"
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-27T09:15:00Z",
-      "updated": "2026-09-27T12:12:00Z",
-      "blocker": "real-PG integration in the LW1-INTEGRATION lane",
-      "next_action": "HELD at 93b0fb2c (built on fakes; the plan forbids merging on fakes) → the LW1-INTEGRATION lane runs it on real PostgreSQL (PgAccessStore, role matrix) together with L1's port switch and H1's real-port case, from the integration branch codex/w5-lw1-integration (fb9989ee = tip + L2 + L1)",
+      "updated": "2026-09-27T18:13:00Z",
+      "blocker": null,
+      "next_action": "DONE: L2 integrated on real PostgreSQL by the LW1 integration merge 7fe48fe1",
       "estimate": {
-        "optimistic_h": 3,
-        "likely_h": 6,
-        "pessimistic_h": 12,
-        "confidence": "medium",
-        "basis": "wave5-plan §5 LW1 estimates",
-        "at": "2026-09-27T09:15:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T18:13:00Z"
       },
       "evidence": [
         "research/plan/evidence/l/L2-1e0f875.md"
@@ -4230,18 +4230,18 @@
         "prefix": "infrx-l4-",
         "db": "l4"
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-27T09:15:00Z",
-      "updated": "2026-09-27T09:43:00Z",
-      "blocker": "waits for L2-SQL (lab-sql) and L2 (lab-access) to merge",
-      "next_action": "HELD at 80dae52c (verdict REJECT only on R-3 = the membership seam, ruled R156): merges after L2 and L2-SQL; then an L1 integration round switches the read to the L2 port, applies WR-L1-1..4 (home page, lab-mutants target, .gitignore, .env.example) and runs LAB-ACCESS on l4; WR-L1-6 (Lab sign-in, /auth/callback, middleware) goes to L4 (LW2)",
+      "updated": "2026-09-27T18:13:00Z",
+      "blocker": null,
+      "next_action": "DONE: L1 integrated (one membership seam via 0030) by the LW1 integration merge 7fe48fe1; WR-L1-6 (sign-in, /auth/callback, middleware) → L4",
       "estimate": {
-        "optimistic_h": 4,
-        "likely_h": 8,
-        "pessimistic_h": 16,
-        "confidence": "medium",
-        "basis": "wave5-plan §5 LW1 estimates",
-        "at": "2026-09-27T09:15:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T18:13:00Z"
       },
       "evidence": [
         "research/plan/evidence/l/L1-eabf94a.md"
@@ -4460,27 +4460,35 @@
       "branch": "codex/w5-lw1-integration",
       "worktree": ".claude/worktrees/codex-w5-lw1-integration",
       "base": "fb9989ee",
-      "head": null,
+      "head": "c03c26e3",
       "isolation": {
         "ports": "l2 57501, l4 57503",
         "prefix": "infrx-l2-/infrx-l4-",
         "db": "l2"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-27T12:12:00Z",
-      "updated": "2026-09-27T12:12:00Z",
+      "updated": "2026-09-27T18:13:00Z",
       "blocker": null,
-      "next_action": "handback → merge = the LW1 exit (L2, L1, H1 integrated) → LW2 dispatch",
+      "next_action": "DONE: merged --no-ff at 7fe48fe1 = the LW1 exit; WR-LW1I-1 (pin 0030), -2 (function callers), -3/-6 (PG mutant lists in their own api-mutants process) applied; R171–R172; WR-LW1I-4 (DatasetSources) → lab-sql LW2; WR-LW1I-5 optional; WR-L1-6 → L4",
       "estimate": {
-        "optimistic_h": 3,
-        "likely_h": 6,
-        "pessimistic_h": 12,
-        "confidence": "medium",
-        "basis": "three integrations; the C3A real-DB analogue",
-        "at": "2026-09-27T12:12:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T18:13:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/l/L2-INT-dd79f8c.md"
+      ],
+      "commands": [
+        {
+          "cmd": "tests/l/access on l2 (23); tests/d/test_l2sql_self on l4 (3 checks, 8 users, 7 SQL mutants); tests/h real port; Lab targets; coordinator at the merge: l4 70 passed, l2 69 passed, lab-test 27, lint/typecheck/build ✓",
+          "exit": 0,
+          "summary": "LW1 exit at 7fe48fe1"
+        }
+      ],
       "owned_paths": [
         "lab-access + lab-app + lab-contracts paths, 0030 if needed"
       ],
@@ -7555,6 +7563,72 @@
       "by": "tracker",
       "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
       "source": "updates/N2-20260927T1616Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:00Z",
+      "by": "coordinator (LW1 exit)",
+      "what": "LW1 EXIT at 7fe48fe1: L2 on real PostgreSQL, L1 through the 0030 session door (R171), H1 on the real rights port (R172); every LW1 task merged (L2-SQL, D6F, D7, L2, L1, F3, H1, T2I; X1/X3/X5 drafts). LW2 continues: lab-sql (D6J, L3-SQL, D9 from 0031), lab-access L3, lab-app L4 + V1M dispatched; datasets and trace-ship LW2 already merged; feedback G4F running",
+      "source": "research/plan/evidence/l/L2-INT-dd79f8c.md"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/L1-20260927T0926Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/L1-20260927T0955Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/L2-20260927T1004Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/L2-20260927T1157Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/H1-20260927T1320Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/L1-20260927T1320Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/L2-20260927T1320Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/H1-20260927T1723Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/L1-20260927T1723Z.json"
+    },
+    {
+      "at": "2026-09-27T18:13:13Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/L2-20260927T1723Z.json"
     }
   ],
   "history": {
@@ -8415,10 +8489,60 @@
       "status": "rejected",
       "at": "2026-09-27T16:16:00Z",
       "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "L1-20260927T0926Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T09:26:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "L1-20260927T0955Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T09:55:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "L2-20260927T1004Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:04:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "L2-20260927T1157Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T11:57:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "H1-20260927T1320Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T13:20:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "L1-20260927T1320Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T13:20:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "L2-20260927T1320Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T13:20:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "H1-20260927T1723Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T17:23:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "L1-20260927T1723Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T17:23:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "L2-20260927T1723Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T17:23:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T16:21:23Z",
+    "computed_at": "2026-09-27T18:13:13Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -8486,13 +8610,34 @@
     }
   },
   "activated": [
+    "B1",
+    "B2",
+    "C2",
+    "C3F",
+    "C3L",
     "D6F",
+    "D6J",
     "D7",
+    "D8",
+    "D9",
+    "E3L",
     "F3",
+    "G4F",
+    "G4T",
     "H1",
+    "I2L",
+    "J2",
     "L1",
     "L2",
+    "L3",
+    "L4",
+    "N1",
+    "N2",
+    "R1",
+    "T2F",
     "T2I",
+    "T3",
+    "V1M",
     "X1",
     "X3",
     "X5"

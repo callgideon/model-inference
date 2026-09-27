@@ -220,6 +220,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
         "0026_fenced_result.sql",
     # Lab (local-only, R151): L2-SQL, D6F
     "0027_lab_access.sql", "0028_feedback_durable.sql", "0029_lab_data.sql",
+    # Lab (local-only, R151): LW1 integration (R156 session door)
+    "0030_lab_access_self.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
