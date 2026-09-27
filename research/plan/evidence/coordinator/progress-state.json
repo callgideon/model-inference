@@ -19,7 +19,7 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 148,
+  "revision": 150,
   "updated": "2026-09-27T00:24:00Z",
   "agent_slots": {
     "total": 16,
@@ -3508,16 +3508,16 @@
       },
       "activity": "queued",
       "started": "2026-09-26T18:20:00Z",
-      "updated": "2026-09-26T21:33:00Z",
+      "updated": "2026-09-27T00:24:00Z",
       "blocker": null,
       "next_action": "GO-LIVE order (user 19:50Z): RELEASE freeze on b640c35c (G1–G5 + G4b, E3C final, App journey; ~3.5 h) → release-bundle + fetch + prepull → verified hosted dump [user] → W1–W13 install maintenance (needs the migrate.py / operations.cli allow rules, else the user runs W6/W7*) → Vercel production variables + P-05 [operator] → APP-MERGE main --no-ff in a detached worktree off origin/main, push HEAD:refs/heads/main, smoke S1–S6 → certify + E1B cells live (E4C-runbook §4a) → BACKEND-READY / APP-PILOT decisions",
       "estimate": {
-        "optimistic_h": 0.3,
-        "likely_h": 0.5,
-        "pessimistic_h": 1,
-        "confidence": "high",
-        "basis": "one --no-ff merge + push once authorized",
-        "at": "2026-09-26T18:20:00Z"
+        "optimistic_h": 1,
+        "likely_h": 1.5,
+        "pessimistic_h": 3,
+        "confidence": "medium",
+        "basis": "after G2 green + the user-run W1/W6/W7 + Vercel inputs: detached worktree off origin/main, merge d3a99e01 --no-ff, push HEAD:refs/heads/main, smoke S1–S6",
+        "at": "2026-09-27T00:24:00Z"
       },
       "evidence": [],
       "commands": [],
@@ -6491,6 +6491,24 @@
       "by": "coordinator (SWEEP-2)",
       "what": "SWEEP-2 ACCEPT 9244f8c3 merged at e6962d0a with the four small wirings applied; the sweep backlog is empty — the tip (e6962d0a) is the next release candidate after d3a99e01 goes live",
       "source": "research/plan/evidence/coordinator/SWEEP-2-6f9b831.md"
+    },
+    {
+      "at": "2026-09-27T00:24:43Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T23:14:00Z is not newer than lane SWEEP-1 state 2026-09-26T23:49:00Z",
+      "source": "updates/SWEEP-1-20260926T2314Z.json"
+    },
+    {
+      "at": "2026-09-27T00:24:43Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-26T23:41:00Z is not newer than lane SWEEP-1 state 2026-09-26T23:49:00Z",
+      "source": "updates/SWEEP-1-20260926T2341Z.json"
+    },
+    {
+      "at": "2026-09-27T00:24:43Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T00:08:00Z is not newer than lane SWEEP-2 state 2026-09-27T00:24:00Z",
+      "source": "updates/SWEEP-2-20260927T0008Z.json"
     }
   ],
   "history": {
@@ -7187,10 +7205,25 @@
       "status": "rejected",
       "at": "2026-09-26T21:05:00Z",
       "reason": "stale: at 2026-09-26T21:05:00Z is not newer than lane G2-FIX state 2026-09-26T21:33:00Z"
+    },
+    "SWEEP-1-20260926T2314Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T23:14:00Z",
+      "reason": "stale: at 2026-09-26T23:14:00Z is not newer than lane SWEEP-1 state 2026-09-26T23:49:00Z"
+    },
+    "SWEEP-1-20260926T2341Z.json": {
+      "status": "rejected",
+      "at": "2026-09-26T23:41:00Z",
+      "reason": "stale: at 2026-09-26T23:41:00Z is not newer than lane SWEEP-1 state 2026-09-26T23:49:00Z"
+    },
+    "SWEEP-2-20260927T0008Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T00:08:00Z",
+      "reason": "stale: at 2026-09-27T00:08:00Z is not newer than lane SWEEP-2 state 2026-09-27T00:24:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-26T21:33:57Z",
+    "computed_at": "2026-09-27T00:24:43Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -7234,9 +7267,7 @@
         "conditional": null,
         "confidence": null,
         "critical_path": null,
-        "stale": [
-          "E3A"
-        ]
+        "stale": []
       },
       "E4": {
         "gate": "APP-PILOT",
@@ -7250,7 +7281,6 @@
         "confidence": null,
         "critical_path": null,
         "stale": [
-          "E3A",
           "I2A",
           "I3"
         ]
