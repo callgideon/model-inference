@@ -20,8 +20,7 @@ from typing import Any
 
 # `v2` is the contracts-v2 package (F2P wire-in, item 1): `contracts.v2` resolves by
 # attribute access like every other submodule, and still loads nothing until touched.
-_SUBMODULES = ("codec", "errors", "ids", "limits", "money", "ports", "records",
-                "tasklocal", "v2", "wire")
+_SUBMODULES = ("codec", "errors", "ids", "lab", "limits", "money", "ports", "records", "tasklocal", "v2", "wire")
 
 __all__ = list(_SUBMODULES)
 

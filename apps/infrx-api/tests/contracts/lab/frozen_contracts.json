@@ -17,7 +17,7 @@
     "apps/app/lib/contracts/v2/published-model.ts": "d329fd81b72ad8af125e97f796bd8c98c0c633fe5283b88fab0d011f1a447511",
     "apps/app/lib/contracts/v2/types.ts": "8829662d7f894055c1fba6c5cff0ff47b28d17073a36f43112f525fd27dc3116",
     "apps/infrx-api/infrx/contracts/README.md": "e49726400d96ddacdd98c2967df73de212e647589abba55c3658e53b69e3c340",
-    "apps/infrx-api/infrx/contracts/__init__.py": "17f91d21cb8f7416e60189fb29f367615153b2dd73bdb8ce893b30db70ffbf47",
+    "apps/infrx-api/infrx/contracts/__init__.py": "a0f21c85188638ad8a8f6de517261e55b6ec25431cec58017b9a0383a0d195dc",
     "apps/infrx-api/infrx/contracts/codec.py": "b118ff8ac42aee0d61758048c50f9eef1e733697ef8d27232da1daf7d35e038e",
     "apps/infrx-api/infrx/contracts/conformance/__init__.py": "5acc7ecd482559f1a739cd50a0c573777a3bcd6a27cbe8995830ebb72546b611",
     "apps/infrx-api/infrx/contracts/conformance/acceptance.py": "8c129c66fb305c5c94437dd10b1d278926fc767ca7c04b2ef184f2ef29510d09",

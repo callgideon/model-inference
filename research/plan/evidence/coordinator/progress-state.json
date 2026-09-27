@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 163,
-  "updated": "2026-09-27T09:43:00Z",
+  "revision": 165,
+  "updated": "2026-09-27T10:41:50Z",
   "agent_slots": {
     "total": 16,
-    "active": 6,
+    "active": 4,
     "reserved": 2,
     "note": "Session 03 post-launch: CERTIFY-WINDOW + six LW1 lanes (wave5-plan) running; certify/E1B on the live box after CERTIFY-WINDOW merges."
   },
@@ -4241,27 +4241,36 @@
       "branch": "codex/w5-lab-contracts",
       "worktree": ".claude/worktrees/codex-w5-lab-contracts",
       "base": "9a6c3685",
-      "head": null,
+      "head": "de85fa6a",
       "isolation": {
         "ports": "fake-only",
         "prefix": "infrx-fake-only-",
         "db": "fake-only"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-27T09:15:00Z",
-      "updated": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T10:41:00Z",
       "blocker": null,
-      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "next_action": "DONE: merged --no-ff at d970e88a; WR-F3-1..3 applied (contracts lab export + frozen pin, api-mutants list, packages/shared exports); rulings R157–R164; H1 real-port case after L2; WR-H1-1 (authorize(gate, provider_org_id, dataset_ref)) and the D7 ref-storage note go to lab-access / lab-sql at their merges",
       "estimate": {
-        "optimistic_h": 5,
-        "likely_h": 10,
-        "pessimistic_h": 20,
-        "confidence": "medium",
-        "basis": "wave5-plan §5 LW1 estimates",
-        "at": "2026-09-27T09:15:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T10:41:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/f/F3-f63f040.md",
+        "research/plan/evidence/h/H1-20de8e4.md"
+      ],
+      "commands": [
+        {
+          "cmd": "tests/contracts/lab + tests/h + test_config_and_imports at the merge (coordinator)",
+          "exit": 0,
+          "summary": "394 passed; F3 53 cases / 43 py + 16 ts mutants; H1 19 cases / 25 mutants; three majors fixed + rechecked"
+        }
+      ],
       "owned_paths": [
         "wave5-plan §5 LW1 lab-contracts"
       ],
@@ -7080,6 +7089,36 @@
       "by": "coordinator (LW1)",
       "what": "L1 (lab-app) verified at 80dae52c: two majors fixed (AST boundary scan, guard tests); R-3 (membership seam) ruled R156 — one RPC by lab-sql behind the L2 port; L1 held until L2/L2-SQL merge, then an integration round. WR-L1-6 (sign-in/callback/middleware) assigned to L4 in LW2",
       "source": "research/plan/evidence/l/L1-eabf94a.md"
+    },
+    {
+      "at": "2026-09-27T10:41:00Z",
+      "by": "coordinator (LW1)",
+      "what": "lab-contracts (F3 + H1) merged at d970e88a with WR-F3-1..3; rulings R157–R164 numbered; F3 is the base contract for the M2–M4 lanes. Lane-brief flaw noted: COMMON's \"make api-test\" collides on the default d1 harness when lanes run concurrently — later waves pass INFRX_D_TASK=<key>",
+      "source": "research/plan/evidence/f/F3-f63f040.md"
+    },
+    {
+      "at": "2026-09-27T10:41:50Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/F3-20260927T1005Z.json"
+    },
+    {
+      "at": "2026-09-27T10:41:50Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/H1-20260927T1005Z.json"
+    },
+    {
+      "at": "2026-09-27T10:41:50Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/F3-20260927T1032Z.json"
+    },
+    {
+      "at": "2026-09-27T10:41:50Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/H1-20260927T1032Z.json"
     }
   ],
   "history": {
@@ -7836,10 +7875,30 @@
       "status": "rejected",
       "at": "2026-09-27T09:33:00Z",
       "reason": "stale: at 2026-09-27T09:33:00Z is not newer than lane W5-DISCOVERY state 2026-09-27T09:36:00Z"
+    },
+    "F3-20260927T1005Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:05:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "H1-20260927T1005Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:05:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "F3-20260927T1032Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:32:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "H1-20260927T1032Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:32:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T09:36:21Z",
+    "computed_at": "2026-09-27T10:41:50Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
