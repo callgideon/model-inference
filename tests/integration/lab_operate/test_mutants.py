@@ -14,8 +14,20 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import mutants as mutation_list                         # noqa: E402
+HERE = Path(__file__).resolve().parent
+
+
+def _load(name: str, file: str):
+    """By path under a unique name: `runner`/`mutants` are also E3C's and E2's module names."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, HERE / file)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+mutation_list = _load("e3l_mutants", "mutants.py")
 
 LAYER1, STACK = mutation_list.MUTANTS, mutation_list.STACK_MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
