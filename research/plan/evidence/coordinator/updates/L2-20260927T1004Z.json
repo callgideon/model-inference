@@ -1,0 +1,16 @@
+{"task": "L2", "slice": "L2 (fake-driven; L2-SQL pending)", "activity": "review",
+ "head": "1e0f8750", "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-access",
+ "branch": "codex/w5-lab-access",
+ "owned_paths": ["apps/infrx-api/infrx/lab/__init__.py", "apps/infrx-api/infrx/lab/access/", "apps/infrx-api/tests/l/access/"],
+ "commands": [
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/l/access (seam test only, 5bf8459a)", "exit": 2, "summary": "red: ModuleNotFoundError infrx.lab"},
+  {"cmd": "cd apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q tests/l/access/", "exit": 0, "summary": "30 passed; 12 cases, 13/13 mutants killed"},
+  {"cmd": "make api-test", "exit": 2, "summary": "4542 passed, 54 skipped, 9 xfailed; 43 failed + 8 errors all tests/i BlockingIOError on the shared i8 pooler lock (concurrent lanes)"},
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/i/test_pooler.py tests/i/test_observe.py tests/i/test_privilege_probe.py tests/i/test_rollback_drill.py", "exit": 0, "summary": "36 passed, 1 xfailed (rerun alone)"},
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/i/test_mutants.py", "exit": 0, "summary": "50 passed (rerun alone)"}
+ ],
+ "estimate": {"optimistic_h": 1.5, "likely_h": 3, "pessimistic_h": 6, "confidence": "medium",
+  "basis": "remaining: PG adapter conformance + role matrix after L2-SQL merges, one verify round; C3A real-DB analogue", "at": "2026-09-27T10:04Z"},
+ "blockers": ["L2-SQL (lab-sql) not merged: real PG integration and role matrix not runnable (13:9)"],
+ "wiring_requests": ["WR-L2-1 schema request to lab-sql (tables, RPCs lab_provider_membership/lab_memberships_for_user/lab_current_grant/lab_grant_history/lab_deployment_aggregates, RLS, PgLabAccess implementing infrx.lab.access.AccessStore)", "WR-L2-2 Makefile:21 api-mutants += tests/l/access/test_mutants.py"],
+ "evidence": ["research/plan/evidence/l/L2-1e0f875.md", "research/plan/evidence/coordinator/updates/L2-20260927T1004Z.json"]}
