@@ -531,10 +531,16 @@ def test_rows_are_on_disk_as_they_finish_and_an_interrupt_is_marked():
         assert_clean(blobs, "interrupted run")
 
 
-def test_a_second_ctrl_c_cannot_lose_the_summary():
+def test_a_second_ctrl_c_cannot_lose_the_summary(request):
     """n5: SIGINT is held for the length of one row write and of the final summary write,
     so an impatient second Ctrl-C cannot truncate either. Exit is still 130."""
     import signal as sig
+    # A background job (`cmd &` in a non-interactive shell, e.g. a release gate's `make
+    # check`) starts with SIGINT ignored, sigint_deferred restores what it found, and an
+    # ignored SIGINT survives exec into the subprocess below: give this case the terminal's
+    # disposition and hand back whatever the process had, pass or fail.
+    found = sig.signal(sig.SIGINT, sig.default_int_handler)
+    request.addfinalizer(lambda: sig.signal(sig.SIGINT, found))
     state = {"interrupted": False}
     with bench.sigint_deferred(state):
         os.kill(os.getpid(), sig.SIGINT)         # would raise KeyboardInterrupt unprotected
@@ -549,7 +555,7 @@ def test_a_second_ctrl_c_cannot_lose_the_summary():
     with bench.sigint_deferred(state, ignore_after=True):
         os.kill(os.getpid(), sig.SIGINT)
     assert sig.getsignal(sig.SIGINT) == sig.SIG_IGN and state["interrupted"] is True
-    sig.signal(sig.SIGINT, sig.default_int_handler)      # leave the test process as we found it
+    sig.signal(sig.SIGINT, sig.default_int_handler)      # back to the disposition set above
     # and an IN-PROCESS run must never change the caller's disposition: only a standalone
     # CLI run (bench.CLI_PROCESS) may leave SIGINT ignored on its way out.
     with tempfile.TemporaryDirectory() as t2:
