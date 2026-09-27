@@ -1,0 +1,6 @@
+{"task":"L4","slice":"L4 (fake L3 port)","activity":"review","head":"fcd93898","worktree":".claude/worktrees/codex-w5-lab-app-lw2","branch":"codex/w5-lab-app-lw2",
+ "owned_paths":["apps/lab/app/(provider)/{overview,models,deployments,settings}/","apps/lab/lib/services/control/","apps/lab/tests/l/ui/","apps/lab/app/(provider)/layout.tsx","apps/lab/tests/l/shell/"],
+ "commands":[{"cmd":"make lab-test","exit":0,"summary":"49/49"},{"cmd":"make lab-lint","exit":0,"summary":"0 problems"},{"cmd":"make lab-typecheck","exit":0,"summary":"clean"},{"cmd":"make lab-build","exit":0,"summary":"5 dynamic routes"},{"cmd":"node tests/l/ui/run-mutants.mjs","exit":0,"summary":"47/47 killed, 16 cases named"},{"cmd":"node tests/l/shell/run-mutants.mjs","exit":0,"summary":"69/69 killed"}],
+ "estimate":{"optimistic_h":1.5,"likely_h":3,"pessimistic_h":6,"confidence":"medium","basis":"UI+fake+tests done; remaining = WR-L4-1 route from L3, http adapter, J01/J02 on real L3 at l4, one verify round","at":"2026-09-27T19:50Z"},
+ "blockers":["L3 not on the base: real LAB-PUBLISH evidence waits for its merge"],"wiring_requests":["WR-L4-1 L3 control route shape (lab-access-lw2) + ruling","WR-L4-2 (provider)/page.tsx redirect to /overview","WR-L4-3 Makefile lab-mutants ui runner","WR-L4-4 .env.example LAB_CONTROL_PREVIEW line"],
+ "evidence":["research/plan/evidence/l/L4-fcd9389.md"]}
