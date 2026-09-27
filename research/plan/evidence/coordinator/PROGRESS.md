@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-27 11:32Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 169, updated 2026-09-27 11:32Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-27 11:33Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 169, updated 2026-09-27 11:33Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -31,7 +31,7 @@ Remaining, in order:
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 3 active lanes, 2 reserved.
+- Agent slots: 16 total, 4 active lanes, 2 reserved.
 - Validation: 0 error(s), 8 warning(s).
 
 ### Actionable blockers
@@ -216,6 +216,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | W5-TRACE-SHIP | support (wave5 LW1 lane trace-ship; wave5-plan §5) tasks T2I; workflow wf_7f35c7d0-e41; Opus implementer + 2 lenses + one fix round | complete | codex/w5-trace-ship | 9a6c3685 → 0b6a295d | ports t2i 57540/57541/57542, prefix infrx-t2i-, db t2i | 2026-09-27 10:43Z | DONE: merged --no-ff at a7bafee0; WR-1 (harness.apply_trace_schema after wait_all + a service case), WR-2 (api-mutants list), R165 applied; WR-3 (composition root, flag OFF, D5 pins lookup with a PG proof on a t2i postgres port) carried to LW2 trace-ship (T2F/T3) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 10:43Z; basis: merged |
 | W5-DISCOVERY | support (wave5 LW1 lane discovery; wave5-plan §5) tasks X1, X3, X5; workflow wf_c1a1f58a-491; Opus implementer + 2 lenses + one fix round | complete | codex/w5-discovery | 9a6c3685 → 3e4223ba | ports none (documents), prefix infrx-none-, db none | 2026-09-27 09:36Z | DONE: merged --no-ff at 137c36c0; README index rows + the marlin-sop 82 s cap note applied by the coordinator; X1/X3/X5 stay planned until the owner approves (P-13/P-14/P-15) → C3 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 09:36Z; basis: merged |
 | D7 | D7 not started | blocked | codex/w5-lab-sql | — → fd65005b | none | 2026-09-27 11:00Z | F3's reviewed commit is not on claude/consumer-v1 (no infrx/contracts/lab at 56566aab); brief: stop after D6F | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 11:00Z; basis: brief estimate; D10 2/4/8 for 8 files |
+| W5-LAB-SQL-D7 | support (wave5 LW1 lane lab-sql, continuation) D7 = migration 0029 (datasets/evals durable schema: manifests, samples, splits, harness revisions; eval runs/cases/attempt leases/outbox/results/checkpoints; RLS, indexes, query plan); workflow wf_534ebe84-1c3 | running | codex/w5-lab-sql-d7 | 1a681151 → — | ports dlab 57500 (decoy 27500), prefix infrx-dlab-, db dlab | 2026-09-27 11:33Z | handback → merge (migration pin 0029, api-mutants list) | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 11:33Z; basis: wave5-plan D7 3/6/12 |
 
 ### Queues and locks
 

@@ -20,12 +20,12 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 169,
-  "updated": "2026-09-27T11:32:14Z",
+  "updated": "2026-09-27T11:33:00Z",
   "agent_slots": {
     "total": 16,
     "active": 2,
     "reserved": 2,
-    "note": "Session 03 post-launch: CERTIFY-WINDOW + six LW1 lanes (wave5-plan) running; certify/E1B on the live box after CERTIFY-WINDOW merges."
+    "note": "Session 03 post-launch: lab-access (L2) + lab-sql-d7 running; certify window awaits the operator start; LW2 after L2 + the L1 integration round."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -4401,6 +4401,40 @@
       "wiring_requests": [],
       "blocker": "F3's reviewed commit is not on claude/consumer-v1 (no infrx/contracts/lab at 56566aab); brief: stop after D6F",
       "updated": "2026-09-27T11:00:00Z"
+    },
+    {
+      "id": "W5-LAB-SQL-D7",
+      "task": null,
+      "slice": "(wave5 LW1 lane lab-sql, continuation) D7 = migration 0029 (datasets/evals durable schema: manifests, samples, splits, harness revisions; eval runs/cases/attempt leases/outbox/results/checkpoints; RLS, indexes, query plan); workflow wf_534ebe84-1c3",
+      "agent": "opus",
+      "branch": "codex/w5-lab-sql-d7",
+      "worktree": ".claude/worktrees/codex-w5-lab-sql-d7",
+      "base": "1a681151",
+      "head": null,
+      "isolation": {
+        "ports": "dlab 57500 (decoy 27500)",
+        "prefix": "infrx-dlab-",
+        "db": "dlab"
+      },
+      "activity": "running",
+      "started": "2026-09-27T11:33:00Z",
+      "updated": "2026-09-27T11:33:00Z",
+      "blocker": null,
+      "next_action": "handback → merge (migration pin 0029, api-mutants list)",
+      "estimate": {
+        "optimistic_h": 3,
+        "likely_h": 6,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "wave5-plan D7 3/6/12",
+        "at": "2026-09-27T11:33:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW1 lab-sql (D7)"
+      ],
+      "wiring_requests": []
     }
   ],
   "review_queue": [],
