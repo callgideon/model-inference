@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-27 12:12Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 170, updated 2026-09-27 12:12Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-27 13:47Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 172, updated 2026-09-27 13:47Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -31,7 +31,7 @@ Remaining, in order:
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 5 active lanes, 2 reserved.
+- Agent slots: 16 total, 4 active lanes, 2 reserved.
 - Validation: 0 error(s), 8 warning(s).
 
 ### Actionable blockers
@@ -125,7 +125,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (63.4 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (65.0 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -216,7 +216,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | W5-TRACE-SHIP | support (wave5 LW1 lane trace-ship; wave5-plan §5) tasks T2I; workflow wf_7f35c7d0-e41; Opus implementer + 2 lenses + one fix round | complete | codex/w5-trace-ship | 9a6c3685 → 0b6a295d | ports t2i 57540/57541/57542, prefix infrx-t2i-, db t2i | 2026-09-27 10:43Z | DONE: merged --no-ff at a7bafee0; WR-1 (harness.apply_trace_schema after wait_all + a service case), WR-2 (api-mutants list), R165 applied; WR-3 (composition root, flag OFF, D5 pins lookup with a PG proof on a t2i postgres port) carried to LW2 trace-ship (T2F/T3) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 10:43Z; basis: merged |
 | W5-DISCOVERY | support (wave5 LW1 lane discovery; wave5-plan §5) tasks X1, X3, X5; workflow wf_c1a1f58a-491; Opus implementer + 2 lenses + one fix round | complete | codex/w5-discovery | 9a6c3685 → 3e4223ba | ports none (documents), prefix infrx-none-, db none | 2026-09-27 09:36Z | DONE: merged --no-ff at 137c36c0; README index rows + the marlin-sop 82 s cap note applied by the coordinator; X1/X3/X5 stay planned until the owner approves (P-13/P-14/P-15) → C3 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 09:36Z; basis: merged |
 | D7 | D7 not started | blocked | codex/w5-lab-sql | — → fd65005b | none | 2026-09-27 11:00Z | F3's reviewed commit is not on claude/consumer-v1 (no infrx/contracts/lab at 56566aab); brief: stop after D6F | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 11:00Z; basis: brief estimate; D10 2/4/8 for 8 files |
-| W5-LAB-SQL-D7 | support (wave5 LW1 lane lab-sql, continuation) D7 = migration 0029 (datasets/evals durable schema: manifests, samples, splits, harness revisions; eval runs/cases/attempt leases/outbox/results/checkpoints; RLS, indexes, query plan); workflow wf_534ebe84-1c3 | running | codex/w5-lab-sql-d7 | 1a681151 → — | ports dlab 57500 (decoy 27500), prefix infrx-dlab-, db dlab | 2026-09-27 11:33Z | handback → merge (migration pin 0029, api-mutants list) | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 11:33Z; basis: wave5-plan D7 3/6/12 |
+| W5-LAB-SQL-D7 | support (wave5 LW1 lane lab-sql, continuation) D7 = migration 0029 (datasets/evals durable schema: manifests, samples, splits, harness revisions; eval runs/cases/attempt leases/outbox/results/checkpoints; RLS, indexes, query plan); workflow wf_534ebe84-1c3 | complete | codex/w5-lab-sql-d7 | 1a681151 → 94caba1c | ports dlab 57500 (decoy 27500), prefix infrx-dlab-, db dlab | 2026-09-27 13:47Z | DONE: merged --no-ff at 7c11b6d8 with WR-D7-1 (pin 0029), WR-D7-2 (api-mutants); rulings R166–R168; minors F3–F7 / RSI-1..3 carried to the LW2 lab-sql lane (D6J/L3-SQL/D9) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 13:47Z; basis: merged |
 | W5-LW1-INTEGRATION | support (wave5 LW1 integration) L2 on real PostgreSQL (PgAccessStore, db clock, role matrix), the one-RPC membership seam for the Lab App (R156; WR-L1-1..4), H1 real-port case (WR-H1-1); workflow wf (see RESUME); base fb9989ee = tip + lab-access + lab-app | running | codex/w5-lw1-integration | fb9989ee → — | ports l2 57501, l4 57503, prefix infrx-l2-/infrx-l4-, db l2 | 2026-09-27 12:12Z | handback → merge = the LW1 exit (L2, L1, H1 integrated) → LW2 dispatch | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 12:12Z; basis: three integrations; the C3A real-DB analogue |
 
 ### Queues and locks
@@ -359,6 +359,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `L2-SQL-20260927T0943Z.json`: unknown task ID 'L2-SQL'
 - `D6F-20260927T1100Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - `L2-SQL-20260927T1100Z.json`: unknown task ID 'L2-SQL'
+- `D7-20260927T1900Z.json`: unknown activity 'fix-round'
 
 ## Tasks (backend, App, activated, reused baseline)
 
@@ -447,6 +448,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-27 13:47Z UTC, tracker: rejected update: unknown activity 'fix-round'
+- 2026-09-27 13:47Z UTC, coordinator (LW1): D7 (0029 lab_data) ACCEPT_WITH_FIXES 94caba1c merged at 7c11b6d8 with wirings; R166–R168; the LW1-INTEGRATION lane is the last LW1 lane running
 - 2026-09-27 12:12Z UTC, coordinator (LW1): lab-access (L2) ACCEPT_WITH_FIXES 93b0fb2c on fakes → held; LW1-INTEGRATION lane launched from codex/w5-lw1-integration (fb9989ee = tip + L2 + L1) to run L2 on real PostgreSQL, switch L1 to the one-RPC seam (R156, WR-L1-1..4) and add H1's real-port case; its merge is the LW1 exit
 - 2026-09-27 11:32Z UTC, tracker: rejected update: unknown task ID 'L2-SQL'
 - 2026-09-27 11:00Z UTC, D7: queued → blocked; head fd65005b; estimate likely unknown → 6 h (brief estimate; D10 2/4/8 for 8 files); blocker: F3's reviewed commit is not on claude/consumer-v1 (no infrx/contracts/lab at 56566aab); brief: stop after D6F

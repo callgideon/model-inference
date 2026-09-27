@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 170,
-  "updated": "2026-09-27T12:12:00Z",
+  "revision": 172,
+  "updated": "2026-09-27T13:47:34Z",
   "agent_slots": {
     "total": 16,
-    "active": 2,
+    "active": 1,
     "reserved": 2,
     "note": "Session 03 post-launch: lab-access (L2) + lab-sql-d7 running; certify window awaits the operator start; LW2 after L2 + the L1 integration round."
   },
@@ -4418,27 +4418,35 @@
       "branch": "codex/w5-lab-sql-d7",
       "worktree": ".claude/worktrees/codex-w5-lab-sql-d7",
       "base": "1a681151",
-      "head": null,
+      "head": "94caba1c",
       "isolation": {
         "ports": "dlab 57500 (decoy 27500)",
         "prefix": "infrx-dlab-",
         "db": "dlab"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-27T11:33:00Z",
-      "updated": "2026-09-27T11:33:00Z",
+      "updated": "2026-09-27T13:47:00Z",
       "blocker": null,
-      "next_action": "handback → merge (migration pin 0029, api-mutants list)",
+      "next_action": "DONE: merged --no-ff at 7c11b6d8 with WR-D7-1 (pin 0029), WR-D7-2 (api-mutants); rulings R166–R168; minors F3–F7 / RSI-1..3 carried to the LW2 lab-sql lane (D6J/L3-SQL/D9)",
       "estimate": {
-        "optimistic_h": 3,
-        "likely_h": 6,
-        "pessimistic_h": 12,
-        "confidence": "medium",
-        "basis": "wave5-plan D7 3/6/12",
-        "at": "2026-09-27T11:33:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T13:47:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/d/D7-cc7e326.md"
+      ],
+      "commands": [
+        {
+          "cmd": "INFRX_D_TASK=dlab: focused 41; D7 + L2-SQL + D6F lists 151; D lists + D7 757; make api-test 4934; coordinator at the merge: upgrade_lab + d7 units + harness pin",
+          "exit": 0,
+          "summary": "41; 151 killed; 757; 4934 passed; 53 passed"
+        }
+      ],
       "owned_paths": [
         "wave5-plan §5 LW1 lab-sql (D7)"
       ],
@@ -7315,6 +7323,18 @@
       "by": "coordinator (LW1)",
       "what": "lab-access (L2) ACCEPT_WITH_FIXES 93b0fb2c on fakes → held; LW1-INTEGRATION lane launched from codex/w5-lw1-integration (fb9989ee = tip + L2 + L1) to run L2 on real PostgreSQL, switch L1 to the one-RPC seam (R156, WR-L1-1..4) and add H1's real-port case; its merge is the LW1 exit",
       "source": "research/plan/evidence/l/L2-1e0f875.md"
+    },
+    {
+      "at": "2026-09-27T13:47:00Z",
+      "by": "coordinator (LW1)",
+      "what": "D7 (0029 lab_data) ACCEPT_WITH_FIXES 94caba1c merged at 7c11b6d8 with wirings; R166–R168; the LW1-INTEGRATION lane is the last LW1 lane running",
+      "source": "research/plan/evidence/d/D7-cc7e326.md"
+    },
+    {
+      "at": "2026-09-27T13:47:34Z",
+      "by": "tracker",
+      "what": "rejected update: unknown activity 'fix-round'",
+      "source": "updates/D7-20260927T1900Z.json"
     }
   ],
   "history": {
@@ -8130,10 +8150,15 @@
       "status": "rejected",
       "at": "2026-09-27T11:00:00Z",
       "reason": "unknown task ID 'L2-SQL'"
+    },
+    "D7-20260927T1900Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T19:00:00Z",
+      "reason": "unknown activity 'fix-round'"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T11:32:14Z",
+    "computed_at": "2026-09-27T13:47:34Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
