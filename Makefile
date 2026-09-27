@@ -79,14 +79,20 @@ console-built:
 # LW0 (R154): the Lab is a standalone package like apps/app (its own lockfile; no pnpm workspace).
 # Install once: cd apps/lab && pnpm install --frozen-lockfile. Until L1 lands apps/lab/app,
 # typecheck and build report "not run" rather than a pass, as bench-test does.
+# LW0 fix C1: without that install, the targets that run the Lab's own binaries fail fast and
+# name the install (as gates.py app_e2e does for apps/app) - a failure, never a "not run".
+LAB_INSTALLED = test -d apps/lab/node_modules || { echo "$@: FAIL - apps/lab/node_modules missing: cd apps/lab && pnpm install --frozen-lockfile" >&2; exit 1; }
+
 lab-test:
 	cd apps/lab && pnpm test
 
 lab-lint:
+	@$(LAB_INSTALLED)
 	cd apps/lab && pnpm lint
 
 lab-typecheck:
 	@if [ -d apps/lab/app ]; then \
+		$(LAB_INSTALLED); \
 		cd apps/lab && pnpm exec next typegen && pnpm exec tsc --noEmit; \
 	else \
 		echo "lab-typecheck: not run - apps/lab/app does not exist yet (L1 owns it)"; \
@@ -94,6 +100,7 @@ lab-typecheck:
 
 lab-build:
 	@if [ -d apps/lab/app ]; then \
+		$(LAB_INSTALLED); \
 		cd apps/lab && pnpm build; \
 	else \
 		echo "lab-build: not run - apps/lab/app does not exist yet (L1 owns it)"; \
