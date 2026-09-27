@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 151,
-  "updated": "2026-09-27T02:07:00Z",
+  "revision": 153,
+  "updated": "2026-09-27T04:54:41Z",
   "agent_slots": {
     "total": 16,
-    "active": 0,
+    "active": 1,
     "reserved": 2,
     "note": "Session 03: RELEASE freeze d3a99e01 G2 running (coordinator; e2c/i8 held); no lane running; MAIN-MERGE waits for the go-live inputs."
   },
@@ -3941,6 +3941,86 @@
         "research/plan/evidence/e/BENCH-sigint-<head7>.md"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "TRACKER-PRUNE",
+      "task": null,
+      "slice": "(tracker) v1 launch scope headline; superseded hidden; deferred collapsed",
+      "agent": "opus",
+      "branch": "codex/tracker-prune",
+      "worktree": ".claude/worktrees/codex-tracker-prune",
+      "base": "17cc78bd",
+      "head": "e9b2ff0b",
+      "isolation": {
+        "ports": "none",
+        "prefix": "-",
+        "db": "-"
+      },
+      "activity": "complete",
+      "started": "2026-09-27T04:41:00Z",
+      "updated": "2026-09-27T04:53:00Z",
+      "blocker": null,
+      "next_action": "DONE: merged --no-ff at da13c2b6; WR-TP-1 (this lane row) and WR-TP-2 (test_validate_plan C0→I3) applied by the coordinator",
+      "estimate": {
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T04:53:00Z"
+      },
+      "evidence": [
+        "research/plan/evidence/coordinator/TRACKER-PRUNE-0a859ee.md"
+      ],
+      "commands": [
+        {
+          "cmd": "python3 -m pytest research/plan/scripts/test_progress.py; progress.py check; validate_plan",
+          "exit": 0,
+          "summary": "35 passed; PASS 0 errors; PASS"
+        }
+      ],
+      "owned_paths": [
+        "research/plan/scripts/progress.py",
+        "research/plan/scripts/test_progress.py",
+        "research/plan/22-consumer-v1-implementation.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "TEST-USER",
+      "task": null,
+      "slice": "(operator script) infra/app/create-test-user.py: a confirmed Supabase user with the signup grant, no email verification (user decision 2026-09-27); tests on a fake GoTrue/PostgREST + the app-c0 stack",
+      "agent": "opus",
+      "branch": "codex/test-user",
+      "worktree": ".claude/worktrees/codex-test-user",
+      "base": "17cc78bd",
+      "head": null,
+      "isolation": {
+        "ports": "app-c0 55451",
+        "prefix": "infrx-app-c0-",
+        "db": "app-c0"
+      },
+      "activity": "running",
+      "started": "2026-09-27T04:41:00Z",
+      "updated": "2026-09-27T04:53:00Z",
+      "blocker": null,
+      "next_action": "handback → merge → run against hosted after the install (SSM names supabase_url / supabase_service_role_key)",
+      "estimate": {
+        "optimistic_h": 1,
+        "likely_h": 1.5,
+        "pessimistic_h": 3,
+        "confidence": "medium",
+        "basis": "one script + tests + doc",
+        "at": "2026-09-27T04:53:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "infra/app/create-test-user.py",
+        "infra/app/operations.md",
+        "tests/integration/ops/test_create_test_user.py"
+      ],
+      "wiring_requests": []
     }
   ],
   "review_queue": [],
@@ -6569,6 +6649,18 @@
       "by": "coordinator (BENCH-SIGINT)",
       "what": "BENCH-SIGINT merged onto the tip: the SIGINT test establishes its own precondition (121 passed as a & job); RELEASE d3a99e01 unchanged, G2 run 2 under setsid continues",
       "source": "research/plan/evidence/e/BENCH-sigint-11c17f2.md"
+    },
+    {
+      "at": "2026-09-27T04:53:00Z",
+      "by": "coordinator (TRACKER-PRUNE)",
+      "what": "TRACKER-PRUNE ACCEPT e9b2ff0b merged at da13c2b6: the tracker now leads with the v1 launch scope (20/30), hides the 6 superseded tasks, collapses the 57 deferred into Later. User directives 04:1x–04:4xZ recorded: full deploy permission (no users), skip email verification (TEST-USER lane), prune the tracker, complete the deferred items after the v1 launch. Pre-window W1–W4 done on the box; go-live checklist extracted (73 steps, 29 open items → decisions in RELEASE-d3a99e01.md)",
+      "source": "research/plan/evidence/coordinator/TRACKER-PRUNE-0a859ee.md"
+    },
+    {
+      "at": "2026-09-27T04:54:41Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T04:46:06Z is not newer than lane TRACKER-PRUNE state 2026-09-27T04:53:00Z",
+      "source": "updates/TRACKER-PRUNE-20260927T0446Z.json"
     }
   ],
   "history": {
@@ -7280,10 +7372,15 @@
       "status": "rejected",
       "at": "2026-09-27T00:08:00Z",
       "reason": "stale: at 2026-09-27T00:08:00Z is not newer than lane SWEEP-2 state 2026-09-27T00:24:00Z"
+    },
+    "TRACKER-PRUNE-20260927T0446Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T04:46:06Z",
+      "reason": "stale: at 2026-09-27T04:46:06Z is not newer than lane TRACKER-PRUNE state 2026-09-27T04:53:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T00:24:43Z",
+    "computed_at": "2026-09-27T04:54:41Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -7327,7 +7424,9 @@
         "conditional": null,
         "confidence": null,
         "critical_path": null,
-        "stale": []
+        "stale": [
+          "E3A"
+        ]
       },
       "E4": {
         "gate": "APP-PILOT",
@@ -7341,6 +7440,7 @@
         "confidence": null,
         "critical_path": null,
         "stale": [
+          "E3A",
           "I2A",
           "I3"
         ]

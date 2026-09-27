@@ -1,14 +1,40 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-27 00:24Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 150, updated 2026-09-27 00:24Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-27 04:54Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 153, updated 2026-09-27 04:54Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+
+## v1 launch scope
+
+**20 / 30** — backend corrections + App completion + 4 go-live steps. Lab, hosting and later work is listed at the end under “Later” and not counted; superseded tasks are not shown.
+
+- Backend corrections 12 / 14
+  - `E1B` window-bound: runs on the live system as the post-go-live test window; now: every lane complete; the coordinator updates the manifest status from the evidence
+  - `E4C` window-bound: runs on the live system as the post-go-live test window; now: start dependencies met
+- App completion 8 / 12
+  - `I2A` go-live-bound: follows the live release and the BACKEND-READY decision; now: lane active
+  - `E3A` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+  - `I3` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+  - `E4` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+
+Remaining, in order:
+
+1. `RELEASE-FREEZE` RELEASE freeze: G1–G5 + G4b green on the candidate
+2. `MAIN-MERGE` install maintenance W1–W13, merge main (App release), deploy, smoke
+3. `E1B` window-bound: runs on the live system as the post-go-live test window; now: every lane complete; the coordinator updates the manifest status from the evidence
+4. `E4C` window-bound: runs on the live system as the post-go-live test window; now: start dependencies met
+5. `BACKEND-READY` E4C certify + E1B cells on the live system, then the decision
+6. `I2A` go-live-bound: follows the live release and the BACKEND-READY decision; now: lane active
+7. `E3A` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+8. `I3` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+9. `E4` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
+10. `APP-PILOT` E4 on the live App, then the decision
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 2 active lanes, 2 reserved.
-- Validation: 0 error(s), 6 warning(s).
+- Agent slots: 16 total, 3 active lanes, 2 reserved.
+- Validation: 0 error(s), 10 warning(s).
 
 ### Actionable blockers
 
@@ -37,9 +63,7 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 |---|---|---|---|
 | Backend corrections | 12 / 14 | none | BACKEND-LOCAL 7/7; BACKEND-READY 0/6 |
 | App completion | 8 / 12 | I2A | APP-LOCAL 17/17; APP-PILOT 0/5 |
-| Deferred Lab / hosting / later | 0 / 57 | none | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
-| Superseded | 0 / 6 | none | n/a |
 
 ## Milestones and ETA
 
@@ -93,7 +117,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (51.6 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (56.1 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -134,7 +158,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | U2 | U2 verified ACCEPT_WITH_FIXES: U2-V-1..5 fixed and rechecked (failed key read never renders as empty; redaction; stuck pending; plaintext/lost-key seams; wiring tests) | complete | codex/app-u2 | 46776646 → 2bd04497 | ports fakes only, prefix infrx-app-u2- | 2026-09-26 01:02Z | merged via codex/app-union-2 (dec15244); manifest implemented; WR-U2-3 option (a) + U2-W03 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 01:02Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) and the union round-2 checks |
 | U3 | U3 verified ACCEPT_WITH_FIXES: U3-V1..V3 fixed and rechecked (DUR-RLS on operator views can fail; form retry protection wired; Unavailable rendering tested) | complete | codex/app-u3 | 46776646 → b80c4cd8 | ports app-u3 postgres 55453, prefix infrx-app-u3- | 2026-09-26 01:02Z | merged via codex/app-union-2 (dec15244); manifest implemented; WR-U3-1 → D10 0025 lane after 0024 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 01:02Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) and the union round-2 checks |
 | I2A | I2A I2A-PREP: hosting configuration as code (env matrix, preview credential isolation, callback allowlists, private no-store, release identity) + App deploy/rollback runbook; no live deploy | review | codex/i2a-prep | fd40748c → 8ca672d0 | ports none, prefix infrx-i2a-prep- | 2026-09-26 00:33Z | I2A-PREP merged a5ca1cd1 (+ wiring 416da075: /api/version public, console-built in check, trailing-dot refusal); R134 numbered. The live half (Vercel env, staging project, P-05 auth settings, deploy + smoke + known-good record) runs after BACKEND-READY with the operator inputs listed in i/I2A-prep-9fe9484.md | 2–12 h remaining (likely 5 h), confidence low, estimated 2026-09-26 00:33Z — STALE; basis: prep merged; the live deploy waits for the accepted backend and seven operator inputs |
-| E3A | E3A E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b block (runner over the E3C world, Supabase stand-in edge, Playwright journey: 19 checks over the 17 E3A test_ids, app-e2e gate wiring); verified ACCEPT_WITH_FIXES, merged 6d55c5e0; gate not claimed | queued | codex/e3a-prep | fd40748c → 4391553c | ports e4b compose block 56800–56899, prefix infrx-e3a-prep- | 2026-09-26 22:00Z | E3A proper needs BACKEND-LOCAL (E3C) and a rerun on the merged SHA; still NOT RUN: operator-controls (operator identity + one U3 action with a reason), the four delegated cells, the expired-content display on /usage/<id>; E3A-WR-1/WR-2 with the E3C final run (overlay keeps the lane queued: the gate dispatches after BACKEND-READY) | 0.3–1 h remaining (likely 0.5 h), confidence high, estimated 2026-09-26 22:00Z; basis: candidate complete; the recorded decision waits on BACKEND-READY |
+| E3A | E3A E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b block (runner over the E3C world, Supabase stand-in edge, Playwright journey: 19 checks over the 17 E3A test_ids, app-e2e gate wiring); verified ACCEPT_WITH_FIXES, merged 6d55c5e0; gate not claimed | queued | codex/e3a-prep | fd40748c → 4391553c | ports e4b compose block 56800–56899, prefix infrx-e3a-prep- | 2026-09-26 22:00Z | E3A proper needs BACKEND-LOCAL (E3C) and a rerun on the merged SHA; still NOT RUN: operator-controls (operator identity + one U3 action with a reason), the four delegated cells, the expired-content display on /usage/<id>; E3A-WR-1/WR-2 with the E3C final run (overlay keeps the lane queued: the gate dispatches after BACKEND-READY) | 0.3–1 h remaining (likely 0.5 h), confidence high, estimated 2026-09-26 22:00Z — STALE; basis: candidate complete; the recorded decision waits on BACKEND-READY |
 | P25-ENACT | support P-25 enactment as configuration (I8/M6 support lane): retention grace 3,600 s, cache cap 50 GiB, intervals pinned, alert + runbooks | complete | codex/p25-enact | 74183655 → a15393c5 | ports m6 block (postgres 55444), no Valkey/S3, prefix infrx-m6- | 2026-09-26 03:36Z | merged through the wave4b union at 51c1644d; WR-P25-5 logged in 15-pending-inputs | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 00:51Z; basis: lane verified; remaining is the union round-3 merge and four coordinator wirings |
 | I3 | I3 I3-PREP (coordinator): infra/app/operations.md (C1–C5 checks, cutover X0–X9 + rollback, browser error monitoring, alert delivery, App rollback rule, budgets, OPS-APP scenario register), infra/app/rollback.py, App error pages + POST /api/client-errors + onRequestError, alerts/app.json AppDown, tests/i3 (9) + tests/integration/ops (21); verified ACCEPT_WITH_FIXES, merged; gate not claimed | queued | codex/i3-prep | 6badd4e1 → 39b78070 | ports no compose block; task-local PostgreSQL app-i3 55461 only if needed, prefix infrx-i3-prep- | 2026-09-26 04:22Z | I3 proper (operator run) needs BACKEND-READY, the I2A live half, P-01/P-05/P-24/P-25 (overlay keeps the lane queued: the gate dispatches after BACKEND-READY; the prep work is merged and recorded in head/evidence/commands) | 3–14 h remaining (likely 6 h), confidence low, estimated 2026-09-26 02:11Z — STALE; basis: lane handback: preparation merged; the operator run needs hosted/Vercel/box windows and four pending inputs |
 | APP-E3A-FIX | support E3A support lane: F-1 (middleware 307 on the sign-in server action: claim never runs) and F-2 (/traces, /dedicated, /teams served to a consumer) fixed with fails-before tests; journey checks un-gated by C3A/U2/U3/U4 fitted to the merged pages; runner rerun on the e4b block | complete | codex/app-e3a-fix | 6d55c5e0 → 97dce397 | ports E3A runner inside the e4b block (56860/56861/56870; one runner at a time), prefix infrx-e4b- | 2026-09-26 02:24Z | merged --no-ff onto claude/consumer-v1 (ACCEPT; minors carried: plain-POST pass-through on /login,/signup, /admin keeps its own operator decision, ancestor loading.tsx assertion, update JSON exit codes) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 02:24Z; basis: merged after the in-workflow verification (ACCEPT) |
@@ -168,10 +192,13 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | STEP55-FIX | support E4C window scripts (support lane; before the RELEASE freeze) | complete | codex/step55-fix | 88cb89eb → 6788c25b | ports e1c postgres 55449 (PG-backed cases); never i8/e2c, prefix infrx-e1c-, db e1c | 2026-09-26 19:35Z | DONE: merged --no-ff at cc23960e; WR-S55-1 applied (205e6dd9); minors → STEP55-FIX-2 (running) | 0.1–1 h remaining (likely 0.3 h), confidence high, estimated 2026-09-26 19:07Z; basis: committed, suites and mutants green; review remains |
 | E1B-WIRE | E1B (window wiring; no measurement) WR-3 bench --target direct sends the worker's stop_token_ids; WR-4 the worker publishes AttemptResult.timings as phase metrics; WR-1 the E1B window profile bases validate as §7 writes them; WR-2 a committed e1b-window.sh runs WC-1..WC-8 in order with the no-overlap preconditions; workflow (Opus implementer, 2 lenses, one fix round) | complete | codex/e1b-wire | 387cac69 → b608d8b1 | ports w5 postgres 55445 / valkey 55491; never i8/e2c, prefix infrx-w5-, db w5 | 2026-09-26 20:55Z | DONE: merged --no-ff (test_rollout.py conflict resolved: the tip's F2 assertions kept inside the e4c test, the E1B section after it); WREQ-1/2/3 + the lens minors → E1B-WIRE-2 (before the freeze) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 20:55Z; basis: merged |
 | E1B-WIRE-2 | E1B (window wiring, follow-up) WREQ-1 the worker passes its metrics registry to the inference loop (phase timings reach the box) with a timings guard for the preparation loop; WREQ-2 the three bench stop_token mutants in the list; WREQ-3 E4C-runbook §3/§5.0 fill the E1B profiles and state the window order (e1b-window.sh after §4, WC-6a, WC-7 alone, WC-6b, §5, WC-9; no certify/soak/journey/drills while it runs); launcher minors E1BW-R1 (pipefail guard), R2 (interrupted-run log kept), R3 (bounded waits); plain Opus agent | complete | codex/e1b-wire-2 | aac38207 → cdc41389 | ports w5 postgres 55445 / valkey 55491; never i8/e2c, prefix infrx-w5-, db w5 | 2026-09-26 21:19Z | DONE: merged --no-ff; E1B is wired for the window (WC-1..WC-9 launcher + profiles + runbook §3/§4a/§5.0/§5.2); the cells run on the live system after go-live | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 21:19Z; basis: merged |
-| RELEASE-FREEZE | support (RELEASE freeze of d3a99e01, second candidate) freeze-release.sh (G1 + G2 make check in the e2c form + tests/i on e2c) in parallel with checks-d3a99e01-gates/-app/-e3c.sh; started 22:36Z; the b640c35c candidate failed G2 on the tests/i coverage of the E1B launcher cases | running | claude/consumer-v1 | d3a99e01 → d3a99e01 | ports e2c 55448/55493/55494 + Q 55430 (G2), e4b block (app), e3c block (E3C), rehearsal ns infrx-pre (G5); i8 held free, prefix infrx-e2c-/infrx-e4b-/infrx-e3c-/infrx-pre, db e2c | 2026-09-26 22:51Z | G2 make check running since 22:36Z (api-test ~46% at 22:50Z; ETA ≈02:10Z) then tests/i on e2c → freeze complete → W1 staging [USER-RUN] → install maintenance when the user-held inputs land | 3.5–5 h remaining (likely 4 h), confidence medium, estimated 2026-09-26 22:37Z; basis: restart at 22:36Z; api-test 47 min + mutants + console; side checks green at b640c35c |
+| RELEASE-FREEZE | support (RELEASE freeze of d3a99e01, second candidate) freeze-release.sh (G1 + G2 make check in the e2c form + tests/i on e2c) in parallel with checks-d3a99e01-gates/-app/-e3c.sh; started 22:36Z; the b640c35c candidate failed G2 on the tests/i coverage of the E1B launcher cases | running | claude/consumer-v1 | d3a99e01 → d3a99e01 | ports e2c 55448/55493/55494 + Q 55430 (G2), e4b block (app), e3c block (E3C), rehearsal ns infrx-pre (G5); i8 held free, prefix infrx-e2c-/infrx-e4b-/infrx-e3c-/infrx-pre, db e2c | 2026-09-27 02:01Z | G2 run 2 at d3a99e01 under setsid -f (SIGINT default) started 02:00Z (~3.4 h; ETA ≈05:30Z) then tests/i on e2c → freeze complete → W1 staging [USER-RUN] → install maintenance when the user-held inputs land. RELEASE stays d3a99e01. | 3.4–4.5 h remaining (likely 3.6 h), confidence medium, estimated 2026-09-27 02:01Z; basis: run 1 reached the last stage in 3.4 h; only the SIGINT disposition changed |
 | SWEEP-1 | support (post-freeze minors sweep; merges after RELEASE) WR-BM-1/2, WR-G2FIX-1..3 (+SC-3/SC-4, CM-5/CM-6), E1BP-3..11, AM2-L-2/L-3, AM1-L2 (unit leg), G8-FLAG R2/R3/R6; Opus implementer, 2 lenses, one fix round | complete | codex/sweep-1 | b640c35c → 7581e239 | ports w5 55445/55491, g8 55447/55492, d4 55435/55465, e1c 55449, e3c block one at a time; never e2c/i8/e4b/55432, prefix infrx-w5-/infrx-g8-/infrx-d4-/infrx-e1c-, db w5 | 2026-09-26 23:49Z | DONE: merged --no-ff at 7d10f586 (after RELEASE d3a99e01; the App release merges the RELEASE sha). Carried to SWEEP-2: SW1-R2, SW1-R3/RV-2, SW1-RV-3, SW1-RV-4, WR-SWEEP1-1..3 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 23:49Z; basis: merged |
 | E1B-MUTANTS | support (release-gate fix) three or four mutants in tests/i/mutants.py for infra/rollout/e1b-window.sh so the test_e1b_window__* cases are covered; plain Opus agent; no docker | complete | codex/e1b-mutants | b640c35c → 1208ec99 | ports none (hermetic cases), prefix -, db - | 2026-09-26 22:37Z | DONE: merged --no-ff at d3a99e01 = the new RELEASE; copy-layout fix included | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 22:37Z; basis: merged |
 | SWEEP-2 | support (post-freeze minors sweep 2; from 7d10f586) SW1-R2 two integration mutants (held-55430 case, per-scope control case), SW1-R3/RV-2 valkey-q container identity (infrx-q3-valkey-<port>) in the e2c prefixes or the docs, SW1-RV-3 l8ref.sh stops infrx-observe.service as well as the timer (stub call list), SW1-RV-4 test_run.py docstring + mutants.py D-mode TMPDIR note, WR-SWEEP1-1 the WC-2 c=1 pair cell in e1b-window.sh + §7.2 line + plan count 12 + test_rollout container, WR-SWEEP1-2 e3c README DUR-CAP control row, WR-SWEEP1-3 app runner E3C_FINAL comment (reference stays the RELEASE run); Opus implementer, 2 lenses, one fix round | complete | codex/sweep-2 | 7d10f586 → 9244f8c3 | ports w5, g8, d4, e1c, q3 via INFRX_Q_VALKEY_PORT=55491? no — q on a granted port only; e3c block one at a time; never e2c/i8/e4b/55430/55432/55462, prefix infrx-w5-/infrx-g8-/infrx-d4-/infrx-e1c-, db w5 | 2026-09-27 00:24Z | DONE: merged --no-ff at e6962d0a (after RELEASE d3a99e01) + coordinator wirings WR-SWEEP2-1 (WC-6a row), SW2-RV-1 (runner comment), SW2-RV-2 ×2 (E1B-prep log line; evidence line number). No carried minors. | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 00:24Z; basis: merged and wired |
+| BENCH-SIGINT | support (release-gate hygiene) test_leaks.py::test_a_second_ctrl_c_cannot_lose_the_summary establishes the default SIGINT handler itself and restores what it found (the freeze runs make check as a background process; bash gives async jobs SIGINT = SIG_IGN); plain Opus agent; test-only; from the tip 92ed083a — merges after, next candidate | complete | codex/bench-sigint | 92ed083a → 9d09be8b | ports none, prefix -, db - | 2026-09-27 02:07Z | DONE: merged --no-ff onto the tip (after RELEASE d3a99e01); the gate form as a background job now passes bench-test | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 02:07Z; basis: merged |
+| TRACKER-PRUNE | support (tracker) v1 launch scope headline; superseded hidden; deferred collapsed | complete | codex/tracker-prune | 17cc78bd → e9b2ff0b | ports none, prefix -, db - | 2026-09-27 04:53Z | DONE: merged --no-ff at da13c2b6; WR-TP-1 (this lane row) and WR-TP-2 (test_validate_plan C0→I3) applied by the coordinator | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 04:53Z; basis: merged |
+| TEST-USER | support (operator script) infra/app/create-test-user.py: a confirmed Supabase user with the signup grant, no email verification (user decision 2026-09-27); tests on a fake GoTrue/PostgREST + the app-c0 stack | running | codex/test-user | 17cc78bd → — | ports app-c0 55451, prefix infrx-app-c0-, db app-c0 | 2026-09-27 04:53Z | handback → merge → run against hosted after the install (SSM names supabase_url / supabase_service_role_key) | 1–3 h remaining (likely 1.5 h), confidence medium, estimated 2026-09-27 04:53Z; basis: one script + tests + doc |
 
 ### Queues and locks
 
@@ -185,11 +212,15 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 ## Validation
 
 - warning: stale estimate: lane I2A estimated at 2026-09-26T00:33:19Z (older than 6 h)
+- warning: stale estimate: lane E3A estimated at 2026-09-26T22:00:00Z (older than 6 h)
 - warning: stale estimate: lane I3 estimated at 2026-09-26T02:11:40Z (older than 6 h)
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
+- warning: overlapping writers: I2A (review) and TEST-USER (running) both own infra/ / infra/app/create-test-user.py (+1 more)
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
+- warning: overlapping writers: E3A (queued) and TEST-USER (running) both own tests/integration/ / tests/integration/ops/test_create_test_user.py
+- warning: overlapping writers: I3 (queued) and TEST-USER (running) both own infra/ / infra/app/create-test-user.py (+2 more)
 
 ## Pending inputs
 
@@ -291,8 +322,9 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `SWEEP-1-20260926T2314Z.json`: stale: at 2026-09-26T23:14:00Z is not newer than lane SWEEP-1 state 2026-09-26T23:49:00Z
 - `SWEEP-1-20260926T2341Z.json`: stale: at 2026-09-26T23:41:00Z is not newer than lane SWEEP-1 state 2026-09-26T23:49:00Z
 - `SWEEP-2-20260927T0008Z.json`: stale: at 2026-09-27T00:08:00Z is not newer than lane SWEEP-2 state 2026-09-27T00:24:00Z
+- `TRACKER-PRUNE-20260927T0446Z.json`: stale: at 2026-09-27T04:46:06Z is not newer than lane TRACKER-PRUNE state 2026-09-27T04:53:00Z
 
-## All manifest tasks
+## Tasks (backend, App, reused baseline)
 
 | ID | Title | Category | Manifest | Activity | State |
 |---|---|---|---|---|---|
@@ -303,7 +335,6 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `D3` | Fenced leases, recovery and cancellation | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `D4` | Persistent stream journal and replay | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `D5` | Terminal transaction, grants and reconciliation | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `D6` | Durable feedback and judge coordination | Superseded | superseded-for-scheduling | unassigned | superseded: never scheduled; replaced by D6F, D6J |
 | `M1` | Bound and secure URL/base64 materialization | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `M2` | Versioned preprocessing and tenant cache | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `M3` | Owned uploads, expiry and orphan collection | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
@@ -316,54 +347,26 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `G1` | Ingress, auth and capability validation | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G2` | Synchronous chat and persistent SSE relay | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G3` | Explicit jobs, status, cancellation and replay | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `G4` | Uploads, feedback and trace export adapters | Superseded | superseded-for-scheduling | unassigned | superseded: never scheduled; replaced by G4U, G4F, G4T |
-| `G5` | Signed async completion callbacks | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `T1` | Byte-budgeted capture and persistent spool | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `T2` | Idempotent analytics and content shipping | Superseded | superseded-for-scheduling | unassigned | superseded: never scheduled; replaced by T2I, T2F |
-| `T3` | Logical retention, deletion and observability | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `J1` | Dry-run sampler, rubric and score validation | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `J2` | Consent/budget coordinated submission and collection | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `J3` | Operator calibration and quality report | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `C1` | Typed repositories, pagination and tenant query boundary | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `C2` | Lab content access, expiry and safe signed references | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `C3` | Shared key/settings/grant/feedback/judge actions | Superseded | superseded-for-scheduling | unassigned | superseded: never scheduled; replaced by C3A, C3F, C3L |
 | `U1` | Usage and promotional balance views | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `U2` | Keys and privacy/settings controls | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `U3` | Operator grants, suspension and pilot operations | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `V1` | Paginated trace list and filters | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `V2` | Trace detail, content and feedback | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `V3` | Judge score and calibration presentation | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `I1` | Read-only inventory and deploy design | Reused baseline | integrated | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `I2` | Reproducible single-GPU deployment | Superseded | superseded-for-scheduling | unassigned | superseded: never scheduled; replaced by I2A, I2L |
 | `I3` | Recovery, alarms and rollback runbooks | App completion | planned | queued | blocked: gated: dispatch only after BACKEND-READY is accepted |
-| `I4` | Separately gated fleet deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `E1` | Distinct corpus and authenticated benchmark client | Reused baseline | integrated | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E2` | Pinned integration services and fault harness | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `E3` | Cross-module failures and security gate | Superseded | superseded-for-scheduling | unassigned | superseded: never scheduled; replaced by E3A, E3L, E5L |
 | `E4` | Single-GPU release evidence and launch decision | App completion | planned | unassigned | blocked: gated: dispatch only after BACKEND-READY is accepted |
 | `S1` | Reconcile pulled wave-2 baseline and publish product revision audit | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `A1` | Verified individual signup entitlement and idempotent backfill | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `A2` | Consumer signup verification and credited onboarding | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `A3` | Published catalog, credit rates and capability-matched examples | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `D6F` | Durable feedback and immutable author provenance | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `D6J` | Lab consent, USD budget and external submission coordination | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `G4U` | Owned upload HTTP adapter | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `G4F` | Owned feedback HTTP adapter | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `G4T` | Owned trace export HTTP adapter | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `T2I` | Inference analytics and content projection | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `T2F` | Feedback analytics projection | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `C3A` | Consumer key/privacy and platform operator actions | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `C3F` | Authorized feedback and review actions | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `C3L` | Lab judge and calibration control actions | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `L1` | Provider app shell and separate build/auth boundary | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `L2` | Provider role and purpose-specific data-access services | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `L3` | Assisted model registration and dev/prod revision services | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `L4` | Model/deployment/publication UI and aggregate health | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `I2A` | Reproducible App and single-GPU runtime deployment | App completion | planned | review | active: lane active |
-| `I2L` | Independent Lab app and control-service deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `E3A` | Consumer failure, security and signup-to-spend integration gate | App completion | planned | queued | blocked: gated: dispatch only after BACKEND-READY is accepted |
-| `E3L` | Provider access, publication and rollback integration gate | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `E5L` | Provider traces, review and evaluation integration gate | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `F2R` | Close remaining wave-2 contract and verification carryovers | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `F2P` | Encode product-v2 CREDIT, identity, serving and permission contracts | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `D1R` | Add product-v2 schema without rewriting USD pilot migrations | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
@@ -371,41 +374,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `I0` | Repair installer atomicity and fail-closed startup prerequisite | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E2R` | Repair service harness ownership, role matrix and shared test clock | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G1R` | Revise ingress for consumer and provider endpoint audiences | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `V1M` | Move the implemented trace explorer into the authorized Lab shell | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `U1R` | Adapt consumer usage and balance views to CREDIT and explicit legacy USD | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `F3` | Freeze dataset, evaluation, training and rollout contracts | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `D7` | Persist datasets, harnesses and evaluation coordination | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `N1` | Import benchmark data and existing annotation outputs | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `N2` | Version, split and export reproducible datasets | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `N3` | Derive datasets from permitted traces and propagate revocation | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `N4` | Build dataset import, version and split workflows in Lab | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `H1` | Version prompts and bounded replay harnesses | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `B1` | Execute durable offline evaluation runs | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `B2` | Compare quality, costs and latency with honest uncertainty | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `B3` | Benchmark externally produced checkpoints continuously | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `B4` | Build evaluations and experiment comparisons in Lab | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `D8` | Persist annotations and external training lifecycle | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `P1` | Import, review and export annotation records | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `P2` | Run bounded teacher annotation batches | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `P3` | Integrate external training and import candidates | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `P4` | Build annotation and training workflows in Lab | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `D9` | Persist release policies and stable experiment assignment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `R1` | Route bounded shadow, canary and A/B experiments | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `R2` | Evaluate guardrails and roll back controlled releases | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `R3` | Register and compare optimized serving variants | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `R4` | Build release experiments and optimization comparison UI | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `I5` | Package dataset and evaluation workers for independent deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `I6` | Package annotation and training integration workers | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `I7` | Package release controls and optimization evidence operations | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `E6L` | Prove imported benchmark to candidate decision end to end | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `E7L` | Prove the second authorized improvement iteration | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `E8L` | Prove controlled rollout and optimization evidence | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `X1` | Specify a bounded live-video workload and trial contract | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `X2` | Implement and verify the approved video session adapter | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `X3` | Specify a robot/task and inference freshness contract | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `X4` | Implement the bounded policy/ROS2 observation adapter | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `X5` | Qualify a non-NVIDIA backend investment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `X6` | Implement and validate one qualified inference backend | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `S2M` | Freeze Marlin SOP inference launch profile | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G6B` | Headless endpoint provisioning and operations | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E3B` | Backend-only durability, security and protocol integration gate | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
@@ -432,6 +401,10 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-27 04:54Z UTC, tracker: rejected update: stale: at 2026-09-27T04:46:06Z is not newer than lane TRACKER-PRUNE state 2026-09-27T04:53:00Z
+- 2026-09-27 04:53Z UTC, coordinator (TRACKER-PRUNE): TRACKER-PRUNE ACCEPT e9b2ff0b merged at da13c2b6: the tracker now leads with the v1 launch scope (20/30), hides the 6 superseded tasks, collapses the 57 deferred into Later. User directives 04:1x–04:4xZ recorded: full deploy permission (no users), skip email verification (TEST-USER lane), prune the tracker, complete the deferred items after the v1 launch. Pre-window W1–W4 done on the box; go-live checklist extracted (73 steps, 29 open items → decisions in RELEASE-d3a99e01.md)
+- 2026-09-27 02:07Z UTC, coordinator (BENCH-SIGINT): BENCH-SIGINT merged onto the tip: the SIGINT test establishes its own precondition (121 passed as a & job); RELEASE d3a99e01 unchanged, G2 run 2 under setsid continues
+- 2026-09-27 02:01Z UTC, coordinator (RELEASE): G2 run 1 at d3a99e01 FAIL at its last stage (bench-test): the SIGINT test pins the inherited handler as the default and the freeze ran as an async job (SIGINT ignored). Not a tree defect: bench-test alone passes under setsid (118). G2 run 2 started under setsid -f; RELEASE stays d3a99e01; BENCH-SIGINT fixes the test assumption on the tip
 - 2026-09-27 00:24Z UTC, tracker: rejected update: stale: at 2026-09-27T00:08:00Z is not newer than lane SWEEP-2 state 2026-09-27T00:24:00Z
 - 2026-09-27 00:24Z UTC, tracker: rejected update: stale: at 2026-09-26T23:41:00Z is not newer than lane SWEEP-1 state 2026-09-26T23:49:00Z
 - 2026-09-27 00:24Z UTC, tracker: rejected update: stale: at 2026-09-26T23:14:00Z is not newer than lane SWEEP-1 state 2026-09-26T23:49:00Z
@@ -752,3 +725,73 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 ## History
 
 The v46 backend-first tracker is preserved at [research/plan/evidence/coordinator/tracker-v46/README.md](tracker-v46/README.md) (commit `dff31efc`): E4B closure bands B0–B4: 28 done · 2 in progress (E1B, E4B) · 0 remaining of 30 packages; 33 checkpoints 2026-09-21T22:44Z → 2026-09-24T21:00Z.
+
+<details><summary>Later — not in the v1 launch scope (57 tasks)</summary>
+
+These follow the v1 launch (App acceptance, then their own activation gates); they are not counted in any headline number.
+
+| ID | Title | Category | Manifest | Activity | State |
+|---|---|---|---|---|---|
+| `B1` | Execute durable offline evaluation runs | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `B2` | Compare quality, costs and latency with honest uncertainty | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `B3` | Benchmark externally produced checkpoints continuously | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `B4` | Build evaluations and experiment comparisons in Lab | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `C2` | Lab content access, expiry and safe signed references | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `C3F` | Authorized feedback and review actions | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `C3L` | Lab judge and calibration control actions | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `D6F` | Durable feedback and immutable author provenance | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `D6J` | Lab consent, USD budget and external submission coordination | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `D7` | Persist datasets, harnesses and evaluation coordination | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `D8` | Persist annotations and external training lifecycle | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `D9` | Persist release policies and stable experiment assignment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `E3L` | Provider access, publication and rollback integration gate | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `E5L` | Provider traces, review and evaluation integration gate | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `E6L` | Prove imported benchmark to candidate decision end to end | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `E7L` | Prove the second authorized improvement iteration | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `E8L` | Prove controlled rollout and optimization evidence | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `F3` | Freeze dataset, evaluation, training and rollout contracts | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `G4F` | Owned feedback HTTP adapter | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `G4T` | Owned trace export HTTP adapter | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `G5` | Signed async completion callbacks | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `H1` | Version prompts and bounded replay harnesses | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `I2L` | Independent Lab app and control-service deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `I4` | Separately gated fleet deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `I5` | Package dataset and evaluation workers for independent deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `I6` | Package annotation and training integration workers | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `I7` | Package release controls and optimization evidence operations | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `J2` | Consent/budget coordinated submission and collection | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `J3` | Operator calibration and quality report | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `L1` | Provider app shell and separate build/auth boundary | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `L2` | Provider role and purpose-specific data-access services | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `L3` | Assisted model registration and dev/prod revision services | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `L4` | Model/deployment/publication UI and aggregate health | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `N1` | Import benchmark data and existing annotation outputs | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `N2` | Version, split and export reproducible datasets | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `N3` | Derive datasets from permitted traces and propagate revocation | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `N4` | Build dataset import, version and split workflows in Lab | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `P1` | Import, review and export annotation records | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `P2` | Run bounded teacher annotation batches | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `P3` | Integrate external training and import candidates | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `P4` | Build annotation and training workflows in Lab | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `R1` | Route bounded shadow, canary and A/B experiments | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `R2` | Evaluate guardrails and roll back controlled releases | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `R3` | Register and compare optimized serving variants | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `R4` | Build release experiments and optimization comparison UI | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `T2F` | Feedback analytics projection | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `T2I` | Inference analytics and content projection | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `T3` | Logical retention, deletion and observability | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `V1M` | Move the implemented trace explorer into the authorized Lab shell | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `V2` | Trace detail, content and feedback | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `V3` | Judge score and calibration presentation | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `X1` | Specify a bounded live-video workload and trial contract | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `X2` | Implement and verify the approved video session adapter | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `X3` | Specify a robot/task and inference freshness contract | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `X4` | Implement the bounded policy/ROS2 observation adapter | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `X5` | Qualify a non-NVIDIA backend investment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+| `X6` | Implement and validate one qualified inference backend | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
+
+</details>
+
+---
+
+6 superseded tasks are not shown (replaced by their split tasks, never scheduled): `D6` → D6F, D6J; `G4` → G4U, G4F, G4T; `T2` → T2I, T2F; `C3` → C3A, C3F, C3L; `I2` → I2A, I2L; `E3` → E3A, E3L, E5L.
