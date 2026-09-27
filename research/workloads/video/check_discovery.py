@@ -1,7 +1,8 @@
 """Mechanical half of VIDEO-/ROBOT-/BACKEND-CONTRACT for the X1/X3/X5 discovery documents.
 
 A contract field is either sourced or `BLOCKED: <pending input> — <exact missing input>`;
-any blocked field keeps the trial blocked; the manifest status stays `planned`; the audit
+any blocked field keeps the trial blocked; a field the trial status
+says was not supplied must be BLOCKED; the manifest status stays `planned`; the audit
 log is the last section. Judgement (is the source right?) stays with the reviewer.
 
     python3 research/workloads/video/check_discovery.py     # exit 1 on any error
@@ -66,6 +67,8 @@ def check(text, spec):
     if table is None:
         return errors + ["no `## Contract fields` table"]
     blocked = False
+    trial = re.search(r"^\*\*Trial status:\*\*(.*)$", text, re.M)
+    said_missing = trial.group(1).lower() if trial else ""  # inputs the document itself says were not supplied
     for field in spec.fields:
         if field not in table:
             errors.append(f"{field}: required contract field missing")
@@ -76,6 +79,8 @@ def check(text, spec):
             if not marker or marker.group(1) not in spec.inputs:
                 errors.append(f"{field}: BLOCKED must be `BLOCKED: <one of {spec.inputs}> — <exact missing input>`")
             blocked = True
+        elif re.search(rf"\b{re.escape(field.lower())}\b", said_missing):
+            errors.append(f"{field}: the trial status says it was not supplied, so the row must be BLOCKED")
         elif source in EMPTY:
             errors.append(f"{field}: value has no source and is not BLOCKED (never invent a target)")
     if blocked and not re.search(r"^\*\*Trial status:\*\* BLOCKED", text, re.M):

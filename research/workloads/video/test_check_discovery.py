@@ -68,6 +68,11 @@ class Checks(unittest.TestCase):
         text = VALID.replace("BLOCKED: P-13 — the owner's end-to-end deadline per event class", "BLOCKED: P-13")
         self.assertTrue(any("Deadline" in e for e in errors(text)))
 
+    def test_field_the_trial_status_calls_missing_must_be_blocked(self):
+        # catches: a row given a sourced value while the document's own trial status says it was never supplied
+        text = VALID.replace("see §1.", "no owner has supplied the transport.")
+        self.assertTrue(any("Transport" in e for e in errors(text)))
+
     def test_blocked_row_forces_blocked_trial_status(self):
         # catches: a trial declared ready while a contract field is still blocked
         text = VALID.replace("**Trial status:** BLOCKED: P-13 — see §1.", "**Trial status:** approved")

@@ -26,6 +26,8 @@ MUTANTS = (
     ("blocked_trial_not_forced", "if blocked and not", "if False and not", ("test_blocked_row_forces_blocked_trial_status",)),
     ("log_position_unchecked", "if not headings or not re.fullmatch", "if not headings or False and not re.fullmatch",
      ("test_log_must_be_the_last_section",)),
+    ("trial_status_contradiction_unchecked", "elif re.search(", "elif False and re.search(",
+     ("test_field_the_trial_status_calls_missing_must_be_blocked",)),
     ("table_parse_wrong_column", "out[cells[0]] = (cells[1], cells[2])", "out[cells[0]] = (cells[1], cells[1])",
      ("test_unsourced_value_fails",)),
     ("trial_status_wrong_word", r'r"^\*\*Trial status:\*\* BLOCKED"', r'r"^\*\*Trial status:\*\* APPROVED"',

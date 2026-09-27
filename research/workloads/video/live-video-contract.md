@@ -67,9 +67,12 @@ acceptance field below is either sourced from this repository or marked
 - **Loss.** Every window is exactly one of fresh / stale / dropped (overload) / failed; the
   denominators follow the E1 rule that a retry may not hide a rejection
   ([marlin-sop.md](../marlin-sop.md) §5.2 "Denominators").
-- **Causal labelling rule.** Ground truth labels an event at its onset in capture time; a
-  detection credited to window `k` must have onset `≤ t_k`, and a detection whose span lies
-  in the overlap of `k−1` and `k` is one event, not two.
+- **Causal labelling rule — proposed default, not decided.** The temporal label semantics
+  are the owner's (P-13; [05-lab-spec.md](../../platforms/05-lab-spec.md):52 freezes them
+  only when the actual benchmark is supplied), so the §4 row is BLOCKED. Proposal: ground
+  truth labels an event at its onset in capture time; a detection credited to window `k`
+  must have onset `≤ t_k`; a detection whose span lies in the overlap of `k−1` and `k` is
+  one event, not two (this clause presumes the duplicate-event policy of §2.2).
 
 ### 2.2 Decisions the owner must make
 
@@ -95,15 +98,22 @@ clip gave grid `[10,28,28]` = 1,960 video tokens (`meas.` 2026-09-19,
 | Re-encoding factor (stateless overlap) | `W / H` | W = 10 s, H = 2 s → 5× the tokens of the raw stream |
 | Prefill tokens per stream-second | `196 · W / H` | 980 tokens/s for W = 10, H = 2 |
 | Windows per second per stream | `1 / H` | 0.5 |
-| Streams per GPU | `R_window / (1/H)` where `R_window` is the measured sustainable window rate | from the only measurement, 1.569 req/s for 10.1 s 1080p clips at concurrency 8 on 1× L40S (`meas.`, `bench.jsonl`), ≈ 0.8 streams at H = 2 s or ≈ 15.7 at H = 10 s |
-| Latency floor | one request at concurrency 1 took ≈ 2.0 s end to end (1 ÷ 0.501 req/s, TTFT p50 0.767 s, ~200 output tokens) (`meas.`, same source) | event-to-emit delay ∈ [≈2.0 s, H + ≈2.0 s) at concurrency 1 |
+| Video-seconds per second per stream | `W / H` | 5 video-s/s for W = 10, H = 2 |
+| Streams per GPU | `V / (W/H)`, `V` = measured video-s/s per GPU | from [E1B-box-20260923T2155Z](../../plan/evidence/e/E1B-box-20260923T2155Z.md) L1 (`meas.`, 1× L40S): `V` = 6.779 at c = 1 and 18.732 at c = 8 → W = 10 s: ≈ 1.4 (c = 1) to ≈ 3.7 (c = 8) streams at H = 2 s, ≈ 6.8 to ≈ 18.7 at H = 10 s. Two-clip reference (2026-09-19 `bench.jsonl` rows 1–2, W ≈ 10 s only): `R_window · H` = 1.569 req/s × H → ≈ 3.1 at H = 2 s, ≈ 15.7 at H = 10 s |
+| Latency | `L_k` at concurrency `c` | E1B L1 (`meas.`): c = 1 p50 2.26 s / p95 6.76 s; c = 8 p50 5.95 s / p95 20.71 s. Two-clip reference: ≈ 2.0 s at c = 1 (1 ÷ 0.501 req/s, TTFT p50 0.767 s). Event-to-emit delay ∈ [`L_k`, H + `L_k`), so ≈ [2.3 s, H + 2.3 s) at c = 1 p50 |
 
-These rows are **p50-grade, one GPU, two clips sent repeatedly** (so vLLM's multimodal cache
-may have absorbed cost) — [marlin-sop.md](../marlin-sop.md) §1.6. They size the problem;
-they are not an envelope and are not a target. ⚠️ **TO BE VERIFIED:** sustained window rate
-with distinct, non-repeating windows at the chosen `W`/`H`; method: replay the §5 fixture
-through `models/marlin2b/bench.py` with `--rate` at the owner's `H` and report fresh/stale/
-dropped per window.
+The primary basis is E1B L1: 60 distinct in-cap clips (the 4 over-cap 112 s clips failed),
+a restarted engine at every level, direct to the engine, profile `v1`, output mix
+128/512/1,024 tokens, closed-loop arrival. Its clips run 2–72 s (mean 21.1 s, median 13.5 s;
+`models/marlin2b/corpus/manifest.json`), not a fixed `W`, and its c = 8 throughput comes with
+a 20.7 s p95, so a freshness deadline would cap streams below the c = 8 figure. The
+2026-09-19 rows are a **p50-grade, two-clip reference sent repeatedly** (vLLM's multimodal
+cache may have absorbed cost; [marlin-sop.md](../marlin-sop.md) §1.6) and hold only at
+W ≈ 10 s. These rows size the problem; they are not an envelope and not a target.
+⚠️ **TO BE VERIFIED:** sustained window rate and freshness at the owner's fixed `W`/`H` under
+rate-paced arrival (distinct inputs are covered by E1B L1; fixed `W` and paced arrival are
+not); method: replay the §5 fixture through `models/marlin2b/bench.py` with `--rate` at the
+owner's `H` and report fresh/stale/dropped per window.
 
 ---
 
@@ -150,7 +160,8 @@ Kept inside the parent X2 slices of 14-expansion-gates.md §X2:
 
 The VIDEO-CONTRACT failure oracle names deadline, clock alignment, overload policy and causal
 labelling rule; X1.a–c name the rest. `check_discovery.py` in this directory enforces that
-every row is sourced or BLOCKED.
+every row is sourced or BLOCKED, and that no row the trial status names as unsupplied is
+given a value.
 
 | Field | Value | Source |
 |---|---|---|
@@ -161,7 +172,7 @@ every row is sourced or BLOCKED.
 | Retention | BLOCKED: P-13 — frame/window/event retention for live input (rights under P-09) | — |
 | Response shape | BLOCKED: P-13 — the event record schema the consumer reads | — |
 | Deployment location | BLOCKED: P-13 — camera site, network path and allowed serving placement | — |
-| Causal labelling rule | Onset in capture time; credited to window `k` only if onset ≤ `t_k`; one event across an overlap (§2.1) | 05-lab-spec.md:52; 07-api-contracts.md "Streaming distinctions" |
+| Causal labelling rule | BLOCKED: P-13 — the owner's temporal label semantics (onset vs span crediting, overlap crediting); proposed default in §2.1 | — |
 | Ground truth | BLOCKED: P-13 — labelled live streams with event onsets in capture time and their producer | — |
 | Deadline | BLOCKED: P-13 — end-to-end deadline per event class | — |
 | Freshness threshold | BLOCKED: P-13 — maximum `t_emit − t_k` before a window is stale | — |
@@ -209,3 +220,13 @@ imply any of them (14-expansion-gates.md §X1 "Acceptance").
   `marlin-sop.md` §1.5/§2.5 (that file is outside this lane; flagged, not edited). Sizing
   rows are `est.` from the single committed L40S measurement. No GPU run, cloud call,
   purchase or code change.
+- 2026-09-27 (X1 fix round, review findings 0-D1, 0-D2, 1-DISC-2): corrects the entry
+  above. (1) The causal labelling rule is `BLOCKED: P-13` (05-lab-spec.md:52 leaves temporal
+  label semantics to the owner, and the trial status already listed it as unsupplied); §2.1
+  keeps it as a proposed default. Counts: 1 sourced field (serving capability), 17 BLOCKED.
+  (2) The 2026-09-19 `bench.jsonl` rows were not the single committed L40S measurement:
+  [E1B-box-20260923T2155Z](../../plan/evidence/e/E1B-box-20260923T2155Z.md) L1 (64-clip distinct corpus, restarted engine per level) is now the primary `meas.`
+  basis for §2.3, in video-s/s; the 2026-09-19 rows stay as the labelled two-clip reference.
+  (3) Streams per GPU at H = 2 s was printed as ≈ 0.8 (1.569 ÷ 2); the formula gives
+  1.569 × 2 ≈ 3.1, for W ≈ 10 s only. The recomputed rows are `V ÷ (W/H)`. No GPU run, cloud
+  call, purchase or code change.
