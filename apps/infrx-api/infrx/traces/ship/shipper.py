@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -106,8 +106,10 @@ class ShipReport:
 
 
 class Shipper:
-    def __init__(self, spool, projection, objects, *, pins: PinsLookup | None = None) -> None:
+    def __init__(self, spool, projection, objects, *, pins: PinsLookup | None = None,
+                 retention=None) -> None:
         self.spool, self.projection, self.objects, self.pins = spool, projection, objects, pins
+        self.retention = retention           # T3: `retention.Retention`, consulted per segment
 
     async def ship(self) -> ShipReport:
         report = ShipReport()
@@ -133,9 +135,19 @@ class Shipper:
         report.torn += scan.torn
         if scan.unreadable or scan.poison:
             return "unreadable" if scan.unreadable else "poison"
-        rows = [await self._row(envelope, content, f"{segment}:{position}")
-                for envelope, content, (segment, position)
-                in zip(scan.records, scan.contents, scan.ids)]
+        verdicts = await self.retention.verdicts(scan.records) if self.retention else {}
+        rows = []
+        for envelope, content, (segment, position) in zip(scan.records, scan.contents, scan.ids):
+            trace_id = f"{segment}:{position}"
+            verdict = verdicts.get((envelope.org_id, envelope.request_id))
+            if verdict is not None:
+                # T3: deleted or expired - never (re)written, and the object an earlier
+                # attempt of this replay may have put goes too
+                await self.objects.delete(content_key(envelope.org_id, trace_id))
+                if verdict == "drop":
+                    continue
+                content = b""
+            rows.append(await self._row(envelope, content, trace_id))
         if rows:
             await self.projection.insert(rows)
             report.rows += len(rows)
@@ -209,4 +221,6 @@ def _row(values) -> TraceRow:
     for name in ("org_id", "request_id", "key_id", "serving_version_id"):
         row[name] = None if row[name] is None else str(row[name])
     row["content_stored"] = bool(row["content_stored"])
+    for name in ("started_at", "completed_at"):         # UTC columns, naive from the driver
+        row[name] = row[name] and row[name].replace(tzinfo=timezone.utc)
     return TraceRow(**row)

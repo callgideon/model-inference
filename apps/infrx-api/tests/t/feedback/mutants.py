@@ -57,7 +57,7 @@ def _m(name, invariant, old, new, file, *cases, dies_by=()) -> Mutant:
                   dies_by=tuple(dies_by))
 
 
-_INSERT = "            await self.projection.insert([e.feedback for e in owned])"
+_INSERT = "            await self.projection.insert(rows)"
 MUTANTS: tuple[Mutant, ...] = (
     _m("rows_never_inserted", "the durable rows reach the projection",
        _INSERT, "            pass", P, DURABLE),

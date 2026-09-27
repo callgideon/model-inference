@@ -22,3 +22,5 @@ CREATE TABLE IF NOT EXISTS feedback_events
 )
 ENGINE = ReplacingMergeTree
 ORDER BY (org_id, request_id, feedback_id)
+-- T3: physical cleanup at 13 months; reads filter logical expiry themselves.
+TTL toDateTime(created_at) + INTERVAL 13 MONTH

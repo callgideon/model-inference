@@ -9,6 +9,7 @@ never filled in. A replay inserts the identical row, and FINAL reads keep one.
 
 The projected row is the durable row: author, channel, role, operator marker, calibration
 membership and rubric as PostgreSQL stored them. Nothing else is written - no judge result.
+With a T3 `retention`, a deleted or expired request's rows are acknowledged, not re-inserted.
 Nothing composes a projector yet (WR-T-2: the worker, behind `CLICKHOUSE_URL`).
 """
 from __future__ import annotations
@@ -38,8 +39,8 @@ class Event:
 
 class FeedbackProjector:
     def __init__(self, outbox, projection, *, worker_id: str | None = None,
-                 batch: int = 100, redelivery_s: float = 30.0) -> None:
-        self.outbox, self.projection = outbox, projection
+                 batch: int = 100, redelivery_s: float = 30.0, retention=None) -> None:
+        self.outbox, self.projection, self.retention = outbox, projection, retention
         self.worker_id = worker_id or f"feedback-{uuid.uuid4().hex[:8]}"
         self.batch, self.redelivery_s = batch, redelivery_s
 
@@ -47,8 +48,11 @@ class FeedbackProjector:
         events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
                                            redelivery_s=self.redelivery_s)
         owned = [e for e in events if e.feedback is not None]
-        if owned:
-            await self.projection.insert([e.feedback for e in owned])
+        rows = [e.feedback for e in owned]
+        if rows and self.retention is not None:
+            rows = await self.retention.keep_feedback(rows)   # T3: deleted/expired: not again
+        if rows:
+            await self.projection.insert(rows)
         acknowledged = await self.outbox.acknowledge(
             [e.event_id for e in owned], worker_id=self.worker_id) if owned else 0
         return {"read": len(events), "projected": len(owned), "acknowledged": acknowledged,

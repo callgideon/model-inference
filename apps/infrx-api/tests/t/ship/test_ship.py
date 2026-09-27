@@ -95,6 +95,12 @@ class Objects(InMemoryObjectStore):
         self.reads.append(key)
         return await (self.inner.get(key) if self.inner is not None else super().get(key))
 
+    async def delete(self, key):
+        return await (self.inner.delete(key) if self.inner is not None else super().delete(key))
+
+    async def keys(self, prefix):
+        return await (self.inner.keys(prefix) if self.inner is not None else super().keys(prefix))
+
 
 class Projection:
     """Either projection, with an outage switch."""

@@ -28,3 +28,5 @@ CREATE TABLE IF NOT EXISTS trace_envelopes
 )
 ENGINE = ReplacingMergeTree(content_stored)
 ORDER BY (org_id, trace_id)
+-- T3: physical cleanup of metadata at 13 months; reads filter logical expiry themselves.
+TTL toDateTime(started_at) + INTERVAL 13 MONTH
