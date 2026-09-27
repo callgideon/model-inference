@@ -22,12 +22,15 @@ from infrx.config import from_env
 from infrx.scheduling.memory import MemoryScheduler
 from infrx.worker import __main__ as worker_main
 
-from ..b.runner.test_runner_pg import (KEY, N, PORT, RATE_CARD, Case, Dying, endpoint,  # noqa: F401
-                                       pytestmark, restore, revoke, world)
+from ..b.runner import test_runner_pg as b1
+from ..b.runner.test_runner_pg import KEY, N, PORT, RATE_CARD, Case, Dying, restore, revoke
 from ..b.runner.world import DEPLOYMENT, SPEC, Crash
 from ..d import pgharness
 from ..d import test_d7_lab_data as d7
 from .test_worker_main import environment, utc_now
+
+# B1's b1 world (module-scoped: this module's own database), its dev endpoint and its skip.
+world, endpoint, pytestmark = b1.world, b1.endpoint, b1.pytestmark
 
 
 def run(coroutine):
