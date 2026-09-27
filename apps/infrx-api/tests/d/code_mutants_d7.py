@@ -320,8 +320,9 @@ CODE_MUTANTS = (
 )
 
 
-def kill(mutant) -> tuple[str, str]:
-    """migration_mutants.kill's classification on this lane's database and seed."""
+def kill(mutant, db: str = DB, world=t) -> tuple[str, str]:
+    """migration_mutants.kill's classification on this lane's database and a world module's
+    seed and CHECKS (D7's by default; the later lab-sql lists pass their own)."""
     pgharness.ensure()
     with TemporaryDirectory(prefix=f"infrx-dlab-{mutant.name}-") as tmp:
         directory = Path(tmp)
@@ -329,15 +330,15 @@ def kill(mutant) -> tuple[str, str]:
         if refused is not None:
             return _d.MISDECLARED, refused
         try:
-            pgharness.recreate(DB)
-            pgharness.apply(DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM,
+            pgharness.recreate(db)
+            pgharness.apply(db, migrations.sql_for(shim=pgharness.NEEDS_SHIM,
                                                    directory=directory))
         except (AssertionError, psycopg.Error) as broken:
             return _d.APPLY_ERROR, _d._first_line(broken)
         try:
-            with pgharness.connect(DB) as conn:
-                t.seed(conn)
-                return _d._run(t.CHECKS[mutant.check], conn)
+            with pgharness.connect(db) as conn:
+                world.seed(conn)
+                return _d._run(world.CHECKS[mutant.check], conn)
         except (AssertionError, psycopg.Error) as during_setup:
             return _d.SETUP_ERROR, _d._first_line(during_setup)
 
