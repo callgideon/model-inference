@@ -1,0 +1,40 @@
+{
+  "task": "TEST-USER",
+  "lane": "TEST-USER",
+  "slice": "fix round: 0-TU-R1 (key header check, widened except) and 0-TU-R2 (--reset-existing opt-in) in infra/app/create-test-user.py; tests, mutants, operations.md",
+  "activity": "review",
+  "at": "2026-09-27T05:06:00Z",
+  "head": "8cc9c8fb",
+  "base": "17cc78bd",
+  "worktree": ".claude/worktrees/codex-test-user",
+  "branch": "codex/test-user",
+  "owned_paths": [
+    "infra/app/create-test-user.py",
+    "infra/app/operations.md",
+    "tests/integration/ops/test_create_test_user.py",
+    "tests/integration/mutants.py",
+    "research/plan/evidence/i/TEST-USER-abb017e0.md",
+    "research/plan/evidence/coordinator/updates/TEST-USER-20260927T0506Z.json"
+  ],
+  "isolation": {"ports": "postgres 55451 (INFRX_D_TASK=app-c0, INFRX_D1_IMAGE=supabase)", "prefix": "infrx-app-c0-"},
+  "findings": [
+    {"id": "0-TU-R1", "fixed": true, "cases": ["tu07[key-cr]", "tu07[key-lf]", "tu15"], "mutants": ["tum19", "tum20"]},
+    {"id": "0-TU-R2", "fixed": true, "cases": ["tu14"], "mutants": ["tum21"]}
+  ],
+  "commands": [
+    {"cmd": "pytest -q tests/integration/ops/test_create_test_user.py (new cases, before the fix)", "exit": 1, "summary": "6 failed, 15 passed, 1 skipped (fails-before)"},
+    {"cmd": "pytest -q tests/integration/ops/test_create_test_user.py", "exit": 0, "summary": "21 passed, 1 skipped"},
+    {"cmd": "INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase pytest -q tests/integration/ops/test_create_test_user.py", "exit": 0, "summary": "22 passed"},
+    {"cmd": "tu11 with tum18 applied by hand on app-c0", "exit": 1, "summary": "1 failed (layer-2 kill)"},
+    {"cmd": "tests/integration/mutants.py --layer all --only tuc01|tum01..tum21", "exit": 0, "summary": "control survived, 20 killed, tum18 pending (layer 2)"},
+    {"cmd": "pytest -q tests/integration/ops", "exit": 0, "summary": "55 passed, 1 skipped"},
+    {"cmd": "pytest -q tests/integration/test_run.py -k 'anchor or mutation_stage_runs_every_list'", "exit": 0, "summary": "2 passed"},
+    {"cmd": "pytest -q tests/integration/backend/recovery/test_mutant_list_i3b.py", "exit": 0, "summary": "1 passed"},
+    {"cmd": "ruff check (owned python)", "exit": 0, "summary": "clean"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.1, "likely_h": 0.25, "pessimistic_h": 1, "confidence": "medium", "basis": "lane done; hosted use is two SSM exports and one command [OP]", "at": "2026-09-27T05:06:00Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/i/TEST-USER-abb017e0.md"]
+}

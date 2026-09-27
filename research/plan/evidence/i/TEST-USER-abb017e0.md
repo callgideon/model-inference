@@ -89,3 +89,45 @@ existing I3 ops tests are in the same position. Nothing is added to the Makefile
 Lane: 0 h (review only). Hosted use: optimistic 0.1 h, likely 0.25 h, pessimistic 1 h
 (confidence medium; basis: two exports + one command; pessimistic if the hosted flag is off or
 GoTrue answers a different existing-user code).
+
+## Fix round (review 0-TU-R1, 0-TU-R2) — code head `8cc9c8fb`
+
+Handback head was `92aaa6c7`. Changed: `infra/app/create-test-user.py`, `infra/app/operations.md`
+(same section + one verification-log line), `tests/integration/ops/test_create_test_user.py`,
+`tests/integration/mutants.py`.
+
+- **0-TU-R1 (blocking) fixed.** `main()` refuses a key that is not printable ASCII
+  (`re.fullmatch(r"[\x21-\x7e]+", key)`) with exit 2, `SUPABASE_SERVICE_ROLE_KEY has characters
+  a header cannot carry`, before any call and without echoing it. `call()` now catches
+  `(OSError, http.client.HTTPException, ValueError)` and still prints only the exception's type
+  name, so a rejected header or a non-HTTP answer is a refusal (exit 3), never a traceback.
+  Reviewer's reproduction (`SUPABASE_SERVICE_ROLE_KEY=$'placeholder-SECRETKEY\r'`) now prints
+  only that sentence, exit 2. operations.md says so and says to re-store the parameter.
+- **0-TU-R2 (major) fixed.** An address that exists (the create answers 409/422 and the lookup
+  finds exactly that address) is refused with exit 3, `address exists; pass --reset-existing to
+  confirm and re-password it`, after one read-only GET; no PUT, no grant. `--reset-existing`
+  opts in to the old confirm + re-password repair. `--dry-run` shows which path it would take.
+  operations.md documents the flag and its risk (it locks a real owner out and marks an
+  unverified address verified; use only on an operator-owned address). Skipped:
+  `--allow-domain` (optional in the finding; the opt-in flag already closes the silent path).
+
+| Command | Exit | Result |
+|---|---|---|
+| `pytest -q tests/integration/ops/test_create_test_user.py` with the new cases, before the fix | 1 | **6 failed**, 15 passed, 1 skipped: tu07[key-cr] and [key-lf] exit 1 (traceback), tu14 exit 0 (re-passworded), tu15 exit 1 (BadStatusLine traceback), tu02/tu06 (no `--reset-existing` yet) |
+| same, after | 0 | 21 passed, 1 skipped |
+| `INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase pytest -q tests/integration/ops/test_create_test_user.py` | 0 | **22 passed** (tu11 on the real Supabase image, now with `--reset-existing` for its pre-existing row) |
+| tu11 with tum18 applied by hand, app-c0, then `git checkout --` the file | 1 | 1 failed (layer-2 kill re-proven) |
+| `tests/integration/mutants.py --layer all --only <id>` for tuc01, tum01–tum21 | 0 each | control SURVIVED; tum01–tum17 and tum19–tum21 killed; tum18 pending (layer 2) |
+| `pytest -q tests/integration/ops` | 0 | 55 passed, 1 skipped |
+| `pytest -q tests/integration/test_run.py -k "anchor or mutation_stage_runs_every_list"` | 0 | 2 passed |
+| `pytest -q tests/integration/backend/recovery/test_mutant_list_i3b.py` | 0 | 1 passed |
+| `ruff check` (owned Python) | 0 | clean |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS |
+
+New cases and mutants: tu07[key-cr], tu07[key-lf] (a key ending in CR / LF → exit 2, no request,
+no secret; tum19 removes the check) · tu14 an existing address without `--reset-existing` →
+exit 3, requests = POST + GET only, password still `old`, not confirmed, no grant (tum21 removes
+the refusal) · tu15 a non-HTTP answer → exit 3 naming the step, no traceback, no secret (tum20
+narrows the except back to OSError). tu02, tu06 and tu11 now pass `--reset-existing`.
+
+Remaining effort: lane 0 h (review only); hosted use unchanged (0.1 / 0.25 / 1 h, medium).
