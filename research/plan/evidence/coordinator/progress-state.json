@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 169,
-  "updated": "2026-09-27T11:33:00Z",
+  "revision": 170,
+  "updated": "2026-09-27T12:12:00Z",
   "agent_slots": {
     "total": 16,
     "active": 2,
@@ -4182,17 +4182,17 @@
       "branch": "codex/w5-lab-access",
       "worktree": ".claude/worktrees/codex-w5-lab-access",
       "base": "9a6c3685",
-      "head": null,
+      "head": "93b0fb2c",
       "isolation": {
         "ports": "l2 57501",
         "prefix": "infrx-l2-",
         "db": "l2"
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-27T09:15:00Z",
-      "updated": "2026-09-27T09:15:00Z",
-      "blocker": null,
-      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "updated": "2026-09-27T12:12:00Z",
+      "blocker": "real-PG integration in the LW1-INTEGRATION lane",
+      "next_action": "HELD at 93b0fb2c (built on fakes; the plan forbids merging on fakes) → the LW1-INTEGRATION lane runs it on real PostgreSQL (PgAccessStore, role matrix) together with L1's port switch and H1's real-port case, from the integration branch codex/w5-lw1-integration (fb9989ee = tip + L2 + L1)",
       "estimate": {
         "optimistic_h": 3,
         "likely_h": 6,
@@ -4201,8 +4201,16 @@
         "basis": "wave5-plan §5 LW1 estimates",
         "at": "2026-09-27T09:15:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/l/L2-1e0f875.md"
+      ],
+      "commands": [
+        {
+          "cmd": "tests/l/access (fakes) + mutants; make api-test (i8 pooler contention from concurrent lanes)",
+          "exit": 0,
+          "summary": "30 passed; 13/13 mutants; three majors fixed + rechecked (db clock, viewer grant-history policy, R156 conformance)"
+        }
+      ],
       "owned_paths": [
         "wave5-plan §5 LW1 lab-access"
       ],
@@ -4433,6 +4441,40 @@
       "commands": [],
       "owned_paths": [
         "wave5-plan §5 LW1 lab-sql (D7)"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-LW1-INTEGRATION",
+      "task": null,
+      "slice": "(wave5 LW1 integration) L2 on real PostgreSQL (PgAccessStore, db clock, role matrix), the one-RPC membership seam for the Lab App (R156; WR-L1-1..4), H1 real-port case (WR-H1-1); workflow wf (see RESUME); base fb9989ee = tip + lab-access + lab-app",
+      "agent": "opus",
+      "branch": "codex/w5-lw1-integration",
+      "worktree": ".claude/worktrees/codex-w5-lw1-integration",
+      "base": "fb9989ee",
+      "head": null,
+      "isolation": {
+        "ports": "l2 57501, l4 57503",
+        "prefix": "infrx-l2-/infrx-l4-",
+        "db": "l2"
+      },
+      "activity": "running",
+      "started": "2026-09-27T12:12:00Z",
+      "updated": "2026-09-27T12:12:00Z",
+      "blocker": null,
+      "next_action": "handback → merge = the LW1 exit (L2, L1, H1 integrated) → LW2 dispatch",
+      "estimate": {
+        "optimistic_h": 3,
+        "likely_h": 6,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "three integrations; the C3A real-DB analogue",
+        "at": "2026-09-27T12:12:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "lab-access + lab-app + lab-contracts paths, 0030 if needed"
       ],
       "wiring_requests": []
     }
@@ -7267,6 +7309,12 @@
       "by": "tracker",
       "what": "rejected update: unknown task ID 'L2-SQL'",
       "source": "updates/L2-SQL-20260927T1100Z.json"
+    },
+    {
+      "at": "2026-09-27T12:12:00Z",
+      "by": "coordinator (LW1)",
+      "what": "lab-access (L2) ACCEPT_WITH_FIXES 93b0fb2c on fakes → held; LW1-INTEGRATION lane launched from codex/w5-lw1-integration (fb9989ee = tip + L2 + L1) to run L2 on real PostgreSQL, switch L1 to the one-RPC seam (R156, WR-L1-1..4) and add H1's real-port case; its merge is the LW1 exit",
+      "source": "research/plan/evidence/l/L2-1e0f875.md"
     }
   ],
   "history": {
