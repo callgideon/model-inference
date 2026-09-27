@@ -47,6 +47,11 @@ def test_lab_upgrade_preserves_history_money_identity_and_grants() -> None:
     pgharness.apply(DB, base)
     conn = pgharness.connect(DB)
     made = d10.seed_history(conn)
+    # a pre-Lab feedback row: D6F's entry order must number it, and it stays as it was
+    conn.execute("insert into infrx.feedback (feedback_id, org_id, request_id, author_principal, "
+                 "author_role, channel, name, value_bool) select 'fb_pre_lab', org_id, "
+                 "request_id, 'k', 'customer', 'api', 'thumb', true from infrx.jobs "
+                 "where request_id = %s", (made["usd_settled"],))
     before = d10.snapshot(conn)
     pgharness.apply(DB, lab)
     after = d10.snapshot(conn)
@@ -63,6 +68,8 @@ def test_lab_upgrade_preserves_history_money_identity_and_grants() -> None:
     assert {k: v for k, v in after["cols"].items() if k in before["cols"]} == before["cols"]
     changed = {k for k in before["fns"] if after["fns"].get(k) != before["fns"][k]}
     assert changed == set(), f"an existing function's grants changed: {changed}"
+    assert conn.execute("select entry_seq from infrx.feedback where feedback_id = 'fb_pre_lab'"
+                        ).fetchone()[0] is not None                              # 0028
     pgharness.apply(DB, lab)
     assert d10.snapshot(conn) == after, "the Lab set is not re-runnable"
     print(f"Lab upgrade over {len(made)} seeded job states: {len(before['counts'])} tables "
