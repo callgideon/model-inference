@@ -5,7 +5,8 @@
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/h/test_mutants.py   # all
     INFRX_MUTANTS=all INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_mutants.py  # + pg
 
-Run the PostgreSQL list in a process that has not itself started the D harness.
+Run the PostgreSQL list in a process that has not itself started the D harness: its own line in
+`make api-mutants` (WR-LW1I-6); after a tests/d list in the same process it skips visibly.
 """
 from __future__ import annotations
 
@@ -57,6 +58,12 @@ def test_mutant_is_killed(mutant):
 @pytest.mark.parametrize("mutant", SELECTED_PG, ids=[m.name for m in SELECTED_PG])
 def test_pg_mutant_is_killed(mutant):
     """Through the real L2 port (visible skip without Docker)."""
+    if pgharness._lock_fd is not None:
+        # ponytail: skip, not share - the copy's harness cannot join this process's; the list's
+        # own line in `make api-mutants` (WR-LW1I-6) is where it runs.
+        pytest.skip("this process already holds the D harness lock (an earlier tests/d list "
+                    "started it), so the copy's harness would be refused: run this list in its "
+                    "own process")
     reason = pgharness.unavailable()
     if reason:
         pytest.skip(f"PostgreSQL harness unavailable: {reason}")
