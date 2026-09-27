@@ -562,8 +562,10 @@ def wait_all(timeout: float = 240.0) -> dict[str, str]:
     """Versions, so the evidence records what actually answered rather than what was
     requested. PostgreSQL is first and slowest: the Supabase image runs its own
     init-scripts and migrations before it accepts a connection."""
-    return {"postgres": wait_postgres(timeout), "valkey": wait_valkey(),
-            "clickhouse": wait_clickhouse(), "s3": wait_s3()}
+    versions = {"postgres": wait_postgres(timeout), "valkey": wait_valkey(),
+                "clickhouse": wait_clickhouse(), "s3": wait_s3()}
+    apply_trace_schema()                       # T2I: the trace projection DDL, idempotent
+    return versions
 
 
 # --------------------------------------------------------------------- clients
@@ -588,6 +590,23 @@ def clickhouse_client():
     return clickhouse_connect.get_client(
         host="127.0.0.1", port=PORTS["clickhouse_http"], username=CH_USER,
         password=CH_PASSWORD, database=CH_DATABASE, connect_timeout=5, send_receive_timeout=30)
+
+
+TRACE_SCHEMA = API_ROOT / "infrx" / "traces" / "ship" / "schema.sql"
+
+
+def apply_trace_schema() -> int:
+    """T2I's projection DDL (`trace_envelopes`) in the stack's own ClickHouse database:
+    every statement of `infrx/traces/ship/schema.sql`, idempotent (CREATE ... IF NOT
+    EXISTS), applied after the services answer. An initdb mount would not do: the
+    image's init client has no --database. Returns the number of statements run."""
+    client = clickhouse_client()
+    statements = [part.strip() for part in TRACE_SCHEMA.read_text().split(";") if part.strip()
+                  and not all(line.strip().startswith("--") or not line.strip()
+                              for line in part.strip().splitlines())]
+    for statement in statements:
+        client.command(statement)
+    return len(statements)
 
 
 # --------------------------------------------------------------------- fault injection

@@ -390,6 +390,16 @@ def test_valkey_accepts_namespaced_keys_and_the_suite_cleans_up_after_itself():
     assert client.keys(f"{harness.VALKEY_PREFIX}*") == []
 
 
+def test_trace_projection_schema_is_applied_once_and_idempotently():
+    """T2I (WR-1): the stack carries `trace_envelopes` from infrx/traces/ship/schema.sql,
+    applied by wait_all(); applying it again changes nothing."""
+    stack_or_skip()
+    assert harness.apply_trace_schema() >= 1
+    assert harness.apply_trace_schema() >= 1
+    client = harness.clickhouse_client()
+    assert client.query("exists table trace_envelopes").result_rows[0][0] == 1
+
+
 def test_clickhouse_answers_ddl_and_a_round_trip_in_its_own_database():
     """T owns the real DDL (08 §1). This proves the service is usable and isolated, and
     nothing more - the table is dropped again."""

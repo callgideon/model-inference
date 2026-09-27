@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 165,
-  "updated": "2026-09-27T10:41:50Z",
+  "revision": 166,
+  "updated": "2026-09-27T10:43:46Z",
   "agent_slots": {
     "total": 16,
-    "active": 4,
+    "active": 3,
     "reserved": 2,
     "note": "Session 03 post-launch: CERTIFY-WINDOW + six LW1 lanes (wave5-plan) running; certify/E1B on the live box after CERTIFY-WINDOW merges."
   },
@@ -4284,27 +4284,35 @@
       "branch": "codex/w5-trace-ship",
       "worktree": ".claude/worktrees/codex-w5-trace-ship",
       "base": "9a6c3685",
-      "head": null,
+      "head": "0b6a295d",
       "isolation": {
         "ports": "t2i 57540/57541/57542",
         "prefix": "infrx-t2i-",
         "db": "t2i"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-27T09:15:00Z",
-      "updated": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T10:43:00Z",
       "blocker": null,
-      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "next_action": "DONE: merged --no-ff at a7bafee0; WR-1 (harness.apply_trace_schema after wait_all + a service case), WR-2 (api-mutants list), R165 applied; WR-3 (composition root, flag OFF, D5 pins lookup with a PG proof on a t2i postgres port) carried to LW2 trace-ship (T2F/T3)",
       "estimate": {
-        "optimistic_h": 4,
-        "likely_h": 8,
-        "pessimistic_h": 16,
-        "confidence": "medium",
-        "basis": "wave5-plan §5 LW1 estimates",
-        "at": "2026-09-27T09:15:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T10:43:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/t/T2I-c9ed0e4.md"
+      ],
+      "commands": [
+        {
+          "cmd": "tests/t/ship (in-memory + ClickHouse/MinIO on t2i); mutants; T1 + contracts suites; coordinator: tests/t/ship + test_services -k trace at the merge",
+          "exit": 0,
+          "summary": "20 passed with the stack, 19/19 mutants; 349; 22 passed / 13 stack-skips at the merge"
+        }
+      ],
       "owned_paths": [
         "wave5-plan §5 LW1 trace-ship"
       ],
@@ -7119,6 +7127,24 @@
       "by": "tracker",
       "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
       "source": "updates/H1-20260927T1032Z.json"
+    },
+    {
+      "at": "2026-09-27T10:43:00Z",
+      "by": "coordinator (LW1)",
+      "what": "trace-ship (T2I) merged at a7bafee0 with WR-1/WR-2 and R165; WR-3 (composition, flag off) carried to LW2. LW1 status: discovery, lab-contracts, trace-ship merged; lab-app held (R156); lab-sql and lab-access running",
+      "source": "research/plan/evidence/t/T2I-c9ed0e4.md"
+    },
+    {
+      "at": "2026-09-27T10:43:46Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/T2I-20260927T1013Z.json"
+    },
+    {
+      "at": "2026-09-27T10:43:46Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/T2I-20260927T1037Z.json"
     }
   ],
   "history": {
@@ -7895,10 +7921,20 @@
       "status": "rejected",
       "at": "2026-09-27T10:32:00Z",
       "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "T2I-20260927T1013Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:13:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "T2I-20260927T1037Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:37:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T10:41:50Z",
+    "computed_at": "2026-09-27T10:43:46Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,

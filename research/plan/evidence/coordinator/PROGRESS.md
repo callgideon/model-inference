@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-27 10:41Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 165, updated 2026-09-27 10:41Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-27 10:43Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 166, updated 2026-09-27 10:43Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -31,7 +31,7 @@ Remaining, in order:
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 6 active lanes, 2 reserved.
+- Agent slots: 16 total, 5 active lanes, 2 reserved.
 - Validation: 0 error(s), 9 warning(s).
 
 ### Actionable blockers
@@ -124,7 +124,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (61.9 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (62.0 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -212,7 +212,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | W5-LAB-ACCESS | support (wave5 LW1 lane lab-access; wave5-plan §5) tasks L2; workflow wf_056bcc43-fb8; Opus implementer + 2 lenses + one fix round | running | codex/w5-lab-access | 9a6c3685 → — | ports l2 57501, prefix infrx-l2-, db l2 | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
 | W5-LAB-APP | support (wave5 LW1 lane lab-app; wave5-plan §5) tasks L1; workflow wf_3d1c0f24-3fd; Opus implementer + 2 lenses + one fix round | review | codex/w5-lab-app | 9a6c3685 → 80dae52c | ports l4 57503; Lab dev 3100, prefix infrx-l4-, db l4 | 2026-09-27 09:43Z | waits for L2-SQL (lab-sql) and L2 (lab-access) to merge | 4–16 h remaining (likely 8 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
 | W5-LAB-CONTRACTS | support (wave5 LW1 lane lab-contracts; wave5-plan §5) tasks F3 → H1; workflow wf_aaf54f13-157; Opus implementer + 2 lenses + one fix round | complete | codex/w5-lab-contracts | 9a6c3685 → de85fa6a | ports fake-only, prefix infrx-fake-only-, db fake-only | 2026-09-27 10:41Z | DONE: merged --no-ff at d970e88a; WR-F3-1..3 applied (contracts lab export + frozen pin, api-mutants list, packages/shared exports); rulings R157–R164; H1 real-port case after L2; WR-H1-1 (authorize(gate, provider_org_id, dataset_ref)) and the D7 ref-storage note go to lab-access / lab-sql at their merges | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 10:41Z; basis: merged |
-| W5-TRACE-SHIP | support (wave5 LW1 lane trace-ship; wave5-plan §5) tasks T2I; workflow wf_7f35c7d0-e41; Opus implementer + 2 lenses + one fix round | running | codex/w5-trace-ship | 9a6c3685 → — | ports t2i 57540/57541/57542, prefix infrx-t2i-, db t2i | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 4–16 h remaining (likely 8 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
+| W5-TRACE-SHIP | support (wave5 LW1 lane trace-ship; wave5-plan §5) tasks T2I; workflow wf_7f35c7d0-e41; Opus implementer + 2 lenses + one fix round | complete | codex/w5-trace-ship | 9a6c3685 → 0b6a295d | ports t2i 57540/57541/57542, prefix infrx-t2i-, db t2i | 2026-09-27 10:43Z | DONE: merged --no-ff at a7bafee0; WR-1 (harness.apply_trace_schema after wait_all + a service case), WR-2 (api-mutants list), R165 applied; WR-3 (composition root, flag OFF, D5 pins lookup with a PG proof on a t2i postgres port) carried to LW2 trace-ship (T2F/T3) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 10:43Z; basis: merged |
 | W5-DISCOVERY | support (wave5 LW1 lane discovery; wave5-plan §5) tasks X1, X3, X5; workflow wf_c1a1f58a-491; Opus implementer + 2 lenses + one fix round | complete | codex/w5-discovery | 9a6c3685 → 3e4223ba | ports none (documents), prefix infrx-none-, db none | 2026-09-27 09:36Z | DONE: merged --no-ff at 137c36c0; README index rows + the marlin-sop 82 s cap note applied by the coordinator; X1/X3/X5 stay planned until the owner approves (P-13/P-14/P-15) → C3 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 09:36Z; basis: merged |
 
 ### Queues and locks
@@ -349,6 +349,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `H1-20260927T1005Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - `F3-20260927T1032Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - `H1-20260927T1032Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- `T2I-20260927T1013Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- `T2I-20260927T1037Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 
 ## Tasks (backend, App, activated, reused baseline)
 
@@ -437,6 +439,9 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-27 10:43Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- 2026-09-27 10:43Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- 2026-09-27 10:43Z UTC, coordinator (LW1): trace-ship (T2I) merged at a7bafee0 with WR-1/WR-2 and R165; WR-3 (composition, flag off) carried to LW2. LW1 status: discovery, lab-contracts, trace-ship merged; lab-app held (R156); lab-sql and lab-access running
 - 2026-09-27 10:41Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - 2026-09-27 10:41Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - 2026-09-27 10:41Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
