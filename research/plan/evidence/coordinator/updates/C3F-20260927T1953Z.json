@@ -1,0 +1,28 @@
+{
+  "task": "C3F",
+  "slice": "C3F (App own-feedback action + Lab review action under L2 grants)",
+  "activity": "review",
+  "head": "c84aa8cc",
+  "worktree": ".claude/worktrees/codex-w5-feedback-c3f",
+  "branch": "codex/w5-feedback-c3f",
+  "owned_paths": ["apps/app/lib/services/feedback.ts", "apps/app/tests/c/feedback/", "apps/lab/lib/services/review/", "apps/lab/tests/c/review/"],
+  "commands": [
+    {"cmd": "make console-test", "exit": 0, "summary": "679 tests, 620 pass, 0 fail, 59 skipped"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "cd apps/app && pnpm build", "exit": 0, "summary": "App builds"},
+    {"cmd": "make lab-test / lab-lint / lab-typecheck / lab-build / lab-mutants", "exit": 0, "summary": "31 pass 2 skipped; clean; clean; builds; 50/50"},
+    {"cmd": "cd apps/app && node tests/c/feedback/run-mutants.mjs", "exit": 0, "summary": "6 cases named, 18/18 killed"},
+    {"cmd": "cd apps/lab && node tests/c/review/run-mutants.mjs", "exit": 0, "summary": "4 cases named, 20/20 killed"},
+    {"cmd": "INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py", "exit": 0, "summary": "6/6 PG checks, App 2/2 + Lab 2/2 via PostgREST"},
+    {"cmd": "... stack.py --mutants", "exit": 0, "summary": "22/22 SQL mutants killed"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium", "basis": "C3A/G4F one fix round each; mutants and real-PG stack green; WR-C3F-1 is a proven file copy", "at": "2026-09-27T19:53Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-C3F-1 lab-sql: add apps/app/tests/c/feedback/proposed_doors.sql as the next local-only migration (public.submit_feedback, public.lab_review_feedback)",
+    "WR-C3F-2 coordinator: research/plan/evidence/c/C3F-c84aa8c-wiring.patch (consoleActions.submitFeedback + app/actions.ts export + compose.test.ts + 3 mutants)",
+    "WR-C3F-3 Makefile: console-mutants += tests/c/feedback/run-mutants.mjs; lab-mutants += tests/c/review/run-mutants.mjs; new console-c3f-real target (stack.py and --mutants)"
+  ],
+  "evidence": ["research/plan/evidence/c/C3F-c84aa8c.md", "research/plan/evidence/c/C3F-c84aa8c-wiring.patch"]
+}
