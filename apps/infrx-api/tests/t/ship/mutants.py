@@ -58,6 +58,11 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("build_ignores_the_flag", "nothing is built (nothing connects) while shipping is off",
        "    if not shipping_enabled(limits):\n        return None",
        "    if False:\n        return None", BUILD),
+    _m("build_without_retention", "the production shipper consults T3's tombstones",
+       "    return Shipper(spool, traces, objects, pins=PgPins(connector(limits.database_url)),\n"
+       "                   retention=retention)",
+       "    return Shipper(spool, traces, objects, pins=PgPins(connector(limits.database_url)))",
+       BUILD),
     # --- TRACE-RECOVER ----------------------------------------------------------------
     _m("active_segment_shipped", "only sealed (fsynced) segments ship",
        "            if not view.sealed:\n                continue",

@@ -51,19 +51,28 @@ def build_shipper(limits: PilotSettings, spool, *, prefix: str = "infrx/",
                   endpoint_url: str = "") -> Shipper | None:
     """T2I WR-3's factory, for the composition root: None unless `shipping_enabled(limits)`
     (flag OFF); otherwise the shipper over ClickHouse (`CLICKHOUSE_URL`), the trace bucket
-    (`S3_TRACE_BUCKET`) and D5's pins on `DATABASE_URL`. The root schedules
-    `await spool.rotate(); await shipper.ship()` (a wiring request)."""
+    (`S3_TRACE_BUCKET`) and D5's pins on `DATABASE_URL`, consulting T3's retention over the
+    same client and bucket (no resurrection). The root schedules
+    `await spool.rotate(); await shipper.ship()` and `shipper.retention.expire()` /
+    `.sweep()` (wiring requests)."""
     if not shipping_enabled(limits):
         return None
     import clickhouse_connect
 
     from ...media.s3 import S3ObjectStore
     from ...state.jobstore import connector
+    from ..feedback import ClickHouseFeedbackProjection
+    from ..retention import ClickHouseRetentionStore, Retention
     from .pins import PgPins
-    return Shipper(spool,
-                   ClickHouseProjection(clickhouse_connect.get_client(dsn=limits.clickhouse_url)),
-                   S3ObjectStore.connect(limits.s3_trace_bucket, prefix, endpoint_url),
-                   pins=PgPins(connector(limits.database_url)))
+    client = clickhouse_connect.get_client(dsn=limits.clickhouse_url)
+    traces = ClickHouseProjection(client)
+    objects = S3ObjectStore.connect(limits.s3_trace_bucket, prefix, endpoint_url)
+    retention = Retention(ClickHouseRetentionStore(client), traces,
+                          ClickHouseFeedbackProjection(client), objects,
+                          content_days=limits.trace_content_max_days,
+                          metadata_months=limits.trace_metadata_months)
+    return Shipper(spool, traces, objects, pins=PgPins(connector(limits.database_url)),
+                   retention=retention)
 
 
 def content_key(org_id: str, trace_id: str) -> str:

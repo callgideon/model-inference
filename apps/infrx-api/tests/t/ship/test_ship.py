@@ -260,6 +260,11 @@ def test_no_shipper_is_built_unless_shipping_is_enabled(monkeypatch):
     assert asked == [{"dsn": "http://ch:8123"}]
     assert (built.spool, built.projection.client) == ("the spool", "a clickhouse client")
     assert isinstance(built.pins, ship.PgPins) and built.objects.bucket == "infrx-traces"
+    kept = built.retention                    # T3: the replay consults the tombstones
+    assert kept is not None, "the production shipper would resurrect deleted traces"
+    assert (kept.traces, kept.objects, kept.store.client) == \
+        (built.projection, built.objects, "a clickhouse client")
+    assert (kept.content_days, kept.metadata_months) == (90, 13)
 
 
 # ======================================================================================

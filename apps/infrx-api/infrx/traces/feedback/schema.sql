@@ -3,7 +3,7 @@
 -- again and ReplacingMergeTree keeps one: every read is FINAL. The key leads with the org and
 -- the durable request id, the trace projection's join key (late feedback joins by it). No
 -- judge column: a judge result is never derived here. `value` is the JSON value.
--- Additive; the E2 stack applies it only through coordinator wiring (T2F WR-T-3).
+-- Additive: the E2 stack applies it only through coordinator wiring (T2F WR-T-3).
 CREATE TABLE IF NOT EXISTS feedback_events
 (
     org_id           UUID,
@@ -22,5 +22,5 @@ CREATE TABLE IF NOT EXISTS feedback_events
 )
 ENGINE = ReplacingMergeTree
 ORDER BY (org_id, request_id, feedback_id)
--- T3: physical cleanup at 13 months; reads filter logical expiry themselves.
+-- T3: physical cleanup at 13 months, reads filter logical expiry themselves.
 TTL toDateTime(created_at) + INTERVAL 13 MONTH
