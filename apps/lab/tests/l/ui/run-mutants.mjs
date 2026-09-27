@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+// L4's mutant runner (R32; LANE-RULES addendum) over tests/l/ui, on the shared Lab harness.
+// Usage: node tests/l/ui/run-mutants.mjs [--only ID,ID]
+import { m, runMutants } from "../shell/harness.mjs";
+
+const SUITE = ["view", "journey", "actions", "pages"].map((f) => `tests/l/ui/${f}.test.ts`);
+const PORT = "lib/services/control/port.ts";
+const FAKE = "lib/services/control/fake.ts";
+const VIEW = "lib/services/control/view.ts";
+const ACTIONS = "lib/services/control/actions.ts";
+const LAYOUT = "app/(provider)/layout.tsx";
+const MODELS = "app/(provider)/models/page.tsx";
+const DEPLOY = "app/(provider)/deployments/page.tsx";
+
+const C = {
+  v01: "L4-V01 roles mirror ROLE_CAPABILITIES: viewer reads health, developer manages dev, only administrator proposes",
+  v02: "L4-V02 a row shows the pinned model, serving, runtime, schema and rate identities and where it is visible",
+  v03: "L4-V03 actions follow the record and the role: smoke dev, publish only after a passed smoke, roll back live prod",
+  v04: "L4-V04 a pending proposal is shown as awaiting the operator and blocks a second one; a decided one does not",
+  v05: "L4-V05 health rows carry the redacted aggregate only, whatever else a record carries",
+  v06: "L4-V06 a refusal is fixed copy for a known reason and nothing for anything else in the URL",
+  v07: "L4-V07 the control port fails closed: unavailable until the real adapter is wired, the preview never in production",
+  j01: "L4-J01 register → dev smoke → publish proposal → operator approval → App discovery → rollback",
+  j02: "L4-J02 unauthorized variants: another provider, a viewer, a developer proposing, publish before smoke, a duplicate",
+  a01: "L4-A01 register runs as the session's provider and role, whatever the form claims",
+  a02: "L4-A02 a role without the capability is refused before the control service is asked",
+  a03: "L4-A03 malformed input is refused as invalid and never reaches the control service",
+  a04: "L4-A04 the service's refusal is carried as its reason; its success is a plain return to the records",
+  a05: "L4-A05 a consumer-only user gets a 404 from every action and the control service is never asked",
+  p01: "L4-P01 each page reads the control records as the session's workspace and shows ?refused= only as fixed copy",
+  p02: "L4-P02 the provider layout links the L4 pages and labels the preview stand-in only when it is on",
+};
+
+const MUTANTS = [
+  m("L4-X01", "a viewer may manage dev deployments", PORT, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "manage_dev_deployment"],', [C.v01, C.a02]),
+  m("L4-X02", "a developer may propose publication", PORT, 'developer: ["read_aggregate_health", "manage_dev_deployment"],', 'developer: ["read_aggregate_health", "manage_dev_deployment", "propose_publication"],', [C.v01, C.a02, C.j02]),
+  m("L4-X03", "the row shows the wrong runtime identity", VIEW, "runtime: d.runtime,", "runtime: d.modelId,", [C.v02]),
+  m("L4-X04", "an unpriced revision shows a rate card", VIEW, 'd.rateCardVersion ?? "unpriced"', 'd.rateCardVersion ?? "rc-0"', [C.v02]),
+  m("L4-X05", "dev and prod are not told apart", VIEW, "where: `${d.environment} · ${d.visibility}`", "where: d.visibility", [C.v02]),
+  m("L4-X06", "publish is offered before a passed smoke", VIEW, 'if (d.environment === "dev" && d.smoke === "passed") actions.push("publish");', 'if (d.environment === "dev") actions.push("publish");', [C.v03]),
+  m("L4-X07", "rollback is offered on a private prod revision", VIEW, 'if (d.environment === "prod" && d.visibility === "public") actions.push("rollback");', 'if (d.environment === "prod") actions.push("rollback");', [C.v03]),
+  m("L4-X08", "a retired revision still offers actions", VIEW, 'const live = d.state === "active";', "const live = true;", [C.v03]),
+  m("L4-X09", "a pending proposal does not block another", VIEW, "if (live && !pending && holds(", "if (live && holds(", [C.v04]),
+  m("L4-X10", "a decided proposal still reads as pending", VIEW, 'p.deploymentRevisionId === d.deploymentRevisionId && p.state === "proposed"', "p.deploymentRevisionId === d.deploymentRevisionId", [C.v04]),
+  m("L4-X11", "a proposal is shown as already published", VIEW, "proposed · awaiting operator approval", "published", [C.v04]),
+  m("L4-X12", "health rows pass through every field of the record", VIEW, "aggregates.map((a) => ({\n", "aggregates.map((a) => ({\n    ...a,\n", [C.v05]),
+  m("L4-X13", "an idle window divides by zero", VIEW, "a.requests > 0 ? `${Math.round((a.errors / a.requests) * 1000) / 10}%` : \"—\"", "`${Math.round((a.errors / a.requests) * 1000) / 10}%`", [C.v05]),
+  m("L4-X14", "any ?refused= string is looked up", VIEW, "(REFUSALS as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v06]),
+  m("L4-X15", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v07]),
+  m("L4-X16", "the default port is the stand-in, not unavailable", PORT, "  return UNAVAILABLE;\n}", "  return (preview ??= new FakeControl());\n}", [C.v07]),
+  m("L4-X17", "any preview flag value turns the stand-in on", PORT, 'env.LAB_CONTROL_PREVIEW === "1"', "env.LAB_CONTROL_PREVIEW !== undefined", [C.v07]),
+  m("L4-X18", "reads are not scoped to the provider", FAKE, "rows.filter((r) => r.providerId === actor.providerId).map(strip)", "rows.map(strip)", [C.j02]),
+  m("L4-X19", "another provider's revision can be acted on", FAKE, "d.deploymentRevisionId === id && d.providerId === actor.providerId", "d.deploymentRevisionId === id", [C.j02]),
+  m("L4-X20", "a foreign id is judged by role first (confirms it exists)", FAKE,
+    '    if (row === undefined) return "not_found";\n    return holds(actor.role, capability) ? row : "denied";',
+    '    if (!holds(actor.role, capability)) return "denied";\n    return row === undefined ? "not_found" : row;', [C.j02]),
+  m("L4-X21", "register without the capability", FAKE, '    if (!holds(actor.role, "manage_dev_deployment")) return no("denied");\n', "", [C.j02]),
+  m("L4-X22", "a mutable artifact ref is registered", FAKE, '    if (!DIGEST.test(r.artifactDigest)) return no("invalid");\n', "", [C.j02]),
+  m("L4-X23", "smoke runs on a prod revision", FAKE, 'if (d.environment !== "dev" || d.state !== "active") return no("conflict");', 'if (d.state !== "active") return no("conflict");', [C.j01]),
+  m("L4-X24", "publish is proposed before a passed smoke", FAKE, 'd.environment === "dev" && d.state === "active" && d.smoke === "passed"', 'd.environment === "dev" && d.state === "active"', [C.j02]),
+  m("L4-X25", "a second pending proposal is accepted", FAKE, 'if (!fits || this.requests.some((p) => p.deploymentRevisionId === id && p.state === "proposed")) return no("conflict");', 'if (!fits) return no("conflict");', [C.j02]),
+  m("L4-X26", "rollback is proposed with nothing to roll back to", FAKE, ' && this.previous(d) !== undefined;', ";", [C.j01]),
+  m("L4-X27", "publishing leaves the old revision public", FAKE, '      for (const x of live) x.visibility = "private";\n', "", [C.j01]),
+  m("L4-X28", "rollback does not restore the previous revision", FAKE, '      back.visibility = "public";\n', "", [C.j01]),
+  m("L4-X29", "a rejected proposal publishes", FAKE, "    if (!approve) return;\n", "", [C.j02]),
+  m("L4-X30", "App discovery lists dev revisions", FAKE, 'filter((d) => d.environment === "prod" && d.visibility === "public" && d.state === "active")', 'filter((d) => d.visibility === "public" || d.environment === "dev")', [C.j01]),
+  m("L4-X31", "a published revision carries no rate card", FAKE, "rateCardVersion: `rc-${this.cards}`", "rateCardVersion: null", [C.j01]),
+  m("L4-X32", "register acts as the form's provider", ACTIONS, "controlPort().register(actor(w),", 'controlPort().register({ providerId: String(data.get("providerId")), role: w.role },', [C.a01]),
+  m("L4-X33", "the actor's role is not the session's", ACTIONS, "role: w.role });", 'role: "administrator" });', [C.a01]),
+  m("L4-X34", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+  m("L4-X35", "malformed input reaches the control service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+  m("L4-X36", "any artifact reference passes the shape check", ACTIONS, "const DIGEST = /^sha256:[0-9a-f]{64}$/;", "const DIGEST = /./;", [C.a03]),
+  m("L4-X37", "any model name passes the shape check", ACTIONS, "const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;", "const NAME = /./;", [C.a03]),
+  m("L4-X38", "an unknown proposal kind is accepted", ACTIONS, '(kind === "publish" || kind === "rollback") && id !== null', "id !== null", [C.a03]),
+  m("L4-X39", "a refusal is dropped on the way back", ACTIONS, "redirect(result.ok ? page : `${page}?refused=${result.reason}`);", "redirect(page);", [C.a02, C.a04]),
+  m("L4-X40", "a success is flagged by the action, not the records", ACTIONS, "redirect(result.ok ? page :", "redirect(result.ok ? `${page}?done=1` :", [C.a01, C.a04]),
+  m("L4-X41", "proposing needs only the dev capability", ACTIONS, '"propose_publication", valid', '"manage_dev_deployment", valid', [C.a02]),
+  m("L4-X42", "an action runs without a provider workspace", ACTIONS, "export async function smokeDeployment(data: FormData): Promise<void> {\n  const w = await requireProviderWorkspace();",
+    'export async function smokeDeployment(data: FormData): Promise<void> {\n  const w = { providerId: "x", providerName: "x", role: "administrator" } as const;', [C.a05]),
+  m("L4-X43", "a page reads records as a fixed provider", DEPLOY, "{ providerId: workspace.providerId, role: workspace.role }", '{ providerId: "11111111-1111-4111-8111-111111111111", role: workspace.role }', [C.p01]),
+  m("L4-X44", "a page shows ?refused= raw", MODELS, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
+  m("L4-X45", "a page claims success on its own", DEPLOY, "<h1>Deployments</h1>", "<h1>Deployments</h1>\n      <p>Published successfully.</p>", [C.p01]),
+  m("L4-X46", "the nav loses the deployments page", LAYOUT, '<Link href="/deployments">Deployments</Link>', "Deployments", [C.p02]),
+  m("L4-X47", "the preview label shows when the stand-in is off", LAYOUT, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
+];
+
+process.exit(await runMutants({ suite: SUITE, prefix: "L4", mutants: MUTANTS }));

@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real lab-test lab-lint lab-typecheck lab-build lab-mutants
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -18,7 +18,7 @@ api-test:
 # E4B's list lives beside its runner in tests/integration/backend (outside apps/infrx-api), so it
 # runs from the root with the pinned interpreter, through the same shared R83 runner.
 api-mutants:
-	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py tests/m/test_retention_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/w/test_w5_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_code_mutants_d4.py tests/d/test_code_mutants_d5.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py tests/i/test_mutants.py tests/contracts/lab/test_mutants.py tests/h/test_mutants.py tests/t/ship/test_mutants.py tests/t/feedback/test_mutants.py tests/t/retention/test_mutants.py tests/d/test_code_mutants_l2sql.py tests/d/test_code_mutants_d6f.py tests/d/test_code_mutants_d7.py tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py tests/d/test_upgrade_lab.py tests/g/feedback/test_mutants.py
+	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py tests/m/test_retention_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/w/test_w5_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_code_mutants_d4.py tests/d/test_code_mutants_d5.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py tests/i/test_mutants.py tests/contracts/lab/test_mutants.py tests/h/test_mutants.py tests/t/ship/test_mutants.py tests/t/feedback/test_mutants.py tests/t/retention/test_mutants.py tests/d/test_code_mutants_l2sql.py tests/d/test_code_mutants_d6f.py tests/d/test_code_mutants_d7.py tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py tests/d/test_upgrade_lab.py tests/g/feedback/test_mutants.py tests/b/runner/test_mutants.py tests/b/reports/test_mutants.py
 	# Lab PG mutant lists run in their own process: their pristine baseline starts the D harness itself (LW1 integration F1)
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/l/access/test_mutants.py tests/h/test_mutants.py tests/d/test_l2sql_self_mutants.py
 	INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py
@@ -44,6 +44,7 @@ console-mutants:
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
 	cd apps/app && node tests/a/run-mutants.mjs
 	cd apps/app && node tests/a/run-catalog-mutants.mjs
+	cd apps/app && node tests/c/feedback/run-mutants.mjs
 
 # C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
 # Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
@@ -58,6 +59,11 @@ console-c3a-real:
 # U3 DUR-RLS / DUR-CAP / CONSOLE-FLOWS: operator console over real Supabase PostgreSQL + PostgREST (Docker).
 console-u3-real:
 	cd $(API) && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/u/operator_stack.py
+
+# C3F FEEDBACK-ACK / LAB-ACCESS: App own-feedback + Lab review doors over real Supabase PostgreSQL + PostgREST,
+# then the SQL mutants of the doors (Docker; fails visibly without it). Not part of check.
+console-c3f-real:
+	cd $(API) && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py --mutants
 
 # U1R/U4: the App's read adapters against real PostgreSQL as the browser principal, each on its
 # own task-local instance (D harness). A missing Docker prints SKIP and exits 0, as tests/d does.
@@ -111,7 +117,8 @@ lab-build:
 # Lab mutant runners join here as their lanes merge (and console-mutants' tests/v line when V1M
 # removes tests/v); each exits non-zero on a survivor.
 lab-mutants:
-	cd apps/lab && node tests/l/shell/run-mutants.mjs
+	cd apps/lab && node tests/l/shell/run-mutants.mjs && node tests/l/ui/run-mutants.mjs
+	cd apps/lab && node tests/c/review/run-mutants.mjs
 
 check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
 

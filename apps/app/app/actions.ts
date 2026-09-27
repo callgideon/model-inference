@@ -12,7 +12,8 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import type { ApiKeyCreated, ApiKeyCreateInput, ApiKeySummary, Result } from "@/lib/contracts/types";
+import type { ApiKeyCreated, ApiKeyCreateInput, ApiKeySummary, FeedbackEntry, FeedbackInput, Result } from "@/lib/contracts/types";
+import type { FeedbackRpc } from "@/lib/services/feedback";
 import { consoleActions, supabaseKeyStore, type KeyClient } from "@/lib/services/actions";
 import { operatorRpcPort, type OperatorRpcClient } from "@/app/(console)/admin/operator-port";
 import { consumerSession } from "@/lib/services/server";
@@ -29,6 +30,8 @@ const actions = consoleActions({
   },
   revalidate: (path) => revalidatePath(path),
   // U3 / WR-U3-2: the operator's own client; the database checks operator authority (WR-U3-1).
+  // C3F / WR-C3F-2: the individual's own client; the database derives org, author and channel.
+  feedback: async () => (await createClient()) as unknown as FeedbackRpc,
   operator: operatorRpcPort(async () => (await createClient()) as unknown as OperatorRpcClient),
 });
 
@@ -50,4 +53,9 @@ export async function revokeConsumerKey(keyId: string): Promise<Result<ApiKeySum
 /** A reasoned, idempotent operator change (U3): one audited `public.operator_*` RPC as the signed-in operator. */
 export async function operatorAction(input: unknown): Promise<Result<{ replayed: boolean }>> {
   return actions.operator(input);
+}
+
+/** C3F: one feedback signal on one of the caller's own requests (idempotent per key). */
+export async function submitFeedback(input: FeedbackInput): Promise<Result<FeedbackEntry>> {
+  return actions.submitFeedback(input);
 }
