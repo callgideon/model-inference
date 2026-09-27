@@ -137,9 +137,12 @@ SQL_MUTANTS = (
     # --- EVAL-DURABLE
     _s("d7_cases_unbounded", "   order by s.sample_id limit (v_doc->>'max_cases')::int;",
        "   order by s.sample_id;", LEASES, "a run evaluates more cases than it was budgeted"),
-    _s("d7_run_created_twice", "  if not found then\n    return infrx.lab_run_json(r.object_id);"
-       "         -- run:<run_id> replays (R161)\n  end if;\n", "", LEASES,
+    _s("d7_run_created_twice", "  if not found then\n    -- run:<run_id> replays (R161)",
+       "  if false then\n    -- run:<run_id> replays (R161)", LEASES,
        "creating a run again fails (or doubles its cases and events)"),
+    _s("d7_run_replays_to_any_provider", "from infrx.lab_eval_runs where run_ref = r.ref) then",
+       "from infrx.lab_eval_runs where run_id = r.object_id) then", LEASES,
+       "a provider publishing another's run_id reads that provider's run and squats its own"),
     _s("d7_run_event_missing", "  insert into infrx.lab_outbox (provider_org_id, kind, payload)"
        "\n  values (v_provider, 'eval_run',", "  perform (v_provider, 'eval_run',", LEASES,
        "a created run is never announced to the runner"),
@@ -172,6 +175,14 @@ SQL_MUTANTS = (
        "    if false then", LEASES, "a second, different outcome is acknowledged as the first"),
     _s("d7_no_finish_replay", "  if a.finish_digest is not null then", "  if false then",
        LEASES, "a finish retried after a lost answer is refused as stale"),
+    _s("d7_replay_any_worker",
+       " and x.worker_id = v_lease->>'worker_id'\n     and r.provider_org_id",
+       "\n     and r.provider_org_id", LEASES,
+       "another worker presenting a finished lease reads the attempt it never held"),
+    _s("d7_replay_any_provider",
+       "\n     and r.provider_org_id = (v_lease->>'provider_org_id')::uuid;\n  if a.finish_digest",
+       ";\n  if a.finish_digest", LEASES,
+       "another provider presenting a finished lease reads this provider's attempt"),
     _s("d7_failed_with_results", "\n     or (v_outcome = 'failed' and jsonb_array_length("
        "v_results) > 0) then", " then", LEASES, "a failed attempt records a scored result"),
     _s("d7_evaluator_of_any_provider", "\n                 or (infrx.lab_ref_parts(x->>"

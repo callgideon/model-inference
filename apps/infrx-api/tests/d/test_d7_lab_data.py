@@ -307,15 +307,26 @@ def check_a_stale_grant_stops_access_and_scheduling(conn) -> str:
 @rolled_back
 def check_leases_are_fenced_and_one_result_per_case(conn) -> str:
     """EVAL-DURABLE: a run is one case per sample (up to max_cases) and one `eval_run` event,
-    and creating it again is the same run; a lease is one attempt; a foreign worker, an
-    expired lease and a recovered attempt are `stale_lease`; recovery puts the case back and
-    the next lease is attempt 2; a finish records one result per evaluator, the case and
-    the cost, replays to the same answer and refuses another outcome under the same lease."""
+    and creating it again is the same run, but another provider's run under the same run_id
+    is `not_found`, never this run; a lease is one attempt; a foreign worker, an expired lease
+    and a recovered attempt are `stale_lease`; recovery puts the case back and the next lease
+    is attempt 2; a finish records one result per evaluator, the case and the cost, replays
+    to the same answer for its own provider and worker only, and refuses another outcome
+    under the same lease."""
     _, run = a_run(conn, n=3, max_cases=2)
     run_id = run["run_id"]
     assert run["cases"] == {"pending": 2} and run["state"] == "queued", run
     again = ok(conn, "lab_create_run", {"provider_org_id": NEMO, "run_ref": run["run_ref"]})
     assert again["run_id"] == run_id and again["cases"] == {"pending": 2}
+    theirs = publish(conn, manifest(uid(1, 0xe9), provider=OTHER, source=W["other_source"],
+                                    grant=W["other_grant"], tag=0xe9), OTHER)
+    squat = publish(conn, {
+        **eval_run(run_id, theirs, publish(conn, {**harness(uid(3, 0xe9)),
+                                                  "provider_org_id": OTHER}, OTHER)),
+        "provider_org_id": OTHER, "serving_ref": SERVING.replace(NEMO, OTHER),
+        "evaluator_ref": EVALUATOR.replace(NEMO, OTHER)}, OTHER)
+    assert refusal(conn, "lab_create_run", {"provider_org_id": OTHER, "run_ref": squat}) == \
+        "not_found", "another provider's run under this run_id replays this run"
     assert count(conn, "select count(*) from infrx.lab_outbox where kind = 'eval_run' and "
                  "payload->>'run_id' = %s", run_id) == 1, "a replay queued a second event"
     assert refusal(conn, "lab_lease_case", {"provider_org_id": OTHER, "run_id": run_id,
@@ -351,6 +362,9 @@ def check_leases_are_fenced_and_one_result_per_case(conn) -> str:
     done = ok(conn, "lab_finish_attempt", finish(retry))
     assert done["state"] == "succeeded", done
     assert ok(conn, "lab_finish_attempt", finish(retry)) == done, "a replay is not the answer"
+    assert (refusal(conn, "lab_finish_attempt", finish({**retry, "provider_org_id": OTHER})),
+            refusal(conn, "lab_finish_attempt", finish({**retry, "worker_id": "w9"}))) == \
+        ("not_found", "stale_lease"), "a finish replays to another provider or worker"
     assert refusal(conn, "lab_heartbeat", {"lease": retry, "lease_s": 30}) == "stale_lease", \
         "a finished attempt was renewed"
     assert refusal(conn, "lab_finish_attempt", finish(retry, score=0)) == \

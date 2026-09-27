@@ -487,7 +487,14 @@ begin
   values (r.object_id, v_provider, r.ref, v_doc->>'dataset_ref')
   on conflict (run_id) do nothing;
   if not found then
-    return infrx.lab_run_json(r.object_id);         -- run:<run_id> replays (R161)
+    -- run:<run_id> replays (R161) to the caller's own run only; the same run_id under
+    -- another provider is an unknown run (R157). ponytail: run_id is global, so a provider
+    -- that learns another's run_id before it is created takes it; key runs by
+    -- (provider_org_id, run_id) if run ids ever stop being unguessable.
+    if not exists (select 1 from infrx.lab_eval_runs where run_ref = r.ref) then
+      perform infrx.refuse('not_found', 'no such run for this provider');
+    end if;
+    return infrx.lab_run_json(r.object_id);
   end if;
   -- ponytail: the first max_cases samples by id; seeded sampling is B1's when it needs one.
   insert into infrx.lab_eval_cases (run_id, case_id)
