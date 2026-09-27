@@ -1,0 +1,59 @@
+{
+ "task": "B1",
+ "slice": "follow-ups: WR-B-4 (freeze via the L2 port), B-R3, B-R7, B-R8, RSI-2, d87408fc fix-round addendum",
+ "activity": "review",
+ "worktree": ".claude/worktrees/codex-w5-eval-ops",
+ "branch": "codex/w5-eval-ops",
+ "blockers": [],
+ "head": "568f9eaf",
+ "owned_paths": [
+  "apps/infrx-api/infrx/evaluation/runner/",
+  "apps/infrx-api/tests/b/runner/"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first uv run --frozen pytest -q tests/b/runner/test_runner.py",
+   "exit": 1,
+   "summary": "19 failed: 18 TypeError (freeze has no access), 1 DID NOT RAISE (B-R3)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/b/runner/test_runner.py",
+   "exit": 0,
+   "summary": "19 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b3 uv run --frozen pytest -q tests/b/runner/test_runner_pg.py",
+   "exit": 0,
+   "summary": "7 passed, 1 xfailed (strict B-R1 drill kept)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/b/runner/test_mutants.py tests/b/checkpoints/test_mutants.py tests/i/lab_eval/test_mutants.py tests/b/reports/test_mutants.py",
+   "exit": 0,
+   "summary": "198 passed (runner 74, checkpoints 37, lab_eval 34, reports 53)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b3 make api-test (4086f26f)",
+   "exit": 2,
+   "summary": "5155 passed, 81 skipped, 10 xfailed, 51 failed outside the lane: 7 outbox_relay[valkey] (d2-valkey lock held by another run), 43 tests/i/test_mutants.py (non-default key baseline, known), 1 tests/m/test_retention [d10] wall-clock bound under load"
+  },
+  {
+   "cmd": "reruns alone: INFRX_D_TASK=b3 pytest tests/d/test_outbox_relay.py tests/m/test_retention.py; then outbox_relay when the lock was free; tests/i/test_mutants.py default key",
+   "exit": 0,
+   "summary": "retention green (92 passed, 7 lock-held); outbox_relay 20 passed at 22:55Z; tests/i/test_mutants.py 50 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "one review round on a ~40-line diff; B-R1 flips when lab_release_attempt lands",
+  "at": "2026-09-27T23:00Z"
+ },
+ "wiring_requests": [
+  "WR-EO-1 Makefile:21 api-mutants: append ' tests/b/checkpoints/test_mutants.py tests/i/lab_eval/test_mutants.py' after ' tests/b/reports/test_mutants.py'"
+ ],
+ "evidence": [
+  "research/plan/evidence/b/B1-568f9ea.md"
+ ]
+}

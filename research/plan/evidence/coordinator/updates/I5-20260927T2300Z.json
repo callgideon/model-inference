@@ -1,0 +1,67 @@
+{
+ "task": "I5",
+ "slice": "I5.a units, separate pool budget, I5.b local drills, I5.c disabled-by-default runbook + local/staging ledger",
+ "activity": "review",
+ "worktree": ".claude/worktrees/codex-w5-eval-ops",
+ "branch": "codex/w5-eval-ops",
+ "blockers": [],
+ "head": "4086f26f",
+ "owned_paths": [
+  "infra/lab/workers/eval/",
+  "apps/infrx-api/deploy/lab/eval/",
+  "apps/infrx-api/tests/i/lab_eval/"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first uv run --frozen pytest -q tests/i/lab_eval (units and script absent)",
+   "exit": 2,
+   "summary": "collection error: pool_budget.py missing"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/i/lab_eval/test_units.py tests/i/lab_eval/test_pool_budget.py",
+   "exit": 0,
+   "summary": "6 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i5 uv run --frozen pytest -q tests/i/lab_eval/test_drills_pg.py",
+   "exit": 0,
+   "summary": "4 passed (PG 57523 + MinIO 57524); first run 1 error: 57524 in TIME-WAIT from another lane's client (P-21)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_eval/test_mutants.py",
+   "exit": 0,
+   "summary": "34 passed: 32 mutants killed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/b/runner/test_mutants.py tests/b/checkpoints/test_mutants.py tests/i/lab_eval/test_mutants.py tests/b/reports/test_mutants.py",
+   "exit": 0,
+   "summary": "198 passed (runner 74, checkpoints 37, lab_eval 34, reports 53)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b3 make api-test (4086f26f)",
+   "exit": 2,
+   "summary": "5155 passed, 81 skipped, 10 xfailed, 51 failed outside the lane: 7 outbox_relay[valkey] (d2-valkey lock held by another run), 43 tests/i/test_mutants.py (non-default key baseline, known), 1 tests/m/test_retention [d10] wall-clock bound under load"
+  },
+  {
+   "cmd": "reruns alone: INFRX_D_TASK=b3 pytest tests/d/test_outbox_relay.py tests/m/test_retention.py; then outbox_relay when the lock was free; tests/i/test_mutants.py default key",
+   "exit": 0,
+   "summary": "retention green (92 passed, 7 lock-held); outbox_relay 20 passed at 22:55Z; tests/i/test_mutants.py 50 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 2,
+  "likely_h": 4,
+  "pessimistic_h": 8,
+  "confidence": "medium",
+  "basis": "one review round (I8 pooler analogue) + WR-B-5 entry point and a composed local rerun; staging (P-08) excluded",
+  "at": "2026-09-27T23:00Z"
+ },
+ "wiring_requests": [
+  "WR-EO-1 Makefile:21 api-mutants: append ' tests/b/checkpoints/test_mutants.py tests/i/lab_eval/test_mutants.py' after ' tests/b/reports/test_mutants.py'",
+  "WR-B-5 (amended) python -m infrx.lab.workers <datasets|eval|checkpoints> per infra/lab/workers/eval/RUNBOOK.md section 1; checkpoint_received -> on_checkpoint (CapacityExhausted releases), eval_run -> resume + Runner.run, lab_recover timer",
+  "WR-I5-1 (P-21, user approval) extend ip_local_reserved_ports to 57000-57599 (57524 was held by an ephemeral client socket)"
+ ],
+ "evidence": [
+  "research/plan/evidence/i/I5-4086f26.md"
+ ]
+}
