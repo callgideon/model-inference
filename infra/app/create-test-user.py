@@ -2,14 +2,15 @@
 """Create (or repair) an internal test user with no email-verification step (TEST-USER).
 
     python3 infra/app/create-test-user.py --email tester@example.com [--json] [--dry-run]
-        [--password-env INFRX_TEST_USER_PASSWORD]
+        [--password-env INFRX_TEST_USER_PASSWORD] [--reset-existing]
 
 For internal v1 testing only (operations.md, "Test users without email verification").
 Secrets come from the environment, never argv: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and
 the password in the variable --password-env names.
 
   1. GoTrue admin API: create the user already confirmed (`email_confirm: true`) with the
-     password; an address that exists is found, confirmed and given the password instead.
+     password. An address that exists is refused (exit 3) unless --reset-existing: then it
+     is found, confirmed and given the password instead.
   2. The App's own grant: `claim_signup_grant(p_user_id, 'consumer-v1')` through PostgREST as
      the service role - the call app/(auth)/grant.ts makes after a verified sign-in (0015).
      The database decides: one 10,000 CREDIT grant per individual, a replay answers the
@@ -24,6 +25,7 @@ failed call (a held grant included).
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
@@ -60,7 +62,8 @@ def call(base: str, key: str, method: str, path: str, body: dict | None = None):
             status, raw = reply.status, reply.read()
     except urllib.error.HTTPError as reply:
         status, raw = reply.code, reply.read()
-    except OSError as failed:                       # URLError, timeouts, refused connections
+    except (OSError, http.client.HTTPException, ValueError) as failed:  # URLError, timeouts,
+        # refused connections, a non-HTTP answer, a header value http.client rejects (it quotes it)
         raise Refused(f"{method} {path.split('?')[0]}: {type(failed).__name__}") from None
     try:
         return status, json.loads(raw) if raw else None
@@ -73,7 +76,8 @@ def why(what: str, status: int, doc) -> Refused:
     return Refused(f"{what}: HTTP {status}" + (f" ({code})" if code else ""))
 
 
-def ensure_user(base: str, key: str, email: str, password: str) -> tuple[dict, bool]:
+def ensure_user(base: str, key: str, email: str, password: str,
+                reset: bool) -> tuple[dict, bool]:
     status, doc = call(base, key, "POST", "/auth/v1/admin/users",
                        {"email": email, "password": password, "email_confirm": True})
     created = status in (200, 201)
@@ -90,6 +94,8 @@ def ensure_user(base: str, key: str, email: str, password: str) -> tuple[dict, b
                  if str(u.get("email", "")).lower() == email.lower()]
         if len(match) != 1:
             raise refusal                            # e.g. 422 weak_password, not an existing user
+        if not reset:                                # a real account is never taken over by default
+            raise Refused("address exists; pass --reset-existing to confirm and re-password it")
         status, doc = call(base, key, "PUT", f"/auth/v1/admin/users/{match[0]['id']}",
                            {"email_confirm": True, "password": password})
         if status != 200:
@@ -135,6 +141,8 @@ def main(argv=None) -> int:
     ap.add_argument("--email", required=True)
     ap.add_argument("--password-env", default="INFRX_TEST_USER_PASSWORD", metavar="NAME",
                     help="the environment variable holding the password (never argv)")
+    ap.add_argument("--reset-existing", action="store_true",
+                    help="an existing address: confirm it and overwrite its password")
     ap.add_argument("--dry-run", action="store_true", help="print the plan; call nothing")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
@@ -145,6 +153,8 @@ def main(argv=None) -> int:
     problem = ("--email is not an address" if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", a.email)
                else f"{a.password_env} is not set" if not password
                else "SUPABASE_SERVICE_ROLE_KEY is not set" if not key
+               else "SUPABASE_SERVICE_ROLE_KEY has characters a header cannot carry"
+               if not re.fullmatch(r"[\x21-\x7e]+", key)
                else "SUPABASE_URL is not set" if not base
                else "SUPABASE_URL must be https (plain http only for localhost)"
                if not (url.scheme == "https" or (url.scheme == "http" and url.hostname in LOCAL))
@@ -154,12 +164,14 @@ def main(argv=None) -> int:
         return 2
     if a.dry_run:
         show({"supabase_url": base, "email": a.email, "plan": [
-            "POST /auth/v1/admin/users email_confirm=true (existing: GET ?filter=, PUT email_confirm=true + password)",
+            "POST /auth/v1/admin/users email_confirm=true (an existing address: "
+            + ("GET ?filter=, PUT email_confirm=true + password)" if a.reset_existing
+               else "refused, exit 3)"),
             f"POST /rest/v1/rpc/claim_signup_grant p_campaign_version={CAMPAIGN}",
             "POST /rest/v1/rpc/console_wallet_summary"]}, a.json)
         return 0
     try:
-        user, created = ensure_user(base, key, a.email, password)
+        user, created = ensure_user(base, key, a.email, password, a.reset_existing)
         grant, detail = claim(base, key, user["id"])
         row = wallet(base, key, user["id"])
     except Refused as refused:

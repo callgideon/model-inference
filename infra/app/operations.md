@@ -278,7 +278,10 @@ claims the signup grant with the App's own call (`claim_signup_grant(p_user_id,
 'consumer-v1')` as the service role, what `app/(auth)/grant.ts` sends after a verified
 sign-in) and reads the wallet back through `console_wallet_summary`. The database decides the
 grant: 10,000 CREDIT once per individual and per address (R71, R85), a rerun replays it, and
-the tool writes no table. The admin API is not gated by the public-signup switch, so it works with signup off (⚠️ TO BE VERIFIED [OP] on the first hosted run). Production signups
+the tool writes no table. An address that already exists is refused (exit 3, nothing changed)
+unless `--reset-existing` is passed: then it is confirmed and its password overwritten, so use
+it only on an address the operator owns (it would lock a real owner out and mark an
+unverified address verified). The admin API is not gated by the public-signup switch, so it works with signup off (⚠️ TO BE VERIFIED [OP] on the first hosted run). Production signups
 keep the normal flow: confirmation email, `/auth/callback`, `/welcome` (X8).
 
 [OP], on the coordinator host (the repository's AWS prefix; values are never printed or typed
@@ -296,12 +299,14 @@ python3 infra/app/create-test-user.py --email tester+1@<operator-owned domain> [
 unset SUPABASE_SERVICE_ROLE_KEY INFRX_TEST_USER_PASSWORD
 ```
 
-It prints `user_id`, `email`, `confirmed: true`, `created` (false: the address existed and was
-confirmed and given the password), `grant` and the wallet (`wallet_id`, `available` as the
+It prints `user_id`, `email`, `confirmed: true`, `created` (false: the address existed and
+`--reset-existing` confirmed it and gave it the password), `grant` and the wallet (`wallet_id`, `available` as the
 database's exact decimal string, `unit: CREDIT`) — never the key or the password; a refusal
 prints the step, the HTTP status and the reply's code only. `--password-env NAME` reads the
 password from another variable. Every call times out after 5 s; redirects are not followed;
-plain `http` is accepted only for localhost.
+plain `http` is accepted only for localhost. A key holding anything but printable ASCII (a CR
+kept by `$(…)` from an SSM value stored with CRLF, for one) is exit 2 before any call and is
+never echoed; re-store the parameter without it.
 
 | `grant` | Meaning | Exit |
 |---|---|---|
@@ -311,7 +316,7 @@ plain `http` is accepted only for localhost.
 | `unavailable` | a held claim (`grant_detail`: `identity_reused` — the address was granted before, use a new one; `rollout_hold`; `retired`; `unverified`) or a failed call | 3 |
 
 Exit 2 is bad input or a missing variable (nothing called); exit 3 a refused or failed call
-(a 401 stops at the first call). The user then signs in at `/login` with the address and
+(a 401 stops at the first call; an existing address without `--reset-existing`). The user then signs in at `/login` with the address and
 password; `email_confirmed_at` is set, so the App treats the account as verified.
 
 **Revoke** [OP]: API keys with `python -m infrx.operations.cli revoke-key --org <org> --key-id
@@ -381,3 +386,4 @@ re-drilled.
   tree needs a schema proof (`rollback.py --schema-proof`). Local checks only.
 - 2026-09-26: Cutover rollback step 2 uses the audited operator verb `flag --name signup_grant --off` (G8-FLAG, R144; WR-G8FLAG-1 applied at the merge a30631a8); GAP-I3-1 / I3R-7 closed.
 - 2026-09-27: TEST-USER: [Test users without email verification](#test-users-without-email-verification) and `create-test-user.py` (internal v1 testing; the App's grant call, no table writes). Local checks only (fake GoTrue + PostgREST; the real grant on the task-local app-c0 stack); no hosted, Vercel, AWS or box state read or changed.
+- 2026-09-27: TEST-USER fix round (0-TU-R1, 0-TU-R2): an existing address is refused unless `--reset-existing`; a key a header cannot carry is exit 2 and never echoed. Local checks only; no hosted state read or changed.

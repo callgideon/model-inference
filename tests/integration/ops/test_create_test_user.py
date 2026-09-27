@@ -51,6 +51,7 @@ class Fake:
         self.wallet_status = 200                # console_wallet_summary's HTTP status
         self.claim_status: str | None = None    # a canned claim answer (e.g. identity_reused)
         self.upstream: str | None = None        # forward /rest/v1 here (tu11)
+        self.garbage = False                    # answer every request with a non-HTTP line
 
     def add(self, email: str, confirmed: bool = False) -> str:
         uid = str(uuid.uuid4())
@@ -129,6 +130,9 @@ def serve(fake: Fake):
             fake.requests.append({"method": method, "path": self.path, "body": body,
                                   "apikey": self.headers.get("apikey"),
                                   "authorization": self.headers.get("Authorization")})
+            if fake.garbage:
+                self.wfile.write(b"not http\r\n\r\n")
+                return
             if fake.upstream and self.path.startswith("/rest/v1/"):
                 forward = urllib.request.Request(
                     fake.upstream + self.path[len("/rest/v1"):], data=raw or None, method=method,
@@ -210,7 +214,7 @@ def test_tu01_a_new_user_is_created_confirmed_and_granted_once(fake):
 def test_tu02_an_existing_user_is_confirmed_and_repassworded_and_the_grant_is_idempotent(fake):
     fake.add("x" + EMAIL)                       # a filter match that is another address
     uid = fake.add(EMAIL.upper())               # GoTrue may hold the address in another case
-    code, out, err = run(fake, "--email", EMAIL, "--json")
+    code, out, err = run(fake, "--email", EMAIL, "--json", "--reset-existing")
     assert code == 0, err
     assert fake.paths()[:3] == ["POST /auth/v1/admin/users",
                                 f"GET /auth/v1/admin/users?filter={urllib.parse.quote(EMAIL)}",
@@ -219,7 +223,7 @@ def test_tu02_an_existing_user_is_confirmed_and_repassworded_and_the_grant_is_id
     assert fake.users[uid]["password"] == PASSWORD and fake.users[uid]["email_confirmed_at"]
     first = json.loads(out)
     assert (first["user_id"], first["created"], first["grant"]) == (uid, False, "granted")
-    code, out, err = run(fake, "--email", EMAIL, "--json")
+    code, out, err = run(fake, "--email", EMAIL, "--json", "--reset-existing")
     again = json.loads(out)
     assert code == 0, err
     assert (again["grant"], again["available"]) == ("already-granted", GRANT)
@@ -255,11 +259,11 @@ def test_tu05_dry_run_calls_nothing(fake):
 def test_tu06_secrets_never_reach_the_output(fake):
     fake.add(EMAIL)
     for args in (("--json",), (), ("--dry-run", "--json")):
-        code, out, err = run(fake, "--email", EMAIL, *args)
+        code, out, err = run(fake, "--email", EMAIL, "--reset-existing", *args)
         assert code == 0, err
         assert_no_secret(out, err)
     fake.claim_status = "identity_reused"
-    assert_no_secret(*run(fake, "--email", EMAIL)[1:])
+    assert_no_secret(*run(fake, "--email", EMAIL, "--reset-existing")[1:])
 
 
 @pytest.mark.parametrize("args, env, why", [
@@ -269,7 +273,10 @@ def test_tu06_secrets_never_reach_the_output(fake):
     (("--email", EMAIL), {"SUPABASE_SERVICE_ROLE_KEY": ""}, "SUPABASE_SERVICE_ROLE_KEY"),
     (("--email", EMAIL), {"SUPABASE_URL": ""}, "SUPABASE_URL"),
     (("--email", EMAIL), {"SUPABASE_URL": "http://project.invalid"}, "https"),
-], ids=["email", "password", "password-env", "key", "url", "plain-http-remote"])
+    # 0-TU-R1: `$(aws ssm get-parameter ...)` keeps a CR; http.client would quote the key.
+    (("--email", EMAIL), {"SUPABASE_SERVICE_ROLE_KEY": KEY + "\r"}, "SUPABASE_SERVICE_ROLE_KEY"),
+    (("--email", EMAIL), {"SUPABASE_SERVICE_ROLE_KEY": KEY + "\n"}, "SUPABASE_SERVICE_ROLE_KEY"),
+], ids=["email", "password", "password-env", "key", "url", "plain-http-remote", "key-cr", "key-lf"])
 def test_tu07_bad_input_exits_2_and_calls_nothing(fake, args, env, why):
     code, out, err = run(fake, *args, env=env)
     assert code == 2 and why in err
@@ -314,6 +321,26 @@ def test_tu13_a_failed_wallet_read_is_a_failure_not_a_zero(fake):
     assert_no_secret(out, err)
 
 
+def test_tu14_an_existing_address_is_refused_untouched_without_reset_existing(fake):
+    """0-TU-R2: a real account is never re-passworded or force-confirmed by default."""
+    uid = fake.add(EMAIL)
+    code, out, err = run(fake, "--email", EMAIL, "--json")
+    assert code == 3 and out == "" and "--reset-existing" in err
+    assert fake.paths() == ["POST /auth/v1/admin/users",
+                            f"GET /auth/v1/admin/users?filter={urllib.parse.quote(EMAIL)}"]
+    assert fake.users[uid]["password"] == "old" and fake.users[uid]["email_confirmed_at"] is None
+    assert fake.granted == set()
+    assert_no_secret(out, err)
+
+
+def test_tu15_a_non_http_answer_is_a_refusal_not_a_traceback(fake):
+    fake.garbage = True
+    code, out, err = run(fake, "--email", EMAIL)
+    assert code == 3 and out == "" and "Traceback" not in err
+    assert "POST /auth/v1/admin/users" in err
+    assert_no_secret(out, err)
+
+
 # ---------------------------------------------------------------- layer 2: app-c0 ---
 def _service_jwt(secret: str) -> str:
     def enc(doc) -> str:
@@ -355,7 +382,7 @@ def test_tu11_the_real_grant_through_postgrest_on_app_c0(fake, monkeypatch):
         key = _service_jwt(stack.JWT_SECRET)
         outcomes = []
         for _ in range(2):
-            code, out, err = run(fake, "--email", EMAIL, "--json", key=key)
+            code, out, err = run(fake, "--email", EMAIL, "--json", "--reset-existing", key=key)
             assert code == 0, err
             assert_no_secret(out, err, key=key)
             doc = json.loads(out)

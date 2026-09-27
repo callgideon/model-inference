@@ -1332,6 +1332,19 @@ MUTANTS: tuple[Mutant, ...] = (
            '        show({"supabase_url": base, "email": a.email, "key": key, "plan": [',
            TU_SUITE, "tu06 or tu05", cases=("test_tu06_secrets_never_reach_the_output",
                                             "test_tu05_dry_run_calls_nothing")),
+    # Fix round (0-TU-R1, 0-TU-R2).
+    Mutant("tum19", "a key a header cannot carry (a CR from $(aws ssm ...)) is exit 2, never quoted",
+           TU_TOOL, 'if not re.fullmatch(r"[\\x21-\\x7e]+", key)', 'if False',
+           TU_SUITE, "tu07 and key-", cases=(
+               "test_tu07_bad_input_exits_2_and_calls_nothing[key-cr]",
+               "test_tu07_bad_input_exits_2_and_calls_nothing[key-lf]")),
+    Mutant("tum20", "a non-HTTP answer (or a rejected header) is a refusal, never a traceback",
+           TU_TOOL, 'except (OSError, http.client.HTTPException, ValueError) as failed:',
+           'except OSError as failed:', TU_SUITE, "tu15",
+           cases=("test_tu15_a_non_http_answer_is_a_refusal_not_a_traceback",)),
+    Mutant("tum21", "an existing address is refused untouched unless --reset-existing",
+           TU_TOOL, '        if not reset:', '        if False:', TU_SUITE, "tu14",
+           cases=("test_tu14_an_existing_address_is_refused_untouched_without_reset_existing",)),
     # Layer 2: the real 0015 grant through PostgREST on app-c0 (INFRX_D1_IMAGE=supabase).
     Mutant("tum18", "the real grant function is called through PostgREST and replays",
            TU_TOOL, '"/rest/v1/rpc/claim_signup_grant",', '"/rest/v1/rpc/claim_signup_grant_x",',
