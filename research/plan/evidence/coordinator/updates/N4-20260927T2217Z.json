@@ -1,0 +1,59 @@
+{
+ "task": "N4",
+ "slice": "N4 (Lab datasets UI, fake then real N1/N2)",
+ "activity": "review",
+ "head": "b642f2f2",
+ "worktree": ".claude/worktrees/codex-w5-datasets-lw4",
+ "branch": "codex/w5-datasets-lw4",
+ "owned_paths": [
+  "apps/lab/app/(provider)/datasets/",
+  "apps/lab/lib/services/datasets/",
+  "apps/lab/tests/n/"
+ ],
+ "commands": [
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "45 tests: 44 pass, 1 skipped (journey without LAB_N_REAL)"
+  },
+  {
+   "cmd": "make lab-lint / lab-typecheck / lab-build",
+   "exit": 0,
+   "summary": "clean; build lists the 5 datasets routes"
+  },
+  {
+   "cmd": "node tests/n/run-mutants.mjs",
+   "exit": 0,
+   "summary": "21 cases all named; 39 mutants, 39 killed"
+  },
+  {
+   "cmd": "make lab-mutants",
+   "exit": 0,
+   "summary": "L1 list 50/50 with the new files in the boundary scan"
+  },
+  {
+   "cmd": "LAB_N_REAL=1 INFRX_D_TASK=n3 node --test tests/n/journey.test.ts",
+   "exit": 0,
+   "summary": "1 pass on real N1/N2/N3 + D7 + L2 (after fixing a created_at format defect the real run found)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 3,
+  "pessimistic_h": 7,
+  "confidence": "medium",
+  "basis": "one review round on ~900 TS lines (App lanes 2.3-3.8 h dispatch->merge) + WR-N4-1 mount and a journey rerun",
+  "at": "2026-09-27T22:17:18Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-N4-1 mount router() from apps/lab/tests/n/backend.py as infrx/gateway/routes/lab_datasets.py behind a default-off flag, verified Lab session as user",
+  "WR-N4-2 lab-sql lab_list_datasets RPC",
+  "WR-N4-3 Datasets nav link in app/(provider)/layout.tsx",
+  "WR-N4-4 Makefile lab-mutants += cd apps/lab && node tests/n/run-mutants.mjs",
+  "WR-N4-5 apps/lab/.env.example LAB_DATASETS_API_URL="
+ ],
+ "evidence": [
+  "research/plan/evidence/n/N4-b642f2f.md"
+ ]
+}
