@@ -472,7 +472,7 @@ LAB_LANE_PORTS = {
     "p3": {"postgres": 57530, "protocol": 57531}, "r1": {"postgres": 57532, "valkey": 57533},
     "r2": {"postgres": 57534}, "g5": {"postgres": 57535}, "i4": {"postgres": 57536},
     # T lanes: a block, because a TASK_PORTS entry would inherit the track's native 59000
-    "t2i": {"clickhouse": 57540, "s3": 57542}, "t2f": {"clickhouse": 57543, "s3": 57545},
+    "t2i": {"clickhouse": 57540, "s3": 57542}, "t2f": {"clickhouse": 57543, "s3": 57545, "postgres": 57549},
     "t3": {"clickhouse": 57546, "s3": 57548},
 }
 

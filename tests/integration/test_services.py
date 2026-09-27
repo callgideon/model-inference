@@ -394,10 +394,11 @@ def test_trace_projection_schema_is_applied_once_and_idempotently():
     """T2I (WR-1): the stack carries `trace_envelopes` from infrx/traces/ship/schema.sql,
     applied by wait_all(); applying it again changes nothing."""
     stack_or_skip()
-    assert harness.apply_trace_schema() >= 1
-    assert harness.apply_trace_schema() >= 1
+    assert harness.apply_trace_schema() == 3
+    assert harness.apply_trace_schema() == 3
     client = harness.clickhouse_client()
-    assert client.query("exists table trace_envelopes").result_rows[0][0] == 1
+    for table in ("trace_envelopes", "feedback_events", "trace_deletions"):
+        assert client.query(f"exists table {table}").result_rows[0][0] == 1, table
 
 
 def test_clickhouse_answers_ddl_and_a_round_trip_in_its_own_database():

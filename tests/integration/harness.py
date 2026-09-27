@@ -592,18 +592,19 @@ def clickhouse_client():
         password=CH_PASSWORD, database=CH_DATABASE, connect_timeout=5, send_receive_timeout=30)
 
 
-TRACE_SCHEMA = API_ROOT / "infrx" / "traces" / "ship" / "schema.sql"
+TRACE_SCHEMAS = tuple(API_ROOT / "infrx" / "traces" / part / "schema.sql"
+                      for part in ("ship", "feedback", "retention"))     # T2I, T2F, T3
 
 
 def apply_trace_schema() -> int:
-    """T2I's projection DDL (`trace_envelopes`) in the stack's own ClickHouse database:
-    every statement of `infrx/traces/ship/schema.sql`, idempotent (CREATE ... IF NOT
+    """The trace DDL (T2I `trace_envelopes`, T2F `feedback_events`, T3 `trace_deletions`) in the
+    stack's own ClickHouse database: every statement of the three schema.sql files, idempotent (CREATE ... IF NOT
     EXISTS), applied after the services answer. An initdb mount would not do: the
     image's init client has no --database. Returns the number of statements run."""
     client = clickhouse_client()
-    statements = [part.strip() for part in TRACE_SCHEMA.read_text().split(";") if part.strip()
-                  and not all(line.strip().startswith("--") or not line.strip()
-                              for line in part.strip().splitlines())]
+    statements = [part.strip() for path in TRACE_SCHEMAS for part in path.read_text().split(";")
+                  if part.strip() and not all(line.strip().startswith("--") or not line.strip()
+                                              for line in part.strip().splitlines())]
     for statement in statements:
         client.command(statement)
     return len(statements)

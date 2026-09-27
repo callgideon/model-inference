@@ -112,7 +112,7 @@ TASK_BLOCKS: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
     # ... and the T lanes, whose ClickHouse native port a TASK_PORTS entry cannot move (it
     # would inherit the track's 59000), so each gets a block of its own inside the Lab band.
     "t2i": {"clickhouse": (57540, (57541,)), "s3": (57542, ())},
-    "t2f": {"clickhouse": (57543, (57544,)), "s3": (57545, ())},
+    "t2f": {"clickhouse": (57543, (57544,)), "s3": (57545, ()), "postgres": (57549, ())},
     "t3": {"clickhouse": (57546, (57547,)), "s3": (57548, ())},
 }
 
