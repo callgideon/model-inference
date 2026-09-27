@@ -10,9 +10,11 @@ root=${E4B_ROOT:-/opt/dlami/nvme/e4b}
 head_bytes=${HEAD_BYTES:-24000}
 only=${ONLY:-*.json}          # a glob on the file name; e.g. ONLY=report.json
 [ -d "$root" ] || { echo "no $root"; exit 3; }
-run=${RUN:-$(find "$root" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort | tail -n 1)}
+# the default is the newest certify run (a UTC name), never e4c/ or e1b-* beside it (certify-prep defect 3)
+run=${RUN:-$(find "$root" -mindepth 1 -maxdepth 1 -type d -regextype posix-extended \
+               -regex '.*/[0-9]{8}T[0-9]{6}Z' -printf "%f\n" | sort | tail -n 1)}
 dir="$root/$run"
-[ -d "$dir" ] || { echo "no run $run under $root"; exit 3; }
+[ -n "$run" ] && [ -d "$dir" ] || { echo "no run ${run:-(none)} under $root"; exit 3; }
 echo "== run $run"
 find "$dir" -maxdepth 3 -type f -printf '%s\t%TY-%Tm-%TdT%TH:%TM:%TSZ\t%P\n' | sort -k3 | head -n 200
 for f in $(find "$dir" -maxdepth 3 -type f -name "$only" | sort | head -n 20); do
