@@ -1,0 +1,64 @@
+{
+ "task": "B1",
+ "slice": "B1.a freeze, B1.b fenced lease loop + dev endpoint, B1.c results; drills on real D7",
+ "activity": "review",
+ "head": "9a7c3e6d",
+ "worktree": ".claude/worktrees/codex-w5-eval-runner",
+ "branch": "codex/w5-eval-runner",
+ "blockers": [],
+ "owned_paths": [
+  "apps/infrx-api/infrx/evaluation/__init__.py",
+  "apps/infrx-api/infrx/evaluation/runner/",
+  "apps/infrx-api/tests/b/runner/"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first: uv run --frozen pytest -q tests/b/runner/test_runner.py (runner absent)",
+   "exit": 2,
+   "summary": "ImportError: cannot import name 'HttpDevEndpoint' from 'infrx.evaluation.runner'"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/b/runner/test_runner.py",
+   "exit": 0,
+   "summary": "15 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/b/runner/test_mutants.py",
+   "exit": 0,
+   "summary": "64 passed: 62 mutants killed, every case covered"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b1 uv run --frozen pytest -q tests/b/runner/test_runner_pg.py",
+   "exit": 0,
+   "summary": "6 passed on real 0029 (57520) + HTTP fake dev endpoint (57521); container removed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b1 make api-test (at e12b266a)",
+   "exit": 2,
+   "summary": "4994 passed, 50 failed, 8 errors: all in tests/d/test_outbox_relay.py and tests/i (shared d2-valkey / i8-postgres locks held by other lanes); rerun when free: relay/pooler/observe/probe/drill green; tests/i/test_mutants.py green under the default key (50 passed), fails its pristine baseline under INFRX_D_TASK=b1 only (open issue, track I)"
+  },
+  {
+   "cmd": "uv run --frozen ruff check infrx/evaluation tests/b",
+   "exit": 0,
+   "summary": "all checks passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 3,
+  "pessimistic_h": 6,
+  "confidence": "medium",
+  "basis": "one review round on ~300 lines + L3/L2/worker integration after those lanes merge (N2 review 1/2/5)",
+  "at": "2026-09-27T17:43Z"
+ },
+ "wiring_requests": [
+  "WR-B-1 Makefile:21 api-mutants: append ' tests/b/runner/test_mutants.py tests/b/reports/test_mutants.py' after ' tests/d/test_upgrade_lab.py'",
+  "WR-B-2 (lab-sql) lab_finish_attempt stores an error code for a failed attempt; an evaluator table (R167 upgrade); a read RPC for a run's results + attempt costs; optional split-restricted case set and a lease release on 402",
+  "WR-B-3 (L3) serving_ref -> dev DeploymentRevision, base URL, endpoint-scoped provider_dev credential name, frozen RateCardSnapshot -> HttpDevEndpoint; finite-video media path",
+  "WR-B-4 (L2) freeze callers derive provider_org_id from the L2 port with a schedule-capable current membership",
+  "WR-B-5 (coordinator) eval_run handler on the Lab outbox relay: resolve run + evaluator spec, build the endpoint, freeze (idempotent) then Runner.run; lab_recover on a timer; Lab-only, default off"
+ ],
+ "evidence": [
+  "research/plan/evidence/b/B1-e12b266.md"
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "task": "B2",
+ "slice": "B2.a pairing, B2.b scoring/intervals/costs/latency, B2.c protocol and decision (fake-only)",
+ "activity": "review",
+ "head": "9a7c3e6d",
+ "worktree": ".claude/worktrees/codex-w5-eval-runner",
+ "branch": "codex/w5-eval-runner",
+ "blockers": [],
+ "owned_paths": [
+  "apps/infrx-api/infrx/evaluation/reports/",
+  "apps/infrx-api/tests/b/reports/"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first: uv run --frozen pytest -q tests/b/reports/test_reports.py (module absent)",
+   "exit": 1,
+   "summary": "11 failed"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/b/reports/test_reports.py",
+   "exit": 0,
+   "summary": "11 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/b/reports/test_mutants.py",
+   "exit": 0,
+   "summary": "53 passed: 51 mutants killed, every case covered"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/b",
+   "exit": 0,
+   "summary": "42 passed, 6 skipped (PG drills need INFRX_D_TASK=b1)"
+  },
+  {
+   "cmd": "uv run --frozen ruff check infrx/evaluation tests/b",
+   "exit": 0,
+   "summary": "all checks passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "one review round on ~200 lines, fake-only; integration waits on B1 merge + WR-B-2 read RPC",
+  "at": "2026-09-27T17:43Z"
+ },
+ "wiring_requests": [
+  "WR-B-6 Makefile:21 api-mutants: tests/b/reports/test_mutants.py (included in WR-B-1)",
+  "WR-B-7 (lab-sql) write-once lab_eval_reports keyed by report_digest (run refs, protocol digest, decision)",
+  "WR-B-8 (B4/E6L) B2 case records from D7 rows via WR-B-2's read (result body, attempt costs, case states, manifest slices and source clusters)"
+ ],
+ "evidence": [
+  "research/plan/evidence/b/B2-7db7490.md"
+ ]
+}
