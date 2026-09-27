@@ -71,6 +71,17 @@ def test_pg_mutant_is_killed(mutant):
     assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
 
 
+def test_the_pg_list_skips_visibly_in_a_process_that_holds_the_d_harness(monkeypatch):
+    """0-F1/1-LW1I-R1: an earlier list in this process (a tests/d list) holds the port lock, so
+    the copy's own harness is refused (HarnessBusy) and the pristine baseline reads broken_runner.
+    Oracle: a PG mutant in such a process is a visible skip naming the fix, never a failure."""
+    monkeypatch.setattr(pgharness, "_lock_fd", -1)
+    monkeypatch.setattr(mutation_list, "run_mutant",
+                        lambda m: mutation_list.Result(Outcome.broken_runner, "HarnessBusy"))
+    with pytest.raises(pytest.skip.Exception, match="its own process"):
+        test_pg_mutant_is_killed(PG[0])
+
+
 A = mutation_list.A
 SELF_TESTS = (
     (Outcome.survived, Mutant("self_no_op", "a comment changes nothing", A,
