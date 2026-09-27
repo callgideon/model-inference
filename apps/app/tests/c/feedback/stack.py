@@ -442,7 +442,8 @@ def adapters(world: dict) -> int:
         env = {**os.environ, "INFRX_C3F_STACK": handle.name}
         codes = [subprocess.run(("node", "--test", test), cwd=root, env=env).returncode
                  for root, test in ((APP, "tests/c/feedback/feedback-postgrest.test.ts"),
-                                    (LAB, "tests/c/review/review-postgrest.test.ts"))]
+                                    (LAB, "tests/c/review/review-postgrest.test.ts"),
+                                    (LAB, "tests/v/detail/feedback-postgrest.test.ts"))]
         os.unlink(handle.name)
         return max(codes)
     finally:

@@ -119,6 +119,7 @@ lab-build:
 lab-mutants:
 	cd apps/lab && node tests/l/shell/run-mutants.mjs && node tests/l/ui/run-mutants.mjs
 	cd apps/lab && node tests/c/review/run-mutants.mjs
+	cd apps/lab && node tests/v/detail/run-mutants.mjs && node tests/v/judge/run-mutants.mjs
 
 check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
 
