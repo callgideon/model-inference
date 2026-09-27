@@ -1,0 +1,67 @@
+{
+ "task": "R2",
+ "slice": "R2.a-c over fake D9/L3 ports and a B2-shaped report (started early)",
+ "activity": "review",
+ "head": "3146a246",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-rollout-control",
+ "branch": "codex/w5-rollout-control",
+ "owned_paths": [
+  "apps/infrx-api/infrx/rollouts/control/",
+  "apps/infrx-api/infrx/rollouts/optimization/",
+  "apps/infrx-api/tests/r/control/",
+  "apps/infrx-api/tests/r/optimization/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/control/test_control.py (red, before impl)",
+   "exit": 2,
+   "summary": "ModuleNotFoundError infrx.rollouts"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/control/test_control.py",
+   "exit": 0,
+   "summary": "22 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/r/control/test_mutants.py",
+   "exit": 0,
+   "summary": "63 passed: 61/61 mutants killed (one declared dies_by LabRejected after a first broken_runner run)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r (x10)",
+   "exit": 0,
+   "summary": "10/10 x 47 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 make api-test (e0b23744)",
+   "exit": 2,
+   "summary": "5066 passed, 77 skipped, 9 xfailed, 43 failed, 8 errors; all in tests/i: 8 = shared i8 PG lock held by rollout-routing's tests/i run, 43 = tests/i/test_mutants pristine-baseline broken_runner on those cases (non-default key, recorded)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 uv run --frozen pytest -q tests/i --deselect tests/i/test_mutants.py (alone, lock free)",
+   "exit": 0,
+   "summary": "211 passed, 1 xfailed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2.5,
+  "pessimistic_h": 6,
+  "confidence": "medium",
+  "basis": "code complete (22 tests, 61 mutants); one verify round + real D9/L3/B2/R1 swap after merge; brief 2/4/8, ~2 h spent",
+  "at": "2026-09-27T22:27Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-R2-1 lab-sql D9 infrx/state/lab_rollout.py: ReleaseStore.release(policy_ref)->Release(state,fence,plan_digest,started_at); transition(policy_ref,*,fence,to,decision:lab.rollout_decision.1,reasons)->int CAS (StateConflict on stale fence/undeclared move; running->{approved,rolled_back}, approved->rolled_back)",
+  "WR-R2-2 lab-access L3: ServingControl.serving(endpoint_id)->(serving_ref,fence); rollback(endpoint_id,*,fence,to_serving_ref,reason)->int CAS, audited, admitted pins untouched",
+  "WR-R2-3 rollout-routing R1: Live aggregates per policy revision (observed_until, Arm(requests,errors,p99_ms) x2, quality_covered, spent Amount, candidate_healthy); future admissions -> baseline when D9 state != running",
+  "WR-R2-4 eval-runner B2: keep infrx.eval_report.1 report_digest/protocol_digest/baseline_run/candidate_run/decision as consumed",
+  "WR-R2-5 Makefile:21 api-mutants line 1 += tests/r/control/test_mutants.py tests/r/optimization/test_mutants.py",
+  "WR-R2-6 infrx/rollouts/__init__.py (R1-owned): control/optimization are subpackages; add to __all__/docstring if R1 declares one"
+ ],
+ "evidence": [
+  "research/plan/evidence/r/R2-3146a24.md",
+  "research/plan/evidence/coordinator/updates/R2-20260927T2227Z.json"
+ ]
+}
