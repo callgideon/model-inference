@@ -1113,7 +1113,7 @@ def test_certify_window__a_killed_sequencer_leaves_its_live_cell_resumable(tmp_p
     lock's descriptor; the cell started a second time."""
     root, stub = _window_root(tmp_path)
     (root / "infra" / "rollout" / "ssm.sh").write_text(
-        '#!/usr/bin/env bash\necho "$*" >> "$STUBS/ssm.calls"\nsleep 3\necho "WC-7 cold exit=0"\n')
+        '#!/usr/bin/env bash\necho "$*" >> "$STUBS/ssm.calls"\nsleep 4\necho "WC-7 cold exit=0"\n')
     logdir = tmp_path / "log"
     _certified(logdir)
     env = {"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "HOME": str(root), "STUBS": str(stub),
@@ -1126,6 +1126,8 @@ def test_certify_window__a_killed_sequencer_leaves_its_live_cell_resumable(tmp_p
         subprocess.run(["sleep", "0.05"])
     first.terminate()
     first.wait()
+    # the killed sequencer's own short children (a 0.1 s pid wait, a `tee`) end within this; the 4 s cell does not
+    subprocess.run(["sleep", "0.5"])
     resumed = _window(root, stub, "--only", "wc7", LOGDIR=str(logdir))
     assert resumed.returncode == 0 and "still running" in resumed.stdout, resumed.stdout + resumed.stderr
     assert len((stub / "ssm.calls").read_text().splitlines()) == 1
