@@ -35,6 +35,9 @@ export const REASONS = [
 ] as const;
 export type Reason = (typeof REASONS)[number];
 export const LAB_UNITS = ["CREDIT", "PROVIDER_USD"] as const;
+/** The free-form dicts records carry as content: never scanned for refs or amounts. */
+export const OPAQUE = ["input_schema", "input_mapping", "reference_output", "label"] as const;
+const opaque = (key: string): boolean => (OPAQUE as readonly string[]).includes(key);
 
 /** A state that is not a key is terminal. `ambiguous` never returns to `submitting`. */
 export const TRANSITIONS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
@@ -87,6 +90,7 @@ function refs(node: Json, out: Json[] = []): Json[] {
   if (Array.isArray(node)) node.forEach((item) => refs(item, out));
   else if (node !== null && typeof node === "object") {
     for (const [key, value] of Object.entries(node)) {
+      if (opaque(key)) continue;
       if (key.endsWith("_ref") && value !== null) out.push(value);
       else if (key.endsWith("_refs") && Array.isArray(value)) out.push(...value);
       else refs(value, out);
@@ -98,10 +102,19 @@ function refs(node: Json, out: Json[] = []): Json[] {
 function mixed(node: Json): boolean {
   if (Array.isArray(node)) return node.some(mixed);
   if (node === null || typeof node !== "object") return false;
-  const units = Object.values(node)
+  const values = Object.entries(node).filter(([key]) => !opaque(key)).map(([, v]) => v);
+  const units = values
     .filter((v: Json) => v !== null && typeof v === "object" && !Array.isArray(v) && "unit" in v)
     .map((v: Json) => v.unit);
-  return units.some((u) => u !== units[0]) || Object.values(node).some(mixed);
+  return units.some((u) => u !== units[0]) || values.some(mixed);
+}
+
+/** Every number means the same to both halves: finite, and integers within 2^53. */
+function exactNumbers(node: Json): boolean {
+  if (Array.isArray(node)) return node.every(exactNumbers);
+  if (node !== null && typeof node === "object") return Object.values(node).every(exactNumbers);
+  return typeof node !== "number"
+    || (Number.isFinite(node) && (!Number.isInteger(node) || Number.isSafeInteger(node)));
 }
 
 // --- shapes: required keys, optional (nullable) keys, then the record's own rule ------------
@@ -245,5 +258,5 @@ export function validate(payload: unknown): Reason | null {
     return "cross_provider_ref";
   }
   if (mixed(p)) return "mixed_units";
-  return SHAPES[schema as Schema](p) ? null : "invalid";
+  return SHAPES[schema as Schema](p) && exactNumbers(p) ? null : "invalid";
 }

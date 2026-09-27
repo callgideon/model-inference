@@ -6,7 +6,10 @@ import { createHash } from "node:crypto";
 
 import { REFERABLE, type Schema, validate } from "./index.ts";
 
-/** Sorted keys, no whitespace: the same bytes as Python's `records.canonical`. */
+/**
+ * RFC 8785 (JCS): keys by UTF-16 code unit, no whitespace, ECMAScript number spelling
+ * (`JSON.stringify`); the same bytes as Python's `records.canonical`.
+ */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value !== null && typeof value === "object") {

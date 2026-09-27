@@ -43,6 +43,9 @@ REF2 = "test_lab_both_halves_derive_the_same_immutable_ref"
 VOCAB = "test_lab_vocabularies_and_transitions_match_across_halves"
 COVER = "test_lab_fixtures_cover_text_finite_video_and_structured_tool_io"
 DIGEST = "test_lab_a_ref_is_the_digest_of_the_canonical_record"
+FREE = "test_lab_free_form_content_is_opaque_to_the_ref_and_unit_scans"
+JCS = "test_lab_canonical_json_is_rfc8785_in_both_halves"
+EXTSUB = "test_lab_external_submission_is_authorized_for_the_runs_own_purpose"
 RESOLVE = "test_lab_resolve_is_provider_scoped_and_digest_exact"
 TRANS = "test_lab_transitions_allow_only_the_declared_moves"
 AMBIG = "test_lab_an_ambiguous_submit_is_reconciled_never_resubmitted"
@@ -77,6 +80,17 @@ MUTANTS: tuple[Mutant, ...] = (
       'if REF_RE.fullmatch(ref).group(2) != payload.get("provider_org_id"):', "if False:", REJ),
     m("lab_units_side_by_side_unchecked", "amounts side by side share one unit", R,
       "if _mixed(payload):", "if False:", REJ),
+    m("lab_refs_scan_free_form", "a tool schema, mapping, output or label holds no Lab refs", R,
+      "            if key in OPAQUE:", "            if False:", ACC, REF2, FREE, dies_by=REFUSED),
+    m("lab_units_scan_free_form", "units inside free-form content are data, not amounts", R,
+      "values = [v for k, v in node.items() if k not in OPAQUE]", "values = list(node.values())",
+      ACC, REF2, FREE, dies_by=REFUSED),
+    m("lab_unsafe_integer_accepted", "an integer past 2^53 is refused (the TS half cannot read it)", R,
+      "return isinstance(node, bool) or not isinstance(node, int) or abs(node) <= SAFE_INT",
+      "return True", REJ),
+    m("lab_non_finite_accepted", "a non-finite number is refused", R,
+      "return math.isfinite(node) and (not node.is_integer() or abs(node) <= SAFE_INT)",
+      "return not node.is_integer() or abs(node) <= SAFE_INT", JCS),
     m("lab_ref_kind_unchecked", "a ref names the kind its field expects", R,
       "if match is None or match.group(1) not in kinds:", "if match is None:", REJ),
     m("lab_lax_types", "'7' is not a seed (strict, like the TS half)", R,
@@ -143,7 +157,15 @@ MUTANTS: tuple[Mutant, ...] = (
       "int(digest[:8], 16) % 10_000", "int(digest[:8], 16) % 1_000", COHORT),
     # --- identity -----------------------------------------------------------------------------
     m("lab_digest_depends_on_key_order", "a ref is the digest of canonical (sorted) JSON", R,
-      "sort_keys=True", "sort_keys=False", DIGEST),
+      'keys = sorted(node, key=lambda key: key.encode("utf-16-be"))', "keys = list(node)",
+      DIGEST, REF2, JCS),
+    m("lab_digest_keys_by_code_point", "keys sort by UTF-16 code unit, as the TS half does", R,
+      'keys = sorted(node, key=lambda key: key.encode("utf-16-be"))', "keys = sorted(node)",
+      REF2, JCS),
+    m("lab_digest_numbers_as_python", "numbers are spelled as ECMAScript does (1.0 is 1)", R,
+      "        return _number(node)", "        return repr(node)", REF2, JCS),
+    m("lab_digest_small_exponent_as_fixed", "1e-7 is exponent form, 1e-6 fixed", R,
+      "if -6 < n <= 0:", "if -7 < n <= 0:", REF2, JCS),
     m("lab_digest_of_the_id_only", "a ref's digest covers the whole record", R,
       "hashlib.sha256(canonical(payload)).hexdigest()", 'hashlib.sha256(payload[id_field].encode()).hexdigest()',
       DIGEST, REF2),
@@ -162,12 +184,21 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- DATA-RIGHTS --------------------------------------------------------------------------
     m("lab_gate_open", "every gate needs a current membership and grant", R,
       "if not v2.may_read_customer_content(", "if False and not v2.may_read_customer_content(",
-      GATE, ROLE, MANIFEST),
+      GATE, ROLE, MANIFEST, EXTSUB),
     m("lab_export_is_sharing", "export needs a training grant", R,
-      "Gate.export: v2.DataPurpose.training,", "Gate.export: v2.DataPurpose.provider_sharing,", FOUR),
-    m("lab_submission_is_sharing", "external submission needs an external_judging grant", R,
-      "Gate.external_submission: v2.DataPurpose.external_judging,",
-      "Gate.external_submission: v2.DataPurpose.provider_sharing,", FOUR),
+      "Gate.export: (v2.DataPurpose.training,),", "Gate.export: (v2.DataPurpose.provider_sharing,),", FOUR),
+    m("lab_submission_is_sharing", "external submission needs a judging or training grant", R,
+      "Gate.external_submission: (v2.DataPurpose.external_judging, v2.DataPurpose.training),",
+      "Gate.external_submission: (v2.DataPurpose.provider_sharing,),", FOUR, EXTSUB),
+    m("lab_submission_is_judging_only", "an external training run is submittable (0-LC-1 table)", R,
+      "Gate.external_submission: (v2.DataPurpose.external_judging, v2.DataPurpose.training),",
+      "Gate.external_submission: (v2.DataPurpose.external_judging,),", FOUR, EXTSUB),
+    m("lab_submission_checks_first_purpose", "the gate checks the run's purpose, not judging (0-LC-1)", R,
+      "category=category, purpose=purpose):", "category=category, purpose=allowed[0]):", GATE, EXTSUB),
+    m("lab_gate_purpose_unchecked", "a gate checks only the purposes it allows", R,
+      "if purpose not in allowed:", "if False:", EXTSUB),
+    m("lab_submission_defaults_to_judging", "external submission names its purpose; no default", R,
+      "if purpose is None and len(allowed) == 1:", "if purpose is None:", EXTSUB),
     # --- vocabulary parity and the frozen v1/v2 bytes ------------------------------------------
     m("lab_modality_added_one_side", "both halves declare the same modalities", R,
       'MODALITIES = ("text", "finite_video", "structured")',
@@ -186,6 +217,15 @@ TS_MUTANTS: tuple[Mutant, ...] = (
       "if (false) {", TS),
     m("ts_units_unchecked", "the TS half refuses mixed units", TI,
       'if (mixed(p)) return "mixed_units";', 'if (false) return "mixed_units";', TS),
+    m("ts_refs_scan_free_form", "the TS half reads no refs inside free-form content", TI,
+      "      if (opaque(key)) continue;\n", "", TS, REF2, FREE),
+    m("ts_units_scan_free_form", "the TS half reads no amounts inside free-form content", TI,
+      "Object.entries(node).filter(([key]) => !opaque(key)).map(([, v]) => v)", "Object.values(node)",
+      TS, REF2, FREE),
+    m("ts_unsafe_integer_accepted", "the TS half refuses integers past 2^53", TI,
+      "(!Number.isInteger(node) || Number.isSafeInteger(node))", "true", TS),
+    m("ts_non_finite_accepted", "the TS half refuses non-finite numbers", TI,
+      "(Number.isFinite(node) && (", "(true && (", JCS),
     m("ts_ref_kind_unchecked", "the TS half checks ref kinds", TI,
       "return match !== null && (kinds as string[]).includes(match[1]);", "return match !== null;", TS),
     m("ts_lax_integers", "the TS half does not coerce '7'", TI,
@@ -211,7 +251,7 @@ TS_MUTANTS: tuple[Mutant, ...] = (
     m("ts_attempt_key_loses_the_attempt", "the TS attempt key names the attempt", TI,
       "`attempt:${runId}:${caseId}:${attempt}`", "`attempt:${runId}:${caseId}`", VOCAB, TS),
     m("ts_canonical_unsorted", "the TS ref digests sorted-key JSON", TF,
-      ".sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))", "", REF2),
+      ".sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))", "", REF2, JCS),
 )
 
 

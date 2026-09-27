@@ -28,6 +28,8 @@ P = "harnesses/replay.py"
 ID = "test_h1_a_prompt_or_processor_change_is_a_new_identity"
 CODE = "test_h1_arbitrary_code_is_never_a_harness"
 BIND = "test_h1_binding_pins_the_revision_and_checks_the_purpose"
+MEMBER = "test_h1_binding_checks_the_callers_current_membership"
+XDEP = "test_h1_replay_targets_only_its_own_providers_deployment"
 MUT = "test_h1_a_mutable_harness_ref_is_rejected"
 XPROV = "test_h1_a_cross_provider_harness_fails_the_purpose_check"
 REC = "test_h1_replay_answers_tools_only_from_recordings"
@@ -58,7 +60,10 @@ MUTANTS: tuple[Mutant, ...] = (
     # H1.c binding
     m("h1_bind_skips_the_rights_port", "binding asks L2 before scheduling",
       "    rights.authorize(lab.Gate.schedule,", "    (lambda *a, **k: None)(lab.Gate.schedule,",
-      BIND, XPROV),
+      BIND, XPROV, MEMBER),
+    m("h1_bind_forwards_no_principal", "L2 is asked about the calling user's membership",
+      "user_id=user_id, provider_org_id=record.provider_org_id,",
+      "user_id=None, provider_org_id=record.provider_org_id,", BIND, MEMBER),
     m("h1_bind_asks_the_wrong_gate", "binding is the scheduling gate",
       "rights.authorize(lab.Gate.schedule,", "rights.authorize(lab.Gate.access,", BIND),
     m("h1_bind_validates_the_old_run", "the pinned ref itself is validated first",
@@ -66,6 +71,8 @@ MUTANTS: tuple[Mutant, ...] = (
     # H1.b replay
     m("h1_prod_endpoint_allowed", "replay targets dev deployments only",
       "if deployment.environment is not v2.Environment.dev:", "if False:", DEV),
+    m("h1_replay_on_another_providers_deployment", "replay targets the harness provider's deployment",
+      "if deployment.provider_org_id != self._revision.provider_org_id:", "if False:", XDEP),
     m("h1_mutating_tool_replayed", "network mutation is blocked like an actuator",
       'if tool.effect != "read_only":', 'if tool.effect == "actuator":', BLOCK),
     m("h1_undeclared_tool_mapped", "an undeclared tool is unsupported",

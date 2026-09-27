@@ -16,6 +16,7 @@ import hashlib
 import json
 import pathlib
 import subprocess
+import typing
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -33,6 +34,10 @@ PIN = pathlib.Path(__file__).with_name("frozen_contracts.json")
 A, B = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
 MODEL = "33333333-3333-4333-8333-333333333333"
 NOW = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+# RFC 8785 probe: key order by UTF-16 code units (U+1F600 sorts before U+E000), and the
+# ECMAScript spelling of every number shape a double can take.
+PROBE = ('{"numbers":[1.0,-0.0,0.1,1e-7,1.5e-6,123.456,5e-324,1e21,1.5e300,100.0,1e-6,'
+         '0.000001234,-2.5,9007199254740991],"b":1,"a":2,"\\ue000":3,"\\ud83d\\ude00":4,"aa":5}')
 
 
 def node(script: str) -> dict:
@@ -49,19 +54,22 @@ def ts() -> dict:
     return node(f"""
 import {{ readFileSync }} from "node:fs";
 import * as lab from "{(SHARED / 'index.ts').as_uri()}";
-import {{ FakeLabCatalog, refOf }} from "{(SHARED / 'fakes.ts').as_uri()}";
+import {{ FakeLabCatalog, canonicalJson, refOf }} from "{(SHARED / 'fakes.ts').as_uri()}";
 const fx = JSON.parse(readFileSync("{SHARED / 'fixtures.json'}", "utf8"));
 const out = {{ accepted: {{}}, refs: {{}}, published: {{}}, rejected: [] }};
 const catalog = new FakeLabCatalog();
 for (const [name, payload] of Object.entries(fx.accepted)) {{
   out.accepted[name] = lab.validate(payload);
-  out.refs[name] = lab.REFERABLE[payload.schema] ? refOf(payload) : null;
-  if (out.refs[name]) out.published[name] = catalog.publish(payload) === catalog.publish(payload);
+  try {{ out.refs[name] = lab.REFERABLE[payload.schema] ? refOf(payload) : null; }}
+  catch (refused) {{ out.refs[name] = String(refused); }}
+  if (out.refs[name]?.startsWith("lab:")) out.published[name] = catalog.publish(payload) === catalog.publish(payload);
 }}
 for (const item of fx.rejected) out.rejected.push(lab.validate(item.payload));
 out.vocab = {{ SCHEMAS: lab.SCHEMAS, REF_KINDS: lab.REF_KINDS, MODALITIES: lab.MODALITIES,
   TRANSITIONS: lab.TRANSITIONS, REASONS: lab.REASONS, MAX_VIDEO_MS: lab.MAX_VIDEO_MS,
-  SURFACE_VERSION: lab.SURFACE_VERSION }};
+  SURFACE_VERSION: lab.SURFACE_VERSION, OPAQUE: lab.OPAQUE }};
+out.canonical = canonicalJson(JSON.parse({json.dumps(PROBE)}));
+out.nonfinite = lab.validate({{ ...fx.accepted.annotation, label: {{ x: 1e400 }} }});
 out.reordered = refOf(Object.fromEntries(Object.entries(fx.accepted.rollout_policy).reverse()));
 out.keys = [lab.attemptKey("{A}", "{B}", 3), lab.submitKey("{A}")];
 console.log(JSON.stringify(out));
@@ -82,14 +90,17 @@ def member(role=v2.ProviderRole.developer) -> v2.ProviderMembership:
 
 
 def authorize(gate, **changes):
-    args = dict(membership=member(), grant=grant(purposes=(lab.GATE_PURPOSE[gate],)), now=NOW,
+    """The gate with a current member and a grant for `purpose` (default: the gate's first)."""
+    purpose = changes.get("purpose") or lab.GATE_PURPOSES[gate][0]
+    args = dict(membership=member(), grant=grant(purposes=(purpose,)), now=NOW,
                 provider_org_id=A, model_id=MODEL, category=v2.DataCategory.request_content)
     return lab.authorize(gate, **{**args, **changes})
 
 
 # --- F3.a / F3.c: every record, both halves ------------------------------------------------
 def test_lab_accepted_fixtures_parse_in_python():
-    assert set(ACCEPTED) == {schema.split(".")[1] for schema in lab.SCHEMAS}, "one per schema"
+    assert {payload["schema"] for payload in ACCEPTED.values()} == set(lab.SCHEMAS), "every schema"
+    assert {schema.split(".")[1] for schema in lab.SCHEMAS} <= set(ACCEPTED), "each by its name"
     for name, payload in ACCEPTED.items():
         assert lab.validate(payload) is None, name
         assert lab.parse(payload).schema_id == payload["schema"]
@@ -131,6 +142,7 @@ def test_lab_vocabularies_and_transitions_match_across_halves():
     assert vocab["MODALITIES"] == list(lab.MODALITIES)
     assert vocab["MAX_VIDEO_MS"] == lab.MAX_VIDEO_MS == 82_000
     assert vocab["SURFACE_VERSION"] == lab.SURFACE_VERSION
+    assert vocab["OPAQUE"] == list(lab.OPAQUE)
     assert vocab["TRANSITIONS"] == {kind: {state: sorted(targets) for state, targets in table.items()}
                                     for kind, table in states.TRANSITIONS.items()}
     assert ts()["keys"] == [lab.attempt_key(A, B, 3), lab.submit_key(A)]
@@ -142,7 +154,36 @@ def test_lab_fixtures_cover_text_finite_video_and_structured_tool_io():
     assert lab.parse(ACCEPTED["harness_revision"]).tools[0].effect == "read_only"
 
 
+def test_lab_free_form_content_is_opaque_to_the_ref_and_unit_scans():
+    """A tool's JSON schema, an input mapping, an expected output and a label are content:
+    a property named `order_ref` or two physical units side by side there is data, not a
+    Lab ref or a Lab amount. The opaque fields are exactly the free-form dicts the models
+    declare, so a new free-form field cannot be added without deciding."""
+    for name in ("harness_revision_free_form", "annotation_free_form"):
+        assert lab.validate(ACCEPTED[name]) is None and ts()["accepted"][name] is None, name
+    models = [m for m in vars(lab).values() if isinstance(m, type) and issubclass(m, lab.LabModel)]
+    free_form = {field for model in models for field, info in model.model_fields.items()
+                 if any(typing.get_origin(shape) is dict            # dict[...] or dict[...] | None
+                        for shape in (info.annotation, *typing.get_args(info.annotation)))}
+    assert len(models) > len(lab.MODELS) and free_form == set(lab.OPAQUE)
+    foreign = copy.deepcopy(ACCEPTED["annotation_free_form"])       # declared fields still scanned
+    foreign["rubric_ref"] = foreign["rubric_ref"].replace(A, B)
+    assert lab.validate(foreign) == "cross_provider_ref"
+
+
 # --- identity: refs are content digests ----------------------------------------------------
+def test_lab_canonical_json_is_rfc8785_in_both_halves():
+    """The bytes behind every ref: keys by UTF-16 code unit, numbers spelled as ECMAScript
+    does (1.0 is `1`, 1e-7 is `1e-7`), identical in Python and TypeScript; a number the
+    halves would read differently (non-finite, or an integer past 2^53) is refused."""
+    assert lab.canonical(json.loads(PROBE)).decode() == ts()["canonical"] == (
+        '{"a":2,"aa":5,"b":1,"numbers":[1,0,0.1,1e-7,0.0000015,123.456,5e-324,1e+21,'
+        '1.5e+300,100,0.000001,0.000001234,-2.5,9007199254740991],"\U0001f600":4,"\ue000":3}')
+    assert lab.validate({**ACCEPTED["annotation"], "label": {"x": float("inf")}}) == "invalid"
+    assert lab.canonical([float("nan")]) == b"[NaN]"          # outside a record: no crash
+    assert ts()["nonfinite"] == "invalid"
+
+
 def test_lab_a_ref_is_the_digest_of_the_canonical_record():
     payload = ACCEPTED["dataset_manifest"]
     reordered = dict(reversed(list(payload.items())))
@@ -212,20 +253,48 @@ def test_lab_budgets_are_exact_and_typed_by_unit():
 # --- DATA-RIGHTS: server-derived authorization at every gate --------------------------------
 @pytest.mark.parametrize("gate", list(lab.Gate))
 def test_lab_every_gate_needs_the_current_grant_for_its_purpose(gate):
-    assert authorize(gate) is None
-    with pytest.raises(errors.Forbidden):        # revoked after selection, before the read
-        authorize(gate, grant=grant(purposes=(lab.GATE_PURPOSE[gate],), revoked_at=NOW))
-    other = next(p for p in v2.DataPurpose if p is not lab.GATE_PURPOSE[gate])
-    with pytest.raises(errors.Forbidden):        # capture/sharing never implies another purpose
-        authorize(gate, grant=grant(purposes=(other,)))
-    with pytest.raises(errors.Forbidden):
-        authorize(gate, provider_org_id=B)
+    for purpose in lab.GATE_PURPOSES[gate]:
+        assert authorize(gate, purpose=purpose) is None
+        with pytest.raises(errors.Forbidden):    # revoked after selection, before the read
+            authorize(gate, purpose=purpose, grant=grant(purposes=(purpose,), revoked_at=NOW))
+        for other in v2.DataPurpose:             # one purpose never implies another
+            if other is not purpose:
+                with pytest.raises(errors.Forbidden):
+                    authorize(gate, purpose=purpose, grant=grant(purposes=(other,)))
+        with pytest.raises(errors.Forbidden):
+            authorize(gate, purpose=purpose, provider_org_id=B)
 
 
 def test_lab_the_gates_name_four_distinct_permissions():
+    purpose = v2.DataPurpose
     assert {g.value for g in lab.Gate} == {"schedule", "access", "export", "external_submission"}
-    assert lab.GATE_PURPOSE[lab.Gate.export] is v2.DataPurpose.training
-    assert lab.GATE_PURPOSE[lab.Gate.external_submission] is v2.DataPurpose.external_judging
+    assert lab.GATE_PURPOSES == {
+        lab.Gate.schedule: (purpose.provider_sharing,), lab.Gate.access: (purpose.provider_sharing,),
+        lab.Gate.export: (purpose.training,),
+        lab.Gate.external_submission: (purpose.external_judging, purpose.training)}
+    run_purposes = typing.get_args(lab.ExternalRun.model_fields["purpose"].annotation)
+    assert set(run_purposes) == set(lab.GATE_PURPOSES[lab.Gate.external_submission])
+
+
+def test_lab_external_submission_is_authorized_for_the_runs_own_purpose():
+    """The external run's own purpose picks the grant: content never leaves for training
+    under a judging-only grant, nor for judging under a training-only one, and the caller
+    names the run's purpose (there is no default at this gate)."""
+    judging = lab.parse(ACCEPTED["external_run"])
+    training = judging.model_copy(update={"purpose": "training"})
+    only = {p: grant(purposes=(p,)) for p in v2.DataPurpose}
+    gate = lab.Gate.external_submission
+    for run in (judging, training):
+        assert authorize(gate, purpose=run.purpose, grant=only[v2.DataPurpose(run.purpose)]) is None
+    for run, wrong in ((training, v2.DataPurpose.external_judging), (judging, v2.DataPurpose.training)):
+        with pytest.raises(errors.Forbidden):
+            authorize(gate, purpose=run.purpose, grant=only[wrong])
+    every = grant(purposes=tuple(v2.DataPurpose))
+    with pytest.raises(errors.Forbidden):        # unnamed: never defaults to judging
+        authorize(gate, purpose=None, grant=every)
+    with pytest.raises(errors.Forbidden):        # a gate's purposes are fixed
+        authorize(lab.Gate.access, purpose=v2.DataPurpose.training, grant=every)
+    assert authorize(lab.Gate.access, grant=every) is None      # a sole purpose is the default
 
 
 def test_lab_a_role_alone_never_authorizes_data_reuse():

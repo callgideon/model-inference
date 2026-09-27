@@ -16,7 +16,8 @@ ALL = mutation_list.MUTANTS
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("h1_prod_endpoint_allowed", "h1_mutating_tool_replayed", "h1_bytes_unbounded",
-          "h1_mid_run_edit_accepted", "h1_bind_skips_the_rights_port")
+          "h1_mid_run_edit_accepted", "h1_bind_skips_the_rights_port",
+          "h1_replay_on_another_providers_deployment", "h1_bind_forwards_no_principal")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 Mutant, Outcome = mutation_list.Mutant, mutation_list.Outcome
 

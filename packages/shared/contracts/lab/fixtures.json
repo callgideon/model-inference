@@ -17,6 +17,38 @@
       "schema": "lab.annotation.1",
       "state": "submitted"
     },
+    "annotation_free_form": {
+      "annotation_id": "0000005d-0000-4000-8000-00000000005d",
+      "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "evidence_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ground_truth": true,
+      "label": {
+        "confidence": 0.93,
+        "doc_ref": "INV-2",
+        "length": {
+          "unit": "cm",
+          "value": 2.5
+        },
+        "mass": {
+          "unit": "kg",
+          "value": 1.25
+        },
+        "source_refs": [
+          "page-1",
+          "page-2"
+        ],
+        "\ue000": 1,
+        "\ud83d\ude00": 2
+      },
+      "method": "human",
+      "method_version": "rubric-v3",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "reviewer_id": "0000005b-0000-4000-8000-00000000005b",
+      "rubric_ref": "lab:rubric:11111111-1111-4111-8111-111111111111:0000005c-0000-4000-8000-00000000005c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sample_id": "00000065-0000-4000-8000-000000000065",
+      "schema": "lab.annotation.1",
+      "state": "submitted"
+    },
     "attempt": {
       "attempt": 2,
       "case_id": "0000001f-0000-4000-8000-00000000001f",
@@ -162,6 +194,77 @@
             "type": "object"
           },
           "name": "lookup_sku"
+        }
+      ],
+      "version": 1
+    },
+    "harness_revision_free_form": {
+      "adapter": "structured",
+      "created_at": "2026-09-27T10:00:00Z",
+      "harness_id": "00000015-0000-4000-8000-000000000015",
+      "input_mapping": {
+        "input": "sample.text",
+        "order_ref": "sample.order"
+      },
+      "processor_profile": "marlin-sop-1",
+      "prompt_template": "Find order {{order_ref}}: {{input}}",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "reference_output": {
+        "order_ref": "ORD-7",
+        "price": {
+          "unit": "EUR",
+          "value": 12.5
+        },
+        "score": 1.0,
+        "tax": {
+          "unit": "USD",
+          "value": 0.1
+        },
+        "tiny": 1e-07,
+        "zero": -0.0
+      },
+      "schema": "lab.harness_revision.1",
+      "tools": [
+        {
+          "effect": "read_only",
+          "input_schema": {
+            "properties": {
+              "length": {
+                "properties": {
+                  "unit": {
+                    "const": "cm"
+                  }
+                },
+                "type": "object"
+              },
+              "line_refs": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "order_ref": {
+                "type": "string"
+              },
+              "weight": {
+                "properties": {
+                  "unit": {
+                    "const": "kg"
+                  },
+                  "value": {
+                    "minimum": 0.5,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "order_ref"
+            ],
+            "type": "object"
+          },
+          "name": "lookup_order"
         }
       ],
       "version": 1
@@ -1406,7 +1509,70 @@
         "state": "received"
       },
       "reason": "invalid"
+    },
+    {
+      "name": "an integer past 2^53 inside a label",
+      "payload": {
+        "annotation_id": "0000005a-0000-4000-8000-00000000005a",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "evidence_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ground_truth": true,
+        "label": {
+          "count": 9007199254740993
+        },
+        "method": "human",
+        "method_version": "rubric-v3",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "reviewer_id": "0000005b-0000-4000-8000-00000000005b",
+        "rubric_ref": "lab:rubric:11111111-1111-4111-8111-111111111111:0000005c-0000-4000-8000-00000000005c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sample_id": "00000065-0000-4000-8000-000000000065",
+        "schema": "lab.annotation.1",
+        "state": "submitted"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a seed past 2^53",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 9223372036854775808,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
     }
   ],
-  "schema_note": "F3 shared fixtures: both halves must accept every `accepted` payload and refuse every `rejected` one with its `reason` (tests/contracts/lab)."
+  "schema_note": "F3 shared fixtures: both halves must accept every `accepted` payload and refuse every `rejected` one with its `reason` (tests/contracts/lab). Free-form content (tool input_schema, input_mapping, reference_output, label) is opaque to the ref and unit scans; refs digest RFC 8785 canonical JSON."
 }

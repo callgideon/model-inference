@@ -5,7 +5,8 @@ profile, input mapping, tool schemas and reference output, identified by the sha
 its canonical JSON (`revision_ref`). There is no code field and the adapter is one of the
 three built-ins, so an uploaded program cannot be a harness.
 
-`Replayer` runs cases against **one dev deployment** and nothing else:
+`Replayer` runs cases against **one dev deployment of the harness's own provider** and
+nothing else:
 
 * the model is called through the port it is given; tools are never called at all. A
   tool call is answered from a recording (`recording_key`) if the tool is declared
@@ -15,8 +16,8 @@ three built-ins, so an uploaded program cannot be a harness.
   `ReplayBoundExceeded` and the run stays stopped.
 * the revision is re-derived before each case: a harness edited mid-run is refused.
 
-`bind` pins a revision into an F3 evaluation run after the rights port (L2) authorizes
-scheduling; `compare` says what two runs differ in (single factor, tagged multifactor,
+`bind` pins a revision into an F3 evaluation run after the rights port (L2, the one
+membership seam of R156) authorizes scheduling for the calling user; `compare` says what two runs differ in (single factor, tagged multifactor,
 or a rerun) and refuses runs over different case universes.
 """
 from __future__ import annotations
@@ -46,16 +47,22 @@ def recording_key(name: str, arguments: Any) -> str:
 
 
 class RightsPort(Protocol):
-    """L2's grant evaluator: raises `Forbidden` unless the provider may use the dataset."""
+    """L2's gate evaluator: raises `Forbidden` unless `user_id` holds a current membership
+    of the provider AND the provider a current grant for the dataset at this gate."""
 
-    def authorize(self, gate: lab.Gate, *, provider_org_id: str, dataset_ref: str) -> None: ...
+    def authorize(self, gate: lab.Gate, *, user_id: str, provider_org_id: str,
+                  dataset_ref: str) -> None: ...
 
 
-def bind(run: dict[str, Any], harness_ref: str, *, rights: RightsPort) -> dict[str, Any]:
-    """A copy of `run` pinned to `harness_ref`, validated, then authorized for scheduling."""
+def bind(run: dict[str, Any], harness_ref: str, *, rights: RightsPort,
+         user_id: str) -> dict[str, Any]:
+    """A copy of `run` pinned to `harness_ref`, validated, then authorized for scheduling.
+
+    `user_id` is the server-derived caller (the session subject), never a request field.
+    """
     bound = {**run, "harness_ref": harness_ref}
     record = lab.parse(bound)          # mutable or foreign refs stop here, before any read
-    rights.authorize(lab.Gate.schedule, provider_org_id=record.provider_org_id,
+    rights.authorize(lab.Gate.schedule, user_id=user_id, provider_org_id=record.provider_org_id,
                      dataset_ref=record.dataset_ref)
     return bound
 
@@ -127,6 +134,8 @@ class Replayer:
             raise errors.Forbidden("replay targets dev deployments only")
         self._payload, self._ref = harness, revision_ref(harness)
         self._revision: lab.HarnessRevision = lab.parse(harness)
+        if deployment.provider_org_id != self._revision.provider_org_id:
+            raise errors.Forbidden("replay targets the harness provider's own deployment only")
         self._model, self._recordings, self._bounds, self._clock = model, recordings, bounds, clock
         self._start, self._requests, self._bytes = clock(), 0, 0
         self._stopped: str | None = None

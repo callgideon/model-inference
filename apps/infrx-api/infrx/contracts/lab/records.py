@@ -3,8 +3,15 @@
 **Refs are immutable by grammar.** Every Lab reference is
 `lab:<kind>:<provider_org_id>:<object_id>@sha256:<64 hex>`; a label (`@latest`), a
 missing digest or any other spelling is a *mutable ref* and is refused. A record's own
-ref is the sha256 of its canonical JSON (sorted keys, compact, UTF-8), so changing one
-byte of a manifest, harness or policy changes its identity (EVAL-REPRO, DATA-IMMUTABLE).
+ref is the sha256 of its RFC 8785 canonical JSON (keys by UTF-16 code unit, compact,
+ECMAScript number spelling, UTF-8), so both halves name one record identically and
+changing one byte of a manifest, harness or policy changes its identity (EVAL-REPRO,
+DATA-IMMUTABLE). A number the halves would read differently (non-finite, or an integer
+past 2^53) is `invalid`.
+
+**Free-form content is opaque.** A tool's `input_schema`, an `input_mapping`, a
+`reference_output` and a `label` are content: nothing inside them is read as a ref or an
+amount (`OPAQUE`), so a tool property named `order_ref` is data.
 
 **Every ref in a record belongs to the record's provider.** The provider segment is
 checked against `provider_org_id` before anything else is read; a server additionally
@@ -20,16 +27,20 @@ never a Lab unit. There is no conversion (v2 `money_units`).
 
 **Rights are checked at the gate, never carried.** `authorize` takes the *current*
 membership and grant (server-derived) at scheduling, access, export and external
-submission; a published manifest names its grants as audit evidence and confers no
-continued access (DATA-RIGHTS). A role alone never authorizes data reuse.
+submission, for the purpose the gate allows; at external submission that is the run's
+own purpose (judging or training), never a default. A published manifest names its
+grants as audit evidence and confers no continued access (DATA-RIGHTS). A role alone
+never authorizes data reuse.
 """
 from __future__ import annotations
 
 import enum
 import hashlib
 import json
+import math
 import re
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Any, Literal
 
 from pydantic import (AfterValidator, BaseModel, ConfigDict, Field, ValidationError,
@@ -52,6 +63,9 @@ MODALITIES = ("text", "finite_video", "structured")
 MAX_VIDEO_MS = 82_000                  # the product's finite-video cap (LANE-RULES 8)
 REASONS = ("unknown_schema", "mutable_ref", "cross_provider_ref", "mixed_units", "invalid")
 LAB_UNITS = ("CREDIT", "PROVIDER_USD")
+# The free-form dicts records carry as content: never scanned for refs or amounts.
+OPAQUE = ("input_schema", "input_mapping", "reference_output", "label")
+SAFE_INT = 2**53 - 1                   # the largest integer both halves read exactly
 
 REF_RE = re.compile(rf"lab:({'|'.join(REF_KINDS)}):({UUID_RE.pattern}):({UUID_RE.pattern})"
                     r"@sha256:([0-9a-f]{64})")
@@ -390,9 +404,12 @@ REFERABLE: dict[str, tuple[str, str]] = {
 
 # --- the one validator ----------------------------------------------------------------------
 def _refs(node: Any):
-    """Every ref-valued field: a key ending `_ref` (one) or `_refs` (a list)."""
+    """Every ref-valued field: a key ending `_ref` (one) or `_refs` (a list), outside
+    the opaque free-form content."""
     if isinstance(node, dict):
         for key, value in node.items():
+            if key in OPAQUE:
+                continue
             if key.endswith("_ref") and value is not None:
                 yield value
             elif key.endswith("_refs") and isinstance(value, list):
@@ -407,11 +424,23 @@ def _refs(node: Any):
 def _mixed(node: Any) -> bool:
     """True if two sibling amounts (dicts with a `unit`) disagree on the unit."""
     if isinstance(node, dict):
-        units = [v["unit"] for v in node.values() if isinstance(v, dict) and "unit" in v]
-        return any(u != units[0] for u in units) or any(_mixed(v) for v in node.values())
+        values = [v for k, v in node.items() if k not in OPAQUE]
+        units = [v["unit"] for v in values if isinstance(v, dict) and "unit" in v]
+        return any(u != units[0] for u in units) or any(_mixed(v) for v in values)
     if isinstance(node, list):
         return any(_mixed(v) for v in node)
     return False
+
+
+def _exact_numbers(node: Any) -> bool:
+    """Every number means the same to both halves: finite, and integers within 2^53."""
+    if isinstance(node, dict):
+        return all(map(_exact_numbers, node.values()))
+    if isinstance(node, list):
+        return all(map(_exact_numbers, node))
+    if isinstance(node, float):
+        return math.isfinite(node) and (not node.is_integer() or abs(node) <= SAFE_INT)
+    return isinstance(node, bool) or not isinstance(node, int) or abs(node) <= SAFE_INT
 
 
 def parse(payload: Any) -> LabRecord:
@@ -429,6 +458,8 @@ def parse(payload: Any) -> LabRecord:
             raise LabRejected("cross_provider_ref", f"{ref} belongs to another provider")
     if _mixed(payload):
         raise LabRejected("mixed_units", "amounts side by side are in different units")
+    if not _exact_numbers(payload):
+        raise LabRejected("invalid", "a number is non-finite or an integer past 2^53")
     try:
         return model.model_validate(payload)
     except ValidationError as refused:
@@ -444,8 +475,39 @@ def validate(payload: Any) -> str | None:
     return None
 
 
+def _number(value: float) -> str:
+    """ECMAScript Number::toString of a finite double (RFC 8785 3.2.2.3)."""
+    if value == 0:
+        return "0"
+    sign, (_, digits, exponent) = "-" * (value < 0), Decimal(repr(abs(value))).normalize().as_tuple()
+    s = "".join(map(str, digits))
+    k, n = len(s), exponent + len(s)       # value = 0.s * 10^n
+    if k <= n <= 21:
+        return sign + s + "0" * (n - k)
+    if 0 < n <= 21:
+        return sign + s[:n] + "." + s[n:]
+    if -6 < n <= 0:
+        return sign + "0." + "0" * -n + s
+    mantissa = s[0] + ("." + s[1:] if k > 1 else "")
+    return f"{sign}{mantissa}e{'+' if n > 0 else '-'}{abs(n - 1)}"
+
+
+def _jcs(node: Any) -> str:
+    if isinstance(node, dict):
+        keys = sorted(node, key=lambda key: key.encode("utf-16-be"))
+        return "{" + ",".join(f"{_jcs(key)}:{_jcs(node[key])}" for key in keys) + "}"
+    if isinstance(node, list):
+        return "[" + ",".join(map(_jcs, node)) + "]"
+    if isinstance(node, float) and math.isfinite(node):
+        return _number(node)
+    # str, int, bool, None; a non-finite float keeps Python's spelling (a record refuses it,
+    # but a replayed model answer may carry one and is only counted and keyed).
+    return json.dumps(node, ensure_ascii=False)
+
+
 def canonical(payload: Any) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    """RFC 8785 (JCS) bytes: the same as `canonicalJson` in `packages/shared/.../fakes.ts`."""
+    return _jcs(payload).encode()
 
 
 def ref_of(payload: dict[str, Any]) -> str:
@@ -464,23 +526,31 @@ class Gate(enum.StrEnum):
     external_submission = "external_submission"
 
 
-GATE_PURPOSE: dict[Gate, v2.DataPurpose] = {
-    Gate.schedule: v2.DataPurpose.provider_sharing,
-    Gate.access: v2.DataPurpose.provider_sharing,
-    Gate.export: v2.DataPurpose.training,
-    Gate.external_submission: v2.DataPurpose.external_judging,
+# The purposes each gate may check; the first of a one-purpose gate is its default.
+GATE_PURPOSES: dict[Gate, tuple[v2.DataPurpose, ...]] = {
+    Gate.schedule: (v2.DataPurpose.provider_sharing,),
+    Gate.access: (v2.DataPurpose.provider_sharing,),
+    Gate.export: (v2.DataPurpose.training,),
+    Gate.external_submission: (v2.DataPurpose.external_judging, v2.DataPurpose.training),
 }
 
 
 def authorize(gate: Gate, *, membership: v2.ProviderMembership | None,
               grant: v2.AccessGrant | None, now: datetime, provider_org_id: str,
-              model_id: str, category: v2.DataCategory) -> None:
-    """`Forbidden` unless a current membership AND a current grant for this gate's purpose.
+              model_id: str, category: v2.DataCategory,
+              purpose: v2.DataPurpose | str | None = None) -> None:
+    """`Forbidden` unless a current membership AND a current grant for `purpose`.
 
-    Both records come from the server's own reads at the moment of the gate (the L2
-    port), never from a request or a manifest: that is what makes revocation immediate.
+    `purpose` must be one the gate allows; a one-purpose gate defaults to it, and external
+    submission takes the `ExternalRun.purpose` of the run being sent (no default). Both
+    records come from the server's own reads at the moment of the gate (the L2 port),
+    never from a request or a manifest: that is what makes revocation immediate.
     """
-    purpose = GATE_PURPOSE[gate]
+    allowed = GATE_PURPOSES[gate]
+    if purpose is None and len(allowed) == 1:
+        purpose = allowed[0]
+    if purpose not in allowed:
+        raise errors.Forbidden(f"{gate}: purpose {purpose!r} is not one of {allowed}")
     if not v2.may_read_customer_content(membership=membership, grant=grant, now=now,
                                         provider_org_id=provider_org_id, model_id=model_id,
                                         category=category, purpose=purpose):

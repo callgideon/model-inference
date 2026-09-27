@@ -18,7 +18,8 @@ CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("lab_provider_segment_ignored", "lab_units_side_by_side_unchecked",
           "lab_ambiguous_resubmits", "lab_gate_open", "lab_frozen_contract_edited",
-          "ts_provider_segment_ignored")
+          "ts_provider_segment_ignored", "lab_submission_checks_first_purpose",
+          "lab_refs_scan_free_form", "lab_digest_numbers_as_python", "ts_refs_scan_free_form")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 TS_SELECTED = TS_ALL if FULL_RUN else tuple(m for m in TS_ALL if m.name in SUBSET)
 Mutant, Outcome = mutation_list.Mutant, mutation_list.Outcome
