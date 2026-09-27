@@ -24,7 +24,7 @@ Full output: `scratchpad/wave4b/freeze-d3a99e01/certify-hashes.json` (coordinato
 | Gate | Result | Where |
 |---|---|---|
 | G1 | PASS 22:35:56Z | freeze-d3a99e01/G1.log |
-| G2 make check (e2c form, Q 55430) | RUNNING from 22:36Z (~3.5 h) | freeze-d3a99e01/G2-make-check.log |
+| G2 make check (e2c form, Q 55430) | run 1 (22:36–01:57Z, started as an async job `… &` of a non-interactive bash): api-test 4576 passed / 43 skipped / 9 xfailed (37 min), api-mutants + console stages PASS, **bench-test FAIL** 1 failed / 117 passed — `test_leaks.py::test_a_second_ctrl_c_cannot_lose_the_summary` "handler restored" (SIG_IGN, not default_int_handler): bash starts async children with SIGINT ignored and the test pins the inherited handler as the default (a test assumption, not a tree defect; fix lane BENCH-SIGINT on the tip). `make bench-test` at d3a99e01 under `setsid` (SIGINT default): 118 passed. **Run 2 started 02:00Z under `setsid -f`** (freeze-d3a99e01-2/) | freeze-d3a99e01/G2-make-check.log; freeze-d3a99e01-2/G2-make-check.log |
 | G2 tests/i on e2c | after make check | freeze-d3a99e01/G2-tests-i.log |
 | G3 / G4 / G4b / G5 | PASS: G4 `[]`, G4b `ok`, G3 build + probe `"ok": true` (image `infrx-runtime:d3a99e01`), G5 `REHEARSAL PASSED` (REHEARSAL_NS=infrx-pre, 0 leftovers) — 22:36–22:40Z | checks-d3a99e01-gates.log |
 | G6 | operator inputs (readiness log) | — |
@@ -45,3 +45,4 @@ env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN infra/rol
 
 - 2026-09-26T22:38Z: candidate frozen; identities recomputed (only git.sha differs from b640c35c); G1 PASS; G2, gates, E3C and App re-proofs running.
 - 2026-09-26T22:52Z: G3/G4/G4b/G5, E3C final and app-e2e PASS at d3a99e01; G2 make check running (api-test ~46% at 22:50Z).
+- 2026-09-27T02:00Z: G2 run 1 FAIL at the last stage (bench-test) under an async-job SIGINT disposition; bench-test alone PASS 118 under setsid; G2 run 2 started under setsid (G1 PASS again). The freeze starter now uses `setsid -f`. RELEASE stays d3a99e01.

@@ -20,10 +20,10 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 150,
-  "updated": "2026-09-27T00:24:00Z",
+  "updated": "2026-09-27T02:01:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 0,
+    "active": 1,
     "reserved": 2,
     "note": "Session 03: RELEASE freeze d3a99e01 G2 running (coordinator; e2c/i8 held); no lane running; MAIN-MERGE waits for the go-live inputs."
   },
@@ -3729,16 +3729,16 @@
       },
       "activity": "running",
       "started": "2026-09-26T21:33:00Z",
-      "updated": "2026-09-26T22:51:00Z",
+      "updated": "2026-09-27T02:01:00Z",
       "blocker": null,
-      "next_action": "G2 make check running since 22:36Z (api-test ~46% at 22:50Z; ETA ≈02:10Z) then tests/i on e2c → freeze complete → W1 staging [USER-RUN] → install maintenance when the user-held inputs land",
+      "next_action": "G2 run 2 at d3a99e01 under setsid -f (SIGINT default) started 02:00Z (~3.4 h; ETA ≈05:30Z) then tests/i on e2c → freeze complete → W1 staging [USER-RUN] → install maintenance when the user-held inputs land. RELEASE stays d3a99e01.",
       "estimate": {
-        "optimistic_h": 3.5,
-        "likely_h": 4,
-        "pessimistic_h": 5,
+        "optimistic_h": 3.4,
+        "likely_h": 3.6,
+        "pessimistic_h": 4.5,
         "confidence": "medium",
-        "basis": "restart at 22:36Z; api-test 47 min + mutants + console; side checks green at b640c35c",
-        "at": "2026-09-26T22:37:00Z"
+        "basis": "run 1 reached the last stage in 3.4 h; only the SIGINT disposition changed",
+        "at": "2026-09-27T02:01:00Z"
       },
       "evidence": [
         "research/plan/evidence/coordinator/RELEASE-d3a99e01.md",
@@ -3759,6 +3759,11 @@
           "cmd": "at d3a99e01: G1; G4; G4b; G3 build+probe; G5 rehearse.sh (ns infrx-pre); make app-e2e (e4b); E3C final run (e3c block, 5 controls)",
           "exit": 0,
           "summary": "G1 PASS; G4 []; G4b ok; G3 \"ok\": true; G5 REHEARSAL PASSED (0 leftovers); app-e2e PASS (journey 20/20, 103.4 s); E3C PASS 16/16 scenarios, 12/12 controls (14 min)"
+        },
+        {
+          "cmd": "make check at d3a99e01, run 1 (async job; SIGINT ignored by the shell)",
+          "exit": 2,
+          "summary": "api-test 4576 passed; api-mutants + console PASS; bench-test 1 failed / 117 passed — test_a_second_ctrl_c_cannot_lose_the_summary pins the inherited SIGINT handler as the default (test assumption). make bench-test under setsid: 118 passed"
         }
       ],
       "owned_paths": [
@@ -3891,6 +3896,41 @@
       ],
       "owned_paths": [
         "listed in lane-sweep-2.js"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "BENCH-SIGINT",
+      "task": null,
+      "slice": "(release-gate hygiene) test_leaks.py::test_a_second_ctrl_c_cannot_lose_the_summary establishes the default SIGINT handler itself and restores what it found (the freeze runs make check as a background process; bash gives async jobs SIGINT = SIG_IGN); plain Opus agent; test-only; from the tip 92ed083a — merges after, next candidate",
+      "agent": "opus",
+      "branch": "codex/bench-sigint",
+      "worktree": ".claude/worktrees/codex-bench-sigint",
+      "base": "92ed083a",
+      "head": null,
+      "isolation": {
+        "ports": "none",
+        "prefix": "-",
+        "db": "-"
+      },
+      "activity": "running",
+      "started": "2026-09-27T02:01:00Z",
+      "updated": "2026-09-27T02:01:00Z",
+      "blocker": null,
+      "next_action": "handback → merge onto the tip (models/marlin2b/tests under both dispositions; bench mutant list)",
+      "estimate": {
+        "optimistic_h": 0.2,
+        "likely_h": 0.4,
+        "pessimistic_h": 1,
+        "confidence": "high",
+        "basis": "one test fixture change",
+        "at": "2026-09-27T02:01:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "models/marlin2b/tests/test_leaks.py",
+        "research/plan/evidence/e/BENCH-sigint-<head7>.md"
       ],
       "wiring_requests": []
     }
@@ -6509,6 +6549,12 @@
       "by": "tracker",
       "what": "rejected update: stale: at 2026-09-27T00:08:00Z is not newer than lane SWEEP-2 state 2026-09-27T00:24:00Z",
       "source": "updates/SWEEP-2-20260927T0008Z.json"
+    },
+    {
+      "at": "2026-09-27T02:01:00Z",
+      "by": "coordinator (RELEASE)",
+      "what": "G2 run 1 at d3a99e01 FAIL at its last stage (bench-test): the SIGINT test pins the inherited handler as the default and the freeze ran as an async job (SIGINT ignored). Not a tree defect: bench-test alone passes under setsid (118). G2 run 2 started under setsid -f; RELEASE stays d3a99e01; BENCH-SIGINT fixes the test assumption on the tip",
+      "source": "research/plan/evidence/coordinator/RELEASE-d3a99e01.md"
     }
   ],
   "history": {
