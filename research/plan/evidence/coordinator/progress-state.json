@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 155,
-  "updated": "2026-09-27T05:25:00Z",
+  "revision": 157,
+  "updated": "2026-09-27T05:38:10Z",
   "agent_slots": {
     "total": 16,
     "active": 1,
@@ -6686,6 +6686,18 @@
       "by": "coordinator (RELEASE)",
       "what": "RELEASE d3a99e01 FREEZE COMPLETE: G2 run 2 PASS (make check exit 0 in 3 h 20 min; tests/i PASS) — every gate green. Install maintenance starts (W6/W6b rehearsal first). hosted-migrate.sh committed after two reviews (53a7c64f)",
       "source": "research/plan/evidence/coordinator/RELEASE-d3a99e01.md"
+    },
+    {
+      "at": "2026-09-27T05:38:10Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T04:52:00Z is not newer than lane TEST-USER state 2026-09-27T05:10:00Z",
+      "source": "updates/TEST-USER-20260927T0452Z.json"
+    },
+    {
+      "at": "2026-09-27T05:38:10Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T05:06:00Z is not newer than lane TEST-USER state 2026-09-27T05:10:00Z",
+      "source": "updates/TEST-USER-20260927T0506Z.json"
     }
   ],
   "history": {
@@ -7402,10 +7414,20 @@
       "status": "rejected",
       "at": "2026-09-27T04:46:06Z",
       "reason": "stale: at 2026-09-27T04:46:06Z is not newer than lane TRACKER-PRUNE state 2026-09-27T04:53:00Z"
+    },
+    "TEST-USER-20260927T0452Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T04:52:00Z",
+      "reason": "stale: at 2026-09-27T04:52:00Z is not newer than lane TEST-USER state 2026-09-27T05:10:00Z"
+    },
+    "TEST-USER-20260927T0506Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T05:06:00Z",
+      "reason": "stale: at 2026-09-27T05:06:00Z is not newer than lane TEST-USER state 2026-09-27T05:10:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T04:54:41Z",
+    "computed_at": "2026-09-27T05:38:10Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
