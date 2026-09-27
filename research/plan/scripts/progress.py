@@ -35,9 +35,12 @@ VERDICTS = ["PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN", "PENDING"]
 CONFIDENCE = ["unknown", "low", "medium", "high"]
 DONE = {"implemented", "integrated"}
 HOURS = ("optimistic_h", "likely_h", "pessimistic_h")
-CATEGORIES = {"backend": "Backend corrections", "app": "App completion", "deferred": "Deferred Lab / hosting / later",
+CATEGORIES = {"backend": "Backend corrections", "app": "App completion", "activated": "Activated post-launch (Lab / later)",
+              "deferred": "Deferred Lab / hosting / later",
               "baseline": "Reused baseline", "superseded": "Superseded"}
-SHOWN = ("backend", "app", "baseline")  # headline categories; deferred renders collapsed last, superseded only in the footer
+SHOWN = ("backend", "app", "activated", "baseline")  # headline categories; deferred renders collapsed last, superseded only in the footer
+# R155: progress-state `activated` lists deferred tasks the coordinator activated (P-17 / the post-launch decision);
+# they leave the collapsed Later list and get normal readiness, ETA and lane accounting. The v1 launch scope is unchanged.
 LATER = "Later — not in the v1 launch scope"
 # Go-live steps (GO-LIVE decision 2026-09-26, session-03 log): (kind, overlay lane or gate id, what); ordered as they run.
 GO_LIVE = [("lane", "RELEASE-FREEZE", "RELEASE freeze: G1–G5 + G4b green on the candidate"),
@@ -122,11 +125,12 @@ class Model:
         self.gates = {g: self.gate(g, v) for g, v in state.get("gates", {}).items() if g in self.rg}
         self.accepted = {g for g, v in self.gates.items() if v["green"]}
         self.pending_roots = {r for v in self.gates.values() if not v["green"] for r in v["roots"]}
-        base = set(state.get("reused_baseline", {}).get("tasks", []))
+        base, self.activated = set(state.get("reused_baseline", {}).get("tasks", [])), set(state.get("activated", []))
         backend = closure(self.tasks, self.rg["BACKEND-READY"]["requires"])
         app = closure(self.tasks, self.rg["APP-PILOT"]["requires"])
         self.cat = {i: "superseded" if t["status"].startswith("superseded") else "baseline" if i in base
-                    else "backend" if i in backend else "app" if i in app else "deferred" for i, t in self.tasks.items()}
+                    else "backend" if i in backend else "app" if i in app else "activated" if i in self.activated else "deferred"
+                    for i, t in self.tasks.items()}
         locks = state.get("resource_locks", [])
         self.gpu_tasks = {t for x in locks if x.get("kind") == "gpu" for t in x.get("tasks", [])}
         self.windows = {w["task"]: w for x in locks if x.get("kind") == "gpu" for w in x.get("windows", [])}
@@ -220,9 +224,13 @@ class Model:
                  for i in x.get("tasks", []) + [w.get("task") for w in x.get("windows", [])]]
         refs += [(f"historical run {r['id']}", r.get("task")) for r in s.get("historical_runs", [])]
         refs += [("reused_baseline", i) for i in s.get("reused_baseline", {}).get("tasks", [])]
+        refs += [("activated", i) for i in s.get("activated", [])]
         for where, i in refs:
             if i not in ids:
                 err(f"unknown task ID {i!r} in {where}")
+        for i in s.get("activated", []):
+            if i in ids and self.cat[i] != "activated":
+                err(f"activated task {i} is {self.cat[i]}, not deferred")
         for q in ("review_queue", "integration_queue"):
             for x in s.get(q, []):
                 if x.get("lane") not in lane_ids:
@@ -677,7 +685,7 @@ def overview_facts(M):
     blockers += [f"{p['id']} open — {p['what']} (owner {p.get('owner')}; blocks {', '.join(p.get('blocks', []))})" for p in s.get("inputs", []) if p.get("status") != "resolved"]
     blockers += [f"{x.get('label', x['id'])} held by {x['holder']}" + (f" until ≈{hm(x['until'])}" if x.get("until") else "") for x in s.get("resource_locks", []) if x.get("holder")]
     blockers += [f"{f['milestone']} ({f['gate']}): {f['constraint']}" for f in M.eta.values() if f["status"] in ("blocked", "unknown")]
-    ready = [v for v in M.views if v["ready"] == "ready" and v["cat"] in ("backend", "app") and v["activity"] in ("unassigned", "queued", "ready")]
+    ready = [v for v in M.views if v["ready"] == "ready" and v["cat"] in ("backend", "app", "activated") and v["activity"] in ("unassigned", "queued", "ready")]
     return {"open_band": open_band, "active_bands": active_bands, "slots": s.get("agent_slots", {}),
             "running": sum(x["activity"] in ACTIVE for x in M.lanes), "blockers": blockers, "ready": ready}
 
@@ -896,6 +904,7 @@ manifest v{e(M.m['schema_version'])} · {link(s.get('program_doc', ''))} · gene
     H.append('<section id="progress"><h2>Progress summaries</h2><p class="note">Task counts use the manifest status (implemented/integrated) over explicit denominators; '
              'acceptance counts are gate cells marked PASS. Neither implies launch readiness: a gate turns green only on an explicit accepted decision.</p><div class="grid">')
     denominators = {"backend": "E4C (BACKEND-READY) closure minus the reused baseline", "app": "APP-PILOT (E4) closure minus backend and reused baseline",
+                    "activated": "deferred tasks listed in progress-state `activated` (R155), outside the v1 launch scope",
                     "baseline": "implemented/integrated before program 22; reused, excluded from new-work percentages"}
     for x in summaries(M):
         n, k = len(x["ids"]), len(x["impl"])
@@ -1057,7 +1066,7 @@ def render_md(M):
         L += ["## Rejected updates", ""] + [f"- `{n}`: {md_cell(r.get('reason'))}" for n, r in rej] + [""]
     row = lambda v: [f"`{v['id']}`", v["title"], CATEGORIES[v["cat"]], v["status"], v["activity"], f"{v['ready']}: {v['why']}"]
     head = ["ID", "Title", "Category", "Manifest", "Activity", "State"]
-    L += ["## Tasks (backend, App, reused baseline)", ""] + mdt(head, [row(v) for v in M.views if v["cat"] in SHOWN])
+    L += ["## Tasks (backend, App, activated, reused baseline)", ""] + mdt(head, [row(v) for v in M.views if v["cat"] in SHOWN])
     L += ["## Activity log (newest first)", ""] + [f"- {hm(x.get('at'))} UTC, {x.get('by')}: {md_cell(x.get('what'))}" for x in reversed(s.get("activity_log", []))]
     v46 = s.get("history", {}).get("v46")
     if v46:

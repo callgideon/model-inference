@@ -4,7 +4,12 @@
 
 **Sequencing:** consumer Marlin App launch comes first. [Complete plan](../../research/plan/12-complete-build-plan.md), [detailed later Lab packages](../../research/plan/13-lab-improvement-handoffs.md) and [fresh-session handoff](../../research/plan/16-fresh-session-handoff.md) are ready for the next accepted Lab scope.
 
-**Documentation scaffold only. No runnable application, dependencies or deployment has been created yet.**
+**Package only (LW0, R154).** `package.json` and `pnpm-lock.yaml` exist, standalone like `apps/app` (no root pnpm workspace, which would re-root the live App's lockfile and Vercel build); the coordinator owns both. There is no application yet: L1 creates `app/`. Lab-only shared TypeScript comes from `packages/shared` (`file:` dependency), never from `apps/app`. Dev port 3100 (the App keeps 3000). No deployment.
+
+```bash
+cd apps/lab && pnpm install --frozen-lockfile
+make lab-test lab-lint lab-typecheck lab-build lab-mutants   # typecheck/build report "not run" until app/ exists
+```
 
 This is the planned provider product: register model versions, configure private dev and production endpoints, inspect authorized inference evidence, benchmark candidates, curate data and connect improvement workflows.
 

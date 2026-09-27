@@ -42,7 +42,7 @@ class Base(unittest.TestCase):
                 t["status"] = "planned"
         s["lanes"] = [{"id": i, "task": t, "activity": a, "slice": sl, "updated": hours_ago(1), "deviation": "fixture" if a == "running" else None}
                       for i, t, a, sl in LANES]
-        s.update(ingested={}, review_queue=[], integration_queue=[], agent_slots={"total": 14, "reserved": 2},
+        s.update(ingested={}, review_queue=[], integration_queue=[], agent_slots={"total": 14, "reserved": 2}, activated=[],
                  eta_params={"review_rework_fraction": 0.3, "integration_h_per_task": 0.5})
         for g in s["gates"].values():
             g.update(candidate={"source": None, "deployed": None, "config": None}, decision=None, decided_at=None)
@@ -96,7 +96,7 @@ class Coverage(Base):
     def test_denominators_separate_new_work_from_reused_baseline(self):
         m = self.model()
         s = {x["cat"]: len(x["ids"]) for x in P.summaries(m)}
-        self.assertEqual(s, {"backend": 14, "app": 12, "baseline": 44})  # deferred and superseded are not headline counts
+        self.assertEqual(s, {"backend": 14, "app": 12, "activated": 0, "baseline": 44})  # deferred and superseded are not headline counts
         self.assertEqual(sum(s.values()) + sum(c in ("deferred", "superseded") for c in m.cat.values()), len(self.manifest["tasks"]))
 
     def test_superseded_tasks_are_not_shown_but_still_accounted(self):
@@ -182,6 +182,39 @@ class Coverage(Base):
             self.assertTrue(any(want in x for x in m.errors), (want, m.errors))
         self.assertIn("E2C", m.eta["E3C"]["unknown"])  # a malformed estimate never feeds a date
         self.assertNotIn("finish", m.eta["E3C"])
+
+
+class Activation(Base):
+    """LW0 item 9 (R155): an `activated` deferred task gets the normal readiness, lane accounting and task list."""
+
+    def test_an_activated_deferred_task_is_scheduled_like_any_other(self):
+        # Oracle: an activated task still reported blocked-as-deferred, left in the collapsed Later list,
+        # missing from the summaries/next-ready work, or not counting its running lane fails here.
+        self.assertEqual(self.model().readiness("L1")[0], "blocked")
+        self.state["activated"] = ["L1", "L2"]
+        self.state["lanes"].append({"id": "lab-access", "task": "L2", "activity": "running", "updated": hours_ago(1), "deviation": "fixture"})
+        m = self.model()
+        self.assertEqual((m.cat["L1"], m.readiness("L1")), ("activated", ("ready", "start dependencies met")))
+        self.assertEqual(m.readiness("L2")[0], "active")
+        x = next(x for x in P.summaries(m) if x["cat"] == "activated")
+        self.assertEqual((x["ids"], x["active"]), (["L1", "L2"], ["L2"]))
+        self.assertIn("L1", [v["id"] for v in P.overview_facts(m)["ready"]])
+        page, md = P.render_html(m), P.render_md(m)
+        tasks = page[page.index('id="tasks"'):page.index('id="board"')]
+        self.assertIn('data-id="l1"', tasks)
+        self.assertIn("Later — not in the v1 launch scope (55 tasks)", page)
+        self.assertLess(md.index("| `L1` |"), md.index("## Activity log"))
+        self.assertEqual(P.uncovered(m, page, md), [])
+        self.assertEqual(P.launch_scope(m)["total"], 14 + 12 + len(P.GO_LIVE))  # the v1 launch headline is unchanged
+        self.assertEqual(m.errors, [])
+
+    def test_only_a_known_deferred_task_can_be_activated(self):
+        # Oracle: activating a backend/App/baseline task (re-categorising launch work) or an unknown ID passes silently.
+        self.state["activated"] = ["E4C", "F2P", "NOPE"]
+        errors = self.model().errors
+        self.assertIn("activated task E4C is backend, not deferred", errors)
+        self.assertIn("activated task F2P is baseline, not deferred", errors)
+        self.assertIn("unknown task ID 'NOPE' in activated", errors)
 
 
 class Gates(Base):

@@ -455,6 +455,61 @@ def test_c1_is_the_only_console_task_with_a_database():
         tasklocal.local_services("z9")
 
 
+# LW0 (R152-R153): the post-launch Lab lanes. Every lane port sits in ONE band, 57500-57599;
+# C and V lanes use `lab-`/`app-` keys so R48's `c2`/`v1` stay fake-only (above), and `dlab` is
+# the only D key (its D-harness decoy is 27500, outside every reservation - tests/d/test_pgharness).
+LAB_BAND = range(57500, 57600)
+LAB_LANE_PORTS = {
+    "dlab": {"postgres": 57500}, "l2": {"postgres": 57501}, "l3": {"postgres": 57502},
+    "l4": {"postgres": 57503}, "i2l": {"postgres": 57504}, "lab-c2": {"postgres": 57505, "s3": 57506},
+    "g4f": {"postgres": 57507}, "g4t": {"postgres": 57508}, "app-c3f": {"postgres": 57509},
+    "lab-c3l": {"postgres": 57510}, "j2": {"postgres": 57511, "judge-fake": 57512},
+    "lab-v1m": {"postgres": 57513}, "n1": {"postgres": 57514, "s3": 57515},
+    "n2": {"postgres": 57516, "s3": 57517}, "n3": {"postgres": 57518, "s3": 57519},
+    "b1": {"postgres": 57520, "model-fake": 57521}, "b3": {"postgres": 57522},
+    "i5": {"postgres": 57523, "s3": 57524}, "i6": {"postgres": 57525}, "i7": {"postgres": 57526},
+    "p1": {"postgres": 57527}, "p2": {"postgres": 57528, "teacher-fake": 57529},
+    "p3": {"postgres": 57530, "protocol": 57531}, "r1": {"postgres": 57532, "valkey": 57533},
+    "r2": {"postgres": 57534}, "g5": {"postgres": 57535}, "i4": {"postgres": 57536},
+    # T lanes: a block, because a TASK_PORTS entry would inherit the track's native 59000
+    "t2i": {"clickhouse": 57540, "s3": 57542}, "t2f": {"clickhouse": 57543, "s3": 57545},
+    "t3": {"clickhouse": 57546, "s3": 57548},
+}
+
+
+def test_every_lab_lane_port_sits_in_one_band():
+    """Oracle: a lane port outside 57500-57599, a lane on another's port, or a T lane still on
+    the track's ClickHouse native 59000 fails here."""
+    for task, ports in LAB_LANE_PORTS.items():
+        services = tasklocal.local_services(task)
+        assert {name: s.host_port for name, s in services.items()} == ports, task
+        assert all(s.container == f"infrx-{task}-{s.service}" for s in services.values())
+    for task, native in (("t2i", 57541), ("t2f", 57544), ("t3", 57547)):
+        assert tasklocal.local_services(task)["clickhouse"].extra_ports == (native,), task
+    used = {port for ports in LAB_LANE_PORTS.values() for port in ports.values()} | {57541, 57544, 57547}
+    reserved = tasklocal.all_host_ports()          # raises on any collision
+    assert {port for port in reserved if port in LAB_BAND} == used
+    assert used <= set(LAB_BAND)
+
+
+@pytest.mark.parametrize("n,gate", enumerate(("e3l", "e5l", "e6l", "e7l", "e8l")))
+def test_each_lab_gate_owns_a_compose_block_below_the_band(n, gate):
+    """Oracle: an E gate without its own 100-port block, or whose PostgreSQL mirror is not the
+    port the harness derives (E2's 55532 + the block's offset, as e3c), fails here."""
+    base = 57000 + 100 * n
+    services = tasklocal.local_services(gate)
+    compose = services["compose"]
+    assert (compose.host_port, *compose.extra_ports) == tuple(range(base, base + 100))
+    assert services["postgres"].host_port == 55532 + base - 55500
+
+
+def test_the_lab_tracks_develop_against_fakes():
+    """Oracle: a Lab track (l n h b p r x) that `local_services` does not know raises
+    `unknown track` for every task without a port of its own (L1, H1, B2, P4, R3, X1 ...)."""
+    for task in ("l1", "n4", "h1", "b2", "p4", "r3", "x1"):
+        assert tasklocal.local_services(task) == {}, task
+
+
 def _api_dir():
     import pathlib
     return pathlib.Path(__file__).resolve().parents[2]
