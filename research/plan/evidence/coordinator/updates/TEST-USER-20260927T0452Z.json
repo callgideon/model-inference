@@ -1,0 +1,35 @@
+{
+  "task": "TEST-USER",
+  "lane": "TEST-USER",
+  "slice": "internal test users without email verification: infra/app/create-test-user.py (GoTrue admin create/confirm + the App's claim_signup_grant + console_wallet_summary), operations.md section, tests and mutants",
+  "activity": "review",
+  "at": "2026-09-27T04:52:00Z",
+  "head": "abb017e0",
+  "base": "17cc78bd",
+  "worktree": ".claude/worktrees/codex-test-user",
+  "branch": "codex/test-user",
+  "owned_paths": [
+    "infra/app/create-test-user.py",
+    "infra/app/operations.md",
+    "tests/integration/ops/test_create_test_user.py",
+    "tests/integration/mutants.py",
+    "research/plan/evidence/i/TEST-USER-abb017e0.md",
+    "research/plan/evidence/coordinator/updates/TEST-USER-20260927T0452Z.json"
+  ],
+  "isolation": {"ports": "postgres 55451 (INFRX_D_TASK=app-c0, INFRX_D1_IMAGE=supabase)", "prefix": "infrx-app-c0-"},
+  "commands": [
+    {"cmd": "pytest -q tests/integration/ops/test_create_test_user.py (before the tool)", "exit": 1, "summary": "15 failed, 1 skipped (fails-before)"},
+    {"cmd": "pytest -q tests/integration/ops/test_create_test_user.py", "exit": 0, "summary": "17 passed, 1 skipped"},
+    {"cmd": "INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase pytest -q tests/integration/ops/test_create_test_user.py", "exit": 0, "summary": "18 passed (real 0015 grant through PostgREST)"},
+    {"cmd": "tests/integration/mutants.py --layer all --only tuc01|tum01..tum18", "exit": 0, "summary": "control survived, 17 killed alone, tum18 pending (layer 2; kill proven by hand on app-c0)"},
+    {"cmd": "19 TEST-USER mutants as one list", "exit": 0, "summary": "killed 17, controls_survived 1, not_killed 0, pending 1"},
+    {"cmd": "pytest -q tests/integration/test_run.py -k 'anchor or mutation_stage_runs_every_list'", "exit": 0, "summary": "2 passed"},
+    {"cmd": "pytest -q tests/integration/ops", "exit": 0, "summary": "51 passed, 1 skipped"},
+    {"cmd": "ruff check (owned python)", "exit": 0, "summary": "clean"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.1, "likely_h": 0.25, "pessimistic_h": 1, "confidence": "medium", "basis": "lane done; hosted use is two SSM exports and one command [OP]", "at": "2026-09-27T04:52:00Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/i/TEST-USER-abb017e0.md"]
+}
