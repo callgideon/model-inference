@@ -11,6 +11,7 @@ layout of the F3 list (the F3 fixtures live in `packages/shared`).
 from __future__ import annotations
 
 import ast
+import dataclasses
 import pathlib
 import sys
 
@@ -28,6 +29,7 @@ P = "harnesses/replay.py"
 ID = "test_h1_a_prompt_or_processor_change_is_a_new_identity"
 CODE = "test_h1_arbitrary_code_is_never_a_harness"
 BIND = "test_h1_binding_pins_the_revision_and_checks_the_purpose"
+REAL = "test_h1_binding_asks_the_real_l2_port"
 MEMBER = "test_h1_binding_checks_the_callers_current_membership"
 XDEP = "test_h1_replay_targets_only_its_own_providers_deployment"
 MUT = "test_h1_a_mutable_harness_ref_is_rejected"
@@ -59,11 +61,11 @@ MUTANTS: tuple[Mutant, ...] = (
       'if payload.get("schema") != "lab.harness_revision.1":', "if False:", CODE),
     # H1.c binding
     m("h1_bind_skips_the_rights_port", "binding asks L2 before scheduling",
-      "    rights.authorize(lab.Gate.schedule,", "    (lambda *a, **k: None)(lab.Gate.schedule,",
+      "    await rights.authorize(lab.Gate.schedule,",
+      "    None and await rights.authorize(lab.Gate.schedule,",
       BIND, XPROV, MEMBER),
     m("h1_bind_forwards_no_principal", "L2 is asked about the calling user's membership",
-      "user_id=user_id, provider_org_id=record.provider_org_id,",
-      "user_id=None, provider_org_id=record.provider_org_id,", BIND, MEMBER),
+      "lab.Gate.schedule, user_id=user_id,", "lab.Gate.schedule, user_id=None,", BIND, MEMBER),
     m("h1_bind_asks_the_wrong_gate", "binding is the scheduling gate",
       "rights.authorize(lab.Gate.schedule,", "rights.authorize(lab.Gate.access,", BIND),
     m("h1_bind_validates_the_old_run", "the pinned ref itself is validated first",
@@ -124,11 +126,25 @@ def case_names() -> set[str]:
             if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")}
 
 
-RUNNER = Runner(name="h1", targets=(SUITE,), layout=_layout, require_every_case=True)
+#: WR-H1-1: the binding decisions again, killed through the real L2 port on PostgreSQL
+#: (`-m pg`, the D harness of `INFRX_D_TASK`; the copy reaches the migrations via its
+#: `apps/app` link).
+PG_MUTANTS: tuple[Mutant, ...] = tuple(
+    dataclasses.replace(m, name=f"pg_{m.name}", cases=(REAL,))
+    for m in MUTANTS if m.name in ("h1_bind_skips_the_rights_port", "h1_bind_forwards_no_principal"))
+
+RUNNER = Runner(name="h1", targets=(SUITE,), layout=_layout, require_every_case=True,
+                extra_args=("-m", "not pg"))
+PG_RUNNER = Runner(name="h1-pg", targets=(SUITE,), layout=_layout, require_every_case=True,
+                   extra_args=("-m", "pg"), env=("INFRX_D_TASK",))
 
 
 def run_mutant(mutant: Mutant) -> Result:
-    return shared.run_mutant(mutant, RUNNER)
+    """The PostgreSQL list has no module baseline, so its case runs unmutated first, once
+    per process (R83 (b))."""
+    if mutant not in PG_MUTANTS:
+        return shared.run_mutant(mutant, RUNNER)
+    return shared.pristine((REAL,), PG_RUNNER) or shared.run_mutant(mutant, PG_RUNNER)
 
 
 if __name__ == "__main__":

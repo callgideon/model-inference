@@ -50,20 +50,20 @@ class RightsPort(Protocol):
     """L2's gate evaluator: raises `Forbidden` unless `user_id` holds a current membership
     of the provider AND the provider a current grant for the dataset at this gate."""
 
-    def authorize(self, gate: lab.Gate, *, user_id: str, provider_org_id: str,
-                  dataset_ref: str) -> None: ...
+    async def authorize(self, gate: lab.Gate, *, user_id: str, provider_org_id: str,
+                        dataset_ref: str) -> None: ...
 
 
-def bind(run: dict[str, Any], harness_ref: str, *, rights: RightsPort,
-         user_id: str) -> dict[str, Any]:
+async def bind(run: dict[str, Any], harness_ref: str, *, rights: RightsPort,
+               user_id: str) -> dict[str, Any]:
     """A copy of `run` pinned to `harness_ref`, validated, then authorized for scheduling.
 
     `user_id` is the server-derived caller (the session subject), never a request field.
     """
     bound = {**run, "harness_ref": harness_ref}
     record = lab.parse(bound)          # mutable or foreign refs stop here, before any read
-    rights.authorize(lab.Gate.schedule, user_id=user_id, provider_org_id=record.provider_org_id,
-                     dataset_ref=record.dataset_ref)
+    await rights.authorize(lab.Gate.schedule, user_id=user_id,
+                           provider_org_id=record.provider_org_id, dataset_ref=record.dataset_ref)
     return bound
 
 

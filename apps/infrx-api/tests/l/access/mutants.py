@@ -44,6 +44,7 @@ EXPIRED = "test_lab_access__an_expired_grant_denies"
 STORE_CLOCK = "test_lab_access__revocation_and_grants_are_judged_on_the_store_clock"
 HISTORY = "test_lab_access__grant_history_keeps_every_version_for_the_recipient_only"
 PG_DOORS = "test_lab_access_pg__a_foreign_member_is_refused_at_both_doors"
+DATASET = "test_lab_access__a_dataset_passes_a_gate_only_under_every_sources_current_grant"
 FAKE_ONLY, PG_ONLY = (REDACTED,), (PG_DOORS,)
 
 AGG_GUARD = ("        await self._member(user_id, provider_org_id, "
@@ -93,7 +94,16 @@ MUTANTS: tuple[Mutant, ...] = (
        MID_QUEUE, EXPIRED),
     _m("clock_is_the_process_clock", "0-F1 (R7/R79): the store's clock, never the process's",
        A, "await self.store.db_now()", "datetime.now().astimezone()", STORE_CLOCK,
-       occurrences=3),
+       occurrences=4),
+    _m("dataset_first_source_only", "WR-H1-1: every source of a dataset is under a grant",
+       A, "        for use in uses:\n", "        for use in uses[:1]:\n", DATASET),
+    _m("dataset_grant_of_the_first_grantor", "each source is judged on its own grantor's grant",
+       A, "grant=grants[use.grantor_org_id]", "grant=grants[uses[0].grantor_org_id]", DATASET),
+    _m("dataset_without_sources_passes", "an unknown or foreign dataset is refused (default deny)",
+       A, "        if not uses:\n", "        if False:\n", DATASET),
+    _m("dataset_gate_ignored", "the gate decides the purpose (export needs training)",
+       A, "            lab.authorize(gate, membership=",
+       "            lab.authorize(lab.Gate.schedule, membership=", DATASET),
     _m("history_drops_revocations", "a revocation is a new history version (C/J/T audit)",
        F, "        self.history.append(self.grants[(grantor_org_id, provider_org_id)])\n", "",
        HISTORY),

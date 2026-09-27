@@ -9,8 +9,8 @@ no "as of" time. The clock is the store's (`infrx.now()`, R7/R79: there is no se
 read AFTER the rows it judges, so a revocation or grant committed before the read is never in
 that clock's future: a revocation denies the very next call, including queued work.
 
-`LabAccess` is also the port C, J and T consume for grant history and source ids, and the one
-membership read the Lab shell uses (R156).
+`LabAccess` is also the port C, J and T consume for grant history and source ids, the one
+membership read the Lab shell uses (R156), and H1's rights port at a Lab gate (WR-H1-1).
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from typing import Any, Mapping, Protocol, Sequence
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...contracts import errors
+from ...contracts.lab import records as lab
 from ...contracts.v2.ports import ProviderDirectory, authorize_content_read
 from ...contracts.v2.records import (AccessGrant, DataCategory, DataPurpose,
                                      ProviderCapability, ProviderMembership)
@@ -42,6 +43,25 @@ class AccessStore(ProviderDirectory, Protocol):
 
     async def deployment_aggregates(self, provider_org_id: str) -> Sequence[Mapping[str, Any]]:
         """The provider's own deployments' operational aggregates, one row per window."""
+
+
+class DatasetUse(BaseModel):
+    """One source a dataset draws on: whose data (the grantor), from which model, which
+    category. The grant is not stored here: it is read current at every gate."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    grantor_org_id: str
+    model_id: str
+    category: DataCategory
+
+
+class DatasetSources(Protocol):
+    """D7's dataset storage (lab-sql, not merged): the uses of the provider's OWN dataset;
+    none for an unknown or another provider's ref."""
+
+    async def uses(self, provider_org_id: str, dataset_ref: str) -> Sequence[DatasetUse]:
+        """The dataset's sources, one per (grantor, model, category)."""
 
 
 class DeploymentAggregate(BaseModel):
@@ -72,8 +92,8 @@ class Workspace(BaseModel):
 class LabAccess:
     """Named provider operations. `user_id` is the server-verified session identity."""
 
-    def __init__(self, store: AccessStore) -> None:
-        self.store = store
+    def __init__(self, store: AccessStore, datasets: DatasetSources | None = None) -> None:
+        self.store, self.datasets = store, datasets
 
     async def _member(self, user_id: str, provider_org_id: str,
                       capability: ProviderCapability) -> None:
@@ -126,3 +146,23 @@ class LabAccess:
                                provider_org_id=provider_org_id, model_id=model_id,
                                category=category, purpose=purpose)
         return grant
+
+    async def authorize(self, gate: lab.Gate, *, user_id: str, provider_org_id: str,
+                        dataset_ref: str) -> None:
+        """H1's `RightsPort` (WR-H1-1): `Forbidden` unless `user_id` is a current
+        developer+ member of the provider AND every source of the dataset is under the
+        grantor's current grant for the gate's purpose (F3 `lab.authorize`). Default deny:
+        no dataset storage wired, or a dataset with no sources. A two-purpose gate
+        (external submission) needs the run's purpose, which this port does not take, so it
+        is refused."""
+        uses = await self.datasets.uses(provider_org_id, dataset_ref) if self.datasets else ()
+        if not uses:
+            raise errors.Forbidden(f"{gate}: no sources of this dataset for this provider")
+        membership = await self.store.membership(provider_org_id, user_id)
+        grants = {grantor: await self.store.current_grant(grantor, provider_org_id)
+                  for grantor in {use.grantor_org_id for use in uses}}
+        now = await self.store.db_now()
+        for use in uses:
+            lab.authorize(gate, membership=membership, grant=grants[use.grantor_org_id],
+                          now=now, provider_org_id=provider_org_id, model_id=use.model_id,
+                          category=use.category)

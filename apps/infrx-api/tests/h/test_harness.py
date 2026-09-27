@@ -142,7 +142,7 @@ def test_h1_a_cross_provider_harness_fails_the_purpose_check():
 
 
 @pytest.mark.pg
-def test_h1_binding_asks_the_real_l2_port(pg_world):
+def test_h1_binding_asks_the_real_l2_port(pg_world):  # noqa: F811 - the imported fixture
     """WR-H1-1 over PostgreSQL: `bind` asks `LabAccess.authorize` (current membership and
     grant rows, the database clock). BOTH (a provider-A developer) binds A's run; A's viewer
     and B's developer are Forbidden; after the grantor revokes, BOTH is Forbidden too."""

@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.support import DEFAULT_START
 from infrx.contracts.v2 import records as v2
-from infrx.lab.access import LabAccess
-from infrx.lab.access.fakes import FakeAccessStore
+from infrx.lab.access import DatasetUse, LabAccess
+from infrx.lab.access.fakes import FakeAccessStore, FakeDatasets
 from psycopg.types.json import Jsonb
 
 from tests.d import checks_admission as ca
@@ -26,6 +26,16 @@ from tests.d import checks_credit as cc
 T0 = DEFAULT_START                    # 2026-09-20 12:00Z: behind any process clock running this
 FAR = datetime(2099, 1, 1, tzinfo=timezone.utc)     # ahead of any process clock running this
 CONTENT = v2.DataCategory.request_content
+
+
+def datasets(w) -> FakeDatasets:
+    """A's two datasets (D7 is not merged, so they are fake in both worlds): DATASET draws on
+    CONSUMER_1's data (granted to A); MIXED also on CONSUMER_2's (granted to B only)."""
+    w.DATASET = f"lab:dataset:{w.A}:0000000a-0000-4000-8000-00000000000a@sha256:{'a' * 64}"
+    w.MIXED = f"lab:dataset:{w.A}:0000000b-0000-4000-8000-00000000000b@sha256:{'b' * 64}"
+    c1, c2 = (DatasetUse(grantor_org_id=g, model_id=w.MODELS[w.A], category=CONTENT)
+              for g in (w.C1, w.C2))
+    return FakeDatasets({(w.A, w.DATASET): (c1,), (w.A, w.MIXED): (c1, c2)})
 
 
 class FakeWorld:
@@ -55,7 +65,7 @@ class FakeWorld:
                 "deployment_revision_id": revision, "window_start": T0 - timedelta(hours=1),
                 "window_end": T0, "requests": 40, "errors": 1, "p95_latency_ms": 900}]
         self.advance(60)
-        self.access = LabAccess(self.store)
+        self.access = LabAccess(self.store, datasets(self))
 
     def now(self) -> datetime:
         return self.store.now
@@ -111,7 +121,7 @@ class PgWorld:
             "infrx.deployment_revisions d using (deployment_revision_id) "
             "where d.provider_org_id = %s order by 1", (provider,))]
             for provider in (self.A, self.B)}
-        self.access = LabAccess(PgAccessStore(connector(dsn)))
+        self.access = LabAccess(PgAccessStore(connector(dsn)), datasets(self))
 
     def now(self) -> datetime:
         return self.conn.execute("select infrx.now()").fetchone()[0]

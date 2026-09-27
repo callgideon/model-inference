@@ -7,6 +7,7 @@ from typing import Any
 
 from ...contracts.conformance.v2_fakes import FakeProviderDirectory
 from ...contracts.v2.records import AccessGrant
+from . import DatasetUse
 
 
 @dataclasses.dataclass
@@ -41,3 +42,14 @@ class FakeAccessStore(FakeProviderDirectory):
 
     async def deployment_aggregates(self, provider_org_id: str) -> list[dict[str, Any]]:
         return list(self.rows.get(provider_org_id, ()))
+
+
+@dataclasses.dataclass
+class FakeDatasets:
+    """D7's `DatasetSources` in memory: (provider, dataset_ref) -> its uses."""
+
+    uses_by_ref: dict[tuple[str, str], tuple[DatasetUse, ...]] = dataclasses.field(
+        default_factory=dict)
+
+    async def uses(self, provider_org_id: str, dataset_ref: str) -> tuple[DatasetUse, ...]:
+        return self.uses_by_ref.get((provider_org_id, dataset_ref), ())
