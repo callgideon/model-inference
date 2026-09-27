@@ -3,12 +3,15 @@
 
 Driven by the F3 fixtures (`packages/shared/contracts/lab/fixtures.json`): the harness
 revision and evaluation run below are the contract's accepted examples. L2's rights port
-is a fake here (integration dependency L2; the real check is its RPC).
+is a fake in every case but one: `test_h1_binding_asks_the_real_l2_port`, marked `pg`, binds
+through `LabAccess` over PostgreSQL (WR-H1-1; the L2 world of `tests/l/access`, `INFRX_D_TASK=l2`).
 
     uv run --frozen pytest -q tests/h/test_harness.py
+    INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_harness.py -m pg
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import pathlib
@@ -19,6 +22,8 @@ from infrx.contracts import errors
 from infrx.contracts.lab import records as lab
 from infrx.contracts.v2 import records as v2
 from infrx.harnesses import replay as h
+
+from tests.l.access.conftest import pg_template, pg_world  # noqa: F401 - the L2 world
 
 REPO = pathlib.Path(__file__).resolve().parents[4]
 FIXTURES = json.loads((REPO / "packages/shared/contracts/lab/fixtures.json").read_text())
@@ -61,10 +66,14 @@ class Rights:
     def __init__(self, provider=A, dataset=RUN["dataset_ref"], members=(USER,)):
         self.allowed, self.members, self.asked = (provider, dataset), set(members), []
 
-    def authorize(self, gate, *, user_id, provider_org_id, dataset_ref):
+    async def authorize(self, gate, *, user_id, provider_org_id, dataset_ref):
         self.asked.append((gate, user_id, provider_org_id, dataset_ref))
         if user_id not in self.members or (provider_org_id, dataset_ref) != self.allowed:
             raise errors.Forbidden("no current membership and grant")
+
+
+def bind(run, ref, **kwargs):
+    return asyncio.run(h.bind(run, ref, **kwargs))
 
 
 def replayer(model, payload=None, recordings=None, bounds=ROOMY, clock=None, env=v2.Environment.dev):
@@ -98,7 +107,7 @@ def test_h1_arbitrary_code_is_never_a_harness():
 # --- H1.c: binding into the F3 manifest ---------------------------------------------------------
 def test_h1_binding_pins_the_revision_and_checks_the_purpose():
     rights = Rights()
-    bound = h.bind(RUN, h.revision_ref(harness()), rights=rights, user_id=USER)
+    bound = bind(RUN, h.revision_ref(harness()), rights=rights, user_id=USER)
     assert bound["harness_ref"] == h.revision_ref(harness()) and lab.validate(bound) is None
     assert rights.asked == [(lab.Gate.schedule, USER, A, RUN["dataset_ref"])]
     assert RUN["harness_ref"] != bound["harness_ref"]                  # the input is not edited
@@ -108,9 +117,9 @@ def test_h1_binding_checks_the_callers_current_membership():
     """The provider still holds the grant, but this user's membership is revoked: the port
     is asked about the caller, so the bind is Forbidden for them and allowed for a member."""
     rights, ref = Rights(members=(USER,)), h.revision_ref(harness())
-    assert h.bind(RUN, ref, rights=rights, user_id=USER)["harness_ref"] == ref
+    assert bind(RUN, ref, rights=rights, user_id=USER)["harness_ref"] == ref
     with pytest.raises(errors.Forbidden):
-        h.bind(RUN, ref, rights=rights, user_id=REVOKED)
+        bind(RUN, ref, rights=rights, user_id=REVOKED)
     assert [asked[1] for asked in rights.asked] == [USER, REVOKED]
 
 
@@ -118,7 +127,7 @@ def test_h1_a_mutable_harness_ref_is_rejected():
     label = h.revision_ref(harness()).split("@")[0] + "@latest"
     rights = Rights()
     with pytest.raises(lab.LabRejected) as refused:
-        h.bind(RUN, label, rights=rights, user_id=USER)
+        bind(RUN, label, rights=rights, user_id=USER)
     assert refused.value.reason == "mutable_ref" and rights.asked == []
 
 
@@ -126,10 +135,27 @@ def test_h1_a_cross_provider_harness_fails_the_purpose_check():
     foreign = h.revision_ref(harness(provider_org_id=B))
     rights = Rights()
     with pytest.raises(lab.LabRejected) as refused:
-        h.bind(RUN, foreign, rights=rights, user_id=USER)
+        bind(RUN, foreign, rights=rights, user_id=USER)
     assert refused.value.reason == "cross_provider_ref" and rights.asked == []
     with pytest.raises(errors.Forbidden):                               # no grant: L2 says no
-        h.bind(RUN, h.revision_ref(harness()), rights=Rights(provider=B), user_id=USER)
+        bind(RUN, h.revision_ref(harness()), rights=Rights(provider=B), user_id=USER)
+
+
+@pytest.mark.pg
+def test_h1_binding_asks_the_real_l2_port(pg_world):
+    """WR-H1-1 over PostgreSQL: `bind` asks `LabAccess.authorize` (current membership and
+    grant rows, the database clock). BOTH (a provider-A developer) binds A's run; A's viewer
+    and B's developer are Forbidden; after the grantor revokes, BOTH is Forbidden too."""
+    w = pg_world
+    run = {**json.loads(json.dumps(RUN).replace(A, w.A)), "dataset_ref": w.DATASET}
+    ref = h.revision_ref(harness(provider_org_id=w.A))
+    assert bind(run, ref, rights=w.access, user_id=w.BOTH)["harness_ref"] == ref
+    for user in (w.VIEWER_A, w.DEV_B):
+        with pytest.raises(errors.Forbidden):
+            bind(run, ref, rights=w.access, user_id=user)
+    w.revoke_grant(w.C1, w.A)
+    with pytest.raises(errors.Forbidden):
+        bind(run, ref, rights=w.access, user_id=w.BOTH)
 
 
 # --- H1.b: replay -------------------------------------------------------------------------------

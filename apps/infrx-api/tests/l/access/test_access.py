@@ -16,6 +16,7 @@ import psycopg
 import pytest
 
 from infrx.contracts import errors
+from infrx.contracts.lab import records as lab
 from infrx.contracts.v2 import records as v2
 from tests.d import checks
 
@@ -171,6 +172,33 @@ def test_lab_access__grant_history_keeps_every_version_for_the_recipient_only(wo
     assert run(w.access.grant_history(w.DEV_B, w.B, w.C1)) == ()
     with pytest.raises(errors.Forbidden):
         content(w, w.DEV_A, w.A, w.C1)
+
+
+# --- datasets at a Lab gate: H1's rights port (WR-H1-1) --------------------------------
+def gate(w, user, provider, ref, at=lab.Gate.schedule):
+    return run(w.access.authorize(at, user_id=user, provider_org_id=provider, dataset_ref=ref))
+
+
+def test_lab_access__a_dataset_passes_a_gate_only_under_every_sources_current_grant(world):
+    """Oracle (WR-H1-1, DATA-RIGHTS): scheduling A's dataset needs a current developer+ member
+    of A AND a current grant, for the gate's purpose, of every source it draws on. Refused: a
+    viewer; B's developer, naming A or B; a dataset with one ungranted source; an unknown
+    dataset; the export gate (training was never granted); and, after the revocation, the
+    member who was allowed a moment before."""
+    w = world
+    assert gate(w, w.BOTH, w.A, w.DATASET) is None
+    for user, provider, ref, at in ((w.VIEWER_A, w.A, w.DATASET, lab.Gate.schedule),
+                                    (w.DEV_B, w.A, w.DATASET, lab.Gate.schedule),
+                                    (w.DEV_B, w.B, w.DATASET, lab.Gate.schedule),
+                                    (w.BOTH, w.A, w.MIXED, lab.Gate.schedule),
+                                    (w.BOTH, w.A, w.DATASET.replace("@sha256:a", "@sha256:c"),
+                                     lab.Gate.schedule),
+                                    (w.BOTH, w.A, w.DATASET, lab.Gate.export)):
+        with pytest.raises(errors.Forbidden):
+            gate(w, user, provider, ref, at)
+    w.revoke_grant(w.C1, w.A)
+    with pytest.raises(errors.Forbidden):
+        gate(w, w.BOTH, w.A, w.DATASET)
 
 
 # --- direct DB roles (PostgreSQL only) ------------------------------------------------
