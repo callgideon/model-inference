@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "2252e5a0",
+ "integration_head": "0efb70c6",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 182,
- "updated": "2026-09-27T21:02:36Z",
+ "revision": 187,
+ "updated": "2026-09-27T22:49:32Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4693,26 +4693,28 @@
    "branch": "codex/w5-lab-access-lw2",
    "worktree": ".claude/worktrees/codex-w5-lab-access-lw2",
    "base": "eb0734d7",
-   "head": null,
+   "head": "08a353e7",
    "isolation": {
     "ports": "l3 57502",
     "prefix": "infrx-l3-",
     "db": "l3"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
-   "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
+   "updated": "2026-09-27T21:31:06Z",
+   "blocker": "L3-SQL not merged: the PG half of tests/l/control skips (1-L3-INT-1 open by design → the L3 integration lane after lab-sql-lw2 merges)",
+   "next_action": "REJECT-as-held at 08a353e7: L3 (LabControl over a fake ControlStore; majors C1 smoke-gate bypass and C2 fixed+rechecked); like L2 in LW1 it merges through an L3-INTEGRATION lane after lab-sql-lw2 lands: reconcile PgControlStore with the ControlStore surface (WR-L3-1 delta), WR-L3-5 (catalog.py _PRIVATE = ready_private, A3 wiring), run the l3 PG world + 19 PG mutants, WR-L3-2 (api-mutants own-process line); WR-L3-3 (engine SmokeTest adapter + Lab control route → lab-api), WR-L3-4 (provider_dev admission, D) recorded; minors C3–C6, EVID-1/2, CORR-1 carried",
    "estimate": {
-    "optimistic_h": 0,
-    "likely_h": 0,
-    "pessimistic_h": 0,
+    "optimistic_h": 1.5,
+    "likely_h": 3,
+    "pessimistic_h": 7,
     "confidence": "medium",
-    "basis": "wave5-plan §5 estimate; set at handback",
-    "at": "2026-09-27T19:05:00Z"
+    "basis": "handback: first PG run against L3-SQL + one verify round (L2's LW1 integration analogue)",
+    "at": "2026-09-27T21:31:06Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/l/L3-8e092ae.md"
+   ],
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW2 lab-access-lw2"
@@ -4836,26 +4838,29 @@
    "branch": "codex/w5-judge",
    "worktree": ".claude/worktrees/codex-w5-judge",
    "base": "eb0734d7",
-   "head": null,
+   "head": "19b031da",
    "isolation": {
     "ports": "j2 57511/57512; lab-c3l 57510",
     "prefix": "infrx-j2-",
     "db": "j2"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
+   "updated": "2026-09-27T22:49:32Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
+   "next_action": "DONE (code): merged --no-ff at 007048f2 + wirings 0efb70c6 (WR-J2-1, WR-J2-2 pg marker, WR-C3L-1; J2 33/33 + J1 125/125, C3L 12 cases 35/35); integration NOT claimed until D6J + SR-J2-1/SR-C3L-1 land (lab-sql LW3); WR-J2-3 → composition batch 2",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
     "pessimistic_h": 0,
-    "confidence": "medium",
-    "basis": "wave5-plan §5 estimate; set at handback",
-    "at": "2026-09-27T19:05:00Z"
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-27T22:49:32Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/j/J2-1666099.md",
+    "research/plan/evidence/c/C3L-33563dd.md"
+   ],
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW3 judge"
@@ -4972,26 +4977,29 @@
    "branch": "codex/w5-rollout-control",
    "worktree": ".claude/worktrees/codex-w5-rollout-control",
    "base": "eb0734d7",
-   "head": null,
+   "head": "ae5e263d",
    "isolation": {
     "ports": "r2 57534",
     "prefix": "infrx-r2-",
     "db": "r2"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
+   "updated": "2026-09-27T22:44:07Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
+   "next_action": "ACCEPT_WITH_FIXES at ae5e263d (R2 controller over fake D9/L3/B2 ports; R3 variant identity/compare with real W3 capabilities + H1 compare; major RC-C1 policy binding fixed+rechecked) → merge batch #3 with WR-R2-5 (api-mutants); WR-R2-1 → lab-sql D9, WR-R2-2/WR-R3-1 → L3 integration, WR-R2-3 → R1, WR-R2-4 → B2 (already merged shape), WR-R2-6 → R1's __init__, WR-R3-2 → lab-sql, WR-R3-3 → experiment owners; real D9/L3/B2/R1 halves rerun at their merges",
    "estimate": {
-    "optimistic_h": 0,
-    "likely_h": 0,
-    "pessimistic_h": 0,
+    "optimistic_h": 1.5,
+    "likely_h": 4,
+    "pessimistic_h": 10,
     "confidence": "medium",
-    "basis": "wave5-plan §5 estimate; set at handback",
-    "at": "2026-09-27T19:05:00Z"
+    "basis": "handback: R2 1/2.5/6 + R3 0.5/1.5/4 after D9/L3/R1",
+    "at": "2026-09-27T22:44:07Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/r/R2-3146a24.md",
+    "research/plan/evidence/r/R3-e0b2374.md"
+   ],
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW4 rollout-control"
@@ -5147,26 +5155,29 @@
    "branch": "codex/w5-trace-ui",
    "worktree": ".claude/worktrees/codex-w5-trace-ui",
    "base": "2252e5a0",
-   "head": null,
+   "head": "7cd50277",
    "isolation": {
     "ports": "lab-v1m 57513",
     "prefix": "infrx-lab-v1m-",
     "db": "lab_v1m"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-27T21:02:36Z",
-   "updated": "2026-09-27T21:02:36Z",
+   "updated": "2026-09-27T22:49:32Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "DONE: merged --no-ff at 2099e9c4 + wirings b4e870ba (WR-V2-3 stack.py adapter, WR-V2-4 lab-mutants line; detail 42/42, judge 36/36; V2-R01/R02 real C3F door green); real trace/C2/judge adapters at the lab-api/content/judge merges (WR-V2-1/2, WR-V3-1)",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
     "pessimistic_h": 0,
-    "confidence": "medium",
-    "basis": "plan 2/4/8 + 1/2/4",
-    "at": "2026-09-27T21:02:36Z"
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-27T22:49:32Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/v/V2-9c4bbc0.md",
+    "research/plan/evidence/v/V3-205f3bc.md"
+   ],
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW4 trace-ui"
@@ -5204,6 +5215,40 @@
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW2 composition"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-2",
+   "task": null,
+   "slice": "(wave5 merge lane #2) trace-ui 7cd50277 + judge 19b031da with their wirings; workflow wf_58d1ce35-52f; base 37859776",
+   "agent": "opus",
+   "branch": "codex/w5-merge-2",
+   "worktree": ".claude/worktrees/codex-w5-merge-2",
+   "base": "37859776",
+   "head": "0efb70c6",
+   "isolation": {
+    "ports": "app-c3f / j2 (checks only)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "complete",
+   "started": "2026-09-27T22:24:58Z",
+   "updated": "2026-09-27T22:49:32Z",
+   "blocker": null,
+   "next_action": "DONE: fast-forwarded onto claude/consumer-v1 at 0efb70c6 (verify ok; minors: C3L case count 12 not 11, check 1 without a task key touched the d1 harness once)",
+   "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-27T22:49:32Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
    ],
    "wiring_requests": []
   }
