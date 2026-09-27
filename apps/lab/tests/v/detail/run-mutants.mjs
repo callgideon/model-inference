@@ -23,6 +23,7 @@ const C = {
   j03: "V2-J03 without a current grant, after revocation, with a forged grant or past T3 retention, no content is read",
   p01: "V2-P01 the page reads as the session's workspace, and feedback shows whatever the trace read says",
   p02: "V2-P02 content is asked for by a link, read only for ?content=1 and rendered as text in a wrapping block",
+  p03: "V2-P03 each feedback row shows its provenance (who) beside what and when",
 };
 
 const MUTANTS = [
@@ -67,6 +68,7 @@ const MUTANTS = [
   m("V2-X39", "content is rendered as HTML", PANELS, "<pre style={WRAP}>{view.text}</pre>", "<pre style={WRAP} dangerouslySetInnerHTML={{ __html: view.text }} />", [C.p02]),
   m("V2-X40", "the content control is a scripted button", PANELS, "{view.offer && <a href={href}>Show content</a>}", "{view.offer && <button onClick={() => {}}>Show content</button>}", [C.p02]),
   m("V2-X41", "long content does not wrap on a phone", PANELS, 'whiteSpace: "pre-wrap", ', "", [C.p02]),
+  m("V2-X42", "a feedback row drops its provenance", PANELS, "<strong>{r.what}</strong> · {r.who} · {r.when}", "<strong>{r.what}</strong> · {r.when}", [C.p03]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "V2", mutants: MUTANTS }));

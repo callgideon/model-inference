@@ -33,3 +33,7 @@ test("V2-P02 content is asked for by a link, read only for ?content=1 and render
   for (const source of [page, panels]) assert.doesNotMatch(source, /dangerouslySetInnerHTML|innerHTML|onClick|tabIndex|<table/);
   assert.match(read("app/(provider)/requests/[id]/loading.tsx"), /role="status"/);
 });
+
+test("V2-P03 each feedback row shows its provenance (who) beside what and when", () => {
+  assert.match(read(PANELS), /<strong>\{r\.what\}<\/strong> · \{r\.who\} · \{r\.when\}/);
+});

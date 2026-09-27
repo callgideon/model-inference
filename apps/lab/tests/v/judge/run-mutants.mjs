@@ -54,6 +54,8 @@ const MUTANTS = [
   m("V3-X30", "a refusal is shown raw", PANEL, "{JUDGE_COPY[result.reason]}", "{result.reason}", [C.p01]),
   m("V3-X31", "consent is not linked to Settings", PANEL, '<Link href="/settings">Settings</Link>', "Settings", [C.p01]),
   m("V3-X32", "the panel hides dry runs", PANEL, "judgeRows(result.value)", 'judgeRows(result.value.filter((r) => r.mode === "live"))', [C.p01]),
+  m("V3-X35", "the panel prints Calibrated. for every run", PANEL, "<p>{r.calibration}</p>", "<p>Calibrated.</p>", [C.p01]),
+  m("V3-X36", "the panel prints pass for every run", PANEL, "<p>Verdict: {r.verdict}</p>", "<p>Verdict: pass</p>", [C.p01]),
   m("V3-X33", "judge runs show beside a missing request", PAGE, "{trace.ok && <JudgePanel result={judge} />}", "<JudgePanel result={judge} />", [C.p02]),
   m("V3-X34", "judge runs are read as a provider from the URL", PAGE, "judgePort().runs(actor, id)", 'judgePort().runs({ providerId: id, role: "administrator" }, id)', [C.p02]),
 ];

@@ -17,6 +17,8 @@ test("V3-P01 the judge panel is read only, shows refusals as fixed copy and link
   assert.match(panel, /<p role="status">\{JUDGE_COPY\[result\.reason\]\}<\/p>/);
   assert.match(panel, /const rows = result\.ok \? judgeRows\(result\.value\) : \[\];/);
   assert.match(panel, /<Link href="\/settings">Settings<\/Link>/);
+  assert.match(panel, /<p>Verdict: \{r\.verdict\}<\/p>/, "the verdict is the view's, never a literal");
+  assert.match(panel, /<p>\{r\.calibration\}<\/p>/, "calibration is the view's, never a literal");
 });
 
 test("V3-P02 the page reads judge runs as the session's actor and shows them only beside a visible request", () => {
