@@ -1,0 +1,31 @@
+{
+ "task": "D7",
+ "slice": "D7.a + D7.b + D7.c (0029_lab_data.sql + PgLabDataStore)",
+ "activity": "review",
+ "head": "cc7e3266",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-d7",
+ "branch": "codex/w5-lab-sql-d7",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0029_lab_data.sql",
+  "apps/infrx-api/infrx/state/lab_data.py",
+  "apps/infrx-api/tests/d/test_d7_lab_data.py",
+  "apps/infrx-api/tests/d/test_d7_units.py",
+  "apps/infrx-api/tests/d/code_mutants_d7.py",
+  "apps/infrx-api/tests/d/test_code_mutants_d7.py",
+  "apps/infrx-api/tests/d/test_upgrade_lab.py"
+ ],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_d7_lab_data.py (before 0029)", "exit": 1, "summary": "11 errors: infrx.lab_register_source(jsonb) does not exist"},
+  {"cmd": "INFRX_D_TASK=dlab pytest -q test_d7_lab_data test_d7_units test_upgrade_lab test_l2sql_access test_d6f_feedback", "exit": 0, "summary": "41 passed"},
+  {"cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_code_mutants_d7.py test_code_mutants_l2sql.py test_code_mutants_d6f.py", "exit": 0, "summary": "151 passed; D7 64 SQL + 17 Python mutants killed"},
+  {"cmd": "INFRX_D_TASK=dlab make api-test", "exit": 0, "summary": "4934 passed, 54 skipped, 9 xfailed (44m21s)"},
+  {"cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py tests/d/test_code_mutants_d7.py", "exit": 0, "summary": "757 passed (18m27s)"}
+ ],
+ "estimate": {"optimistic_h": 1, "likely_h": 3, "pessimistic_h": 6, "confidence": "medium", "basis": "remaining = one review round + wiring; D6F/L2-SQL review rounds, D10-0025 at 1/2/5", "at": "2026-09-27T19:00Z"},
+ "blockers": [],
+ "wiring_requests": [
+  "WR-D7-1 tests/integration/test_harness.py:222 migration pin: append \"0029_lab_data.sql\" after \"0028_feedback_durable.sql\"",
+  "WR-D7-2 Makefile api-mutants (line 21): append tests/d/test_code_mutants_d7.py after tests/d/test_code_mutants_d6f.py"
+ ],
+ "evidence": ["research/plan/evidence/d/D7-cc7e326.md"]
+}
