@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "f4bceeba",
+ "integration_head": "2252e5a0",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 181,
- "updated": "2026-09-27T20:16:44Z",
+ "revision": 182,
+ "updated": "2026-09-27T21:02:36Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4633,9 +4633,9 @@
    },
    "activity": "review",
    "started": "2026-09-27T16:22:00Z",
-   "updated": "2026-09-27T20:16:44Z",
+   "updated": "2026-09-27T21:02:36Z",
    "blocker": null,
-   "next_action": "Recheck wf_defb22c8-b33: B-R2 FIXED at d87408fc; B-R1 fixed in the fake world only — on real 0029 it needs infrx.lab_release_attempt + PgLabDataStore.release (WR-B-2(d), required, lab-sql-lw2 brief; strict-xfail PG drill flips then) → merge lane #1 merges d87408fc (inert: WR-B-5 worker entry point is the composition batch) with WR-B-1 and numbers R173/R174; B1 stays review until the PG drill passes",
+   "next_action": "B1/B2 code merged --no-ff at 8f01c7df + WR-B-1 66f7cc2a; rulings R173/R174 numbered (next free R175). B1 stays review: B-R1 open on real 0029 (strict-xfail PG drill) until lab-sql-lw2 delivers lab_release_attempt + PgLabDataStore.release; WR-B-4 + minors B-R3/R7/R8/RSI-2 → eval-ops; WR-B-5 → composition lane",
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 12,
@@ -4733,18 +4733,18 @@
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T20:16:44Z",
+   "updated": "2026-09-27T21:02:36Z",
    "blocker": null,
-   "next_action": "ACCEPT at 65ea22c4 (WR-L1-6 + L4 on a fake control port; V1M BLOCKED on WR-V1M-1 shared console copy + WR-V1M-2 provider trace read API) → merge lane #1 (wf_6d05fd77-294) applies WR-L1-6a/b/c, WR-L4-2/3/4, WR-V1M-1; WR-L4-1 + WR-V1M-2 → the new lab-api lane; L4's real-L3 journey rerun at the L3 merge; minor LAPP-C1 carried",
+   "next_action": "DONE: merged --no-ff at b5e1d9d9 + wirings b83c5f1b (WR-L1-6a/b/c, WR-L4-2/3/4, WR-V1M-1 incl. four v2 siblings; lockfile unchanged); L4 real-L3 journey rerun at the L3 merge (WR-L4-1 → lab-api); V1M waits for WR-V1M-2 (lab-api) then a V1M move lane; LAPP-C1 carried; WR-L1-6c allow-list = operator step (P-08)",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
     "pessimistic_h": 0,
-    "confidence": "medium",
-    "basis": "handback: WR-L1-6 0.5/1/2, L4 1.5/3/6 (real L3), V1M 4/8/16 after WR-V1M-1/2",
-    "at": "2026-09-27T20:16:44Z"
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-27T21:02:36Z"
    },
    "evidence": [
     "research/plan/evidence/l/WR-L1-6-2b48855.md",
@@ -4771,18 +4771,18 @@
     "prefix": "infrx-app-c3f-",
     "db": "app_c3f"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T20:16:44Z",
+   "updated": "2026-09-27T21:02:36Z",
    "blocker": null,
-   "next_action": "ACCEPT at d869b30a (own-feedback App action + Lab review actions; two SQL doors proposed as WR-C3F-1 → lab-sql LW3; 6/6 real-stack checks on app-c3f, 22/22 SQL mutants) → merge lane #1 applies WR-C3F-2 (App composition patch) + WR-C3F-3 (Makefile); minors m1/m2 carried",
+   "next_action": "DONE: merged --no-ff at a580ef49 + wirings 4dabcb38 (WR-C3F-2 patch, WR-C3F-3 Makefile incl. console-c3f-real; both real-stack runs 6/6 + 22/22); WR-C3F-1 SQL doors → lab-sql LW3; minors m1/m2 carried",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
     "pessimistic_h": 0,
-    "confidence": "medium",
-    "basis": "handback: 1/2/5 (one review round + wiring) — done at merge",
-    "at": "2026-09-27T20:16:44Z"
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-27T21:02:36Z"
    },
    "evidence": [
     "research/plan/evidence/c/C3F-c84aa8c.md",
@@ -5079,29 +5079,131 @@
    "branch": "codex/w5-merge-1",
    "worktree": ".claude/worktrees/codex-w5-merge-1",
    "base": "f4bceeba",
-   "head": null,
+   "head": "66f7cc2a",
    "isolation": {
     "ports": "l4 / app-c3f / b1 (checks only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-27T20:16:44Z",
-   "updated": "2026-09-27T20:16:44Z",
+   "updated": "2026-09-27T21:02:36Z",
    "blocker": null,
-   "next_action": "merge agent per lane (--no-ff + wirings + checks from a shared clone) → verify lens → coordinator fast-forwards claude/consumer-v1",
+   "next_action": "DONE: merge branch integrated at 2252e5a0 (verify lens ok; minors: lab-mutants line shape, R173 text fuller than the summary, B1 PG counts docker-only)",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "three merges with Lab/App/API checks",
-    "at": "2026-09-27T20:16:44Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-27T21:02:36Z"
    },
    "evidence": [],
    "commands": [],
    "owned_paths": [
     "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-EVAL-OPS",
+   "task": null,
+   "slice": "(wave5 LW4 lane eval-ops) tasks WR-B-4 → B3 → I5 (+ B1 minors); workflow wf_95878a02-8f1; base 2252e5a0",
+   "agent": "opus",
+   "branch": "codex/w5-eval-ops",
+   "worktree": ".claude/worktrees/codex-w5-eval-ops",
+   "base": "2252e5a0",
+   "head": null,
+   "isolation": {
+    "ports": "b3 57522; i5 57523/57524",
+    "prefix": "infrx-b3-",
+    "db": "b3"
+   },
+   "activity": "running",
+   "started": "2026-09-27T21:02:36Z",
+   "updated": "2026-09-27T21:02:36Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "medium",
+    "basis": "plan 2/4/8 + 2/4/8",
+    "at": "2026-09-27T21:02:36Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "wave5-plan §5 LW4 eval-ops"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-TRACE-UI",
+   "task": null,
+   "slice": "(wave5 LW4 lane trace-ui) tasks V2 → V3 (fake trace/C2/judge ports; real C3F); workflow wf_b26caf44-b9e; base 2252e5a0",
+   "agent": "opus",
+   "branch": "codex/w5-trace-ui",
+   "worktree": ".claude/worktrees/codex-w5-trace-ui",
+   "base": "2252e5a0",
+   "head": null,
+   "isolation": {
+    "ports": "lab-v1m 57513",
+    "prefix": "infrx-lab-v1m-",
+    "db": "lab_v1m"
+   },
+   "activity": "running",
+   "started": "2026-09-27T21:02:36Z",
+   "updated": "2026-09-27T21:02:36Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "medium",
+    "basis": "plan 2/4/8 + 1/2/4",
+    "at": "2026-09-27T21:02:36Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "wave5-plan §5 LW4 trace-ui"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-COMPOSITION",
+   "task": null,
+   "slice": "(wave5 LW2 lane composition) tasks WR-T-4 → WR-N-3 → WR-B-5 → E4 regression (switches OFF); workflow wf_95f6e885-95e; base 2252e5a0",
+   "agent": "opus",
+   "branch": "codex/w5-composition",
+   "worktree": ".claude/worktrees/codex-w5-composition",
+   "base": "2252e5a0",
+   "head": null,
+   "isolation": {
+    "ports": "t2f / n2 / b1 / e4b (gate)",
+    "prefix": "infrx-t2f-",
+    "db": "t2f"
+   },
+   "activity": "running",
+   "started": "2026-09-27T21:02:36Z",
+   "updated": "2026-09-27T21:02:36Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "medium",
+    "basis": "three mounts like G4F's + the App gate",
+    "at": "2026-09-27T21:02:36Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "wave5-plan §5 LW2 composition"
    ],
    "wiring_requests": []
   }
@@ -9125,6 +9227,8 @@
   "T2I",
   "T3",
   "V1M",
+  "V2",
+  "V3",
   "X1",
   "X3",
   "X5"
