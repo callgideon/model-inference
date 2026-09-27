@@ -1,0 +1,16 @@
+{"task": "G4F", "slice": "feedback lane (LW2): G4F route; C3F not started (L2 absent)", "activity": "review",
+ "head": "95ae17ab", "worktree": ".claude/worktrees/codex-w5-feedback", "branch": "codex/w5-feedback",
+ "owned_paths": ["apps/infrx-api/infrx/gateway/routes/feedback.py", "apps/infrx-api/tests/g/feedback/"],
+ "commands": [
+  {"cmd": "uv run --frozen pytest -q tests/g/feedback/test_feedback.py (before the route)", "exit": 2, "summary": "ImportError: no infrx.gateway.routes.feedback (seam test fails first)"},
+  {"cmd": "INFRX_D_TASK=g4f uv run --frozen pytest -q tests/g/feedback/test_feedback.py tests/g/feedback/test_feedback_pg.py", "exit": 0, "summary": "35 passed (4 real PG on 57507)"},
+  {"cmd": "INFRX_D_TASK=g4f make api-test (95ae17ab)", "exit": 1, "summary": "4924 passed; 50 failed + 8 errors only in tests/d/test_outbox_relay[valkey] and tests/i from shared-lock contention with a concurrent lane run; rerun of those files after it ended: 281 passed, 1 xfailed"},
+  {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/feedback/test_mutants.py", "exit": 0, "summary": "20/20 mutants killed, 23 passed"},
+  {"cmd": "INFRX_G4F_PG=1 INFRX_D_TASK=g4f INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/feedback/test_mutants.py", "exit": 0, "summary": "23 passed with PG cases in the copies"}],
+ "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium",
+  "basis": "G4F review round + wiring; G4U analogue (one fix round), G7 ~3 h; C3F separately 2/4/8 once L2 merges", "at": "2026-09-27T16:00Z"},
+ "blockers": ["C3F waits for the L2 port (infrx/lab/access) on claude/consumer-v1"],
+ "wiring_requests": ["WR-G4F-1 composition (config feedback_api default off, pilot feedback adapter, ROUTERS += feedback, test_startup) — research/plan/evidence/g/G4F-95ae17a-wiring.patch",
+  "WR-G4F-2 D6F PgFeedbackService.accept reports replay so FeedbackAccepted.replayed is true on a replay",
+  "WR-G4F-3 Makefile api-mutants += tests/g/feedback/test_mutants.py"],
+ "evidence": ["research/plan/evidence/g/G4F-95ae17a.md", "research/plan/evidence/g/G4F-95ae17a-wiring.patch"]}
