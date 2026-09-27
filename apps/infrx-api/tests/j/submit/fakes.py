@@ -86,6 +86,13 @@ class FakeJudgeLedger:
             return run, False
         return self._move(run_id, "submitting", submit_key=submit_key(run_id)), True
 
+    async def record_sent(self, run_id: str, sample_ids) -> LedgerRun:
+        run = self.runs[run_id]
+        if run.state != "submitting" or not set(sample_ids) <= set(run.sample_ids):
+            raise errors.StateConflict(f"judge run {run_id} cannot record these samples")
+        self.runs[run_id] = run = dataclasses.replace(run, sent_ids=tuple(sample_ids))
+        return run
+
     async def record_submission(self, run_id: str, external_id: str) -> LedgerRun:
         run = self.runs[run_id]
         if run.external_id == external_id:

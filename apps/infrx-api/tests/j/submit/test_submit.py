@@ -317,3 +317,20 @@ def test_j2__malformed_foreign_and_no_media_results_are_never_a_pass():
     assert not stored[case.ids[1]].accepted
     third = stored[case.ids[2]]
     assert not (third.accepted and third.overall_pass)
+
+
+def test_j2__a_result_for_a_sample_skipped_before_egress_is_stored_nowhere():
+    """0-J2-C1: a requested sample with no stored content never leaves, so the judge never
+    saw it; a result the provider returns for it anyway (fabricated or echoed) is stored
+    nowhere. Collection scores the ids that were sent, not the ids that were requested."""
+    import json
+    case = Case()
+    skipped = fakes.rid(7)
+    asyncio.run(fakes.trace(case.projection, case.objects, case.w.C1, skipped, stored=False))
+    run = case.submit(case.job(request_ids=case.ids + (skipped,)))
+    [(_, items)] = case.provider.calls
+    assert skipped not in {item["sample_id"] for item in items}
+    assert run.sent_ids == case.ids and run.sample_ids == case.ids + (skipped,)
+    outputs(case, *((sample, json.dumps(j1.result())) for sample in case.ids + (skipped,)))
+    asyncio.run(collect(run.run_id, wiring=case.wiring))
+    assert {key[1] for key in case.ledger.results} == set(case.ids)

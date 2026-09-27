@@ -10,7 +10,8 @@
 4. one submit intent (D6J `begin_submit`): only the call that created it may egress, so a
    double click or a restarted worker never sends a second batch;
 5. the content, read from T2I by durable request id with the grantor's organization bound;
-   a request with no stored content is skipped before egress;
+   a request with no stored content is skipped before egress, and the ids that do leave are
+   recorded (D6J `record_sent`) so collection scores only what the judge actually saw;
 6. the permission again, immediately before egress: a revocation since step 2 releases the
    hold and nothing leaves;
 7. one provider call, never retried: a definite rejection releases, anything else (a timeout,
@@ -75,6 +76,7 @@ class LedgerRun:
     submit_key: str | None = None
     external_id: str | None = None
     actual: ProviderUsd | None = None
+    sent_ids: tuple[str, ...] = ()           # the samples that left; a subset of sample_ids
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,9 @@ class JudgeLedger(Protocol):
 
     async def begin_submit(self, run_id: str) -> tuple[LedgerRun, bool]:
         """(run, True) only for the call that moved `prepared` -> `submitting`."""
+
+    async def record_sent(self, run_id: str, sample_ids: Sequence[str]) -> LedgerRun:
+        """The ids about to leave, recorded while `submitting`, before egress."""
 
     async def record_submission(self, run_id: str, external_id: str) -> LedgerRun: ...
     async def quarantine(self, run_id: str, reason: str) -> LedgerRun: ...
@@ -177,6 +182,7 @@ async def submit(job: JudgeJob, *, user_id: str, wiring: JudgeWiring) -> LedgerR
     except errors.DomainError:
         await ledger.release(run.run_id, "failed", "permission withdrawn before egress")
         raise
+    run = await ledger.record_sent(run.run_id, [item["sample_id"] for item in items])
     try:
         external_id = await wiring.provider.submit(run.submit_key, items)
     except SubmitRejected as exc:
@@ -212,7 +218,7 @@ async def collect(run_id: str, *, wiring: JudgeWiring,
         return run
     run = await _run(wiring.ledger, run_id, "submitted")
     polled = await wiring.provider.results(run.external_id)
-    plan = ScoreLedger(run.run_id, rubric.version, run.sample_ids)
+    plan = ScoreLedger(run.run_id, rubric.version, run.sent_ids)
     for sample_id, text in polled.items:
         plan.deliver(validate_json(rubric, text, run_id=run.run_id, sample_id=sample_id,
                                    media_available=sample_id in run.media_ids))

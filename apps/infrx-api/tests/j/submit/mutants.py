@@ -42,6 +42,7 @@ NONE = "test_j2__reconciliation_with_no_provider_record_releases_the_hold"
 SENDING = "test_j2__a_run_still_submitting_is_not_reconciled_under_its_sender"
 ONCE = "test_j2__duplicate_and_late_results_settle_and_project_once"
 SCORES = "test_j2__malformed_foreign_and_no_media_results_are_never_a_pass"
+SKIPPED = "test_j2__a_result_for_a_sample_skipped_before_egress_is_stored_nowhere"
 H_HOST = "test_j2_http__egress_is_refused_to_anything_but_the_local_fake"
 H_TRIP = "test_j2_http__submit_and_collect_round_trip_through_the_fake"
 H_REJECT = "test_j2_http__a_rejection_releases_the_hold"
@@ -106,8 +107,14 @@ MUTANTS: tuple[Mutant, ...] = (
        J, '    run = await _run(wiring.ledger, run_id, "ambiguous")',
        "    run = await wiring.ledger.run(run_id)", SENDING),
     _m("foreign_sample_projected", "a result for a sample the run never sent is stored nowhere",
-       J, "ScoreLedger(run.run_id, rubric.version, run.sample_ids)",
+       J, "ScoreLedger(run.run_id, rubric.version, run.sent_ids)",
        "ScoreLedger(run.run_id, rubric.version, [s for s, _ in polled.items])", SCORES),
+    _m("skipped_sample_projected", "a result for a sample skipped before egress is stored nowhere",
+       J, "ScoreLedger(run.run_id, rubric.version, run.sent_ids)",
+       "ScoreLedger(run.run_id, rubric.version, run.sample_ids)", SKIPPED),
+    _m("requested_ids_recorded_as_sent", "only the ids that leave are recorded as sent",
+       J, 'record_sent(run.run_id, [item["sample_id"] for item in items])',
+       "record_sent(run.run_id, run.sample_ids)", SKIPPED),
     _m("every_sample_has_media", "a sample sent without media is limited, never a pass",
        J, "media_available=sample_id in run.media_ids", "media_available=True", SCORES),
     _m("no_sample_has_media", "a sample sent with media is not limited",
