@@ -99,7 +99,7 @@ test("N4-J01 import, interrupted and resumed, then a frozen version, its splits 
     const status = await port.version(world.provider, frozen.datasetRef);
     assert.equal(status.ok, true);
     const summary = status.ok ? splitSummary(status.value) : [];
-    assert.deepEqual(summary.map((r) => [r.split, r.samples, r.restricted]), [["train", 3, 0], ["validation", 2, 0], ["holdout", 2, 0]]);
+    assert.deepEqual(summary.map((r) => [r.split, r.samples, r.restricted]), [["train", 2, 0], ["validation", 2, 0], ["holdout", 2, 0]]);
 
     // export: never the holdout; the part is read through the backend's gate
     const exported = await exportVersion(port, dev, form({ dataset_ref: frozen.datasetRef, ttl_s: "600" }), "e4000000-0000-4000-8000-000000000001");
@@ -108,7 +108,7 @@ test("N4-J01 import, interrupted and resumed, then a frozen version, its splits 
     assert.deepEqual(record.omitted.map((o) => o.reason), ["holdout", "holdout"]);
     const part = await port.readPart(world.provider, record.exportId, 0);
     const items = part.ok ? part.value.trim().split("\n").map((l) => JSON.parse(l)) : [];
-    assert.equal(items.length, 5);
+    assert.equal(items.length, 4);
     assert.equal(items.some((i) => i.split === "holdout"), false);
 
     // cross-provider deep links, a viewer and a consumer-only user

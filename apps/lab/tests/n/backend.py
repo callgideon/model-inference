@@ -144,7 +144,7 @@ def router(*, access, store, objects, user_of, clock=lambda: datetime.now(UTC),
             derived = await versions.derive(
                 store, objects, provider_org_id=provider, actor=user,
                 dataset_id=body["dataset_id"], version=body["version"],
-                created_at=clock().isoformat(), base=body.get("base"), add=body.get("add", []),
+                created_at=clock().strftime("%Y-%m-%dT%H:%M:%SZ"), base=body.get("base"), add=body.get("add", []),
                 now=clock(), policy=versions.SplitPolicy(
                     seed=policy["seed"], train_bp=policy["train_bp"],
                     validation_bp=policy["validation_bp"]))
