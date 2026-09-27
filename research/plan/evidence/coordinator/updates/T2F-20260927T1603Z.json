@@ -1,0 +1,74 @@
+{
+  "task": "T2F",
+  "slice": "T2F feedback projection from the D6F outbox (+ T2I WR-3 pins lookup and build_shipper, flag OFF)",
+  "activity": "review",
+  "head": "87e6cdca",
+  "worktree": ".claude/worktrees/codex-w5-trace-ship-lw2",
+  "branch": "codex/w5-trace-ship-lw2",
+  "owned_paths": [
+    "apps/infrx-api/infrx/traces/feedback/",
+    "apps/infrx-api/infrx/traces/ship/",
+    "apps/infrx-api/tests/t/feedback/",
+    "apps/infrx-api/tests/t/ship/"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/feedback/test_mutants.py -k 'not pg' (T3 fix round; no T2F file changed)",
+      "exit": 0,
+      "summary": "8 passed, 3 skipped (ClickHouse-only)"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/t/feedback (tests first)",
+      "exit": 2,
+      "summary": "RED: ImportError infrx.traces.feedback, 2 collection errors"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/t/ship/test_pins_pg.py (base file)",
+      "exit": 0,
+      "summary": "RED-as-skip: 3 skipped naming T2I WR-4 (no real pins lookup)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=t2f INFRX_T2F_STACK=1 INFRX_T3_STACK=1 uv run --frozen pytest -q -rs tests/t",
+      "exit": 0,
+      "summary": "129 passed, 20 skipped (9 T2I stack half on t2i ports, 11 PG mutants outside INFRX_MUTANTS=all)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=t2f INFRX_T2F_STACK=1 INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/feedback/test_mutants.py",
+      "exit": 0,
+      "summary": "22 passed: 8/8 runner mutants + 11/11 in-process PostgreSQL mutants killed, lists well-formed, every case covered, no-op self-test survives"
+    },
+    {
+      "cmd": "WR-T-1 applied: tests/contracts/test_config_and_imports.py; tests/contracts/test_mutants.py -k 'lw0 or well_formed or every_case'; root tests/integration/test_harness.py -k overlaps",
+      "exit": 0,
+      "summary": "286 passed; 6 passed; 9 passed"
+    },
+    {
+      "cmd": "uv run --frozen ruff check infrx/traces tests/t",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "INFRX_D_TASK=t2f make api-test (at 0d4076cc + WR-T-1 in the tree)",
+      "exit": 2,
+      "summary": "1 failed, 4969 passed, 73 skipped, 9 xfailed; the failure = T3 runner self-test misdeclared without the stack, fixed in 4b741135 (file rerun: 9 passed; full T3 list 39 passed)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "implementation + lane checks ~2.5 h (plan 2/4/8); remaining = one verify round + coordinator wiring WR-T-1..4",
+    "at": "2026-09-27T16:03Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-T-1 tasklocal TASK_PORTS t2f postgres 57549 + LAB_LANE_PORTS pin (supersedes T2I WR-4)",
+    "WR-T-2 Makefile:21 api-mutants += tests/t/feedback/test_mutants.py",
+    "WR-T-3 tests/integration/harness.py TRACE_SCHEMAS (ship, feedback, retention) + test_services proof",
+    "WR-T-4 composition flag OFF: build_shipper / FeedbackProjector / retention timers (T3 evidence)"
+  ],
+  "evidence": [
+    "research/plan/evidence/t/T2F-554f38d.md"
+  ]
+}

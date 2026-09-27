@@ -39,6 +39,7 @@ PINS_OUTAGE = "test_a_pins_lookup_outage_holds_the_segment"
 UNREADABLE = "test_a_segment_this_reader_cannot_read_is_never_acked"
 TENANT = "test_a_tenant_reads_only_its_own_content"
 FORGED = "test_a_row_pointing_at_another_tenants_object_is_never_followed"
+BUILD = "test_no_shipper_is_built_unless_shipping_is_enabled"
 
 
 def _m(name, invariant, old, new, *cases, dies_by=()) -> Mutant:
@@ -54,6 +55,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("flag_ignores_the_bucket", "no bucket, no shipping",
        "limits.clickhouse_url,\n                                           limits.s3_trace_bucket))",
        "limits.clickhouse_url))", FLAG),
+    _m("build_ignores_the_flag", "nothing is built (nothing connects) while shipping is off",
+       "    if not shipping_enabled(limits):\n        return None",
+       "    if False:\n        return None", BUILD),
+    _m("build_without_retention", "the production shipper consults T3's tombstones",
+       "    return Shipper(spool, traces, objects, pins=PgPins(connector(limits.database_url)),\n"
+       "                   retention=retention)",
+       "    return Shipper(spool, traces, objects, pins=PgPins(connector(limits.database_url)))",
+       BUILD),
     # --- TRACE-RECOVER ----------------------------------------------------------------
     _m("active_segment_shipped", "only sealed (fsynced) segments ship",
        "            if not view.sealed:\n                continue",

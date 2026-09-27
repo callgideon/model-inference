@@ -16,14 +16,15 @@ unreadable format or a poison frame is never acked: deleting bytes this reader c
 is not shipping them.
 
 Shipping is OFF unless the spool, ClickHouse and the trace bucket are all configured
-(`shipping_enabled`); building and scheduling a `Shipper` is the composition root's.
+(`shipping_enabled`); `build_shipper` builds one only then, and scheduling it is the
+composition root's.
 """
 from __future__ import annotations
 
 import asyncio
 import dataclasses
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -44,6 +45,34 @@ def shipping_enabled(limits: PilotSettings) -> bool:
     """Defaults OFF: all three of the spool, the projection and the bucket must be set."""
     return all(value.strip() for value in (limits.trace_spool_dir, limits.clickhouse_url,
                                            limits.s3_trace_bucket))
+
+
+def build_shipper(limits: PilotSettings, spool, *, prefix: str = "infrx/",
+                  endpoint_url: str = "") -> Shipper | None:
+    """T2I WR-3's factory, for the composition root: None unless `shipping_enabled(limits)`
+    (flag OFF); otherwise the shipper over ClickHouse (`CLICKHOUSE_URL`), the trace bucket
+    (`S3_TRACE_BUCKET`) and D5's pins on `DATABASE_URL`, consulting T3's retention over the
+    same client and bucket (no resurrection). The root schedules
+    `await spool.rotate(); await shipper.ship()` and `shipper.retention.expire()` /
+    `.sweep()` (wiring requests)."""
+    if not shipping_enabled(limits):
+        return None
+    import clickhouse_connect
+
+    from ...media.s3 import S3ObjectStore
+    from ...state.jobstore import connector
+    from ..feedback import ClickHouseFeedbackProjection
+    from ..retention import ClickHouseRetentionStore, Retention
+    from .pins import PgPins
+    client = clickhouse_connect.get_client(dsn=limits.clickhouse_url)
+    traces = ClickHouseProjection(client)
+    objects = S3ObjectStore.connect(limits.s3_trace_bucket, prefix, endpoint_url)
+    retention = Retention(ClickHouseRetentionStore(client), traces,
+                          ClickHouseFeedbackProjection(client), objects,
+                          content_days=limits.trace_content_max_days,
+                          metadata_months=limits.trace_metadata_months)
+    return Shipper(spool, traces, objects, pins=PgPins(connector(limits.database_url)),
+                   retention=retention)
 
 
 def content_key(org_id: str, trace_id: str) -> str:
@@ -86,8 +115,10 @@ class ShipReport:
 
 
 class Shipper:
-    def __init__(self, spool, projection, objects, *, pins: PinsLookup | None = None) -> None:
+    def __init__(self, spool, projection, objects, *, pins: PinsLookup | None = None,
+                 retention=None) -> None:
         self.spool, self.projection, self.objects, self.pins = spool, projection, objects, pins
+        self.retention = retention           # T3: `retention.Retention`, consulted per segment
 
     async def ship(self) -> ShipReport:
         report = ShipReport()
@@ -113,9 +144,22 @@ class Shipper:
         report.torn += scan.torn
         if scan.unreadable or scan.poison:
             return "unreadable" if scan.unreadable else "poison"
-        rows = [await self._row(envelope, content, f"{segment}:{position}")
-                for envelope, content, (segment, position)
-                in zip(scan.records, scan.contents, scan.ids)]
+        verdicts = await self.retention.verdicts(scan.records) if self.retention else {}
+        rows = []
+        for envelope, content, (segment, position) in zip(scan.records, scan.contents, scan.ids):
+            trace_id = f"{segment}:{position}"
+            verdict = verdicts.get((envelope.org_id, envelope.request_id))
+            if verdict is not None:
+                # T3: deleted or expired - never (re)written, and the object an earlier
+                # attempt of this replay may have put goes too, unless a live grant or
+                # export holds it (the sweep deletes it once the reference ends)
+                ref = content_key(envelope.org_id, trace_id)
+                if not await self.retention.keeps(envelope.org_id, envelope.request_id, ref):
+                    await self.objects.delete(ref)
+                if verdict == "drop":
+                    continue
+                content = b""
+            rows.append(await self._row(envelope, content, trace_id))
         if rows:
             await self.projection.insert(rows)
             report.rows += len(rows)
@@ -189,4 +233,6 @@ def _row(values) -> TraceRow:
     for name in ("org_id", "request_id", "key_id", "serving_version_id"):
         row[name] = None if row[name] is None else str(row[name])
     row["content_stored"] = bool(row["content_stored"])
+    for name in ("started_at", "completed_at"):         # UTC columns, naive from the driver
+        row[name] = row[name] and row[name].replace(tzinfo=timezone.utc)
     return TraceRow(**row)

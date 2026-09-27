@@ -1,0 +1,66 @@
+{
+  "task": "T3",
+  "slice": "T3 logical retention and deletion over T2I + T2F (tombstone receipts, logical expiry, sweep, holds, no resurrection through replay) + loss/lag/retention gauges and alarms",
+  "activity": "review",
+  "head": "4b741135",
+  "worktree": ".claude/worktrees/codex-w5-trace-ship-lw2",
+  "branch": "codex/w5-trace-ship-lw2",
+  "owned_paths": [
+    "apps/infrx-api/infrx/traces/retention/",
+    "apps/infrx-api/infrx/traces/ship/",
+    "apps/infrx-api/infrx/traces/feedback/",
+    "apps/infrx-api/tests/t/retention/",
+    "apps/infrx-api/tests/t/ship/",
+    "apps/infrx-api/tests/t/feedback/"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/t/retention (tests first)",
+      "exit": 2,
+      "summary": "RED: ImportError infrx.traces.retention"
+    },
+    {
+      "cmd": "INFRX_T3_STACK=1 uv run --frozen pytest -q tests/t/retention",
+      "exit": 0,
+      "summary": "14 passed (memory + ClickHouse 57546 / MinIO 57548)"
+    },
+    {
+      "cmd": "INFRX_T3_STACK=1 INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/retention/test_mutants.py",
+      "exit": 0,
+      "summary": "39 passed: 34/34 mutants killed (6 store-only on the stack), list checks, 3 runner self-tests"
+    },
+    {
+      "cmd": "INFRX_D_TASK=t2f INFRX_T2F_STACK=1 INFRX_T3_STACK=1 uv run --frozen pytest -q -rs tests/t",
+      "exit": 0,
+      "summary": "129 passed, 20 skipped (9 T2I stack half, 11 PG mutants outside INFRX_MUTANTS=all)"
+    },
+    {
+      "cmd": "WR-T-3 proof: harness splitter over ship/feedback/retention schema.sql twice on the t3 ClickHouse",
+      "exit": 0,
+      "summary": "3 statements each time; trace_envelopes, feedback_events, trace_deletions exist"
+    },
+    {
+      "cmd": "INFRX_D_TASK=t2f make api-test (at 0d4076cc + WR-T-1 in the tree)",
+      "exit": 2,
+      "summary": "1 failed, 4969 passed, 73 skipped, 9 xfailed; the failure = T3 runner self-test misdeclared without the stack, fixed in 4b741135 (file rerun: 9 passed; full T3 list 39 passed)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 5,
+    "confidence": "medium",
+    "basis": "implementation + lane checks ~3 h (plan 3/6/12); remaining = one verify round (greenfield retention semantics likely draw findings) + WR-T-2..5 wiring",
+    "at": "2026-09-27T14:30Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-T-2 Makefile:21 api-mutants += tests/t/retention/test_mutants.py",
+    "WR-T-3 tests/integration/harness.py TRACE_SCHEMAS + test_services proof (patch in evidence)",
+    "WR-T-4 composition flag OFF: build_shipper(limits, sink) timers ship/expire/sweep; FeedbackProjector(PgFeedbackOutbox(connector(DATABASE_URL)), shipper.retention.feedback, retention=shipper.retention)",
+    "WR-T-5 I2L-OBS: retention.RULES into infra/alerts/operations.json + export retention.gauges"
+  ],
+  "evidence": [
+    "research/plan/evidence/t/T3-4b74113.md"
+  ]
+}
