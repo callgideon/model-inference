@@ -1,8 +1,8 @@
 {
  "task": "V2",
  "slice": "request detail + C2 content on demand + C3F feedback (fake trace/C2 ports, real C3F)",
- "activity": "review",
- "head": "205f3bcd",
+ "activity": "fix-round",
+ "head": "10dee89f",
  "worktree": ".claude/worktrees/codex-w5-trace-ui",
  "branch": "codex/w5-trace-ui",
  "owned_paths": [
@@ -15,16 +15,6 @@
    "cmd": "node --test tests/v/detail/view.test.ts (pre-impl)",
    "exit": 1,
    "summary": "ERR_MODULE_NOT_FOUND (seam)"
-  },
-  {
-   "cmd": "node tests/v/detail/run-mutants.mjs",
-   "exit": 0,
-   "summary": "12 cases all named; 41/41 killed"
-  },
-  {
-   "cmd": "make lab-test",
-   "exit": 0,
-   "summary": "77 tests, 73 pass, 0 fail, 4 skipped (real-stack cases)"
   },
   {
    "cmd": "make lab-lint",
@@ -45,6 +35,16 @@
    "cmd": "make lab-mutants",
    "exit": 0,
    "summary": "69/69, 47/47, 20/20 (existing)"
+  },
+  {
+   "cmd": "node tests/v/detail/run-mutants.mjs",
+   "exit": 0,
+   "summary": "13 cases all named; 42/42 killed"
+  },
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "78 tests, 74 pass, 0 fail, 4 skipped (real-stack cases)"
   }
  ],
  "estimate": {
@@ -67,5 +67,11 @@
  ],
  "evidence": [
   "research/plan/evidence/v/V2-9c4bbc0.md"
- ]
+ ],
+ "fix_round": {
+  "finding": "0-TUI-CORR-1",
+  "fixed": true,
+  "commit": "10dee89f",
+  "summary": "New V2-P03 asserts the feedback row `<strong>{r.what}</strong> · {r.who} · {r.when}` in `components/traces/detail/panels.tsx`, so the author_role/channel provenance that keeps customer feedback from reading as an operator label (FEEDBACK-ACK, risk row 28) cannot be dropped. New mutant V2-X42 (drop `· {r.who}`) in `tests/v/detail/run-mutants.mjs`, killed by V2-P03. Product code unchanged."
+ }
 }

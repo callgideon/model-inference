@@ -58,6 +58,18 @@ A Lab request page reads the trace projection, C3F feedback and J2 judge runs in
 
 Optimistic 1 h / likely 2 h / pessimistic 4 h after WR-V2-1/2/3 land, confidence medium. Basis: two thin adapters wired into one seam each, the real stack cases rerun, one verify round (brief 2/4/8; about 3 h spent).
 
+## Fix round (0-TUI-CORR-1, commit 10dee89f)
+
+Finding: the rendered judge verdict/calibration and the feedback provenance were not pinned (hand mutants H1-H3 survived). New V2-P03 asserts the feedback row `<strong>{r.what}</strong> · {r.who} · {r.when}` in `components/traces/detail/panels.tsx`, so the author_role/channel provenance that keeps customer feedback from reading as an operator label (FEEDBACK-ACK, risk row 28) cannot be dropped. New mutant V2-X42 (drop `· {r.who}`) in `tests/v/detail/run-mutants.mjs`, killed by V2-P03. Product code unchanged.
+
+| cmd | exit | result |
+|---|---|---|
+| `node tests/v/detail/run-mutants.mjs` | 0 | 13 cases all named; 42/42 killed |
+| `make lab-test` | 0 | tests 78, pass 74, fail 0, skipped 4 (real-stack cases) |
+| `make lab-lint` | 0 | clean |
+| `make lab-typecheck` | 0 | clean |
+
 ## Audit log
 
 - 2026-09-27: written at 9c4bbc0c (lane trace-ui, LW4).
+- 2026-09-27: fix round 0-TUI-CORR-1 appended (tests at 10dee89f).

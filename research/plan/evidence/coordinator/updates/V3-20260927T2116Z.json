@@ -1,8 +1,8 @@
 {
  "task": "V3",
  "slice": "judge + calibration panels (fake J2/J3 port)",
- "activity": "review",
- "head": "205f3bcd",
+ "activity": "fix-round",
+ "head": "10dee89f",
  "worktree": ".claude/worktrees/codex-w5-trace-ui",
  "branch": "codex/w5-trace-ui",
  "owned_paths": [
@@ -17,19 +17,9 @@
    "summary": "ERR_MODULE_NOT_FOUND (seam)"
   },
   {
-   "cmd": "node tests/v/judge/run-mutants.mjs",
-   "exit": 0,
-   "summary": "8 cases all named; 34/34 killed"
-  },
-  {
    "cmd": "node tests/v/detail/run-mutants.mjs",
    "exit": 0,
    "summary": "12 cases all named; 41/41 killed"
-  },
-  {
-   "cmd": "make lab-test",
-   "exit": 0,
-   "summary": "77 tests, 73 pass, 0 fail, 4 skipped (real-stack cases)"
   },
   {
    "cmd": "make lab-lint",
@@ -50,6 +40,16 @@
    "cmd": "make lab-mutants",
    "exit": 0,
    "summary": "69/69, 47/47, 20/20 (existing)"
+  },
+  {
+   "cmd": "node tests/v/judge/run-mutants.mjs",
+   "exit": 0,
+   "summary": "8 cases all named; 36/36 killed"
+  },
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "78 tests, 74 pass, 0 fail, 4 skipped (real-stack cases)"
   }
  ],
  "estimate": {
@@ -69,5 +69,11 @@
  ],
  "evidence": [
   "research/plan/evidence/v/V3-205f3bc.md"
- ]
+ ],
+ "fix_round": {
+  "finding": "0-TUI-CORR-1",
+  "fixed": true,
+  "commit": "10dee89f",
+  "summary": "V3-P01 now also asserts `<p>Verdict: {r.verdict}</p>` and `<p>{r.calibration}</p>` in `components/traces/judge/panel.tsx`, so the panel can neither print a literal verdict (e.g. `pass` beside a dry or no-media run) nor a literal `Calibrated.` beside an uncalibrated judge. New mutants in `tests/v/judge/run-mutants.mjs`: V3-X35 (calibration → `Calibrated.`) and V3-X36 (verdict → `pass`), both killed by V3-P01. Product code unchanged."
+ }
 }
