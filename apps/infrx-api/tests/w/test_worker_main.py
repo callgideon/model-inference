@@ -1184,3 +1184,246 @@ def test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not(
     assert service.reap_errors == 0 and service.reconciliation is not None
     assert 'infrx_reconciliation_drift{process="worker"} 0.0' in rendered, rendered
     assert 'infrx_holds_unknown{process="worker"} 0.0' in rendered
+
+
+# ------------------------------------------------------------------ WR-T-4 / WR-B-5 (LW2)
+# The composition lane: the trace pumps (T2I shipper, T3 retention, T2F feedback projection)
+# and the Lab `eval_run` worker (B1 over D7's outbox), each behind its own deployment switch.
+# Failure oracles: a switch on by default, a switch the composition ignores (off composes
+# something, or on composes nothing), a pump over the wrong store or in the wrong order, a
+# switch that starts without what it needs, and an `eval_run` redelivery that freezes the run
+# again (after a revocation `freeze` is refused, so the run would never end) or acknowledges
+# a delivery whose wallet stopped it (the run would never be picked up again).
+TRACE_PUMPS = {"trace_ship", "trace_retention", "feedback_projection"}
+LAB_PUMPS = {"lab_eval", "lab_recover"}
+TRACE_ENV = {"TRACE_PUMPS": "1", "CLICKHOUSE_URL": "http://ch.invalid:8123/infrx",
+             "S3_TRACE_BUCKET": "infrx-traces"}
+
+
+def captured_steps(monkeypatch) -> dict:
+    """`every` replaced by a recorder: what name, which interval, which step."""
+    steps = {}
+
+    async def never():
+        await asyncio.Event().wait()
+    monkeypatch.setattr(worker_main, "every", lambda interval_s, step, what: (
+        steps.__setitem__(what, (interval_s, step)), never())[1])
+    return steps
+
+
+def started(service) -> None:
+    """Start each housekeeping loop once (the recorder above) and close the coroutines."""
+    for loop in service.housekeeping.values():
+        loop().close()
+
+
+def test_worker_main__every_trace_and_lab_switch_is_off_and_composes_nothing(tmp_path,
+                                                                              monkeypatch):
+    """Off by default, and off composes nothing: the launched worker is the one E4 accepted
+    (the three M6 loops, no spool, no ClickHouse client, no Lab store)."""
+    from infrx.config import deployment_from_env
+    assert deployment_from_env({}).trace_pumps is False
+    assert deployment_from_env({}).lab_eval_worker is False
+
+    def composed_nothing(*args, **kw):
+        raise AssertionError("a switched-off pump was composed")
+    monkeypatch.setattr(worker_main, "trace_pumps", composed_nothing)
+    monkeypatch.setattr(worker_main, "lab_eval", composed_nothing)
+    service, _ = composed(environment(tmp_path, TRACE_SPOOL_DIR=str(tmp_path / "spool"),
+                                      **{k: v for k, v in TRACE_ENV.items() if k != "TRACE_PUMPS"}),
+                          evaluators=object(), targets=object())
+    assert set(service.housekeeping) == HOUSEKEEPING
+    assert not (tmp_path / "spool").exists()
+
+
+@pytest.mark.parametrize("unset", ["TRACE_SPOOL_DIR", "CLICKHOUSE_URL", "S3_TRACE_BUCKET"])
+def test_worker_main__trace_pumps_refuse_to_start_without_their_settings(unset, tmp_path):
+    """On, the three T2I settings are required: a pump that silently ships nothing is a
+    switch that lies. The refusal names the setting."""
+    env = environment(tmp_path, TRACE_SPOOL_DIR=str(tmp_path / "spool"), **TRACE_ENV)
+    env.pop(unset)
+    with pytest.raises(Exception) as refused:            # any other death is not a refusal
+        composed(env)
+    assert type(refused.value) is RuntimeMisconfigured and unset in str(refused.value)
+
+
+def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(tmp_path,
+                                                                               monkeypatch):
+    """On: T2I's `build_shipper` over a spool on `TRACE_SPOOL_DIR` (rotated before each ship
+    pass, the S3 endpoint the deployment's), T3's expire-then-sweep over the shipper's own
+    retention, and T2F's projector on the worker's pool into that retention's feedback
+    projection, consulting it."""
+    from infrx.traces import ship
+    from infrx.traces.feedback.pg import PgFeedbackOutbox
+    from infrx.traces.spool import SpoolTraceSink
+    calls, built = [], {}
+
+    class Retention:
+        feedback = object()
+
+        async def expire(self):
+            calls.append("expire")
+
+        async def sweep(self):
+            calls.append("sweep")
+
+    class Shipper:
+        retention = Retention()
+
+        async def ship(self):
+            calls.append("ship")
+
+    def build(limits, spool, **kw):
+        built.update(limits=limits, spool=spool, **kw)
+        return Shipper()
+    monkeypatch.setattr(ship, "build_shipper", build)
+    steps = captured_steps(monkeypatch)
+    service, pool = composed(environment(tmp_path, TRACE_SPOOL_DIR=str(tmp_path / "spool"),
+                                         S3_ENDPOINT_URL="http://127.0.0.1:9", **TRACE_ENV))
+    assert set(service.housekeeping) == HOUSEKEEPING | TRACE_PUMPS
+    started(service)
+    spool = built["spool"]
+    assert type(spool) is SpoolTraceSink and spool.spool_dir == tmp_path / "spool"
+    assert built.get("endpoint_url") == "http://127.0.0.1:9"
+    assert built["limits"].clickhouse_url == TRACE_ENV["CLICKHOUSE_URL"]
+    rotated = spool.rotate
+
+    async def rotate():
+        calls.append("rotate")
+        return await rotated()
+    spool.rotate = rotate
+    interval, step = steps["trace ship"]
+    asyncio.run(step())
+    assert calls == ["rotate", "ship"] and interval == worker_main.TRACE_SHIP_S
+    calls.clear()
+    interval, step = steps["trace retention"]
+    asyncio.run(step())
+    assert calls == ["expire", "sweep"] and interval == worker_main.TRACE_RETENTION_S
+    interval, pump = steps["feedback projection"]
+    projector = pump.__self__
+    assert interval == worker_main.FEEDBACK_PROJECTION_S
+    assert type(projector.outbox) is PgFeedbackOutbox
+    assert projector.outbox.connect is service.jobs._connect
+    assert projector.projection is Shipper.retention.feedback
+    assert projector.retention is Shipper.retention
+    asyncio.run(spool.close())
+
+
+def test_worker_main__the_lab_eval_worker_refuses_to_start_without_its_sources(tmp_path):
+    """On, the worker needs the evaluator spec source (WR-B-2(b)) and the dev target source
+    (WR-B-3); neither exists yet, so the switch refuses rather than leasing cases it cannot
+    run. The refusal names the switch."""
+    with pytest.raises(RuntimeMisconfigured) as refused:
+        composed(environment(tmp_path, LAB_EVAL_WORKER="1"))
+    assert "LAB_EVAL_WORKER" in str(refused.value)
+
+
+def test_worker_main__the_lab_eval_worker_pumps_d7s_outbox_and_recovers(tmp_path,
+                                                                        monkeypatch):
+    """On (with its sources): D2's `OutboxRelay` over D7's `PgLabDataStore` on the worker's
+    pool, whose scheduler is the `eval_run` handler, and `lab_recover` on its own timer."""
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.outbox import OutboxRelay
+    steps = captured_steps(monkeypatch)
+    evaluators, targets = object(), object()
+    service, _ = composed(environment(tmp_path, LAB_EVAL_WORKER="1"),
+                          evaluators=evaluators, targets=targets)
+    assert set(service.housekeeping) == HOUSEKEEPING | LAB_PUMPS
+    started(service)
+    interval, pump = steps["lab eval"]
+    relay = pump.__self__
+    assert type(relay) is OutboxRelay and interval == worker_main.LAB_PUMP_S
+    assert type(relay.store) is PgLabDataStore
+    assert relay.store._connect is service.jobs._connect
+    handler = relay.scheduler
+    assert type(handler) is worker_main.EvalRuns and handler.store is relay.store
+    assert (handler.evaluators, handler.targets) == (evaluators, targets)
+    assert handler.objects is service.preparation.runner.media.objects
+    interval, recover = steps["lab recover"]
+    assert interval == worker_main.LAB_RECOVER_S and recover == relay.store.recover
+
+
+class LabStore:
+    """D7's reads the handler makes, over one created run."""
+
+    def __init__(self) -> None:
+        self.reads = []
+
+    async def run_status(self, run_id, *, provider_org_id):
+        self.reads.append(("run_status", run_id, provider_org_id))
+        return {"run_ref": "lab:run:p:r@sha256:" + "0" * 64}
+
+    async def resolve(self, ref, *, provider_org_id):
+        self.reads.append(("resolve", ref, provider_org_id))
+        return type("Run", (), {"evaluator_ref": "eval-ref", "serving_ref": "serving-ref"})()
+
+
+def eval_handler(monkeypatch, stopped=None):
+    """The handler over `LabStore`, with `runner.resume`/`Runner` recorded and `freeze`
+    fatal."""
+    from infrx.evaluation import runner
+    seen = []
+
+    async def freeze(*args, **kw):
+        raise AssertionError("a redelivery froze the run again")
+
+    async def resume(store, run_id, *, evaluator, provider_org_id):
+        seen.append(("resume", run_id, evaluator, provider_org_id))
+        return "frozen"
+
+    class Runner:
+        def __init__(self, store, objects, endpoint, deployment, *, worker_id, limits):
+            seen.append(("runner", objects, endpoint, deployment, worker_id, limits))
+
+        async def run(self, frozen):
+            seen.append(("run", frozen))
+            return {"stopped": stopped}
+
+    async def evaluators(ref):
+        return {"spec-for": ref}
+
+    async def targets(ref):
+        return f"endpoint-for-{ref}", f"deployment-for-{ref}"
+    monkeypatch.setattr(runner, "freeze", freeze)
+    monkeypatch.setattr(runner, "resume", resume)
+    monkeypatch.setattr(runner, "Runner", Runner)
+    store = LabStore()
+    return worker_main.EvalRuns(store, "objects", evaluators, targets, worker_id="w-lab"), \
+        store, seen
+
+
+def delivery(kind="eval_run"):
+    from infrx.state.lab_data import LabEvent
+    return LabEvent(event_id="e1", kind=kind, provider_org_id="p", payload={"run_id": "r1"})
+
+
+def test_worker_main__an_eval_run_delivery_resumes_the_created_run_never_freezes(
+        monkeypatch):
+    """B1's recheck: the event names a run D7 already created, so the handler rebuilds it
+    with `resume` (no scheduling gate) for the event's own provider, with the evaluator and
+    the dev target its record names, and works it to the end; `freeze` again would be refused
+    after a revocation and the run would never end."""
+    handler, store, seen = eval_handler(monkeypatch)
+    assert asyncio.run(handler.enqueue(delivery())) is True
+    assert store.reads[0] == ("run_status", "r1", "p")
+    assert store.reads[1][0] == "resolve" and store.reads[1][2] == "p"
+    assert seen == [("resume", "r1", {"spec-for": "eval-ref"}, "p"),
+                    ("runner", "objects", "endpoint-for-serving-ref",
+                     "deployment-for-serving-ref", "w-lab", worker_main.LAB_EVAL_LIMITS),
+                    ("run", "frozen")]
+
+
+@pytest.mark.parametrize("stopped", ["wallet_exhausted", "other_kind"])
+def test_worker_main__a_delivery_the_handler_cannot_finish_stays_pending(stopped,
+                                                                         monkeypatch):
+    """A run stopped by the dev wallet is not acknowledged (the relay redelivers it after its
+    window, once funded); another kind's event (`checkpoint_received`, B3's) is never taken
+    by this handler. A budget stop is final and acknowledged."""
+    from infrx.contracts import errors
+    handler, _, seen = eval_handler(monkeypatch, stopped=stopped)
+    event = delivery("checkpoint_received" if stopped == "other_kind" else "eval_run")
+    with pytest.raises(errors.DomainError):
+        asyncio.run(handler.enqueue(event))
+    assert (seen == []) is (stopped == "other_kind")
+    handler, _, _ = eval_handler(monkeypatch, stopped="budget_exhausted")
+    assert asyncio.run(handler.enqueue(delivery())) is True

@@ -234,6 +234,11 @@ NOT_SETTABLE = {
     "FEEDBACK_API": "mounts POST /v1/feedback (G4F, off by default): enabling it on the hosted "
                     "gateway needs the E4 regression rerun and the database feedback flag, a "
                     "deploy change, not a --set",
+    "TRACE_PUMPS": "runs the trace shipper, retention and feedback projection in the worker "
+                   "(WR-T-4, off by default): enabling it needs ClickHouse, the trace bucket "
+                   "and the E4 regression rerun, a deploy change, not a --set",
+    "LAB_EVAL_WORKER": "runs the Lab eval_run worker (WR-B-5, off by default, Lab-only): the "
+                       "hosted database has no Lab schema (plan rule 4), never a --set",
 }
 
 

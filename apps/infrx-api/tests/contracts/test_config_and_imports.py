@@ -544,6 +544,9 @@ DEPLOYMENT_EXPECTED = {
     "RETENTION_GRACE_S": 3600.0,
     # G4F (WR-G4F-1): the switch that mounts POST /v1/feedback, off
     "FEEDBACK_API": False,
+    # WR-T-4 / WR-B-5 (composition lane): the worker's trace pumps and Lab eval worker, off
+    "TRACE_PUMPS": False,
+    "LAB_EVAL_WORKER": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.
