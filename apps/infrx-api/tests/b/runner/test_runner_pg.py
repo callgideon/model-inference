@@ -6,7 +6,9 @@ and the provider_dev endpoint over HTTP on the b1 model-fake port, through
 
 Drills (EVAL-DURABLE): a worker killed after the endpoint charged and before it finished;
 a connection lost after the charge (the same key replays, no second debit); a durable cancel
-mid-batch; duplicate delivery; an exhausted dev wallet, funded again; data revoked mid-run.
+mid-batch; duplicate delivery; an exhausted dev wallet, funded again; data revoked mid-run;
+402 deliveries past max_attempts (strict xfail until WR-B-2(d)'s release is in D7); a kill,
+then a revocation, then a delivery that resumes the created run.
 Outside the mutant runner (N2/T2I's pattern); the oracles are the fake-world cases' mutants.
 
     INFRX_D_TASK=b1 uv run --frozen pytest -q tests/b/runner/test_runner_pg.py
@@ -18,6 +20,7 @@ import os
 
 import psycopg
 import pytest
+from infrx.contracts import errors
 from infrx.contracts.tasklocal import local_services
 from infrx.datasets.imports import sample_key
 from infrx.evaluation import runner
@@ -71,8 +74,9 @@ class Case:
         dataset = run(self.store.publish(self.manifest, provider_org_id=NEMO, actor="dev@nemo"))
         harness_ref = run(self.store.publish(harness(harness_id=uid(n, 0xa7)),
                                              provider_org_id=NEMO, actor="dev@nemo"))
-        self.frozen = run(runner.freeze(self.store, eval_run(dataset, harness_ref, run=n),
-                                        evaluator=SPEC, provider_org_id=NEMO, actor="dev@nemo"))
+        self.payload = eval_run(dataset, harness_ref, run=n)
+        self.frozen = run(runner.freeze(self.store, self.payload, evaluator=SPEC,
+                                        provider_org_id=NEMO, actor="dev@nemo"))
         self.run_id = self.frozen.run.run_id
         self.wallet = DevWallet(funded)
         self.ids = sorted(s["sample_id"] for s in self.manifest["samples"])
@@ -109,6 +113,24 @@ def per_case():
     return RATE_CARD.debit(900, 1000)
 
 
+class Dying(HttpDevEndpoint):
+    """The worker dies after the endpoint charged, before the answer reached it."""
+
+    async def complete(self, **request):
+        await super().complete(**request)
+        raise Crash("killed")
+
+
+def revoke(conn) -> None:
+    l2.ok(conn, "lab_revoke_access_grant", {
+        "actor_user_id": l2.C1, "grantor_org_id": l2.org(conn, l2.C1),
+        "recipient_provider_org_id": NEMO})
+
+
+def restore(conn) -> None:
+    l2.ok(conn, "lab_put_access_grant", l2.scope(conn, purposes=["provider_sharing", "training"]))
+
+
 def test_b1_pg_duplicate_delivery_scores_each_case_once_and_costs_match_the_wallet(
         world, endpoint) -> None:
     c = Case(world, 1)
@@ -133,12 +155,6 @@ def test_b1_pg_a_worker_killed_after_the_charge_recovers_as_a_new_attempt(world,
     bounded by max_attempts)."""
     c = Case(world, 2)
     endpoint(c.wallet)
-
-    class Dying(HttpDevEndpoint):
-        async def complete(self, **request):
-            await super().complete(**request)
-            raise Crash("killed")
-
     dying = Dying(f"http://127.0.0.1:{PORT}", api_key=KEY, model="m", rate_card=RATE_CARD)
     with pytest.raises(Crash):
         run(Runner(c.store, c.objects, dying, DEPLOYMENT, worker_id="w",
@@ -211,13 +227,61 @@ def test_b1_pg_an_exhausted_dev_wallet_stops_then_resumes_when_funded(world, end
 def test_b1_pg_revoked_data_fails_its_cases_without_dispatch(world, endpoint) -> None:
     c = Case(world, 6)
     endpoint(c.wallet)
-    revoke = {"actor_user_id": l2.C1, "grantor_org_id": l2.org(c.conn, l2.C1),
-              "recipient_provider_org_id": NEMO}
-    l2.ok(c.conn, "lab_revoke_access_grant", revoke)
+    revoke(c.conn)
     try:
         report = run(c.runner().run(c.frozen))
         assert report["failures"] == {i: "revoked" for i in c.ids} and c.wallet.calls == []
         assert report["cases"] == {"failed": N} and c.results() == []
     finally:
-        l2.ok(c.conn, "lab_put_access_grant", l2.scope(
-            c.conn, purposes=["provider_sharing", "training"]))
+        restore(c.conn)
+
+
+@pytest.mark.xfail(not hasattr(PgLabDataStore, "release"), strict=True,
+                   reason="WR-B-2(d): 0029 has no lab_release_attempt, so a 402's lease expires "
+                          "and counts toward max_attempts (0-B-R1)")
+def test_b1_pg_402_deliveries_past_max_attempts_never_fail_a_case(world, endpoint) -> None:
+    """0-B-R1 on real D7: two unfunded deliveries (recovered between them) under
+    max_attempts=2, then an allocation: every case is done, none `attempts_exhausted`."""
+    c = Case(world, 7, funded="0")
+    endpoint(c.wallet)
+
+    def deliver():
+        return run(Runner(c.store, c.objects, c.endpoint(), DEPLOYMENT, worker_id="w",
+                          limits=Limits(30, 2, 2, 1)).run(c.frozen))
+
+    for _ in range(2):
+        assert deliver()["stopped"] == "wallet_exhausted"
+        d7.advance(c.conn, 31)
+        run(c.store.recover())
+    c.wallet.balance = type(c.wallet.balance)("1000")
+    report = deliver()
+    assert report["failures"] == {} and report["cases"] == {"done": N}
+
+
+def test_b1_pg_a_created_run_resumes_after_a_revocation_and_ends_revoked(world, endpoint) -> None:
+    """0-B-R2 on real D7: the worker is killed after the charge, the grant is revoked, the
+    lease expires and is recovered. Scheduling stays gated (`freeze` is Forbidden), but the
+    next delivery rebuilds the created run with `resume` and every case - the killed one and
+    the never-started ones - ends `revoked`, with no further call."""
+    c = Case(world, 8)
+    endpoint(c.wallet)
+    dying = Dying(f"http://127.0.0.1:{PORT}", api_key=KEY, model="m", rate_card=RATE_CARD)
+    with pytest.raises(Crash):
+        run(Runner(c.store, c.objects, dying, DEPLOYMENT, worker_id="w",
+                   limits=Limits(30, 3, 2, 1)).run(c.frozen))
+    revoke(c.conn)
+    try:
+        d7.advance(c.conn, 31)
+        assert run(c.store.recover()) >= 1
+        with pytest.raises(errors.Forbidden):
+            run(runner.freeze(c.store, c.payload, evaluator=SPEC, provider_org_id=NEMO,
+                              actor="dev@nemo"))
+        again = run(runner.resume(c.store, c.run_id, evaluator=SPEC, provider_org_id=NEMO))
+        assert (again.run_ref, again.cases, again.limit) == (
+            c.frozen.run_ref, c.frozen.cases, c.frozen.limit)
+        report = run(c.runner("w2").run(again))
+        assert report["failures"] == {i: "revoked" for i in c.ids}
+        assert report["cases"] == {"failed": N} and report["state"] == "succeeded"
+        assert len(c.wallet.calls) == 1 and c.results() == []
+    finally:
+        restore(c.conn)

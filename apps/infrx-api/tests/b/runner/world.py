@@ -7,7 +7,9 @@ scheduling refuses a non-current grant; a run's cases are the first `max_cases` 
 (R168); a lease is one attempt (the case's attempt count + 1); every write is fenced (live
 run, live attempt, same worker, unexpired on the store clock); a finish replays by digest;
 one result per (run, case, evaluator); the run succeeds when no case is pending or leased;
-`recover` expires leases and puts their cases back.
+`recover` expires leases and puts their cases back. `release` is WR-B-2(d)'s requested
+`lab_release_attempt` (not in 0029 yet): a fenced 402 attempt is removed and its case is
+pending with the attempt uncounted, so the next lease is the same attempt and key.
 
 `DevWallet` is the provider_dev endpoint (L3 + D5 stand-in): a wallet that starts at 0 and
 is funded by the test (an operator allocation), a debit of `rate_card.debit(usage)` per
@@ -199,6 +201,14 @@ class FakeEvalStore(FakeLabStore):
         if not any(c["state"] in ("pending", "leased") for k, c in self.cases.items()
                    if k[0] == key[0]):
             run["state"] = "succeeded"
+        return lease
+
+    async def release(self, lease):
+        self._fence(lease)
+        key = (lease["run_id"], lease["case_id"], lease["attempt"])
+        del self.attempts[key]
+        case = self.cases[key[:2]]
+        case["state"], case["attempts"] = "pending", case["attempts"] - 1
         return lease
 
     async def recover(self) -> int:

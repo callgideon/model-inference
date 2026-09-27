@@ -13,6 +13,10 @@ just refused scheduling unless every sample's grant is current for provider_shar
 freeze the holdout is all accessible; each attempt re-reads the gate). The dataset ref pins
 both, being the digest of the manifest.
 
+**`resume`** rebuilds the same `Frozen` for a worker's delivery from the created run (D7's
+run status names its `run_ref`), with no scheduling gate: after a revocation `freeze` is
+refused, but the run's cases must still end, each attempt failing as `revoked`.
+
 **B1.b `Runner.run`.** `concurrency` workers loop over D7's leases: each lease is one
 attempt of one case (`attempt:<run>:<case>:<n>`). Before leasing, the run's recorded CREDIT
 is checked against its budget. Per attempt: past `max_attempts` the case fails without a
@@ -24,7 +28,9 @@ again under the same key, so the endpoint replays instead of charging twice, at 
 `dispatch_retries` times. A worker that dies leaves its lease to expire; `lab_recover`
 puts the case back and the next attempt is a new, bounded, paid attempt. An exhausted dev
 wallet (402) stops the whole run for good: unfinished cases stay pending/leased
-(unresolved), never dropped.
+(unresolved), never dropped. A 402 is the wallet's, not the case's: its attempt is given
+back (`store.release`, WR-B-2(d)) so it never counts toward `max_attempts`, and the re-run
+is the same attempt under the same key (calls already charged replay, not re-charged).
 
 **B1.c results.** A harness outcome is the case's one result under the run's evaluator
 (`complete`/`failed` are scored by the metric; `blocked`/`unsupported` are recorded with
@@ -35,7 +41,7 @@ the fence (cancelled, expired, taken over) is dropped: no stale result overwrite
 one. D7 keeps one result per run x case x evaluator.
 
 `provider_org_id` is the caller's server-derived provider (the L2 port: wiring); the worker
-entry point that runs `freeze`/`Runner.run` for an `eval_run` outbox event is wiring.
+entry point that runs `resume`/`Runner.run` for an `eval_run` outbox event is wiring.
 """
 from __future__ import annotations
 
@@ -87,10 +93,8 @@ class Frozen:
     limit: Credit
 
 
-async def freeze(store, payload: dict[str, Any], *, evaluator: dict[str, Any],
-                 provider_org_id: str, actor: str) -> Frozen:
-    """The run published and created in D7; the same payload is the same run."""
-    run = lab.parse(payload)
+def _checked(run: lab.LabRecord, evaluator: dict[str, Any]) -> Credit:
+    """The run's CREDIT limit, once it is a run and `evaluator` is the spec it names."""
     if not isinstance(run, lab.EvalRun):
         raise errors.InvalidRequest("not an evaluation run")
     evaluator_id = lab.REF_RE.fullmatch(run.evaluator_ref).group(3)
@@ -105,17 +109,38 @@ async def freeze(store, payload: dict[str, Any], *, evaluator: dict[str, Any],
     limits = [b.limit for b in run.budgets if b.limit.unit == "CREDIT"]
     if not limits:
         raise errors.InvalidRequest("a run spends provider_dev CREDIT under a CREDIT budget")
-    run_ref = await store.publish(payload, provider_org_id=provider_org_id, actor=actor)
-    await store.create_run(run_ref, provider_org_id=provider_org_id)
-    manifest = await store.resolve(run.dataset_ref, provider_org_id=provider_org_id)
-    harness = await store.resolve(run.harness_ref, provider_org_id=provider_org_id)
+    return limits[0].amount
+
+
+async def _pinned(store, run: lab.EvalRun, run_ref: str, evaluator: dict[str, Any],
+                  limit: Credit) -> Frozen:
+    manifest = await store.resolve(run.dataset_ref, provider_org_id=run.provider_org_id)
+    harness = await store.resolve(run.harness_ref, provider_org_id=run.provider_org_id)
     cases = tuple(sorted(s.sample_id for s in manifest.samples)[:run.max_cases])
     return Frozen(run=run, run_ref=run_ref, manifest=manifest,
                   harness=harness.model_dump(by_alias=True, exclude_unset=True),
                   evaluator=evaluator, split_digest=split_digest(manifest.splits.model_dump()),
                   cases=cases,
                   holdout=tuple(c for c in cases if c in manifest.splits.holdout),
-                  limit=limits[0].amount)
+                  limit=limit)
+
+
+async def freeze(store, payload: dict[str, Any], *, evaluator: dict[str, Any],
+                 provider_org_id: str, actor: str) -> Frozen:
+    """The run published and created in D7; the same payload is the same run."""
+    run = lab.parse(payload)
+    limit = _checked(run, evaluator)
+    run_ref = await store.publish(payload, provider_org_id=provider_org_id, actor=actor)
+    await store.create_run(run_ref, provider_org_id=provider_org_id)
+    return await _pinned(store, run, run_ref, evaluator, limit)
+
+
+async def resume(store, run_id: str, *, evaluator: dict[str, Any],
+                 provider_org_id: str) -> Frozen:
+    """The created run as `freeze` pinned it, rebuilt from D7 without the scheduling gate."""
+    run_ref = (await store.run_status(run_id, provider_org_id=provider_org_id))["run_ref"]
+    run = await store.resolve(run_ref, provider_org_id=provider_org_id)
+    return await _pinned(store, run, run_ref, evaluator, _checked(run, evaluator))
 
 
 @dataclass(frozen=True)
@@ -216,7 +241,7 @@ class Runner:
             outcome = await asyncio.to_thread(replayer.replay, case)
         except errors.InsufficientCredit:
             self._stop = "wallet_exhausted"
-            return self._abandon(case_id, bill)
+            return await self._release(lease, bill)
         except errors.StaleLease:
             return self._abandon(case_id, bill)
         except ReplayBoundExceeded as bound:
@@ -281,6 +306,18 @@ class Runner:
             return self._abandon(lease["case_id"], bill)
         if reason:
             self._failures[lease["case_id"]] = reason
+
+    async def _release(self, lease, bill: _Bill) -> None:
+        """Give a 402's attempt back: the case is pending with the attempt uncounted."""
+        # ponytail: 0029 has no lab_release_attempt yet (WR-B-2(d)); on PgLabDataStore the
+        # lease expires and counts toward max_attempts until it does.
+        release = getattr(self._store, "release", None)
+        if release is not None:
+            try:
+                await release(lease)
+            except errors.StaleLease:
+                pass
+        self._abandon(lease["case_id"], bill)
 
     def _abandon(self, case_id: str, bill: _Bill | None) -> None:
         self._abandoned.append(case_id)

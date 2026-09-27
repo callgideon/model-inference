@@ -215,6 +215,12 @@ def test_b1_a_durable_cancel_stops_spending_and_drops_the_in_flight_result() -> 
     report = run(Runner(two.store, two.objects, two.wallet, DEPLOYMENT, worker_id="w",
                         limits=LIMITS, recordings={recording_key("look", {}): 1}).run(frozen))
     assert len(two.wallet.calls) == 1 and report["abandoned"] == [two.ids[0]]
+    poor = World(n=1, funded="0")               # cancelled while the 402 is in flight
+    frozen = poor.freeze()
+    poor.wallet.answer = lambda p: poor.store.runs[frozen.run.run_id].update(
+        state="cancelled") or "a1"
+    report = run(poor.runner().run(frozen))
+    assert report["stopped"] == "wallet_exhausted" and report["abandoned"] == [poor.ids[0]]
 
 
 def test_b1_duplicate_delivery_scores_each_case_once() -> None:
@@ -237,22 +243,44 @@ def test_b1_duplicate_delivery_scores_each_case_once() -> None:
 
 def test_b1_an_exhausted_dev_wallet_stops_the_run_with_its_cases_unresolved() -> None:
     """EVAL-DURABLE: the dev wallet (starting at 0, funded by an allocation) refuses a
-    request it cannot hold; the runner stops for good - no further call - and the cases it
-    did not finish stay pending/leased, never dropped; funded again, the run completes."""
+    request it cannot hold; the runner stops for good - no further call - and gives the
+    refused attempt back, so the cases it did not finish stay pending, never dropped; funded
+    again, the run completes at once (no lease to wait out)."""
     w = World(funded="0")
     frozen = w.freeze()
     report = run(w.runner().run(frozen))
     assert report["stopped"] == "wallet_exhausted" and len(w.wallet.calls) == 1
-    assert report["cases"] == {"leased": 1, "pending": N - 1} and w.store.results == {}
+    assert report["cases"] == {"pending": N} and w.store.results == {}
     w.wallet.balance = RATE_CARD.maximum_hold(900, 1000) + RATE_CARD.maximum_hold(900, 1000)
     report = run(w.runner().run(frozen))
     assert report["stopped"] == "wallet_exhausted" and report["cases"] == {
-        "done": 2, "leased": 2, "pending": N - 4}
+        "done": 2, "pending": N - 2}
     assert not w.wallet.balance.is_negative
     w.wallet.balance = type(w.wallet.balance)("1000")
-    w.store.now += 31
-    assert run(w.store.recover()) == 2
     assert run(w.runner().run(frozen))["cases"] == {"done": N}
+
+
+def test_b1_a_402_gives_its_attempt_back_so_billing_never_exhausts_a_case() -> None:
+    """EVAL-DURABLE (0-B-R1): a 402 is the wallet's, not the case's. Each refused delivery
+    stops after one call with every case pending (the attempt is given back, WR-B-2(d), not
+    left to expire), so more unfunded deliveries than `max_attempts` never fail a case as
+    `attempts_exhausted`; the re-run is the same attempt under the same key; funded, every
+    case is done."""
+    w = World(n=2)
+    frozen = w.freeze()
+    w.wallet.fail = [errors.InsufficientCredit("x")] * (LIMITS.max_attempts + 1)
+    for delivery in range(1, LIMITS.max_attempts + 2):
+        report = run(w.runner().run(frozen))
+        assert report["stopped"] == "wallet_exhausted" and len(w.wallet.calls) == delivery
+        assert report["cases"] == {"pending": 2} and report["failures"] == {}
+        w.store.now += 31
+        run(w.store.recover())
+    report = run(w.runner().run(frozen))
+    assert report["cases"] == {"done": 2} and report["failures"] == {}
+    assert sorted(w.results()) == w.ids
+    first = f"attempt:{frozen.run.run_id}:{w.ids[0]}:1:0"
+    assert [c["key"] for c in w.wallet.calls][:LIMITS.max_attempts + 2] == \
+        [first] * (LIMITS.max_attempts + 2)
 
 
 def test_b1_the_credit_budget_bounds_spending() -> None:
@@ -278,6 +306,39 @@ def test_b1_revoked_data_fails_its_case_without_dispatch() -> None:
     unshared.store.grants[unshared.grant]["purposes"] = {"training"}
     report = run(unshared.runner().run(frozen))
     assert report["failures"] == {unshared.ids[0]: "revoked"} and unshared.wallet.calls == []
+
+
+def test_b1_a_created_run_resumes_after_a_revocation_and_ends_revoked() -> None:
+    """EVAL-DURABLE (0-B-R2): a revocation re-gates scheduling (`freeze` is refused), but a
+    delivery rebuilds the created run from D7 with `resume` - the same pin, no scheduling
+    gate - so the case whose worker was killed and the never-started ones all end `revoked`
+    per attempt, none left pending under a running run; another provider's run and an
+    evaluator that is not the run's are refused."""
+    w = World(n=3)
+    frozen = w.freeze()
+    w.wallet.crash_after_charge = True
+    with pytest.raises(Crash):
+        run(w.runner().run(frozen))
+    w.wallet.crash_after_charge = False
+    w.store.revoke(w.grant)
+    w.store.now += 31
+    assert run(w.store.recover()) == 1
+    with pytest.raises(errors.Forbidden):
+        w.freeze()
+
+    def resume(evaluator=SPEC, provider=NEMO):
+        return run(runner.resume(w.store, frozen.run.run_id, evaluator=evaluator,
+                                 provider_org_id=provider))
+
+    again = resume()
+    assert again == frozen
+    report = run(w.runner(worker="w2").run(again))
+    assert report["failures"] == {i: "revoked" for i in w.ids} and len(w.wallet.calls) == 1
+    assert report["cases"] == {"failed": 3} and report["state"] == "succeeded"
+    with pytest.raises(errors.NotFound):
+        resume(provider=OTHER)
+    with pytest.raises(errors.InvalidRequest, match="evaluator"):
+        resume(evaluator={**SPEC, "max_requests": 5})
 
 
 def test_b1_harness_outcomes_are_results_and_bounds_fail_the_attempt() -> None:

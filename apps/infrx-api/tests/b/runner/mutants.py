@@ -32,6 +32,8 @@ DUP = "test_b1_duplicate_delivery_scores_each_case_once"
 WALLET = "test_b1_an_exhausted_dev_wallet_stops_the_run_with_its_cases_unresolved"
 BUDGET = "test_b1_the_credit_budget_bounds_spending"
 REVOKED = "test_b1_revoked_data_fails_its_case_without_dispatch"
+GIVEBACK = "test_b1_a_402_gives_its_attempt_back_so_billing_never_exhausts_a_case"
+RESUME = "test_b1_a_created_run_resumes_after_a_revocation_and_ends_revoked"
 HARNESS = "test_b1_harness_outcomes_are_results_and_bounds_fail_the_attempt"
 LARGE = "test_b1_an_oversized_output_is_scored_and_recorded_without_its_body"
 NOREF = "test_b1_a_case_without_its_reference_is_recorded_unscored"
@@ -71,6 +73,14 @@ MUTANTS: tuple[Mutant, ...] = (
       "split_digest(manifest.splits.model_dump())", "split_digest({})", FREEZE),
     m("b1_harness_defaults_added", "the frozen harness is the published record's bytes",
       "exclude_unset=True", "exclude_unset=False", FREEZE),
+    m("b1_resume_regated", "a created run resumes without the scheduling gate (0-B-R2)",
+      "    run = await store.resolve(run_ref, provider_org_id=provider_org_id)\n",
+      "    run = await store.resolve(run_ref, provider_org_id=provider_org_id)\n"
+      "    await store.create_run(run_ref, provider_org_id=provider_org_id)\n", RESUME,
+      dies_by=("Forbidden",)),
+    m("b1_resume_evaluator_unchecked", "a resumed run still refuses another evaluator spec",
+      "_pinned(store, run, run_ref, evaluator, _checked(run, evaluator))",
+      "_pinned(store, run, run_ref, evaluator, run.budgets[0].limit.amount)", RESUME),
     # --- B1.b the loop (EVAL-DURABLE)
     m("b1_budget_unchecked", "the run's recorded CREDIT stops leasing at its limit",
       'if Credit(status["costs"].get("CREDIT", "0")) >= self._frozen.limit:', "if False:",
@@ -79,7 +89,7 @@ MUTANTS: tuple[Mutant, ...] = (
       'if Credit(status["costs"].get("CREDIT", "0")) >= self._frozen.limit:',
       'if Credit(status["costs"].get("CREDIT", "0")) > self._frozen.limit:', BUDGET),
     m("b1_stop_not_sticky", "a stop ends every worker's loop",
-      "        while self._stop is None:\n", "        while True:\n", WALLET),
+      "        while self._stop is None:\n", "        while True:\n", GIVEBACK),
     m("b1_terminal_run_raises", "a delivery of a finished run is a no-op",
       "            except errors.AlreadyTerminal:\n                return",
       "            except errors.StateConflict:\n                return", DUP,
@@ -104,10 +114,17 @@ MUTANTS: tuple[Mutant, ...] = (
       '                purpose="provider_sharing"):\n            return await self._finish(',
       '                purpose="training"):\n            return await self._finish(', REVOKED),
     m("b1_wallet_not_stopping", "an exhausted dev wallet stops the run",
-      '            self._stop = "wallet_exhausted"\n', "            pass\n", WALLET),
+      '            self._stop = "wallet_exhausted"\n', "            pass\n", GIVEBACK),
     m("b1_wallet_is_a_failure", "a 402 leaves the case unresolved, not failed",
       "        except errors.InsufficientCredit:\n", "        except errors.InvalidApiKey:\n",
       WALLET),
+    m("b1_402_attempt_kept", "a 402 gives its attempt back, never spending max_attempts",
+      "            return await self._release(lease, bill)",
+      "            return self._abandon(case_id, bill)", WALLET, GIVEBACK),
+    m("b1_402_release_refusal_raises", "a release refused by the fence is abandoned, not raised",
+      "            except errors.StaleLease:\n                pass\n",
+      "            except errors.IdempotencyConflict:\n                pass\n", CANCEL,
+      dies_by=("StaleLease",)),
     m("b1_stale_replay_unreported", "an attempt refused by the fence is abandoned",
       "        except errors.StaleLease:\n            return self._abandon(case_id, bill)",
       "        except errors.StaleLease:\n            return None", CANCEL),
