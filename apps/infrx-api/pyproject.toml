@@ -32,3 +32,4 @@ pythonpath = ["."]
 # importlib import mode: tests/<track>/ directories may hold same-named files
 # (tests/d/test_admit.py and tests/g/test_admit.py) without a basename collision.
 addopts = "--import-mode=importlib"
+markers = ["pg: runs on the lane's task-local PostgreSQL"]
