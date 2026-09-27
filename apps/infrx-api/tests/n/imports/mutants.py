@@ -37,6 +37,7 @@ DUP = "test_n1_duplicate_rows_are_dedup_candidates"
 GSPLIT = "test_n1_a_group_split_across_splits_is_quarantined"
 PREVIEW = "test_n1_the_schema_preview_shows_fields_mapping_and_row_errors"
 STRICT = "test_n1_the_spec_is_strict"
+ACTING = "test_wrn2_only_a_current_developer_member_acts_for_the_provider"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -175,6 +176,17 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n1_preview_blank_row", "a blank line is not a preview row",
       "        if not raw.strip():\n            continue\n        try:",
       "        try:", PREVIEW),
+    # --- WR-N-2: the acting provider (the L2 membership half)
+    Mutant(name="wrn2_role_unchecked", invariant="a viewer never acts on dataset content",
+           file="datasets/__init__.py", old="if ACTS not in ROLE_CAPABILITIES[membership.role]:",
+           new="if False:", cases=(ACTING,)),
+    Mutant(name="wrn2_viewer_capability", invariant="dataset work needs developer or above",
+           file="datasets/__init__.py", old="ACTS = ProviderCapability.manage_dev_deployment",
+           new="ACTS = ProviderCapability.read_aggregate_health", cases=(ACTING,)),
+    Mutant(name="wrn2_any_provider", invariant="a membership acts only for its own provider",
+           file="datasets/__init__.py",
+           old="if membership.provider_org_id == provider_org_id:", new="if True:",
+           cases=(ACTING,)),
 )
 
 

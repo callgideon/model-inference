@@ -39,8 +39,8 @@ export reuses finished parts and refuses (`Conflict`) parts its inputs no longer
 a finished one replays. `cancel` stops it for good; reads after expiry or cancellation are
 `Gone`.
 
-The caller's `provider_org_id` is server-derived (the L2 membership check at the route:
-wiring).
+The caller's `provider_org_id` is server-derived: `datasets.acting_provider` (the L2
+membership check, WR-N-2) at the route.
 """
 from __future__ import annotations
 

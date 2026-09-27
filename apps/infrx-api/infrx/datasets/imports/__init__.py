@@ -30,8 +30,8 @@ last line: the source (the upload's digest, `source_id` = the import id) is regi
 the grant, then the manifest is published in D7's one transaction - a crash anywhere before
 that publishes nothing.
 
-The caller's `provider_org_id` is server-derived (the L2 port's membership check at the
-route: wiring); D7 re-checks the grant.
+The caller's `provider_org_id` is server-derived: `datasets.acting_provider` (the L2 port's
+membership check, WR-N-2) at the route; D7 re-checks the grant.
 """
 from __future__ import annotations
 
