@@ -3,7 +3,7 @@
 # W7 + W7f H1/H2 (done by the coordinator 2026-09-27 06:53–06:56Z). Order: h3 w8 w9 w10 w10b w11 user w12 main.
 # Every step logs to $LOGDIR/<step>.log and the script stops at the first failure naming the rollout.md §3 row.
 #   infra/rollout/go-live-remaining.sh                                   # full run, new LOGDIR
-#   STEP=<step> LOGDIR=<the first run's dir> infra/rollout/go-live-remaining.sh   # resume (reuse the LOGDIR)
+#   infra/rollout/go-live-remaining.sh --step <step> --logdir <the first run's dir>   # resume (reuse the LOGDIR)
 # main receives RELEASE itself (the App release identity; S1/C1 compare the commit with RELEASE); the later
 # test/doc commits on claude/consumer-v1 follow in the next release. H4–H6 (tenant-2, +40,000 CREDIT, the
 # keys-certify inventory) remain for the coordinator after this script.
@@ -17,6 +17,7 @@ INSTALL_ARGS=(RELEASE="$RELEASE" ENGINE_MAX_NUM_SEQS=8
 TEST_USER_EMAIL=${TEST_USER_EMAIL:-rey+infrx-test1@callsofia.co}
 LOGDIR=${LOGDIR:-$HOME/infrx-go-live/$(date -u +%Y%m%dT%H%M%SZ)}
 STEP=${STEP:-h3}
+while [ $# -gt 0 ]; do case "$1" in --step) STEP=$2; shift 2;; --logdir) LOGDIR=$2; shift 2;; *) echo "unknown argument $1 (use --step <step> --logdir <dir>)" >&2; exit 2;; esac; done
 ORDER=(h3 w8 w9 w10 w10b w11 user w12 main)
 umask 077; mkdir -p "$LOGDIR"; chmod 700 "$LOGDIR"
 TAG=$(basename "$LOGDIR")
