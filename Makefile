@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real lab-test lab-lint lab-typecheck lab-build lab-mutants
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -76,7 +76,42 @@ bench-test:
 console-built:
 	cd apps/app && pnpm build && node --test tests/i2a/*.test.ts
 
-check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test
+# LW0 (R154): the Lab is a standalone package like apps/app (its own lockfile; no pnpm workspace).
+# Install once: cd apps/lab && pnpm install --frozen-lockfile. Until L1 lands apps/lab/app,
+# typecheck and build report "not run" rather than a pass, as bench-test does.
+# LW0 fix C1: without that install, the targets that run the Lab's own binaries fail fast and
+# name the install (as gates.py app_e2e does for apps/app) - a failure, never a "not run".
+LAB_INSTALLED = test -d apps/lab/node_modules || { echo "$@: FAIL - apps/lab/node_modules missing: cd apps/lab && pnpm install --frozen-lockfile" >&2; exit 1; }
+
+lab-test:
+	cd apps/lab && pnpm test
+
+lab-lint:
+	@$(LAB_INSTALLED)
+	cd apps/lab && pnpm lint
+
+lab-typecheck:
+	@if [ -d apps/lab/app ]; then \
+		$(LAB_INSTALLED); \
+		cd apps/lab && pnpm exec next typegen && pnpm exec tsc --noEmit; \
+	else \
+		echo "lab-typecheck: not run - apps/lab/app does not exist yet (L1 owns it)"; \
+	fi
+
+lab-build:
+	@if [ -d apps/lab/app ]; then \
+		$(LAB_INSTALLED); \
+		cd apps/lab && pnpm build; \
+	else \
+		echo "lab-build: not run - apps/lab/app does not exist yet (L1 owns it)"; \
+	fi
+
+# Lab mutant runners join here as their lanes merge (and console-mutants' tests/v line when V1M
+# removes tests/v); each exits non-zero on a survivor.
+lab-mutants:
+	@echo "lab-mutants: not run - no Lab mutant runner has merged yet"
+
+check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
 
 # Real service evidence is separate from unit checks; Docker absence must fail visibly.
 # Optional arguments: make integration INTEGRATION_ARGS="--layer 1 --no-mutants"

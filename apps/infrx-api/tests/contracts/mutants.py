@@ -1873,6 +1873,20 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("contracts_v2_not_a_submodule", "contracts.v2 resolves by attribute access (item 1)",
        "contracts/__init__.py", '"tasklocal", "v2", "wire")', '"tasklocal", "wire")',
        "test_contracts_v2_resolves_by_attribute_access_like_every_submodule"),
+    # --- LW0 (R152-R153): the Lab lanes' task-local registry ----------------------------
+    _m("lw0_lab_tracks_not_fake_only", "the Lab tracks resolve to the fakes (never `unknown track`)",
+       "contracts/tasklocal.py", '"i", "l", "n", "h", "b", "p", "r", "x")', '"i")',
+       "test_the_lab_tracks_develop_against_fakes",
+       dies_by=("ValueError",)),          # the defect IS the raise: `unknown track`
+    _m("lw0_lane_port_outside_the_band", "every Lab lane port sits in 57500-57599",
+       "contracts/tasklocal.py", '"dlab": {"postgres": 57500}', '"dlab": {"postgres": 57600}',
+       "test_every_lab_lane_port_sits_in_one_band"),
+    _m("lw0_t_lane_inherits_the_track_clickhouse", "a T lane's ClickHouse (and native port) is its own block",
+       "contracts/tasklocal.py", '    "t2i": {"clickhouse": (57540, (57541,)), "s3": (57542, ())},\n', "",
+       "test_every_lab_lane_port_sits_in_one_band"),
+    _m("lw0_gate_postgres_not_the_derived_port", "an E gate's PostgreSQL is 55532 + its block offset",
+       "contracts/tasklocal.py", '"e3l": {"postgres": 57032}', '"e3l": {"postgres": 57033}',
+       "test_each_lab_gate_owns_a_compose_block_below_the_band"),
     # items 3-4: the CREDIT regime of the fake JobStore (`ports.CreditJobStore`). Layered
     # refusals with no single store edit that breaks them - private/unknown/unpriced models
     # (the catalog's visibility *and* `pin_admission`), an operator or foreign wallet

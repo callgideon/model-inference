@@ -35,11 +35,24 @@ DB = f"{pgharness.DATABASE}_upgrade"
 D10 = ("0019_", "0020_", "0021_", "0022_", "0023_", "0024_", "0025_", "0026_")
 
 
-def _split():
+def _split(everything=None):
     """(0001-0018 + clock, the D10 files) as `(label, sql)` pairs."""
-    everything = migrations.sql_for(shim=pgharness.NEEDS_SHIM)
+    everything = everything or migrations.sql_for(shim=pgharness.NEEDS_SHIM)
     ours = tuple(f for f in everything if f[0].startswith(D10))
-    return tuple(f for f in everything if f not in ours), ours
+    # the shim and the clock are not numbered; 0027 on (the Lab's) are neither world
+    base = tuple(f for f in everything if not f[0][:4].isdigit() or f[0][:4] <= "0018")
+    return base, ours
+
+
+def test_a_later_migration_is_neither_the_0018_world_nor_d10() -> None:
+    """LW0 item 5 (R151): a Lab migration (0027 on) must not be applied before 0019 as part of
+    the "0018 world", nor counted as D10. Oracle: the old split put every non-D10 file,
+    0027 included, in the base."""
+    files = (("shim.sql", ""), ("0018_x.sql", ""), ("0019_x.sql", ""), ("0026_x.sql", ""),
+             ("0027_lab.sql", ""), ("clock.sql", ""))
+    base, ours = _split(files)
+    assert [label for label, _ in base] == ["shim.sql", "0018_x.sql", "clock.sql"]
+    assert [label for label, _ in ours] == ["0019_x.sql", "0026_x.sql"]
 
 
 def seed_history(conn) -> dict:

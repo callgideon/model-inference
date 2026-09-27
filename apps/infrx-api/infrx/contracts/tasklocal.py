@@ -72,6 +72,27 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "app-u4": {"postgres": 55456}, "app-u1r": {"postgres": 55457}, "app-a2": {"postgres": 55460},
     # E3C composes the E2 stack as namespace `e3c` in its own block (56900-56999)
     "e3c": {"postgres": 56932},
+    # LW0 (post-launch Lab lanes, R152-R153): every lane port in ONE band, 57500-57599. C and V
+    # lanes use `lab-`/`app-` keys so R48's c2/v1 stay fake-only; `dlab` is the only D key (its
+    # D-harness decoy, port - 30000, is 27500). G5 and I4 are conditional lanes.
+    "dlab": {"postgres": 57500},
+    "l2": {"postgres": 57501}, "l3": {"postgres": 57502}, "l4": {"postgres": 57503},
+    "i2l": {"postgres": 57504}, "lab-c2": {"postgres": 57505, "s3": 57506},
+    "g4f": {"postgres": 57507}, "g4t": {"postgres": 57508},
+    "app-c3f": {"postgres": 57509}, "lab-c3l": {"postgres": 57510},
+    "j2": {"postgres": 57511, "judge-fake": 57512}, "lab-v1m": {"postgres": 57513},
+    "n1": {"postgres": 57514, "s3": 57515}, "n2": {"postgres": 57516, "s3": 57517},
+    "n3": {"postgres": 57518, "s3": 57519},
+    "b1": {"postgres": 57520, "model-fake": 57521}, "b3": {"postgres": 57522},
+    "i5": {"postgres": 57523, "s3": 57524}, "i6": {"postgres": 57525}, "i7": {"postgres": 57526},
+    "p1": {"postgres": 57527}, "p2": {"postgres": 57528, "teacher-fake": 57529},
+    "p3": {"postgres": 57530, "protocol": 57531},
+    "r1": {"postgres": 57532, "valkey": 57533}, "r2": {"postgres": 57534},
+    "g5": {"postgres": 57535}, "i4": {"postgres": 57536},
+    # The Lab E gates compose the E2 stack in their own blocks (TASK_BLOCKS below); the
+    # PostgreSQL port is the one the harness derives, 55532 + the block's offset, as e3c's.
+    "e3l": {"postgres": 57032}, "e5l": {"postgres": 57132}, "e6l": {"postgres": 57232},
+    "e7l": {"postgres": 57332}, "e8l": {"postgres": 57432},
 }
 
 # A task's own block of a track service, replacing the track's (host port, extra ports).
@@ -82,6 +103,17 @@ TASK_BLOCKS: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
     "e3b2": {"compose": (56700, tuple(range(56701, 56800)))},
     "e4b": {"compose": (56800, tuple(range(56801, 56900)))},
     "e3c": {"compose": (56900, tuple(range(56901, 57000)))},
+    # LW0: the Lab E gates (harness.NAMESPACES +1500 ... +1900) ...
+    "e3l": {"compose": (57000, tuple(range(57001, 57100)))},
+    "e5l": {"compose": (57100, tuple(range(57101, 57200)))},
+    "e6l": {"compose": (57200, tuple(range(57201, 57300)))},
+    "e7l": {"compose": (57300, tuple(range(57301, 57400)))},
+    "e8l": {"compose": (57400, tuple(range(57401, 57500)))},
+    # ... and the T lanes, whose ClickHouse native port a TASK_PORTS entry cannot move (it
+    # would inherit the track's 59000), so each gets a block of its own inside the Lab band.
+    "t2i": {"clickhouse": (57540, (57541,)), "s3": (57542, ())},
+    "t2f": {"clickhouse": (57543, (57544,)), "s3": (57545, ())},
+    "t3": {"clickhouse": (57546, (57547,)), "s3": (57548, ())},
 }
 
 # track -> {service: (host port, extra ports)}
@@ -94,7 +126,9 @@ TRACK_SERVICES: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
 }
 # G, W and J use fakes until integration, so they get no task-local service. C is here
 # too: only C1 has a database (R48), which `TASK_PORTS` grants it directly.
-FAKE_ONLY_TRACKS = ("f", "g", "w", "j", "c", "u", "v", "i")
+# LW0: the Lab tracks too (L access/app, N datasets, H harnesses, B evaluation, P pipelines,
+# R rollout, X expansion); their lanes' ports come only from TASK_PORTS / TASK_BLOCKS.
+FAKE_ONLY_TRACKS = ("f", "g", "w", "j", "c", "u", "v", "i", "l", "n", "h", "b", "p", "r", "x")
 
 
 @dataclass(frozen=True)

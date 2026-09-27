@@ -143,7 +143,7 @@ def ephemeral_overlap(ports: list[int], proc: Path = Path("/proc/sys/net/ipv4"))
     return {**row, "status": "risk", "ports": exposed, "ephemeral_range": [low, high],
             "detail": "a namespace port can be taken as an outgoing source port and the "
                       "container bind then fails; reserve them host-wide, e.g. sysctl -w "
-                      "net.ipv4.ip_local_reserved_ports=55400-55999,56700-56999"}
+                      "net.ipv4.ip_local_reserved_ports=55400-55999,56700-57599"}
 
 
 def containers() -> list[str] | None:

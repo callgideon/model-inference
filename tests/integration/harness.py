@@ -45,8 +45,10 @@ E2_PORTS = {
 }
 # E3B phase 2: namespace -> offset of its block from E2's. A namespace moves the whole
 # layout, so two checkouts can run the stack at once (e3b2: 56700-56799, E2's +1200; e4b: 56800-56899, +1300;
-# e3c: 56900-56999, +1400 - tasklocal's `e3c` block, E3C WR-1).
-NAMESPACES = {"e2": 0, "e3b2": 1200, "e4b": 1300, "e3c": 1400}
+# e3c: 56900-56999, +1400 - tasklocal's `e3c` block, E3C WR-1; LW0: the Lab gates e3l-e8l,
+# 57000-57499, +1500 ... +1900 - tasklocal's blocks of the same names).
+NAMESPACES = {"e2": 0, "e3b2": 1200, "e4b": 1300, "e3c": 1400,
+              "e3l": 1500, "e5l": 1600, "e6l": 1700, "e7l": 1800, "e8l": 1900}
 NAMESPACE = os.environ.get("INFRX_E2_NAMESPACE") or "e2"
 if NAMESPACE not in NAMESPACES:
     raise ValueError(f"INFRX_E2_NAMESPACE={NAMESPACE!r}: expected one of {sorted(NAMESPACES)}")

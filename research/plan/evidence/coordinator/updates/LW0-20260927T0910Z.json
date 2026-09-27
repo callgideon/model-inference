@@ -1,0 +1,20 @@
+{
+  "task": "LW0",
+  "slice": "wave-5 post-launch plan §3 items 1-9 (item 10 = the P-21 request to the user); fix round for review 3b85c6ea",
+  "activity": "review",
+  "head": "a0d9d235",
+  "worktree": ".claude/worktrees/codex-lw0",
+  "branch": "codex/lw0",
+  "owned_paths": ["research/plan/08-contracts-v1-encoding.md", "apps/infrx-api/infrx/contracts/tasklocal.py", "apps/infrx-api/tests/contracts/test_config_and_imports.py", "apps/infrx-api/tests/contracts/mutants.py", "apps/infrx-api/tests/d/test_upgrade_d10.py", "tests/integration/harness.py", "tests/integration/preflight.py", "Makefile", "apps/lab/", "packages/shared/", "research/plan/scripts/progress.py", "research/plan/scripts/test_progress.py", "research/plan/evidence/coordinator/LW0-7894418.md"],
+  "commands": [
+    {"cmd": "scratch copy of Makefile + apps/lab/package.json, no node_modules: make lab-lint (and lab-typecheck/lab-build with apps/lab/app)", "exit": 2, "summary": "before a0d9d235: 'eslint: not found' / 'next not found'; after: '<target>: FAIL - apps/lab/node_modules missing: cd apps/lab && pnpm install --frozen-lockfile', pnpm not started; lab-test and the 'not run' branches unchanged"},
+    {"cmd": "make lab-test lab-lint lab-typecheck lab-build lab-mutants (worktree, installed)", "exit": 0, "summary": "0 tests; lint clean; typecheck/build/mutants 'not run' until apps/lab/app"},
+    {"cmd": "make -n check", "exit": 0, "summary": "resolves"},
+    {"cmd": "cd apps/infrx-api && uv run --frozen --no-sync pytest -q tests/contracts (at 7894418f; no Python changed in the fix round)", "exit": 0, "summary": "1303 passed, 1 skipped"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/contracts/test_mutants.py -k 'lw0_ or well_formed or every_case' (at 7894418f)", "exit": 0, "summary": "6 passed; 4/4 LW0 mutants killed"}
+  ],
+  "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "medium", "basis": "review findings closed at a0d9d235 (C1 in the Makefile; C2/RS-1 need only ratification); remaining: WR-LW0-6 doc patches, WR-LW0-7 ratification, merge, one make check", "at": "2026-09-27T09:10Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-LW0-1 progress-state lane LW0 (task-less) so this update ingests", "WR-LW0-2 dated P-17 activation record + progress-state `activated` for the LW1 ids; LAB-* gates in progress-state", "WR-LW0-3 extend the HTML tracker with LW0-LW6", "WR-LW0-4 file the P-21 extension (57000-57599) for user approval", "WR-LW0-5 cut and record the Lab base SHA including this commit", "WR-LW0-6 add `cd apps/lab && pnpm install --frozen-lockfile` to LANE-RULES rule 4 and to the infra/rollout/README.md G2 recipe (make check now fails fast without it)", "WR-LW0-7 ratify tests/integration/harness.py, tests/integration/preflight.py, packages/shared/package.json and tests/contracts/mutants.py as LW0 scope (§3 items 4, 7, 8 + the mutant addendum) in the merge note"],
+  "evidence": ["research/plan/evidence/coordinator/LW0-7894418.md"]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "@infrx/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Lab-only shared TypeScript (F3 contracts, the C0 QueryPort copy, trace formatting); apps/lab depends on it through file:. The App does not."
+}
