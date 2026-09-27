@@ -107,7 +107,10 @@ PG_MUTANTS: tuple[Mutant, ...] = tuple(
     dataclasses.replace(m, name=f"pg_{m.name}", cases=tuple(
         c for c in m.cases if c not in FAKE_ONLY) + (
         PG_ONLY if m.name in ("aggregates_unguarded", "history_unguarded") else ()))
-    for m in MUTANTS if m.file == A and set(m.cases) - set(FAKE_ONLY))
+    for m in MUTANTS if m.file == A and set(m.cases) - set(FAKE_ONLY)) + (
+    _m("pg_store_clock_is_the_server_clock", "R7: PgAccessStore.db_now is infrx.now(), the "
+       "clock the tests freeze, never the server's now()", "state/lab_access.py",
+       'conn.execute("select infrx.now()")', 'conn.execute("select now()")', STORE_CLOCK),)
 
 
 def case_names() -> set[str]:

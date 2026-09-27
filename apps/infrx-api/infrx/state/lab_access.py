@@ -8,6 +8,7 @@ for one provider. The current grant is the latest version.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Mapping, Sequence
 
 from ..contracts.v2.records import AccessGrant, ProviderMembership
@@ -33,6 +34,16 @@ class PgAccessStore:
         finally:
             await conn.close()
         return result
+
+    async def db_now(self) -> datetime:
+        """The database clock (`infrx.now()`, R7) the L2 service judges currency on."""
+        conn = await self._connect()
+        try:
+            cursor = await conn.execute("select infrx.now()")
+            (now,) = await cursor.fetchone()
+        finally:
+            await conn.close()
+        return now
 
     async def membership_rows(self, user_id: str) -> list[dict[str, Any]]:
         """The R156 read as stored, display name included (the Lab shell's list)."""
