@@ -20,10 +20,10 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 172,
-  "updated": "2026-09-27T13:47:34Z",
+  "updated": "2026-09-27T13:49:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 1,
+    "active": 4,
     "reserved": 2,
     "note": "Session 03 post-launch: lab-access (L2) + lab-sql-d7 running; certify window awaits the operator start; LW2 after L2 + the L1 integration round."
   },
@@ -4485,6 +4485,108 @@
         "lab-access + lab-app + lab-contracts paths, 0030 if needed"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "W5-DATASETS",
+      "task": null,
+      "slice": "(wave5 LW2 lane datasets) tasks N1 → N2; workflow wf_c08491dc-2a3; base c9578fda (started early: dependencies merged)",
+      "agent": "opus",
+      "branch": "codex/w5-datasets",
+      "worktree": ".claude/worktrees/codex-w5-datasets",
+      "base": "c9578fda",
+      "head": null,
+      "isolation": {
+        "ports": "n1 57514/57515; n2 57516/57517",
+        "prefix": "infrx-n1-",
+        "db": "n1"
+      },
+      "activity": "running",
+      "started": "2026-09-27T13:49:00Z",
+      "updated": "2026-09-27T13:49:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge (wirings: route mounts behind off flags, composition calls, migration pins) after the LW1 exit",
+      "estimate": {
+        "optimistic_h": 6,
+        "likely_h": 12,
+        "pessimistic_h": 24,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW2 estimates",
+        "at": "2026-09-27T13:49:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW2 datasets"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-TRACE-SHIP-LW2",
+      "task": null,
+      "slice": "(wave5 LW2 lane trace-ship-lw2) tasks T2F → T3 (+ T2I WR-3 pins lookup + build_shipper); workflow wf_adbe46dc-46a; base c9578fda (started early: dependencies merged)",
+      "agent": "opus",
+      "branch": "codex/w5-trace-ship-lw2",
+      "worktree": ".claude/worktrees/codex-w5-trace-ship-lw2",
+      "base": "c9578fda",
+      "head": null,
+      "isolation": {
+        "ports": "t2f, t3 (TASK_BLOCKS)",
+        "prefix": "infrx-t2f-",
+        "db": "t2f"
+      },
+      "activity": "running",
+      "started": "2026-09-27T13:49:00Z",
+      "updated": "2026-09-27T13:49:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge (wirings: route mounts behind off flags, composition calls, migration pins) after the LW1 exit",
+      "estimate": {
+        "optimistic_h": 5,
+        "likely_h": 10,
+        "pessimistic_h": 20,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW2 estimates",
+        "at": "2026-09-27T13:49:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW2 trace-ship-lw2"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-FEEDBACK",
+      "task": null,
+      "slice": "(wave5 LW2 lane feedback) tasks G4F (C3F only if L2 is on the tip); workflow wf_85aabf67-834; base c9578fda (started early: dependencies merged)",
+      "agent": "opus",
+      "branch": "codex/w5-feedback",
+      "worktree": ".claude/worktrees/codex-w5-feedback",
+      "base": "c9578fda",
+      "head": null,
+      "isolation": {
+        "ports": "g4f 57507; app-c3f 57509",
+        "prefix": "infrx-g4f-",
+        "db": "g4f"
+      },
+      "activity": "running",
+      "started": "2026-09-27T13:49:00Z",
+      "updated": "2026-09-27T13:49:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge (wirings: route mounts behind off flags, composition calls, migration pins) after the LW1 exit",
+      "estimate": {
+        "optimistic_h": 1,
+        "likely_h": 2,
+        "pessimistic_h": 4,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW2 estimates",
+        "at": "2026-09-27T13:49:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW2 feedback"
+      ],
+      "wiring_requests": []
     }
   ],
   "review_queue": [],
@@ -7335,6 +7437,12 @@
       "by": "tracker",
       "what": "rejected update: unknown activity 'fix-round'",
       "source": "updates/D7-20260927T1900Z.json"
+    },
+    {
+      "at": "2026-09-27T13:49:00Z",
+      "by": "coordinator (LW2)",
+      "what": "LW2 lanes datasets (N1→N2), trace-ship (T2F→T3 + T2I composition), feedback (G4F; C3F waits for L2) started early from c9578fda — their dependencies (F3, D7, 0027/0028, T2I) are merged; lab-sql LW2 (D6J/L3-SQL/D9), lab-access L3 and lab-app L4/V1M wait for the LW1 integration merge (0030 numbering, L2 port, L1 shell)",
+      "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
     }
   ],
   "history": {
