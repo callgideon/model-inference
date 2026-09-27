@@ -1,0 +1,55 @@
+{
+ "worktree": ".claude/worktrees/codex-w5-lab-sql",
+ "branch": "codex/w5-lab-sql",
+ "activity": "review",
+ "head": "fd65005b",
+ "blockers": [],
+ "task": "D6F",
+ "slice": "0028 + PgFeedbackService",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0028_feedback_durable.sql",
+  "apps/infrx-api/infrx/state/feedback.py",
+  "apps/infrx-api/tests/d/test_d6f_feedback.py",
+  "apps/infrx-api/tests/d/test_d6f_units.py",
+  "apps/infrx-api/tests/d/code_mutants_d6f.py",
+  "apps/infrx-api/tests/d/test_code_mutants_d6f.py",
+  "apps/infrx-api/tests/d/test_upgrade_lab.py"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_d6f_feedback.py (before 0028)",
+   "exit": 1,
+   "summary": "8 failed, 8 errors (no feedback enablement; stub)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q D6F + L2-SQL suites and mutant lists",
+   "exit": 0,
+   "summary": "88 passed; conformance 8/8 on PG; 19 SQL + 15 Python mutants killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab uv run --frozen pytest -q (make api-test)",
+   "exit": 1,
+   "summary": "4689 passed, 1 failed test_d1r_leaves_the_0001_0005_schema_unchanged (WR-LABSQL-4; 21 passed with it)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py + both lane lists",
+   "exit": 0,
+   "summary": "742 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "one review round; D10-0026 analogue",
+  "at": "2026-09-27T11:00Z"
+ },
+ "wiring_requests": [
+  "WR-LABSQL-4 tests/d/checks_credit.py FILLED_BOUNDARIES += infrx.accept_feedback(jsonb)",
+  "WR-LABSQL-1/2 as L2-SQL"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/D6F-fd65005.md"
+ ]
+}

@@ -1,0 +1,12 @@
+{"task": "L2-SQL", "slice": "L2 schema half (0027)", "activity": "review", "head": "506e11e9",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql", "branch": "codex/w5-lab-sql",
+ "owned_paths": ["apps/app/supabase/migrations/0027_lab_access.sql", "apps/infrx-api/tests/d/test_l2sql_access.py", "apps/infrx-api/tests/d/code_mutants_l2sql.py", "apps/infrx-api/tests/d/test_code_mutants_l2sql.py", "apps/infrx-api/tests/d/test_upgrade_lab.py"],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_l2sql_access.py (before 0027)", "exit": 1, "summary": "6 failed UndefinedFunction"},
+  {"cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_l2sql_access.py tests/d/test_code_mutants_l2sql.py", "exit": 0, "summary": "28 passed; 20 SQL mutants killed"},
+  {"cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_upgrade_lab.py", "exit": 0, "summary": "2 passed"},
+  {"cmd": "INFRX_D_TASK=dlab pytest -q tests/d tests/i/test_known_good_proof.py ../../tests/integration/test_harness.py", "exit": 1, "summary": "986 passed, 9 failed (migration pin = WR-LABSQL-1; 7 valkey HarnessBusy other lane's d2 lock; 1 production-string scan of files not touched)"}],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "one review round, D10-0025 analogue", "at": "2026-09-27T09:43Z"},
+ "blockers": [],
+ "wiring_requests": ["WR-LABSQL-1 test_harness.py migration pin += 0027_lab_access.sql", "WR-LABSQL-2 Makefile:21 api-mutants += tests/d/test_code_mutants_l2sql.py tests/d/test_upgrade_lab.py"],
+ "evidence": ["research/plan/evidence/d/L2-SQL-506e11e.md"]}

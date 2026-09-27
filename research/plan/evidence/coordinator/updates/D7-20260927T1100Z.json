@@ -1,0 +1,23 @@
+{
+ "worktree": ".claude/worktrees/codex-w5-lab-sql",
+ "branch": "codex/w5-lab-sql",
+ "activity": "blocked",
+ "head": "fd65005b",
+ "blockers": [
+  "F3's reviewed commit is not on claude/consumer-v1 (no infrx/contracts/lab at 56566aab); brief: stop after D6F"
+ ],
+ "task": "D7",
+ "slice": "not started",
+ "owned_paths": [],
+ "commands": [],
+ "estimate": {
+  "optimistic_h": 3,
+  "likely_h": 6,
+  "pessimistic_h": 12,
+  "confidence": "medium",
+  "basis": "brief estimate; D10 2/4/8 for 8 files",
+  "at": "2026-09-27T11:00Z"
+ },
+ "wiring_requests": [],
+ "evidence": []
+}

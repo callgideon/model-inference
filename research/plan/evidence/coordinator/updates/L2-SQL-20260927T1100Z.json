@@ -1,0 +1,57 @@
+{
+ "worktree": ".claude/worktrees/codex-w5-lab-sql",
+ "branch": "codex/w5-lab-sql",
+ "activity": "review",
+ "head": "fd65005b",
+ "blockers": [],
+ "task": "L2-SQL",
+ "slice": "L2 schema half (0027) + PgAccessStore, reworked to v2 shapes and R156",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0027_lab_access.sql",
+  "apps/infrx-api/infrx/state/lab_access.py",
+  "apps/infrx-api/tests/d/test_l2sql_access.py",
+  "apps/infrx-api/tests/d/test_l2sql_units.py",
+  "apps/infrx-api/tests/d/code_mutants_l2sql.py",
+  "apps/infrx-api/tests/d/test_code_mutants_l2sql.py",
+  "apps/infrx-api/tests/d/test_upgrade_lab.py"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_l2sql_access.py (before 0027)",
+   "exit": 1,
+   "summary": "6 failed UndefinedFunction"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_l2sql_access.py tests/d/test_code_mutants_l2sql.py",
+   "exit": 0,
+   "summary": "39 passed; 22 SQL + 8 Python mutants killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab uv run --frozen pytest -q (make api-test)",
+   "exit": 1,
+   "summary": "4689 passed, 1 failed (WR-LABSQL-4), 42 skipped, 9 xfailed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py + both lane lists",
+   "exit": 0,
+   "summary": "742 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "one review round + L2 integration; D10-0025 analogue",
+  "at": "2026-09-27T11:00Z"
+ },
+ "wiring_requests": [
+  "WR-LABSQL-1 test_harness.py pin += 0027_lab_access.sql, 0028_feedback_durable.sql",
+  "WR-LABSQL-2 Makefile:21 += tests/d/test_code_mutants_l2sql.py tests/d/test_code_mutants_d6f.py tests/d/test_upgrade_lab.py",
+  "WR-LABSQL-3 (to L2) PgAccessStore is the real AccessStore; model ids are v2 model UUIDs"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/L2-SQL-fd65005.md",
+  "research/plan/evidence/d/L2-SQL-506e11e.md"
+ ]
+}

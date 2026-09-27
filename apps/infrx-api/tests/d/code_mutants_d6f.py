@@ -1,0 +1,182 @@
+"""R32/R40 for D6F: single-edit defects of the feedback migration (killed by the named check of
+`test_d6f_feedback.py` on a database built from the mutated set, needs Docker) and of
+`infrx/state/feedback.py` (killed by the named case of `test_d6f_units.py` through the shared
+runner, no Docker).
+
+    INFRX_D_TASK=dlab uv run --frozen pytest -q tests/d/test_code_mutants_d6f.py
+"""
+from __future__ import annotations
+
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import psycopg
+from infrx.state import migrations
+
+from ..contracts import mutants as shared
+from ..contracts.mutants import Mutant, Runner
+from . import migration_mutants as _d
+from . import pgharness
+from . import test_d6f_feedback as t
+
+FILE = "0028_feedback_durable.sql"
+DB = f"{pgharness.DATABASE}_d6fmut"
+
+FLAG = "check_the_writes_fail_closed_until_the_flag_is_on"
+ACK = "check_acceptance_commits_row_key_and_outbox_together"
+SPOOF = "check_provenance_cannot_be_supplied_by_the_client"
+OWNER = "check_ownership_is_the_durable_job"
+LABEL = "check_a_label_is_an_audited_operator_row_of_the_jobs_tenant"
+IMMUTABLE = "check_feedback_rows_are_immutable"
+ROLES = "check_browser_roles_reach_no_write"
+RACE = "check_a_concurrent_duplicate_replays_the_first_row"
+_OUTBOX = ("  insert into infrx.outbox (event_id, aggregate_id, org_id, kind, payload, "
+           "available_at)\n  values (gen_random_uuid(), v_job, v_org, 'feedback_projection',\n"
+           "          jsonb_build_object('feedback_id', f.feedback_id), infrx.now());\n")
+_AUDIT = ("  insert into infrx.audit_entries (id, actor_principal, action, target_org_id, "
+          "reason, after,\n    idempotency_key)\n  values (gen_random_uuid(), f.author_principal, "
+          "'calibration_label', v_org,\n    'calibration label', jsonb_build_object('feedback_id', "
+          "f.feedback_id, 'request_id', v_job,\n      'label', f.value_text, 'rubric_version', "
+          "f.rubric_version), f.idempotency_key);\n")
+
+
+def _s(name, old, new, check, why, **kw):
+    return _d.Mutant(name, FILE, old, new, "lab", check, why, **kw)
+
+
+SQL_MUTANTS = (
+    _s("d6f_missing_flag_row_enables", "where f.name = 'feedback'),\n                  false)",
+       "where f.name = 'feedback'),\n                  true)", FLAG,
+       "applying the migration turns feedback on (a missing row is not closed)"),
+    _s("d6f_flag_not_checked", "  perform infrx.feedback_enabled();\n", "", FLAG,
+       "feedback is written with its flag off", occurrences=2),
+    _s("d6f_body_keys_unchecked", "     or exists (select 1 from jsonb_object_keys(v_body) k\n"
+       "                where k not in ('name', 'value', 'comment'))\n", "", SPOOF,
+       "a client's author, channel or marker key is silently accepted"),
+    _s("d6f_role_follows_the_marker", "p_args->>'principal', 'customer',",
+       "p_args->>'principal', case when (p_args->>'by_operator')::boolean then 'operator' "
+       "else 'customer' end,", ACK, "an operator on the customer path authors operator rows (R31)"),
+    _s("d6f_float_rating_rounded", " and v_value::text ~ '^-?[0-9]+$'", "", SPOOF,
+       "a 1.5 rating is stored as 2"),
+    _s("d6f_ownership_ignores_the_org", "where j.request_id = v_job and j.org_id = v_org)\n",
+       "where j.request_id = v_job)\n", OWNER,
+       "another organization answers for a request it does not own"),
+    _s("d6f_suspension_ignored", "  if (select o.suspended from public.organizations o where "
+       "o.id = v_org) then", "  if false then", OWNER, "a suspended org submits (R33)"),
+    _s("d6f_duplicate_writes_twice", "  return not exists (select 1 from infrx.idempotency",
+       "  return true or not exists (select 1 from infrx.idempotency", ACK, "a replayed submission fails instead of answering its row"),
+    _s("d6f_concurrent_duplicate_fails", "  perform pg_advisory_xact_lock(hashtextextended(",
+       "  perform (hashtextextended(", RACE,
+       "the second of two simultaneous submissions fails instead of answering the first row"),
+    _s("d6f_changed_payload_replays", "  if i.payload_digest <> p_idem->>'payload_hash' then",
+       "  if false then", ACK, "a changed payload under a used key returns the old row"),
+    _s("d6f_keys_cross_operations", "  if not found or f.calibration_set <> p_label then",
+       "  if not found then", LABEL,
+       "a customer replaying an operator's key receives the operator's label (R54)"),
+    _s("d6f_no_projection_event", _OUTBOX, "", ACK,
+       "an acknowledged feedback never reaches the projection"),
+    _s("d6f_label_without_operator", "  if not coalesce((p_args->>'is_operator')::boolean, "
+       "false) then", "  if false then", SPOOF, "a customer authors a calibration label"),
+    _s("d6f_label_on_another_scope", "  if (p_args->'idem'->>'org_id')::uuid is distinct from "
+       "v_org then", "  if false then", LABEL,
+       "a label's key is scoped to the operator's org, not the row's (R26)"),
+    _s("d6f_label_not_audited", _AUDIT, "", LABEL, "an operator's label leaves no audit row (R34)"),
+    _s("d6f_rows_mutable", "create trigger feedback_immutable before update or delete on "
+       "infrx.feedback\n  for each row execute function infrx.forbid_update_delete();\n", "",
+       IMMUTABLE, "an author, channel or role is rewritten after acknowledgment"),
+    _s("d6f_reads_any_org", "                 and (v_org is null or j.org_id = v_org)) then",
+       "                 ) then", OWNER, "another org learns a request exists"),
+    _s("d6f_reads_mix_labels", "\n                      and f.calibration_set = coalesce(("
+       "p_args->>'calibration')::boolean,\n                                                "
+       "       false)", "", LABEL, "a customer's list carries operator labels (R49)"),
+    _s("d6f_label_callable_by_browsers", "-- `accept_feedback` keeps 0004's grants through "
+       "`create or replace`.", "grant execute on function infrx.label_calibration(jsonb) to "
+       "authenticated;", ROLES, "a browser session calls the label RPC with a forged operator"),
+)
+
+RUNNER = Runner(name="d6f", targets=("tests/d/test_d6f_units.py",))
+F = "state/feedback.py"
+SENDS = "test_accept__sends_server_derived_provenance_and_the_signal_only"
+REFUSES = "test_accept__refuses_forged_fields_and_foreign_scopes_without_calling"
+MASKS = "test_accept__an_operator_row_reads_platform_to_a_customer"
+LABELS = "test_label__operator_only_bounded_and_sends_the_label"
+LISTS = "test_lists__owned_is_the_callers_org_and_labels_are_operator_only"
+CODES = "test_refusals__the_disabled_flag_and_sql_codes_are_typed"
+
+
+def _p(name, invariant, old, new, *cases) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=F, old=old, new=new, cases=cases)
+
+
+CODE_MUTANTS = (
+    _p("d6f_py_channel_fixed", "the channel is the service's", '"channel": self.channel.value,',
+       '"channel": FeedbackChannel.api.value,', SENDS),
+    _p("d6f_py_marker_dropped", "R50: the operator marker is the session's",
+       '"by_operator": bool(auth.is_operator),', '"by_operator": False,', SENDS),
+    _p("d6f_py_body_whole", "only the signal reaches the SQL",
+       'include={"name", "value", "comment"},\n                                    exclude_none=True)',
+       'exclude_none=True)', SENDS),
+    _p("d6f_py_non_object_body", "a JSON array is a 400",
+       "        if not isinstance(feedback, dict):\n", "        if False:\n", REFUSES),
+    _p("d6f_py_foreign_scope", "R10: the key is the caller's org's",
+       "        if idem.org_id != auth.org_id:", "        if False:", REFUSES),
+    _p("d6f_py_keyless", "R3: a key is required",
+       '        if idem.key is None:\n            raise errors.InvalidRequest("an idempotency key '
+       'is required for feedback")', '        if False:\n            raise '
+       'errors.InvalidRequest("an idempotency key is required for feedback")', REFUSES),
+    _p("d6f_py_unmasked_answer", "R41/R54: an answer is projected for its viewer",
+       "        return visible_feedback((Feedback.model_validate(row),),\n"
+       "                                operator=bool(auth.is_operator))[0]",
+       "        return Feedback.model_validate(row)", MASKS),
+    _p("d6f_py_label_by_anyone", "R31: only an operator labels",
+       '        if not auth.is_operator:\n            raise errors.Forbidden("labelling',
+       '        if False:\n            raise errors.Forbidden("labelling', LABELS),
+    _p("d6f_py_bool_rubric", "R54: a boolean is not a rubric version",
+       "        if isinstance(rubric_version, bool) or not isinstance", "        if not isinstance",
+       LABELS),
+    _p("d6f_py_long_comment", "R43: a label's comment is bounded",
+       "\n                                    or len(comment) > MAX_FEEDBACK_TEXT_CHARS):", "):",
+       LABELS),
+    _p("d6f_py_label_keyless", "a label needs a key", '        if idem.key is None:\n'
+       '            raise errors.InvalidRequest("an idempotency key is required for a '
+       'calibration label")', '        if False:\n            raise errors.InvalidRequest("an '
+       'idempotency key is required for a calibration label")', LABELS),
+    _p("d6f_py_owned_any_org", "list_owned is the caller's org's",
+       '"org_id": auth.org_id})', '})', LISTS),
+    _p("d6f_py_owned_shows_labels", "R49: no label in list_owned",
+       "        return visible_feedback(tuple(Feedback.model_validate(r) for r in rows),\n"
+       "                                operator=bool(auth.is_operator))",
+       "        return tuple(Feedback.model_validate(r) for r in rows)", LISTS),
+    _p("d6f_py_calibration_for_anyone", "R35: labels are operator data",
+       '        if not auth.is_operator:\n            raise errors.Forbidden("calibration',
+       '        if False:\n            raise errors.Forbidden("calibration', LISTS),
+    _p("d6f_py_flag_off_untyped", "a disabled flag is a typed 503",
+       '            if failed.sqlstate == "0A000":', "            if False:", CODES),
+)
+SQL_NAMES = tuple(m.name for m in SQL_MUTANTS)
+
+
+def kill(mutant) -> tuple[str, str]:
+    """migration_mutants.kill's classification on this lane's database and seed."""
+    pgharness.ensure()
+    with TemporaryDirectory(prefix=f"infrx-dlab-{mutant.name}-") as tmp:
+        directory = Path(tmp)
+        refused = _d._mutate(directory, mutant)
+        if refused is not None:
+            return _d.MISDECLARED, refused
+        try:
+            pgharness.recreate(DB)
+            pgharness.apply(DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM,
+                                                   directory=directory))
+        except (AssertionError, psycopg.Error) as broken:
+            return _d.APPLY_ERROR, _d._first_line(broken)
+        try:
+            with pgharness.connect(DB) as conn:
+                t.seed(conn)
+                return _d._run(t.CHECKS[mutant.check], conn)
+        except (AssertionError, psycopg.Error) as during_setup:
+            return _d.SETUP_ERROR, _d._first_line(during_setup)
+
+
+def run_code_mutant(mutant):
+    return shared.run_mutant(mutant, RUNNER)
