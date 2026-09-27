@@ -1,0 +1,79 @@
+{
+ "task": "V3",
+ "slice": "judge + calibration panels (fake J2/J3 port)",
+ "activity": "fix-round",
+ "head": "10dee89f",
+ "worktree": ".claude/worktrees/codex-w5-trace-ui",
+ "branch": "codex/w5-trace-ui",
+ "owned_paths": [
+  "apps/lab/components/traces/judge/",
+  "apps/lab/tests/v/judge/",
+  "apps/lab/app/(provider)/requests/[id]/page.tsx"
+ ],
+ "commands": [
+  {
+   "cmd": "node --test tests/v/judge/view.test.ts (pre-impl)",
+   "exit": 1,
+   "summary": "ERR_MODULE_NOT_FOUND (seam)"
+  },
+  {
+   "cmd": "node tests/v/detail/run-mutants.mjs",
+   "exit": 0,
+   "summary": "12 cases all named; 41/41 killed"
+  },
+  {
+   "cmd": "make lab-lint",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-typecheck",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-build",
+   "exit": 0,
+   "summary": "builds, ƒ /requests/[id]"
+  },
+  {
+   "cmd": "make lab-mutants",
+   "exit": 0,
+   "summary": "69/69, 47/47, 20/20 (existing)"
+  },
+  {
+   "cmd": "node tests/v/judge/run-mutants.mjs",
+   "exit": 0,
+   "summary": "8 cases all named; 36/36 killed"
+  },
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "78 tests, 74 pass, 0 fail, 4 skipped (real-stack cases)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "after WR-V3-1: one adapter into one seam + real JUDGE-SCORES rerun + one verify round",
+  "at": "2026-09-27T21:16Z"
+ },
+ "blockers": [
+  "real integration waits on J2 merge + WR-V3-1 (J2/J3 per-request read)"
+ ],
+ "wiring_requests": [
+  "WR-V3-1 lab_judge_runs(provider, request) J2/J3 read + TS adapter in lib/services/judge wired into components/traces/judge/port.ts",
+  "WR-V2-4 (lab-mutants line) covers tests/v/judge/run-mutants.mjs"
+ ],
+ "evidence": [
+  "research/plan/evidence/v/V3-205f3bc.md"
+ ],
+ "fix_round": {
+  "finding": "0-TUI-CORR-1",
+  "fixed": true,
+  "commit": "10dee89f",
+  "summary": "V3-P01 now also asserts `<p>Verdict: {r.verdict}</p>` and `<p>{r.calibration}</p>` in `components/traces/judge/panel.tsx`, so the panel can neither print a literal verdict (e.g. `pass` beside a dry or no-media run) nor a literal `Calibrated.` beside an uncalibrated judge. New mutants in `tests/v/judge/run-mutants.mjs`: V3-X35 (calibration → `Calibrated.`) and V3-X36 (verdict → `pass`), both killed by V3-P01. Product code unchanged."
+ }
+}
