@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
-from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+from infrx.gateway.routes import chat, feedback, health, ingress, jobs, models, uploads
 from infrx.observe import host
 from infrx.observe import route as metrics
 from infrx.scheduling.memory import MemoryScheduler
@@ -157,7 +157,7 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     loopback-only /metrics last - the one chat handler is the ingress's, every upload and jobs
     route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
     slash redirects) is served."""
-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, metrics)
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}
@@ -173,6 +173,50 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     assert {served.get(key) for key in ingress.JOBS_ROUTES} == {jobs.__name__}
     assert rt.relay.on_async is not None            # jobs' 202 hook, on the pilot's relay
     ingress.assert_route_table(app)
+
+
+def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it():
+    """G4F (WR-G4F-1): `FEEDBACK_API` is off by default, and then no feedback route exists
+    even with a service at hand (the launched API is unchanged); on, `POST /v1/feedback` is
+    the feedback router's and acknowledges through the composed service."""
+    import dataclasses
+    from unittest import mock
+
+    from infrx.config import deployment_from_env
+    from infrx.contracts.records import Feedback
+
+    class Stub:
+        async def accept(self, auth, request_id, signal, idem):
+            return Feedback(feedback_id="fb_" + "Q" * 43, request_id=request_id,
+                            org_id=auth.org_id, author_principal=auth.principal,
+                            author_role="customer", channel="api", created_at="2026-09-27T00:00:00Z",
+                            **signal)
+
+    assert deployment_from_env({}).feedback_api is False
+
+    def composed(on):
+        world = relay_support.World()
+        world.stream.usage = lambda: asyncio.sleep(0, {})
+        config = support.settings(deployment=dataclasses.replace(support.BUILD, feedback_api=on))
+        return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
+                                      clock=world.now_s, catalog=world.catalog,
+                                      stream=world.stream, objects=world.objects,
+                                      jobs=world.jobs, index=MemoryScheduler(world.clock.now),
+                                      feedback=Stub())
+
+    body = {"request_id": support.REQUEST_ID, "name": "thumb", "value": True}
+    headers = {**support.AUTH, "Idempotency-Key": "wr-g4f-1"}
+    off = composed(False)
+    assert off.state.runtime.feedback is None
+    assert all(getattr(r, "path", "") != feedback.FEEDBACK_PATH for r in off.routes)
+    assert local(off).post(feedback.FEEDBACK_PATH, json=body, headers=headers).status_code == 404
+    on = composed(True)
+    assert on.state.runtime.feedback is not None
+    assert [r.methods for r in on.routes
+            if getattr(r, "path", "") == feedback.FEEDBACK_PATH] == [{"POST"}]
+    answer = local(on).post(feedback.FEEDBACK_PATH, json=body, headers=headers)
+    assert answer.status_code == 201 and answer.json()["author_role"] == "customer"
+    ingress.assert_route_table(on)
 
 
 def fixture_host(monkeypatch, root: pathlib.Path) -> None:

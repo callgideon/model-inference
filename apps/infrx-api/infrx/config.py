@@ -351,6 +351,10 @@ class DeploymentSettings:
     # (`python -m infrx.worker`: /readyz, /livez, /metrics), the one install.sh's
     # `wait_ready` and 60-verify-local.sh probe. Never public: WorkerService binds loopback.
     worker_health_port: int = 8002
+    # G4F (WR-G4F-1): mount `POST /v1/feedback` over D6F's `PgFeedbackService` on the job
+    # store's pool. Off by default, so the launched API is unchanged; the database's own
+    # `feedback` flag gates every write again (off: 503 dependency_unavailable).
+    feedback_api: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):
@@ -408,7 +412,7 @@ CONSOLE_ONLY_SETTINGS = ("CONSOLE_CURSOR_SECRET",)
 # in PostgreSQL, a zero message cap refuses every request, a zero segment never rotates.
 DEPLOYMENT_MUST_BE_POSITIVE = tuple(
     f.name for f in dataclasses.fields(DeploymentSettings)
-    if not isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)
+    if not isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), (str, bool))   # a switch may be off
 )
 
 

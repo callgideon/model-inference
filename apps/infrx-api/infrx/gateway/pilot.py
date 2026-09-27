@@ -230,8 +230,17 @@ def adapters_from_env(settings, **injected):
                     # only beside the job store it was built with (one database)
                     **({} if "jobs" in adapters else {"readiness": lifecycle}),
                     "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
+                    # G4F (WR-G4F-1): only when the deployment enables the feedback route
+                    **({"feedback": _pg_feedback(connect)}
+                       if settings.deployment.feedback_api else {}),
                     **adapters}
     return adapters
+
+
+def _pg_feedback(connect):
+    """D6F's `PgFeedbackService` on the api channel (G4F's route)."""
+    from ..state.feedback import PgFeedbackService
+    return PgFeedbackService(connect)
 
 
 def _pg_lifecycle(connect, settings):
@@ -282,7 +291,7 @@ def build_info(rt) -> None:
 
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
                        pool=None, consent_for=None, attachments=None,
-                       lifecycle=None, readiness=None) -> IngressDeps:
+                       lifecycle=None, readiness=None, feedback=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -318,6 +327,8 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     checks = {"price_source": Probe(models.price_check(catalog, settings)),
               "journal": Probe(journal_check(stream))}
     rt.relay = relay
+    # G4F (WR-G4F-1): the feedback route mounts over this, and only when enabled.
+    rt.feedback = feedback if deployment.feedback_api else None
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
                            relay=relay)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,

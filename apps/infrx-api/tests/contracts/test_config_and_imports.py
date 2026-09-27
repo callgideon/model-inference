@@ -334,7 +334,7 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     half-finished track mount itself on the public gateway."""
     from infrx.gateway import app as composition_root
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
-        ["health", "models", "ingress", "uploads", "jobs", "route"]
+        ["health", "models", "ingress", "uploads", "jobs", "feedback", "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -542,11 +542,13 @@ DEPLOYMENT_EXPECTED = {
     "MONITOR_DATABASE_URL": "",
     # P-25 (decided 2026-09-25): 50 GiB above, and the content collection grace
     "RETENTION_GRACE_S": 3600.0,
+    # G4F (WR-G4F-1): the switch that mounts POST /v1/feedback, off
+    "FEEDBACK_API": False,
 }
 
-# Everything except the text values (the secret, the accounting regime).
+# Everything except the text values (the secret, the accounting regime) and the switch.
 DEPLOYMENT_NUMBERS = tuple(name for name, value in sorted(DEPLOYMENT_EXPECTED.items())
-                           if not isinstance(value, str))
+                           if not isinstance(value, (str, bool)))
 
 
 def test_every_deployment_name_and_default_is_frozen():
@@ -566,10 +568,10 @@ def test_the_deployment_names_are_nobodys_existing_names():
 
 @pytest.mark.parametrize("name", sorted(DEPLOYMENT_EXPECTED))
 def test_each_deployment_name_is_read_from_the_environment(name):
-    raw = "s" * 32 if name == "CONSOLE_CURSOR_SECRET" else "7"
-    deployment = config.deployment_from_env({name: raw})
     field_name = name.lower()
     kind = type(getattr(config.DEPLOYMENT_DEFAULTS, field_name))
+    raw = "s" * 32 if name == "CONSOLE_CURSOR_SECRET" else "true" if kind is bool else "7"
+    deployment = config.deployment_from_env({name: raw})
     assert getattr(deployment, field_name) == kind(raw)
 
 

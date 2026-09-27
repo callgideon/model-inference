@@ -231,6 +231,9 @@ NOT_SETTABLE = {
     "WORKER_HEALTH_PORT": "the worker's loopback port is the unit's and lib.sh's (8002, "
                           "wait_ready and 60-verify-local.sh): moving it is a deploy change, "
                           "not a --set",
+    "FEEDBACK_API": "mounts POST /v1/feedback (G4F, off by default): enabling it on the hosted "
+                    "gateway needs the E4 regression rerun and the database feedback flag, a "
+                    "deploy change, not a --set",
 }
 
 
