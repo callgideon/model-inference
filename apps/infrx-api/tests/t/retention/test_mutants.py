@@ -19,7 +19,7 @@ CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 STACK = os.environ.get("INFRX_T3_STACK") == "1"
 SUBSET = ("shipper_skips_the_policy", "sweep_follows_a_cross_org_key", "sweep_ignores_holds",
-          "read_ignores_content_expiry")
+          "read_ignores_content_expiry", "replay_ignores_holds", "sweep_stops_at_the_head")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 Mutant, Outcome = mutation_list.Mutant, mutation_list.Outcome
 needs_stack = pytest.mark.skipif(not STACK, reason="T3 (owner: T): a store-only mutant - "

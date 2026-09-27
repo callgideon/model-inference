@@ -37,6 +37,8 @@ HOLDS = "test_content_a_live_grant_or_export_references_is_kept"
 MIDWAY = "test_a_sweep_that_fails_midway_finishes_on_the_next_one"
 GAUGES = "test_loss_lag_and_retention_gauges_fire_their_alarms"
 MONTHS = "test_metadata_months_are_calendar_months"     # no stack half: the self-tests' case
+HELD_REPLAY = "test_a_replay_keeps_content_a_live_grant_or_export_references"
+STARVE = "test_held_and_failing_deletions_never_starve_later_ones"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -82,6 +84,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "                if self.holds is not None and await self.holds(stone.org_id, "
        "stone.request_id):",
        "                if False:", HOLDS),
+    _m("sweep_stops_at_the_head", "held and failing tombstones never starve later ones", R,
+       "            after = page[-1]", "            break", STARVE),
     _m("sweep_keeps_objects", "the sweep reaches the objects", R,
        "                        await self.objects.delete(row.content_key)",
        "                        pass", SWEEP),
@@ -116,8 +120,15 @@ MUTANTS: tuple[Mutant, ...] = (
        "        verdicts = await self.retention.verdicts(scan.records) if self.retention else {}",
        "        verdicts = {}", REPLAY),
     _m("replay_leaves_its_object", "an object whose row never landed goes with the replay", S,
-       "                await self.objects.delete(content_key(envelope.org_id, trace_id))",
-       "                pass", REPLAY),
+       "                    await self.objects.delete(ref)", "                    pass", REPLAY),
+    _m("replay_ignores_holds", "a replay keeps content a live grant or export holds", S,
+       "                if not await self.retention.keeps(envelope.org_id, envelope.request_id, "
+       "ref):", "                if True:", HELD_REPLAY),
+    _m("replay_keeps_an_unnamed_object", "a held request's object no row names still goes", R,
+       "        return self.holds is not None and await self.holds(org_id, request_id) and any(\n"
+       "            row.content_key == key for row in await self.traces.find(org_id, request_id))",
+       "        return self.holds is not None and await self.holds(org_id, request_id)",
+       HELD_REPLAY),
     _m("expired_record_ships_content", "no content object after the bound", S,
        '                    continue\n                content = b""',
        "                    continue", EXPIRY),
@@ -153,6 +164,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("expiry_ignores_the_cutoff", "only content past the cutoff expires", R,
        '"AND started_at <= toDateTime64({cutoff:String}, 6, \'UTC\') "',
        '"AND toDateTime64({cutoff:String}, 6, \'UTC\') IS NOT NULL "', EXPIRY),
+    _m("pending_ignores_the_cursor", "each page of the sweep starts past the last", R,
+       "        if after is not None:\n            cursor = (",
+       "        if False:\n            cursor = (", STARVE),
     _m("purge_keeps_feedback", "a deletion reaches the feedback projection", R,
        "        for table in (TRACES, FEEDBACK):", "        for table in (TRACES,):", SWEEP),
     _m("loss_counts_every_row", "only rows with a loss reason are lost", R,
@@ -163,7 +177,7 @@ MUTANTS: tuple[Mutant, ...] = (
 #: Only the real ClickHouse sees these: the in-memory store has no query text.
 NEEDS_STACK = frozenset({"pending_includes_cleaned", "pending_without_final", "expiry_repeats",
                          "expiry_ignores_the_cutoff", "purge_keeps_feedback",
-                         "loss_counts_every_row"})
+                         "loss_counts_every_row", "pending_ignores_the_cursor"})
 RUNNER = Runner(name="t3", targets=(SUITE,), env=("INFRX_T3_STACK",))
 
 

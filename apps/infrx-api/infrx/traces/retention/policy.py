@@ -12,12 +12,14 @@ TTLs and object deletes are cleanup, never the authorization boundary.
 organization's prefix), then for a `request` tombstone its trace and feedback rows, then marks
 the tombstone cleaned. Content a live grant or export references (`holds`) is kept and the
 tombstone stays pending - still logically deleted - until the reference ends. A failure leaves
-the tombstone pending for the next sweep; every step is idempotent.
+the tombstone pending for the next sweep; every step is idempotent. The sweep pages past held
+and failing tombstones (a cursor), so they never starve the deletions queued behind them.
 
 **No resurrection.** The spool is reached through the shipper: `verdicts` drops a deleted
-request's record (and deletes the object a replay may have written) and ships an expired one
-without content, so a replayed segment brings nothing back; the feedback projector drops a
-deleted request's rows (`keep_feedback`) and acknowledges them. Tombstones are never TTL'd.
+request's record (and deletes the object a replay may have written, unless a live grant or
+export holds it - `keeps`) and ships an expired one without content, so a replayed segment
+brings nothing back; the feedback projector drops a deleted request's rows (`keep_feedback`)
+and acknowledges them. Tombstones are never TTL'd.
 
 `gauges` are the loss, lag and retention numbers and `RULES` the alarms over them, in
 `infra/alerts` rule shape, for I2L-OBS to deploy (a wiring request).
@@ -115,8 +117,22 @@ class Retention:
         return len(pairs)
 
     async def sweep(self, limit: int = 100) -> dict[str, int]:
+        """Pages of `limit` pending tombstones, oldest first, until `limit` are cleaned or the
+        queue ends: held and failing ones stay pending behind the cursor, never in the way.
+        ponytail: each sweep asks `holds` again for every held tombstone ahead of the due
+        ones; a held-until column when long-lived holds number in the millions."""
         report = {"cleaned": 0, "held": 0, "failed": 0}
-        for stone in await self.store.pending(limit):
+        after = None
+        while report["cleaned"] < limit:
+            page = await self.store.pending(limit, after)
+            await self._sweep(page, report)
+            if len(page) < limit or page[-1] == after:     # the end, or a store not advancing
+                break
+            after = page[-1]
+        return report
+
+    async def _sweep(self, page, report) -> None:
+        for stone in page:
             try:
                 if self.holds is not None and await self.holds(stone.org_id, stone.request_id):
                     report["held"] += 1
@@ -131,7 +147,6 @@ class Retention:
                 report["cleaned"] += 1
             except Exception:                   # noqa: BLE001 - pending, retried next sweep
                 report["failed"] += 1
-        return report
 
     # --- what the writers consult (no resurrection) -------------------------------------
     async def verdicts(self, envelopes) -> dict[tuple[str, str], str]:
@@ -147,6 +162,13 @@ class Retention:
             elif CONTENT in scopes or not self.content_live(e.started_at, now):
                 out[(e.org_id, e.request_id)] = NO_CONTENT
         return out
+
+    async def keeps(self, org_id: str, request_id: str, key: str) -> bool:
+        """For the shipper's replay: the object at `key` stays while a live grant or export
+        holds the request and a shipped row names it. An object no row names was never
+        readable, so nothing references it, and no sweep could ever find it."""
+        return self.holds is not None and await self.holds(org_id, request_id) and any(
+            row.content_key == key for row in await self.traces.find(org_id, request_id))
 
     async def keep_feedback(self, rows):
         """For the feedback projector: the rows of requests neither deleted nor expired."""
@@ -234,10 +256,18 @@ class ClickHouseRetentionStore:
             found.setdefault((stone.org_id, stone.request_id), {})[stone.scope] = stone
         return found
 
-    async def pending(self, limit: int) -> list[Tombstone]:
+    async def pending(self, limit: int, after: Tombstone | None = None) -> list[Tombstone]:
+        """In (deleted_at, org, request, scope) order, past `after` when given."""
+        cursor, parameters = "", {"limit": limit}
+        if after is not None:
+            cursor = ("AND (deleted_at, org_id, request_id, scope) > (toDateTime64({at:String}, "
+                      "6, 'UTC'), {org:UUID}, {request:UUID}, {scope:String}) ")
+            parameters |= {"at": _at(after.deleted_at), "org": after.org_id,
+                           "request": after.request_id, "scope": after.scope}
         return [self._stone(values) for values in await self._query(
-            f"SELECT {', '.join(COLUMNS)} FROM {TABLE} FINAL WHERE state = {PENDING} "
-            "ORDER BY deleted_at, org_id, request_id LIMIT {limit:UInt32}", limit=limit)]
+            f"SELECT {', '.join(COLUMNS)} FROM {TABLE} FINAL WHERE state = {PENDING} " + cursor
+            + "ORDER BY deleted_at, org_id, request_id, scope LIMIT {limit:UInt32}",
+            **parameters)]
 
     async def expired_content(self, cutoff: datetime, limit: int) -> list[tuple[str, str]]:
         return [(str(org), str(request)) for org, request in await self._query(

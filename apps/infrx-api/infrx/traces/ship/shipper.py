@@ -151,8 +151,11 @@ class Shipper:
             verdict = verdicts.get((envelope.org_id, envelope.request_id))
             if verdict is not None:
                 # T3: deleted or expired - never (re)written, and the object an earlier
-                # attempt of this replay may have put goes too
-                await self.objects.delete(content_key(envelope.org_id, trace_id))
+                # attempt of this replay may have put goes too, unless a live grant or
+                # export holds it (the sweep deletes it once the reference ends)
+                ref = content_key(envelope.org_id, trace_id)
+                if not await self.retention.keeps(envelope.org_id, envelope.request_id, ref):
+                    await self.objects.delete(ref)
                 if verdict == "drop":
                     continue
                 content = b""

@@ -84,9 +84,11 @@ class MemoryStore:
                 found.setdefault((org, request), {})[scope] = stone
         return found
 
-    async def pending(self, limit: int):
-        return sorted((s for s in self._final().values() if s.cleaned_at is None),
-                      key=lambda s: (s.deleted_at, s.org_id, s.request_id))[:limit]
+    async def pending(self, limit: int, after=None):
+        def order(s):
+            return (s.deleted_at, s.org_id, s.request_id, s.scope)
+        return sorted((s for s in self._final().values() if s.cleaned_at is None
+                       and (after is None or order(s) > order(after))), key=order)[:limit]
 
     async def expired_content(self, cutoff, limit: int):
         stoned = {(s.org_id, s.request_id) for s in self._final().values()}
@@ -372,6 +374,83 @@ def test_content_a_live_grant_or_export_references_is_kept(w):
         live.clear()                                           # the grant ended
         assert await policy(w, holds=held).sweep() == {"cleaned": 1, "held": 0, "failed": 0}
         assert await raw(w, ID_A) == ([], [], [])
+        await sink.close()
+    run(scenario())
+
+
+def test_a_replay_keeps_content_a_live_grant_or_export_references(w):
+    """A lost-ack segment replayed while a live grant or export holds its deleted (ID_A) and
+    its expired (ID_B) request: both objects stay, as the sweep keeps them. An object whose
+    row never landed (ID_C) was never readable, so nothing can reference it and the replay
+    deletes it (no sweep could find it). Once the hold ends, expiry and the sweep finish."""
+    async def scenario():
+        live = {(b.ORG_A, ID_A), (b.ORG_A, ID_B), (b.ORG_A, ID_C)}
+
+        async def held(org_id, request_id):
+            return (org_id, request_id) in live
+        sink = spool(io=LostAck())
+        await capture(sink, ID_A, b"a's content")
+        await capture(sink, ID_B, b"b's content")
+        await durable(sink)
+        await ship.Shipper(sink, w.traces, w.objects, retention=policy(w, holds=held)).ship()
+        [a_row], [b_row] = await w.traces.find(b.ORG_A, ID_A), await w.traces.find(b.ORG_A, ID_B)
+        orphan = spool(_dir("t3-held-orphan"))
+        await capture(orphan, ID_C, b"c's content")
+        await durable(orphan)
+        down = Projection(w.traces)
+        down.down = True                      # the object lands, its row does not
+        await ship.Shipper(orphan, down, w.objects, retention=policy(w, holds=held)).ship()
+        await policy(w).delete(b.ORG_A, ID_A, "owner request")
+        await policy(w).delete(b.ORG_A, ID_C, "owner request")
+        assert await policy(w, holds=held).sweep() == {"cleaned": 0, "held": 2, "failed": 0}
+        bound = STARTED + timedelta(days=DEFAULTS.trace_content_max_days)   # ID_B expired
+        for sink_ in (sink, orphan):
+            await ship.Shipper(sink_, w.traces, w.objects,
+                               retention=policy(w, bound, holds=held)).ship()
+        assert await w.objects.get(a_row.content_key) == b"a's content", \
+            "replay deleted content a live grant/export holds"
+        assert await w.objects.get(b_row.content_key) == b"b's content", \
+            "replay deleted expired content a live grant/export holds"
+        assert sorted(await w.objects.keys(f"trace/{b.ORG_A}/")) == \
+            sorted([a_row.content_key, b_row.content_key]), "an object no row names was kept"
+        assert orphan.segments() == ()
+        live.clear()                                           # the references ended
+        assert await policy(w, bound, holds=held).expire() == 1
+        assert await policy(w, bound, holds=held).sweep() == \
+            {"cleaned": 3, "held": 0, "failed": 0}
+        assert await raw(w, ID_A) == ([], [], [])
+        assert await w.objects.keys(f"trace/{b.ORG_A}/") == []
+        await sink.close()
+        await orphan.close()
+    run(scenario())
+
+
+# ======================================================================================
+# held and failing deletions never starve the ones behind them
+# ======================================================================================
+def test_held_and_failing_deletions_never_starve_later_ones(w):
+    """The oldest `limit` pending tombstones are held or keep failing: every sweep pages past
+    them, so a later deletion nothing holds is still cleaned (one export referencing `limit`
+    requests must not stop every deletion after it)."""
+    async def scenario():
+        sink = await shipped(w, {ID_A: b"a's content"})
+        head = [f"dddddddd-0000-4000-8000-00000000000{n}" for n in range(3)]
+        for n, request_id in enumerate(head):
+            await policy(w, SOON + timedelta(seconds=n)).delete(b.ORG_A, request_id, "export")
+        await policy(w, SOON + timedelta(hours=1)).delete(b.ORG_A, ID_A, "owner request")
+
+        async def held(org_id, request_id):
+            if request_id == head[1]:
+                raise errors.DependencyUnavailable("the grant source did not answer")
+            return request_id in head
+        later = SOON + timedelta(hours=2)
+        assert await policy(w, later, holds=held).sweep(limit=3) == \
+            {"cleaned": 1, "held": 2, "failed": 1}
+        [receipt] = await policy(w).receipt(b.ORG_A, ID_A)
+        assert receipt.cleaned_at == later, "an unheld deletion was never swept"
+        assert await raw(w, ID_A) == ([], [], [])
+        assert await policy(w, later, holds=held).sweep(limit=3) == \
+            {"cleaned": 0, "held": 2, "failed": 1}
         await sink.close()
     run(scenario())
 
