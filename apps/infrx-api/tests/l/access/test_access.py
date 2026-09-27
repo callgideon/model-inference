@@ -86,3 +86,95 @@ def test_lab_access__a_provider_member_never_reads_another_providers_data():
     with pytest.raises(errors.Forbidden):        # B's own workspace, A's grantor
         content(access, DEV_B, PROVIDER_B, CONSUMER_1)
     assert content(access, DEV_A, PROVIDER_A, CONSUMER_1).grantor_org_id == CONSUMER_1
+
+
+# --- memberships: explicit, per provider, never from consumer ownership -----------
+def test_lab_access__workspaces_are_explicit_provider_memberships_only():
+    """Oracle: a consumer-only user gets no workspace (L1 denies them); the user in both
+    products gets exactly their provider membership, not their consumer org."""
+    _, _, access = world()
+    assert run(access.workspaces(CONSUMER_ONLY)) == ()
+    assert [m.provider_org_id for m in run(access.workspaces(BOTH))] == [PROVIDER_A]
+    assert [m.provider_org_id for m in run(access.workspaces(DEV_B))] == [PROVIDER_B]
+
+
+def test_lab_access__a_revoked_membership_loses_its_workspace_at_once():
+    """Oracle: the revocation instant ends selection, aggregates and content alike."""
+    store, clock, access = world()
+    assert content(access, DEV_A, PROVIDER_A, CONSUMER_1)
+    old = store.memberships[(PROVIDER_A, DEV_A)]
+    store.memberships[(PROVIDER_A, DEV_A)] = old.model_copy(update={"revoked_at": T0})
+    assert run(access.workspaces(DEV_A)) == ()
+    with pytest.raises(errors.NotFound):
+        run(access.aggregates(DEV_A, PROVIDER_A))
+    with pytest.raises(errors.NotFound):
+        run(access.grant_history(DEV_A, PROVIDER_A, CONSUMER_1))
+    with pytest.raises(errors.Forbidden):
+        content(access, DEV_A, PROVIDER_A, CONSUMER_1)
+
+
+def test_lab_access__a_viewer_reads_aggregates_and_never_content():
+    """Oracle: every role reads its own aggregates; content needs developer+ and a grant."""
+    _, _, access = world()
+    assert len(run(access.aggregates(VIEWER_A, PROVIDER_A))) == 1
+    with pytest.raises(errors.Forbidden):
+        content(access, VIEWER_A, PROVIDER_A, CONSUMER_1)
+
+
+# --- the default read is redacted -------------------------------------------------
+@pytest.mark.parametrize("column", ["user_id", "org_id", "api_key_id", "request_id"])
+def test_lab_access__default_aggregates_carry_no_customer_identity(column):
+    """Oracle: an aggregate row carrying any identity column is refused, not passed on."""
+    store, _, access = world()
+    store.rows[PROVIDER_A] = [{**_aggregate(), column: CONSUMER_1}]
+    with pytest.raises(ValueError):
+        run(access.aggregates(DEV_A, PROVIDER_A))
+
+
+# --- purpose separation, expiry, revocation mid-queue ------------------------------
+def test_lab_access__each_purpose_is_its_own_permission():
+    """Oracle: a sharing grant is not training consent; a capture grant is not sharing."""
+    _, _, access = world()
+    assert content(access, DEV_A, PROVIDER_A, CONSUMER_1).purposes == (
+        v2.DataPurpose.provider_sharing,)
+    for purpose in (v2.DataPurpose.training, v2.DataPurpose.external_judging,
+                    v2.DataPurpose.capture):
+        with pytest.raises(errors.Forbidden):
+            content(access, DEV_A, PROVIDER_A, CONSUMER_1, purpose)
+    assert content(access, DEV_B, PROVIDER_B, CONSUMER_2, v2.DataPurpose.capture)
+    with pytest.raises(errors.Forbidden):
+        content(access, DEV_B, PROVIDER_B, CONSUMER_2)
+
+
+def test_lab_access__revocation_denies_queued_work_on_its_next_check():
+    """Oracle: authorized at enqueue, revoked before the worker's use-time check -> denied;
+    the service answers from the current grant on its own clock, never a cached one."""
+    store, clock, access = world()
+    assert content(access, DEV_A, PROVIDER_A, CONSUMER_1)        # enqueue-time check
+    store.revoke(CONSUMER_1, PROVIDER_A, at=T0 + timedelta(minutes=1))
+    assert content(access, DEV_A, PROVIDER_A, CONSUMER_1)        # before the instant
+    clock["now"] = T0 + timedelta(minutes=1)
+    with pytest.raises(errors.Forbidden):                        # use-time check
+        content(access, DEV_A, PROVIDER_A, CONSUMER_1)
+
+
+def test_lab_access__an_expired_grant_denies():
+    store, clock, access = world()
+    clock["now"] = T0 + timedelta(days=30)
+    with pytest.raises(errors.Forbidden):
+        content(access, DEV_A, PROVIDER_A, CONSUMER_1)
+
+
+# --- grant history: the C/J/T port -------------------------------------------------
+def test_lab_access__grant_history_keeps_every_version_for_the_recipient_only():
+    """Oracle: history names every version (source ids for C/J/T) and is scoped to the
+    member's own provider; history never authorizes (a revoked version is listed and the
+    content read is still refused)."""
+    store, clock, access = world()
+    store.revoke(CONSUMER_1, PROVIDER_A, at=T0)
+    history = run(access.grant_history(DEV_A, PROVIDER_A, CONSUMER_1))
+    assert [(g.version, g.revoked_at) for g in history] == [(1, None), (2, T0)]
+    assert {g.grant_id for g in history} == {"90000000-0000-4000-8000-000000000001"}
+    assert run(access.grant_history(DEV_B, PROVIDER_B, CONSUMER_1)) == ()
+    with pytest.raises(errors.Forbidden):
+        content(access, DEV_A, PROVIDER_A, CONSUMER_1)
