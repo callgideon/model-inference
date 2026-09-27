@@ -1,0 +1,153 @@
+diff --git a/apps/app/app/actions.ts b/apps/app/app/actions.ts
+index 72131c91..42a546be 100644
+--- a/apps/app/app/actions.ts
++++ b/apps/app/app/actions.ts
+@@ -12,7 +12,8 @@
+ import { revalidatePath } from "next/cache";
+ import { headers } from "next/headers";
+ import { redirect } from "next/navigation";
+-import type { ApiKeyCreated, ApiKeyCreateInput, ApiKeySummary, Result } from "@/lib/contracts/types";
++import type { ApiKeyCreated, ApiKeyCreateInput, ApiKeySummary, FeedbackEntry, FeedbackInput, Result } from "@/lib/contracts/types";
++import type { FeedbackRpc } from "@/lib/services/feedback";
+ import { consoleActions, supabaseKeyStore, type KeyClient } from "@/lib/services/actions";
+ import { operatorRpcPort, type OperatorRpcClient } from "@/app/(console)/admin/operator-port";
+ import { consumerSession } from "@/lib/services/server";
+@@ -29,6 +30,8 @@ const actions = consoleActions({
+   },
+   revalidate: (path) => revalidatePath(path),
+   // U3 / WR-U3-2: the operator's own client; the database checks operator authority (WR-U3-1).
++  // C3F / WR-C3F-2: the individual's own client; the database derives org, author and channel.
++  feedback: async () => (await createClient()) as unknown as FeedbackRpc,
+   operator: operatorRpcPort(async () => (await createClient()) as unknown as OperatorRpcClient),
+ });
+ 
+@@ -51,3 +54,8 @@ export async function revokeConsumerKey(keyId: string): Promise<Result<ApiKeySum
+ export async function operatorAction(input: unknown): Promise<Result<{ replayed: boolean }>> {
+   return actions.operator(input);
+ }
++
++/** C3F: one feedback signal on one of the caller's own requests (idempotent per key). */
++export async function submitFeedback(input: FeedbackInput): Promise<Result<FeedbackEntry>> {
++  return actions.submitFeedback(input);
++}
+diff --git a/apps/app/lib/services/actions.ts b/apps/app/lib/services/actions.ts
+index e45d240f..3329aa52 100644
+--- a/apps/app/lib/services/actions.ts
++++ b/apps/app/lib/services/actions.ts
+@@ -33,10 +33,13 @@ import {
+   type ApiKeyCreateInput,
+   type ApiKeySummary,
+   type ErrorCode,
++  type FeedbackEntry,
++  type FeedbackInput,
+   type Result,
+ } from "../contracts/types.ts";
+ import { parseCredit, type Credit } from "../contracts/v2/money-units.ts";
+ import { generateKey, hashKey, keyPrefix } from "../keys.ts";
++import { submitOwnFeedback, type FeedbackRpc } from "./feedback.ts";
+ import { __testables, keyOf, type ConsumerAccount, type ConsumerContext } from "./console.ts";
+ import type { Row } from "./query.ts";
+ 
+@@ -359,6 +362,8 @@ export type ActionDeps = {
+   revalidate(path: string): void;
+   /** The audited operator port; none is App-reachable yet (WR-C3A-3a). */
+   operator?: OperatorPort;
++  /** C3F: the individual's own client for `public.submit_feedback` (WR-C3F-2). */
++  feedback?: () => Promise<FeedbackRpc>;
+   actions?: ConsumerActions;
+ };
+ 
+@@ -378,6 +383,11 @@ export function consoleActions(deps: ActionDeps) {
+     createKey: (input: ApiKeyCreateInput) =>
+       guarded(async () => actions.createKey(await deps.context(), await deps.keys(), input), "/api-keys"),
+     revokeKey: (keyId: string) => guarded(async () => actions.revokeKey(await deps.context(), await deps.keys(), keyId), "/api-keys"),
++    submitFeedback: (input: FeedbackInput) =>
++      guarded(async () => {
++        if (deps.feedback === undefined) return fail<FeedbackEntry>("dependency_unavailable", "feedback is not available yet");
++        return submitOwnFeedback(await deps.context(), await deps.feedback(), input);
++      }, "/traces"),
+     operator: (input: unknown) =>
+       guarded(async () => {
+         const command = operatorCommand(await deps.session(), input);
+diff --git a/apps/app/tests/c/feedback/run-mutants.mjs b/apps/app/tests/c/feedback/run-mutants.mjs
+index 1a9c6e2a..3aff26a4 100644
+--- a/apps/app/tests/c/feedback/run-mutants.mjs
++++ b/apps/app/tests/c/feedback/run-mutants.mjs
+@@ -12,8 +12,9 @@ import { fileURLToPath } from "node:url";
+ const base = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+ const args = process.argv.slice(2);
+ const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
+-const SUITE = ["tests/c/feedback/feedback.test.ts"];
++const SUITE = ["tests/c/feedback/feedback.test.ts", "tests/c/feedback/compose.test.ts"];
+ const F = "lib/services/feedback.ts";
++const ACTIONS = "lib/services/actions.ts";
+ 
+ const C = {
+   a01: "C3F-A01 the action forwards only the signal, over the one named door, from a ready session",
+@@ -22,10 +23,15 @@ const C = {
+   a04: "C3F-A04 the door's refusals keep their code; its text never reaches the caller",
+   a05: "C3F-A05 flag off, a missing door, a denied role and a lost answer are never a success",
+   a06: "C3F-A06 an acknowledgment is only a stored customer console signal; any other provenance fails closed",
++  c01: "C3F-C01 the composed action refuses a cross-site request before resolving anyone",
++  c02: "C3F-C02 an acknowledged signal refreshes the traces; a refusal or no client refreshes nothing",
+ };
+ 
+ const m = (id, what, find, replace, cases) => ({ id, what, file: F, find, replace, cases });
+ const MUTANTS = [
++  { id: "C3F-CX01", what: "the composed action skips the Origin check", file: ACTIONS, find: "    submitFeedback: (input: FeedbackInput) =>\n      guarded(async () => {", replace: "    submitFeedback: (input: FeedbackInput) =>\n      (async (run: () => Promise<Result<FeedbackEntry>>, _p: string) => run())(async () => {", cases: [C.c01] },
++  { id: "C3F-CX02", what: "the traces are not refreshed after an acknowledgment", file: ACTIONS, find: '      }, "/traces"),', replace: "      }),", cases: [C.c02] },
++  { id: "C3F-CX03", what: "no client passes as a success", file: ACTIONS, find: 'if (deps.feedback === undefined) return fail<FeedbackEntry>("dependency_unavailable"', replace: 'if (deps.feedback === undefined) return fail<FeedbackEntry>("not_found"', cases: [C.c02] },
+   m("C3F-AX01", "a smuggled field is passed on", "  if (rejected !== null) return rejected;\n", "", [C.a02]),
+   m("C3F-AX02", "the door name drifts", '"submit_feedback"', '"submit_own_feedback"', [C.a01]),
+   m("C3F-AX03", "the caller's input goes to the door verbatim", "{ p_args: { request_id, name, value, comment, idempotency_key } }", "{ p_args: { ...(input as object), author_role: \"customer\" } }", [C.a01]),
+diff --git a/apps/app/tests/c/feedback/compose.test.ts b/apps/app/tests/c/feedback/compose.test.ts
+new file mode 100644
+index 00000000..2d4f2b60
+--- /dev/null
++++ b/apps/app/tests/c/feedback/compose.test.ts
+@@ -0,0 +1,45 @@
++// C3F WR-C3F-2: `consoleActions().submitFeedback` as `app/actions.ts` composes it - the Origin check
++// before anyone is resolved, the context and the individual's own client, a refresh only after an
++// acknowledgment, and no client an explicit unavailable state.
++import assert from "node:assert/strict";
++import test from "node:test";
++import type { ConsumerContext } from "../../../lib/contracts/v2/consumer.ts";
++import { consoleActions, type ActionDeps } from "../../../lib/services/actions.ts";
++import type { FeedbackRpc } from "../../../lib/services/feedback.ts";
++
++const JOB = "5c000000-0000-4000-8000-0000000000f1";
++const ME = "c1000000-0000-4000-8000-000000000001";
++const ready: ConsumerContext = { state: "ready", account: { userId: ME, email: "me@example.com", walletId: "aaaaaaaa-0000-4000-8000-000000000001", orgId: "0e000000-0000-4000-8000-000000000001", suspended: false } };
++const ROW = { feedback_id: "fb_" + "a".repeat(64), request_id: JOB, author_principal: ME, author_role: "customer", channel: "console", name: "thumb", value: true, comment: null, calibration_set: false, rubric_version: null, created_at: "2026-09-27T00:00:00+00:00" };
++const input = { request_id: JOB, name: "thumb" as const, value: true, idempotency_key: "k" };
++
++function deps(origin: string, answer: unknown, feedback = true) {
++  const seen = { resolved: 0, calls: 0, refreshed: [] as string[] };
++  const rpc: FeedbackRpc = { rpc: () => { seen.calls += 1; return Promise.resolve({ data: answer, error: null }); } };
++  const d = {
++    headers: async () => new Headers({ origin, host: "app.example" }),
++    context: async () => { seen.resolved += 1; return ready; },
++    revalidate: (path: string) => seen.refreshed.push(path),
++    ...(feedback ? { feedback: async () => rpc } : {}),
++  } as unknown as ActionDeps;
++  return { d, seen };
++}
++
++test("C3F-C01 the composed action refuses a cross-site request before resolving anyone", async () => {
++  const { d, seen } = deps("https://evil.example", ROW);
++  const result = await consoleActions(d).submitFeedback(input);
++  assert.equal(result.ok ? "ok" : result.error.code, "forbidden");
++  assert.deepEqual([seen.resolved, seen.calls], [0, 0]);
++});
++
++test("C3F-C02 an acknowledged signal refreshes the traces; a refusal or no client refreshes nothing", async () => {
++  const good = deps("https://app.example", ROW);
++  assert.equal((await consoleActions(good.d).submitFeedback(input)).ok, true, "acknowledged");
++  assert.deepEqual(good.seen.refreshed, ["/traces"]);
++  const bad = deps("https://app.example", { ...ROW, author_role: "operator" });
++  assert.equal((await consoleActions(bad.d).submitFeedback(input)).ok, false, "not a customer signal");
++  assert.deepEqual(bad.seen.refreshed, []);
++  const none = deps("https://app.example", ROW, false);
++  const off = await consoleActions(none.d).submitFeedback(input);
++  assert.equal(off.ok ? "ok" : off.error.code, "dependency_unavailable");
++});
