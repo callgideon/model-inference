@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 175,
-  "updated": "2026-09-27T16:21:23Z",
+  "revision": 176,
+  "updated": "2026-09-27T16:22:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 2,
+    "active": 3,
     "reserved": 2,
     "note": "Session 03 post-launch: lab-access (L2) + lab-sql-d7 running; certify window awaits the operator start; LW2 after L2 + the L1 integration round."
   },
@@ -4603,6 +4603,40 @@
       "commands": [],
       "owned_paths": [
         "wave5-plan §5 LW2 feedback"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-EVAL-RUNNER",
+      "task": null,
+      "slice": "(wave5 LW3 lane eval-runner, started early on the critical path) B1 → B2; workflow wf_09caea96-a00; base 995b7977; B1.b against a local fake dev endpoint until L3/L2 merge",
+      "agent": "opus",
+      "branch": "codex/w5-eval-runner",
+      "worktree": ".claude/worktrees/codex-w5-eval-runner",
+      "base": "995b7977",
+      "head": null,
+      "isolation": {
+        "ports": "b1 57520 / model-fake 57521",
+        "prefix": "infrx-b1-",
+        "db": "b1"
+      },
+      "activity": "running",
+      "started": "2026-09-27T16:22:00Z",
+      "updated": "2026-09-27T16:22:00Z",
+      "blocker": null,
+      "next_action": "handback → merge (worker entry point + L3/L2 wirings after the LW1 integration)",
+      "estimate": {
+        "optimistic_h": 6,
+        "likely_h": 12,
+        "pessimistic_h": 24,
+        "confidence": "medium",
+        "basis": "wave5-plan B1 4/8/16 + B2 2/4/8",
+        "at": "2026-09-27T16:22:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW3 eval-runner"
       ],
       "wiring_requests": []
     }
