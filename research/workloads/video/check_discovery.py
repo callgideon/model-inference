@@ -33,6 +33,12 @@ SPECS = {
                 "End-to-end latency", "Freshness target", "Placement", "Stale-action rejection",
                 "Local control owner", "Proposed-versus-executed evidence", "Offline and simulator acceptance",
                 "Hardware trial authorization", "Adapter and MCAP mapping")),
+    "hardware/non-nvidia-backend.md": Spec(
+        inputs=("P-15",),
+        fields=("Chip", "Runtime", "Model", "Workload", "Supported operators", "Supported dtypes", "Licensing",
+                "Driver and toolchain", "Artifact conversion", "Engine port", "Load profile", "Quality parity",
+                "Capacity", "Cost including idle capacity", "Failure recovery", "Prototype scope",
+                "Resource allocation", "Go/no-go criteria", "Trial access")),
 }
 
 BLOCKED = re.compile(r"BLOCKED: (P-\d+) — (.{12,})")
