@@ -4,7 +4,7 @@
 
 The files that ship are read as they stand (`deploy/lab/app/*`, `infra/lab/app/lab.json`,
 the runbook). The two docker cases run the pinned Caddy (lib.sh CADDY_IMAGE) on the edge
-files - `caddy validate` with no network, and one live edge on e3l's ports 57090/57091 in
+files - `caddy validate` with no network, and one live edge on e3l's ports 57095/57096 in
 front of a loopback stub - and skip visibly without docker. Nothing touches systemd, a
 host path, AWS or anything hosted. The App-serving drill is E3L's l11
 (tests/integration/lab_operate): App inference with the Lab down, broken and rolled back.
@@ -37,7 +37,7 @@ CADDY_IMAGE = re.search(r"^CADDY_IMAGE=(\S+)", (DEPLOY / "lib.sh").read_text(), 
 # The App edge's one-line import of the Lab site (WR-I2L-1); the composed file is what the box
 # would run once the coordinator applies it.
 IMPORT_LINE = "import /etc/caddy/lab/*.caddy"
-EDGE_PORT, UPSTREAM_PORT = 57090, 57091        # e3l's block, beside the E3L runner's 57000-57089
+EDGE_PORT, UPSTREAM_PORT = 57095, 57096   # e3l block: E2 layout +1500 leaves 57095-57099 free
 
 
 def manifest() -> dict:
