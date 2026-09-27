@@ -1,0 +1,66 @@
+{
+  "task": "T3",
+  "slice": "T3 logical retention and deletion over T2I + T2F (tombstone receipts, logical expiry, sweep, holds, no resurrection through replay) + loss/lag/retention gauges and alarms; fix round: 0-TS2-C1 (replay keeps held content) + 0-TS2-C2 (sweep pages past held/failing tombstones)",
+  "activity": "review",
+  "head": "87e6cdca",
+  "worktree": ".claude/worktrees/codex-w5-trace-ship-lw2",
+  "branch": "codex/w5-trace-ship-lw2",
+  "owned_paths": [
+    "apps/infrx-api/infrx/traces/retention/",
+    "apps/infrx-api/infrx/traces/ship/",
+    "apps/infrx-api/infrx/traces/feedback/",
+    "apps/infrx-api/tests/t/retention/",
+    "apps/infrx-api/tests/t/ship/",
+    "apps/infrx-api/tests/t/feedback/"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/t/retention/test_retention.py -k 'replay_keeps or starve' (cases first, at 0a0fc882)",
+      "exit": 1,
+      "summary": "RED: replay deleted content a live grant/export holds; cleaned 0 != 1 behind a held/failing head"
+    },
+    {
+      "cmd": "INFRX_T3_STACK=1 uv run --frozen pytest -q tests/t/retention/test_retention.py",
+      "exit": 0,
+      "summary": "19 passed (memory + ClickHouse 57546 / MinIO 57548)"
+    },
+    {
+      "cmd": "INFRX_T3_STACK=1 INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/retention",
+      "exit": 0,
+      "summary": "62 passed: 38/38 mutants killed (7 store-only on the stack), list checks, 3 runner self-tests"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/t/retention/test_mutants.py",
+      "exit": 0,
+      "summary": "11 passed (api-test subset)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/ship/test_mutants.py",
+      "exit": 0,
+      "summary": "24 passed, 2 skipped (T2I stack-only)"
+    },
+    {
+      "cmd": "INFRX_T3_STACK=1 uv run --frozen pytest -q tests/t tests/contracts/test_config_and_imports.py (PG files excluded: WR-T-1 not in tree, no PG path touched)",
+      "exit": 0,
+      "summary": "412 passed, 24 skipped"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "fix round ~1 h; remaining = re-verify of 0-TS2-C1/C2 + WR-T-1..5 wiring (unchanged)",
+    "at": "2026-09-27T16:03Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-T-2 Makefile:21 api-mutants += tests/t/retention/test_mutants.py",
+    "WR-T-3 tests/integration/harness.py TRACE_SCHEMAS + test_services proof (patch in evidence)",
+    "WR-T-4 composition flag OFF: build_shipper(limits, sink) timers ship/expire/sweep; FeedbackProjector(PgFeedbackOutbox(connector(DATABASE_URL)), shipper.retention.feedback, retention=shipper.retention)",
+    "WR-T-5 I2L-OBS: retention.RULES into infra/alerts/operations.json + export retention.gauges"
+  ],
+  "evidence": [
+    "research/plan/evidence/t/T3-4b74113.md"
+  ]
+}
