@@ -116,14 +116,15 @@ def test_r3_a_variant_is_an_immutable_distinct_serving_identity():
     assert catalog.publish(VARIANT) == catalog.publish(register())      # same bytes, one ref
     seen = {VARIANT["variant_serving_ref"]}
     for change in ({"engine_version": "0.11.1"}, {"hardware": "H100"},
-                   {"preprocessor": "marlin-sop-1fps"}, {"engine": "sglang"},
-                   {"served_model": "marlin-2b-fp8"}):
+                   {"preprocessor": "marlin-sop-1fps"}, {"served_model": "marlin-2b-fp8"}):
         other = ident(**{**NVFP4.model_dump(), **change})
         eng = engine(version=other.engine_version, models=(other.served_model,),
                      served=other.served_model)
         ref = asyncio.run(r3.register(P, VARIANT_ID, BASE, other, eng))["variant_serving_ref"]
         assert ref not in seen, change
         seen.add(ref)
+    # another engine is another identity (it registers only through its own W3 adapter)
+    assert r3.serving_ref(P, ident(**{**NVFP4.model_dump(), "engine": "sglang"})) not in seen
     with pytest.raises(errors.InvalidRequest):                          # not a variant
         register(variant=BASE)
     # capabilities are a set: their order is not an identity
@@ -138,6 +139,8 @@ def test_r3_registration_checks_the_engine_through_w3():
         register(eng=engine(version="0.10.0", require_version="0.11.0"))
     with pytest.raises(EngineUnsupported):                              # the model is not served
         register(eng=engine(models=("other",)))
+    with pytest.raises(errors.InvalidRequest):                          # declares sglang, probed vLLM
+        register(variant=ident(**{**NVFP4.model_dump(), "engine": "sglang"}))
     other = ident(**{**NVFP4.model_dump(), "served_model": "marlin-2b-fp8"})
     with pytest.raises(errors.InvalidRequest):                          # serves a different model
         asyncio.run(r3.register(P, VARIANT_ID, BASE, other, engine()))
@@ -220,13 +223,17 @@ def test_r3_a_tokenizer_change_or_a_lost_capability_is_never_equivalent():
         out = r3.compare(variant, BASE, cand, report=report(runs=runs), runs=runs, loads=loads)
         assert out["outcome"] == "not_equivalent" and out["reasons"] == [reason]
         assert not out["optimization_claimed"]
-    # a variant that ADDS a capability is not refused for it (it is reported)
+    # a variant that claims a capability the base lacks: W3's probe cannot confirm it and the
+    # paired report only covers the base's workload, so the claim is unverified and a lying
+    # variant never reaches `equivalent` (it is reported, not refused)
     more = ident(**{**NVFP4.model_dump(), "capabilities": ["text", "finite_video", "tools"]})
     variant = register(variant=more)
     runs = (RUN, run_of(variant["variant_serving_ref"]))
-    out = r3.compare(variant, BASE, more, report=report(runs=runs), runs=runs, loads=None)
-    assert out["outcome"] == "equivalent" and out["capabilities"]["variant"] == [
-        "finite_video", "text", "tools"]
+    loads = (load("base"), load("variant", serving_ref=variant["variant_serving_ref"]))
+    out = r3.compare(variant, BASE, more, report=report(runs=runs), runs=runs, loads=loads)
+    assert out["outcome"] == "inconclusive" and out["reasons"] == ["capability_unverified:tools"]
+    assert not out["optimization_claimed"]
+    assert out["capabilities"]["variant"] == ["finite_video", "text", "tools"]
 
 
 def test_r3_unmeasured_or_inconclusive_claims_nothing():

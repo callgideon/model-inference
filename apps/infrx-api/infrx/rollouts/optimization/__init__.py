@@ -8,7 +8,8 @@ quantization or preprocessor is a distinct serving identity, and registering the
 identity twice is the same ref. `register` first asks the variant's engine through W3's
 capability probe (`VllmEngine.capabilities`, which refuses a model it does not serve or a
 pinned version it is not) and refuses a variant whose engine version or served model is
-not the declared one; the result is an F3 `lab.optimization_variant.1` naming what changed.
+not the declared one, or whose declared `engine` is not the probing adapter's kind (only
+`vllm` has a W3 adapter); the result is an F3 `lab.optimization_variant.1` naming what changed.
 
 **R3.b comparison.** `compare` takes the registered variant, both identities (re-derived to
 the registered refs, so an identity cannot be swapped afterwards), the two B1 runs and the
@@ -21,7 +22,9 @@ come only from an experiment branch's `results/` at a commit (`<exp>/results/...
 
 **R3.c verdict.** A B2 `reject` (a failed required slice) is `rejected` whatever the
 throughput; a changed tokenizer or a lost base capability is `not_equivalent`; a
-non-accepting report is `inconclusive`; otherwise `equivalent`. An optimization is claimed
+non-accepting report is `inconclusive`, and so is a variant claiming a capability the base
+lacks: W3's probe does not report capabilities and the paired report covers only the base's
+workload, so such a claim is unverified (reported as `capability_unverified:<c>`); otherwise `equivalent`. An optimization is claimed
 only for an equivalent variant with measurements. ponytail: no cost column; attach one when
 a measured $/GPU-hour source (cloud-pricing) is wired to the load records.
 """
@@ -37,6 +40,9 @@ from pydantic import AfterValidator, Field, ValidationError
 from ...contracts import errors
 from ...contracts.lab import records as lab
 from ...harnesses.replay import compare as pair_runs
+from ...worker.engine import VllmEngine
+
+ADAPTERS = {"vllm": VllmEngine}   # W3's engine adapters by the `engine` an identity declares
 
 CAPABILITIES = ("text", "finite_video", "structured", "tools")
 EXPERIMENTS = ("deepseek41f", "deepseek41fnvfp4", "qwen3827b", "kimik3", "marlin2b")
@@ -80,6 +86,8 @@ async def register(provider_org_id: str, variant_id: str, base: Identity, varian
                    engine) -> dict[str, Any]:
     """The `lab.optimization_variant.1` of `variant` over `base`, after W3's probe of the
     variant's engine (`engine.capabilities()`)."""
+    if not isinstance(engine, ADAPTERS.get(variant.engine, ())):
+        raise errors.InvalidRequest(f"a {variant.engine} variant probed through another engine")
     probe = await engine.capabilities()
     if probe.get("version") != variant.engine_version or \
             variant.served_model not in probe.get("models", []):
@@ -135,10 +143,13 @@ def compare(variant: dict[str, Any], base: Identity, candidate: Identity, *,
     decided, reasons = report["decision"]["outcome"], list(report["decision"]["reasons"])
     unlike = (["tokenizer_changed"] if base.tokenizer_digest != candidate.tokenizer_digest else []) \
         + [f"capability_lost:{c}" for c in base.capabilities if c not in candidate.capabilities]
+    unverified = [f"capability_unverified:{c}" for c in candidate.capabilities
+                  if c not in base.capabilities]
     outcome = "rejected" if decided == "reject" else "not_equivalent" if unlike else \
-        "inconclusive" if decided != "accept" else "equivalent"
+        "inconclusive" if decided != "accept" or unverified else "equivalent"
     return {"schema": "infrx.variant_comparison.1", "variant_ref": lab.ref_of(variant),
-            "outcome": outcome, "reasons": reasons if decided == "reject" else unlike + reasons,
+            "outcome": outcome,
+            "reasons": reasons if decided == "reject" else unlike + unverified + reasons,
             "capabilities": {"base": base.capabilities, "variant": candidate.capabilities},
             "report_digest": report["report_digest"], "performance": performance,
             "optimization_claimed": outcome == "equivalent" and performance is not None}

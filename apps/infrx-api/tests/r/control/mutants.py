@@ -36,6 +36,7 @@ RESTART = "test_r2_a_restart_converges_without_a_second_decision_or_flapping"
 RACE = "test_r2_a_lost_serving_race_rereads_and_converges"
 EMERG = "test_r2_emergency_rollback_needs_no_evidence_and_happens_once"
 LOST = "test_r2_a_decision_lost_to_another_transition_is_not_swallowed"
+FORGED = "test_r2_a_policy_other_than_the_stored_revision_is_refused"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -200,6 +201,13 @@ MUTANTS: tuple[Mutant, ...] = (
       "            except errors.StateConflict:\n                return\n", RACE),
     m("r2_converge_one_try", "a lost serving CAS is retried",
       "for _ in range(CONVERGE_TRIES):", "for _ in range(1):", RACE),
+    # --- R2.c the policy is the revision policy_ref names (fix round 0-RC-C1)
+    m("r2_policy_unbound", "a caller's policy never steers the alias",
+      "        if lab.ref_of(policy.model_dump(mode=\"json\", by_alias=True)) != policy_ref:\n",
+      "        if False:\n", FORGED),
+    m("r2_emergency_policy_unbound", "the operator's stop uses the stored policy too",
+      "release = await self._release(policy, policy_ref, None)",
+      "release = await self._store.release(policy_ref)", FORGED),
 )
 
 

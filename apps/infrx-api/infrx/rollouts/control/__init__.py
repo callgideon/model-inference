@@ -28,7 +28,9 @@ steps converges on restart; a rolled-back release stays rolled back whatever the
 do later, and an alias someone else moved on is left alone (no flapping). Queued and
 running jobs keep the serving and rate pins they were admitted with (R1/L3); only future
 admissions follow the policy and alias. `emergency_rollback` is the operator's, from any
-live state, independent of evidence.
+live state, independent of evidence. Every entry point first checks that the policy object
+is the revision `policy_ref` names (`lab.ref_of`), so the baseline it rolls back to and the
+candidates it recognises are the stored policy's, never a caller's substitute.
 """
 from __future__ import annotations
 
@@ -185,8 +187,15 @@ class Controller:
     def __init__(self, store: ReleaseStore, serving: ServingControl, *, actor_id: str) -> None:
         self._store, self._serving, self._actor = store, serving, actor_id
 
-    async def _release(self, policy_ref: str, plan: Plan) -> Release:
+    async def _release(self, policy: lab.RolloutPolicy, policy_ref: str,
+                       plan: Plan | None) -> Release:
+        # The rollback target and candidate set come from `policy`, so it must be the very
+        # revision D9's row names: a caller's other policy never steers the alias.
+        if lab.ref_of(policy.model_dump(mode="json", by_alias=True)) != policy_ref:
+            raise errors.InvalidRequest("the policy is not the revision policy_ref names")
         release = await self._store.release(policy_ref)
+        if plan is None:
+            return release
         if release.plan_digest != plan_digest(plan):
             raise errors.StateConflict("the plan changed after launch")
         return release
@@ -224,7 +233,7 @@ class Controller:
                    now: datetime, report: dict[str, Any] | None = None,
                    runs: tuple[dict[str, Any], dict[str, Any]] | None = None) -> Verdict:
         """One controller pass: act on a rollback verdict, converge a rolled-back release."""
-        release = await self._release(policy_ref, plan)
+        release = await self._release(policy, policy_ref, plan)
         if release.state == "rolled_back":
             await self._converge(policy, policy_ref)
             return Verdict("rolled_back", ())
@@ -241,7 +250,7 @@ class Controller:
                       plan: Plan, live: Live, *, now: datetime, report: dict[str, Any],
                       runs: tuple[dict[str, Any], dict[str, Any]]) -> Verdict:
         """An operator's expansion: only a running release on an `expand` verdict."""
-        release = await self._release(policy_ref, plan)
+        release = await self._release(policy, policy_ref, plan)
         if release.state != "running":
             raise errors.StateConflict(f"a {release.state} release cannot be approved")
         verdict = evaluate(plan, policy, live, started_at=release.started_at, now=now,
@@ -255,7 +264,7 @@ class Controller:
                                  policy_ref: str, *, now: datetime, reason: str) -> None:
         """The operator's stop, from any live state: no plan, report or metrics needed. A
         release already rolled back is refused by the CAS and only converges."""
-        release = await self._store.release(policy_ref)
+        release = await self._release(policy, policy_ref, None)
         await self._decide(policy, policy_ref, release, "rolled_back",
                            Verdict("rollback", (f"operator:{reason}",)), operator_id, now)
         await self._converge(policy, policy_ref)

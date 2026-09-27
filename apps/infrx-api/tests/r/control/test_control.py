@@ -31,7 +31,7 @@ POLICY = lab.parse({
     "created_at": "2026-09-27T10:00:00Z", "endpoint_id": "0000006f-0000-4000-8000-00000000006f",
     "baseline_ref": BASE, "mode": "canary", "cohort": "account",
     "candidates": [{"serving_ref": CAND, "weight_bp": 1_000}]})
-POLICY_REF = f"lab:policy:{P}:0000006e-0000-4000-8000-00000000006e@sha256:{'a' * 64}"
+POLICY_REF = lab.ref_of(POLICY.model_dump(mode="json", by_alias=True))   # D9 stores this ref
 RUN = {
     "schema": "lab.eval_run.1", "provider_org_id": P,
     "run_id": "0000001e-0000-4000-8000-00000000001e", "created_at": "2026-09-27T10:00:00Z",
@@ -381,3 +381,21 @@ def test_r2_a_decision_lost_to_another_transition_is_not_swallowed():
     with pytest.raises(errors.StateConflict):
         asyncio.run(step(ctl, live(errors_=21)))
     assert len(store.decisions) == 1
+
+
+def test_r2_a_policy_other_than_the_stored_revision_is_refused():
+    """The rollback target is the stored policy's baseline, never a caller's substitute."""
+    wrong = CAND.replace("b" * 64, "c" * 64).replace("00000029", "00000030")
+    forged = lab.parse({**POLICY.model_dump(mode="json", by_alias=True), "baseline_ref": wrong})
+    store, serving = FakeReleases(), FakeServing(current=CAND)
+    ctl = controller(store, serving)
+    for call in (lambda: ctl.step(forged, POLICY_REF, plan(), live(errors_=21), now=HORIZON),
+                 lambda: ctl.approve(OPERATOR, forged, POLICY_REF, plan(), live(), now=HORIZON,
+                                     report=report(), runs=(BASE_RUN, CAND_RUN)),
+                 lambda: ctl.emergency_rollback(OPERATOR, forged, POLICY_REF, now=START,
+                                                reason="pager")):
+        with pytest.raises(errors.InvalidRequest):
+            asyncio.run(call())
+    assert store.decisions == [] and serving.rollbacks == [] and serving.current == CAND
+    asyncio.run(ctl.step(POLICY, POLICY_REF, plan(), live(errors_=21), now=HORIZON))
+    assert serving.current == BASE and len(store.decisions) == 1
