@@ -1,0 +1,65 @@
+{
+ "task": "J2",
+ "slice": "LW3 judge lane task 1: consent/budget coordinated submission and collection over a fake D6J ledger (real L2 on PG j2, real T2I read_content)",
+ "activity": "review",
+ "head": "16660999",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-judge",
+ "branch": "codex/w5-judge",
+ "owned_paths": [
+  "apps/infrx-api/infrx/judge/submit.py",
+  "apps/infrx-api/tests/j/submit/",
+  "apps/infrx-api/tests/j/mutants.py"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/j/submit (red, before submit.py)",
+   "exit": 2,
+   "summary": "ModuleNotFoundError infrx.judge.submit"
+  },
+  {
+   "cmd": "INFRX_D_TASK=j2 uv run --frozen pytest -q tests/j --ignore=tests/j/test_mutants.py --ignore=tests/j/submit/test_mutants.py",
+   "exit": 0,
+   "summary": "260 passed (J1 231 + J2 29 items; PG world ran)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/j/submit/test_mutants.py",
+   "exit": 0,
+   "summary": "33 passed: 31/31 J2 mutants killed (first run 29/31, two cases fixed)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/j/test_mutants.py",
+   "exit": 0,
+   "summary": "125 passed: J1 list + provider_sdk_imported_on_the_submit_path killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=j2 make api-test",
+   "exit": 1,
+   "summary": "5046 passed, 77 skipped, 9 xfailed; 50 failed + 8 errors all shared-lock (tests/d/test_outbox_relay[valkey] d2-valkey lock, tests/i pooler flock, tests/i/test_mutants baseline); none in owned paths"
+  },
+  {
+   "cmd": "INFRX_D_TASK=j2 rerun tests/d/test_outbox_relay.py + tests/i pooler suites alone",
+   "exit": 1,
+   "summary": "41 passed, 7 failed + 8 errors: same locks still held by other lanes"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 5,
+  "confidence": "medium",
+  "basis": "align JudgeLedger to lab-sql-lw2's D6J repository and rerun 29 items + 31 mutants on its merge (D10-0025 analogue 1/2/5)",
+  "at": "2026-09-27T21:49Z"
+ },
+ "blockers": [
+  "integration needs D6J (lab-sql-lw2, not on the base): SR-J2-1"
+ ],
+ "wiring_requests": [
+  "WR-J2-1 Makefile api-mutants line 1 += tests/j/submit/test_mutants.py",
+  "WR-J2-2 (optional, = WR-LW1I-5) register the pg marker in apps/infrx-api/pyproject.toml",
+  "WR-J2-3 (deferred) judge worker entry point after D6J + SR-C3L-1, behind JUDGE_MODE=live (default dry_run = OFF)",
+  "SR-J2-1 (schema request, lab-sql D6J) lab_judge_* tables and RPCs per research/plan/evidence/j/J2-1666099.md"
+ ],
+ "evidence": [
+  "research/plan/evidence/j/J2-1666099.md"
+ ]
+}
