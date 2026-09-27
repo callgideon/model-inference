@@ -36,6 +36,7 @@ EXPIRY = "test_expired_content_is_unreadable_then_swept_while_its_metadata_stays
 HOLDS = "test_content_a_live_grant_or_export_references_is_kept"
 MIDWAY = "test_a_sweep_that_fails_midway_finishes_on_the_next_one"
 GAUGES = "test_loss_lag_and_retention_gauges_fire_their_alarms"
+MONTHS = "test_metadata_months_are_calendar_months"     # no stack half: the self-tests' case
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -53,7 +54,7 @@ MUTANTS: tuple[Mutant, ...] = (
        EXPIRY),
     _m("months_ignore_the_year", "13 months crosses a year", R,
        "    year, month = at.year + index // 12, index % 12 + 1",
-       "    year, month = at.year, index % 12 + 1", EXPIRY),
+       "    year, month = at.year, index % 12 + 1", EXPIRY, MONTHS),
     _m("read_ignores_content_expiry", "expired content is unreadable before any cleanup", R,
        "        if not rows or not all(self.content_live(r.started_at, now) for r in rows):",
        "        if not rows:", EXPIRY),

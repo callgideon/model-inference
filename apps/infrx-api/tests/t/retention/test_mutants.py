@@ -52,13 +52,13 @@ def test_mutant_is_killed(mutant):
 ANCHOR = "PENDING, CLEANED = 1, 2"
 SELF_TESTS = (
     (Outcome.survived, Mutant("self_no_op", "a comment changes nothing", mutation_list.R,
-                              ANCHOR, ANCHOR + "  # no-op", (mutation_list.GAUGES,))),
+                              ANCHOR, ANCHOR + "  # no-op", (mutation_list.MONTHS,))),
     (Outcome.broken_runner, Mutant("self_syntax", "a broken copy is not a kill",
                                    mutation_list.R, ANCHOR, "PENDING = = 1",
-                                   (mutation_list.GAUGES,))),
+                                   (mutation_list.MONTHS,))),
     (Outcome.misdeclared, Mutant("self_missing_anchor", "the list matches the code",
                                  mutation_list.R, "not in the module", "x",
-                                 (mutation_list.GAUGES,))),
+                                 (mutation_list.MONTHS,))),
 )
 
 

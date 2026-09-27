@@ -343,6 +343,13 @@ def test_expired_content_is_unreadable_then_swept_while_its_metadata_stays(w):
     run(scenario())
 
 
+def test_metadata_months_are_calendar_months():
+    """13 months crosses the year and clamps the day to the target month's last."""
+    assert retention.add_months(STARTED, 13) == datetime(2027, 10, 20, 12, tzinfo=timezone.utc)
+    assert retention.add_months(datetime(2026, 1, 31, tzinfo=timezone.utc), 13) == \
+        datetime(2027, 2, 28, tzinfo=timezone.utc)
+
+
 # ======================================================================================
 # kept: content a live grant or export references
 # ======================================================================================
