@@ -180,25 +180,47 @@ def export_row(row, state: ContentState) -> wire.TraceExport:
         trace_schema_version=row.request_schema_version)
 
 
-async def export_page(pages: TracePages, retention, org_id: str, *, cursor: str | None,
-                      since: datetime | None, until: datetime | None,
-                      limit: int) -> tuple[list[wire.TraceExport], str | None]:
-    """One page of `org_id`'s own traces, minus what T3 deleted or expired. The cursor
-    advances past dropped rows too, so a page may be short; `None` is the end."""
-    if not 1 <= limit <= EXPORT_MAX_LIMIT:
-        raise errors.InvalidRequest(f"limit must be 1..{EXPORT_MAX_LIMIT}", param="limit")
-    after = decode_cursor(cursor) if cursor else None
-    rows = [r for r in await pages.page(org_id, after=after, since=since, until=until,
-                                        limit=limit) if r.org_id == org_id]
-    verdicts = await retention.verdicts(rows)
-    now = retention.clock()
-    out = []
-    for row in rows:
-        verdict = verdicts.get((row.org_id, row.request_id))
-        if verdict != DROP:
-            expired = verdict == NO_CONTENT or not retention.content_live(row.started_at, now)
-            out.append(export_row(row, row_state(row, expired)))
-    return out, encode_cursor(rows[-1]) if len(rows) == limit else None
+class OwnedExport:
+    """G4T's service: pages of the caller's OWN traces over the projection (`pages`) and T3's
+    `retention.verdicts` (deleted or metadata-expired: dropped; content deleted or past its
+    bound: `expired`)."""
+
+    def __init__(self, pages: TracePages, retention) -> None:
+        self.pages, self.retention = pages, retention
+
+    async def page(self, org_id: str, *, cursor: str | None, since: datetime | None,
+                   until: datetime | None,
+                   limit: int) -> tuple[list[wire.TraceExport], str | None]:
+        """One page of `org_id`'s traces, minus what T3 deleted or expired. The cursor
+        advances past dropped rows too, so a page may be short; `None` is the end."""
+        if not 1 <= limit <= EXPORT_MAX_LIMIT:
+            raise errors.InvalidRequest(f"limit must be 1..{EXPORT_MAX_LIMIT}", param="limit")
+        after = decode_cursor(cursor) if cursor else None
+        rows = [r for r in await self.pages.page(org_id, after=after, since=since, until=until,
+                                                 limit=limit) if r.org_id == org_id]
+        verdicts = await self.retention.verdicts(rows)       # T3's bounds and tombstones
+        out = []
+        for row in rows:
+            verdict = verdicts.get((row.org_id, row.request_id))
+            if verdict != DROP:
+                out.append(export_row(row, row_state(row, verdict == NO_CONTENT)))
+        return out, encode_cursor(rows[-1]) if len(rows) == limit else None
+
+
+def build_export(limits) -> OwnedExport | None:
+    """G4T's factory for the composition root: None unless ClickHouse is configured; the
+    export reads the T2I projection and T3's tombstones there, on T3's bounds."""
+    if not limits.clickhouse_url.strip():
+        return None
+    import clickhouse_connect
+
+    from ..traces.retention import ClickHouseRetentionStore, Retention
+    from ..traces.ship import ClickHouseProjection
+    client = clickhouse_connect.get_client(dsn=limits.clickhouse_url)
+    retention = Retention(ClickHouseRetentionStore(client), ClickHouseProjection(client), None,
+                          None, content_days=limits.trace_content_max_days,
+                          metadata_months=limits.trace_metadata_months)
+    return OwnedExport(ClickHouseTracePages(client), retention)
 
 
 class ClickHouseTracePages:
