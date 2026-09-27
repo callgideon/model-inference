@@ -24,7 +24,7 @@ if [ "$THROUGH" = w7 ]; then [[ $EXPECT =~ ^[0-9a-f]{64}$ ]] || { echo "--throug
 : "${RELEASE:?export RELEASE=<the release commit, 40 hex> (rollout.md preamble)}"
 [[ $RELEASE =~ ^[0-9a-f]{40}$ ]] || { echo "RELEASE is not a full commit id" >&2; exit 2; }
 [ "$(git rev-parse HEAD)" = "$RELEASE" ] || { echo "HEAD $(git rev-parse --short HEAD) is not RELEASE=$RELEASE" >&2; exit 2; }
-[ -z "$(git status --porcelain -- apps/app/supabase/migrations apps/infrx-api/deploy/migrate.py apps/infrx-api/infrx/state/migrations.py infra/runbooks/pgrestore.py)" ] || { echo "uncommitted or untracked changes in the migration inputs" >&2; exit 2; }
+[ -z "$(git status --porcelain -- apps/app/supabase/migrations apps/infrx-api/deploy/migrate.py apps/infrx-api/infrx/state/migrations.py)" ] || { echo "uncommitted or untracked changes in the migration inputs" >&2; exit 2; }   # pgrestore.py is the dump tool, not a migration input
 [ -x apps/infrx-api/.venv/bin/python ] || { echo "run from the repo root after make api-env" >&2; exit 2; }
 PY=apps/infrx-api/.venv/bin/python
 HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscgsymzdykendbrc dbname=postgres sslmode=require"

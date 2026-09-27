@@ -520,6 +520,28 @@ def test_i3b_bk01g_an_acl_is_compared_by_the_privileges_it_grants():
         assert {_family(problem) for problem in problems} == {"relations"}, problems
 
 
+def test_i3b_rst_default_acls_outside_the_dumped_schemas_are_not_compared():
+    """A default privilege in a schema the dump never carries (Supabase's realtime, storage,
+    …) is platform state that upgrades change under hosted; it must not fail the equality
+    check. A default in a project schema still does. (Hosted W6, 2026-09-27: realtime's
+    default for postgres gained grant options on the platform side; the fresh copy's had
+    none, and the check reported the verified dump as unequal.)"""
+    with scratch("infrx_i3b_defacl") as (database,):
+        with connect(database) as conn:
+            conn.execute("create schema infrx")
+            conn.execute("create schema realtime_like")
+        before = fingerprint(database)
+        with connect(database) as conn:
+            conn.execute("alter default privileges for role postgres in schema realtime_like "
+                         "grant select on tables to public")
+        assert pg.compare(before, fingerprint(database)) == [], "platform schema compared"
+        with connect(database) as conn:
+            conn.execute("alter default privileges for role postgres in schema infrx "
+                         "grant select on tables to public")
+        problems = pg.compare(before, fingerprint(database))
+        assert [_family(problem) for problem in problems] == ["default_acls"], problems
+
+
 def _service_role(conn, sql: str, params=None):
     with conn.transaction():
         conn.execute("set local role service_role")

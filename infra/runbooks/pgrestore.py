@@ -283,10 +283,14 @@ CATALOG = {
                "nspowner)))::text order by 1)::text "
                "from pg_namespace where nspname = any(%(s)s) order by 1",
     # What every FUTURE object gets: the defaults 0004 narrowed, per schema and global.
+    # Only the defaults the dump carries: the project schemas' and the global ones (0004's
+    # function default travels in meta.json). Platform-managed schemas (realtime, storage, …)
+    # are neither dumped nor restored, and Supabase changes their defaults under hosted.
     "default_acls": "select defaclrole::regrole::text, "
                     "coalesce(nullif(defaclnamespace, 0)::regnamespace::text, '-'), "
                     "defaclobjtype::text, array(select unnest(defaclacl)::text order by 1)::text "
-                    "from pg_default_acl order by 1, 2, 3",
+                    "from pg_default_acl where defaclnamespace = 0 "
+                    "or defaclnamespace::regnamespace::text = any(%(s)s) order by 1, 2, 3",
 }
 
 
