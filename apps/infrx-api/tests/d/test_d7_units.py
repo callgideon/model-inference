@@ -14,6 +14,7 @@ import json
 from infrx.contracts import errors
 from infrx.contracts.lab import records
 from infrx.contracts.v2.records import AccessGrant
+from infrx.lab.access import DatasetUse
 from infrx.state.lab_data import LabEvent, PgLabDataStore, grant_ref
 
 from .test_adapter_units import _Conn, _db_error, _refused
@@ -128,3 +129,43 @@ def test_outbox__is_the_relays_store_half_with_the_claimant_on_every_ack() -> No
         ("lab_outbox_ack", {"event_ids": ["e1"], "worker_id": "relay-1"}),
         ("lab_outbox_release", {"event_ids": ["e2"]}),
         ("lab_outbox_error", {"event_id": "e3", "error": "boom"})]
+
+
+def test_followup__error_release_results_evaluators_reports_and_uses() -> None:
+    """0034's calls: a failed attempt's error only when given, the 402 release, the results
+    read, RFC 8785 evaluator specs, B2 reports checked against their own digest BEFORE the
+    database, and `uses` as the port's `DatasetUse` records."""
+    rep = {"schema": "infrx.eval_report.1", "é": 0.5}
+    body = records.canonical(rep).decode()
+    digest = "sha256:" + hashlib.sha256(records.canonical(rep)).hexdigest()
+    use = {"grantor_org_id": ORG, "model_id": "m", "category": "feedback"}
+    store, conn = _store({}, {}, {"state": "released"}, {"attempt_rows": []}, {"ref": "e"},
+                         {"ref": "e", "body": '{"metric": "exact_match"}'},
+                         {"report_digest": digest}, {"report_digest": digest, "body": body},
+                         [use])
+    spec = {"metric": "exact_match", "é": 1}
+    _ok(store.finish(LEASE, outcome="failed", results=[], error="bound:requests"))
+    _ok(store.finish(LEASE, outcome="failed", results=[]))
+    assert _ok(store.release(LEASE)) == {"state": "released"}
+    _ok(store.run_results("r", provider_org_id=NEMO))
+    assert _ok(store.put_evaluator(spec, provider_org_id=NEMO, evaluator_id="i",
+                                   actor="dev")) == "e"
+    assert _ok(store.evaluator("e", provider_org_id=NEMO)) == {"metric": "exact_match"}
+    assert _ok(store.put_eval_report({**rep, "report_digest": digest}, provider_org_id=NEMO,
+                                     actor="b2")) == digest
+    assert _ok(store.eval_report(digest, provider_org_id=NEMO)) == {**rep, "report_digest": digest}
+    assert _ok(store.uses(NEMO, "d")) == (DatasetUse(**use),)
+    _refused(errors.InvalidRequest, store.put_eval_report(
+        {**rep, "report_digest": "sha256:" + "0" * 64}, provider_org_id=NEMO, actor="b2"))
+    failed = {"lease": LEASE, "outcome": "failed", "results": [], "cost": None}
+    assert [_sent(conn, n) for n in range(len(conn.sent))] == [
+        ("lab_finish_attempt", {**failed, "error": "bound:requests"}),
+        ("lab_finish_attempt", failed),
+        ("lab_release_attempt", {"lease": LEASE}),
+        ("lab_run_results", {"provider_org_id": NEMO, "run_id": "r"}),
+        ("lab_put_evaluator", {"provider_org_id": NEMO, "evaluator_id": "i", "actor": "dev",
+                               "body": records.canonical(spec).decode()}),
+        ("lab_evaluator", {"provider_org_id": NEMO, "ref": "e"}),
+        ("lab_put_eval_report", {"provider_org_id": NEMO, "actor": "b2", "body": body}),
+        ("lab_eval_report", {"provider_org_id": NEMO, "report_digest": digest}),
+        ("lab_dataset_uses", {"provider_org_id": NEMO, "dataset_ref": "d"})]

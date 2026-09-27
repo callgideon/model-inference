@@ -15,11 +15,14 @@ from infrx.state import migrations
 
 from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Runner
+from . import code_mutants_d7 as d7
 from . import migration_mutants as _d
 from . import pgharness
 from . import test_d6f_feedback as t
+from . import test_d6f_scrub as scrub_world
 
 FILE = "0028_feedback_durable.sql"
+SCRUB_FILE = "0035_feedback_scrub.sql"
 DB = f"{pgharness.DATABASE}_d6fmut"
 
 FLAG = "check_the_writes_fail_closed_until_the_flag_is_on"
@@ -81,9 +84,11 @@ SQL_MUTANTS = (
        "v_org then", "  if false then", LABEL,
        "a label's key is scoped to the operator's org, not the row's (R26)"),
     _s("d6f_label_not_audited", _AUDIT, "", LABEL, "an operator's label leaves no audit row (R34)"),
-    _s("d6f_rows_mutable", "create trigger feedback_immutable before update or delete on "
-       "infrx.feedback\n  for each row execute function infrx.forbid_update_delete();\n", "",
-       IMMUTABLE, "an author, channel or role is rewritten after acknowledgment"),
+    # 0035 re-creates this trigger over its scrub guard, so the mutant lives there now
+    _d.Mutant("d6f_rows_mutable", SCRUB_FILE, "create trigger feedback_immutable before update "
+              "or delete on infrx.feedback\n  for each row execute function "
+              "infrx.feedback_guard();\n", "", "lab", IMMUTABLE,
+              "an author, channel or role is rewritten after acknowledgment"),
     _s("d6f_reads_any_org", "                 and (v_org is null or j.org_id = v_org)) then",
        "                 ) then", OWNER, "another org learns a request exists"),
     _s("d6f_reads_mix_labels", "\n                      and f.calibration_set = coalesce(("
@@ -102,6 +107,8 @@ MASKS = "test_accept__an_operator_row_reads_platform_to_a_customer"
 LABELS = "test_label__operator_only_bounded_and_sends_the_label"
 LISTS = "test_lists__owned_is_the_callers_org_and_labels_are_operator_only"
 CODES = "test_refusals__the_disabled_flag_and_sql_codes_are_typed"
+REPLAY = "test_accept_with_replay__a_stored_row_of_another_id_is_a_replay"
+SCRUBBED = "test_scrub__sends_the_org_request_and_receipt_fields_and_answers_the_count"
 
 
 def _p(name, invariant, old, new, *cases) -> Mutant:
@@ -152,8 +159,75 @@ CODE_MUTANTS = (
        '        if False:\n            raise errors.Forbidden("calibration', LISTS),
     _p("d6f_py_flag_off_untyped", "a disabled flag is a typed 503",
        '            if failed.sqlstate == "0A000":', "            if False:", CODES),
+    _p("d6f_py_never_replayed", "WR-G4F-2: a replay is reported",
+       '            row["feedback_id"] != feedback_id', "            False", REPLAY),
+    _p("d6f_py_new_id_per_read", "the id compared is the one sent",
+       '"request_id": request_id, "feedback_id": feedback_id,',
+       '"request_id": request_id, "feedback_id": ids.new_feedback_id(),', REPLAY),
+    _p("d6f_py_scrub_unattributed", "a scrub names its actor",
+       '"org_id": org_id, "request_id": request_id, "actor": actor,',
+       '"org_id": org_id, "request_id": request_id, "actor": "platform",', SCRUBBED),
+    _p("d6f_py_scrub_raw", "the scrub answers its count",
+       '            "reason": reason}))["scrubbed"]', '            "reason": reason}))', SCRUBBED),
 )
 SQL_NAMES = tuple(m.name for m in SQL_MUTANTS)
+
+# ------------------------------------------------------------ the scrub (0035, T3's request)
+DB_S = f"{pgharness.DATABASE}_d6fsmut"
+SCRUBS = "check_a_scrub_removes_the_text_and_leaves_a_receipt"
+OWN = "check_only_the_orgs_own_request_is_scrubbed"
+GUARD = "check_nothing_but_a_scrub_rewrites_feedback"
+ROLES_S = "check_browser_roles_cannot_scrub"
+SERVICE = "check_the_service_reports_replays_and_scrubs"
+
+
+def _c(name, old, new, check, why, **kw):
+    return _d.Mutant(name, SCRUB_FILE, old, new, "lab", check, why, **kw)
+
+
+SCRUB = (
+    _c("d6f_scrub_keeps_comments", "  update infrx.feedback set comment = null,",
+       "  update infrx.feedback set comment = comment,", SCRUBS,
+       "a deleted trace's customer comment survives in PostgreSQL"),
+    _c("d6f_scrub_erases_verdicts", "    value_text = case when name in ('correction', 'comment') "
+       "then '[scrubbed]'\n                      else value_text end", "    value_text = case "
+       "when name in ('correction', 'comment', 'calibration_label') then '[scrubbed]'\n"
+       "                      else value_text end", SCRUBS,
+       "an operator's calibration verdict is destroyed by a customer deletion"),
+    _c("d6f_scrub_unreceipted", "  if n > 0 then", "  if false then", SCRUBS,
+       "a deletion leaves no receipt"),
+    _c("d6f_scrub_receipts_repeats", "  if n > 0 then", "  if true then", SCRUBS,
+       "every sweep writes an empty receipt (and fails its own check)"),
+    _c("d6f_scrub_any_org", "  if not exists (select 1 from infrx.jobs j where j.request_id = "
+       "v_job and j.org_id = v_org)", "  if not exists (select 1 from infrx.jobs j where "
+       "j.request_id = v_job)", OWN, "one org erases another org's feedback"),
+    _c("d6f_scrub_whole_org", "   where org_id = v_org and request_id = v_job\n",
+       "   where org_id = v_org\n", OWN, "deleting one trace erases every trace's feedback"),
+    _c("d6f_guard_ignores_marker", "  if tg_op = 'UPDATE' and current_setting("
+       "'infrx.feedback_scrub', true) = 'on'", "  if tg_op = 'UPDATE'", GUARD,
+       "any writer blanks feedback text outside the audited scrub"),
+    _c("d6f_guard_ignores_provenance", "\n     and to_jsonb(new) - 'comment' - 'value_text' = "
+       "to_jsonb(old) - 'comment' - 'value_text'", "", GUARD,
+       "a scrub-shaped update also rewrites the author"),
+    _c("d6f_guard_any_comment", "     and new.comment is null\n", "", GUARD,
+       "a comment is rewritten under the scrub marker"),
+    _c("d6f_guard_any_text", "     and new.value_text is not distinct from (case", "     and "
+       "true or new.value_text is not distinct from (case", GUARD,
+       "a correction is rewritten under the scrub marker"),
+    _c("d6f_scrub_unattributed", "      perform infrx.refuse('invalid_request', 'a scrub names "
+       "its actor and reason');", "      null;", GUARD, "an unattributed scrub removes text"),
+    _c("d6f_scrub_receipts_deletable", "grant select on infrx.feedback_scrubs to service_role;",
+       "grant select, delete on infrx.feedback_scrubs to service_role;", ROLES_S,
+       "the platform role erases the evidence that a deletion happened"),
+    _c("d6f_scrub_count_misreported", "  return jsonb_build_object('scrubbed', n);",
+       "  return jsonb_build_object('scrubbed', 0);", SERVICE,
+       "T3's sweep cannot tell a scrub from a no-op"),
+)
+SCRUB_NAMES = tuple(m.name for m in SCRUB)
+
+
+def kill_scrub(mutant) -> tuple[str, str]:
+    return d7.kill(mutant, DB_S, scrub_world)
 
 
 def kill(mutant) -> tuple[str, str]:

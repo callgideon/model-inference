@@ -51,6 +51,12 @@ class PgFeedbackService:
 
     async def accept(self, auth, request_id: str, feedback: dict[str, Any],
                      idem: IdempotencyRef) -> Feedback:
+        return (await self.accept_with_replay(auth, request_id, feedback, idem))[0]
+
+    async def accept_with_replay(self, auth, request_id: str, feedback: dict[str, Any],
+                                 idem: IdempotencyRef) -> tuple[Feedback, bool]:
+        """`accept`, and whether it was a replay (WR-G4F-2: the route's `replayed`): a replay
+        answers the stored row, whose id is not the one this call generated."""
         if not isinstance(feedback, dict):
             raise errors.InvalidRequest("a feedback submission is one {name, value} object")
         try:     # extra="forbid": a provenance field (author, channel, marker) is refused
@@ -61,15 +67,24 @@ class PgFeedbackService:
             raise errors.Forbidden("idempotency scope must be the caller's org")
         if idem.key is None:
             raise errors.InvalidRequest("an idempotency key is required for feedback")
+        feedback_id = ids.new_feedback_id()
         row = await self._call("accept_feedback", {
             "org_id": auth.org_id, "principal": auth.principal,
             "by_operator": bool(auth.is_operator), "channel": self.channel.value,
-            "request_id": request_id, "feedback_id": ids.new_feedback_id(),
+            "request_id": request_id, "feedback_id": feedback_id,
             "body": body.model_dump(mode="json", include={"name", "value", "comment"},
                                     exclude_none=True),
             "idem": idem.model_dump(mode="json")})
         return visible_feedback((Feedback.model_validate(row),),
-                                operator=bool(auth.is_operator))[0]
+                                operator=bool(auth.is_operator))[0], \
+            row["feedback_id"] != feedback_id
+
+    async def scrub(self, org_id: str, request_id: str, *, actor: str, reason: str) -> int:
+        """T3's deletion reaching durable feedback (0035): the request's comments and free
+        text are removed under a receipt; the number of rows changed (0 on a repeat)."""
+        return (await self._call("scrub_feedback", {
+            "org_id": org_id, "request_id": request_id, "actor": actor,
+            "reason": reason}))["scrubbed"]
 
     async def label_calibration(self, auth, request_id: str, label: str, rubric_version: int,
                                 idem: IdempotencyRef, *, comment: str | None = None) -> Feedback:
