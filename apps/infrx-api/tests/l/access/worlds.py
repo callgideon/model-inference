@@ -92,7 +92,7 @@ class PgWorld:
     through the lab-sql RPCs, or the platform's own UPDATE for a membership revocation; reads
     go through `LabAccess` over `PgAccessStore`, which runs as `service_role`."""
 
-    A, B = cc.NEMO, cc.OTHER_PROVIDER
+    A, B = cc.NEMO, "b0000010-0000-4000-8000-000000000010"
     DEV_A, BOTH, CONSUMER_ONLY = cc.PROVIDER_DEV_USER, cc.CONSUMER_1, cc.CONSUMER_2
     DEV_B = "d1000000-0000-4000-8000-00000000000b"
     VIEWER_A = "e1000000-0000-4000-8000-00000000000a"
@@ -146,14 +146,15 @@ class PgWorld:
 
 
 def seed_pg(conn, dsn: str) -> None:
-    """seed_admission's world (clock frozen at T0), plus provider B's own name and model,
-    DEV_B and VIEWER_A, BOTH as an A developer, the two grants and one request by BOTH on A's
-    deployment (A's aggregates); then a minute passes."""
+    """seed_admission's world (clock frozen at T0), plus provider B (its own name - the seed's
+    second provider shares A's - and model), DEV_B and VIEWER_A, BOTH as an A developer, the
+    two grants and one request by BOTH on A's deployment (A's aggregates); then a minute
+    passes."""
     ca.seed_admission(conn)
     assert conn.execute("select infrx.now()").fetchone()[0] == T0
     w = PgWorld
-    conn.execute("update infrx.provider_orgs set display_name = %s where provider_org_id = %s",
-                 (w.NAMES[w.B], w.B))
+    conn.execute("insert into infrx.provider_orgs (provider_org_id, slug, display_name, "
+                 "created_by) values (%s, 'other-lab', %s, 'ops')", (w.B, w.NAMES[w.B]))
     conn.execute(
         "insert into public.models (id, name, provider, description, status, base_url, "
         "served_model, input_usd_per_m, output_usd_per_m, context_tokens, input_modalities, "
