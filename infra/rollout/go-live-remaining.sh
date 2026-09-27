@@ -47,12 +47,12 @@ do_w9() {
   ! grep -qE '[0-9]+ skipped' "$LOGDIR/w9-s3-check.log" || fail W9 "the S3 conformance cases were skipped, not run: $W7F, then RB-A"
 }
 do_w10() {
-  run w10-install env TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh "${INSTALL_ARGS[@]}" MIGRATION_DIGEST="$MIGRATION_DIGEST" || fail W10 "read the log's last lines: 'refused' (preflight) → $W7F, then R1; 'not ready' → $W7F, then R2(b) with the 'backup' path in the log"
+  run w10-install env TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh "${INSTALL_ARGS[@]}" MIGRATION_DIGEST="$MIGRATION_DIGEST" || fail W10 "exact code: aws ssm get-command-invocation --command-id <the 'command …' id in the log> --instance-id i-0e8449a4ffca29bab --query ResponseCode (2 = preflight refused → $W7F, then R1; 4 = not ready → $W7F, then R2(b) with the 'backup' path in the log)"
   grep -E "deployed $RELEASE|rollback:|backup" "$LOGDIR/w10-install.log" | tee -a "$LOGDIR/go-live.log" >/dev/null || true
   grep -q "deployed $RELEASE" "$LOGDIR/w10-install.log" || fail W10 "status Success but no 'deployed $RELEASE' line (SSM truncates long output): the edge may be LIVE — check public /health before any rollback"
 }
 do_w10b() {
-  run w10b-maintenance ssm infra/rollout/steps/95-maintenance.sh RELEASE="$RELEASE" || fail W10b "95-maintenance: 'still OPEN and admitting' → stop here (the edge is open; do not run 55); otherwise nothing changed — rerun"
+  run w10b-maintenance ssm infra/rollout/steps/95-maintenance.sh RELEASE="$RELEASE" || fail W10b "95-maintenance: 'still OPEN and admitting' → stop here (the edge is open; do not run 55); any other failure → the edge may already serve 503 — rerun 95"
   run w10b-runtime-login ssm infra/rollout/steps/55-runtime-login.sh || fail W10b "55-runtime-login: the edge is in maintenance — either ssm 56-resume.sh RELEASE=$RELEASE on the owner login (record RV-09 not met) or $W7F then R2; never 91-abort"
   run w10b-resume ssm infra/rollout/steps/56-resume.sh RELEASE="$RELEASE" || fail W10b "56-resume: maintenance stays — journalctl -u marlin2b-gateway -u infrx-worker on the box, rerun 56, or $W7F then R2(a); never 91-abort"
   grep -q "resumed" "$LOGDIR/w10b-resume.log" || fail W10b "no 'resumed' line: maintenance stays — rerun 56-resume.sh or $W7F then R2(a); never 91-abort"
@@ -86,15 +86,18 @@ do_w12() {
   if [ ! -s "$LOGDIR/w12-revoked.key" ]; then
     run w12-issue-revoked cli issue-key --user "$uid" --name "w12-revoked-$TAG" --secret-file "$LOGDIR/w12-revoked.key" --idempotency-key "key-w12-revoked-$TAG" --reason "W12 revoked-key check" || fail W12 "issue-key failed (no key issued)"
     [ -s "$LOGDIR/w12-revoked.key" ] || fail W12 "issue-key wrote no secret (a replay?): remove $LOGDIR/w12-revoked.key and rerun with a new LOGDIR"
-    kid=$(python3 -c "import json,sys; d=[json.loads(l) for l in open(sys.argv[1]) if l.startswith('{')][-1]; print(d['key_id'])" "$LOGDIR/w12-issue-revoked.log")
-    org=$(python3 -c "import json,sys; d=[json.loads(l) for l in open(sys.argv[1]) if l.startswith('{')][-1]; print(d['org_id'])" "$LOGDIR/w12-issue-revoked.log")
-    run w12-revoke cli revoke-key --org "$org" --key-id "$kid" --idempotency-key "revoke-w12-$TAG" --reason "W12 revoked-key check" || fail W12 "key $kid is ACTIVE: revoke it by hand (revoke-key --org $org --key-id $kid) before H6"
   fi
+  # always revoke (a replay under the same idempotency key is harmless): a rerun after a failed revoke must never smoke with an ACTIVE key
+  kid=$(python3 -c "import json,sys; d=[json.loads(l) for l in open(sys.argv[1]) if l.startswith('{')][-1]; print(d['key_id'])" "$LOGDIR/w12-issue-revoked.log")
+  org=$(python3 -c "import json,sys; d=[json.loads(l) for l in open(sys.argv[1]) if l.startswith('{')][-1]; print(d['org_id'])" "$LOGDIR/w12-issue-revoked.log")
+  run w12-revoke cli revoke-key --org "$org" --key-id "$kid" --idempotency-key "revoke-w12-$TAG" --reason "W12 revoked-key check" || fail W12 "key $kid is ACTIVE: revoke it (revoke-key --org $org --key-id $kid) before any rerun of W12"
   INFRX_TEST_KEY=$(aws ssm get-parameter --with-decryption --name /model-inference/e4b_api_key --query Parameter.Value --output text) && [ -n "$INFRX_TEST_KEY" ] || fail W12 "e4b_api_key read failed"
   LEGACY_KEY=$(aws ssm get-parameter --with-decryption --name /model-inference/marlin2b_api_key --query Parameter.Value --output text) && [ -n "$LEGACY_KEY" ] || fail W12 "marlin2b_api_key read failed: stop (an empty LEGACY_KEY skips the R51 check silently)"
   INFRX_REVOKED_KEY=$(tr -d '\n' < "$LOGDIR/w12-revoked.key")
   export INFRX_TEST_KEY INFRX_REVOKED_KEY LEGACY_KEY; unset MARLIN_API_KEY
-  say "W12: port checks use IP=100.57.145.167 by default (confirm the Elastic IP is still attached, or export IP= to skip)"
+  if [ -z "${IP+x}" ]; then
+    [ "$(aws ec2 describe-addresses --public-ips 100.57.145.167 --query 'Addresses[0].InstanceId' --output text 2>/dev/null)" = i-0e8449a4ffca29bab ] || fail W12 "the Elastic IP 100.57.145.167 is not on the box: export IP=<current> (or IP= to skip the port checks)"
+  fi
   run w12-verify-external infra/rollout/verify-external.sh || { unset INFRX_TEST_KEY INFRX_REVOKED_KEY LEGACY_KEY; fail W12 "smoke red: before any pilot request was accepted → $W7F then R2(a); after → R3"; }
   unset INFRX_TEST_KEY INFRX_REVOKED_KEY LEGACY_KEY
   n=$(grep -c '^PASS' "$LOGDIR/w12-verify-external.log" || true); say "W12: $n PASS lines (16 expected)"
