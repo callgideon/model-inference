@@ -12,12 +12,13 @@ import { fileURLToPath } from "node:url";
 const lab = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const args = process.argv.slice(2);
 const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
-const SUITE = ["access", "config", "request", "boundary"].map((f) => `tests/l/shell/${f}.test.ts`);
+const SUITE = ["access", "config", "request", "guard", "boundary"].map((f) => `tests/l/shell/${f}.test.ts`);
 
 const ACCESS = "lib/auth/access.ts";
 const MEMBERS = "lib/auth/memberships.ts";
 const CONFIG = "lib/auth/config.ts";
 const REQUEST = "lib/auth/request.ts";
+const GUARD = "lib/auth/guard.ts";
 const ACTION = "lib/auth/actions.ts";
 const LAYOUT = "app/(provider)/layout.tsx";
 const NEXT = "next.config.ts";
@@ -43,6 +44,9 @@ const C = {
   r01: "L1-R01 a misconfigured Lab is unavailable and builds no client",
   r02: "L1-R02 the session client is the Lab's: its cookie options, its env, and the request's cookie store",
   r03: "L1-R03 the user comes from the session and the workspace from the Lab's cookie, re-checked against memberships",
+  g01: "L1-G01 a page gets a workspace only when one is selected: the picker state is a 404, never the first workspace",
+  g02: "L1-G02 the selection action runs for any provider session and is a 404 for everyone else",
+  g03: "L1-G03 the guard reads through the Lab's own session client and sends no identity",
   b01: "L1-B01 every page, route, provider layout and server action calls the provider guard",
   b02: "L1-B02 the provider layout renders its children only for a ready workspace",
   b03: "L1-B03 the selection action stores the membership it validated, never the submitted value",
@@ -93,6 +97,19 @@ const MUTANTS = [
   m("L1-X37", "the picker state renders the page", LAYOUT, "        <Workspaces workspaces={access.workspaces} />\n      </main>", "        <Workspaces workspaces={access.workspaces} />\n        {children}\n      </main>", [C.b02]),
   m("L1-X38", "the provider layout is prerendered", LAYOUT, 'export const dynamic = "force-dynamic";', "", [C.b02]),
   m("L1-X39", "the action stores the submitted value", ACTION, ".set(WORKSPACE_COOKIE, chosen.providerId,", '.set(WORKSPACE_COOKIE, String(formData.get("providerId")),', [C.b03]),
+  // Fix round (0-L1-R-2): guard.ts is run by guard.test.ts; X42 is the reviewer's type-correct H2'.
+  m("L1-X42", "a page under the picker state gets the first workspace (H2')", GUARD, "const workspace = readyWorkspace(await providerAccessForRequest());",
+    "const access = await providerAccessForRequest();\n  const workspace = readyWorkspace(access) ?? sessionAccess(access)?.workspaces[0] ?? null;", [C.g01]),
+  m("L1-X43", "the page guard renders without a workspace", GUARD, "  if (workspace === null) notFound();\n", "", [C.g01]),
+  m("L1-X44", "the action guard runs without a provider session", GUARD, "  if (access === null) notFound();\n", "", [C.g02]),
+  m("L1-X45", "the action guard admits any signed-in state", GUARD, "const access = sessionAccess(await providerAccessForRequest());", "const access = (await providerAccessForRequest()) as SessionAccess;", [C.g02]),
+  m("L1-X46", "the guard's client drops the Lab cookie options", GUARD, "createServerClient(url, key, options)", "createServerClient(url, key, { cookies: options.cookies })", [C.g03]),
+  m("L1-X47", "the guard's membership read sends an identity", GUARD, "rpc: (name) => client.rpc(name)", 'rpc: (name) => client.rpc(name, { user_id: "" })', [C.g03]),
+  // Fix round (0-L1-R-1): server actions in every form Next accepts; X48 is the reviewer's H1.
+  m("L1-X48", "an unguarded arrow-const server action (H1)", ACTION, '  redirect("/");\n}\n',
+    '  redirect("/");\n}\n\nexport const peekWorkspaces = async (formData: FormData) => {\n  return String(formData.get("providerId"));\n};\n', [C.b01]),
+  m("L1-X49", "an unguarded default-export server action", ACTION, '  redirect("/");\n}\n', '  redirect("/");\n}\n\nexport default async function peek() {\n  return 1;\n}\n', [C.b01]),
+  m("L1-X50", "an unguarded inline server action in the provider layout", LAYOUT, "<form action={selectWorkspace}>", '<form action={async () => { "use server"; }}>', [C.b01]),
   m("L1-X40", "the Lab imports the App's code", ACCESS, "export const ROLES", 'import type {} from "../../../app/lib/types.ts";\nexport const ROLES', [C.b04]),
 ];
 
