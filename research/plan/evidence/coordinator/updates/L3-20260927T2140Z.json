@@ -1,0 +1,20 @@
+{"task": "L3", "slice": "L3 (fake-driven over the L3-SQL seam; PG half written, skips until L3-SQL merges)", "activity": "review",
+ "head": "8e092ae1", "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-access-lw2",
+ "branch": "codex/w5-lab-access-lw2",
+ "owned_paths": ["apps/infrx-api/infrx/lab/control/", "apps/infrx-api/tests/l/control/"],
+ "commands": [
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/l/control/test_control.py -k never_mutates (pre-impl)", "exit": 4, "summary": "red: ModuleNotFoundError infrx.lab.control"},
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/l/control/test_control.py", "exit": 0, "summary": "12 passed (fake), 12 skipped (pg: L3-SQL absent)"},
+  {"cmd": "cd apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q tests/l/control/test_mutants.py", "exit": 0, "summary": "35 passed, 19 skipped: 30/30 fake mutants killed; 19 PG mutants skip (L3-SQL absent)"},
+  {"cmd": "INFRX_D_TASK=l3 make api-test", "exit": 1, "summary": "5045 passed, 90 skipped, 9 xfailed, 43 failed - all 43 tests/i/test_mutants.py broken_runner (i8 pooler baseline under a non-default key; known, non-blocking)"},
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/l (ad hoc, no INFRX_D_TASK)", "exit": 0, "summary": "51 passed, 14 skipped; deviation: L2 pg cases ran on d1 55432 under the harness lock, container removed at exit"}
+ ],
+ "estimate": {"optimistic_h": 1.5, "likely_h": 3, "pessimistic_h": 7, "confidence": "medium",
+  "basis": "remaining: first PG run against L3-SQL (adapter or signature reconciliation per WR-L3-1 delta) + one verify round; L2 LW1 integration analogue", "at": "2026-09-27T21:40Z"},
+ "blockers": ["L3-SQL (lab-sql-lw2) not merged: PgControlStore absent, the PG half and 19 PG mutants skip (13:9)"],
+ "wiring_requests": [
+  "WR-L3-1 schema request to lab-sql (L3-SQL): infrx/state/lab_control.py PgControlStore implementing infrx.lab.control.ControlStore (db_now, model_provider, deployment, endpoint, transition CAS, propose, issue_dev_key, publish CAS on listing version, rollback CAS, fund_dev_wallet, events) - see evidence for signatures and the delta vs the lab-sql draft",
+  "WR-L3-2 Makefile api-mutants: own line INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control/test_mutants.py",
+  "WR-L3-3 G/W: SmokeTest adapter over the real engine and an authenticated Lab control route (default OFF)",
+  "WR-L3-4 D: provider_dev admission path (0011 admit_credit refuses non-consumer audiences)"],
+ "evidence": ["research/plan/evidence/l/L3-8e092ae.md", "research/plan/evidence/coordinator/updates/L3-20260927T2140Z.json"]}
