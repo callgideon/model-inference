@@ -169,10 +169,12 @@ def _no_constant(name: str):
 
 
 def _ms(value: Any, unit: str) -> int | None:
+    """Whole milliseconds, exactly (no float round trip), or None: a fraction, a boolean,
+    a non-number, or a non-finite value (`1e999` parses to infinity)."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    ms = Decimal(str(float(value))) * (1000 if unit == "s" else 1)
-    return int(ms) if ms == ms.to_integral_value() else None
+    ms = Decimal(str(value)) * (1000 if unit == "s" else 1)
+    return int(ms) if ms.is_finite() and ms == ms.to_integral_value() else None
 
 
 def _row(spec: ImportSpec, raw: bytes | None) -> tuple[dict, dict]:

@@ -175,8 +175,11 @@ def test_n1_malformed_rows_are_quarantined_and_never_silently_omitted() -> None:
 
 def test_n1_timestamp_units_are_checked() -> None:
     """Oracle: an unknown clock unit is refused before anything is read; a span in
-    fractional milliseconds, backwards, empty, negative, a boolean, or past the 82 s cap
-    is quarantined; seconds with sub-millisecond precision are refused, not rounded."""
+    fractional milliseconds, backwards, empty, negative, a boolean, past the 82 s cap, or
+    out of range (1e999 parses to infinity, a 400-digit integer overflows a float) is
+    quarantined - in the import and in the preview, never a crash; seconds with
+    sub-millisecond precision are refused, not rounded; a millisecond count above 2**53 is
+    exact (a float would merge 2**53 and 2**53 + 1 into an empty span)."""
     spec, _ = fixture("sam_export")
     store, objects, importer = world()
     for unit in ("frames", "MS", None):
@@ -186,18 +189,22 @@ def test_n1_timestamp_units_are_checked() -> None:
     def row(start, end):
         return {"video": {"path": "clips/dock-01.mp4"}, "session": {"id": "s"},
                 "segment": {"start_s": start, "end_s": end}, "annotation": {}}
+    ms = {**spec, "clock_unit": "ms", "import_id": "1a000000-0000-4000-8000-0000000000f2",
+          "dataset_id": "da000000-0000-4000-8000-0000000000f2"}
+    seed_clips(objects, ms)
+    report = ok(importer, ms, rows(row(1500, 4250), row(1.5, 4), row(2 ** 53, 2 ** 53 + 1)),
+                accept_rejects=True)
+    assert (report.accepted, reasons(report)) == (2, [(2, "invalid_span")]), report
+    infinite = json.dumps(row("X", 2)).replace('"X"', "1e999").encode()
     data = rows(row(1, 2), row(2, 1), row(3, 3), row(-1, 2), row(True, 2), row(0, 82.001),
-                row(0.0005, 1), row("1", 2))
+                row(0.0005, 1), row("1", 2), infinite, row(10 ** 400, 2), row(1, 10 ** 400))
     timed = {**spec, "import_id": "1a000000-0000-4000-8000-0000000000f1"}
     seed_clips(objects, timed)
     report = ok(importer, timed, data, accept_rejects=True)
     assert report.accepted == 1, report
-    assert reasons(report) == [(n, "invalid_span") for n in range(2, 9)], report
-    ms = {**spec, "clock_unit": "ms", "import_id": "1a000000-0000-4000-8000-0000000000f2",
-          "dataset_id": "da000000-0000-4000-8000-0000000000f2"}
-    seed_clips(objects, ms)
-    report = ok(importer, ms, rows(row(1500, 4250), row(1.5, 4)), accept_rejects=True)
-    assert (report.accepted, reasons(report)) == (1, [(2, "invalid_span")]), report
+    assert reasons(report) == [(n, "invalid_span") for n in range(2, 12)], report
+    shown = imports.preview(timed, data, provider_org_id=NEMO)["rows"]
+    assert [r.get("reason") for r in shown] == [None] + ["invalid_span"] * 10, shown
 
 
 def test_n1_oversized_rows_and_uploads_are_refused() -> None:

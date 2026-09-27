@@ -33,6 +33,7 @@ REEXP = "test_n2_a_reexport_is_byte_identical_and_carries_schema_rights_and_omis
 EXPRIGHTS = "test_n2_an_export_omits_revoked_and_untrained_sources"
 RESUME = "test_n2_an_interrupted_export_resumes_and_refuses_changed_inputs"
 CANCEL = "test_n2_an_export_is_cancelled_or_expires"
+REDACT = "test_n2_redaction_removes_nested_paths_and_never_the_content_itself"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -84,6 +85,11 @@ MUTANTS: tuple[Mutant, ...] = (
       'if target == "holdout" and i not in placed:', SAME),
     m("n2_duplicates_added", "a repeated content digest adds nothing",
       "elif sample.content_digest in digests:", "elif False:", DUPI),
+    m("n2_unreadable_base_unanchored", "an unreadable base sample still relates new samples",
+      "                    anchors.append(sample)\n", "                    pass\n", REVOKED),
+    m("n2_unreadable_base_split_forgotten", "an unreadable base sample keeps its split",
+      "            if ref == base:\n                placed[",
+      "            if ref == base and sample in kept:\n                placed[", REVOKED),
     m("n2_revoked_read", "derivation reads through the access gate now",
       "if sample.sample_id not in readable:", "if False:", REVOKED),
     m("n2_access_gate_is_training", "derivation is the access gate (provider_sharing)",
@@ -107,7 +113,14 @@ MUTANTS: tuple[Mutant, ...] = (
       'omitted.append({"sample_id": sample.sample_id, "reason": reason})', "None",
       REEXP, EXPRIGHTS),
     m("n2_redaction_ignored", "a redacted key leaves every item",
-      "if k not in keys}", "if True}", REEXP),
+      'original = _drop(original, key.split("."))', "original = original", REEXP, REDACT),
+    m("n2_redaction_top_level_only", "a redacted key is a dotted path, removed at any depth",
+      '_drop(original, key.split("."))', "_drop(original, [key])", REDACT),
+    m("n2_structured_content_unredacted", "structured content loses a redacted path too",
+      'return {**body, "original": original, "content": content}',
+      'return {**body, "original": original}', REDACT),
+    m("n2_content_redaction_accepted", "a redaction never removes the content itself",
+      "    if content is _MISSING:\n", "    if False:\n", REDACT, dies_by=("TypeError",)),
     m("n2_parts_unbounded", "a part holds at most part_items",
       "for n, start in enumerate(range(0, len(items), part_items)):",
       "for n, start in enumerate(range(0, len(items), part_items + 1)):", REEXP),

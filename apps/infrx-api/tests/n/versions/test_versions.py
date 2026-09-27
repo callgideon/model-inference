@@ -234,6 +234,28 @@ def test_n2_a_revoked_source_is_excluded_from_new_versions() -> None:
     m2 = manifest(store, v2.dataset_ref)
     assert {s.grant_ref for s in m2.samples} == {grant_ref(GRANT_2)}
     assert len(manifest(store, a).samples) == 6
+    # An unreadable base sample still holds its family's split: new rows related to a v1
+    # holdout sample (by group, or by text up to case) stay out after v1's grant loses
+    # provider_sharing, so no v2 train row descends from v1's holdout.
+    store, objects = world()
+    v1 = derive(store, objects, add=[imported(store, objects, text(30), 14)])
+    m1 = manifest(store, v1.dataset_ref)
+    held = sorted(s.group_key for s in m1.samples if s.sample_id in m1.splits.holdout)
+    near = [f"  {b['content'].upper()} " for i, b in content(objects, m1).items()
+            if i in m1.splits.holdout]
+    assert held and len(near) == len(held), m1.splits
+    new = imported(store, objects, [{"q": f"near copy of {g}", "g": g} for g in held] +
+                   [{"q": t, "g": f"other-{n}"} for n, t in enumerate(near)] + text(5, "fresh"),
+                   15, grant=GRANT_2)
+    store.grants[grant_ref()]["purposes"] = {"training"}       # access lapses, not training
+    v2 = derive(store, objects, base=v1.dataset_ref, add=[new], version=2)
+    reasons = sorted(o["reason"] for o in v2.omitted)
+    assert reasons == ["grant_not_current"] * 30 + ["related_to_holdout"] * (2 * len(held)), \
+        reasons
+    m2 = manifest(store, v2.dataset_ref)
+    assert sorted(b["content"] for b in content(objects, m2).values()) == \
+        [f"fresh {i}?" for i in range(1, 6)], m2.samples
+    assert m2.splits.holdout == [], m2.splits
 
 
 def test_n2_derivation_reads_only_the_callers_datasets_and_a_sane_policy() -> None:
@@ -295,6 +317,47 @@ def test_n2_a_reexport_is_byte_identical_and_carries_schema_rights_and_omissions
     assert licences == sorted([("CC-BY-4.0", grant_ref()), ("CC0", grant_ref(GRANT_2))]), \
         one["sources"]
     assert {i["source_ref"] for i in items} <= set(one["sources"])
+
+
+def test_n2_redaction_removes_nested_paths_and_never_the_content_itself() -> None:
+    """Oracle (DATA-RIGHTS): a redacted key is a dotted path in the import spec's syntax,
+    removed from the original row at any depth and from structured content that holds it,
+    so no listed key ships; a redaction that would remove the mapped content itself (the
+    text field, or the whole structured content) is refused before anything is written."""
+    store, objects = world()
+    a = imported(store, objects, [{"q": f"email me? {i}", "g": f"g{i}",
+                                   "meta": {"email": f"user{i}@x.com", "lang": "en"}}
+                                  for i in range(12)], 16)
+    for eid, redact in ((uid(12, 0xe0), ["q"]), (uid(13, 0xe0), ["meta.email", "q"])):
+        with pytest.raises(errors.InvalidRequest):
+            run(versions.export(store, objects, provider_org_id=NEMO, dataset_ref=a,
+                                export_id=eid, now=NOW, ttl_s=60, redact=redact))
+    assert not any(uid(n, 0xe0) in key for n in (12, 13) for key in objects.objects), \
+        "a refused export wrote something"
+    record = export(store, objects, uid(14, 0xe0), a, redact=["meta.email", "q.x"])
+    items = part(store, objects, uid(14, 0xe0))
+    assert record["redacted"] == ["meta.email", "q.x"] and len(items) == 12, record
+    assert all(i["record"]["original"]["meta"] == {"lang": "en"} and
+               i["record"]["content"] == i["record"]["original"]["q"] for i in items), items[0]
+    spec, _ = fixture("sam_export")
+    objects.seed(imports.bundle_key(NEMO, uid(17, 0x1a), "a.mp4"), b"clip-a")
+    clips = [{"video": {"path": "a.mp4"}, "session": {"id": f"s{i}"},
+              "segment": {"start_s": i, "end_s": i + 1},
+              "annotation": {"caption": f"worker {i}", "operator": {"badge": i, "shift": "a"}}}
+             for i in range(6)]
+    video = imported(store, objects, clips, 17, modality="finite_video")
+    record = export(store, objects, uid(15, 0xe0), video,
+                    redact=["annotation.operator.badge", "session"])
+    items = part(store, objects, uid(15, 0xe0))
+    assert items and record["redacted"] == ["annotation.operator.badge", "session"], record
+    for i in items:
+        original, got = i["record"]["original"], i["record"]["content"]
+        assert "session" not in original and original["annotation"] == got, original
+        assert got["operator"] == {"shift": "a"} and got["caption"].startswith("worker"), got
+    with pytest.raises(errors.InvalidRequest):
+        run(versions.export(store, objects, provider_org_id=NEMO, dataset_ref=video,
+                            export_id=uid(16, 0xe0), now=NOW, ttl_s=60,
+                            redact=["annotation"]))
 
 
 def test_n2_an_export_omits_revoked_and_untrained_sources() -> None:

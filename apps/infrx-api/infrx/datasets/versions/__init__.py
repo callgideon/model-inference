@@ -22,15 +22,19 @@ never changes the holdout.
 
 **Rights at every read (R160).** Derivation reads through the access gate (the grant's
 current version for `provider_sharing`) and omits what it may no longer read
-(`grant_not_current`); an export reads through the export gate (`training`) and never ships
-the holdout. A published manifest confers nothing: `read_part` re-reads the gate, so an
+(`grant_not_current`) - yet a base sample it may no longer read still anchors its family's
+base split, so a new relative of an unreadable holdout sample stays out; an export reads
+through the export gate (`training`) and never ships the holdout. A published manifest confers nothing: `read_part` re-reads the gate, so an
 export made before a revocation stops serving the revoked items.
 
 **Exports** live at `lab/<provider>/exports/<export id>/`: write-once parts of `part_items`
 JSONL items (sample id, split, digests, source and grant refs, the redacted content record),
 then `export.json` naming the manifest hash, schema, purpose, parts and their digests, every
 omitted sample with its reason, each source's licence/restrictions/grant (per-source
-lineage), the redacted keys, and `expires_at` (TTL 1 s..7 days). A rerun of an unfinished
+lineage), the redacted keys, and `expires_at` (TTL 1 s..7 days). A redacted key is a
+dotted path in the import spec's syntax, removed from the original row and from the content
+re-read at the spec's content path; a redaction that would remove the content itself is
+refused. A rerun of an unfinished
 export reuses finished parts and refuses (`Conflict`) parts its inputs no longer produce;
 a finished one replays. `cancel` stops it for good; reads after expiry or cancellation are
 `Gone`.
@@ -48,7 +52,7 @@ from datetime import datetime, timedelta
 from ...contracts import errors
 from ...contracts.ids import UUID_RE
 from ...contracts.lab import records as lab
-from ..imports import SPLITS, sample_key, spec_key, write_once
+from ..imports import _MISSING, SPLITS, _get, sample_key, spec_key, write_once
 
 MAX_EXPORT_TTL_S = 7 * 86_400
 PART_ITEMS = 1000
@@ -114,6 +118,7 @@ async def derive(store, objects, *, provider_org_id: str, actor: str, dataset_id
     if base and not policy.train_bp + policy.validation_bp:
         raise errors.InvalidRequest("over a frozen holdout, new samples need train/validation")
     omitted, kept, placed, digests = [], [], {}, set()   # placed: base sample id -> its split
+    anchors = []            # base samples no longer readable: left out, their splits still bind
     for ref in parents:
         manifest = await store.resolve(ref, provider_org_id=provider_org_id)
         readable = set(await store.accessible_samples(ref, provider_org_id=provider_org_id,
@@ -122,13 +127,15 @@ async def derive(store, objects, *, provider_org_id: str, actor: str, dataset_id
         for sample in sorted(manifest.samples, key=lambda s: (s.content_digest, s.sample_id)):
             if sample.sample_id not in readable:
                 omitted.append({"sample_id": sample.sample_id, "reason": "grant_not_current"})
+                if ref == base:
+                    anchors.append(sample)
             elif sample.content_digest in digests:
                 omitted.append({"sample_id": sample.sample_id, "reason": "duplicate"})
             else:
                 kept.append(sample)
                 digests.add(sample.content_digest)
-                if ref == base:
-                    placed[sample.sample_id] = where[sample.sample_id]
+            if ref == base:
+                placed[sample.sample_id] = where[sample.sample_id]
     # families: union of samples sharing a group key or a near key
     parent: dict[str, str] = {}
 
@@ -136,12 +143,14 @@ async def derive(store, objects, *, provider_org_id: str, actor: str, dataset_id
         while parent.setdefault(x, x) != x:
             parent[x] = x = parent[parent[x]]         # path halving: near-linear families
         return x
-    for sample in kept:
+    # an anchor's content is read only to relate new samples to it (so its holdout stays
+    # frozen); it is never published
+    for sample in kept + anchors:
         near = near_key(await _body(objects, provider_org_id, sample.content_digest))
         for label in ("g:" + sample.group_key, *(("n:" + near,) if near else ())):
             parent[find(label)] = find(sample.sample_id)
     families: dict[str, list] = {}
-    for sample in kept:
+    for sample in kept + anchors:
         families.setdefault(find(sample.sample_id), []).append(sample)
     leaks, review, split = [], [], {}
     for members in sorted(families.values(), key=lambda f: min(s.sample_id for s in f)):
@@ -185,12 +194,28 @@ async def _live(objects, base: str, export_id: str) -> None:
         raise errors.Gone(f"export {export_id} was cancelled")
 
 
-def _redacted(body: dict, keys: list[str]) -> dict:
-    out = dict(body)
-    for name in ("original", "content"):
-        if isinstance(out.get(name), dict):
-            out[name] = {k: v for k, v in out[name].items() if k not in keys}
-    return out
+def _drop(node, path: list[str]):
+    """`node` without the value at `path` (a no-op where the path is absent)."""
+    if not isinstance(node, dict) or path[0] not in node:
+        return node
+    if len(path) == 1:
+        return {k: v for k, v in node.items() if k != path[0]}
+    return {**node, path[0]: _drop(node[path[0]], path[1:])}
+
+
+def _redacted(body: dict, keys: list[str], content_path: str | None) -> dict:
+    """Each key is a dotted path in the import spec's syntax, removed from the original
+    row; the content is re-read from what is left at the spec's content path, so a
+    structured content loses it too. Removing the content itself is refused."""
+    if not keys:
+        return body
+    original = body["original"]
+    for key in keys:
+        original = _drop(original, key.split("."))
+    content = _get(original, content_path) if content_path else _MISSING
+    if content is _MISSING:
+        raise errors.InvalidRequest("a redaction cannot remove a sample's content")
+    return {**body, "original": original, "content": content}
 
 
 async def export(store, objects, *, provider_org_id: str, dataset_ref: str, export_id: str,
@@ -211,26 +236,28 @@ async def export(store, objects, *, provider_org_id: str, dataset_ref: str, expo
                                                  purpose="training"))
     where = {i: n for n in SPLITS for i in getattr(manifest.splits, n)}
     keys = sorted(set(redact))
-    items, omitted, sources = [], [], {}
+    items, omitted, sources, paths = [], [], {}, {}      # paths: source -> its content path
     for sample in sorted(manifest.samples, key=lambda s: s.sample_id):
         reason = "holdout" if where[sample.sample_id] == "holdout" else \
             None if sample.sample_id in allowed else "grant_not_current"
         if reason:
             omitted.append({"sample_id": sample.sample_id, "reason": reason})
             continue
-        body = await _body(objects, provider_org_id, sample.content_digest)
-        items.append(lab.canonical({
-            "sample_id": sample.sample_id, "split": where[sample.sample_id],
-            "content_digest": sample.content_digest, "source_ref": sample.source_ref,
-            "grant_ref": sample.grant_ref, "record": _redacted(body, keys)}))
         if sample.source_ref not in sources:
             spec = await objects.get(spec_key(provider_org_id,
                                               lab.REF_RE.fullmatch(sample.source_ref).group(3)))
             spec = json.loads(spec) if spec is not None else {}
+            paths[sample.source_ref] = spec.get("fields", {}).get("content")
             sources[sample.source_ref] = {
                 "grant_ref": sample.grant_ref, "license": spec.get("license"),
                 "use_restrictions": spec.get("use_restrictions"),
                 "ownership": spec.get("ownership")}
+        body = await _body(objects, provider_org_id, sample.content_digest)
+        items.append(lab.canonical({
+            "sample_id": sample.sample_id, "split": where[sample.sample_id],
+            "content_digest": sample.content_digest, "source_ref": sample.source_ref,
+            "grant_ref": sample.grant_ref,
+            "record": _redacted(body, keys, paths[sample.source_ref])}))
     parts = []
     for n, start in enumerate(range(0, len(items), part_items)):
         data = b"".join(item + b"\n" for item in items[start:start + part_items])
