@@ -1,0 +1,68 @@
+{
+  "activity": "review",
+  "worktree": ".claude/worktrees/codex-w5-lab-contracts",
+  "branch": "codex/w5-lab-contracts",
+  "blockers": [],
+  "task": "F3",
+  "slice": "F3.a-c complete (one review, then publish)",
+  "head": "f63f040a",
+  "owned_paths": [
+    "apps/infrx-api/infrx/contracts/lab/",
+    "apps/infrx-api/tests/contracts/lab/",
+    "packages/shared/contracts/lab/"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/contracts/lab/test_lab_contracts.py (before impl)",
+      "exit": 2,
+      "summary": "ModuleNotFoundError infrx.contracts.lab (seam red)"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/contracts/lab/test_lab_contracts.py",
+      "exit": 0,
+      "summary": "53 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/lab/test_mutants.py",
+      "exit": 0,
+      "summary": "66 passed: 43 Python + 16 TS mutants killed, 5 self-tests"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/contracts tests/h",
+      "exit": 1,
+      "summary": "1395 passed, 3 failed (v2 PG projection: HarnessBusy, shared d1 lock held by codex-w5-trace-ship)"
+    },
+    {
+      "cmd": "make api-test",
+      "exit": 2,
+      "summary": "3788 passed, 853 failed, 8 errors: all real-PG HarnessBusy on shared 55432 lock (other LW1 lanes) or dependent baselines; 0 in lab/h suites"
+    },
+    {
+      "cmd": "make lab-test lab-lint lab-typecheck lab-build lab-mutants",
+      "exit": 0,
+      "summary": "green / not-run placeholders (no apps/lab/app)"
+    },
+    {
+      "cmd": "pnpm exec tsc --noEmit --strict ... packages/shared/contracts/lab/{index,fakes}.ts",
+      "exit": 0,
+      "summary": "strict typecheck clean"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "code complete; one review round + WR-F3-1..3 wiring; F2P-style freeze analogue (plan 3/6/12)",
+    "at": "2026-09-27T10:05Z"
+  },
+  "wiring_requests": [
+    "WR-F3-1 contracts/__init__ _SUBMODULES += lab (+ pin line)",
+    "WR-F3-2 Makefile api-mutants += tests/contracts/lab/test_mutants.py tests/h/test_mutants.py",
+    "WR-F3-3 packages/shared/package.json exports ./contracts/lab{,/fakes,/fixtures.json} + apps/lab pnpm install",
+    "WR-F3-4 optional lab-typecheck line for packages/shared/contracts/lab"
+  ],
+  "evidence": [
+    "research/plan/evidence/f/F3-f63f040.md"
+  ]
+}

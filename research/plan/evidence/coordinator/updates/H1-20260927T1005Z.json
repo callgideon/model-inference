@@ -1,0 +1,45 @@
+{
+  "activity": "review",
+  "worktree": ".claude/worktrees/codex-w5-lab-contracts",
+  "branch": "codex/w5-lab-contracts",
+  "blockers": [],
+  "task": "H1",
+  "slice": "H1.a-c complete against the fake L2 rights port",
+  "head": "20de8e40",
+  "owned_paths": [
+    "apps/infrx-api/infrx/harnesses/",
+    "apps/infrx-api/tests/h/"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/h/test_harness.py (before impl)",
+      "exit": 2,
+      "summary": "ImportError infrx.harnesses (seam red)"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/h/test_harness.py",
+      "exit": 0,
+      "summary": "19 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/h/test_mutants.py",
+      "exit": 0,
+      "summary": "30 passed: 25/25 mutants killed, 3 self-tests"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "code complete; review round + real L2 port case after L2 merges (integration dependency)",
+    "at": "2026-09-27T10:05Z"
+  },
+  "wiring_requests": [
+    "WR-H1-1 L2 exposes authorize(gate, *, provider_org_id, dataset_ref) raising Forbidden",
+    "WR-H1-2 Makefile api-mutants += tests/h/test_mutants.py"
+  ],
+  "evidence": [
+    "research/plan/evidence/h/H1-20de8e4.md"
+  ]
+}
