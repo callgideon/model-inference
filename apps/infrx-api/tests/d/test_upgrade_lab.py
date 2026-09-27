@@ -20,7 +20,12 @@ pytestmark = pytest.mark.skipif(_reason is not None,
 DB = f"{pgharness.DATABASE}_upgrade_lab"
 
 #: What each Lab migration adds. A new Lab migration extends these three, nothing else.
-NEW_TABLES = {"infrx.lab_access_grants"}                                    # 0027
+NEW_TABLES = {"infrx.lab_access_grants",                                    # 0027
+              *(f"infrx.{t}" for t in ("lab_sources", "lab_records",          # 0029
+                                       "lab_dataset_samples", "lab_eval_runs",
+                                       "lab_eval_cases", "lab_eval_attempts",
+                                       "lab_eval_results", "lab_checkpoint_receipts",
+                                       "lab_outbox"))}
 SEEDED: dict[str, int] = {}                                                 # none yet
 
 
