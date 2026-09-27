@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-27 09:14Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 161, updated 2026-09-27 09:14Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-27 09:15Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 161, updated 2026-09-27 09:15Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -31,7 +31,7 @@ Remaining, in order:
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 2 active lanes, 2 reserved.
+- Agent slots: 16 total, 8 active lanes, 2 reserved.
 - Validation: 0 error(s), 9 warning(s).
 
 ### Actionable blockers
@@ -208,6 +208,12 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | TEST-USER | support (operator script) infra/app/create-test-user.py: a confirmed Supabase user with the signup grant, no email verification (user decision 2026-09-27); tests on a fake GoTrue/PostgREST + the app-c0 stack | complete | codex/test-user | 17cc78bd → 206fe900 | ports app-c0 55451, prefix infrx-app-c0-, db app-c0 | 2026-09-27 05:10Z | DONE: merged --no-ff at 947d72bc (fix round: header-unsafe key exits 2 unechoed; existing address refused unless --reset-existing). Hosted run after the install: export the two SSM values per operations.md, --dry-run, then create the internal test user(s) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 05:10Z; basis: merged |
 | LW0 | support (post-launch Lab pre-wave; wave5-plan §3) rulings R150–R155, tasklocal band 57500–57599 + Lab tracks/blocks, D10 split fix, Lab make targets, apps/lab package, progress.py activated category | complete | codex/lw0 | dcfd9d2d → e1c11a64 | ports none, prefix -, db - | 2026-09-27 09:14Z | DONE: merged --no-ff at 9a6c3685 = the Lab base for LW1 (WR-LW0-5); WR-LW0-1/2/6 applied by the coordinator; WR-LW0-3 (waves in the tracker) and minors C3/C4 carried; WR-LW0-4 (P-21 sysctl) is the user's | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 09:14Z; basis: merged |
 | CERTIFY-WINDOW | support (certify tooling) box steps 76/77/79/80 + the 78 RUN fix, the resumable sequencer infra/rollout/certify-window.sh, certify-h6.sh, fill/validate helpers, runbook wording fixes (from certify-prep-2026-09-27.md) | running | codex/certify-window | b5339c55 → — | ports none (fake tools), prefix -, db - | 2026-09-27 09:14Z | handback → merge → run the sequencer on the live box (A1–A7; ~8–12 h) → BACKEND-READY cells | 2–5 h remaining (likely 3 h), confidence medium, estimated 2026-09-27 09:14Z; basis: four steps + a sequencer + tests |
+| W5-LAB-SQL | support (wave5 LW1 lane lab-sql; wave5-plan §5) tasks L2-SQL → D6F → D7 (after F3); workflow wf_d4b18832-53c; Opus implementer + 2 lenses + one fix round | running | codex/w5-lab-sql | 9a6c3685 → — | ports dlab 57500 (decoy 27500), prefix infrx-dlab-, db dlab | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 2–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
+| W5-LAB-ACCESS | support (wave5 LW1 lane lab-access; wave5-plan §5) tasks L2; workflow wf_056bcc43-fb8; Opus implementer + 2 lenses + one fix round | running | codex/w5-lab-access | 9a6c3685 → — | ports l2 57501, prefix infrx-l2-, db l2 | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
+| W5-LAB-APP | support (wave5 LW1 lane lab-app; wave5-plan §5) tasks L1; workflow wf_3d1c0f24-3fd; Opus implementer + 2 lenses + one fix round | running | codex/w5-lab-app | 9a6c3685 → — | ports l4 57503; Lab dev 3100, prefix infrx-l4-, db l4 | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 4–16 h remaining (likely 8 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
+| W5-LAB-CONTRACTS | support (wave5 LW1 lane lab-contracts; wave5-plan §5) tasks F3 → H1; workflow wf_aaf54f13-157; Opus implementer + 2 lenses + one fix round | running | codex/w5-lab-contracts | 9a6c3685 → — | ports fake-only, prefix infrx-fake-only-, db fake-only | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 5–20 h remaining (likely 10 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
+| W5-TRACE-SHIP | support (wave5 LW1 lane trace-ship; wave5-plan §5) tasks T2I; workflow wf_7f35c7d0-e41; Opus implementer + 2 lenses + one fix round | running | codex/w5-trace-ship | 9a6c3685 → — | ports t2i 57540/57541/57542, prefix infrx-t2i-, db t2i | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 4–16 h remaining (likely 8 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
+| W5-DISCOVERY | support (wave5 LW1 lane discovery; wave5-plan §5) tasks X1, X3, X5; workflow wf_c1a1f58a-491; Opus implementer + 2 lenses + one fix round | running | codex/w5-discovery | 9a6c3685 → — | ports none (documents), prefix infrx-none-, db none | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 12–36 h remaining (likely 18 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
 
 ### Queues and locks
 
@@ -423,6 +429,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-27 09:15Z UTC, coordinator (LW1): LW1 dispatched from the Lab base 9a6c3685: six lanes (lab-sql, lab-access, lab-app, lab-contracts, trace-ship, discovery) as parallel workflows; the live certify/E1B window follows the CERTIFY-WINDOW lane
 - 2026-09-27 09:14Z UTC, tracker: rejected update: stale: at 2026-09-27T09:10:00Z is not newer than lane LW0 state 2026-09-27T09:14:00Z
 - 2026-09-27 09:14Z UTC, tracker: rejected update: stale: at 2026-09-27T08:57:00Z is not newer than lane LW0 state 2026-09-27T09:14:00Z
 - 2026-09-27 09:14Z UTC, coordinator (LW0): LW0 merged at 9a6c3685 (Lab base for LW1); P-17 Lab activation recorded under the user's post-launch directive; LW1 lanes (lab-sql, lab-access, lab-app, lab-contracts, trace-ship, discovery) dispatching from 9a6c3685; CERTIFY-WINDOW lane running

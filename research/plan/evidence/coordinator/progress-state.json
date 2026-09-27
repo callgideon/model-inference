@@ -20,7 +20,7 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 161,
-  "updated": "2026-09-27T09:14:01Z",
+  "updated": "2026-09-27T09:15:00Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -4122,6 +4122,210 @@
         "infra/rollout/steps/7x-*.sh"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "W5-LAB-SQL",
+      "task": null,
+      "slice": "(wave5 LW1 lane lab-sql; wave5-plan §5) tasks L2-SQL → D6F → D7 (after F3); workflow wf_d4b18832-53c; Opus implementer + 2 lenses + one fix round",
+      "agent": "opus",
+      "branch": "codex/w5-lab-sql",
+      "worktree": ".claude/worktrees/codex-w5-lab-sql",
+      "base": "9a6c3685",
+      "head": null,
+      "isolation": {
+        "ports": "dlab 57500 (decoy 27500)",
+        "prefix": "infrx-dlab-",
+        "db": "dlab"
+      },
+      "activity": "running",
+      "started": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T09:15:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "estimate": {
+        "optimistic_h": 2,
+        "likely_h": 6,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW1 estimates",
+        "at": "2026-09-27T09:15:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW1 lab-sql"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-LAB-ACCESS",
+      "task": null,
+      "slice": "(wave5 LW1 lane lab-access; wave5-plan §5) tasks L2; workflow wf_056bcc43-fb8; Opus implementer + 2 lenses + one fix round",
+      "agent": "opus",
+      "branch": "codex/w5-lab-access",
+      "worktree": ".claude/worktrees/codex-w5-lab-access",
+      "base": "9a6c3685",
+      "head": null,
+      "isolation": {
+        "ports": "l2 57501",
+        "prefix": "infrx-l2-",
+        "db": "l2"
+      },
+      "activity": "running",
+      "started": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T09:15:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "estimate": {
+        "optimistic_h": 3,
+        "likely_h": 6,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW1 estimates",
+        "at": "2026-09-27T09:15:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW1 lab-access"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-LAB-APP",
+      "task": null,
+      "slice": "(wave5 LW1 lane lab-app; wave5-plan §5) tasks L1; workflow wf_3d1c0f24-3fd; Opus implementer + 2 lenses + one fix round",
+      "agent": "opus",
+      "branch": "codex/w5-lab-app",
+      "worktree": ".claude/worktrees/codex-w5-lab-app",
+      "base": "9a6c3685",
+      "head": null,
+      "isolation": {
+        "ports": "l4 57503; Lab dev 3100",
+        "prefix": "infrx-l4-",
+        "db": "l4"
+      },
+      "activity": "running",
+      "started": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T09:15:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "estimate": {
+        "optimistic_h": 4,
+        "likely_h": 8,
+        "pessimistic_h": 16,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW1 estimates",
+        "at": "2026-09-27T09:15:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW1 lab-app"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-LAB-CONTRACTS",
+      "task": null,
+      "slice": "(wave5 LW1 lane lab-contracts; wave5-plan §5) tasks F3 → H1; workflow wf_aaf54f13-157; Opus implementer + 2 lenses + one fix round",
+      "agent": "opus",
+      "branch": "codex/w5-lab-contracts",
+      "worktree": ".claude/worktrees/codex-w5-lab-contracts",
+      "base": "9a6c3685",
+      "head": null,
+      "isolation": {
+        "ports": "fake-only",
+        "prefix": "infrx-fake-only-",
+        "db": "fake-only"
+      },
+      "activity": "running",
+      "started": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T09:15:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "estimate": {
+        "optimistic_h": 5,
+        "likely_h": 10,
+        "pessimistic_h": 20,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW1 estimates",
+        "at": "2026-09-27T09:15:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW1 lab-contracts"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-TRACE-SHIP",
+      "task": null,
+      "slice": "(wave5 LW1 lane trace-ship; wave5-plan §5) tasks T2I; workflow wf_7f35c7d0-e41; Opus implementer + 2 lenses + one fix round",
+      "agent": "opus",
+      "branch": "codex/w5-trace-ship",
+      "worktree": ".claude/worktrees/codex-w5-trace-ship",
+      "base": "9a6c3685",
+      "head": null,
+      "isolation": {
+        "ports": "t2i 57540/57541/57542",
+        "prefix": "infrx-t2i-",
+        "db": "t2i"
+      },
+      "activity": "running",
+      "started": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T09:15:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "estimate": {
+        "optimistic_h": 4,
+        "likely_h": 8,
+        "pessimistic_h": 16,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW1 estimates",
+        "at": "2026-09-27T09:15:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW1 trace-ship"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-DISCOVERY",
+      "task": null,
+      "slice": "(wave5 LW1 lane discovery; wave5-plan §5) tasks X1, X3, X5; workflow wf_c1a1f58a-491; Opus implementer + 2 lenses + one fix round",
+      "agent": "opus",
+      "branch": "codex/w5-discovery",
+      "worktree": ".claude/worktrees/codex-w5-discovery",
+      "base": "9a6c3685",
+      "head": null,
+      "isolation": {
+        "ports": "none (documents)",
+        "prefix": "infrx-none-",
+        "db": "none"
+      },
+      "activity": "running",
+      "started": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T09:15:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "estimate": {
+        "optimistic_h": 12,
+        "likely_h": 18,
+        "pessimistic_h": 36,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW1 estimates",
+        "at": "2026-09-27T09:15:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW1 discovery"
+      ],
+      "wiring_requests": []
     }
   ],
   "review_queue": [],
@@ -6816,6 +7020,12 @@
       "by": "tracker",
       "what": "rejected update: stale: at 2026-09-27T09:10:00Z is not newer than lane LW0 state 2026-09-27T09:14:00Z",
       "source": "updates/LW0-20260927T0910Z.json"
+    },
+    {
+      "at": "2026-09-27T09:15:00Z",
+      "by": "coordinator (LW1)",
+      "what": "LW1 dispatched from the Lab base 9a6c3685: six lanes (lab-sql, lab-access, lab-app, lab-contracts, trace-ship, discovery) as parallel workflows; the live certify/E1B window follows the CERTIFY-WINDOW lane",
+      "source": "research/plan/evidence/coordinator/LW0-7894418.md"
     }
   ],
   "history": {
