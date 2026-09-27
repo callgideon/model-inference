@@ -103,7 +103,11 @@ CHECKS = {
 # to its committed evidence (the scratch verdict.json it names is not durable: a later run
 # reuses that directory, so the evidence document is the reference the runner reads). E3C-CELLS
 # added the scenarios that carry DUR-FENCE (s14), DUR-CAP (s15) and CREDIT-RATE (s16); its final
-# run (all 16 scenarios, 12 controls) is the reference.
+# run (all 16 scenarios, 12 controls) is the committed evidence named below. The RELEASE run is
+# the reference: E3C final at d3a99e01, 16/16 scenarios and 12/12 controls on the same scenario
+# set (research/plan/evidence/coordinator/RELEASE-d3a99e01.md). SWEEP-1's run at 5620546c (16
+# scenarios, 14 controls: + nc-dur-cap-org / nc-dur-cap-key) is the next candidate; adopting it
+# is a coordinator change of the values below (WR-SWEEP1-3), not made here.
 E3C_FINAL = {"name": "E3C-CELLS", "run_head": "9227e9ed", "tip": "cce9224c",
              "evidence": "research/plan/evidence/e3c/E3C-CELLS-9227e9e.md",
              "verdict_json": "<scratchpad>/cells/final/verdict.json (E3C-CELLS final run)"}

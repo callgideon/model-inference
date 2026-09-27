@@ -632,8 +632,10 @@ def test_e1b_window__cells_run_in_order_one_container_each_with_only_parser_flag
     assert not any(support.MARKER in a for call in calls for a in call)
     runs = [c for c in calls if c[0] == "run"]
     names = [r[r.index("--name") + 1] for r in runs]
+    # SWEEP-2 (WR-SWEEP1-1, E1BP-11): WC-2's decisive c = 1 gateway half follows its direct legs
     assert names == [f"infrx-e1b-{n}" for n in ("L1-c1", "L1-c2", "L1-c4", "L1-c8", "pair-r0.5",
-                                                "pair-r2.0", "L3", "L5", "forms", "sop", "sop", "sop")]
+                                                "pair-r2.0", "pair-c1", "L3", "L5", "forms",
+                                                "sop", "sop", "sop")]
     bench_flags, dataset_flags = _parser_flags(MARLIN / "bench.py"), _parser_flags(MARLIN / "dataset.py")
     for r in runs:
         name = r[r.index("--name") + 1].removeprefix("infrx-e1b-")
@@ -654,11 +656,14 @@ def test_e1b_window__cells_run_in_order_one_container_each_with_only_parser_flag
             assert flags <= dataset_flags, flags - dataset_flags
     out = pathlib.Path(re.search(r"^out=(\S+)$", done.stdout, re.M).group(1))
     assert [line.split()[0] for line in (out / "cells.tsv").read_text().splitlines()] == \
-        ["WC-1"] * 4 + ["WC-2"] * 2 + ["WC-3", "WC-4", "WC-5", "WC-8"]
+        ["WC-1"] * 4 + ["WC-2"] * 3 + ["WC-3", "WC-4", "WC-5", "WC-8"]
     stamped = json.loads((out / "profiles" / "pair-r2.0.json").read_text())
     assert stamped["measurement"]["rate_per_s"] == 2.0 and stamped["measurement"]["arrival"] == "open-loop"
     assert stamped["workload"]["dataset_version"] == "e1b-w1-pair-r2.0"
     assert stamped["identity"]["run_id"] == "e1b-w1-direct-pair-r2.0"
+    stamped = json.loads((out / "profiles" / "pair-c1.json").read_text())   # WC-1 c = 1's schedule
+    assert (stamped["measurement"]["concurrency"], stamped["workload"]["dataset_version"]) == \
+        (1, "e1b-w1-pair-c1")
     stamped = json.loads((out / "profiles" / "L1-c4.json").read_text())
     assert stamped["measurement"]["concurrency"] == 4 and stamped["measurement"]["rate_per_s"] is None
     (stub / "docker.log").unlink()

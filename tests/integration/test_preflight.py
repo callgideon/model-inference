@@ -6,6 +6,7 @@ profile, a skip or a broken seam into a pass.
 from __future__ import annotations
 
 import http.server
+import importlib.util
 import json
 import os
 import shutil
@@ -41,9 +42,13 @@ def without_docker(tmp_path: Path) -> dict:
     return {**os.environ, "PATH": str(bin_)}
 
 
-def test_the_environment_manifest_is_self_consistent():
+def test_the_environment_manifest_is_self_consistent(monkeypatch):
     """Every profile names only tools, images and namespaces the manifest defines, and no
-    two namespaces share a port - a typo would otherwise be a KeyError at preflight time."""
+    two namespaces share a port - a typo would otherwise be a KeyError at preflight time.
+    SWEEP-2 (SW1-R3/RV-2): the one e2c container the stale-container rule cannot see is Q's,
+    named by tests/q/vkharness.py (not tasklocal) on the valkey-q port; the manifest names it
+    and ENVIRONMENT.md says why. Oracle: vkharness renaming it, or e2c's prefixes starting to
+    cover it, without the manifest following."""
     for name, profile in ENV["profiles"].items():
         assert set(profile["tools"]) <= set(ENV["tools"]), name
         assert set(profile["images"]) <= set(ENV["images"]), name
@@ -56,6 +61,13 @@ def test_the_environment_manifest_is_self_consistent():
         ([own["postgres"].host_port, own["valkey"].host_port, own["s3"].host_port,
           own["valkey-q"].host_port],
          ["infrx-e2c-postgres", "infrx-e2c-valkey", "infrx-e2c-s3", "infrx-e2c-valkey-q"])
+    monkeypatch.setenv("INFRX_Q_VALKEY_PORT", str(own["valkey-q"].host_port))  # as gates.py sets it
+    spec = importlib.util.spec_from_file_location(
+        "vkharness_e2c", pf.REPO / "apps/infrx-api/tests/q/vkharness.py")      # the checkout
+    vkharness = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(vkharness)                  # names only: nothing starts at import
+    assert ENV["namespaces"]["e2c"]["undetected_containers"] == [vkharness.CONTAINER]
+    assert not vkharness.CONTAINER.startswith(tuple(pf.namespace(ENV["namespaces"]["e2c"])[1]))
     assert all("@sha256:" in image["ref"] for image in ENV["images"].values())
     # layer 3 (integration-l3, backend-certify) also binds the E3B PostgREST pair
     sys.path.insert(0, str(HERE / "backend"))

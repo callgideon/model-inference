@@ -157,7 +157,11 @@
         "s3",
         "valkey-q"
       ],
-      "use": "consumer-local's API stages: INFRX_D_TASK=e2c (infrx-e2c-postgres, database infrx_e2c), INFRX_D2_VALKEY_PORT/_CONTAINER (the e2c Valkey port), INFRX_Q_VALKEY_PORT = e2c valkey-q 55430 (container infrx-q3-valkey-55430), INFRX_M_S3_ENDPOINT (infrx-e2c-s3, the MinIO pin the gate starts itself); ports from infrx/contracts/tasklocal.py"
+      "use": "consumer-local's API stages: INFRX_D_TASK=e2c (infrx-e2c-postgres, database infrx_e2c), INFRX_D2_VALKEY_PORT/_CONTAINER (the e2c Valkey port), INFRX_Q_VALKEY_PORT = e2c valkey-q 55430 (container infrx-q3-valkey-55430), INFRX_M_S3_ENDPOINT (infrx-e2c-s3, the MinIO pin the gate starts itself); ports from infrx/contracts/tasklocal.py",
+      "undetected_containers": [
+        "infrx-q3-valkey-55430"
+      ],
+      "undetected_note": "valkey-q's container is named by tests/q/vkharness.py (q3's Valkey container + '-' + the port), not by tasklocal (whose name infrx-e2c-valkey-q no container uses), so it sits outside this namespace's infrx-e2c- prefixes and preflight's stale-container rule does not see it. Not a blocker by design: a stopped leftover is started and reused by vkharness (never duplicated), and a running one holds 55430, which the port probe reports busy (BLOCKED, held_by naming it). SWEEP-2 SW1-R3/RV-2; test_preflight pins the name against vkharness"
     },
     "e2": {
       "harness": "e2",

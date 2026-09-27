@@ -1083,10 +1083,11 @@ def test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_fi
 
 
 def test_a_d_mode_recovery_run_keeps_the_parents_tmpdir_for_the_pgharness_lock(monkeypatch):
-    """I3B R2-B (DR-2): in D mode (INFRX_I3B_PG=d) a recovery suite drives D's pgharness,
-    whose port lock is `gettempdir()/<container>-<port>.lock`. Its mutant run therefore gets
-    NO private TMPDIR, so the child's lock lands in the parent's tempdir with every other run
-    of this TMPDIR; any other suite, or a recovery suite outside D mode, keeps its private one."""
+    """I3B R2-B (DR-2): in D mode (INFRX_I3B_PG=d) a recovery suite drives D's pgharness. Its
+    mutant run gets NO private TMPDIR; any other suite, or a recovery suite outside D mode,
+    keeps its private one. Since WR-BM-1 (SWEEP-1) the port lock is `/tmp/<container>-<port>.lock`
+    whatever TMPDIR is (pgharness.lock_path), so the lock no longer depends on this; the rule
+    still keeps the run's other temp files beside the parent's."""
     import dataclasses
 
     import mutants
