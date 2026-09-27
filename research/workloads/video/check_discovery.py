@@ -26,6 +26,13 @@ SPECS = {
                 "Response shape", "Deployment location", "Causal labelling rule", "Ground truth", "Deadline",
                 "Freshness threshold", "Quality threshold", "Throughput threshold", "Duplicate-event policy",
                 "Overload policy", "Serving capability", "Transport", "Allocated capacity")),
+    "robotics/robot-freshness-contract.md": Spec(
+        inputs=("P-14",),
+        fields=("Policy artifact", "Robot and task", "Camera schema", "Proprioception and state schema",
+                "Action schema", "Normalization", "Action horizon", "Clocks", "ROS2 and recording versions",
+                "End-to-end latency", "Freshness target", "Placement", "Stale-action rejection",
+                "Local control owner", "Proposed-versus-executed evidence", "Offline and simulator acceptance",
+                "Hardware trial authorization", "Adapter and MCAP mapping")),
 }
 
 BLOCKED = re.compile(r"BLOCKED: (P-\d+) — (.{12,})")
