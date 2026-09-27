@@ -1,0 +1,54 @@
+{
+ "activity": "review",
+ "head": "dd79f8cd",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lw1-integration",
+ "branch": "codex/w5-lw1-integration",
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LW1I-1 tests/integration/test_harness.py:222 migration pin += 0030_lab_access_self.sql (after D7's 0029)",
+  "WR-LW1I-2 apps/infrx-api/tests/d/checks.py EXPECTED_FUNCTION_CALLERS += \"public.lab_provider_memberships()\": {\"authenticated\", \"service_role\"} (fixes 2 api-test failures; proof 40 passed on l4)",
+  "WR-LW1I-3 Makefile:21 api-mutants += tests/l/access/test_mutants.py (WR-L2-2) and tests/d/test_l2sql_self_mutants.py",
+  "WR-LW1I-4 lab-sql/D7: implement infrx.lab.access.DatasetSources.uses(provider_org_id, dataset_ref) over D7.a source/grant refs",
+  "WR-LW1I-5 (optional) register the pg pytest marker in pyproject.toml"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/L2-INT-dd79f8c.md",
+  "research/plan/evidence/coordinator/updates/H1-20260927T1320Z.json"
+ ],
+ "task": "H1",
+ "slice": "LW1 integration: WR-H1-1 real-port case (async bind over LabAccess.authorize)",
+ "owned_paths": [
+  "apps/infrx-api/infrx/harnesses/",
+  "apps/infrx-api/tests/h/"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_harness.py (red, 8e6f0b72)",
+   "exit": 1,
+   "summary": "4 failed (bind not awaitable; real-port case)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_harness.py tests/l/access/test_access.py",
+   "exit": 0,
+   "summary": "47 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_mutants.py",
+   "exit": 0,
+   "summary": "35 passed: 27/27 fake + 2/2 PG mutants killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 make api-test",
+   "exit": 2,
+   "summary": "4871 passed, 56 skipped, 9 xfailed, 9 failed: 2 = WR-LW1I-2 (execute surface lists 0030's function; 40 passed with the patch), 7 = test_outbox_relay[valkey] HarnessBusy (another lane's d2 valkey lock)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "green on the real membership+grant port; dataset sources fake until D7 (WR-LW1I-4); one verify round",
+  "at": "2026-09-27T13:20Z"
+ }
+}
