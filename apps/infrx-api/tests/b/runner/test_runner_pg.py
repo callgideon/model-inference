@@ -11,12 +11,13 @@ mid-batch; duplicate delivery; an exhausted dev wallet, funded again; data revok
 then a revocation, then a delivery that resumes the created run.
 Outside the mutant runner (N2/T2I's pattern); the oracles are the fake-world cases' mutants.
 
-    INFRX_D_TASK=b1 uv run --frozen pytest -q tests/b/runner/test_runner_pg.py
+    INFRX_D_TASK=b1 uv run --frozen pytest -q tests/b/runner/test_runner_pg.py   # or b3
 """
 from __future__ import annotations
 
 import asyncio
 import os
+import socket
 
 import psycopg
 import pytest
@@ -33,15 +34,25 @@ from infrx.state.lab_data import PgLabDataStore
 from ...d import pgharness
 from ...d import test_d7_lab_data as d7
 from ...d import test_l2sql_access as l2
-from .world import (DEPLOYMENT, EVALUATOR, NEMO, RATE_CARD, SPEC, Crash, DevWallet, content,
-                    eval_run, harness, manifest, serve, uid)
+from .world import (DEPLOYMENT, DEV, EVALUATOR, NEMO, RATE_CARD, SPEC, Crash, DevWallet, access,
+                    content, eval_run, harness, manifest, serve, uid)
 
-_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") == "b1" else \
-    "PostgreSQL only on the b1 task-local key (INFRX_D_TASK=b1)"
+TASK = os.environ.get("INFRX_D_TASK")
+_reason = pgharness.unavailable() if TASK in ("b1", "b3") else \
+    "PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)"
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_b1"
-PORT = local_services("b1")["model-fake"].host_port           # 57521
+
+
+def _free_port() -> int:
+    """b3 (the eval-ops lane, WR-B-4) has no model-fake port: an ephemeral loopback one."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+PORT = local_services("b1")["model-fake"].host_port if TASK != "b3" else _free_port()
 KEY = "provider-dev-test-key"
 LIMITS = Limits(lease_s=30, max_attempts=3, dispatch_retries=2, concurrency=2)
 N = 4
@@ -76,7 +87,7 @@ class Case:
                                              provider_org_id=NEMO, actor="dev@nemo"))
         self.payload = eval_run(dataset, harness_ref, run=n)
         self.frozen = run(runner.freeze(self.store, self.payload, evaluator=SPEC,
-                                        provider_org_id=NEMO, actor="dev@nemo"))
+                                        access=access(), user_id=DEV, provider_org_id=NEMO))
         self.run_id = self.frozen.run.run_id
         self.wallet = DevWallet(funded)
         self.ids = sorted(s["sample_id"] for s in self.manifest["samples"])
@@ -274,8 +285,8 @@ def test_b1_pg_a_created_run_resumes_after_a_revocation_and_ends_revoked(world, 
         d7.advance(c.conn, 31)
         assert run(c.store.recover()) >= 1
         with pytest.raises(errors.Forbidden):
-            run(runner.freeze(c.store, c.payload, evaluator=SPEC, provider_org_id=NEMO,
-                              actor="dev@nemo"))
+            run(runner.freeze(c.store, c.payload, evaluator=SPEC, access=access(),
+                              user_id=DEV, provider_org_id=NEMO))
         again = run(runner.resume(c.store, c.run_id, evaluator=SPEC, provider_org_id=NEMO))
         assert (again.run_ref, again.cases, again.limit) == (
             c.frozen.run_ref, c.frozen.cases, c.frozen.limit)
