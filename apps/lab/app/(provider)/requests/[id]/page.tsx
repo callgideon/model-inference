@@ -1,0 +1,29 @@
+import { requireProviderWorkspace } from "@/lib/auth/guard";
+import { reviewRequestFeedback } from "@/lib/services/review/actions";
+import { ContentPanel, FeedbackPanel, MetadataPanel } from "@/components/traces/detail/panels";
+import { tracePorts } from "@/components/traces/detail/port";
+import { contentView, TRACE_COPY } from "@/components/traces/detail/view";
+
+export const metadata = { title: "Request · infrx Lab" };
+
+// V2: one request on the provider's own deployments. The trace read and C3F's feedback are read
+// independently, so feedback accepted before the projection lands still shows (FEEDBACK-ACK). Content
+// is read through C2 only when asked for (?content=1).
+export default async function RequestDetail({ params, searchParams }: PageProps<"/requests/[id]">) {
+  const workspace = await requireProviderWorkspace();
+  const actor = { providerId: workspace.providerId, role: workspace.role };
+  const { id } = await params;
+  const wanted = (await searchParams).content === "1";
+  const { traces, content } = tracePorts();
+  const [trace, feedback] = await Promise.all([traces.detail(actor, id), reviewRequestFeedback(id)]);
+  const shown = trace.ok ? await contentView(content, actor, trace.value, wanted) : null;
+  return (
+    <>
+      <h1>Request</h1>
+      {!trace.ok && <p role="alert">{TRACE_COPY[trace.reason]}</p>}
+      {trace.ok && <MetadataPanel detail={trace.value} />}
+      {trace.ok && shown !== null && <ContentPanel view={shown} href={`/requests/${encodeURIComponent(trace.value.request_id)}?content=1`} />}
+      <FeedbackPanel result={feedback} />
+    </>
+  );
+}
