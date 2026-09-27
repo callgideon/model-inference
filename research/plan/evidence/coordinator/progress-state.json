@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 166,
-  "updated": "2026-09-27T10:43:46Z",
+  "revision": 168,
+  "updated": "2026-09-27T11:10:35Z",
   "agent_slots": {
     "total": 16,
-    "active": 3,
+    "active": 2,
     "reserved": 2,
     "note": "Session 03 post-launch: CERTIFY-WINDOW + six LW1 lanes (wave5-plan) running; certify/E1B on the live box after CERTIFY-WINDOW merges."
   },
@@ -4096,27 +4096,35 @@
       "branch": "codex/certify-window",
       "worktree": ".claude/worktrees/codex-certify-window",
       "base": "b5339c55",
-      "head": null,
+      "head": "231539eb",
       "isolation": {
         "ports": "none (fake tools)",
         "prefix": "-",
         "db": "-"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-27T09:02:00Z",
-      "updated": "2026-09-27T09:14:00Z",
+      "updated": "2026-09-27T11:10:00Z",
       "blocker": null,
-      "next_action": "handback → merge → run the sequencer on the live box (A1–A7; ~8–12 h) → BACKEND-READY cells",
+      "next_action": "DONE: merged --no-ff at 2fed3e23; the window runs next via infra/rollout/certify-window.sh (A1–A7; TENANT2_USER=c5082915…; VIDEO_FILE/CORPUS_CACHE for the later steps); minors CW-4..9, R3..R6 carried",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 3,
-        "pessimistic_h": 5,
-        "confidence": "medium",
-        "basis": "four steps + a sequencer + tests",
-        "at": "2026-09-27T09:14:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T11:10:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/e/CERTIFY-WINDOW-19d3c22.md"
+      ],
+      "commands": [
+        {
+          "cmd": "tests/i test_rollout + test_ops_steps; mutants; test_runbooks; DRY_RUN plan; coordinator rerun at the merge",
+          "exit": 0,
+          "summary": "39 passed; 75/75 killed; 13; 44 plan lines / 19 stop conditions; 43 passed at the merge"
+        }
+      ],
       "owned_paths": [
         "infra/rollout/certify-window.sh",
         "infra/rollout/steps/7x-*.sh"
@@ -7145,6 +7153,24 @@
       "by": "tracker",
       "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
       "source": "updates/T2I-20260927T1037Z.json"
+    },
+    {
+      "at": "2026-09-27T11:10:00Z",
+      "by": "coordinator (CERTIFY)",
+      "what": "CERTIFY-WINDOW merged at 2fed3e23 (steps 76/77/78/79/80, the sequencer, fill/validate/h6 helpers, runbook fixes); the live certify + E1B window starts (prep76 → o3 → H4-check → H5 → H6 → profiles77 → freeze → WC-0 → certify (~4.5–6 h) → report/fetch → E1B cells → WC-6/7 → tenant-2 → journey legs → WC-9 → drills → cleanup)",
+      "source": "research/plan/evidence/e/CERTIFY-WINDOW-19d3c22.md"
+    },
+    {
+      "at": "2026-09-27T11:10:35Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T10:02:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z",
+      "source": "updates/CERTIFY-WINDOW-20260927T1002Z.json"
+    },
+    {
+      "at": "2026-09-27T11:10:35Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T10:46:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z",
+      "source": "updates/CERTIFY-WINDOW-20260927T1046Z.json"
     }
   ],
   "history": {
@@ -7931,10 +7957,20 @@
       "status": "rejected",
       "at": "2026-09-27T10:37:00Z",
       "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "CERTIFY-WINDOW-20260927T1002Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:02:00Z",
+      "reason": "stale: at 2026-09-27T10:02:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z"
+    },
+    "CERTIFY-WINDOW-20260927T1046Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T10:46:00Z",
+      "reason": "stale: at 2026-09-27T10:46:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T10:43:46Z",
+    "computed_at": "2026-09-27T11:10:35Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,

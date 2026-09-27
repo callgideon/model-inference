@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-27 10:43Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 166, updated 2026-09-27 10:43Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-27 11:10Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 168, updated 2026-09-27 11:10Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -31,8 +31,8 @@ Remaining, in order:
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 5 active lanes, 2 reserved.
-- Validation: 0 error(s), 9 warning(s).
+- Agent slots: 16 total, 4 active lanes, 2 reserved.
+- Validation: 0 error(s), 7 warning(s).
 
 ### Actionable blockers
 
@@ -124,7 +124,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (62.0 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (62.4 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -207,7 +207,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | TRACKER-PRUNE | support (tracker) v1 launch scope headline; superseded hidden; deferred collapsed | complete | codex/tracker-prune | 17cc78bd → e9b2ff0b | ports none, prefix -, db - | 2026-09-27 04:53Z | DONE: merged --no-ff at da13c2b6; WR-TP-1 (this lane row) and WR-TP-2 (test_validate_plan C0→I3) applied by the coordinator | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 04:53Z; basis: merged |
 | TEST-USER | support (operator script) infra/app/create-test-user.py: a confirmed Supabase user with the signup grant, no email verification (user decision 2026-09-27); tests on a fake GoTrue/PostgREST + the app-c0 stack | complete | codex/test-user | 17cc78bd → 206fe900 | ports app-c0 55451, prefix infrx-app-c0-, db app-c0 | 2026-09-27 05:10Z | DONE: merged --no-ff at 947d72bc (fix round: header-unsafe key exits 2 unechoed; existing address refused unless --reset-existing). Hosted run after the install: export the two SSM values per operations.md, --dry-run, then create the internal test user(s) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 05:10Z; basis: merged |
 | LW0 | support (post-launch Lab pre-wave; wave5-plan §3) rulings R150–R155, tasklocal band 57500–57599 + Lab tracks/blocks, D10 split fix, Lab make targets, apps/lab package, progress.py activated category | complete | codex/lw0 | dcfd9d2d → e1c11a64 | ports none, prefix -, db - | 2026-09-27 09:14Z | DONE: merged --no-ff at 9a6c3685 = the Lab base for LW1 (WR-LW0-5); WR-LW0-1/2/6 applied by the coordinator; WR-LW0-3 (waves in the tracker) and minors C3/C4 carried; WR-LW0-4 (P-21 sysctl) is the user's | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 09:14Z; basis: merged |
-| CERTIFY-WINDOW | support (certify tooling) box steps 76/77/79/80 + the 78 RUN fix, the resumable sequencer infra/rollout/certify-window.sh, certify-h6.sh, fill/validate helpers, runbook wording fixes (from certify-prep-2026-09-27.md) | running | codex/certify-window | b5339c55 → — | ports none (fake tools), prefix -, db - | 2026-09-27 09:14Z | handback → merge → run the sequencer on the live box (A1–A7; ~8–12 h) → BACKEND-READY cells | 2–5 h remaining (likely 3 h), confidence medium, estimated 2026-09-27 09:14Z; basis: four steps + a sequencer + tests |
+| CERTIFY-WINDOW | support (certify tooling) box steps 76/77/79/80 + the 78 RUN fix, the resumable sequencer infra/rollout/certify-window.sh, certify-h6.sh, fill/validate helpers, runbook wording fixes (from certify-prep-2026-09-27.md) | complete | codex/certify-window | b5339c55 → 231539eb | ports none (fake tools), prefix -, db - | 2026-09-27 11:10Z | DONE: merged --no-ff at 2fed3e23; the window runs next via infra/rollout/certify-window.sh (A1–A7; TENANT2_USER=c5082915…; VIDEO_FILE/CORPUS_CACHE for the later steps); minors CW-4..9, R3..R6 carried | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 11:10Z; basis: merged |
 | W5-LAB-SQL | support (wave5 LW1 lane lab-sql; wave5-plan §5) tasks L2-SQL → D6F → D7 (after F3); workflow wf_d4b18832-53c; Opus implementer + 2 lenses + one fix round | running | codex/w5-lab-sql | 9a6c3685 → — | ports dlab 57500 (decoy 27500), prefix infrx-dlab-, db dlab | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 2–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
 | W5-LAB-ACCESS | support (wave5 LW1 lane lab-access; wave5-plan §5) tasks L2; workflow wf_056bcc43-fb8; Opus implementer + 2 lenses + one fix round | running | codex/w5-lab-access | 9a6c3685 → — | ports l2 57501, prefix infrx-l2-, db l2 | 2026-09-27 09:15Z | handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
 | W5-LAB-APP | support (wave5 LW1 lane lab-app; wave5-plan §5) tasks L1; workflow wf_3d1c0f24-3fd; Opus implementer + 2 lenses + one fix round | review | codex/w5-lab-app | 9a6c3685 → 80dae52c | ports l4 57503; Lab dev 3100, prefix infrx-l4-, db l4 | 2026-09-27 09:43Z | waits for L2-SQL (lab-sql) and L2 (lab-access) to merge | 4–16 h remaining (likely 8 h), confidence medium, estimated 2026-09-27 09:15Z; basis: wave5-plan §5 LW1 estimates |
@@ -232,9 +232,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
-- warning: overlapping writers: I2A (review) and CERTIFY-WINDOW (running) both own infra/ / infra/rollout/certify-window.sh (+1 more)
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
-- warning: overlapping writers: I3 (queued) and CERTIFY-WINDOW (running) both own infra/ / infra/rollout/certify-window.sh (+1 more)
 
 ## Pending inputs
 
@@ -351,6 +349,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `H1-20260927T1032Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - `T2I-20260927T1013Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - `T2I-20260927T1037Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+- `CERTIFY-WINDOW-20260927T1002Z.json`: stale: at 2026-09-27T10:02:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z
+- `CERTIFY-WINDOW-20260927T1046Z.json`: stale: at 2026-09-27T10:46:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z
 
 ## Tasks (backend, App, activated, reused baseline)
 
@@ -439,6 +439,9 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-27 11:10Z UTC, tracker: rejected update: stale: at 2026-09-27T10:46:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z
+- 2026-09-27 11:10Z UTC, tracker: rejected update: stale: at 2026-09-27T10:02:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z
+- 2026-09-27 11:10Z UTC, coordinator (CERTIFY): CERTIFY-WINDOW merged at 2fed3e23 (steps 76/77/78/79/80, the sequencer, fill/validate/h6 helpers, runbook fixes); the live certify + E1B window starts (prep76 → o3 → H4-check → H5 → H6 → profiles77 → freeze → WC-0 → certify (~4.5–6 h) → report/fetch → E1B cells → WC-6/7 → tenant-2 → journey legs → WC-9 → drills → cleanup)
 - 2026-09-27 10:43Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - 2026-09-27 10:43Z UTC, tracker: rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - 2026-09-27 10:43Z UTC, coordinator (LW1): trace-ship (T2I) merged at a7bafee0 with WR-1/WR-2 and R165; WR-3 (composition, flag off) carried to LW2. LW1 status: discovery, lab-contracts, trace-ship merged; lab-app held (R156); lab-sql and lab-access running
