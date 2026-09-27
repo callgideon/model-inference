@@ -1,8 +1,8 @@
 {
  "task": "R2",
  "slice": "R2.a-c over fake D9/L3 ports and a B2-shaped report (started early)",
- "activity": "review",
- "head": "3146a246",
+ "activity": "fix-round",
+ "head": "0a239a5d",
  "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-rollout-control",
  "branch": "codex/w5-rollout-control",
  "owned_paths": [
@@ -41,6 +41,21 @@
    "cmd": "INFRX_D_TASK=r2 uv run --frozen pytest -q tests/i --deselect tests/i/test_mutants.py (alone, lock free)",
    "exit": 0,
    "summary": "211 passed, 1 xfailed"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/control/test_control.py (fix round 0a239a5d)",
+   "exit": 0,
+   "summary": "23 passed (new forged-policy case; POLICY_REF is the real ref_of)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/r/control/test_mutants.py (fix round)",
+   "exit": 0,
+   "summary": "63/63 mutants killed incl. r2_policy_unbound, r2_emergency_policy_unbound"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r (fix round)",
+   "exit": 0,
+   "summary": "48 passed; 5x repeat of both suites 32 passed"
   }
  ],
  "estimate": {
@@ -49,7 +64,7 @@
   "pessimistic_h": 6,
   "confidence": "medium",
   "basis": "code complete (22 tests, 61 mutants); one verify round + real D9/L3/B2/R1 swap after merge; brief 2/4/8, ~2 h spent",
-  "at": "2026-09-27T22:27Z"
+  "at": "2026-09-27T23:10Z"
  },
  "blockers": [],
  "wiring_requests": [
@@ -63,5 +78,8 @@
  "evidence": [
   "research/plan/evidence/r/R2-3146a24.md",
   "research/plan/evidence/coordinator/updates/R2-20260927T2227Z.json"
+ ],
+ "fixes": [
+  "0-RC-C1 fixed: policy bound to policy_ref via lab.ref_of before any D9/L3 action"
  ]
 }
