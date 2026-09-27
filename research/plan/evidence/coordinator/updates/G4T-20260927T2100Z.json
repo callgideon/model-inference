@@ -1,0 +1,24 @@
+{
+  "task": "G4T",
+  "lane": "content",
+  "slice": "GET /v1/traces route + OwnedExport (unmounted); WR-G4T-1 mount behind TRACE_EXPORT_API (off) as a proven patch",
+  "activity": "review",
+  "at": "2026-09-27T21:00:00Z",
+  "head": "ecfaf2a",
+  "base": "eb0734d7",
+  "worktree": ".claude/worktrees/codex-w5-content",
+  "branch": "codex/w5-content",
+  "owned_paths": ["apps/infrx-api/infrx/gateway/routes/trace_export.py", "apps/infrx-api/tests/g/trace_export/", "apps/infrx-api/infrx/content/", "research/plan/evidence/g/G4T-ecfaf2a.md", "research/plan/evidence/g/G4T-ecfaf2a-wiring.patch", "research/plan/evidence/coordinator/updates/G4T-20260927T2100Z.json"],
+  "commands": [
+    {"cmd": "pytest -q tests/g/trace_export/test_trace_export.py::test_trace_export__an_org_exports_its_own_traces_only (route absent)", "exit": 4, "summary": "seam failure: ImportError trace_export"},
+    {"cmd": "uv run --frozen pytest -q tests/g/trace_export/test_trace_export.py", "exit": 0, "summary": "15 passed"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/trace_export/test_mutants.py", "exit": 0, "summary": "27/27 mutants killed; 31 passed"},
+    {"cmd": "WR-G4T-1 applied: pytest tests/contracts/test_config_and_imports.py tests/g/test_startup.py tests/i/test_packaging.py tests/g/trace_export", "exit": 0, "summary": "359 passed"},
+    {"cmd": "WR-G4T-1 applied: python -m tests.g.mutants (5 re-anchored + 3 new composition mutants)", "exit": 0, "summary": "8/8 killed"},
+    {"cmd": "make api-test (INFRX_D_TASK=lab-c2, at ecfaf2a)", "exit": 1, "summary": "50 failed, 5064 passed, 99 skipped, 9 xfailed, 8 errors (1:43:34); every failure is a shared lock held by another lane: 7 tests/d/test_outbox_relay[valkey] (HarnessBusy: /tmp/infrx-d2-valkey-55463.lock), 8 errors tests/i/{test_observe,test_pooler,test_privilege_probe,test_rollback_drill} (BlockingIOError on the i8 pooler lock), 43 tests/i/test_mutants (pristine baseline fails on those same tests/i errors: the known non-default-key baseline). Rerun alone: 7 failed, 41 passed, 8 errors - the same locks, still held by other lanes. No failure in tests/content, tests/g/trace_export or any file this lane touched"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "coordinator applies WR-G4T-1 after WR-G4F-1 (G4F fix-round analogue) + one real-ClickHouse proof run + one review round", "at": "2026-09-27T21:00:00Z"},
+  "blockers": ["integration waits on C2 (C2-RPC) per the manifest; ClickHouse page proof needs a ClickHouse block (WR-G4T-3)"],
+  "wiring_requests": ["WR-G4T-1: research/plan/evidence/g/G4T-ecfaf2a-wiring.patch (conflicts textually with WR-G4F-1; apply after it, keep both switches)", "WR-G4T-2: Makefile api-mutants += tests/g/trace_export/test_mutants.py", "WR-G4T-3: real ClickHouse proof of ClickHouseTracePages (g4t ClickHouse block or coordinator run on T3's stack)"],
+  "evidence": ["research/plan/evidence/g/G4T-ecfaf2a.md", "research/plan/evidence/g/G4T-ecfaf2a-wiring.patch"]
+}
