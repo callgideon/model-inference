@@ -33,7 +33,19 @@ Full output: `scratchpad/wave4b/freeze-d3a99e01/certify-hashes.json` (coordinato
 
 At b640c35c (same non-test tree): G3/G4/G4b/G5 PASS, E3C final PASS 16/16 + 12/12, app-e2e PASS 20/20, G2 FAIL (tests/i coverage) — the reason for this candidate.
 
-## Staging (W1) — user-run (tool-policy denial "Production Deploy" at 21:38Z on the previous candidate; the same three commands with this sha):
+## Staging (W1) and the pre-window steps — DONE by the coordinator 2026-09-27 (the user authorized production deploys at 04:1xZ: "no users at all … do not wait on my permissions")
+
+| Step | Result |
+|---|---|
+| W1 bundle | `release-bundle.sh` uploaded `releases/d3a99e01….bundle` + `.sha256` (04:32Z) |
+| W1 fetch | SSM 15298ba9: `d3a99e01….bundle: OK`; `refs/infrx/releases/d3a99e01…` in /home/ubuntu/model-inference; working tree unchanged (04:35Z) |
+| W1 prepull | SSM 8efde5d7: `vllm/vllm-openai@sha256:4cbfd34a…` prepulled for d3a99e01 (04:45Z) |
+| W3 inventory | logged (scratchpad/wave4b/w3-inventory-20260927T043xZ.log): infrx-worker, marlin2b-gateway, marlin2b-vllm active; env keys INFRX_MODE/INFRX_IMAGE/INFRX_RELEASE_SHA/SUPABASE_URL/ENGINE_MAX_NUM_SEQS; three `pre-*.head` markers (04:39Z) |
+| W4 save edge | SSM: `/opt/dlami/nvme/w4-logs/Caddyfile.live-20260927T044546Z` sha256 `31df273cd06219145ffa330ae36e11c5c70a0546212e51a0066beb2b0be1c5a7` (04:45Z) |
+| W2 snapshot | root volume `vol-091e45c92f7426291` → `snap-0a3e2debff48e47d0` started 04:46:15Z (pending; must be `completed` before W5) |
+| Hosted project | the box runs against `fcbnscgsymzdykendbrc.supabase.co` (read-only step; keys never read) |
+
+The original W1 commands (kept for the record):
 
 ```
 env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN apps/infrx-api/deploy/release-bundle.sh d3a99e01869b6b9c85173e25888abbbf9ed4dd29
@@ -46,3 +58,4 @@ env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN infra/rol
 - 2026-09-26T22:38Z: candidate frozen; identities recomputed (only git.sha differs from b640c35c); G1 PASS; G2, gates, E3C and App re-proofs running.
 - 2026-09-26T22:52Z: G3/G4/G4b/G5, E3C final and app-e2e PASS at d3a99e01; G2 make check running (api-test ~46% at 22:50Z).
 - 2026-09-27T02:00Z: G2 run 1 FAIL at the last stage (bench-test) under an async-job SIGINT disposition; bench-test alone PASS 118 under setsid; G2 run 2 started under setsid (G1 PASS again). The freeze starter now uses `setsid -f`. RELEASE stays d3a99e01.
+- 2026-09-27T04:47Z: W1 (bundle, fetch, prepull), W3, W4 and W2 (snapshot pending) done by the coordinator after the user's deploy authorization; G2 run 2 at the mutant stage ~85% (04:42Z).
