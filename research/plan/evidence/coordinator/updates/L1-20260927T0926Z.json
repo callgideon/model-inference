@@ -1,0 +1,30 @@
+{
+  "task": "L1",
+  "slice": "Lab shell: provider-session guard, workspace selection, own session boundary (fake-driven; merges after L2)",
+  "activity": "review",
+  "head": "eabf94ae",
+  "worktree": ".claude/worktrees/codex-w5-lab-app",
+  "branch": "codex/w5-lab-app",
+  "owned_paths": ["apps/lab/app/layout.tsx", "apps/lab/app/(provider)/layout.tsx", "apps/lab/lib/auth/", "apps/lab/next.config.ts", "apps/lab/tests/l/shell/"],
+  "commands": [
+    {"cmd": "node --test tests/l/shell/*.test.ts (before implementation)", "exit": 1, "summary": "red: 6 fail, ERR_MODULE_NOT_FOUND lib/auth/access.ts, config.ts; B01-B04 fail"},
+    {"cmd": "make lab-test", "exit": 0, "summary": "24 passed, 0 failed, 0 skipped"},
+    {"cmd": "make lab-lint", "exit": 0, "summary": "0 problems"},
+    {"cmd": "make lab-typecheck", "exit": 0, "summary": "next typegen + tsc clean"},
+    {"cmd": "make lab-build", "exit": 0, "summary": "Next 16.3.5 build OK"},
+    {"cmd": "cd apps/lab && node tests/l/shell/run-mutants.mjs", "exit": 0, "summary": "24 cases all named; 41/41 killed"},
+    {"cmd": "cd apps/app && pnpm install --frozen-lockfile && pnpm build", "exit": 0, "summary": "App builds unchanged"},
+    {"cmd": "scratch copy + WR-L1-1 page: pnpm build; pnpm start :3100; curl /", "exit": 0, "summary": "ƒ /; private,no-store; signed-out panel; page guard 404 digest"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2.5, "pessimistic_h": 5, "confidence": "medium", "basis": "implementation, tests and mutants done; remaining = one verify round (47-234 min) + WR-L1-1..4 + real-RPC LAB-ACCESS rerun after L2/L2-SQL merge; WR-L1-6 (sign-in/callback/middleware) excluded", "at": "2026-09-27T09:26Z"},
+  "blockers": ["integration waits on L2 + L2-SQL (RPC lab_my_provider_memberships, WR-L1-5)"],
+  "wiring_requests": [
+    "WR-L1-1 apps/lab/app/(provider)/page.tsx: guarded Lab home (exact file in evidence)",
+    "WR-L1-2 Makefile lab-mutants: cd apps/lab && node tests/l/shell/run-mutants.mjs",
+    "WR-L1-3 apps/lab/.gitignore: next-env.d.ts",
+    "WR-L1-4 apps/lab/.env.example (exact file in evidence)",
+    "WR-L1-5 schema request to lab-sql/L2: lab_my_provider_memberships() no-arg RPC, auth.uid()'s active provider memberships, authenticated only",
+    "WR-L1-6 scope: Lab sign-in, /auth/callback and session-refresh middleware.ts are outside L1's owned paths"
+  ],
+  "evidence": ["research/plan/evidence/l/L1-eabf94a.md"]
+}
