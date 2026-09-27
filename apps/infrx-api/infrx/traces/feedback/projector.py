@@ -55,7 +55,7 @@ class FeedbackProjector:
             await self.projection.insert(rows)
         acknowledged = await self.outbox.acknowledge(
             [e.event_id for e in owned], worker_id=self.worker_id) if owned else 0
-        return {"read": len(events), "projected": len(owned), "acknowledged": acknowledged,
+        return {"read": len(events), "projected": len(rows), "acknowledged": acknowledged,
                 "orphaned": len(events) - len(owned)}
 
 
