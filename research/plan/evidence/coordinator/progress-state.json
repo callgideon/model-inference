@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 159,
-  "updated": "2026-09-27T08:45:00Z",
+  "revision": 161,
+  "updated": "2026-09-27T09:14:01Z",
   "agent_slots": {
     "total": 16,
-    "active": 1,
+    "active": 7,
     "reserved": 2,
-    "note": "Session 03: RELEASE freeze d3a99e01 G2 running (coordinator; e2c/i8 held); no lane running; MAIN-MERGE waits for the go-live inputs."
+    "note": "Session 03 post-launch: CERTIFY-WINDOW + six LW1 lanes (wave5-plan) running; certify/E1B on the live box after CERTIFY-WINDOW merges."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -4045,6 +4045,83 @@
         "tests/integration/ops/test_create_test_user.py"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "LW0",
+      "task": null,
+      "slice": "(post-launch Lab pre-wave; wave5-plan §3) rulings R150–R155, tasklocal band 57500–57599 + Lab tracks/blocks, D10 split fix, Lab make targets, apps/lab package, progress.py activated category",
+      "agent": "opus",
+      "branch": "codex/lw0",
+      "worktree": ".claude/worktrees/codex-lw0",
+      "base": "dcfd9d2d",
+      "head": "e1c11a64",
+      "isolation": {
+        "ports": "none",
+        "prefix": "-",
+        "db": "-"
+      },
+      "activity": "complete",
+      "started": "2026-09-27T08:44:00Z",
+      "updated": "2026-09-27T09:14:00Z",
+      "blocker": null,
+      "next_action": "DONE: merged --no-ff at 9a6c3685 = the Lab base for LW1 (WR-LW0-5); WR-LW0-1/2/6 applied by the coordinator; WR-LW0-3 (waves in the tracker) and minors C3/C4 carried; WR-LW0-4 (P-21 sysctl) is the user's",
+      "estimate": {
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T09:14:00Z"
+      },
+      "evidence": [
+        "research/plan/evidence/coordinator/LW0-7894418.md"
+      ],
+      "commands": [
+        {
+          "cmd": "tests/contracts; research/plan/scripts; validate; check; make -n lab-*; pnpm install --frozen-lockfile --offline (apps/lab)",
+          "exit": 0,
+          "summary": "1303 passed; 43 passed (1 pre-existing failure); PASS; 0 errors; ok"
+        }
+      ],
+      "owned_paths": [
+        "see LW0-7894418.md"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "CERTIFY-WINDOW",
+      "task": null,
+      "slice": "(certify tooling) box steps 76/77/79/80 + the 78 RUN fix, the resumable sequencer infra/rollout/certify-window.sh, certify-h6.sh, fill/validate helpers, runbook wording fixes (from certify-prep-2026-09-27.md)",
+      "agent": "opus",
+      "branch": "codex/certify-window",
+      "worktree": ".claude/worktrees/codex-certify-window",
+      "base": "b5339c55",
+      "head": null,
+      "isolation": {
+        "ports": "none (fake tools)",
+        "prefix": "-",
+        "db": "-"
+      },
+      "activity": "running",
+      "started": "2026-09-27T09:02:00Z",
+      "updated": "2026-09-27T09:14:00Z",
+      "blocker": null,
+      "next_action": "handback → merge → run the sequencer on the live box (A1–A7; ~8–12 h) → BACKEND-READY cells",
+      "estimate": {
+        "optimistic_h": 2,
+        "likely_h": 3,
+        "pessimistic_h": 5,
+        "confidence": "medium",
+        "basis": "four steps + a sequencer + tests",
+        "at": "2026-09-27T09:14:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "infra/rollout/certify-window.sh",
+        "infra/rollout/steps/7x-*.sh"
+      ],
+      "wiring_requests": []
     }
   ],
   "review_queue": [],
@@ -6721,6 +6798,24 @@
       "by": "coordinator (GO-LIVE)",
       "what": "v1 PLATFORM LIVE: App release deployed from main = RELEASE d3a99e01 (deployment dpl_Caw24aNxTj57zQuBGs74partZ67H), smoke green; known-good App release recorded. Post-launch: LW0 lane running (wave5-plan §3), certify/E1B preparation running, tracker v1 launch scope updates",
       "source": "research/plan/evidence/coordinator/RELEASE-d3a99e01.md"
+    },
+    {
+      "at": "2026-09-27T09:14:00Z",
+      "by": "coordinator (LW0)",
+      "what": "LW0 merged at 9a6c3685 (Lab base for LW1); P-17 Lab activation recorded under the user's post-launch directive; LW1 lanes (lab-sql, lab-access, lab-app, lab-contracts, trace-ship, discovery) dispatching from 9a6c3685; CERTIFY-WINDOW lane running",
+      "source": "research/plan/evidence/coordinator/LW0-7894418.md"
+    },
+    {
+      "at": "2026-09-27T09:14:01Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T08:57:00Z is not newer than lane LW0 state 2026-09-27T09:14:00Z",
+      "source": "updates/LW0-20260927T0857Z.json"
+    },
+    {
+      "at": "2026-09-27T09:14:01Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T09:10:00Z is not newer than lane LW0 state 2026-09-27T09:14:00Z",
+      "source": "updates/LW0-20260927T0910Z.json"
     }
   ],
   "history": {
@@ -7447,10 +7542,20 @@
       "status": "rejected",
       "at": "2026-09-27T05:06:00Z",
       "reason": "stale: at 2026-09-27T05:06:00Z is not newer than lane TEST-USER state 2026-09-27T05:10:00Z"
+    },
+    "LW0-20260927T0857Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T08:57:00Z",
+      "reason": "stale: at 2026-09-27T08:57:00Z is not newer than lane LW0 state 2026-09-27T09:14:00Z"
+    },
+    "LW0-20260927T0910Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T09:10:00Z",
+      "reason": "stale: at 2026-09-27T09:10:00Z is not newer than lane LW0 state 2026-09-27T09:14:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T05:38:10Z",
+    "computed_at": "2026-09-27T09:14:01Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -7516,5 +7621,17 @@
         ]
       }
     }
-  }
+  },
+  "activated": [
+    "D6F",
+    "D7",
+    "F3",
+    "H1",
+    "L1",
+    "L2",
+    "T2I",
+    "X1",
+    "X3",
+    "X5"
+  ]
 }
