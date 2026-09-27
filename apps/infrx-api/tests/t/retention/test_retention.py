@@ -295,7 +295,8 @@ def test_a_replay_after_deletion_resurrects_nothing(w):
         await durable(restarted)
         report = await ship.Shipper(restarted, w.traces, w.objects, retention=policy(w)).ship()
         assert report.held == {} and restarted.segments() == (), report
-        assert (await project(w, event(1, entry(1, request=ID_A))))["acknowledged"] == 1
+        assert await project(w, event(1, entry(1, request=ID_A))) == \
+            {"read": 1, "projected": 0, "acknowledged": 1, "orphaned": 0}
         for request_id in (ID_A, ID_B, ID_C):
             assert await raw(w, request_id) == ([], [], []), request_id
         assert await w.objects.keys(f"trace/{b.ORG_A}/") == [], "an object was rewritten"
