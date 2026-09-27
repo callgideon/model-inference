@@ -1,0 +1,25 @@
+{
+  "task": "LW0",
+  "slice": "wave-5 post-launch plan §3 items 1-9 (item 10 = the P-21 request to the user)",
+  "activity": "review",
+  "head": "7894418f",
+  "worktree": ".claude/worktrees/codex-lw0",
+  "branch": "codex/lw0",
+  "owned_paths": ["research/plan/08-contracts-v1-encoding.md", "apps/infrx-api/infrx/contracts/tasklocal.py", "apps/infrx-api/tests/contracts/test_config_and_imports.py", "apps/infrx-api/tests/contracts/mutants.py", "apps/infrx-api/tests/d/test_upgrade_d10.py", "tests/integration/harness.py", "tests/integration/preflight.py", "Makefile", "apps/lab/", "packages/shared/", "research/plan/scripts/progress.py", "research/plan/scripts/test_progress.py", "research/plan/evidence/coordinator/LW0-7894418.md"],
+  "commands": [
+    {"cmd": "cd apps/infrx-api && uv run --frozen --no-sync pytest -q tests/contracts", "exit": 0, "summary": "1303 passed, 1 skipped (base 1296 passed, 1 skipped); the 7 new band/gate/track cases failed before"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/contracts/test_mutants.py -k 'lw0_ or well_formed or every_case'", "exit": 0, "summary": "6 passed; 4/4 LW0 mutants killed"},
+    {"cmd": "pytest -q tests/d/test_upgrade_d10.py -k later_migration", "exit": 0, "summary": "1 passed (failed before)"},
+    {"cmd": "python3 -m pytest -q research/plan/scripts/", "exit": 1, "summary": "43 passed, 1 failed: test_validate_plan::test_app_cannot_dispatch_early, failing at base too"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"},
+    {"cmd": "python3 research/plan/scripts/progress.py check", "exit": 0, "summary": "PASS, 0 errors, 8 warnings (base the same)"},
+    {"cmd": "pytest -q tests/integration/test_harness.py tests/integration/test_preflight.py", "exit": 1, "summary": "105 passed, 1 failed: test_nothing_in_this_directory_points_at_production, failing at base too (base 85 passed)"},
+    {"cmd": "make -n lab-test lab-lint lab-typecheck lab-build lab-mutants check", "exit": 0, "summary": "all resolve"},
+    {"cmd": "cd apps/lab && pnpm install --frozen-lockfile --offline; make lab-test lab-lint lab-typecheck lab-build lab-mutants", "exit": 0, "summary": "install ok; test 0/0; lint clean; typecheck/build/mutants 'not run' until apps/lab/app"},
+    {"cmd": "ruff check <edited Python>", "exit": 0, "summary": "clean (progress.py's 4 E731 are pre-existing at base)"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2, "confidence": "medium", "basis": "implementation done at 7894418f; one review round + merge + one make check remain (plan §3: 2/3/6 h coordinator time)", "at": "2026-09-27T08:57Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-LW0-1 progress-state lane LW0 (task-less) so this update ingests", "WR-LW0-2 dated P-17 activation record + progress-state `activated` for the LW1 ids; LAB-* gates in progress-state", "WR-LW0-3 extend the HTML tracker with LW0-LW6", "WR-LW0-4 file the P-21 extension (57000-57599) for user approval", "WR-LW0-5 cut and record the Lab base SHA including this commit"],
+  "evidence": ["research/plan/evidence/coordinator/LW0-7894418.md"]
+}
