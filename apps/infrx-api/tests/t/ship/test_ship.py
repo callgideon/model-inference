@@ -207,14 +207,21 @@ async def one(projection, org_id: str, request_id: str) -> ship.TraceRow:
     return rows[0]
 
 
-def pins_for(table: dict):
+def recorded(lookup):
+    """A pins lookup that also records what it was asked."""
     calls = []
 
-    async def lookup(org_id: str, request_id: str):
+    async def asked(org_id: str, request_id: str):
         calls.append((org_id, request_id))
+        return await lookup(org_id, request_id)
+    asked.calls = calls
+    return asked
+
+
+def pins_for(table: dict):
+    async def lookup(org_id: str, request_id: str):
         return table.get((org_id, request_id))
-    lookup.calls = calls
-    return lookup
+    return recorded(lookup)
 
 
 # ======================================================================================
@@ -362,35 +369,46 @@ def test_metadata_ships_while_the_content_store_is_down_and_content_follows(back
     run(scenario())
 
 
+async def versions_scenario(projection, objects, lookup, credit, pins, lost) -> None:
+    """The versions case for any lookup (`test_pins_pg.py` reruns it with D5's real one):
+    `credit` = the (org, request) admitted at `pins`; `lost` = the (org, request) of a lossy,
+    metadata-only envelope with no pins; and another organization's envelope claiming the
+    credit request's id gets none either."""
+    org_id, request_id = credit
+    sink = spool()
+    await capture(sink, request_id, b"content", org_id=org_id)
+    lossy = b.trace(lost[1], org_id=lost[0], content_bytes=0).model_copy(
+        update={"loss_reason": TraceLossReason.memory_budget})
+    await sink.offer(lossy)
+    await capture(sink, request_id, b"another org's claim", org_id=b.ORG_B)
+    await durable(sink)
+    report = await ship.Shipper(sink, projection, objects, pins=lookup).ship()
+    assert (report.shipped, report.rows, report.held) == (1, 3, {}), report
+    a = await one(projection, org_id, request_id)
+    assert (a.serving_version_id, a.rate_card_version, a.policy_version) == \
+        (pins.serving_version_id, pins.rate_card_version, pins.policy_version)
+    assert (a.model_revision, a.price_version, a.loss_reason, a.mode) == \
+        (b.MODEL, "pv_test", "none", "full")
+    assert a.content_complete
+    for other in (lost, (b.ORG_B, request_id)):
+        row = await one(projection, *other)
+        assert (row.serving_version_id, row.rate_card_version, row.policy_version) == \
+            (None, None, None), other
+    row = await one(projection, *lost)
+    assert row.loss_reason == "memory_budget" and not row.content_complete
+    assert row.content_key is None and not row.content_stored
+    assert sorted(lookup.calls) == sorted([credit, lost, (b.ORG_B, request_id)])
+    await sink.close()
+
+
 def test_the_projection_carries_the_versions_and_the_loss_state(backend):
     """Serving, rate and source-policy versions come from the durable request record
     (looked up by the envelope's own organization); model revision, price version and the
-    loss state come from the envelope."""
+    loss state come from the envelope. The lookup here is a table; D5's real one on
+    PostgreSQL reruns the same scenario in `test_pins_pg.py`."""
     projection, objects = backend
-
-    async def scenario():
-        sink = spool()
-        await capture(sink, ID_A, b"content")
-        lossy = b.trace(ID_B, content_bytes=0).model_copy(
-            update={"loss_reason": TraceLossReason.memory_budget})
-        await sink.offer(lossy)
-        await durable(sink)
-        lookup = pins_for({(b.ORG_A, ID_A): PINS})
-        await ship.Shipper(sink, projection, objects, pins=lookup).ship()
-        a = await one(projection, b.ORG_A, ID_A)
-        assert (a.serving_version_id, a.rate_card_version, a.policy_version) == \
-            (PINS.serving_version_id, PINS.rate_card_version, PINS.policy_version)
-        assert (a.model_revision, a.price_version, a.loss_reason, a.mode) == \
-            (b.MODEL, "pv_test", "none", "full")
-        assert a.content_complete
-        lost = await one(projection, b.ORG_A, ID_B)
-        assert (lost.serving_version_id, lost.rate_card_version, lost.policy_version) == \
-            (None, None, None)
-        assert lost.loss_reason == "memory_budget" and not lost.content_complete
-        assert lost.content_key is None and not lost.content_stored
-        assert sorted(lookup.calls) == [(b.ORG_A, ID_A), (b.ORG_A, ID_B)]
-        await sink.close()
-    run(scenario())
+    run(versions_scenario(projection, objects, pins_for({(b.ORG_A, ID_A): PINS}),
+                          (b.ORG_A, ID_A), PINS, (b.ORG_A, ID_B)))
 
 
 def test_a_pins_lookup_outage_holds_the_segment(backend):
