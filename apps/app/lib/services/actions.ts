@@ -33,10 +33,13 @@ import {
   type ApiKeyCreateInput,
   type ApiKeySummary,
   type ErrorCode,
+  type FeedbackEntry,
+  type FeedbackInput,
   type Result,
 } from "../contracts/types.ts";
 import { parseCredit, type Credit } from "../contracts/v2/money-units.ts";
 import { generateKey, hashKey, keyPrefix } from "../keys.ts";
+import { submitOwnFeedback, type FeedbackRpc } from "./feedback.ts";
 import { __testables, keyOf, type ConsumerAccount, type ConsumerContext } from "./console.ts";
 import type { Row } from "./query.ts";
 
@@ -359,6 +362,8 @@ export type ActionDeps = {
   revalidate(path: string): void;
   /** The audited operator port; none is App-reachable yet (WR-C3A-3a). */
   operator?: OperatorPort;
+  /** C3F: the individual's own client for `public.submit_feedback` (WR-C3F-2). */
+  feedback?: () => Promise<FeedbackRpc>;
   actions?: ConsumerActions;
 };
 
@@ -378,6 +383,11 @@ export function consoleActions(deps: ActionDeps) {
     createKey: (input: ApiKeyCreateInput) =>
       guarded(async () => actions.createKey(await deps.context(), await deps.keys(), input), "/api-keys"),
     revokeKey: (keyId: string) => guarded(async () => actions.revokeKey(await deps.context(), await deps.keys(), keyId), "/api-keys"),
+    submitFeedback: (input: FeedbackInput) =>
+      guarded(async () => {
+        if (deps.feedback === undefined) return fail<FeedbackEntry>("dependency_unavailable", "feedback is not available yet");
+        return submitOwnFeedback(await deps.context(), await deps.feedback(), input);
+      }, "/traces"),
     operator: (input: unknown) =>
       guarded(async () => {
         const command = operatorCommand(await deps.session(), input);

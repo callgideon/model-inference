@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real lab-test lab-lint lab-typecheck lab-build lab-mutants
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -44,6 +44,7 @@ console-mutants:
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
 	cd apps/app && node tests/a/run-mutants.mjs
 	cd apps/app && node tests/a/run-catalog-mutants.mjs
+	cd apps/app && node tests/c/feedback/run-mutants.mjs
 
 # C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
 # Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
@@ -58,6 +59,11 @@ console-c3a-real:
 # U3 DUR-RLS / DUR-CAP / CONSOLE-FLOWS: operator console over real Supabase PostgreSQL + PostgREST (Docker).
 console-u3-real:
 	cd $(API) && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/u/operator_stack.py
+
+# C3F FEEDBACK-ACK / LAB-ACCESS: App own-feedback + Lab review doors over real Supabase PostgreSQL + PostgREST,
+# then the SQL mutants of the doors (Docker; fails visibly without it). Not part of check.
+console-c3f-real:
+	cd $(API) && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py --mutants
 
 # U1R/U4: the App's read adapters against real PostgreSQL as the browser principal, each on its
 # own task-local instance (D harness). A missing Docker prints SKIP and exits 0, as tests/d does.
@@ -112,6 +118,7 @@ lab-build:
 # removes tests/v); each exits non-zero on a survivor.
 lab-mutants:
 	cd apps/lab && node tests/l/shell/run-mutants.mjs && node tests/l/ui/run-mutants.mjs
+	cd apps/lab && node tests/c/review/run-mutants.mjs
 
 check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
 

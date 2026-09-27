@@ -12,8 +12,9 @@ import { fileURLToPath } from "node:url";
 const base = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const args = process.argv.slice(2);
 const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
-const SUITE = ["tests/c/feedback/feedback.test.ts"];
+const SUITE = ["tests/c/feedback/feedback.test.ts", "tests/c/feedback/compose.test.ts"];
 const F = "lib/services/feedback.ts";
+const ACTIONS = "lib/services/actions.ts";
 
 const C = {
   a01: "C3F-A01 the action forwards only the signal, over the one named door, from a ready session",
@@ -22,10 +23,15 @@ const C = {
   a04: "C3F-A04 the door's refusals keep their code; its text never reaches the caller",
   a05: "C3F-A05 flag off, a missing door, a denied role and a lost answer are never a success",
   a06: "C3F-A06 an acknowledgment is only a stored customer console signal; any other provenance fails closed",
+  c01: "C3F-C01 the composed action refuses a cross-site request before resolving anyone",
+  c02: "C3F-C02 an acknowledged signal refreshes the traces; a refusal or no client refreshes nothing",
 };
 
 const m = (id, what, find, replace, cases) => ({ id, what, file: F, find, replace, cases });
 const MUTANTS = [
+  { id: "C3F-CX01", what: "the composed action skips the Origin check", file: ACTIONS, find: "    submitFeedback: (input: FeedbackInput) =>\n      guarded(async () => {", replace: "    submitFeedback: (input: FeedbackInput) =>\n      (async (run: () => Promise<Result<FeedbackEntry>>, _p: string) => run())(async () => {", cases: [C.c01] },
+  { id: "C3F-CX02", what: "the traces are not refreshed after an acknowledgment", file: ACTIONS, find: '      }, "/traces"),', replace: "      }),", cases: [C.c02] },
+  { id: "C3F-CX03", what: "no client passes as a success", file: ACTIONS, find: 'if (deps.feedback === undefined) return fail<FeedbackEntry>("dependency_unavailable"', replace: 'if (deps.feedback === undefined) return fail<FeedbackEntry>("not_found"', cases: [C.c02] },
   m("C3F-AX01", "a smuggled field is passed on", "  if (rejected !== null) return rejected;\n", "", [C.a02]),
   m("C3F-AX02", "the door name drifts", '"submit_feedback"', '"submit_own_feedback"', [C.a01]),
   m("C3F-AX03", "the caller's input goes to the door verbatim", "{ p_args: { request_id, name, value, comment, idempotency_key } }", "{ p_args: { ...(input as object), author_role: \"customer\" } }", [C.a01]),
