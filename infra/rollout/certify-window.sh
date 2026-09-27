@@ -63,7 +63,7 @@ long() {
   else
     if [ -e "$b.rc" ]; then mv "$b.log" "$b.failed-$(date -u +%H%M%S).log"; rm -f "$b.rc"; fi
     rm -f "$b.pid"; say "== $name (detached; $b.log)"
-    setsid -f bash -c 'b=$1; shift; echo $$ > "$b.pid"; "$@" > "$b.log" 2>&1; echo $? > "$b.rc"' _ "$b" "$@"
+    setsid -f bash -c 'b=$1; shift; echo $$ > "$b.pid"; "$@" > "$b.log" 2>&1; echo $? > "$b.rc.new"; mv "$b.rc.new" "$b.rc"' _ "$b" "$@"
     for _ in $(seq 100); do [ -s "$b.pid" ] && break; sleep 0.1; done
   fi
   until [ -e "$b.rc" ]; do
