@@ -1,0 +1,22 @@
+{
+  "task": "X1",
+  "lane": "discovery",
+  "slice": "X1.a-c (discovery draft; approval BLOCKED on P-13)",
+  "activity": "review",
+  "at": "2026-09-27T09:20:56Z",
+  "head": "cdb8681",
+  "base": "9a6c3685",
+  "worktree": ".claude/worktrees/codex-w5-discovery",
+  "branch": "codex/w5-discovery",
+  "owned_paths": ["research/workloads/video/", "research/plan/evidence/x/X1-cdb8681.md", "research/plan/evidence/coordinator/updates/X1-20260927T0920Z.json"],
+  "commands": [
+    {"cmd": "cd research/workloads/video && python3 -m unittest test_check_discovery (before checker)", "exit": 1, "summary": "seam failure: ModuleNotFoundError check_discovery"},
+    {"cmd": "cd research/workloads/video && python3 -m unittest test_check_discovery test_mutants", "exit": 0, "summary": "14 tests OK; 10/10 mutants killed; every case covered"},
+    {"cmd": "cd research/workloads/video && python3 check_discovery.py", "exit": 0, "summary": "1 documents, 0 errors"},
+    {"cmd": "cd research/plan/scripts && python3 validate_plan.py", "exit": 0, "summary": "PASS, 934 links / 290 documents"}
+  ],
+  "estimate": {"optimistic_h": 4, "likely_h": 7, "pessimistic_h": 14, "confidence": "low", "basis": "remaining X3 + X5 (6 slices x 1-2 h, documents from in-repo research and primary sources) plus one review round", "at": "2026-09-27T09:20:56Z"},
+  "blockers": ["P-13: live-video task, cadence/window/deadline/clock/overload/labelling inputs and trial target (approval only; discovery done)"],
+  "wiring_requests": ["research/workloads/README.md: add index row for video/live-video-contract.md", "optional: move check_discovery.py + tests to research/workloads/ root and add to make check"],
+  "evidence": ["research/plan/evidence/x/X1-cdb8681.md"]
+}
