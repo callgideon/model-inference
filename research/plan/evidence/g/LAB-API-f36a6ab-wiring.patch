@@ -1,0 +1,385 @@
+diff --git a/Makefile b/Makefile
+index 4403787b..75a7507c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -18,7 +18,7 @@ api-test:
+ # E4B's list lives beside its runner in tests/integration/backend (outside apps/infrx-api), so it
+ # runs from the root with the pinned interpreter, through the same shared R83 runner.
+ api-mutants:
+-	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py tests/m/test_retention_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/w/test_w5_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_code_mutants_d4.py tests/d/test_code_mutants_d5.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py tests/i/test_mutants.py tests/contracts/lab/test_mutants.py tests/h/test_mutants.py tests/t/ship/test_mutants.py tests/t/feedback/test_mutants.py tests/t/retention/test_mutants.py tests/d/test_code_mutants_l2sql.py tests/d/test_code_mutants_d6f.py tests/d/test_code_mutants_d7.py tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py tests/d/test_upgrade_lab.py tests/g/feedback/test_mutants.py
++	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py tests/m/test_retention_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/w/test_w5_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_code_mutants_d4.py tests/d/test_code_mutants_d5.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py tests/i/test_mutants.py tests/contracts/lab/test_mutants.py tests/h/test_mutants.py tests/t/ship/test_mutants.py tests/t/feedback/test_mutants.py tests/t/retention/test_mutants.py tests/d/test_code_mutants_l2sql.py tests/d/test_code_mutants_d6f.py tests/d/test_code_mutants_d7.py tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py tests/d/test_upgrade_lab.py tests/g/feedback/test_mutants.py tests/g/lab_auth/test_mutants.py tests/g/lab_control/test_mutants.py tests/g/lab_traces/test_mutants.py
+ 	# Lab PG mutant lists run in their own process: their pristine baseline starts the D harness itself (LW1 integration F1)
+ 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/l/access/test_mutants.py tests/h/test_mutants.py tests/d/test_l2sql_self_mutants.py
+ 	INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py
+diff --git a/apps/infrx-api/deploy/preflight.py b/apps/infrx-api/deploy/preflight.py
+index 761e4d42..611d8f6b 100644
+--- a/apps/infrx-api/deploy/preflight.py
++++ b/apps/infrx-api/deploy/preflight.py
+@@ -234,6 +234,13 @@ NOT_SETTABLE = {
+     "FEEDBACK_API": "mounts POST /v1/feedback (G4F, off by default): enabling it on the hosted "
+                     "gateway needs the E4 regression rerun and the database feedback flag, a "
+                     "deploy change, not a --set",
++    "LAB_CONTROL": "mounts /lab/v1/control (WR-L4-1, off by default): enabling it on the hosted "
++                   "gateway needs L3 merged, the Lab migrations applied hosted (plan rule 4) "
++                   "and the E4 regression rerun, a deploy change, not a --set",
++    "LAB_TRACES": "mounts /lab/v1/traces (WR-V1M-2, off by default): enabling it on the hosted "
++                  "gateway needs the trace projection (CLICKHOUSE_URL, S3_TRACE_BUCKET), the Lab "
++                  "migrations applied hosted and the E4 regression rerun, a deploy change, "
++                  "not a --set",
+ }
+ 
+ 
+diff --git a/apps/infrx-api/infrx/config.py b/apps/infrx-api/infrx/config.py
+index 975c9d65..c3a55b7c 100644
+--- a/apps/infrx-api/infrx/config.py
++++ b/apps/infrx-api/infrx/config.py
+@@ -355,6 +355,11 @@ class DeploymentSettings:
+     # store's pool. Off by default, so the launched API is unchanged; the database's own
+     # `feedback` flag gates every write again (off: 503 dependency_unavailable).
+     feedback_api: bool = False
++    # LAB-API (WR-LAB-API-1): mount the Lab's `/lab/v1/control` (WR-L4-1) and `/lab/v1/traces`
++    # (WR-V1M-2), each over the forwarded Supabase session and L2's `LabAccess` on the job
++    # store's pool. Off by default: the launched API is unchanged and no Lab route exists.
++    lab_control: bool = False
++    lab_traces: bool = False
+     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
+     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
+     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):
+diff --git a/apps/infrx-api/infrx/gateway/app.py b/apps/infrx-api/infrx/gateway/app.py
+index 669acf33..aa65418e 100644
+--- a/apps/infrx-api/infrx/gateway/app.py
++++ b/apps/infrx-api/infrx/gateway/app.py
+@@ -15,7 +15,7 @@ from ..media.video import Media
+ from ..usage import Usage
+ from . import pilot
+ from ..observe import route as metrics
+-from .routes import feedback, health, ingress, jobs, models, uploads
++from .routes import feedback, health, ingress, jobs, lab_control, lab_traces, models, uploads
+ 
+ # The composition root's router list, fixed and documented (r1 R44). A track's router is
+ # a module exposing `register(app, rt)`; the coordinator adds it here on an integration
+@@ -26,8 +26,10 @@ from .routes import feedback, health, ingress, jobs, models, uploads
+ # G4U uploads and G3 jobs come after the ingress, over the media store and the relay its
+ # composition put on `rt` (G3 request (a), G4U request (a)); I3B's loopback-only /metrics
+ # over the composition's registry last (I3B request 1). G4F feedback before it, mounted only
+-# when the deployment enables it (`FEEDBACK_API`, default off; WR-G4F-1).
+-ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)
++# when the deployment enables it (`FEEDBACK_API`, default off; WR-G4F-1). The Lab's two
++# surfaces after it, each mounted only when its switch is on (`LAB_CONTROL`, `LAB_TRACES`,
++# default off; WR-LAB-API-1).
++ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)
+ 
+ 
+ def upstream_client(settings):
+diff --git a/apps/infrx-api/infrx/gateway/pilot.py b/apps/infrx-api/infrx/gateway/pilot.py
+index 995a5d41..f34351cc 100644
+--- a/apps/infrx-api/infrx/gateway/pilot.py
++++ b/apps/infrx-api/infrx/gateway/pilot.py
+@@ -233,10 +233,65 @@ def adapters_from_env(settings, **injected):
+                     # G4F (WR-G4F-1): only when the deployment enables the feedback route
+                     **({"feedback": _pg_feedback(connect)}
+                        if settings.deployment.feedback_api else {}),
++                    # LAB-API (WR-LAB-API-1): only the Lab surfaces the deployment enables
++                    **_lab(settings, connect),
+                     **adapters}
+     return adapters
+ 
+ 
++def _lab(settings, connect) -> dict:
++    """LAB-API: `lab_control` / `lab_traces` for the switches that are on, over one session
++    verifier (the project's auth server) and L2's `LabAccess` on this pool. L3's control
++    operations are not composed until L3 merges (its routes answer 503; health is served).
++    `LAB_TRACES` needs T2I's projection and trace bucket, or startup is refused."""
++    deployment = settings.deployment
++    if not (deployment.lab_control or deployment.lab_traces):
++        return {}
++    import httpx
++
++    from ..lab.access import LabAccess
++    from ..state.lab_access import PgAccessStore
++    from .lab_auth import GoTrueSessions
++    from .routes.lab_control import LabControl
++    # ponytail: this client lives as long as the process; close it in `lifespan` if an app is
++    # ever rebuilt inside one process outside tests.
++    sessions = GoTrueSessions(httpx.AsyncClient(base_url=settings.supabase_url,
++                                                timeout=httpx.Timeout(5, connect=2)),
++                              settings.supabase_key)
++    access = LabAccess(PgAccessStore(connect))
++    lab = {"lab_control": LabControl(sessions, access)} if deployment.lab_control else {}
++    if deployment.lab_traces:
++        lab["lab_traces"] = _lab_traces(settings, connect, sessions, access)
++    return lab
++
++
++def _lab_traces(settings, connect, sessions, access):
++    """WR-V1M-2 over T2I's projection and T3's retention on `CLICKHOUSE_URL`, and the trace
++    bucket at the shipper's prefix (`build_shipper`'s `infrx/`)."""
++    limits = settings.pilot
++    missing = tuple(name for name, value in (("CLICKHOUSE_URL", limits.clickhouse_url),
++                                             ("S3_TRACE_BUCKET", limits.s3_trace_bucket))
++                    if not value.strip())
++    if missing:
++        raise RuntimeMisconfigured(runtime_mode(settings), missing)
++    import clickhouse_connect
++
++    from ..media.s3 import S3ObjectStore
++    from ..traces.feedback import ClickHouseFeedbackProjection
++    from ..traces.retention import ClickHouseRetentionStore, Retention
++    from ..traces.ship import ClickHouseProjection
++    from .routes.lab_traces import ClickHouseTraceRows, LabTraces, PgServing
++    client = clickhouse_connect.get_client(dsn=limits.clickhouse_url)
++    objects = S3ObjectStore.connect(limits.s3_trace_bucket, "infrx/",
++                                    settings.deployment.s3_endpoint_url)
++    retention = Retention(ClickHouseRetentionStore(client), ClickHouseProjection(client),
++                          ClickHouseFeedbackProjection(client), objects,
++                          content_days=limits.trace_content_max_days,
++                          metadata_months=limits.trace_metadata_months)
++    return LabTraces(sessions, access, PgServing(connect), ClickHouseTraceRows(client),
++                     retention)
++
++
+ def _pg_feedback(connect):
+     """D6F's `PgFeedbackService` on the api channel (G4F's route)."""
+     from ..state.feedback import PgFeedbackService
+@@ -291,7 +346,8 @@ def build_info(rt) -> None:
+ 
+ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
+                        pool=None, consent_for=None, attachments=None,
+-                       lifecycle=None, readiness=None, feedback=None) -> IngressDeps:
++                       lifecycle=None, readiness=None, feedback=None, lab_control=None,
++                       lab_traces=None) -> IngressDeps:
+     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
+     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
+     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
+@@ -329,6 +385,9 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
+     rt.relay = relay
+     # G4F (WR-G4F-1): the feedback route mounts over this, and only when enabled.
+     rt.feedback = feedback if deployment.feedback_api else None
++    # LAB-API (WR-LAB-API-1): each Lab surface mounts over these, and only when enabled.
++    rt.lab_control = lab_control if deployment.lab_control else None
++    rt.lab_traces = lab_traces if deployment.lab_traces else None
+     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
+                            relay=relay)
+     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
+diff --git a/apps/infrx-api/tests/contracts/test_config_and_imports.py b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+index 7de355a1..349d80b6 100644
+--- a/apps/infrx-api/tests/contracts/test_config_and_imports.py
++++ b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+@@ -334,7 +334,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
+     half-finished track mount itself on the public gateway."""
+     from infrx.gateway import app as composition_root
+     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
+-        ["health", "models", "ingress", "uploads", "jobs", "feedback", "route"]
++        ["health", "models", "ingress", "uploads", "jobs", "feedback", "lab_control",
++         "lab_traces", "route"]
+     for module in composition_root.ROUTERS:
+         assert callable(getattr(module, "register"))
+ 
+@@ -544,6 +545,9 @@ DEPLOYMENT_EXPECTED = {
+     "RETENTION_GRACE_S": 3600.0,
+     # G4F (WR-G4F-1): the switch that mounts POST /v1/feedback, off
+     "FEEDBACK_API": False,
++    # LAB-API (WR-LAB-API-1): the switches that mount the Lab's two surfaces, off
++    "LAB_CONTROL": False,
++    "LAB_TRACES": False,
+ }
+ 
+ # Everything except the text values (the secret, the accounting regime) and the switch.
+diff --git a/apps/infrx-api/tests/g/mutants.py b/apps/infrx-api/tests/g/mutants.py
+index 1f57e0c3..f0652bdb 100644
+--- a/apps/infrx-api/tests/g/mutants.py
++++ b/apps/infrx-api/tests/g/mutants.py
+@@ -893,37 +893,70 @@ MUTANTS: tuple[Mutant, ...] = (
+     # The cutover itself (G2 item 5), in files G does not own, in the temporary copy only:
+     # the retired `unset_mode_refuses` / `composition_root_mounts_the_ingress` inverted.
+     _m("composition_root_mounts_the_legacy_route", "chat is served by the ingress only",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
++       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
+        "from .routes import chat as _chat\n"
+-       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, metrics)",
++       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
+        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+     # === the cutover lane (CUTOVER item 1): the full mount and the adapters from settings ==
+     _m("composition_root_drops_uploads", "the composition root mounts G4U's upload routes",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, ingress, jobs, feedback, metrics)",
++       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
++       "ROUTERS = (health, models, ingress, jobs, feedback, lab_control, lab_traces, metrics)",
+        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+     _m("composition_root_drops_jobs", "the composition root mounts G3's jobs routes",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, ingress, uploads, feedback, metrics)",
++       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, feedback, lab_control, lab_traces, metrics)",
+        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+     _m("composition_root_jobs_before_ingress", "jobs and uploads mount after the ingress",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, jobs, ingress, uploads, feedback, metrics)",
++       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
++       "ROUTERS = (health, models, jobs, ingress, uploads, feedback, lab_control, lab_traces, metrics)",
+        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+     # E4B's served-build check (CUTOVER item 7): /metrics mounted, the build gauge from settings
+     _m("composition_root_drops_metrics", "the composition root mounts I3B's /metrics",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback)", BUILD_CASE,
++       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces)", BUILD_CASE,
+        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+     # G4F (WR-G4F-1): the feedback route is mounted only when FEEDBACK_API turns it on
+     _m("composition_root_drops_feedback", "the composition root mounts G4F's feedback route",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
++       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, jobs, lab_control, lab_traces, metrics)",
+        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
+     _m("feedback_switch_ignored", "FEEDBACK_API off mounts no feedback route, even with a service",
+        P, "    rt.feedback = feedback if deployment.feedback_api else None\n",
+        "    rt.feedback = feedback\n",
+        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
++    # LAB-API (WR-LAB-API-1): each Lab surface is mounted only when its switch turns it on
++    _m("composition_root_drops_lab_control", "the composition root mounts WR-L4-1's control",
++       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_traces, metrics)",
++       "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
++    _m("composition_root_drops_lab_traces", "the composition root mounts WR-V1M-2's traces",
++       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, metrics)",
++       "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
++    _m("lab_control_switch_ignored", "LAB_CONTROL off mounts no control route, even composed",
++       P, "    rt.lab_control = lab_control if deployment.lab_control else None\n",
++       "    rt.lab_control = lab_control\n",
++       "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
++    _m("lab_traces_switch_ignored", "LAB_TRACES off mounts no traces route, even composed",
++       P, "    rt.lab_traces = lab_traces if deployment.lab_traces else None\n",
++       "    rt.lab_traces = lab_traces\n",
++       "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
++    _m("lab_switches_crossed", "each Lab surface follows its own switch",
++       P, "    rt.lab_traces = lab_traces if deployment.lab_traces else None\n",
++       "    rt.lab_traces = lab_traces if deployment.lab_control else None\n",
++       "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
++    _m("lab_control_composed_when_off", "LAB_CONTROL off builds no control",
++       P, '    lab = {"lab_control": LabControl(sessions, access)} if deployment.lab_control else {}\n',
++       '    lab = {"lab_control": LabControl(sessions, access)}\n',
++       "test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
++    _m("lab_verifier_elsewhere", "sessions are verified by the project's own auth server",
++       P, "GoTrueSessions(httpx.AsyncClient(base_url=settings.supabase_url,",
++       "GoTrueSessions(httpx.AsyncClient(base_url=settings.upstream,",
++       "test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
++    _m("lab_traces_without_projection", "LAB_TRACES without ClickHouse and the bucket refuses",
++       P, "    if missing:\n        raise RuntimeMisconfigured(runtime_mode(settings), missing)",
++       "    if False:\n        raise RuntimeMisconfigured(runtime_mode(settings), missing)",
++       "test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
+     # E2C (RV-12): the build case scrapes a fixture procfs; this case keeps the real reading
+     _m("host_memory_not_read", "the scrape reports this Linux host's memory from /proc/meminfo",
+        "observe/host.py", '        if name in ("MemTotal", "MemAvailable"):', "        if False:",
+diff --git a/apps/infrx-api/tests/g/test_startup.py b/apps/infrx-api/tests/g/test_startup.py
+index 7d2f648f..40f22501 100644
+--- a/apps/infrx-api/tests/g/test_startup.py
++++ b/apps/infrx-api/tests/g/test_startup.py
+@@ -18,7 +18,8 @@ from fastapi.testclient import TestClient
+ from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
+ from infrx.contracts import errors, wire
+ from infrx.gateway import app as composition
+-from infrx.gateway.routes import chat, feedback, health, ingress, jobs, models, uploads
++from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_control, lab_traces,
++                                  models, uploads)
+ from infrx.observe import host
+ from infrx.observe import route as metrics
+ from infrx.scheduling.memory import MemoryScheduler
+@@ -157,7 +158,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
+     loopback-only /metrics last - the one chat handler is the ingress's, every upload and jobs
+     route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
+     slash redirects) is served."""
+-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, metrics)
++    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, lab_control,
++                                   lab_traces, metrics)
+     app = pilot_app()
+     rt = app.state.runtime
+     paths = {route.path for route in app.routes if hasattr(route, "path")}
+@@ -219,6 +221,74 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
+     ingress.assert_route_table(on)
+ 
+ 
++def test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them():
++    """LAB-API (WR-LAB-API-1): `LAB_CONTROL` and `LAB_TRACES` are off by default, and then no
++    Lab route exists even with both surfaces composed (the launched API is unchanged); each
++    switch mounts its own surface only, which answers through `lab_auth` (no session: 401)."""
++    import dataclasses
++
++    from infrx.config import deployment_from_env
++
++    assert (deployment_from_env({}).lab_control, deployment_from_env({}).lab_traces) \
++        == (False, False)
++    surfaces = {"lab_control": (lab_control.LabControl(sessions=None, access=None),
++                                lab_control.CONTROL_PREFIX + "/models"),
++                "lab_traces": (lab_traces.LabTraces(None, None, None, None, None),
++                               lab_traces.TRACES_PATH)}
++
++    def composed(**on):
++        world = relay_support.World()
++        world.stream.usage = lambda: asyncio.sleep(0, {})
++        config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
++        return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
++                                      clock=world.now_s, catalog=world.catalog,
++                                      stream=world.stream, objects=world.objects,
++                                      jobs=world.jobs, index=MemoryScheduler(world.clock.now),
++                                      **{name: deps for name, (deps, _) in surfaces.items()})
++
++    for on in ({}, {"lab_control": True}, {"lab_traces": True},
++               {"lab_control": True, "lab_traces": True}):
++        app = composed(**on)
++        paths = {getattr(r, "path", "") for r in app.routes}
++        for name, (deps, path) in surfaces.items():
++            enabled = on.get(name, False)
++            assert (getattr(app.state.runtime, name) is deps) is enabled, (on, name)
++            assert (path in paths) is enabled, (on, name)
++            answer = local(app).get(path)
++            assert answer.status_code == (401 if enabled else 404), (on, name)
++        ingress.assert_route_table(app)
++
++
++def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled(monkeypatch):
++    """LAB-API (WR-LAB-API-1): off, nothing Lab is built; `LAB_CONTROL` builds the control
++    over the project's auth server and L2 on the pool, with L3's operations absent (503 until
++    L3 merges); `LAB_TRACES` without the trace projection and bucket refuses startup."""
++    import dataclasses
++
++    from infrx.gateway import pilot
++    from infrx.lab.access import LabAccess
++
++    def settings(**on):
++        return support.settings(deployment=dataclasses.replace(support.BUILD, **on))
++
++    assert pilot._lab(settings(), connect=None) == {}
++    built = pilot._lab(settings(lab_control=True), connect=None)
++    assert list(built) == ["lab_control"]
++    control = built["lab_control"]
++    assert (str(control.sessions.client.base_url), control.sessions.apikey) \
++        == ("https://fake.supabase.co", "service-role")
++    assert isinstance(control.access, LabAccess) and control.operations is None
++    import clickhouse_connect
++
++    def connected(**kw):
++        raise AssertionError("connected to a projection that is not configured")
++    monkeypatch.setattr(clickhouse_connect, "get_client", connected)
++    with pytest.raises(RuntimeMisconfigured, match="CLICKHOUSE_URL.*S3_TRACE_BUCKET"):
++        pilot._lab(settings(lab_traces=True), connect=None)
++    monkeypatch.setattr(pilot, "_lab_traces", lambda *args: "traces")
++    assert pilot._lab(settings(lab_traces=True), connect=None) == {"lab_traces": "traces"}
++
++
+ def fixture_host(monkeypatch, root: pathlib.Path) -> None:
+     """E2C (RV-12): the scrape reads a fixture procfs, not this machine's `/proc`, so a case
+     about the build gauge runs on any developer host. `collect_host(proc=...)` is the seam
+diff --git a/research/plan/08-contracts-v1-encoding.md b/research/plan/08-contracts-v1-encoding.md
+index c8fd2285..751076fc 100644
+--- a/research/plan/08-contracts-v1-encoding.md
++++ b/research/plan/08-contracts-v1-encoding.md
+@@ -135,6 +135,7 @@ Read by the same rules as the table above with one deliberate difference: an **e
+ | `INFRX_RELEASE_SHA` / `INFRX_IMAGE` | unset | the commit `install.sh` deployed (its HEAD, `--release`) and the runtime image id it built (`sha256:<64 hex>`), written by preflight `apply` (MANIFEST, required in `pilot`); the gateway exposes them as `infrx_build_info{revision, image} 1` on its loopback-only `/metrics` from startup, never read from git or docker at runtime (E4B's served-build check). A `pilot` without either refuses to start (`pilot.build_info`), and a malformed one refuses in every mode (`validate_deployment`) |
+ | `WORKER_HEALTH_PORT` | 8002 | I2B-R4 (W3 request 6): the loopback port of `python -m infrx.worker` (`/readyz`, `/livez`, `/metrics` with the same `infrx_build_info`); bound only after the pool, the bucket and `PROCESSING_CACHE_DIR` answered. Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`): install.sh's `wait_ready` and `60-verify-local.sh` probe 8002 |
+ | `PREPARATION_CONCURRENCY` | 2 (§5's `PilotSettings` default, not restated) | PREP-WORKER: the number of runners `python -m infrx.worker` runs on `prepare_dispatch` candidates (its preparation pool, beside `WORKER_CONCURRENCY`'s inference pool), and M2's per-process materialization gate; still gates nothing at admission (R1: `MAX_PREPARING_JOBS` does). Settable through the installer (`preflight.TUNABLE`). Its drain bound is `PREPARATION_LEASE_TTL_S`: an attempt still running at a SIGTERM is released and its lapsed lease requeued by the next `recover` (R93) ⚠️ TO BE VERIFIED on the box (no measured preparation latency) |
++| `LAB_CONTROL` / `LAB_TRACES` | off (`1`/`true`/`yes`/`on` turn each on) | LAB-API (WR-LAB-API-1): mount the Lab's `/lab/v1/control` (WR-L4-1, over L3's operations; before L3 merges they answer 503 and L2 aggregate health is served) and `/lab/v1/traces` (WR-V1M-2, over T2I's projection and T3's retention: `LAB_TRACES` without `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` refuses startup). Each authenticates the Lab's forwarded Supabase session at the project's auth server (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` as `apikey`; no new secret) and re-derives the actor from L2's `LabAccess` on every call. Off, no Lab route exists (404). Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`) |
+ | `FEEDBACK_API` | off (`1`/`true`/`yes`/`on` turn it on; anything else reads as off) | G4F (WR-G4F-1): mounts `POST /v1/feedback` over D6F's `PgFeedbackService` on the job store's pool; off, no feedback route exists (404) and the launched API is unchanged. The database's own `feedback` flag gates every write again (off: 503). Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`): enabling it hosted needs the E4 regression rerun (wave-5 plan rule 5) and that flag row |
+ 
+ The four `DATABASE_POOL_*` names spell the prefix in full; `11 §F2R` item 7 wrote them as `DATABASE_POOL_MIN_SIZE/MAX_SIZE/CONNECT_TIMEOUT_S/STATEMENT_TIMEOUT_MS`, which this reads as one shared prefix rather than four different ones. The G1/Q1 constants are **not yet reads of these settings**: `validate.py`, `intake.py` and `scheduling/memory.py` belong to other tracks, so the wiring is an integration request, and `tests/contracts/test_config_and_imports.py::test_the_g1_and_q1_constants_match_the_deployment_defaults` pins the constants against these defaults so the two cannot drift while it is open.

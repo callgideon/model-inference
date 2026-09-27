@@ -1,0 +1,69 @@
+{
+ "task": "WR-V1M-2",
+ "activity": "review",
+ "head": "f36a6ab4",
+ "worktree": ".claude/worktrees/codex-w5-lab-api",
+ "branch": "codex/w5-lab-api",
+ "slice": "lab-api (LW2)",
+ "blockers": [],
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/routes/lab_traces.py",
+  "apps/infrx-api/tests/g/lab_traces/"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=l4 pytest tests/g/lab_auth",
+   "exit": 0,
+   "summary": "12 passed (PG l4)"
+  },
+  {
+   "cmd": "pytest tests/g/lab_control",
+   "exit": 0,
+   "summary": "11 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 pytest tests/g/lab_traces/test_lab_traces.py",
+   "exit": 0,
+   "summary": "16 passed (PG l4)"
+  },
+  {
+   "cmd": "INFRX_LAB_API_STACK=1 pytest tests/g/lab_traces/test_lab_traces_stack.py",
+   "exit": 0,
+   "summary": "1 passed (ClickHouse t2i block)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all lab_auth/lab_control/lab_traces test_mutants",
+   "exit": 0,
+   "summary": "24/24, 27/27, 29/29 killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 make api-test",
+   "exit": 2,
+   "summary": "5136 passed; 43 failed = tests/i/test_mutants baseline under non-default key; 8 errors = shared i8 pooler lock BlockingIOError (rerun alone: lock still held)"
+  },
+  {
+   "cmd": "wiring proof: tests/contracts tests/i/test_packaging.py tests/g tests/w (+patch)",
+   "exit": 0,
+   "summary": "2580 passed, 15 skipped; final patch fresh apply 446 passed, 1 skipped; 15/15 wiring G mutants killed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 5,
+  "confidence": "medium",
+  "basis": "G4F 1/2/4 per route plus the auth seam; remaining = wiring apply, L3 compose (control) / traces extra at enable, one verify round",
+  "at": "2026-09-27T22:40Z"
+ },
+ "wiring_requests": [
+  "WR-LAB-API-1 (coordinator): apply research/plan/evidence/g/LAB-API-f36a6ab-wiring.patch (LAB_CONTROL/LAB_TRACES default off, ROUTERS, pilot._lab, preflight NOT_SETTABLE, pins, G mutants, startup cases, Makefile api-mutants, 08 row)",
+  "WR-LAB-API-2 (lab-access-lw2 L3): implement gateway/routes/lab_control.ControlOperations; coordinator passes operations=<L3> in pilot._lab",
+  "WR-LAB-API-3 (lab-app-lw2): http adapters over {data}/{refusal}; map 401 -> denied",
+  "WR-LAB-API-4 (lab-sql, optional): named RPC for PgServing's serving_versions read",
+  "WR-LAB-API-5 (lab-app-lw2 V1M): lib/services/traces adapter over /lab/v1/traces"
+ ],
+ "evidence": [
+  "research/plan/evidence/g/WR-V1M-2-f36a6ab.md",
+  "research/plan/evidence/g/LAB-API-f36a6ab-wiring.patch"
+ ]
+}
