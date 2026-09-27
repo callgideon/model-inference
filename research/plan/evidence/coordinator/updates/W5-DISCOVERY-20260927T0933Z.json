@@ -1,0 +1,64 @@
+{
+  "task": "W5-DISCOVERY",
+  "slice": "X1.a-c, X3.a-c, X5.a-c (discovery drafts; fix round for 0-D1, 0-D2, 1-DISC-1, 1-DISC-2; approval BLOCKED on P-13/P-14/P-15)",
+  "activity": "review",
+  "at": "2026-09-27T09:33:00Z",
+  "head": "5dcd4ac",
+  "base": "9a6c3685",
+  "worktree": ".claude/worktrees/codex-w5-discovery",
+  "branch": "codex/w5-discovery",
+  "owned_paths": [
+    "research/workloads/video/",
+    "research/workloads/robotics/",
+    "research/workloads/hardware/"
+  ],
+  "commands": [
+    {
+      "cmd": "cd research/workloads/video && python3 -m unittest test_check_discovery test_mutants (new trial-status case + mutant, rule absent)",
+      "exit": 1,
+      "summary": "2 failures recorded (seam red)"
+    },
+    {
+      "cmd": "cd research/workloads/video && python3 check_discovery.py (rule added, doc unfixed)",
+      "exit": 1,
+      "summary": "1 error: Causal labelling rule named unsupplied by the trial status (1-DISC-2 reproduced)"
+    },
+    {
+      "cmd": "cd research/workloads/video && python3 -m unittest test_check_discovery test_mutants",
+      "exit": 0,
+      "summary": "15 tests OK; 11/11 mutants killed; every case covered"
+    },
+    {
+      "cmd": "cd research/workloads/video && python3 check_discovery.py",
+      "exit": 0,
+      "summary": "3 documents, 0 errors"
+    },
+    {
+      "cmd": "cd research/plan/scripts && python3 validate_plan.py",
+      "exit": 0,
+      "summary": "PASS, 934 links / 293 documents"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "fix round done; one verify pass over four findings (verify workflow 47-234 min, wave5-plan 2.8) plus the coordinator merge; owner approval (P-13/14/15) is outside lane effort",
+    "at": "2026-09-27T09:33:00Z"
+  },
+  "blockers": [
+    "P-13: live-video task, cadence/window/deadline/clock/overload/temporal-labelling inputs and trial target (approval only; discovery done)",
+    "P-14: design partner, robot/task/policy, schemas, clocks, latency target, local control owner (approval only; discovery done)",
+    "P-15: chip/model/runtime choice, hardware access and go/no-go thresholds (approval only; discovery done)"
+  ],
+  "wiring_requests": [
+    "research/workloads/README.md: add index rows for video/live-video-contract.md, robotics/robot-freshness-contract.md and hardware/non-nvidia-backend.md",
+    "optional: move check_discovery.py + tests to research/workloads/ root and add to make check"
+  ],
+  "evidence": [
+    "research/plan/evidence/x/X1-cdb8681.md",
+    "research/plan/evidence/x/X3-bd00e3b.md",
+    "research/plan/evidence/x/X5-1205cea.md"
+  ]
+}
