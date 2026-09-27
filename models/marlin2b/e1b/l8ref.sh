@@ -2,9 +2,11 @@
 # in-cap clips. A copy of research/plan/evidence/w/box/box-lane/l8ref.sh (append-only, unchanged)
 # with three differences: CLIPS = sop00-sop08 (every sop-synth-v1 clip within the 82 s cap) plus
 # the two 10 s samples, refused (exit 2, nothing touched) unless all 11 are on the box; the
-# engine stop is DECLARED - infrx-observe.timer (the alert cycle) is stopped for the span and
-# started again after the restore, and the restore prints one drills.md-format line (E4C-runbook
-# §6; its ssm=FILL takes ssm.sh's command id); WC-7 starts right after restored=yes. Run as root:
+# engine stop is DECLARED - infrx-observe.timer (the alert cycle) is stopped for the span, with
+# infrx-observe.service, so a cycle already running is ended before the engine stops (systemctl
+# stop returns once the oneshot is down; SWEEP-2 SW1-RV-3); the timer is started again after
+# the restore, and the restore prints one drills.md-format line (E4C-runbook §6; its ssm=FILL
+# takes ssm.sh's command id); WC-7 starts right after restored=yes. Run as root:
 #   infra/rollout/ssm.sh models/marlin2b/e1b/l8ref.sh EUTC=<UTC stamp>   (WC-6b's l8served.sh: the same EUTC)
 set -uo pipefail
 : "${EUTC:?}"
@@ -62,7 +64,7 @@ restore() {
 stopped=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 trap restore EXIT; trap 'exit 130' INT TERM HUP
 echo "declared stop: $OBSERVE ($observe) and $UNIT at $stopped"
-[ "$observe" = active ] && systemctl stop $OBSERVE
+[ "$observe" = active ] && systemctl stop $OBSERVE infrx-observe.service
 systemctl stop $UNIT
 for _ in $(seq 60); do docker inspect $C >/dev/null 2>&1 || break; sleep 1; done
 echo "engine_container=$(docker inspect --format '{{.State.Status}}' $C 2>&1 | head -1)"

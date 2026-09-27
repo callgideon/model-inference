@@ -1148,7 +1148,9 @@ def test_every_section7_command_is_the_launchers_and_validates_against_its_fille
         out_cold, cold = launcher_plan(os.path.join(tmp, "box-cold"), cells="WC-7")
         plan.update(cold)
         outs = {v: out_cold if v in cold else out for v in plan}
-        assert set(plan) == set(launched) and len(plan) == 11, sorted(plan)
+        # SWEEP-2 (WR-SWEEP1-1): 12 = WC-1 4, WC-2 3 (two direct legs + the c = 1 gateway half),
+        # WC-3, WC-4, WC-5, WC-8, WC-7
+        assert set(plan) == set(launched) and len(plan) == 12, sorted(plan)
         fills = ("--profile", "--key-inventory", "--out", "--raw")
         problems = [f"{v}: launcher {drop(plan[v], *fills)} != §7.2 {wanted[v][1]}"
                     for v in plan if drop(plan[v], *fills) != wanted[v][1]]
@@ -1170,7 +1172,7 @@ def test_every_section7_command_is_the_launchers_and_validates_against_its_fille
                 ok = (d["expect_model"] == served == "marlin2b" and "projected_spend" not in d
                       and v["warnings"] == ["blocks do not apply to a local or fake target"])
             else:
-                n = int(argv[argv.index("--requests") + 1])
+                n = int(argv[argv.index("--requests" if "--requests" in argv else "-n") + 1])
                 ok = (not v["blocks"] and not v["warnings"] and d["spend_currency"] == "CREDIT"
                       and Decimal(d["projected_spend"]) == n * CREDIT_PER_REQUEST
                       and Decimal(ceiling.group(1).replace(",", "")) == n * CREDIT_PER_REQUEST

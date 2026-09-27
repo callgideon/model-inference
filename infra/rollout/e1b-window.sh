@@ -125,7 +125,9 @@ for wc in $ORDER; do
   [[ " $CELLS " == *" $wc "* ]] || continue
   case $wc in
     WC-1) for c in 1 2 4 8; do cell WC-1 E1B-direct.json $DIRECT -c $c -n 64 --engine-state warm --dataset-version e1b-w1-L1-c$c; done ;;
-    WC-2) for r in 0.5 2.0; do cell WC-2 E1B-direct.json $DIRECT --rate $r --requests 135 --engine-state warm --dataset-version e1b-w1-pair-r$r; done ;;
+    WC-2) for r in 0.5 2.0; do cell WC-2 E1B-direct.json $DIRECT --rate $r --requests 135 --engine-state warm --dataset-version e1b-w1-pair-r$r; done
+          # E1BP-11's decisive c = 1 half: WC-1's c = 1 schedule through the gateway (WR-SWEEP1-1)
+          cell WC-2 E1B-box.json $BOX -c 1 -n 64 --engine-state warm --dataset-version e1b-w1-pair-c1 ;;
     WC-3) cell WC-3 E1B-box.json $BOX --rate 0.5 --burst 8 --requests 135 --dataset-version e1b-w1-L3 ;;
     WC-4) cell WC-4 E1B-box.json $BOX --rate 0.5 --requests 60 --cancel-fraction 0.2 --cancel-after 2 --dataset-version e1b-w1-L5 ;;
     WC-5) cell WC-5 E1B-box-forms.json $BOX --forms upload,video_b64 --rate 0.5 --requests 135 --dataset-version e1b-w1-forms ;;

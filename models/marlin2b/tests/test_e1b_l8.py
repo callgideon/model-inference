@@ -85,14 +85,16 @@ def test_both_halves_parse_and_name_the_same_eleven_in_cap_clips():
 def test_the_reference_half_is_a_declared_stop_that_silences_and_restores_the_alert_cycle():
     """E1BP-5. Oracle: the engine stopped while the alert cycle runs (its ComponentDown page
     would be an undeclared outage), the cycle left stopped after the restore, or no
-    drills.md-format line for the stop."""
+    drills.md-format line for the stop. SWEEP-2 (SW1-RV-3): stopping the timer alone leaves a
+    cycle already running (infrx-observe.service, a oneshot) to see the engine go down, so the
+    stop names the service too (systemctl stop returns once it is down) before the engine stops."""
     with tempfile.TemporaryDirectory() as tmp:
         env, texts, log = box(tmp)
         done = subprocess.run(["bash", "-c", texts["l8ref.sh"]], env=env, capture_output=True,
                               text=True, timeout=120)
         assert done.returncode == 0, done.stdout + done.stderr
         assert [c for c in calls(log, "systemctl") if not c.startswith("is-active")] == [
-            "stop infrx-observe.timer", "stop marlin2b-vllm", "start marlin2b-vllm",
+            "stop infrx-observe.timer infrx-observe.service", "stop marlin2b-vllm", "start marlin2b-vllm",
             "start infrx-observe.timer"]
         assert "restored=yes" in done.stdout and "silence=infrx-observe.timer" in done.stdout
         line = DRILL.search(done.stdout)

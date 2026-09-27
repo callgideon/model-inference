@@ -41,6 +41,10 @@ OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d",
 # I3B follow-up round 2 (DR-1/DR-3): rc10 runs I2B's rollback.sh and lib.sh from the
 # copy, and i3bm94/i3bm97/i3bm98 mutate them.
 OWNED_TREES += ("apps/infrx-api/deploy",)
+# SWEEP-2 (SW1-R2): e3c's test_e3c_runner.py reads the SQL migrations (reverts.py) and the task
+# record beside its own tree, so the copy carries both; without them its cases cannot run there.
+OWNED_TREES += ("apps/app/supabase/migrations",)
+COPIED_FILES = ("research/plan/tasks.json",)
 # E3B.c only: module code a defect mutant may edit, copied per mutant and never in place.
 API_TREE = "apps/infrx-api/infrx"
 
@@ -1239,6 +1243,26 @@ MUTANTS: tuple[Mutant, ...] = (
            "    names = containers() if docker_ok else None",
            "tests/integration/test_preflight.py", "container_left_in_the_namespace",
            cases=("test_a_container_left_in_the_namespace_is_blocked",)),
+
+    # ---------------- SWEEP-2 (SW1-R2): one mutant per SWEEP-1 case
+    Mutant("e2cp07", "WR-G2FIX-3/SC-3: consumer-local's preflight probes e2c's valkey-q port",
+           "tests/integration/environment.json",
+           '        "s3",\n        "valkey-q"\n      ],', '        "s3"\n      ],',
+           "tests/integration/test_preflight.py", "foreign_listener_on_the_q_valkey_port",
+           cases=("test_a_foreign_listener_on_the_q_valkey_port_blocks_consumer_local",)),
+    Mutant("e2cp08", "SW1-R3/RV-2: the manifest names the one e2c container preflight cannot see "
+           "as vkharness names it",
+           "tests/integration/environment.json",
+           '        "infrx-q3-valkey-55430"\n      ],', '        "infrx-q3-valkey"\n      ],',
+           "tests/integration/test_preflight.py", "manifest_is_self_consistent",
+           cases=("test_the_environment_manifest_is_self_consistent",)),
+    Mutant("e3cr01", "WR-BM-2: nc-dur-cap-org reverts the per-organization comparison, not the per-key one",
+           "tests/integration/backend/e3c/reverts.py",
+           """        "admission_checks", "if v_count >= (p_limits->>'max_active_jobs_per_org')::int then",""",
+           """        "admission_checks", "if v_count >= (p_limits->>'max_active_jobs_per_key')::int then",""",
+           "tests/integration/backend/e3c/test_e3c_runner.py",
+           "each_per_scope_cap_control_removes_only_its_own_comparison",
+           cases=("test_s12_each_per_scope_cap_control_removes_only_its_own_comparison",)),
 )
 
 
@@ -1256,6 +1280,9 @@ def _copy_trees(destination: Path) -> None:
     for tree in OWNED_TREES:
         shutil.copytree(harness.REPO_ROOT / tree, destination / tree,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    for name in COPIED_FILES:
+        (destination / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(harness.REPO_ROOT / name, destination / name)
 
 
 def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
@@ -1267,16 +1294,17 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
     # behind. E3B phase 2: the run gets a PRIVATE TMPDIR inside its own copy, so whatever it
     # leaks goes with the copy - nothing in the shared temp directory is ever swept (sweeping
     # it by name deleted another lane's live mutant copy). One exception: suites under
-    # apps/infrx-api (tests/d) keep the shared TMPDIR, because their port lock lives there.
+    # apps/infrx-api (tests/d) keep the shared TMPDIR, where their port lock used to live (since
+    # WR-BM-1 it is /tmp/<container>-<port>.lock whatever TMPDIR is: pgharness.lock_path).
     with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-{mutant.id}-") as tmp:
         root = Path(tmp)
         _copy_trees(root)
         private = None if mutant.suite.startswith("apps/infrx-api/") else root / "tmp"
         # I3B's D mode (INFRX_I3B_PG=d): its restore and rc10 cases run D's pgharness, whose
-        # port lock lives in the shared TMPDIR too - a private one gives each run its own lock
-        # on the one shared port, and a second run removes the first's container (DR-2).
-        # ponytail: this shares the lock only among runs with the SAME TMPDIR (I3B DRL-4);
-        # a TMPDIR-independent lock path is D's (I3B request R3-2).
+        # port lock used to live in TMPDIR - a private one gave each run its own lock on the one
+        # shared port, and a second run removed the first's container (DR-2). Since WR-BM-1
+        # (SWEEP-1, I3B request R3-2 / DRL-4) the lock is /tmp/<container>-<port>.lock whatever
+        # TMPDIR is, so every run on the port shares it; this exception is kept, not needed.
         if (os.environ.get("INFRX_I3B_PG") == "d"
                 and mutant.suite.startswith("tests/integration/backend/recovery/")):
             private = None
