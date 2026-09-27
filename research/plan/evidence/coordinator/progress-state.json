@@ -20,7 +20,7 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 163,
-  "updated": "2026-09-27T09:36:21Z",
+  "updated": "2026-09-27T09:43:00Z",
   "agent_slots": {
     "total": 16,
     "active": 6,
@@ -4199,17 +4199,17 @@
       "branch": "codex/w5-lab-app",
       "worktree": ".claude/worktrees/codex-w5-lab-app",
       "base": "9a6c3685",
-      "head": null,
+      "head": "80dae52c",
       "isolation": {
         "ports": "l4 57503; Lab dev 3100",
         "prefix": "infrx-l4-",
         "db": "l4"
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-27T09:15:00Z",
-      "updated": "2026-09-27T09:15:00Z",
-      "blocker": null,
-      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "updated": "2026-09-27T09:43:00Z",
+      "blocker": "waits for L2-SQL (lab-sql) and L2 (lab-access) to merge",
+      "next_action": "HELD at 80dae52c (verdict REJECT only on R-3 = the membership seam, ruled R156): merges after L2 and L2-SQL; then an L1 integration round switches the read to the L2 port, applies WR-L1-1..4 (home page, lab-mutants target, .gitignore, .env.example) and runs LAB-ACCESS on l4; WR-L1-6 (Lab sign-in, /auth/callback, middleware) goes to L4 (LW2)",
       "estimate": {
         "optimistic_h": 4,
         "likely_h": 8,
@@ -4218,8 +4218,16 @@
         "basis": "wave5-plan §5 LW1 estimates",
         "at": "2026-09-27T09:15:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/l/L1-eabf94a.md"
+      ],
+      "commands": [
+        {
+          "cmd": "make lab-test/lint/typecheck/build; tests/l/shell/run-mutants.mjs; App build",
+          "exit": 0,
+          "summary": "24 passed; lint/typecheck/build 0; 41/41 mutants killed (+ guard tests G01–G03 and the AST boundary scan after the fix round); App build 0"
+        }
+      ],
       "owned_paths": [
         "wave5-plan §5 LW1 lab-app"
       ],
@@ -7066,6 +7074,12 @@
       "by": "tracker",
       "what": "rejected update: stale: at 2026-09-27T09:33:00Z is not newer than lane W5-DISCOVERY state 2026-09-27T09:36:00Z",
       "source": "updates/W5-DISCOVERY-20260927T0933Z.json"
+    },
+    {
+      "at": "2026-09-27T09:43:00Z",
+      "by": "coordinator (LW1)",
+      "what": "L1 (lab-app) verified at 80dae52c: two majors fixed (AST boundary scan, guard tests); R-3 (membership seam) ruled R156 — one RPC by lab-sql behind the L2 port; L1 held until L2/L2-SQL merge, then an integration round. WR-L1-6 (sign-in/callback/middleware) assigned to L4 in LW2",
+      "source": "research/plan/evidence/l/L1-eabf94a.md"
     }
   ],
   "history": {
