@@ -1,0 +1,22 @@
+{
+  "task": "X3",
+  "lane": "discovery",
+  "slice": "X3.a-c (discovery draft; approval BLOCKED on P-14)",
+  "activity": "review",
+  "at": "2026-09-27T09:22:00Z",
+  "head": "bd00e3b",
+  "base": "9a6c3685",
+  "worktree": ".claude/worktrees/codex-w5-discovery",
+  "branch": "codex/w5-discovery",
+  "owned_paths": ["research/workloads/robotics/", "research/workloads/video/check_discovery.py", "research/plan/evidence/x/X3-bd00e3b.md", "research/plan/evidence/coordinator/updates/X3-20260927T0922Z.json"],
+  "commands": [
+    {"cmd": "cd research/workloads/video && python3 -m unittest test_check_discovery (spec registered, doc absent)", "exit": 1, "summary": "seam failure: robotics document missing"},
+    {"cmd": "cd research/workloads/video && python3 -m unittest test_check_discovery test_mutants", "exit": 0, "summary": "14 tests OK; 10/10 mutants killed"},
+    {"cmd": "cd research/workloads/video && python3 check_discovery.py", "exit": 0, "summary": "2 documents, 0 errors"},
+    {"cmd": "cd research/plan/scripts && python3 validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 2, "likely_h": 4, "pessimistic_h": 8, "confidence": "low", "basis": "remaining X5 (3 slices, inputs mostly in research/gpus/mi355x.md and research/models/marlin2b/mi355x.md) plus one review round", "at": "2026-09-27T09:22:00Z"},
+  "blockers": ["P-14: design partner, robot/task/policy, schemas, clocks, latency target, local control owner (approval only; discovery done)"],
+  "wiring_requests": ["research/workloads/README.md: add index row for robotics/robot-freshness-contract.md"],
+  "evidence": ["research/plan/evidence/x/X3-bd00e3b.md"]
+}
