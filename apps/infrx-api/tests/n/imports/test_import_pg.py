@@ -31,7 +31,9 @@ from ...d import test_d7_lab_data as d7
 from ...d import test_l2sql_access as l2
 from .world import NEMO, Crash, chunks, fixture, run
 
-_reason = pgharness.unavailable()
+# Only on an explicit task-local key: the D harness default is another lane's port.
+_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") else \
+    "PostgreSQL only on an explicit task-local key (INFRX_D_TASK=n1)"
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_n1"

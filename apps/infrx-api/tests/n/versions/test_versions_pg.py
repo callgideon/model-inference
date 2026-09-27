@@ -13,6 +13,7 @@ plus the recorded fail-first runs in the N2 evidence.
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 from infrx.contracts import errors
@@ -30,7 +31,9 @@ from ..imports.test_import_pg import object_store
 from ..imports.world import NEMO, chunks, fixture, run
 from .test_versions import NOW, POLICY, split_of, text, uid
 
-_reason = pgharness.unavailable()
+# Only on an explicit task-local key: the D harness default is another lane's port.
+_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") else \
+    "PostgreSQL only on an explicit task-local key (INFRX_D_TASK=n2)"
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_n2"
