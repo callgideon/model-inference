@@ -1,0 +1,1412 @@
+{
+  "accepted": {
+    "annotation": {
+      "annotation_id": "0000005a-0000-4000-8000-00000000005a",
+      "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "evidence_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ground_truth": true,
+      "label": {
+        "intent": "refund"
+      },
+      "method": "human",
+      "method_version": "rubric-v3",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "reviewer_id": "0000005b-0000-4000-8000-00000000005b",
+      "rubric_ref": "lab:rubric:11111111-1111-4111-8111-111111111111:0000005c-0000-4000-8000-00000000005c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sample_id": "00000065-0000-4000-8000-000000000065",
+      "schema": "lab.annotation.1",
+      "state": "submitted"
+    },
+    "attempt": {
+      "attempt": 2,
+      "case_id": "0000001f-0000-4000-8000-00000000001f",
+      "idempotency_key": "attempt:0000001e-0000-4000-8000-00000000001e:0000001f-0000-4000-8000-00000000001f:2",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "run_ref": "lab:run:11111111-1111-4111-8111-111111111111:0000001e-0000-4000-8000-00000000001e@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "schema": "lab.attempt.1",
+      "state": "leased"
+    },
+    "checkpoint": {
+      "artifact_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "checkpoint_id": "00000046-0000-4000-8000-000000000046",
+      "external_run_ref": "lab:external_run:11111111-1111-4111-8111-111111111111:00000050-0000-4000-8000-000000000050@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "received_at": "2026-09-27T10:00:00Z",
+      "schema": "lab.checkpoint.1",
+      "state": "received"
+    },
+    "dataset_manifest": {
+      "created_at": "2026-09-27T10:00:00Z",
+      "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+      "derivation": "import",
+      "parent_refs": [],
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "samples": [
+        {
+          "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "group_key": "doc-1",
+          "modality": "text",
+          "sample_id": "00000065-0000-4000-8000-000000000065",
+          "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "duration_ms": 81000,
+          "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "group_key": "clip-7",
+          "modality": "finite_video",
+          "sample_id": "00000066-0000-4000-8000-000000000066",
+          "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "group_key": "tool-call-3",
+          "modality": "structured",
+          "sample_id": "00000067-0000-4000-8000-000000000067",
+          "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "schema": "lab.dataset_manifest.1",
+      "splits": {
+        "holdout": [
+          "00000067-0000-4000-8000-000000000067"
+        ],
+        "train": [
+          "00000065-0000-4000-8000-000000000065"
+        ],
+        "validation": [
+          "00000066-0000-4000-8000-000000000066"
+        ]
+      },
+      "version": 1
+    },
+    "eval_run": {
+      "budgets": [
+        {
+          "limit": {
+            "unit": "CREDIT",
+            "value": "500.00000000"
+          },
+          "reserved": {
+            "unit": "CREDIT",
+            "value": "0.00000000"
+          }
+        },
+        {
+          "limit": {
+            "unit": "PROVIDER_USD",
+            "value": "25.00000000"
+          },
+          "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reserved": {
+            "unit": "PROVIDER_USD",
+            "value": "1.50000000"
+          }
+        }
+      ],
+      "created_at": "2026-09-27T10:00:00Z",
+      "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "environment": "dev",
+      "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+      "max_cases": 100,
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "run_id": "0000001e-0000-4000-8000-00000000001e",
+      "schema": "lab.eval_run.1",
+      "seed": 7,
+      "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "state": "queued"
+    },
+    "external_run": {
+      "budget": {
+        "limit": {
+          "unit": "PROVIDER_USD",
+          "value": "40.00000000"
+        },
+        "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "reserved": {
+          "unit": "PROVIDER_USD",
+          "value": "40.00000000"
+        }
+      },
+      "connector": "manual-bundle",
+      "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "external_run_id": "00000050-0000-4000-8000-000000000050",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "purpose": "external_judging",
+      "schema": "lab.external_run.1",
+      "state": "ambiguous",
+      "submit_key": "submit:00000050-0000-4000-8000-000000000050"
+    },
+    "harness_revision": {
+      "adapter": "structured",
+      "created_at": "2026-09-27T10:00:00Z",
+      "harness_id": "00000014-0000-4000-8000-000000000014",
+      "input_mapping": {
+        "input": "sample.text"
+      },
+      "processor_profile": "marlin-sop-1",
+      "prompt_template": "Extract the order as JSON: {{input}}",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "reference_output": {
+        "field": "expected"
+      },
+      "schema": "lab.harness_revision.1",
+      "tools": [
+        {
+          "effect": "read_only",
+          "input_schema": {
+            "type": "object"
+          },
+          "name": "lookup_sku"
+        }
+      ],
+      "version": 1
+    },
+    "optimization_variant": {
+      "base_serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "changes": [
+        "quantization:nvfp4"
+      ],
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "schema": "lab.optimization_variant.1",
+      "variant_id": "0000008c-0000-4000-8000-00000000008c",
+      "variant_serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:0000002a-0000-4000-8000-00000000002a@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "rollout_assignment": {
+      "cohort_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "pinned_by": "cohort",
+      "policy_ref": "lab:policy:11111111-1111-4111-8111-111111111111:0000006e-0000-4000-8000-00000000006e@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "request_id": "00000078-0000-4000-8000-000000000078",
+      "schema": "lab.rollout_assignment.1",
+      "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "rollout_decision": {
+      "decided_at": "2026-09-27T10:00:00Z",
+      "decided_by": "00000082-0000-4000-8000-000000000082",
+      "decision": "expand",
+      "evidence_refs": [
+        "lab:run:11111111-1111-4111-8111-111111111111:0000001e-0000-4000-8000-00000000001e@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "policy_ref": "lab:policy:11111111-1111-4111-8111-111111111111:0000006e-0000-4000-8000-00000000006e@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "schema": "lab.rollout_decision.1"
+    },
+    "rollout_policy": {
+      "baseline_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "candidates": [
+        {
+          "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000029-0000-4000-8000-000000000029@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "weight_bp": 500
+        }
+      ],
+      "cohort": "account",
+      "created_at": "2026-09-27T10:00:00Z",
+      "endpoint_id": "0000006f-0000-4000-8000-00000000006f",
+      "mode": "canary",
+      "policy_id": "0000006e-0000-4000-8000-00000000006e",
+      "provider_org_id": "11111111-1111-4111-8111-111111111111",
+      "schema": "lab.rollout_policy.1",
+      "version": 3
+    }
+  },
+  "rejected": [
+    {
+      "name": "unknown schema version",
+      "payload": {
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+        "derivation": "import",
+        "parent_refs": [],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "samples": [
+          {
+            "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "text",
+            "sample_id": "00000065-0000-4000-8000-000000000065",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "duration_ms": 81000,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "clip-7",
+            "modality": "finite_video",
+            "sample_id": "00000066-0000-4000-8000-000000000066",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "tool-call-3",
+            "modality": "structured",
+            "sample_id": "00000067-0000-4000-8000-000000000067",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "schema": "lab.dataset_manifest.2",
+        "splits": {
+          "holdout": [
+            "00000067-0000-4000-8000-000000000067"
+          ],
+          "train": [
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "validation": [
+            "00000066-0000-4000-8000-000000000066"
+          ]
+        },
+        "version": 1
+      },
+      "reason": "unknown_schema"
+    },
+    {
+      "name": "no schema at all",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "unknown_schema"
+    },
+    {
+      "name": "dataset named by a moving label",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@latest",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "mutable_ref"
+    },
+    {
+      "name": "evidence without a digest",
+      "payload": {
+        "decided_at": "2026-09-27T10:00:00Z",
+        "decided_by": "00000082-0000-4000-8000-000000000082",
+        "decision": "expand",
+        "evidence_refs": [
+          "lab:run:11111111-1111-4111-8111-111111111111:0000001e-0000-4000-8000-00000000001e"
+        ],
+        "policy_ref": "lab:policy:11111111-1111-4111-8111-111111111111:0000006e-0000-4000-8000-00000000006e@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "schema": "lab.rollout_decision.1"
+      },
+      "reason": "mutable_ref"
+    },
+    {
+      "name": "another provider's serving revision",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:22222222-2222-4222-8222-222222222222:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "cross_provider_ref"
+    },
+    {
+      "name": "a sample under another provider's grant",
+      "payload": {
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+        "derivation": "import",
+        "parent_refs": [],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "samples": [
+          {
+            "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "grant_ref": "lab:grant:22222222-2222-4222-8222-222222222222:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "text",
+            "sample_id": "00000065-0000-4000-8000-000000000065",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "duration_ms": 81000,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "clip-7",
+            "modality": "finite_video",
+            "sample_id": "00000066-0000-4000-8000-000000000066",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "tool-call-3",
+            "modality": "structured",
+            "sample_id": "00000067-0000-4000-8000-000000000067",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "schema": "lab.dataset_manifest.1",
+        "splits": {
+          "holdout": [
+            "00000067-0000-4000-8000-000000000067"
+          ],
+          "train": [
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "validation": [
+            "00000066-0000-4000-8000-000000000066"
+          ]
+        },
+        "version": 1
+      },
+      "reason": "cross_provider_ref"
+    },
+    {
+      "name": "CREDIT limit with a PROVIDER_USD reservation",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "mixed_units"
+    },
+    {
+      "name": "legacy USD reservation against a PROVIDER_USD limit",
+      "payload": {
+        "budget": {
+          "limit": {
+            "unit": "PROVIDER_USD",
+            "value": "40.00000000"
+          },
+          "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reserved": {
+            "unit": "USD",
+            "value": "1.00000000"
+          }
+        },
+        "connector": "manual-bundle",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "external_run_id": "00000050-0000-4000-8000-000000000050",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "purpose": "external_judging",
+        "schema": "lab.external_run.1",
+        "state": "ambiguous",
+        "submit_key": "submit:00000050-0000-4000-8000-000000000050"
+      },
+      "reason": "mixed_units"
+    },
+    {
+      "name": "a sample in two splits",
+      "payload": {
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+        "derivation": "import",
+        "parent_refs": [],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "samples": [
+          {
+            "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "text",
+            "sample_id": "00000065-0000-4000-8000-000000000065",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "duration_ms": 81000,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "clip-7",
+            "modality": "finite_video",
+            "sample_id": "00000066-0000-4000-8000-000000000066",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "tool-call-3",
+            "modality": "structured",
+            "sample_id": "00000067-0000-4000-8000-000000000067",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "schema": "lab.dataset_manifest.1",
+        "splits": {
+          "holdout": [
+            "00000067-0000-4000-8000-000000000067",
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "train": [
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "validation": [
+            "00000066-0000-4000-8000-000000000066"
+          ]
+        },
+        "version": 1
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a sample in no split",
+      "payload": {
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+        "derivation": "import",
+        "parent_refs": [],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "samples": [
+          {
+            "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "text",
+            "sample_id": "00000065-0000-4000-8000-000000000065",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "duration_ms": 81000,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "clip-7",
+            "modality": "finite_video",
+            "sample_id": "00000066-0000-4000-8000-000000000066",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "tool-call-3",
+            "modality": "structured",
+            "sample_id": "00000067-0000-4000-8000-000000000067",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "schema": "lab.dataset_manifest.1",
+        "splits": {
+          "holdout": [],
+          "train": [
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "validation": [
+            "00000066-0000-4000-8000-000000000066"
+          ]
+        },
+        "version": 1
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a video over the 82 s cap",
+      "payload": {
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+        "derivation": "import",
+        "parent_refs": [],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "samples": [
+          {
+            "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "text",
+            "sample_id": "00000065-0000-4000-8000-000000000065",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "duration_ms": 82001,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "clip-7",
+            "modality": "finite_video",
+            "sample_id": "00000066-0000-4000-8000-000000000066",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "tool-call-3",
+            "modality": "structured",
+            "sample_id": "00000067-0000-4000-8000-000000000067",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "schema": "lab.dataset_manifest.1",
+        "splits": {
+          "holdout": [
+            "00000067-0000-4000-8000-000000000067"
+          ],
+          "train": [
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "validation": [
+            "00000066-0000-4000-8000-000000000066"
+          ]
+        },
+        "version": 1
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a text sample with a duration",
+      "payload": {
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+        "derivation": "import",
+        "parent_refs": [],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "samples": [
+          {
+            "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "duration_ms": 10,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "text",
+            "sample_id": "00000065-0000-4000-8000-000000000065",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "duration_ms": 81000,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "clip-7",
+            "modality": "finite_video",
+            "sample_id": "00000066-0000-4000-8000-000000000066",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "tool-call-3",
+            "modality": "structured",
+            "sample_id": "00000067-0000-4000-8000-000000000067",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "schema": "lab.dataset_manifest.1",
+        "splits": {
+          "holdout": [
+            "00000067-0000-4000-8000-000000000067"
+          ],
+          "train": [
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "validation": [
+            "00000066-0000-4000-8000-000000000066"
+          ]
+        },
+        "version": 1
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "PROVIDER_USD without a named payer",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a legacy USD budget",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "USD",
+              "value": "1.00000000"
+            },
+            "reserved": {
+              "unit": "USD",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "an evaluation against production",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "prod",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a field the contract does not name",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued",
+        "wallet_id": "000003e7-0000-4000-8000-0000000003e7"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "an idempotency key for another attempt",
+      "payload": {
+        "attempt": 2,
+        "case_id": "0000001f-0000-4000-8000-00000000001f",
+        "idempotency_key": "attempt:0000001e-0000-4000-8000-00000000001e:0000001f-0000-4000-8000-00000000001f:1",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_ref": "lab:run:11111111-1111-4111-8111-111111111111:0000001e-0000-4000-8000-00000000001e@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "schema": "lab.attempt.1",
+        "state": "leased"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "synthetic ground truth",
+      "payload": {
+        "annotation_id": "0000005a-0000-4000-8000-00000000005a",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "evidence_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ground_truth": true,
+        "label": {
+          "intent": "refund"
+        },
+        "method": "synthetic",
+        "method_version": "rubric-v3",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "rubric_ref": "lab:rubric:11111111-1111-4111-8111-111111111111:0000005c-0000-4000-8000-00000000005c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sample_id": "00000065-0000-4000-8000-000000000065",
+        "schema": "lab.annotation.1",
+        "state": "submitted"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a human label with no reviewer",
+      "payload": {
+        "annotation_id": "0000005a-0000-4000-8000-00000000005a",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "evidence_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ground_truth": true,
+        "label": {
+          "intent": "refund"
+        },
+        "method": "human",
+        "method_version": "rubric-v3",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "rubric_ref": "lab:rubric:11111111-1111-4111-8111-111111111111:0000005c-0000-4000-8000-00000000005c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sample_id": "00000065-0000-4000-8000-000000000065",
+        "schema": "lab.annotation.1",
+        "state": "submitted"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "candidates over 100 percent",
+      "payload": {
+        "baseline_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "candidates": [
+          {
+            "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000029-0000-4000-8000-000000000029@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "weight_bp": 6000
+          },
+          {
+            "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:0000002b-0000-4000-8000-00000000002b@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "weight_bp": 4001
+          }
+        ],
+        "cohort": "account",
+        "created_at": "2026-09-27T10:00:00Z",
+        "endpoint_id": "0000006f-0000-4000-8000-00000000006f",
+        "mode": "canary",
+        "policy_id": "0000006e-0000-4000-8000-00000000006e",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "schema": "lab.rollout_policy.1",
+        "version": 3
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "expansion without evidence",
+      "payload": {
+        "decided_at": "2026-09-27T10:00:00Z",
+        "decided_by": "00000082-0000-4000-8000-000000000082",
+        "decision": "expand",
+        "evidence_refs": [],
+        "policy_ref": "lab:policy:11111111-1111-4111-8111-111111111111:0000006e-0000-4000-8000-00000000006e@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "schema": "lab.rollout_decision.1"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a variant that is its own base",
+      "payload": {
+        "base_serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "changes": [
+          "quantization:nvfp4"
+        ],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "schema": "lab.optimization_variant.1",
+        "variant_id": "0000008c-0000-4000-8000-00000000008c",
+        "variant_serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "an unknown state",
+      "payload": {
+        "budget": {
+          "limit": {
+            "unit": "PROVIDER_USD",
+            "value": "40.00000000"
+          },
+          "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reserved": {
+            "unit": "PROVIDER_USD",
+            "value": "40.00000000"
+          }
+        },
+        "connector": "manual-bundle",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "external_run_id": "00000050-0000-4000-8000-000000000050",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "purpose": "external_judging",
+        "schema": "lab.external_run.1",
+        "state": "resubmitting",
+        "submit_key": "submit:00000050-0000-4000-8000-000000000050"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a harness named where the dataset belongs",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "one group in two splits",
+      "payload": {
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+        "derivation": "import",
+        "parent_refs": [],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "samples": [
+          {
+            "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "text",
+            "sample_id": "00000065-0000-4000-8000-000000000065",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "duration_ms": 81000,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "finite_video",
+            "sample_id": "00000066-0000-4000-8000-000000000066",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "tool-call-3",
+            "modality": "structured",
+            "sample_id": "00000067-0000-4000-8000-000000000067",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "schema": "lab.dataset_manifest.1",
+        "splits": {
+          "holdout": [
+            "00000067-0000-4000-8000-000000000067"
+          ],
+          "train": [
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "validation": [
+            "00000066-0000-4000-8000-000000000066"
+          ]
+        },
+        "version": 1
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a derived version with no parent",
+      "payload": {
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_id": "0000000a-0000-4000-8000-00000000000a",
+        "derivation": "derive",
+        "parent_refs": [],
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "samples": [
+          {
+            "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "doc-1",
+            "modality": "text",
+            "sample_id": "00000065-0000-4000-8000-000000000065",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000c9-0000-4000-8000-0000000000c9@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "duration_ms": 81000,
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "clip-7",
+            "modality": "finite_video",
+            "sample_id": "00000066-0000-4000-8000-000000000066",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000ca-0000-4000-8000-0000000000ca@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "grant_ref": "lab:grant:11111111-1111-4111-8111-111111111111:0000012d-0000-4000-8000-00000000012d@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "group_key": "tool-call-3",
+            "modality": "structured",
+            "sample_id": "00000067-0000-4000-8000-000000000067",
+            "source_ref": "lab:source:11111111-1111-4111-8111-111111111111:000000cb-0000-4000-8000-0000000000cb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "schema": "lab.dataset_manifest.1",
+        "splits": {
+          "holdout": [
+            "00000067-0000-4000-8000-000000000067"
+          ],
+          "train": [
+            "00000065-0000-4000-8000-000000000065"
+          ],
+          "validation": [
+            "00000066-0000-4000-8000-000000000066"
+          ]
+        },
+        "version": 1
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a reservation over its limit",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000001"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a run key for another run",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001f-0000-4000-8000-00000000001f",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "two budgets in one unit",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": 7,
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a string where the seed number belongs",
+      "payload": {
+        "budgets": [
+          {
+            "limit": {
+              "unit": "CREDIT",
+              "value": "500.00000000"
+            },
+            "reserved": {
+              "unit": "CREDIT",
+              "value": "0.00000000"
+            }
+          },
+          {
+            "limit": {
+              "unit": "PROVIDER_USD",
+              "value": "25.00000000"
+            },
+            "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reserved": {
+              "unit": "PROVIDER_USD",
+              "value": "1.50000000"
+            }
+          }
+        ],
+        "created_at": "2026-09-27T10:00:00Z",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "environment": "dev",
+        "evaluator_ref": "lab:evaluator:11111111-1111-4111-8111-111111111111:00000032-0000-4000-8000-000000000032@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness_ref": "lab:harness:11111111-1111-4111-8111-111111111111:00000014-0000-4000-8000-000000000014@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "idempotency_key": "run:0000001e-0000-4000-8000-00000000001e",
+        "max_cases": 100,
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "run_id": "0000001e-0000-4000-8000-00000000001e",
+        "schema": "lab.eval_run.1",
+        "seed": "7",
+        "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "state": "queued"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "external work paid in CREDIT",
+      "payload": {
+        "budget": {
+          "limit": {
+            "unit": "CREDIT",
+            "value": "1.00000000"
+          },
+          "payer_ref": "lab:payer:11111111-1111-4111-8111-111111111111:0000003c-0000-4000-8000-00000000003c@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reserved": {
+            "unit": "CREDIT",
+            "value": "0.00000000"
+          }
+        },
+        "connector": "manual-bundle",
+        "dataset_ref": "lab:dataset:11111111-1111-4111-8111-111111111111:0000000a-0000-4000-8000-00000000000a@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "external_run_id": "00000050-0000-4000-8000-000000000050",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "purpose": "external_judging",
+        "schema": "lab.external_run.1",
+        "state": "ambiguous",
+        "submit_key": "submit:00000050-0000-4000-8000-000000000050"
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a shadow serving live traffic",
+      "payload": {
+        "baseline_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000028-0000-4000-8000-000000000028@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "candidates": [
+          {
+            "serving_ref": "lab:serving:11111111-1111-4111-8111-111111111111:00000029-0000-4000-8000-000000000029@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "weight_bp": 500
+          }
+        ],
+        "cohort": "account",
+        "created_at": "2026-09-27T10:00:00Z",
+        "endpoint_id": "0000006f-0000-4000-8000-00000000006f",
+        "mode": "shadow",
+        "policy_id": "0000006e-0000-4000-8000-00000000006e",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "schema": "lab.rollout_policy.1",
+        "version": 3
+      },
+      "reason": "invalid"
+    },
+    {
+      "name": "a checkpoint without an artifact digest",
+      "payload": {
+        "artifact_digest": "sha256:abc",
+        "checkpoint_id": "00000046-0000-4000-8000-000000000046",
+        "external_run_ref": "lab:external_run:11111111-1111-4111-8111-111111111111:00000050-0000-4000-8000-000000000050@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "provider_org_id": "11111111-1111-4111-8111-111111111111",
+        "received_at": "2026-09-27T10:00:00Z",
+        "schema": "lab.checkpoint.1",
+        "state": "received"
+      },
+      "reason": "invalid"
+    }
+  ],
+  "schema_note": "F3 shared fixtures: both halves must accept every `accepted` payload and refuse every `rejected` one with its `reason` (tests/contracts/lab)."
+}
