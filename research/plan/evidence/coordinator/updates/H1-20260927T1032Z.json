@@ -1,0 +1,45 @@
+{
+  "activity": "review",
+  "worktree": ".claude/worktrees/codex-w5-lab-contracts",
+  "branch": "codex/w5-lab-contracts",
+  "blockers": [],
+  "head": "e956fe8d",
+  "task": "H1",
+  "slice": "H1.a-c complete against the fake L2 rights port; fix round (0-LC-2, 1-LC-3) done",
+  "owned_paths": [
+    "apps/infrx-api/infrx/harnesses/",
+    "apps/infrx-api/tests/h/"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/h/test_harness.py (new tests, old code 008390ee)",
+      "exit": 1,
+      "summary": "seam red: cross-provider deployment DID NOT RAISE Forbidden; bind() has no user_id"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/h/test_harness.py",
+      "exit": 0,
+      "summary": "21 passed (18 cases)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/h/test_mutants.py",
+      "exit": 0,
+      "summary": "32 passed: 27/27 mutants killed, 3 self-tests"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2.5,
+    "confidence": "medium",
+    "basis": "both H1 findings fixed with seam tests + killed mutants; remaining = verify + real L2 port case after L2 merges (integration dependency)",
+    "at": "2026-09-27T10:32Z"
+  },
+  "wiring_requests": [
+    "WR-H1-1 L2 exposes authorize(gate, *, user_id, provider_org_id, dataset_ref) raising Forbidden (current membership of user_id AND provider grant for the gate purpose; R156 single RPC)",
+    "WR-H1-2 Makefile api-mutants += tests/h/test_mutants.py"
+  ],
+  "evidence": [
+    "research/plan/evidence/h/H1-20de8e4.md"
+  ]
+}
