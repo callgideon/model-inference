@@ -94,9 +94,67 @@ class Coverage(Base):
         self.assertEqual(len(m.views), len(self.manifest["tasks"]))
 
     def test_denominators_separate_new_work_from_reused_baseline(self):
-        s = {x["cat"]: len(x["ids"]) for x in P.summaries(self.model())}
-        self.assertEqual((s["backend"], s["app"], s["baseline"], s["superseded"]), (14, 12, 44, 6))
-        self.assertEqual(sum(s.values()), len(self.manifest["tasks"]))
+        m = self.model()
+        s = {x["cat"]: len(x["ids"]) for x in P.summaries(m)}
+        self.assertEqual(s, {"backend": 14, "app": 12, "baseline": 44})  # deferred and superseded are not headline counts
+        self.assertEqual(sum(s.values()) + sum(c in ("deferred", "superseded") for c in m.cat.values()), len(self.manifest["tasks"]))
+
+    def test_superseded_tasks_are_not_shown_but_still_accounted(self):
+        # Oracle: a superseded task left in a task table or a summary, or dropped without the footer naming it, fails here.
+        m = self.model()
+        page, md = P.render_html(m), P.render_md(m)
+        sup = sorted(i for i, c in m.cat.items() if c == "superseded")
+        self.assertEqual(len(sup), 6)
+        for i in sup:
+            self.assertNotIn(f'data-id="{i.lower()}"', page)
+            self.assertNotIn(f"| `{i}` |", md)
+        self.assertIn("6 superseded tasks are not shown (replaced by", page)
+        self.assertIn("6 superseded tasks are not shown (replaced by", md)
+        self.assertNotIn("superseded", {x["cat"] for x in P.summaries(m)})
+        self.assertNotIn("superseded", {v["cat"] for v in json.loads(re.search(r'id="data">(.*?)</script>', page)[1])["tasks"]})
+        self.assertEqual(P.uncovered(m, page.replace(f'data-superseded="{sup[0].lower()}"', ""), md), [sup[0]])  # check stays strict
+
+    def test_deferred_tasks_are_collapsed_last_and_uncounted(self):
+        # Oracle: deferred rows in the main task list, above the other sections, open by default or in a headline count fail here.
+        m = self.model()
+        page, md = P.render_html(m), P.render_md(m)
+        title = "Later — not in the v1 launch scope (57 tasks)"
+        start = page.index('<details id="later">')
+        self.assertIn(f"<summary><h2>{title}</h2></summary>", page)
+        self.assertGreater(start, page.index('id="timeline"'))
+        tasks = page[page.index('id="tasks"'):page.index('id="board"')]
+        for i, c in m.cat.items():
+            if c == "deferred":
+                self.assertNotIn(f'data-id="{i.lower()}"', tasks)
+                self.assertGreater(page.index(f'data-id="{i.lower()}"'), start)
+                self.assertGreater(md.index(f"| `{i}` |"), md.index(title))
+        self.assertGreater(md.index(title), md.index("## Activity log"))
+        self.assertNotIn("deferred", {x["cat"] for x in P.summaries(m)})
+        self.assertEqual(P.launch_scope(m)["total"], 14 + 12 + len(P.GO_LIVE))
+
+    def test_launch_scope_headline_arithmetic(self):
+        # Oracle: the headline must be backend + App + go-live steps, done/total, remaining in go-live order.
+        m = self.model()
+        x = P.launch_scope(m)
+        self.assertEqual((x["done"], x["total"]), (0, 30))
+        self.assertEqual([i for i, _ in x["remaining"]][:2], ["RELEASE-FREEZE", "MAIN-MERGE"])
+        self.assertEqual([i for i, _ in x["remaining"]][-1], "APP-PILOT")
+        next(t for t in self.manifest["tasks"] if t["id"] == "E1B")["status"] = "implemented"
+        self.state["lanes"].append({"id": "RELEASE-FREEZE", "task": None, "activity": "complete", "updated": hours_ago(1)})
+        m = self.model()
+        x = P.launch_scope(m)
+        self.assertEqual((x["done"], x["total"]), (2, 30))
+        self.assertEqual(x["remaining"][0][0], "MAIN-MERGE")
+        (_, k, n, rem), app = x["subs"][0], x["subs"][1]
+        self.assertEqual((k, n, len(rem)), (1, 14, 13))
+        self.assertNotIn("E1B", [i for i, _ in rem])
+        self.assertTrue(all("window-bound" in why for _, why in rem))
+        self.assertTrue(all("go-live-bound" in why for _, why in app[3]))
+        page, md = P.render_html(m), P.render_md(m)
+        self.assertIn("<h2>v1 launch scope</h2>", page)
+        self.assertIn("2 / 30", page)
+        self.assertIn("## v1 launch scope", md)
+        self.assertIn("**2 / 30**", md)
 
     def test_committed_overlay_passes_check(self):
         # The live overlay against the live manifest at host UTC, i.e. what `progress.py check` runs.
@@ -204,8 +262,8 @@ class Gates(Base):
         self.assertEqual(self.model().errors, [])
 
     def test_gated_app_lane_running_is_an_error(self):
-        self.state["lanes"].append({"id": "C0", "task": "C0", "activity": "running"})
-        self.assertTrue(any("C0 dispatches only after BACKEND-READY" in x for x in self.model().errors))
+        self.state["lanes"].append({"id": "I3", "task": "I3", "activity": "running"})
+        self.assertTrue(any("I3 dispatches only after BACKEND-READY" in x for x in self.model().errors))
 
 
 class Eta(Base):
@@ -356,9 +414,9 @@ class Updates(Base):
         self.assertIn("impossible transition queued → complete", out[0])
         out = self.apply(self.write_update("D10-20260924T2150Z.json", {"task": "D10", "activity": "complete"}))
         self.assertIn("cannot be complete before start dependencies F2C", out[0])
-        out = self.apply(self.write_update("C0-20260924T2150Z.json", {"task": "C0", "activity": "running"}))
+        out = self.apply(self.write_update("I3-20260924T2150Z.json", {"task": "I3", "activity": "running"}))
         self.assertIn("dispatches only after BACKEND-READY", out[0])
-        self.assertFalse(any(x["id"] == "C0" for x in self.state["lanes"]))
+        self.assertFalse(any(x["id"] == "I3" for x in self.state["lanes"]))
         self.lane("M6")["activity"] = "deferred"
         cases = [("S3", {"task": "S3", "activity": "running"}, "complete is terminal"),
                  ("M6", {"task": "M6", "activity": "running"}, "a deferred lane is re-queued first"),

@@ -37,6 +37,15 @@ DONE = {"implemented", "integrated"}
 HOURS = ("optimistic_h", "likely_h", "pessimistic_h")
 CATEGORIES = {"backend": "Backend corrections", "app": "App completion", "deferred": "Deferred Lab / hosting / later",
               "baseline": "Reused baseline", "superseded": "Superseded"}
+SHOWN = ("backend", "app", "baseline")  # headline categories; deferred renders collapsed last, superseded only in the footer
+LATER = "Later — not in the v1 launch scope"
+# Go-live steps (GO-LIVE decision 2026-09-26, session-03 log): (kind, overlay lane or gate id, what); ordered as they run.
+GO_LIVE = [("lane", "RELEASE-FREEZE", "RELEASE freeze: G1–G5 + G4b green on the candidate"),
+           ("lane", "MAIN-MERGE", "install maintenance W1–W13, merge main (App release), deploy, smoke"),
+           ("gate", "BACKEND-READY", "E4C certify + E1B cells on the live system, then the decision"),
+           ("gate", "APP-PILOT", "E4 on the live App, then the decision")]
+BOUND = {"backend": "window-bound: runs on the live system as the post-go-live test window",
+         "app": "go-live-bound: follows the live release and the BACKEND-READY decision"}
 STALE_ESTIMATE_H = 6
 STALE_VIEW_MIN = 15
 CLOCK_SKEW_H = 0.25  # a lane or update stamped further ahead of host UTC than this is future-dated
@@ -629,7 +638,7 @@ def hrange(v):
 
 def summaries(M):
     out = []
-    for c in CATEGORIES:
+    for c in SHOWN:
         ids = [v["id"] for v in M.views if v["cat"] == c]
         gates = {"backend": ["BACKEND-LOCAL", "BACKEND-READY"], "app": ["APP-LOCAL", "APP-PILOT"]}.get(c, [])
         out.append({"cat": c, "label": CATEGORIES[c], "ids": ids, "impl": [i for i in ids if M.tasks[i]["status"] in DONE],
@@ -637,6 +646,26 @@ def summaries(M):
                     "lanes_complete": sorted(i for i in ids if M.finished(i) and M.tasks[i]["status"] not in DONE),
                     "cells": [(g, M.gates[g]["passed"], len(M.gates[g]["cells"])) for g in gates if g in M.gates]})
     return out
+
+
+def launch_scope(M):
+    """v1 launch scope = backend corrections + App completion + go-live steps: done/total, remaining in go-live order."""
+    lanes, subs = {x["id"]: x for x in M.lanes}, {x["cat"]: x for x in summaries(M) if x["cat"] in BOUND}
+    step = {i: (what, M.gates[i]["green"] if kind == "gate" and i in M.gates else lanes.get(i, {}).get("activity") == "complete")
+            for kind, i, what in GO_LIVE}
+    left = {c: [(i, f"{BOUND[c]}; now: {M.readiness(i)[1]}") for i in sorted(set(x["ids"]) - set(x["impl"]), key=lambda i: (len(reach([i], M.deps)), i))]
+            for c, x in subs.items()}  # dependency order: fewer transitive predecessors first
+    order = ([(i, step[i][0]) for i in ("RELEASE-FREEZE", "MAIN-MERGE") if not step[i][1]] + left["backend"]
+             + [(i, step[i][0]) for i in ("BACKEND-READY",) if not step[i][1]] + left["app"] + [(i, step[i][0]) for i in ("APP-PILOT",) if not step[i][1]])
+    done = sum(len(x["impl"]) for x in subs.values()) + sum(d for _, d in step.values())
+    return {"done": done, "total": sum(len(x["ids"]) for x in subs.values()) + len(step), "remaining": order,
+            "subs": [(subs[c]["label"], len(subs[c]["impl"]), len(subs[c]["ids"]), left[c]) for c in BOUND]}
+
+
+def superseded_line(M, fmt):
+    sup = [i for i in M.tasks if M.cat[i] == "superseded"]
+    return (f"{len(sup)} superseded tasks are not shown (replaced by their split tasks, never scheduled): "
+            + "; ".join(fmt(i) + " → " + ", ".join(M.tasks[i].get("replaced_by", [])) for i in sup) + ".")
 
 
 def overview_facts(M):
@@ -662,7 +691,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-app
 .wrap{max-width:1180px;margin:0 auto;padding:0 16px}
 header.top{background:var(--panel);border-bottom:1px solid var(--line);padding:16px 0 10px}
 h1{font-size:1.45rem;margin:0 0 4px;text-wrap:balance}h2{font-size:1.2rem;margin:0 0 12px}h3{font-size:1rem;margin:0 0 8px}
-section{margin:28px 0}section>h2{padding-top:10px;border-top:2px solid var(--line)}
+section{margin:28px 0}section>h2,#later>summary{padding-top:10px;border-top:2px solid var(--line)}#later>summary{cursor:pointer}#later>summary h2{display:inline;font-size:1.2rem}
 .meta,.note{color:var(--muted);font-size:.875rem}
 nav{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
 a{color:var(--info)}
@@ -697,9 +726,8 @@ ul.plain{margin:0;padding-left:18px}ul.plain li{margin:3px 0}
 
 JS = r"""
 function matches(d, f) {
-  var hidden = d.cat === 'superseded' || d.cat === 'deferred';
   return (!f.q || d.text.indexOf(f.q) >= 0) &&
-    (f.cat ? d.cat === f.cat : (f.all || !hidden)) &&
+    (!f.cat || d.cat === f.cat) &&
     (!f.product || d.product === f.product) &&
     (!f.track || d.track === f.track) &&
     (!f.lane || d.lanes.split(' ').indexOf(f.lane) >= 0) &&
@@ -716,19 +744,19 @@ function matches(d, f) {
     b.hidden = false;
   }
   var keys = ['q', 'cat', 'product', 'track', 'lane', 'activity', 'ready'];
-  var all = document.getElementById('f-all'), count = document.getElementById('f-count');
-  var rows = Array.prototype.slice.call(document.querySelectorAll('details.task'));
+  var count = document.getElementById('f-count');
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#tasks details.task'));
   function apply() {
-    var f = {all: all.checked}, n = 0;
+    var f = {}, n = 0;
     keys.forEach(function (k) { f[k] = document.getElementById('f-' + k).value.trim().toLowerCase(); });
     rows.forEach(function (r) { var ok = matches(r.dataset, f); r.hidden = !ok; n += ok ? 1 : 0; });
-    count.textContent = n + ' of ' + data.tasks.length + ' tasks shown';
+    count.textContent = n + ' of ' + rows.length + ' tasks shown';
   }
   new URLSearchParams(location.hash.slice(1)).forEach(function (v, k) {
     var el = document.getElementById('f-' + k);
     if (el) { if (el.type === 'checkbox') el.checked = v === '1'; else el.value = v.toLowerCase(); }
   });
-  keys.concat('all').forEach(function (k) { document.getElementById('f-' + k).addEventListener('input', apply); });
+  keys.forEach(function (k) { document.getElementById('f-' + k).addEventListener('input', apply); });
   apply();
 })();
 """
@@ -827,11 +855,20 @@ def render_html(M):
 <header class="top"><div class="wrap"><h1>Consumer v1 progress tracker</h1>
 <p class="meta">Generated <time datetime="{gen}">{e(hm(gen))}</time> UTC · overlay revision {e(s.get('revision'))}, updated {e(hm(s.get('updated')))} UTC ·
 manifest v{e(M.m['schema_version'])} · {link(s.get('program_doc', ''))} · generated file, never hand-edited</p>
-<nav aria-label="Views"><a href="#overview">Overview</a><a href="#progress">Progress</a><a href="#tasks">Tasks</a><a href="#board">Agents &amp; worktrees</a>
-<a href="#milestones">Milestones &amp; ETA</a><a href="#verification">Verification</a><a href="#timeline">ETA, inputs &amp; timeline</a></nav></div></header>
+<nav aria-label="Views"><a href="#launch">v1 launch scope</a><a href="#overview">Overview</a><a href="#progress">Progress</a><a href="#tasks">Tasks</a><a href="#board">Agents &amp; worktrees</a>
+<a href="#milestones">Milestones &amp; ETA</a><a href="#verification">Verification</a><a href="#timeline">ETA, inputs &amp; timeline</a><a href="#later">Later</a></nav></div></header>
 <div id="stale" class="banner" role="alert" hidden></div>
 <noscript><div class="banner">JavaScript is off: filters and the view-time stale check are unavailable. Check the generated time above.</div></noscript>
 <main class="wrap">"""]
+    # 0. v1 launch scope (headline)
+    X = launch_scope(M)
+    H.append(f'<section id="launch"><h2>v1 launch scope</h2><div class="card"><p class="big">{X["done"]} / {X["total"]}</p>'
+             f'<div class="bar" aria-hidden="true"><i style="width:{100 * X["done"] / X["total"] if X["total"] else 0:.1f}%"></i></div>'
+             f'<p class="note">Backend corrections + App completion + {len(GO_LIVE)} go-live steps (done = manifest implemented/integrated, lane complete, '
+             f'or gate accepted). Lab, hosting and later work is listed at the end under “Later” and not counted; superseded tasks are not shown.</p>' + kv(
+                 [(f"{lbl} {k} / {n}", ul([f"<code>{e(i)}</code> {e(why)}" for i, why in rem])) for lbl, k, n, rem in X["subs"]]
+                 + [("Remaining, in order", "<ol>" + "".join(f"<li><code>{e(i)}</code> {e(what)}</li>" for i, what in X["remaining"]) + "</ol>")])
+             + "</div></section>")
     # 1. overview
     H.append('<section id="overview"><h2>Overview</h2><div class="grid">')
     H.append('<div class="card"><h3>Integration</h3>' + kv([
@@ -859,9 +896,7 @@ manifest v{e(M.m['schema_version'])} · {link(s.get('program_doc', ''))} · gene
     H.append('<section id="progress"><h2>Progress summaries</h2><p class="note">Task counts use the manifest status (implemented/integrated) over explicit denominators; '
              'acceptance counts are gate cells marked PASS. Neither implies launch readiness: a gate turns green only on an explicit accepted decision.</p><div class="grid">')
     denominators = {"backend": "E4C (BACKEND-READY) closure minus the reused baseline", "app": "APP-PILOT (E4) closure minus backend and reused baseline",
-                    "deferred": "every other active task: Lab, hosting, conditional and later core",
-                    "baseline": "implemented/integrated before program 22; reused, excluded from new-work percentages",
-                    "superseded": "retired mixed tasks; never scheduled"}
+                    "baseline": "implemented/integrated before program 22; reused, excluded from new-work percentages"}
     for x in summaries(M):
         n, k = len(x["ids"]), len(x["impl"])
         cells = "; ".join(f"{g} {p}/{t}" for g, p, t in x["cells"])
@@ -873,18 +908,17 @@ manifest v{e(M.m['schema_version'])} · {link(s.get('program_doc', ''))} · gene
     H.append("</div></section>")
     # 3. tasks
     opts = lambda vals: "".join(f'<option value="{e(str(v).lower())}">{e(lbl)}</option>' for v, lbl in vals)
-    views, order = M.views, {c: n for n, c in enumerate(CATEGORIES)}
+    views, order = [v for v in M.views if v["cat"] in SHOWN], {c: n for n, c in enumerate(SHOWN)}
     H.append('<section id="tasks"><h2>Tasks</h2><div class="filters" role="search" aria-label="Filter tasks">'
              '<label>Search<input type="search" id="f-q" placeholder="ID, title, lane, branch"></label>'
-             '<label>Category<select id="f-cat"><option value="">Active categories</option>' + opts(CATEGORIES.items()) + "</select></label>"
+             '<label>Category<select id="f-cat"><option value="">All</option>' + opts((c, CATEGORIES[c]) for c in SHOWN) + "</select></label>"
              '<label>Product<select id="f-product"><option value="">All</option>' + opts((p, p) for p in sorted({v["product"] for v in views})) + "</select></label>"
              '<label>Owner track<select id="f-track"><option value="">All</option>' + opts((t, t) for t in sorted({v["track"] for v in views})) + "</select></label>"
              '<label>Lane<select id="f-lane"><option value="">All</option>' + opts((x["id"], x["id"]) for x in M.lanes) + "</select></label>"
              '<label>Activity<select id="f-activity"><option value="">All</option>' + opts((a, a) for a in ACTIVITIES + ["unassigned"]) + "</select></label>"
-             '<label>State<select id="f-ready"><option value="">All</option>' + opts((r, r) for r in ("ready", "active", "blocked", "complete", "done", "superseded")) + "</select></label>"
-             '<label class="check"><input type="checkbox" id="f-all"> Include superseded and deferred</label>'
+             '<label>State<select id="f-ready"><option value="">All</option>' + opts((r, r) for r in ("ready", "active", "blocked", "complete", "done")) + "</select></label>"
              f'<output id="f-count" aria-live="polite">{len(views)} tasks (filters need JavaScript)</output></div>'
-             '<p class="note">The default view hides superseded and deferred tasks; choose a category or tick the box to see them. Expand a task for acceptance, '
+             f'<p class="note">Backend, App and reused-baseline tasks; Lab, hosting and later work is listed at the end under “Later”. Expand a task for acceptance, '
              'dependencies, slices, evidence, commits, commands and next action. Filters accept URL presets, e.g. <code>#activity=running</code>.</p>')
     H += [task_details(M, v) for v in sorted(views, key=lambda v: (order[v["cat"]], v["id"]))]
     H.append("</section>")
@@ -945,8 +979,13 @@ manifest v{e(M.m['schema_version'])} · {link(s.get('program_doc', ''))} · gene
     v46 = s.get("history", {}).get("v46", {})
     H.append('<h3 style="margin-top:16px">History</h3>' + kv([
         ("v46 snapshot", link(v46["snapshot"]) if v46.get("snapshot") else ""), ("At commit", e(v46.get("commit"))), ("Final numbers", e(v46.get("final"))),
-        ("v46 gates", e("; ".join(f"{k}: {x}" for k, x in v46.get("gates", {}).items())))]) + "</section></main>")
-    data = {"generated": gen, "stale_after_min": STALE_VIEW_MIN, "revision": s.get("revision"), "tasks": views, "eta": M.eta,
+        ("v46 gates", e("; ".join(f"{k}: {x}" for k, x in v46.get("gates", {}).items())))]) + "</section>")
+    later = sorted((v for v in M.views if v["cat"] == "deferred"), key=lambda v: v["id"])
+    H.append(f'<section><details id="later"><summary><h2>{e(LATER)} ({len(later)} tasks)</h2></summary><p class="note">These follow the v1 launch '
+             '(App acceptance, then their own activation gates); they are not counted in any headline number.</p>' + "".join(task_details(M, v) for v in later)
+             + "</details></section>")
+    H.append('<footer><p class="note">' + superseded_line(M, lambda i: f'<code data-superseded="{e(i.lower())}">{e(i)}</code>') + "</p></footer></main>")
+    data = {"generated": gen, "stale_after_min": STALE_VIEW_MIN, "revision": s.get("revision"), "tasks": [v for v in M.views if v["cat"] != "superseded"], "eta": M.eta,
             "gates": {g: {k: v[k] for k in ("label", "passed", "decision")} for g, v in M.gates.items()}, "lanes": M.lanes,
             "inputs": s.get("inputs", []), "errors": M.errors, "warnings": M.warnings}
     H.append('<script type="application/json" id="data">' + json.dumps(data, ensure_ascii=False).replace("<", "\\u003c") + "</script>")
@@ -969,8 +1008,14 @@ def render_md(M):
     L = ["# Consumer v1 progress tracker", "",
          f"Generated {hm(iso(now))} UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v{M.m['schema_version']}) and "
          f"[progress-state.json](progress-state.json) (overlay revision {s.get('revision')}, updated {hm(s.get('updated'))} UTC). Generated file; never hand-edit. "
-         f"Program: [{s.get('program')}](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).", "",
-         "## Overview", "",
+         f"Program: [{s.get('program')}](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).", ""]
+    X = launch_scope(M)
+    L += ["## v1 launch scope", "", f"**{X['done']} / {X['total']}** — backend corrections + App completion + {len(GO_LIVE)} go-live steps. "
+          "Lab, hosting and later work is listed at the end under “Later” and not counted; superseded tasks are not shown.", ""]
+    for lbl, k, n, rem in X["subs"]:
+        L += [f"- {lbl} {k} / {n}" + ("" if rem else ": done.")] + [f"  - `{i}` {md_cell(why)}" for i, why in rem]
+    L += ["", "Remaining, in order:", ""] + [f"{n}. `{i}` {md_cell(what)}" for n, (i, what) in enumerate(X["remaining"], 1)] + [""]
+    L += ["## Overview", "",
          f"- Integration branch `{s.get('integration_branch')}` (head `{s.get('integration_head')}`), base `{s.get('base')}`, main `{s.get('main')}`.",
          f"- Deployed candidate `{d.get('release')}` ({d.get('install')}; image {d.get('image')}; "
          + ", ".join(f"{k}={v}" for k, v in (d.get("config") or {}).items()) + f"; regime **{d.get('regime')}**).",
@@ -1010,12 +1055,17 @@ def render_md(M):
     rej = [(n, r) for n, r in s.get("ingested", {}).items() if r.get("status") == "rejected"]
     if rej:
         L += ["## Rejected updates", ""] + [f"- `{n}`: {md_cell(r.get('reason'))}" for n, r in rej] + [""]
-    L += ["## All manifest tasks", ""] + mdt(["ID", "Title", "Category", "Manifest", "Activity", "State"], [
-        [f"`{v['id']}`", v["title"], CATEGORIES[v["cat"]], v["status"], v["activity"], f"{v['ready']}: {v['why']}"] for v in M.views])
+    row = lambda v: [f"`{v['id']}`", v["title"], CATEGORIES[v["cat"]], v["status"], v["activity"], f"{v['ready']}: {v['why']}"]
+    head = ["ID", "Title", "Category", "Manifest", "Activity", "State"]
+    L += ["## Tasks (backend, App, reused baseline)", ""] + mdt(head, [row(v) for v in M.views if v["cat"] in SHOWN])
     L += ["## Activity log (newest first)", ""] + [f"- {hm(x.get('at'))} UTC, {x.get('by')}: {md_cell(x.get('what'))}" for x in reversed(s.get("activity_log", []))]
     v46 = s.get("history", {}).get("v46")
     if v46:
         L += ["", "## History", "", f"The v46 backend-first tracker is preserved at {mdlink(v46['snapshot'])} (commit `{v46['commit']}`): {v46['final']}."]
+    later = sorted((v for v in M.views if v["cat"] == "deferred"), key=lambda v: v["id"])
+    L += ["", f"<details><summary>{LATER} ({len(later)} tasks)</summary>", "",
+          "These follow the v1 launch (App acceptance, then their own activation gates); they are not counted in any headline number.", ""]
+    L += mdt(head, [row(v) for v in later]) + ["</details>", "", "---", "", superseded_line(M, lambda i: f"`{i}`")]
     return "\n".join(L) + "\n"
 
 
@@ -1025,7 +1075,12 @@ def load(state_path=STATE):
 
 
 def uncovered(M, html_text, md_text):
-    return [i for i in M.tasks if f'data-id="{i.lower()}"' not in html_text or f"| `{i}` |" not in md_text]
+    """Every manifest task is in both outputs: a task row, or for a superseded task its footer mention."""
+    def seen(i):
+        if M.cat[i] == "superseded":
+            return f'data-superseded="{i.lower()}"' in html_text and f"`{i}` → " in md_text
+        return f'data-id="{i.lower()}"' in html_text and f"| `{i}` |" in md_text
+    return [i for i in M.tasks if not seen(i)]
 
 
 def cmd_render(now):
