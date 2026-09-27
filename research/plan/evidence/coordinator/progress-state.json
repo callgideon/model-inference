@@ -19,11 +19,11 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 161,
-  "updated": "2026-09-27T09:15:00Z",
+  "revision": 163,
+  "updated": "2026-09-27T09:36:21Z",
   "agent_slots": {
     "total": 16,
-    "active": 7,
+    "active": 6,
     "reserved": 2,
     "note": "Session 03 post-launch: CERTIFY-WINDOW + six LW1 lanes (wave5-plan) running; certify/E1B on the live box after CERTIFY-WINDOW merges."
   },
@@ -4301,27 +4301,37 @@
       "branch": "codex/w5-discovery",
       "worktree": ".claude/worktrees/codex-w5-discovery",
       "base": "9a6c3685",
-      "head": null,
+      "head": "3e4223ba",
       "isolation": {
         "ports": "none (documents)",
         "prefix": "infrx-none-",
         "db": "none"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-27T09:15:00Z",
-      "updated": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T09:36:00Z",
       "blocker": null,
-      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "next_action": "DONE: merged --no-ff at 137c36c0; README index rows + the marlin-sop 82 s cap note applied by the coordinator; X1/X3/X5 stay planned until the owner approves (P-13/P-14/P-15) → C3",
       "estimate": {
-        "optimistic_h": 12,
-        "likely_h": 18,
-        "pessimistic_h": 36,
-        "confidence": "medium",
-        "basis": "wave5-plan §5 LW1 estimates",
-        "at": "2026-09-27T09:15:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T09:36:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/x/X1-cdb8681.md",
+        "research/plan/evidence/x/X3-bd00e3b.md",
+        "research/plan/evidence/x/X5-1205cea.md"
+      ],
+      "commands": [
+        {
+          "cmd": "python3 -m unittest (research/workloads/video) + check_discovery.py; validate_plan",
+          "exit": 0,
+          "summary": "14 tests OK; 10/10 mutants killed; 3 documents 0 errors; PASS"
+        }
+      ],
       "owned_paths": [
         "wave5-plan §5 LW1 discovery"
       ],
@@ -7026,6 +7036,36 @@
       "by": "coordinator (LW1)",
       "what": "LW1 dispatched from the Lab base 9a6c3685: six lanes (lab-sql, lab-access, lab-app, lab-contracts, trace-ship, discovery) as parallel workflows; the live certify/E1B window follows the CERTIFY-WINDOW lane",
       "source": "research/plan/evidence/coordinator/LW0-7894418.md"
+    },
+    {
+      "at": "2026-09-27T09:36:00Z",
+      "by": "coordinator (LW1)",
+      "what": "W5-DISCOVERY ACCEPT_WITH_FIXES 3e4223ba merged at 137c36c0 (X1/X3/X5 drafts; every owner field BLOCKED on P-13/P-14/P-15); index + cap-note wirings applied",
+      "source": "research/plan/evidence/x/X1-cdb8681.md"
+    },
+    {
+      "at": "2026-09-27T09:36:21Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/X1-20260927T0920Z.json"
+    },
+    {
+      "at": "2026-09-27T09:36:21Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/X3-20260927T0922Z.json"
+    },
+    {
+      "at": "2026-09-27T09:36:21Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/X5-20260927T0924Z.json"
+    },
+    {
+      "at": "2026-09-27T09:36:21Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-27T09:33:00Z is not newer than lane W5-DISCOVERY state 2026-09-27T09:36:00Z",
+      "source": "updates/W5-DISCOVERY-20260927T0933Z.json"
     }
   ],
   "history": {
@@ -7762,10 +7802,30 @@
       "status": "rejected",
       "at": "2026-09-27T09:10:00Z",
       "reason": "stale: at 2026-09-27T09:10:00Z is not newer than lane LW0 state 2026-09-27T09:14:00Z"
+    },
+    "X1-20260927T0920Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T09:20:56Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "X3-20260927T0922Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T09:22:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "X5-20260927T0924Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T09:24:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "W5-DISCOVERY-20260927T0933Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T09:33:00Z",
+      "reason": "stale: at 2026-09-27T09:33:00Z is not newer than lane W5-DISCOVERY state 2026-09-27T09:36:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T09:14:01Z",
+    "computed_at": "2026-09-27T09:36:21Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,

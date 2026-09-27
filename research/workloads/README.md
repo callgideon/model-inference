@@ -16,6 +16,9 @@ and line or a dated source for every value, and marks every unknown
 | Document | Workload | Status |
 |---|---|---|
 | [`marlin-sop.md`](marlin-sop.md) | SOP verification over recorded robotics video with Marlin-2B: finite clips, dense captions with timestamps, temporal grounding | Profile pinned 2026-09-22 (S2M). Resolves [P-06](../plan/15-pending-inputs.md) for the artifact/processor/surface with four named ⚠️ digest items; registers P-07 certification inputs and **provisional** P-18 criteria; lists fourteen runtime-versus-contract discrepancies for M2/M3/G2/G1R/W3/F/E1B |
+| [`video/live-video-contract.md`](video/live-video-contract.md) | X1 discovery draft: live/streaming video freshness contract (causal windows, hops, loss); trial BLOCKED on P-13 (task, W/H, deadlines, ground truth, trial target) | draft (planned) |
+| [`robotics/robot-freshness-contract.md`](robotics/robot-freshness-contract.md) | X3 discovery draft: robot observation-age / stale-action contract over OpenPI remote inference and MCAP; trial BLOCKED on P-14 (design partner, robot/task, schemas, authorisation) | draft (planned) |
+| [`hardware/non-nvidia-backend.md`](hardware/non-nvidia-backend.md) | X5 discovery draft: candidate MI355X × vLLM-ROCm backend, five gates, idle-capacity trap; no purchase; BLOCKED on P-15 (choice, access, thresholds) | draft (planned) |
 
 ## Rules for a document in this directory
 
@@ -35,3 +38,4 @@ and line or a dated source for every value, and marks every unknown
 
 - 2026-09-22 (S2M): Directory and index created with the Marlin SOP launch profile. No
   measurement, deployment or code change is claimed by either file.
+- 2026-09-27: X1/X3/X5 discovery drafts indexed (LW1 discovery lane; owner approval pending on P-13/P-14/P-15). `video/check_discovery.py` checks the three contract documents.
