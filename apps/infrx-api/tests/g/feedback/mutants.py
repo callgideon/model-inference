@@ -3,16 +3,19 @@
 
 G4F's own list in its own directory (the `tests/g/uploads` precedent). The shared runner:
 one mutant at a time in a throwaway copy, a pristine baseline first, and only an assertion
-or a typed `DomainError` counts as a kill. `INFRX_D_TASK` is the one variable the copy
-inherits, so with it set the named `_pg` cases run on that key's task-local PostgreSQL too;
-without it they skip there as they do here, and the route cases carry every kill.
+or a typed `DomainError` counts as a kill. The copies run the named `_pg` cases only on
+request (`INFRX_G4F_PG=1` with `INFRX_D_TASK`, which the copy then inherits): inside a
+whole-suite run the parent process holds the key's container, so a copy cannot take it.
+Otherwise they skip in the copy and the route cases carry every kill.
 
     uv run --frozen pytest -q tests/g/feedback/test_mutants.py
-    INFRX_D_TASK=g4f INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/feedback/test_mutants.py
+    INFRX_G4F_PG=1 INFRX_D_TASK=g4f INFRX_MUTANTS=all \
+        uv run --frozen pytest -q tests/g/feedback/test_mutants.py
     uv run --frozen python -m tests.g.feedback.mutants --list
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import shutil
@@ -135,7 +138,8 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     return api
 
 
-RUNNER = Runner(name="g4f", targets=SUITE_FILES, layout=_layout, env=("INFRX_D_TASK",))
+RUNNER = Runner(name="g4f", targets=SUITE_FILES, layout=_layout,
+                env=("INFRX_D_TASK",) if os.environ.get("INFRX_G4F_PG") else ())
 
 
 def run_mutant(mutant) -> Result:
