@@ -1,0 +1,71 @@
+{
+ "task": "V2",
+ "slice": "request detail + C2 content on demand + C3F feedback (fake trace/C2 ports, real C3F)",
+ "activity": "review",
+ "head": "205f3bcd",
+ "worktree": ".claude/worktrees/codex-w5-trace-ui",
+ "branch": "codex/w5-trace-ui",
+ "owned_paths": [
+  "apps/lab/app/(provider)/requests/[id]/",
+  "apps/lab/components/traces/detail/",
+  "apps/lab/tests/v/detail/"
+ ],
+ "commands": [
+  {
+   "cmd": "node --test tests/v/detail/view.test.ts (pre-impl)",
+   "exit": 1,
+   "summary": "ERR_MODULE_NOT_FOUND (seam)"
+  },
+  {
+   "cmd": "node tests/v/detail/run-mutants.mjs",
+   "exit": 0,
+   "summary": "12 cases all named; 41/41 killed"
+  },
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "77 tests, 73 pass, 0 fail, 4 skipped (real-stack cases)"
+  },
+  {
+   "cmd": "make lab-lint",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-typecheck",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-build",
+   "exit": 0,
+   "summary": "builds, ƒ /requests/[id]"
+  },
+  {
+   "cmd": "make lab-mutants",
+   "exit": 0,
+   "summary": "69/69, 47/47, 20/20 (existing)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "after WR-V2-1/2/3: two thin adapters into one seam each + real-stack reruns + one verify round",
+  "at": "2026-09-27T21:16Z"
+ },
+ "blockers": [
+  "real integration waits on WR-V2-1 (lab-api trace read TS adapter + grant_ref) and WR-V2-2 (C2 content read by handle); V2-R01/R02 real C3F cases need WR-V2-3 (stack.py bound to key app-c3f)"
+ ],
+ "wiring_requests": [
+  "WR-V2-1 TraceReadPort adapter over GET /lab/v1/traces/{id} + grant_ref in lab_traces GRANTED, wired in components/traces/detail/port.ts",
+  "WR-V2-2 ContentPort = issueContentRef(provider_sharing) + Lab-reachable read by handle",
+  "WR-V2-3 stack.py adapters() += (LAB, tests/v/detail/feedback-postgrest.test.ts); run make console-c3f-real",
+  "WR-V2-4 Makefile lab-mutants += node tests/v/detail/run-mutants.mjs && node tests/v/judge/run-mutants.mjs",
+  "WR-V2-5 V1M list rows link to /requests/{request_id}"
+ ],
+ "evidence": [
+  "research/plan/evidence/v/V2-9c4bbc0.md"
+ ]
+}
