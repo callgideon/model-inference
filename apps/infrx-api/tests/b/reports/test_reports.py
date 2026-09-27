@@ -220,6 +220,8 @@ def test_b2_latency_is_a_nearest_rank_distribution() -> None:
 
 def test_b2_the_t_quantile_is_close_to_students() -> None:
     """The stdlib has no Student t: a Cornish-Fisher expansion of the normal quantile."""
+    assert reports.t_quantile(0.975, 1) == pytest.approx(12.706, abs=0.001)
+    assert reports.t_quantile(0.975, 2) == pytest.approx(4.303, abs=0.001)
     assert reports.t_quantile(0.975, 3) == pytest.approx(3.182, abs=0.03)
     assert reports.t_quantile(0.975, 9) == pytest.approx(2.262, abs=0.005)
     assert reports.t_quantile(0.975, 10_000) == pytest.approx(1.960, abs=0.001)

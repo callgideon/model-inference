@@ -58,8 +58,12 @@ def _digest(value: Any) -> str:
 
 
 def t_quantile(p: float, df: int) -> float:
-    """Student t quantile by the Cornish-Fisher expansion of the normal one.
-    ponytail: ~3% low at df=2 and worse at df=1 (refused upstream); scipy if ever needed."""
+    """Student t quantile: exact for df 1 and 2, else the Cornish-Fisher expansion of the
+    normal one (under 1% low at df=3). ponytail: scipy if it is ever installed."""
+    if df == 1:
+        return math.tan(math.pi * (p - 0.5))
+    if df == 2:
+        return (2 * p - 1) * math.sqrt(2 / (4 * p * (1 - p)))
     z = NormalDist().inv_cdf(p)
     return (z + (z**3 + z) / (4 * df) + (5 * z**5 + 16 * z**3 + 3 * z) / (96 * df**2)
             + (3 * z**7 + 19 * z**5 + 17 * z**3 - 15 * z) / (384 * df**3))
