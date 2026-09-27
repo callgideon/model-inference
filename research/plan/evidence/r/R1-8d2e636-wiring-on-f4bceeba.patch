@@ -1,0 +1,170 @@
+diff --git a/apps/infrx-api/deploy/preflight.py b/apps/infrx-api/deploy/preflight.py
+index 761e4d4..d6af6e8 100644
+--- a/apps/infrx-api/deploy/preflight.py
++++ b/apps/infrx-api/deploy/preflight.py
+@@ -234,6 +234,9 @@ NOT_SETTABLE = {
+     "FEEDBACK_API": "mounts POST /v1/feedback (G4F, off by default): enabling it on the hosted "
+                     "gateway needs the E4 regression rerun and the database feedback flag, a "
+                     "deploy change, not a --set",
++    "ROLLOUT_ROUTING": "routes admission through the Lab rollout router (R1, off by default): "
++                       "enabling it on the hosted gateway needs D9's release store, the E4 "
++                       "regression rerun and P-12, a deploy change, not a --set",
+ }
+ 
+ 
+diff --git a/apps/infrx-api/infrx/config.py b/apps/infrx-api/infrx/config.py
+index 975c9d6..9ec01b4 100644
+--- a/apps/infrx-api/infrx/config.py
++++ b/apps/infrx-api/infrx/config.py
+@@ -355,6 +355,10 @@ class DeploymentSettings:
+     # store's pool. Off by default, so the launched API is unchanged; the database's own
+     # `feedback` flag gates every write again (off: 503 dependency_unavailable).
+     feedback_api: bool = False
++    # R1 (WR-R1-1): route admission through the Lab rollout router (shadow, canary, A/B
++    # over D9's release policies). Off by default, so the launched API is unchanged; on, a
++    # gateway without a release store refuses to start. Public shadow/canary waits on P-12.
++    rollout_routing: bool = False
+     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
+     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
+     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):
+diff --git a/apps/infrx-api/infrx/gateway/pilot.py b/apps/infrx-api/infrx/gateway/pilot.py
+index 995a5d4..924b136 100644
+--- a/apps/infrx-api/infrx/gateway/pilot.py
++++ b/apps/infrx-api/infrx/gateway/pilot.py
+@@ -291,7 +291,8 @@ def build_info(rt) -> None:
+ 
+ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
+                        pool=None, consent_for=None, attachments=None,
+-                       lifecycle=None, readiness=None, feedback=None) -> IngressDeps:
++                       lifecycle=None, readiness=None, feedback=None,
++                       rollouts=None) -> IngressDeps:
+     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
+     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
+     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
+@@ -326,6 +327,14 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
+                                          threshold=deployment.large_body_threshold_bytes)
+     checks = {"price_source": Probe(models.price_check(catalog, settings)),
+               "journal": Probe(journal_check(stream))}
++    if deployment.rollout_routing:
++        # R1 (WR-R1-1): the rollout router around admission, for the ingress and the jobs
++        # route alike (both call `relay.accept`). Off, the relay's own accept serves.
++        if rollouts is None:
++            raise RuntimeMisconfigured(rt.mode, detail="ROLLOUT_ROUTING needs the rollout "
++                                                       "router over D9's release store: rollouts")
++        from ..rollouts import routing
++        relay.accept = routing.hook(relay.accept, rollouts)
+     rt.relay = relay
+     # G4F (WR-G4F-1): the feedback route mounts over this, and only when enabled.
+     rt.feedback = feedback if deployment.feedback_api else None
+diff --git a/apps/infrx-api/tests/contracts/test_config_and_imports.py b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+index 7de355a..6d5c5f1 100644
+--- a/apps/infrx-api/tests/contracts/test_config_and_imports.py
++++ b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+@@ -544,6 +544,8 @@ DEPLOYMENT_EXPECTED = {
+     "RETENTION_GRACE_S": 3600.0,
+     # G4F (WR-G4F-1): the switch that mounts POST /v1/feedback, off
+     "FEEDBACK_API": False,
++    # R1 (WR-R1-1): the switch that routes admission through the rollout router, off
++    "ROLLOUT_ROUTING": False,
+ }
+ 
+ # Everything except the text values (the secret, the accounting regime) and the switch.
+diff --git a/apps/infrx-api/tests/g/mutants.py b/apps/infrx-api/tests/g/mutants.py
+index 1f57e0c..c325429 100644
+--- a/apps/infrx-api/tests/g/mutants.py
++++ b/apps/infrx-api/tests/g/mutants.py
+@@ -35,6 +35,7 @@ K = "auth/keys.py"                      # F1's caches: G owns the file, and the
+ C = "gateway/routes/catalog.py"         # G1R: model resolution for a credential's audience
+ R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and the SSE relay
+ P = "gateway/pilot.py"                  # G2: the pilot composition
++ROLLOUT_CASE = "test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it"
+ OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
+ ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
+ M = "gateway/routes/models.py"          # G7: public discovery, one projection
+@@ -924,6 +925,16 @@ MUTANTS: tuple[Mutant, ...] = (
+        P, "    rt.feedback = feedback if deployment.feedback_api else None\n",
+        "    rt.feedback = feedback\n",
+        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
++    # R1 (WR-R1-1): admission is routed only when ROLLOUT_ROUTING turns it on, over a router
++    _m("rollout_switch_ignored", "ROLLOUT_ROUTING off leaves the relay's own accept serving",
++       P, "    if deployment.rollout_routing:\n        # R1", "    if rollouts is not None:\n        # R1",
++       ROLLOUT_CASE),
++    _m("rollout_router_dropped", "ROLLOUT_ROUTING on routes every admission",
++       P, "        relay.accept = routing.hook(relay.accept, rollouts)\n", "        pass\n",
++       ROLLOUT_CASE),
++    _m("rollout_store_optional", "ROLLOUT_ROUTING on without a router refuses to start",
++       P, "        if rollouts is None:\n            raise RuntimeMisconfigured",
++       "        if False:\n            raise RuntimeMisconfigured", ROLLOUT_CASE),
+     # E2C (RV-12): the build case scrapes a fixture procfs; this case keeps the real reading
+     _m("host_memory_not_read", "the scrape reports this Linux host's memory from /proc/meminfo",
+        "observe/host.py", '        if name in ("MemTotal", "MemAvailable"):', "        if False:",
+diff --git a/apps/infrx-api/tests/g/test_startup.py b/apps/infrx-api/tests/g/test_startup.py
+index 7d2f648..b656be8 100644
+--- a/apps/infrx-api/tests/g/test_startup.py
++++ b/apps/infrx-api/tests/g/test_startup.py
+@@ -219,6 +219,53 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
+     ingress.assert_route_table(on)
+ 
+ 
++def test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it():
++    """R1 (WR-R1-1): `ROLLOUT_ROUTING` is off by default, and then the relay's own `accept`
++    serves the ingress and the jobs route even with a router at hand (the launched API is
++    unchanged); on without a router the gateway refuses to start; on, every admission goes
++    through the router first - here a release-store outage, answered 503 before anything is
++    admitted."""
++    import dataclasses
++
++    from infrx.config import deployment_from_env
++    from infrx.gateway.routes.relay import Relay
++    from infrx.rollouts import routing
++
++    class Down:
++        asked: list = []
++
++        async def active(self, requested_model):
++            self.asked.append(requested_model)
++            raise ConnectionError("release store unreachable")
++
++    assert deployment_from_env({}).rollout_routing is False
++
++    def composed(on, router):
++        world = relay_support.World()
++        world.stream.usage = lambda: asyncio.sleep(0, {})
++        world.during.append(lambda: world.clock.advance(3_600))    # a wait ends, never hangs
++        config = support.settings(deployment=dataclasses.replace(support.BUILD,
++                                                                 rollout_routing=on))
++        return world, composition.create_app(
++            config, client=support.upstream(), sb=support.supabase(), clock=world.now_s,
++            catalog=world.catalog, stream=world.stream, objects=world.objects, jobs=world.jobs,
++            index=MemoryScheduler(world.clock.now), rollouts=router)
++
++    store = Down()
++    _, off = composed(False, routing.Router(store, None))
++    rt = off.state.runtime
++    assert getattr(rt.relay.accept, "__func__", None) is Relay.accept
++    assert rt.ingress.accept == rt.relay.accept
++    with pytest.raises(RuntimeMisconfigured, match="ROLLOUT_ROUTING"):
++        composed(True, None)
++    world, on = composed(True, routing.Router(store, None))
++    assert on.state.runtime.ingress.accept is on.state.runtime.relay.accept
++    answer = local(on).post(support.CHAT_PATH, json=support.BODY, headers=support.AUTH)
++    assert answer.status_code == 503, answer.text
++    assert answer.json()["error"]["code"] == "dependency_unavailable"
++    assert store.asked == [support.PUBLIC_MODEL] and world.jobs.jobs == {}
++
++
+ def fixture_host(monkeypatch, root: pathlib.Path) -> None:
+     """E2C (RV-12): the scrape reads a fixture procfs, not this machine's `/proc`, so a case
+     about the build gauge runs on any developer host. `collect_host(proc=...)` is the seam
+diff --git a/research/plan/08-contracts-v1-encoding.md b/research/plan/08-contracts-v1-encoding.md
+index c8fd228..0dd3467 100644
+--- a/research/plan/08-contracts-v1-encoding.md
++++ b/research/plan/08-contracts-v1-encoding.md
+@@ -136,6 +136,7 @@ Read by the same rules as the table above with one deliberate difference: an **e
+ | `WORKER_HEALTH_PORT` | 8002 | I2B-R4 (W3 request 6): the loopback port of `python -m infrx.worker` (`/readyz`, `/livez`, `/metrics` with the same `infrx_build_info`); bound only after the pool, the bucket and `PROCESSING_CACHE_DIR` answered. Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`): install.sh's `wait_ready` and `60-verify-local.sh` probe 8002 |
+ | `PREPARATION_CONCURRENCY` | 2 (§5's `PilotSettings` default, not restated) | PREP-WORKER: the number of runners `python -m infrx.worker` runs on `prepare_dispatch` candidates (its preparation pool, beside `WORKER_CONCURRENCY`'s inference pool), and M2's per-process materialization gate; still gates nothing at admission (R1: `MAX_PREPARING_JOBS` does). Settable through the installer (`preflight.TUNABLE`). Its drain bound is `PREPARATION_LEASE_TTL_S`: an attempt still running at a SIGTERM is released and its lapsed lease requeued by the next `recover` (R93) ⚠️ TO BE VERIFIED on the box (no measured preparation latency) |
+ | `FEEDBACK_API` | off (`1`/`true`/`yes`/`on` turn it on; anything else reads as off) | G4F (WR-G4F-1): mounts `POST /v1/feedback` over D6F's `PgFeedbackService` on the job store's pool; off, no feedback route exists (404) and the launched API is unchanged. The database's own `feedback` flag gates every write again (off: 503). Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`): enabling it hosted needs the E4 regression rerun (wave-5 plan rule 5) and that flag row |
++| `ROLLOUT_ROUTING` | off (`1`/`true`/`yes`/`on` turn it on; anything else reads as off) | R1 (WR-R1-1): routes every admission (the ingress's and `POST /v1/jobs`, both through `Relay.accept`) through the Lab rollout router over D9's release store: explicit R62 pins served as asked, stable account cohorts, canary subjects admitted on the candidate's pin, shadow duplicates provider-funded and suppressed (never admitted, held or settled). Off, the relay's own accept serves and the launched API is unchanged; on without a router (`rollouts`) the gateway refuses to start. Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`): enabling it hosted needs D9's store, the E4 regression rerun (wave-5 plan rule 5) and P-12 |
+ 
+ The four `DATABASE_POOL_*` names spell the prefix in full; `11 §F2R` item 7 wrote them as `DATABASE_POOL_MIN_SIZE/MAX_SIZE/CONNECT_TIMEOUT_S/STATEMENT_TIMEOUT_MS`, which this reads as one shared prefix rather than four different ones. The G1/Q1 constants are **not yet reads of these settings**: `validate.py`, `intake.py` and `scheduling/memory.py` belong to other tracks, so the wiring is an integration request, and `tests/contracts/test_config_and_imports.py::test_the_g1_and_q1_constants_match_the_deployment_defaults` pins the constants against these defaults so the two cannot drift while it is open.
+ 
