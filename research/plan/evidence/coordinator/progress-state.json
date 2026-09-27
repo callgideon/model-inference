@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 147,
-  "updated": "2026-09-26T23:49:00Z",
+  "revision": 148,
+  "updated": "2026-09-27T00:24:00Z",
   "agent_slots": {
     "total": 16,
     "active": 0,
     "reserved": 2,
-    "note": "Session 03: RELEASE freeze b640c35c running (coordinator; e2c/i8/e4b/e3c/infrx-pre); workflow SWEEP-1 (w5/g8/d4/e1c); MAIN-MERGE waits for the go-live inputs."
+    "note": "Session 03: RELEASE freeze d3a99e01 G2 running (coordinator; e2c/i8 held); no lane running; MAIN-MERGE waits for the go-live inputs."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -3860,27 +3860,35 @@
       "branch": "codex/sweep-2",
       "worktree": ".claude/worktrees/codex-sweep-2",
       "base": "7d10f586",
-      "head": null,
+      "head": "9244f8c3",
       "isolation": {
         "ports": "w5, g8, d4, e1c, q3 via INFRX_Q_VALKEY_PORT=55491? no — q on a granted port only; e3c block one at a time; never e2c/i8/e4b/55430/55432/55462",
         "prefix": "infrx-w5-/infrx-g8-/infrx-d4-/infrx-e1c-",
         "db": "w5"
       },
-      "activity": "queued",
+      "activity": "complete",
       "started": "2026-09-26T23:49:00Z",
-      "updated": "2026-09-26T23:49:00Z",
+      "updated": "2026-09-27T00:24:00Z",
       "blocker": null,
-      "next_action": "launch lane-sweep-2.js from the merge sha; merges after; the E1B cells (post go-live) want SW1-RV-3 and WR-SWEEP1-1 first",
+      "next_action": "DONE: merged --no-ff at e6962d0a (after RELEASE d3a99e01) + coordinator wirings WR-SWEEP2-1 (WC-6a row), SW2-RV-1 (runner comment), SW2-RV-2 ×2 (E1B-prep log line; evidence line number). No carried minors.",
       "estimate": {
-        "optimistic_h": 1.5,
-        "likely_h": 2.5,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "seven small items; SWEEP-1 took 2.2 h",
-        "at": "2026-09-26T23:49:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged and wired",
+        "at": "2026-09-27T00:24:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/SWEEP-2-6f9b831.md"
+      ],
+      "commands": [
+        {
+          "cmd": "test_preflight + e3c runner + app unit; integration list (d4 decoy); models mutants; models tests + test_rollout; test_run anchor guard; one i8 baseline command; validate",
+          "exit": 0,
+          "summary": "128 passed; 190/196 killed (3 pre-existing survivors); 116/119; 136; 4; 8 passed on i8; PASS"
+        }
+      ],
       "owned_paths": [
         "listed in lane-sweep-2.js"
       ],
@@ -6477,6 +6485,12 @@
       "by": "coordinator (SWEEP-1)",
       "what": "SWEEP-1 ACCEPT_WITH_FIXES 7581e239 merged at 7d10f586 after RELEASE (the blocking finding — a preflight case bound the real 55430 — fixed and rechecked; near miss: the lane's first test_preflight run bound 55430 while the G2 freeze ran on e2c, G2 api-test passed regardless); AM1-L2 closed by decision (root boundary = the segment-error check); seven minors → SWEEP-2",
       "source": "research/plan/evidence/coordinator/SWEEP-1-6085112.md"
+    },
+    {
+      "at": "2026-09-27T00:24:00Z",
+      "by": "coordinator (SWEEP-2)",
+      "what": "SWEEP-2 ACCEPT 9244f8c3 merged at e6962d0a with the four small wirings applied; the sweep backlog is empty — the tip (e6962d0a) is the next release candidate after d3a99e01 goes live",
+      "source": "research/plan/evidence/coordinator/SWEEP-2-6f9b831.md"
     }
   ],
   "history": {

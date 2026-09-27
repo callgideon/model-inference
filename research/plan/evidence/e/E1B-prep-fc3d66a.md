@@ -167,3 +167,4 @@ it today (it appears only in `contracts/errors.py`), so its delta is expected to
 | `python3 research/plan/scripts/validate_plan.py` | 0 | all PASS (943 local links across 272 documents) |
 | `cd apps/infrx-api && uv run --frozen --no-sync pytest -q ../../models/marlin2b/tests` | 0 | 116 passed (the protocol test still pins §1–§6) |
 | `git diff --stat 9001335b..HEAD` | 0 | owned paths only |
+- 2026-09-27 (coordinator, at the SWEEP-2 merge; WR-SWEEP1-1 / SW2-RV-2): the pre-window balance figure above (7,231.488 CREDIT, read before WC-3) is superseded by E1B-protocol §7.2: the certify tenant must cover 8,096.5632 CREDIT of window ceilings (est.), read before WC-2's c = 1 half.

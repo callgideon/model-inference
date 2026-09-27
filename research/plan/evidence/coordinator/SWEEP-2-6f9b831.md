@@ -13,7 +13,7 @@
 - Defect: the two SWEEP-1 cases had no mutant in `tests/integration/mutants.py`.
 - Change: `e2cp07` removes `valkey-q` from environment.json e2c `services`. `e3cr01` anchors reverts.py's `nc-dur-cap-org` on the `per_key` comparison. Neither mutant could be judged in the runner's copy as it was. The copy lacked `apps/app/supabase/migrations` (read by `reverts.latest`) and `research/plan/tasks.json` (read at module level by `test_e3c_runner.py`). So `OWNED_TREES` now includes the migrations tree, and a new `COPIED_FILES` tuple holds tasks.json (copied by `_copy_trees`, +3 lines).
 - Fails-before: with the copy change reverted, `mutants.py --only e3cr01` gave `baseline-red` ("the unmutated copy is already red … 1 error").
-- Passes-after, alone: `e2cp07` was **killed** (`1 failed, 58 deselected`, test_preflight.py:129, the busy assertion). `e3cr01` was **killed** (`1 failed, 48 deselected`, test_e3c_runner.py:531, the per-org assertion).
+- Passes-after, alone: `e2cp07` was **killed** (`1 failed, 58 deselected`, test_preflight.py:141, the busy assertion). `e3cr01` was **killed** (`1 failed, 48 deselected`, test_e3c_runner.py:531, the per-org assertion).
 - In the list: the same (full run below).
 
 ### 2. SW1-R3 / SW1-RV-2: the valkey-q container identity
