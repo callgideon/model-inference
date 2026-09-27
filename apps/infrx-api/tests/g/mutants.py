@@ -994,9 +994,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
        dies_by=("RuntimeMisconfigured",)),        # the given store refused: the defect
     _m("given_stores_replaced", "injected stores are used as given, with no pool of ours",
-       P, "                    \"jobs\": PgJobStore(connect, limits=settings.pilot), \"pool\": pool,\n"
+       P, "                       if settings.deployment.feedback_api else {}),\n"
           "                    **adapters}",
-       "                    \"jobs\": PgJobStore(connect, limits=settings.pilot), \"pool\": pool}",
+       "                       if settings.deployment.feedback_api else {})}",
        "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
        dies_by=("RuntimeMisconfigured",)),        # the given store dropped, then refused
     _m("stores_on_an_unnamed_database", "a store is built only on a named DATABASE_URL",
