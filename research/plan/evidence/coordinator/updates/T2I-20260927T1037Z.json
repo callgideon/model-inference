@@ -1,0 +1,32 @@
+{
+  "task": "T2I",
+  "slice": "T2I fix round 1-T2I-R1: D5 pins proved on real PostgreSQL through WR-4 (jobstore.admission_pins + t2i postgres 57549)",
+  "activity": "review",
+  "head": "9c1b9ce8",
+  "worktree": ".claude/worktrees/codex-w5-trace-ship",
+  "branch": "codex/w5-trace-ship",
+  "owned_paths": ["apps/infrx-api/infrx/traces/ship/", "apps/infrx-api/tests/t/ship/"],
+  "commands": [
+    {"cmd": "uv run --frozen pytest -q -rs tests/t/ship/test_ship.py tests/t/ship/test_pins_pg.py (branch, no WR-4)", "exit": 0, "summary": "11 passed, 12 skipped (9 stack, 3 naming WR-4)"},
+    {"cmd": "WR-4 applied: INFRX_D_TASK=t2i uv run --frozen pytest -q tests/t/ship/test_pins_pg.py", "exit": 0, "summary": "2 passed, 1 skipped (stack half); real PG on 57549"},
+    {"cmd": "same, admission_pins defect ignore_org", "exit": 1, "summary": "FAILED: other org's claim carries the pins (test_ship.py:395)"},
+    {"cmd": "same, admission_pins defect never_answer", "exit": 1, "summary": "FAILED: admitted row without pins (test_ship.py:388)"},
+    {"cmd": "same, admission_pins defect swallow_failure", "exit": 1, "summary": "FAILED: row shipped without versions (test_pins_pg.py:67)"},
+    {"cmd": "WR-4 applied: INFRX_T2I_STACK=1 INFRX_D_TASK=t2i uv run --frozen pytest -q tests/t/ship/test_ship.py tests/t/ship/test_pins_pg.py", "exit": 0, "summary": "23 passed (real ClickHouse 57540, MinIO 57542, PG 57549)"},
+    {"cmd": "INFRX_T2I_STACK=1 INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/ship/test_mutants.py", "exit": 0, "summary": "24 passed; 19/19 mutants killed"},
+    {"cmd": "WR-4 applied: uv run --frozen pytest -q tests/contracts/test_config_and_imports.py", "exit": 0, "summary": "286 passed"},
+    {"cmd": "WR-4 applied: INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py -k 'lw0 or well_formed or every_case'", "exit": 0, "summary": "6 passed"},
+    {"cmd": "WR-4 applied: tests/d/test_pgharness.py -k decoy; root tests/integration/test_harness.py -k overlaps", "exit": 0, "summary": "1 passed; 9 passed"},
+    {"cmd": "branch (WR-4 reverted): INFRX_T2I_STACK=1 uv run --frozen pytest -q tests/t", "exit": 0, "summary": "94 passed, 3 skipped (WR-4)"},
+    {"cmd": "uv run --frozen pytest -q tests/t/ship/test_mutants.py; ruff check tests/t/ship (+ WR-4 files when applied)", "exit": 0, "summary": "11 passed; ruff clean"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 4, "confidence": "medium", "basis": "fix round ~1 h; remaining is coordinator wiring (WR-4 three hunks, WR-1..3) and one make check in which the PG proof runs", "at": "2026-09-27T10:37Z"},
+  "blockers": ["versions-carried claim not counted toward LW1 until WR-4 lands and tests/t/ship/test_pins_pg.py runs unskipped"],
+  "wiring_requests": [
+    "WR-1 tests/integration/harness.py apply_trace_schema() after wait_all (+ test_services EXISTS TABLE proof)",
+    "WR-2 Makefile:21 api-mutants += tests/t/ship/test_mutants.py",
+    "WR-3 composition (flag OFF): Shipper only when ship.shipping_enabled(limits), pins=<gateway PgJobStore>.admission_pins (no raw SQL)",
+    "WR-4 (owner D5/lab-sql or coordinator): infrx/state/jobstore.py PgJobStore.admission_pins (org-bound read of infrx.job_admission(...)->'pins'); infrx/contracts/tasklocal.py TASK_PORTS t2i postgres 57549; tests/contracts/test_config_and_imports.py LAB_LANE_PORTS t2i pin; exact patch in the evidence Fix round"
+  ],
+  "evidence": ["research/plan/evidence/t/T2I-c9ed0e4.md"]
+}
