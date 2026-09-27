@@ -1,0 +1,68 @@
+{
+ "task": "N2",
+ "slice": "N2.a + N2.b + N2.c (infrx/datasets/versions)",
+ "activity": "review",
+ "head": "aa6da2aa",
+ "worktree": ".claude/worktrees/codex-w5-datasets",
+ "branch": "codex/w5-datasets",
+ "owned_paths": [
+  "apps/infrx-api/infrx/datasets/versions/",
+  "apps/infrx-api/tests/n/versions/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/versions/test_versions.py (before the module)",
+   "exit": 2,
+   "summary": "ImportError: cannot import name 'versions' (seam first)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/imports/test_import.py tests/n/versions/test_versions.py",
+   "exit": 0,
+   "summary": "26 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n2 uv run --frozen pytest -q tests/n/versions/test_versions_pg.py",
+   "exit": 0,
+   "summary": "2 passed on real 0029 (and on MinIO infrx-n2-s3 57517)"
+  },
+  {
+   "cmd": "PG fail-first: scratch copy whose export ignores the grant, test_versions_pg.py",
+   "exit": 1,
+   "summary": "assert {'holdout'} == {'grant_not_current', 'holdout'}"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py",
+   "exit": 0,
+   "summary": "97 passed; N2 40 mutants killed, N1 53, every case covered"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n2 make api-test",
+   "exit": 0,
+   "summary": "4984 passed, 54 skipped, 9 xfailed (50m11s)"
+  },
+  {
+   "cmd": "ruff check infrx/datasets tests/n",
+   "exit": 0,
+   "summary": "all checks passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 5,
+  "confidence": "medium",
+  "basis": "one review round on ~250 lines + B1 integration questions (holdout reads); N2 -> B1 critical path",
+  "at": "2026-09-27T16:15Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-N-1 Makefile api-mutants (line 21): append ' tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py' after ' tests/d/test_code_mutants_d7.py'",
+  "WR-N-2 (after L2 merges) derive/export routes derive provider_org_id from the L2 port's current export/derive-capable membership (membership half of R160; D7 accessible_samples is the grant half)",
+  "WR-N-4 (B1) a run records versions.split_digest of its dataset; the holdout is read from the manifest splits intersected with lab_accessible_samples",
+  "WR-N-5 (T3) retention deletes lab/<provider>/exports/<id>/ past expires_at or cancelled (reads already refuse)"
+ ],
+ "evidence": [
+  "research/plan/evidence/n/N2-aa6da2a.md",
+  "research/plan/evidence/n/N1-a194687.md"
+ ]
+}

@@ -2,7 +2,7 @@
 """N1 against the real D7 store: the importer publishing through `PgLabDataStore` on the
 task-local PostgreSQL (0001-0029, the D7 world of `tests/d/test_d7_lab_data.py`: C1's grant
 to NEMO, BOTH's to OTHER). The object port is `InMemoryObjectStore`, or the task-local MinIO
-when `INFRX_M_S3_ENDPOINT` is set (bucket `infrx-n1`, prefix `test/n1/<uuid>/`, emptied after
+when `INFRX_M_S3_ENDPOINT` is set (bucket `infrx-n1`, prefix `test/<key>/<uuid>/`, emptied after
 the module; `INFRX_M_S3_LOCAL_CREDS=1` uses the E2 MinIO literals).
 
 T2I/G8's pattern: outside the mutant runner (a PG case in a mutant copy would contend for the
@@ -49,7 +49,7 @@ def object_store():
                           AWS_SECRET_ACCESS_KEY="infrx-e2-local-secret")
         os.environ.pop("AWS_SESSION_TOKEN", None)
     return S3ObjectStore.connect(os.environ.get("INFRX_M_S3_BUCKET", "infrx-n1"),
-                                 f"test/n1/{uuid.uuid4()}/", endpoint)
+                                 f"test/{os.environ['INFRX_D_TASK']}/{uuid.uuid4()}/", endpoint)
 
 
 @pytest.fixture(scope="module")

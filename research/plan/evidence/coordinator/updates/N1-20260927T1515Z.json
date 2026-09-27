@@ -1,0 +1,67 @@
+{
+ "task": "N1",
+ "slice": "N1.a + N1.b + N1.c (infrx/datasets/imports)",
+ "activity": "review",
+ "head": "a1946877",
+ "worktree": ".claude/worktrees/codex-w5-datasets",
+ "branch": "codex/w5-datasets",
+ "owned_paths": [
+  "apps/infrx-api/infrx/datasets/__init__.py",
+  "apps/infrx-api/infrx/datasets/imports/",
+  "apps/infrx-api/tests/n/imports/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/imports/test_import.py (before the module)",
+   "exit": 2,
+   "summary": "ModuleNotFoundError: No module named 'infrx.datasets' (seam first)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/imports/test_import.py",
+   "exit": 0,
+   "summary": "15 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n1 uv run --frozen pytest -q tests/n/imports/test_import_pg.py",
+   "exit": 0,
+   "summary": "3 passed on real 0029 (and 3 passed on MinIO infrx-n1-s3 57515)"
+  },
+  {
+   "cmd": "PG fail-first: scratch copy with splits forced to train, test_import_pg.py",
+   "exit": 1,
+   "summary": "assert [('train', 5)] == [('holdout', ...), ('validation', 1)]"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py (at aa6da2aa)",
+   "exit": 0,
+   "summary": "97 passed; N1 53 mutants killed, every case covered"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n1 make api-test",
+   "exit": 2,
+   "summary": "4905 passed, 54 skipped, 9 xfailed, 50 failed, 8 errors (46m27s); all failures = shared D2 Valkey / I8 locks held by the concurrent codex-w5-trace-ship-lw2 run (HarnessBusy / BlockingIOError), none in tests/n"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n2 make api-test (at aa6da2aa, N1+N2)",
+   "exit": 0,
+   "summary": "4984 passed, 54 skipped, 9 xfailed (50m11s)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "one review round (D7 fix-round analogue) + WR-N-2 after L2 merges",
+  "at": "2026-09-27T15:15Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-N-1 Makefile api-mutants (line 21): append ' tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py' after ' tests/d/test_code_mutants_d7.py'",
+  "WR-N-2 (after L2 merges) the route composing Importer/preview derives provider_org_id+actor from the L2 port's current import-capable membership (R156/R160)",
+  "WR-N-3 composition: Lab object store = S3ObjectStore(S3_MEDIA_BUCKET or a new S3_LAB_BUCKET, prefix) ; bundle upload route writes imports.bundle_key(...) write-once capped at MAX_MEDIA_BYTES, path checked by imports.PATH_RE; flag default OFF"
+ ],
+ "evidence": [
+  "research/plan/evidence/n/N1-a194687.md"
+ ]
+}
