@@ -1,0 +1,7 @@
+{"task":"V1M","slice":"move + provider read","activity":"blocked","head":"a1400936","worktree":".claude/worktrees/codex-w5-lab-app-lw2","branch":"codex/w5-lab-app-lw2",
+ "owned_paths":["apps/lab/app/(provider)/requests/","apps/lab/components/traces/","apps/lab/tests/v/"],
+ "commands":[{"cmd":"make console-test","exit":0,"summary":"671 tests, 614 pass, 0 fail"},{"cmd":"make console-typecheck","exit":0,"summary":"clean"},{"cmd":"cd apps/app && pnpm build","exit":0,"summary":"ok"}],
+ "estimate":{"optimistic_h":4,"likely_h":8,"pessimistic_h":16,"confidence":"low","basis":"after WR-V1M-1/2 merge: git mv 13 files, UI-kit replacement, provider read adapter, 3 tenancy suites rewritten, one verify round","at":"2026-09-27T19:53Z"},
+ "blockers":["packages/shared C0 QueryPort + trace contract copy (LW0 item 7 / LW2 gate) not on base","no provider trace read path from the Lab (no DB client, anon key only); needs WR-V1M-2 ruling + Python owner"],
+ "wiring_requests":["WR-V1M-1 packages/shared/console/{types,money,v2/types}.ts + export + Lab lockfile","WR-V1M-2 /lab/v1/traces provider read route (ruling + owner)","WR-V1M-3 App-side removal list (after both builds pass)"],
+ "evidence":["research/plan/evidence/v/V1M-a140093.md"]}

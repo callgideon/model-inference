@@ -20,6 +20,12 @@ export const ACCESS_COPY: Record<"signed-out" | "unavailable" | "denied", string
   denied: "This account has no provider workspace. Consumer accounts use the infrx App.",
 };
 
+/** WR-L1-6: the sign-in notices, fixed: the auth server's own words are never shown. */
+export const SIGN_IN_COPY: Record<"failed" | "unavailable", string> = {
+  failed: "That email and password did not sign you in. Check them, or ask your provider administrator.",
+  unavailable: ACCESS_COPY.unavailable,
+};
+
 /** A signed-in user's access. `selected` is the preference cookie: honoured only for a membership. */
 export function providerAccess(read: MembershipRead, selected: string | undefined): Access {
   if (!read.ok) return { kind: "unavailable" };

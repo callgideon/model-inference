@@ -3,16 +3,9 @@
 // must fail by assertion. A stale `find`, a load failure or a failure in an undeclared case is not a
 // kill. Pattern and judging follow apps/app/tests/u/run-mutants.mjs.
 // Usage: node tests/l/shell/run-mutants.mjs [--only ID,ID]
-import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { m, runMutants } from "./harness.mjs";
 
-const lab = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const args = process.argv.slice(2);
-const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
-const SUITE = ["access", "config", "request", "guard", "boundary"].map((f) => `tests/l/shell/${f}.test.ts`);
+const SUITE = ["access", "config", "request", "guard", "boundary", "session"].map((f) => `tests/l/shell/${f}.test.ts`);
 
 const ACCESS = "lib/auth/access.ts";
 const MEMBERS = "lib/auth/memberships.ts";
@@ -22,6 +15,9 @@ const GUARD = "lib/auth/guard.ts";
 const ACTION = "lib/auth/actions.ts";
 const LAYOUT = "app/(provider)/layout.tsx";
 const NEXT = "next.config.ts";
+const SIGNIN = "lib/auth/sign-in.ts";
+const ROUTES = "lib/auth/routes.ts";
+const FORM = "lib/auth/sign-in-form.tsx";
 
 const C = {
   a01: "L1-A01 a signed-in user with no provider membership (consumer-only) is denied",
@@ -51,9 +47,14 @@ const C = {
   b02: "L1-B02 the provider layout renders its children only for a ready workspace",
   b03: "L1-B03 the selection action stores the membership it validated, never the submitted value",
   b04: "L1-B04 the Lab never imports the App: shared code comes only from packages/shared",
+  b05: "L1-B05 a signed-out visitor gets the Lab sign-in form, and every signed-in state can sign out",
+  s01: "L1-S01 sign-in sets the Lab session through the Lab's own client and lands on the home page",
+  s02: "L1-S02 a failed or impossible sign-in is a fixed notice: never the auth server's words, never a session",
+  s03: "L1-S03 sign-out ends the Lab session and forgets the workspace preference",
+  s04: "L1-S04 the email-link callback verifies the code or token on the Lab client and only ever returns home",
+  s05: "L1-S05 the proxy refreshes the Lab session cookie on the response and never redirects",
 };
 
-const m = (id, what, file, find, replace, cases) => ({ id, what, file, find, replace, cases });
 const MUTANTS = [
   m("L1-X01", "a consumer-only user gets the workspace picker", ACCESS, '  if (workspaces.length === 0) return { kind: "denied" };\n', "", [C.a01]),
   m("L1-X02", "an unmatched cookie falls back to the first workspace", ACCESS, "workspaces.find((m) => m.providerId === selected);", "(workspaces.find((m) => m.providerId === selected) ?? workspaces[0]);", [C.a03, C.a04]),
@@ -94,7 +95,7 @@ const MUTANTS = [
   m("L1-X34", "a read-only cookie store throws out of setAll", REQUEST, "        } catch {\n", "        } catch (error) {\n          throw error;\n", [C.r02]),
   m("L1-X35", "the workspace preference is ignored", REQUEST, "selected: store.get(WORKSPACE_COOKIE)?.value,", "selected: undefined,", [C.r03]),
   m("L1-X36", "the selection action skips the provider guard", ACTION, "const access = await requireProviderSession();", 'const access = { kind: "denied" } as const;', [C.b01]),
-  m("L1-X37", "the picker state renders the page", LAYOUT, "        <Workspaces workspaces={access.workspaces} />\n      </main>", "        <Workspaces workspaces={access.workspaces} />\n        {children}\n      </main>", [C.b02]),
+  m("L1-X37", "the picker state renders the page", LAYOUT, "        <Workspaces workspaces={access.workspaces} />\n        <SignOut />\n      </main>", "        <Workspaces workspaces={access.workspaces} />\n        <SignOut />\n        {children}\n      </main>", [C.b02]),
   m("L1-X38", "the provider layout is prerendered", LAYOUT, 'export const dynamic = "force-dynamic";', "", [C.b02]),
   m("L1-X39", "the action stores the submitted value", ACTION, ".set(WORKSPACE_COOKIE, chosen.providerId,", '.set(WORKSPACE_COOKIE, String(formData.get("providerId")),', [C.b03]),
   // Fix round (0-L1-R-2): guard.ts is run by guard.test.ts; X42 is the reviewer's type-correct H2'.
@@ -110,73 +111,27 @@ const MUTANTS = [
     '  redirect("/");\n}\n\nexport const peekWorkspaces = async (formData: FormData) => {\n  return String(formData.get("providerId"));\n};\n', [C.b01]),
   m("L1-X49", "an unguarded default-export server action", ACTION, '  redirect("/");\n}\n', '  redirect("/");\n}\n\nexport default async function peek() {\n  return 1;\n}\n', [C.b01]),
   m("L1-X50", "an unguarded inline server action in the provider layout", LAYOUT, "<form action={selectWorkspace}>", '<form action={async () => { "use server"; }}>', [C.b01]),
+  // WR-L1-6 (LW2): sign-in, sign-out, the email-link callback and the proxy refresh.
+  m("L1-X51", "sign-in uses a client without the Lab cookie options", SIGNIN, "clientOptions(config, await cookies()))", "{ cookies: clientOptions(config, await cookies()).cookies })", [C.s01, C.s03]),
+  m("L1-X52", "a failed sign-in still lands home", SIGNIN, '  if (error) return { error: "failed" };\n', "", [C.s02]),
+  m("L1-X53", "a sign-in without a password is sent anyway", SIGNIN, '  if (typeof email !== "string" || typeof password !== "string") return { error: "failed" };\n', "", [C.s02]),
+  m("L1-X54", "a misconfigured Lab reads as a wrong password", SIGNIN, 'if (client === null) return { error: "unavailable" };', 'if (client === null) return { error: "failed" };', [C.s02]),
+  m("L1-X55", "sign-out keeps the workspace preference", SIGNIN, "  (await cookies()).delete(WORKSPACE_COOKIE);\n", "", [C.s03]),
+  m("L1-X56", "sign-out never ends the session", SIGNIN, "  await client?.auth.signOut().catch(() => undefined);\n", "", [C.s03]),
+  m("L1-X57", "an unguarded export beside the public sign-in actions", SIGNIN, "export async function signOut()", "export async function peek() {\n  return 1;\n}\n\nexport async function signOut()", [C.b01]),
+  m("L1-X58", "the callback follows the link's next parameter", ROUTES, 'new URL("/", config?.origin ?? request.nextUrl.origin)', 'new URL(request.nextUrl.searchParams.get("next") ?? "/", config?.origin ?? request.nextUrl.origin)', [C.s04]),
+  m("L1-X59", "the callback redirects to the request's Host", ROUTES, 'new URL("/", config?.origin ?? request.nextUrl.origin)', 'new URL("/", request.nextUrl.origin)', [C.s04]),
+  m("L1-X60", "the callback verifies signup and recovery links", ROUTES, '(type === "magiclink" || type === "email")', "type", [C.s04]),
+  m("L1-X61", "the callback drops the session cookie", ROUTES, "    for (const { name, value, options } of list) response.cookies.set(name, value, options);\n  }).auth;", "    void list;\n  }).auth;", [C.s04]),
+  m("L1-X62", "the request client drops the Lab cookie options", ROUTES, "    cookieOptions: authCookieOptions(config),\n", "", [C.s04, C.s05]),
+  m("L1-X63", "the proxy drops the refreshed cookie", ROUTES, "    for (const { name, value, options } of list) response.cookies.set(name, value, options);\n  });\n  await", "    void list;\n  });\n  await", [C.s05]),
+  m("L1-X64", "the proxy never refreshes the session", ROUTES, "  await client.auth.getUser().catch(() => undefined);\n", "", [C.s05]),
+  m("L1-X65", "the proxy redirects a signed-out request", ROUTES, "  await client.auth.getUser().catch(() => undefined);\n  return response;", '  await client.auth.getUser().catch(() => undefined);\n  return NextResponse.redirect(new URL("/", request.url));', [C.s05]),
+  m("L1-X66", "a signed-out visitor gets no sign-in form", LAYOUT, "        <SignInForm />\n", "", [C.b05]),
+  m("L1-X67", "a consumer-only user cannot sign out", LAYOUT, '      {access.kind === "denied" && <SignOut />}\n', "", [C.b05]),
+  m("L1-X68", "the form shows the action's raw error", FORM, "SIGN_IN_COPY[state.error]", "String(state.error)", [C.b05]),
+  m("L1-X69", "the sign-in notice repeats the auth server", ACCESS, '"That email and password did not sign you in.', '"Invalid login credentials. That email and password did not sign you in.', [C.s02]),
   m("L1-X40", "the Lab imports the App's code", ACCESS, "export const ROLES", 'import type {} from "../../../app/lib/types.ts";\nexport const ROLES', [C.b04]),
 ];
 
-function copy() {
-  const root = mkdtempSync(join(tmpdir(), "l1-mutants-"));
-  cpSync(lab, root, { recursive: true, filter: (s) => !/(node_modules|\.next)(\/|$)/.test(s.slice(lab.length)) });
-  symlinkSync(join(lab, "node_modules"), join(root, "node_modules"), "dir");
-  return root;
-}
-
-function run(cwd) {
-  return new Promise((done) => {
-    const child = spawn(process.execPath, ["--test", "--test-reporter=tap", ...SUITE], { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    child.stdout.on("data", (c) => (out += c));
-    child.stderr.on("data", (c) => (out += c));
-    child.on("close", (code) => done({ code, out }));
-  });
-}
-
-function failed(out) {
-  const cases = [];
-  const re = /^ *not ok \d+ - (.*)$/gm;
-  for (let hit = re.exec(out); hit !== null; hit = re.exec(out)) {
-    const rest = out.slice(hit.index + hit[0].length);
-    const end = rest.search(/^ *\.\.\.$/m);
-    cases.push({ name: hit[1].trim(), assertion: /code: 'ERR_ASSERTION'/.test(end === -1 ? rest : rest.slice(0, end)) });
-  }
-  return cases;
-}
-
-async function judge(mutant) {
-  const pristine = readFileSync(join(lab, mutant.file), "utf8");
-  const hits = pristine.split(mutant.find).length - 1;
-  if (hits !== 1) return `STALE (find matches ${hits} times)`;
-  const root = copy();
-  try {
-    writeFileSync(join(root, mutant.file), pristine.replace(mutant.find, mutant.replace));
-    const { code, out } = await run(root);
-    if (code === 0) return "SURVIVED (suite passed)";
-    const fails = failed(out);
-    if (fails.some((f) => /\.test\.ts$/.test(f.name))) return "RUNNER-ERROR (a test file did not load)";
-    const hit = fails.find((f) => f.assertion && mutant.cases.includes(f.name));
-    return hit ? `killed by "${hit.name}"` : `SURVIVED (failed only: ${fails.map((f) => f.name).join("; ")})`;
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-// Every case in the suite is named by at least one mutant, and every named case exists.
-const declared = new Set(MUTANTS.flatMap((x) => x.cases));
-const baseline = await run(lab);
-const cases = [...baseline.out.matchAll(/^ *ok \d+ - (L1-\S+ .*)$/gm)].map((x) => x[1].trim());
-const problems = [
-  ...(baseline.code === 0 ? [] : ["the unmutated suite does not pass"]),
-  ...cases.filter((name) => !declared.has(name)).map((name) => `no mutant names "${name}"`),
-  ...[...declared].filter((name) => !cases.includes(name)).map((name) => `a mutant names a missing case "${name}"`),
-];
-const selected = only === null ? MUTANTS : MUTANTS.filter((x) => only.includes(x.id));
-if (selected.length === 0) problems.push("--only matched no mutant");
-for (const problem of problems) console.log(`FAIL ${problem}`);
-const bad = problems.length;
-let survivors = 0;
-for (const mutant of selected) {
-  const verdict = await judge(mutant);
-  if (!verdict.startsWith("killed")) survivors += 1;
-  console.log(`${verdict.startsWith("killed") ? "killed " : "NOT KILLED"} ${mutant.id} ${mutant.what} — ${verdict}`);
-}
-console.log(`\n${cases.length} cases, all named: ${bad === 0}; ${selected.length} mutants, ${selected.length - survivors} killed, ${survivors} not killed`);
-process.exit(bad === 0 && survivors === 0 ? 0 : 1);
+process.exit(await runMutants({ suite: SUITE, prefix: "L1", mutants: MUTANTS }));

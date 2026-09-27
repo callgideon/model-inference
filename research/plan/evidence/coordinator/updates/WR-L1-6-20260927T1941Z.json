@@ -1,0 +1,6 @@
+{"task":"L1","slice":"WR-L1-6","activity":"review","head":"2b488558","worktree":".claude/worktrees/codex-w5-lab-app-lw2","branch":"codex/w5-lab-app-lw2",
+ "owned_paths":["apps/lab/lib/auth/","apps/lab/app/(provider)/layout.tsx","apps/lab/tests/l/shell/"],
+ "commands":[{"cmd":"make lab-test","exit":0,"summary":"33/33"},{"cmd":"make lab-lint","exit":0,"summary":"0 problems"},{"cmd":"make lab-typecheck","exit":0,"summary":"clean"},{"cmd":"make lab-build","exit":0,"summary":"ok"},{"cmd":"node tests/l/shell/run-mutants.mjs","exit":0,"summary":"69/69 killed, 33 cases named"},{"cmd":"scratch copy + WR-L1-6a/b: pnpm build + smoke on 3100","exit":0,"summary":"/auth/callback + Proxy built; callback 307 to configured origin"}],
+ "estimate":{"optimistic_h":0.5,"likely_h":1,"pessimistic_h":2,"confidence":"medium","basis":"code+tests+mutants+smoke done; remaining = apply WR-L1-6a..c + one verify round","at":"2026-09-27T19:41Z"},
+ "blockers":[],"wiring_requests":["WR-L1-6a apps/lab/app/auth/callback/route.ts","WR-L1-6b apps/lab/proxy.ts","WR-L1-6c Supabase redirect allow-list + .env.example line (operator)"],
+ "evidence":["research/plan/evidence/l/WR-L1-6-2b48855.md"]}
