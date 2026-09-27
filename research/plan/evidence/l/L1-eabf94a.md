@@ -84,3 +84,47 @@ optimistic 1 h / likely 2.5 h / pessimistic 5 h, confidence medium. Basis: code,
 ## Audit log
 
 - 2026-09-27T09:26Z: evidence written for `eabf94ae` (lane lab-app, LW1).
+
+## Fix round (review of `b7de1b73`; code head `2b1bd41b`)
+
+Changed paths (all owned, test-only): `apps/lab/tests/l/shell/boundary.test.ts`, `apps/lab/tests/l/shell/guard.test.ts` (new), `apps/lab/tests/l/shell/run-mutants.mjs`. No `lib/auth` source changed: both findings were test gaps, not wrong behaviour.
+
+| id | status | what changed |
+|---|---|---|
+| 0-L1-R-1 | fixed | `L1-B01` now parses with the TypeScript compiler (devDependency already installed) instead of splitting on `^export `. Every runtime export of a `"use server"` file (async function, arrow/`const`, `export default`, `export { … }`; type exports are erased and skipped) and every function whose body opens with `"use server"` (inline action) must contain a guard call. The old split also missed a file whose directive follows a comment, and passed an unguarded action followed by a guarded helper; both are now in the self-check list with the arrow, default, list and inline forms. An export list or `export default name` is flagged even if its target is guarded (write the guard in the exported function). |
+| 0-L1-R-2 | fixed | New `guard.test.ts` imports `guard.ts` itself: `module.registerHooks` (Node ≥22.15, no CLI flag, so `pnpm test` is unchanged) maps `next/navigation` to the real `next/navigation.js` (real `notFound()`, digest `NEXT_HTTP_ERROR_FALLBACK;404`), `next/headers` to a fake cookie store and `@supabase/ssr` to a fake session client. G01: page guard = workspace only when ready; select, denied, signed-out, unavailable are 404. G02: action guard = any provider session; the rest 404. G03: the client gets the env URL/key and the Lab cookie options; the RPC gets only its name. The earlier "guard.ts cannot be mutated under node --test" was wrong. The pure-function refactor the finding offered was not needed once guard.ts runs under test. |
+| 0-L1-R-3 | not fixed (coordinator ruling + lab-sql + L2) | Nothing in L1's owned paths can settle it: the SQL is lab-sql's, `memberships_for_user` is L2's, and neither RPC exists on any branch yet (`codex/w5-lab-sql` is at the base). Proposal filed as **WR-L1-7** below. L1's code already matches option (a): no change is needed on the Lab side if the ruling picks it. |
+
+### Red first (before the fix)
+
+| cmd | exit | result |
+|---|---|---|
+| new B01 self-check list, old regex detector: `node --test tests/l/shell/boundary.test.ts` | 1 | B01 fails: detector returned only the page; missed `lib/fn.ts:2` (trailing guarded helper), `lib/arrow.ts:2`, `lib/default.ts:2`, `lib/list.ts:3`, `lib/comment.ts:3`, `app/(provider)/y/page.tsx:1` (inline) |
+| scratch copy of `eabf94ae` + reviewer's H1 (arrow `peekWorkspaces` appended to actions.ts): `node --test tests/l/shell/*.test.ts` | 0 | 24 pass, 0 fail (reproduced: H1 survives) |
+| same copy + reviewer's H2' in guard.ts: `node --test tests/l/shell/*.test.ts` | 0 | 24 pass, 0 fail (reproduced: H2' survives) |
+| H2' copy + the new `guard.test.ts` | 1 | `not ok L1-G01` (3 tests, 2 pass, 1 fail) |
+| H1 copy + the new `boundary.test.ts` | 1 | `not ok L1-B01`: `lib/auth/actions.ts:19` |
+| first mutant run of X42–X50 | 1 | X46 not killed: G03 failed by `TypeError`, not by assertion → G03 reads `cookieOptions?.name`; killed on the rerun |
+
+### Green (on `2b1bd41b`)
+
+| cmd | exit | result |
+|---|---|---|
+| `make lab-test` | 0 | tests 27, pass 27, fail 0, skipped 0 |
+| `make lab-lint` | 0 | 0 problems (the first run flagged a helper named `useServer…` under react-hooks/rules-of-hooks; renamed `serverPrologue`) |
+| `make lab-typecheck` | 0 | `next typegen` + `tsc --noEmit` clean |
+| `make lab-build` | 0 | Next 16.3.5 build OK |
+| `cd apps/lab && node tests/l/shell/run-mutants.mjs` | 0 | 27 cases, all named by a mutant; 50 mutants, 50 killed, 0 not killed |
+| `cd apps/app && pnpm install --frozen-lockfile && pnpm build` | 0 / 0 | App builds unchanged |
+
+New mutants: X42 page guard falls back to the first workspace (H2', G01) · X43 page guard drops its 404 (G01) · X44 action guard drops its 404 (G02) · X45 action guard admits any signed-in state (G02) · X46 guard client drops the Lab cookie options (G03) · X47 guard's RPC sends an identity (G03) · X48 unguarded arrow-const action (H1, B01) · X49 unguarded default-export action (B01) · X50 unguarded inline action in the provider layout (B01).
+
+### Wiring request added
+
+- **WR-L1-7 (ruling for the coordinator; lab-sql + lab-access; supersedes the currency part of WR-L1-5 and aligns WR-L2-1).** Proposed text: *"A current provider membership has one definition, in SQL, on the database clock: `granted_at <= now() and (revoked_at is null or now() < revoked_at)`. lab-sql ships it once, as an internal function `lab_current_provider_memberships(p_user_id uuid)` (EXECUTE revoked from public/anon/authenticated). The session RPC `lab_my_provider_memberships()` (L1, WR-L1-5 shape, EXECUTE for authenticated only) is that function over `auth.uid()`. L2's `AccessStore.memberships_for_user` reads the same function through the service role. L2 keeps `workspaces()`'s `is_current` filter as a documented equivalent: it can only narrow, so any clock-skew disagreement fails closed. Per-call `membership()`/`permits()` checks are unchanged."* Option (a) is recommended over (b): (b) needs an infrx-api HTTP route plus gateway composition wiring for the Lab to reach L2's Python service. Acceptance, after L2-SQL merges, on `l4` (PG 57503): 2 consumers, 2 providers, 1 user in both, plus one membership revoked earlier (`revoked_at` in the past), one revoked during the run, and one not yet effective (`granted_at` in the future). The membership contract (`ProviderMembership`) has no `expires_at`, so "expired" means revoked in the past. The L1 RPC and L2 `workspaces()` must return the same set, and the revoked-during-run row must disappear from both on the next call.
+
+### Estimate (remaining for L1)
+
+optimistic 1 h / likely 2 h / pessimistic 4.5 h, confidence medium. Basis: R-1 and R-2 are closed in this round. What remains is the WR-L1-7 ruling, L2-SQL shipping the RPC, the real-RPC LAB-ACCESS run on `l4` (about 1 h once the RPC exists), and applying WR-L1-1..4. WR-L1-6 is not included.
+
+- 2026-09-27T09:55Z: fix round appended (code head `2b1bd41b`; lane lab-app, LW1).
