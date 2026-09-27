@@ -1,0 +1,16 @@
+{
+  "format": "infrx.dataset_import.1",
+  "provider_org_id": "b0000001-0000-4000-8000-000000000001",
+  "import_id": "1a000000-0000-4000-8000-000000000002",
+  "dataset_id": "da000000-0000-4000-8000-000000000002",
+  "version": 1,
+  "created_at": "2026-09-27T12:30:00Z",
+  "modality": "finite_video",
+  "ownership": "provider_owned",
+  "license": "proprietary; provider-owned warehouse footage",
+  "use_restrictions": ["evaluation", "training"],
+  "grant_ref": "lab:grant:b0000001-0000-4000-8000-000000000001:90000000-0000-4000-8000-000000000001@sha256:0da1aadda6d4fa79f20ee92f80fdee19f7baa4a6c467b9333ac3e1fa662b3874",
+  "clock_unit": "s",
+  "annotation": {"method": "imported", "method_version": "sam2.1-hiera-large+gemini-2.5-pro/2026-09-20", "tool": "sam2 video predictor"},
+  "fields": {"content": "annotation", "group": "session.id", "media": "video.path", "start": "segment.start_s", "end": "segment.end_s"}
+}

@@ -1,0 +1,72 @@
+{
+ "task": "N1",
+ "slice": "N1 fix round (0-N-C1)",
+ "activity": "review",
+ "head": "897905a5",
+ "worktree": ".claude/worktrees/codex-w5-datasets",
+ "branch": "codex/w5-datasets",
+ "owned_paths": [
+  "apps/infrx-api/infrx/datasets/imports/",
+  "apps/infrx-api/tests/n/imports/"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first: tests/n/imports/test_import.py -k timestamp and tests/n/versions/test_versions.py on a49abe2a code with the new tests",
+   "exit": 1,
+   "summary": "OverflowError at imports/__init__.py:175; revoked case missing 6 related_to_holdout; redaction case DID NOT RAISE InvalidRequest"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/imports/test_import.py tests/n/versions/test_versions.py",
+   "exit": 0,
+   "summary": "27 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/n/imports/test_mutants.py",
+   "exit": 0,
+   "summary": "57 passed; N1 55 mutants killed, every case covered"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/n/versions/test_mutants.py",
+   "exit": 0,
+   "summary": "47 passed; N2 45 mutants killed, every case covered"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n2 uv run --frozen pytest -q tests/n/versions/test_versions_pg.py",
+   "exit": 0,
+   "summary": "2 passed (real 0029)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n1 uv run --frozen pytest -q tests/n/imports/test_import_pg.py",
+   "exit": 0,
+   "summary": "3 passed (real 0029)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n1 uv run --frozen pytest -q -rs tests/n",
+   "exit": 0,
+   "summary": "48 passed; no task-local container left"
+  },
+  {
+   "cmd": "uv run --frozen ruff check infrx/datasets tests/n",
+   "exit": 0,
+   "summary": "all checks passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "verification of a ~5-line _ms fix + WR-N-2 after L2 merges",
+  "at": "2026-09-27T16:16Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-N-1 Makefile api-mutants (line 21): append ' tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py' after ' tests/d/test_code_mutants_d7.py'",
+  "WR-N-2 (after L2 merges) import/derive/export routes derive provider_org_id from the L2 port's current capable membership (membership half of R160; D7 is the grant half)",
+  "WR-N-3 Lab object store composition (S3ObjectStore, lab/ prefix; bundle upload route behind a flag defaulting OFF)"
+ ],
+ "evidence": [
+  "research/plan/evidence/n/N2-aa6da2a.md",
+  "research/plan/evidence/n/N1-a194687.md"
+ ]
+}
