@@ -291,13 +291,16 @@ class LabControl:
     async def price_dev(self, operator: OperatorSession, deployment_revision_id: str, *,
                         rate_card_version: str, input_rate: str,
                         output_rate: str) -> RateCardSnapshot:
-        """The internal CREDIT card of a private dev revision (no preview is unmetered).
-        A public revision is priced only by `approve`."""
+        """The internal CREDIT card of a validated private dev revision (no preview is
+        unmetered; a draft or validating one is never priced). A public revision is priced
+        only by `approve`."""
         deployment = await self.store.deployment(deployment_revision_id)
         if deployment is None:
             raise errors.NotFound("no such deployment revision")
         if deployment.visibility is not Visibility.private:
             raise errors.InvalidRequest("an internal card prices a private dev revision only")
+        if deployment.state is not DeploymentState.ready_private:
+            raise errors.StateConflict("only a validated dev revision is priced")
         card = await self._card(operator, deployment, rate_card_version, input_rate, output_rate)
         await self.registry.put(card)
         return card

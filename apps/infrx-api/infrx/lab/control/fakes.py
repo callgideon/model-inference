@@ -82,7 +82,9 @@ class FakeControl:
                       endpoint_id: str | None) -> v2.DeploymentRevision | None:
         """`PgCatalogDirectory.resolve`: the highest listing version whose deployment is
         public and active (and serves `@label`); else, for a provider_dev credential, the
-        newest non-retired private revision on ITS endpoint named `<slug>/<name>-<env>`."""
+        newest VALIDATED (`ready_private`) private revision on ITS endpoint named
+        `<slug>/<name>-<env>` - a later draft never shadows it (WR-L3-5: catalog.py's
+        `_PRIVATE` still says `state <> 'retired'`)."""
         alias, _, label = requested_model.partition("@")
 
         def labelled(d):
@@ -97,7 +99,7 @@ class FakeControl:
         if provider is None or alias != f"{self.slugs[provider]}/{name}-{env}":
             return None
         private = [d for d in self.deployments.values() if d.endpoint_id == endpoint_id
-                   and d.visibility is v2.Visibility.private and d.state is not S.retired
+                   and d.visibility is v2.Visibility.private and d.state is S.ready_private
                    and labelled(d)]
         return max(private, key=lambda d: (d.created_at, d.deployment_revision_id),
                    default=None)

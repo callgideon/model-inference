@@ -160,6 +160,46 @@ def test_lab_control__only_a_passed_smoke_makes_a_dev_revision_usable(world):
         ("lab_transition", w.DEV_A, "validating"), ("lab_transition", w.DEV_A, "ready_private")]
 
 
+class Interrupted:
+    """An engine whose smoke never returns (the process dies mid-way)."""
+
+    async def smoke(self, serving, deployment):
+        raise RuntimeError("smoke interrupted")
+
+
+def test_lab_control__a_newer_unvalidated_revision_is_never_keyed_priced_or_served(world):
+    """Oracle: a dev key is scoped to an endpoint, so what it serves is the endpoint's newest
+    VALIDATED revision: a later draft, or one left validating by an interrupted smoke, on the
+    same endpoint gets no credential and no card, and never shadows the validated revision
+    the key already serves."""
+    w = world
+    s, ready = ready_dev(w)
+    run(w.control.price_dev(OPERATOR, ready.deployment_revision_id,
+                            rate_card_version="rc_preview_ready", input_rate="400",
+                            output_rate="1200"))
+    key = run(w.control.issue_dev_key(w.DEV_A, w.A, ready.deployment_revision_id))
+    auth = auth_for(w, ready, key.key_id)
+    w.advance(60)
+    draft = dev(w, w.DEV_A, w.A, s.serving_version_id)
+    w.advance(60)
+    stuck = dev(w, w.DEV_A, w.A, s.serving_version_id)
+    w.control.engine = Interrupted()
+    with pytest.raises(RuntimeError):
+        run(w.control.validate(w.DEV_A, w.A, stuck.deployment_revision_id))
+    assert run(w.control.store.deployment(stuck.deployment_revision_id)).state \
+        is v2.DeploymentState.validating
+    for unvalidated in (draft, stuck):
+        assert unvalidated.endpoint_id == ready.endpoint_id
+        with pytest.raises(errors.StateConflict):
+            run(w.control.issue_dev_key(w.DEV_A, w.A, unvalidated.deployment_revision_id))
+        with pytest.raises(errors.StateConflict):
+            run(w.control.price_dev(OPERATOR, unvalidated.deployment_revision_id,
+                                    rate_card_version=f"rc_{unvalidated.deployment_revision_id}",
+                                    input_rate="1", output_rate="1"))
+        assert pin(w, "nemostation/preview-dev", auth).deployment_revision_id \
+            == ready.deployment_revision_id
+
+
 def test_lab_control__a_dev_revision_never_reaches_app_discovery(world):
     """Oracle: a validated, priced dev revision with its key is reachable only by a
     provider_dev credential for its own endpoint; a consumer resolves the public listing

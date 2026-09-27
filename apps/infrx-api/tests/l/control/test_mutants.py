@@ -11,7 +11,6 @@ L2's (WR-LW1I-6).
 """
 from __future__ import annotations
 
-import importlib.util
 import os
 
 import pytest
@@ -19,6 +18,7 @@ import pytest
 from tests.d import pgharness
 
 from . import mutants as mutation_list
+from .worlds import seam_missing
 
 MEMORY, PG = mutation_list.MUTANTS, mutation_list.PG_MUTANTS
 ALL = MEMORY + PG
@@ -56,8 +56,9 @@ def test_mutant_is_killed(mutant):
 @pytest.mark.parametrize("mutant", SELECTED_PG, ids=[m.name for m in SELECTED_PG])
 def test_pg_mutant_is_killed(mutant):
     """On the D harness's PostgreSQL (visible skip without Docker or before L3-SQL merges)."""
-    if importlib.util.find_spec("infrx.state.lab_control") is None:
-        pytest.skip("L3-SQL is not merged: infrx.state.lab_control (PgControlStore) is absent")
+    reason = seam_missing()
+    if reason:
+        pytest.skip(reason)
     if pgharness._lock_fd is not None:
         pytest.skip("this process already holds the D harness lock (an earlier tests/d list "
                     "started it), so the copy's harness would be refused: run this list in its "

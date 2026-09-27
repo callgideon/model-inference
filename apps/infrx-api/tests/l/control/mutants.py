@@ -45,6 +45,7 @@ WALLET = "test_lab_control__a_dev_wallet_starts_at_zero_and_only_audited_allocat
 PINS = "test_lab_control__an_alias_switch_while_a_job_is_queued_keeps_its_pins"
 CAS = "test_lab_control__publication_and_rollback_are_compare_and_set"
 ROLLBACK = "test_lab_control__a_rollback_targets_an_earlier_servable_listing_only"
+SHADOW = "test_lab_control__a_newer_unvalidated_revision_is_never_keyed_priced_or_served"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- the service: who may ask, and what may be registered -------------------------
@@ -79,8 +80,17 @@ MUTANTS: tuple[Mutant, ...] = (
        C, "DeploymentState.ready_private if passed else DeploymentState.retired",
        "DeploymentState.retired if passed else DeploymentState.ready_private", SMOKE),
     _m("key_before_validation", "only a validated dev revision gets a credential",
-       C, "        if deployment.state is not DeploymentState.ready_private:\n",
-       "        if False:\n", SMOKE),
+       C, "        if deployment.state is not DeploymentState.ready_private:\n            raise errors.StateConflict(\"only a validated dev revision gets",
+       "        if False:\n            raise errors.StateConflict(\"only a validated dev revision gets",
+       SMOKE, SHADOW),
+    _m("key_for_draft", "a draft or validating revision gets no credential (retired is not all)",
+       C, "        if deployment.state is not DeploymentState.ready_private:\n            raise errors.StateConflict(\"only a validated dev revision gets",
+       "        if deployment.state is DeploymentState.retired:\n            raise errors.StateConflict(\"only a validated dev revision gets",
+       SHADOW),
+    _m("price_unvalidated", "only a validated dev revision is priced",
+       C, "        if deployment.state is not DeploymentState.ready_private:\n            raise errors.StateConflict(\"only a validated dev revision is priced",
+       "        if False:\n            raise errors.StateConflict(\"only a validated dev revision is priced",
+       SHADOW),
     _m("key_stores_the_secret", "the store keeps the secret's hash, never the secret",
        C, "key_hash=hash_key(secret)", "key_hash=secret", KEY),
     _m("proposal_by_developer", "publication is proposed by an administrator",
@@ -134,6 +144,9 @@ MUTANTS: tuple[Mutant, ...] = (
        F, "            owner_provider_org_id=provider_org_id)",
        "            owner_provider_org_id=provider_org_id, "
        "ledger_total=v2.INITIAL_SIGNUP_GRANT, )", WALLET),
+    _m("private_resolves_unvalidated", "a provider_dev key serves its endpoint's newest "
+       "VALIDATED revision (A3 wiring WR-L3-5)",
+       F, "d.state is S.ready_private", "d.state is not S.retired", SHADOW),
     _m("allocation_replayed_twice", "a replayed operation id appends nothing",
        F, "        if prior is not None:\n            return prior\n",
        "        if False:\n            return prior\n", WALLET),

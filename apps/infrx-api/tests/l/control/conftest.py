@@ -1,6 +1,6 @@
 """The two LAB-PUBLISH worlds (`worlds.py`). `world` runs a case on the fake and, marked `pg`, on
 PostgreSQL: one seeded template per module, a fresh copy per case. The `pg` half skips visibly
-without Docker or before L3-SQL merges (`infrx.state.lab_control`, `PgControlStore`)."""
+without Docker or until `infrx.state.lab_control.PgControlStore` (L3-SQL's `ControlStore`, WR-L3-1) exists."""
 from __future__ import annotations
 
 import pytest
@@ -19,10 +19,9 @@ TEMPLATE, CASE = f"{pgharness.DATABASE}_l3tpl", f"{pgharness.DATABASE}_l3case"
 
 @pytest.fixture(scope="module")
 def pg_template():
-    try:
-        import infrx.state.lab_control  # noqa: F401
-    except ImportError:
-        pytest.skip("L3-SQL is not merged: infrx.state.lab_control (PgControlStore) is absent")
+    reason = worlds.seam_missing()
+    if reason:
+        pytest.skip(reason)
     reason = pgharness.unavailable()
     if reason:
         pytest.skip(f"task-local PostgreSQL unavailable: {reason}")

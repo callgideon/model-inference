@@ -143,6 +143,19 @@ class PgWorld(access.PgWorld):
                           "where deployment_revision_id = %s", (deployment_revision_id,))
 
 
+def seam_missing() -> str | None:
+    """Why the pg half cannot run yet: the ControlStore class, not just the module (lab-sql's
+    committed 0032 ships `PgLabControlStore`, a different surface - WR-L3-1)."""
+    try:
+        import infrx.state.lab_control as lab_control
+    except ImportError:
+        return "L3-SQL is not merged: infrx.state.lab_control is absent"
+    if getattr(lab_control, "PgControlStore", None) is None:
+        return ("L3-SQL's ControlStore seam is absent: infrx.state.lab_control has no "
+                "PgControlStore (WR-L3-1 unreconciled; the pg half is not claimed)")
+    return None
+
+
 def seed_pg(conn, dsn: str) -> None:
     """L2's seed (A = NemoStation with the operator seed, B = Other Lab) plus B's
     administrator; A's administrator is the credit seed's."""
