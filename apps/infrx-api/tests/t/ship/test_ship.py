@@ -238,6 +238,24 @@ def test_shipping_is_off_unless_the_spool_the_projection_and_the_bucket_are_all_
         assert ship.shipping_enabled(full.replace(**{unset: " "})) is False, unset
 
 
+def test_no_shipper_is_built_unless_shipping_is_enabled(monkeypatch):
+    """T2I WR-3's factory: nothing is built (nothing connects) while the flag is OFF;
+    enabled, the shipper reads D5's pins from PostgreSQL and writes to the trace bucket."""
+    import clickhouse_connect
+    asked = []
+    monkeypatch.setattr(clickhouse_connect, "get_client",
+                        lambda **kw: asked.append(kw) or "a clickhouse client")
+    full = DEFAULTS.replace(trace_spool_dir="/var/spool/infrx", clickhouse_url="http://ch:8123",
+                            s3_trace_bucket="infrx-traces", database_url="postgresql://db/x")
+    for limits in (DEFAULTS, full.replace(s3_trace_bucket="")):
+        assert ship.build_shipper(limits, spool=None) is None
+    assert asked == []
+    built = ship.build_shipper(full, spool="the spool", endpoint_url="http://127.0.0.1:1")
+    assert asked == [{"dsn": "http://ch:8123"}]
+    assert (built.spool, built.projection.client) == ("the spool", "a clickhouse client")
+    assert isinstance(built.pins, ship.PgPins) and built.objects.bucket == "infrx-traces"
+
+
 # ======================================================================================
 # TRACE-RECOVER
 # ======================================================================================

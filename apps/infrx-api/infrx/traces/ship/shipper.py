@@ -16,7 +16,8 @@ unreadable format or a poison frame is never acked: deleting bytes this reader c
 is not shipping them.
 
 Shipping is OFF unless the spool, ClickHouse and the trace bucket are all configured
-(`shipping_enabled`); building and scheduling a `Shipper` is the composition root's.
+(`shipping_enabled`); `build_shipper` builds one only then, and scheduling it is the
+composition root's.
 """
 from __future__ import annotations
 
@@ -44,6 +45,25 @@ def shipping_enabled(limits: PilotSettings) -> bool:
     """Defaults OFF: all three of the spool, the projection and the bucket must be set."""
     return all(value.strip() for value in (limits.trace_spool_dir, limits.clickhouse_url,
                                            limits.s3_trace_bucket))
+
+
+def build_shipper(limits: PilotSettings, spool, *, prefix: str = "infrx/",
+                  endpoint_url: str = "") -> Shipper | None:
+    """T2I WR-3's factory, for the composition root: None unless `shipping_enabled(limits)`
+    (flag OFF); otherwise the shipper over ClickHouse (`CLICKHOUSE_URL`), the trace bucket
+    (`S3_TRACE_BUCKET`) and D5's pins on `DATABASE_URL`. The root schedules
+    `await spool.rotate(); await shipper.ship()` (a wiring request)."""
+    if not shipping_enabled(limits):
+        return None
+    import clickhouse_connect
+
+    from ...media.s3 import S3ObjectStore
+    from ...state.jobstore import connector
+    from .pins import PgPins
+    return Shipper(spool,
+                   ClickHouseProjection(clickhouse_connect.get_client(dsn=limits.clickhouse_url)),
+                   S3ObjectStore.connect(limits.s3_trace_bucket, prefix, endpoint_url),
+                   pins=PgPins(connector(limits.database_url)))
 
 
 def content_key(org_id: str, trace_id: str) -> str:
