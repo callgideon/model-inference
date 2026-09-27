@@ -1,0 +1,60 @@
+{
+ "activity": "review",
+ "head": "dd79f8cd",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lw1-integration",
+ "branch": "codex/w5-lw1-integration",
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LW1I-1 tests/integration/test_harness.py:222 migration pin += 0030_lab_access_self.sql (after D7's 0029)",
+  "WR-LW1I-2 apps/infrx-api/tests/d/checks.py EXPECTED_FUNCTION_CALLERS += \"public.lab_provider_memberships()\": {\"authenticated\", \"service_role\"} (fixes 2 api-test failures; proof 40 passed on l4)",
+  "WR-LW1I-3 Makefile:21 api-mutants += tests/l/access/test_mutants.py (WR-L2-2) and tests/d/test_l2sql_self_mutants.py",
+  "WR-LW1I-4 lab-sql/D7: implement infrx.lab.access.DatasetSources.uses(provider_org_id, dataset_ref) over D7.a source/grant refs",
+  "WR-LW1I-5 (optional) register the pg pytest marker in pyproject.toml"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/L2-INT-dd79f8c.md",
+  "research/plan/evidence/coordinator/updates/L2-20260927T1320Z.json"
+ ],
+ "task": "L2",
+ "slice": "LW1 integration: L2 on real PostgreSQL (WR-L2-3 db_now) + WR-H1-1 authorize",
+ "owned_paths": [
+  "apps/infrx-api/infrx/lab/",
+  "apps/infrx-api/infrx/state/lab_access.py (db_now only)",
+  "apps/infrx-api/tests/l/access/"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=l2 uv run --frozen pytest -q tests/l/access/test_access.py (base, red)",
+   "exit": 1,
+   "summary": "10 pg failed: PgAccessStore has no db_now"
+  },
+  {
+   "cmd": "same after 94ed729b",
+   "exit": 0,
+   "summary": "23 passed (13 fake + 10 pg on 57501)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l2 uv run --frozen pytest -q tests/l/access/test_mutants.py (dd79f8cd)",
+   "exit": 0,
+   "summary": "43 passed: 20/20 fake + 17/17 PG mutants killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 uv run --frozen pytest -q tests/d/test_l2sql_units.py tests/d/test_l2sql_access.py tests/d/test_code_mutants_l2sql.py",
+   "exit": 0,
+   "summary": "43 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 make api-test",
+   "exit": 2,
+   "summary": "4871 passed, 56 skipped, 9 xfailed, 9 failed: 2 = WR-LW1I-2 (execute surface lists 0030's function; 40 passed with the patch), 7 = test_outbox_relay[valkey] HarnessBusy (another lane's d2 valkey lock)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "integrated on the tip; remaining = WR-LW1I-3 + one verify round",
+  "at": "2026-09-27T13:20Z"
+ }
+}

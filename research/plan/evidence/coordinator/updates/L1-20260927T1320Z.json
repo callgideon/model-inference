@@ -1,0 +1,66 @@
+{
+ "activity": "review",
+ "head": "dd79f8cd",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lw1-integration",
+ "branch": "codex/w5-lw1-integration",
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LW1I-1 tests/integration/test_harness.py:222 migration pin += 0030_lab_access_self.sql (after D7's 0029)",
+  "WR-LW1I-2 apps/infrx-api/tests/d/checks.py EXPECTED_FUNCTION_CALLERS += \"public.lab_provider_memberships()\": {\"authenticated\", \"service_role\"} (fixes 2 api-test failures; proof 40 passed on l4)",
+  "WR-LW1I-3 Makefile:21 api-mutants += tests/l/access/test_mutants.py (WR-L2-2) and tests/d/test_l2sql_self_mutants.py",
+  "WR-LW1I-4 lab-sql/D7: implement infrx.lab.access.DatasetSources.uses(provider_org_id, dataset_ref) over D7.a source/grant refs",
+  "WR-LW1I-5 (optional) register the pg pytest marker in pyproject.toml"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/L2-INT-dd79f8c.md",
+  "research/plan/evidence/coordinator/updates/L1-20260927T1320Z.json"
+ ],
+ "task": "L1",
+ "slice": "LW1 integration: one membership seam (R156) via 0030 + WR-L1-1..4",
+ "owned_paths": [
+  "apps/lab/",
+  "apps/app/supabase/migrations/0030_lab_access_self.sql",
+  "apps/infrx-api/tests/d/test_l2sql_self*.py",
+  "Makefile (lab-mutants line)"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_l2sql_self.py (red)",
+   "exit": 1,
+   "summary": "3 checks failed 42883 (function absent)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_l2sql_self.py tests/d/test_l2sql_self_mutants.py",
+   "exit": 0,
+   "summary": "11 passed: 3 checks (session == L2 port == expected over 8 users), 7/7 SQL mutants killed"
+  },
+  {
+   "cmd": "cd apps/lab && pnpm test (red after the name flip)",
+   "exit": 1,
+   "summary": "25/27 pass; L1-M01, L1-G03 fail"
+  },
+  {
+   "cmd": "make lab-test / lab-lint / lab-typecheck / lab-build / lab-mutants",
+   "exit": 0,
+   "summary": "27/27; 0 problems; clean; ƒ / built; 50/50 mutants killed"
+  },
+  {
+   "cmd": "cd apps/app && pnpm install --frozen-lockfile && pnpm build",
+   "exit": 0,
+   "summary": "App builds"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 make api-test",
+   "exit": 2,
+   "summary": "4871 passed, 56 skipped, 9 xfailed, 9 failed: 2 = WR-LW1I-2 (execute surface lists 0030's function; 40 passed with the patch), 7 = test_outbox_relay[valkey] HarnessBusy (another lane's d2 valkey lock)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "green; remaining = WR-LW1I-1/2, the R156 amendment ruling and one verify round; WR-L1-6 (Lab sign-in) not included",
+  "at": "2026-09-27T13:20Z"
+ }
+}
