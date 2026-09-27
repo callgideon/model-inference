@@ -158,3 +158,59 @@ Spent ~2.5 h.
 
 ## Audit log
 - 2026-09-27: evidence written for `dd79f8cd` (lane lw1-integration, LW1).
+
+## Fix round (findings 0-F1, 0-F2, 1-LW1I-R1) — code head `168e99a9`
+Commits: `3297ae58` tests first (red) · `168e99a9` guard. Changed: `apps/infrx-api/tests/h/test_mutants.py`,
+`apps/infrx-api/tests/l/access/test_mutants.py` only (tests; no product code, no SQL).
+
+**0-F1 / 1-LW1I-R1 (one root cause).** The H1 and L2 PostgreSQL mutant lists run a pytest copy that calls
+`pgharness.ensure()` on the `INFRX_D_TASK` port. When an earlier list in the same process (any `tests/d` list on
+`Makefile:21`) has already taken that port's flock (kept until exit), the copy is refused (`HarnessBusy`) and its
+pristine baseline reads `broken_runner`. Fix, in two halves:
+- owned: `test_pg_mutant_is_killed` (both files) skips **visibly** when `pgharness._lock_fd is not None` in this
+  process, naming the remedy ("run this list in its own process"), before any copy is made. Regression
+  `test_the_pg_list_skips_visibly_in_a_process_that_holds_the_d_harness` (both files; oracle: with the lock held
+  and a runner that reports `broken_runner`, the PG case must raise `Skipped`, never fail).
+- wiring **WR-LW1I-6** (below): the two lists get their own `api-mutants` line, so they run (not skip) in `make`.
+
+| cmd (cwd apps/infrx-api unless noted) | exit | result |
+|---|---|---|
+| `INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_mutants.py tests/l/access/test_mutants.py -k skips_visibly` (red, 3297ae58) | 1 | 2 failed (`pg_… is broken_runner: HarnessBusy`) |
+| reviewer repro `INFRX_MUTANTS=all INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_l2sql_self.py tests/h/test_mutants.py -k 'l2sql_self or pg_mutant'` (red, 3297ae58) | 1 | 2 failed, 3 passed (both `pg_h1_*` broken_runner) |
+| same + `tests/l/access/test_mutants.py`, `-rs` (168e99a9) | 0 | 3 passed, 19 skipped (2 H1 + 17 L2 PG mutants, each "this process already holds the D harness lock … run this list in its own process") |
+| `INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_mutants.py tests/l/access/test_mutants.py` (168e99a9, default) | 0 | 22 passed, 2 skipped (the pre-existing empty PG parameter sets) |
+| `INFRX_MUTANTS=all INFRX_D_TASK=l2 uv run --frozen pytest -q -rs tests/h/test_mutants.py tests/l/access/test_mutants.py` (own process = the WR-LW1I-6 line) | 0 | 80 passed in 4m55s: H1 27+2, L2 20+17 mutants killed, 0 skipped |
+| `uv run --frozen ruff check tests/h tests/l` | 0 | all checks passed |
+| **`INFRX_D_TASK=l2 make api-mutants`** with WR-LW1I-2, -3, -6 applied locally (then reverted) | 0 | line 1: 4001 passed, 35 skipped (177 min total); line 2 (WR-LW1I-6): 80 passed; E4B: 255 passed |
+
+**0-F2** (0030's `authenticated` EXECUTE needs the enumerated surface): not applicable on lane paths
+(`tests/d/checks.py`, `tests/integration/test_harness.py` are not owned; LANE-RULES 2), so the patch stays a wiring
+request for the merge commit. Composed proof:
+
+| cmd | exit | result |
+|---|---|---|
+| **`INFRX_D_TASK=l2 make api-test`** at 168e99a9 with WR-LW1I-1, -2, -3, -6 applied locally (then reverted) | 0 | 4882 passed, 56 skipped, 9 xfailed in 44m30s (the 2 execute-surface failures are gone; the 7 valkey `HarnessBusy` of the first round did not recur) |
+| `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/test_harness.py -k migration_set` (repo root, WR-LW1I-1 applied) | 0 | 1 passed |
+
+### Wiring requests (this round; WR-LW1I-1/2/4/5 unchanged)
+- **WR-LW1I-6** (new; supersedes WR-LW1I-3's first half) `Makefile` `api-mutants`: delete ` tests/h/test_mutants.py`
+  from the first line; add, as the second recipe line (before E4B's):
+  ```
+  	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/h/test_mutants.py tests/l/access/test_mutants.py
+  ```
+  and above the target:
+  ```
+  # H1's and L2's PostgreSQL copies provision their own D harness, so they run in a process no D list
+  # started (WR-LW1I-6); after one they skip visibly.
+  ```
+  Proof: `make api-mutants` above (80 passed on that line, 0 skipped); without it the H1 PG pair skips visibly on line 1.
+- **WR-LW1I-3** (amended): append only ` tests/d/test_l2sql_self_mutants.py` to the first `api-mutants` line (an
+  in-process D list); `tests/l/access/test_mutants.py` goes on the WR-LW1I-6 line, never line 1.
+- **WR-LW1I-2** and **WR-LW1I-1**: exactly as above; apply both in the merge commit (0-F2). With them, `make api-test` green.
+
+### Estimate (remaining, to merge)
+optimistic 0.25 h / likely 0.75 h / pessimistic 3 h (the latter = one `make api-mutants` rerun, ~3 h wall), confidence
+medium-high. Basis: code, tests, both composed make targets green with the wirings; remaining = the coordinator
+applying WR-LW1I-1/2/3/6 and a verify pass.
+
+- 2026-09-27: fix round appended for code head `168e99a9` (findings 0-F1, 0-F2, 1-LW1I-R1).

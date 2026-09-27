@@ -1,0 +1,86 @@
+{
+ "activity": "review",
+ "head": "168e99a9",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lw1-integration",
+ "branch": "codex/w5-lw1-integration",
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LW1I-1 tests/integration/test_harness.py migration pin += 0030_lab_access_self.sql (after D7's 0029); merge commit (0-F2)",
+  "WR-LW1I-2 apps/infrx-api/tests/d/checks.py EXPECTED_FUNCTION_CALLERS += \"public.lab_provider_memberships()\": {\"authenticated\", \"service_role\"}; merge commit (0-F2)",
+  "WR-LW1I-3 (amended) Makefile api-mutants line 1 += tests/d/test_l2sql_self_mutants.py only",
+  "WR-LW1I-4 lab-sql/D7: implement infrx.lab.access.DatasetSources.uses(provider_org_id, dataset_ref) over D7.a source/grant refs",
+  "WR-LW1I-5 (optional) register the pg pytest marker in pyproject.toml",
+  "WR-LW1I-6 Makefile api-mutants: remove tests/h/test_mutants.py from line 1; new second line `cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/h/test_mutants.py tests/l/access/test_mutants.py` (0-F1, 1-LW1I-R1)"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/L2-INT-dd79f8c.md",
+  "research/plan/evidence/coordinator/updates/L2-20260927T1723Z.json"
+ ],
+ "task": "L2",
+ "slice": "LW1 integration: L2 on real PostgreSQL (WR-L2-3 db_now) + WR-H1-1 authorize + fix round (0-F1, 0-F2, 1-LW1I-R1)",
+ "owned_paths": [
+  "apps/infrx-api/infrx/lab/",
+  "apps/infrx-api/infrx/state/lab_access.py (db_now only)",
+  "apps/infrx-api/tests/l/access/"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=l2 uv run --frozen pytest -q tests/l/access/test_access.py (base, red)",
+   "exit": 1,
+   "summary": "10 pg failed: PgAccessStore has no db_now"
+  },
+  {
+   "cmd": "same after 94ed729b",
+   "exit": 0,
+   "summary": "23 passed (13 fake + 10 pg on 57501)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l2 uv run --frozen pytest -q tests/l/access/test_mutants.py (dd79f8cd)",
+   "exit": 0,
+   "summary": "43 passed: 20/20 fake + 17/17 PG mutants killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 uv run --frozen pytest -q tests/d/test_l2sql_units.py tests/d/test_l2sql_access.py tests/d/test_code_mutants_l2sql.py",
+   "exit": 0,
+   "summary": "43 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 make api-test",
+   "exit": 2,
+   "summary": "4871 passed, 56 skipped, 9 xfailed, 9 failed: 2 = WR-LW1I-2 (execute surface lists 0030's function; 40 passed with the patch), 7 = test_outbox_relay[valkey] HarnessBusy (another lane's d2 valkey lock)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_mutants.py tests/l/access/test_mutants.py -k skips_visibly (red, 3297ae58)",
+   "exit": 1,
+   "summary": "2 failed: PG mutant broken_runner instead of a visible skip when this process holds the D harness lock"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l4 uv run --frozen pytest -q -rs tests/d/test_l2sql_self.py tests/h/test_mutants.py tests/l/access/test_mutants.py -k 'l2sql_self or pg_mutant' (168e99a9)",
+   "exit": 0,
+   "summary": "3 passed, 19 skipped visibly (was 2 failed, 3 passed at 3297ae58)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l2 uv run --frozen pytest -q tests/h/test_mutants.py tests/l/access/test_mutants.py (own process)",
+   "exit": 0,
+   "summary": "80 passed: H1 27+2, L2 20+17 killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 make api-mutants (WR-LW1I-2/3/6 applied locally, reverted)",
+   "exit": 0,
+   "summary": "4001 passed 35 skipped; WR-LW1I-6 line 80 passed; E4B 255 passed (177 min)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l2 make api-test (WR-LW1I-1/2/3/6 applied locally, reverted)",
+   "exit": 0,
+   "summary": "4882 passed, 56 skipped, 9 xfailed (44 min)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.75,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "both composed make targets green with WR-LW1I-1/2/3/6; remaining = coordinator wirings + verify",
+  "at": "2026-09-27T17:23Z"
+ }
+}
