@@ -284,7 +284,9 @@ def main(argv: list[str] | None = None) -> int:
     except run.Interrupted as stop:
         why = f"interrupted by signal {stop.signum}: unfinished scenarios are NOT RUN"
     finally:
-        if usable and not args.keep:
+        # A stack that did not provision is torn down too (never left half-up), but only by
+        # the run holding the namespace lock.
+        if held and not (usable and args.keep):
             run.backend_teardown(report)
             run.teardown(report)
         lock.close()

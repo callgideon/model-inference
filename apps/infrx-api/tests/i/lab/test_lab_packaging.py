@@ -207,7 +207,9 @@ def caddy(tmp_path: Path, files: dict[str, str], *, network: str = "none",
 
 
 def composed_main() -> str:
-    return (DEPLOY / "Caddyfile").read_text() + f"\n{IMPORT_LINE}\n"
+    """The App edge as WR-I2L-1 leaves it (the line appended until it is applied)."""
+    main = (DEPLOY / "Caddyfile").read_text()
+    return main if IMPORT_LINE in main else main + f"\n{IMPORT_LINE}\n"
 
 
 def test_i2l__a_broken_or_hijacking_lab_site_never_validates_so_the_app_edge_is_unchanged(tmp_path):

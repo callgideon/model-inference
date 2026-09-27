@@ -26,7 +26,6 @@ HERE = Path(__file__).resolve().parent
 INTEGRATION = HERE.parent
 E3C = INTEGRATION / "backend" / "e3c"
 NAMESPACE = "e3l"
-os.environ.setdefault("INFRX_E2_NAMESPACE", NAMESPACE)
 sys.path[:0] = [p for p in (str(E3C), str(INTEGRATION), str(INTEGRATION / "backend"))
                 if p not in sys.path]
 import world                                            # noqa: E402  E3C's composed box
