@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 178,
-  "updated": "2026-09-27T18:13:13Z",
+  "revision": 179,
+  "updated": "2026-09-27T18:13:00Z",
   "agent_slots": {
     "total": 16,
-    "active": 2,
+    "active": 5,
     "reserved": 2,
-    "note": "Session 03 post-launch: lab-access (L2) + lab-sql-d7 running; certify window awaits the operator start; LW2 after L2 + the L1 integration round."
+    "note": "Session 03 post-launch: running feedback (G4F), eval-runner (B1→B2), lab-sql-lw2, lab-access-lw2, lab-app-lw2; certify window awaits the operator start."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -4645,6 +4645,108 @@
       "commands": [],
       "owned_paths": [
         "wave5-plan §5 LW3 eval-runner"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-LAB-SQL-LW2",
+      "task": null,
+      "slice": "(wave5 LW2 lane lab-sql-lw2) tasks D6J → L3-SQL → D9 (+ scrub_feedback, DatasetSources, the D7 minors); migrations from 0031; workflow wf_a5fefa6a-9c1; base 7fe48fe1 (the LW1 exit)",
+      "agent": "opus",
+      "branch": "codex/w5-lab-sql-lw2",
+      "worktree": ".claude/worktrees/codex-w5-lab-sql-lw2",
+      "base": "7fe48fe1",
+      "head": null,
+      "isolation": {
+        "ports": "dlab 57500",
+        "prefix": "infrx-dlab-",
+        "db": "dlab"
+      },
+      "activity": "running",
+      "started": "2026-09-27T18:13:00Z",
+      "updated": "2026-09-27T18:13:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW2 order (L3-SQL before L3; L3 before L4)",
+      "estimate": {
+        "optimistic_h": 6,
+        "likely_h": 12,
+        "pessimistic_h": 24,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW2 estimates",
+        "at": "2026-09-27T18:13:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW2 lab-sql-lw2"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-LAB-ACCESS-LW2",
+      "task": null,
+      "slice": "(wave5 LW2 lane lab-access-lw2) tasks L3 (fakes until L3-SQL); workflow wf_2c96dbda-ea7; base 7fe48fe1 (the LW1 exit)",
+      "agent": "opus",
+      "branch": "codex/w5-lab-access-lw2",
+      "worktree": ".claude/worktrees/codex-w5-lab-access-lw2",
+      "base": "7fe48fe1",
+      "head": null,
+      "isolation": {
+        "ports": "l3 57502",
+        "prefix": "infrx-l3-",
+        "db": "l3"
+      },
+      "activity": "running",
+      "started": "2026-09-27T18:13:00Z",
+      "updated": "2026-09-27T18:13:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW2 order (L3-SQL before L3; L3 before L4)",
+      "estimate": {
+        "optimistic_h": 3,
+        "likely_h": 6,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW2 estimates",
+        "at": "2026-09-27T18:13:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW2 lab-access-lw2"
+      ],
+      "wiring_requests": []
+    },
+    {
+      "id": "W5-LAB-APP-LW2",
+      "task": null,
+      "slice": "(wave5 LW2 lane lab-app-lw2) tasks WR-L1-6 (sign-in/callback/middleware) → L4 → V1M; workflow wf_4ef4d7ab-f25; base 7fe48fe1 (the LW1 exit)",
+      "agent": "opus",
+      "branch": "codex/w5-lab-app-lw2",
+      "worktree": ".claude/worktrees/codex-w5-lab-app-lw2",
+      "base": "7fe48fe1",
+      "head": null,
+      "isolation": {
+        "ports": "l4 57503; lab-v1m 57513; dev 3100",
+        "prefix": "infrx-l4-",
+        "db": "l4"
+      },
+      "activity": "running",
+      "started": "2026-09-27T18:13:00Z",
+      "updated": "2026-09-27T18:13:00Z",
+      "blocker": null,
+      "next_action": "handback → coordinator merge in the LW2 order (L3-SQL before L3; L3 before L4)",
+      "estimate": {
+        "optimistic_h": 6,
+        "likely_h": 12,
+        "pessimistic_h": 24,
+        "confidence": "medium",
+        "basis": "wave5-plan §5 LW2 estimates",
+        "at": "2026-09-27T18:13:00Z"
+      },
+      "evidence": [],
+      "commands": [],
+      "owned_paths": [
+        "wave5-plan §5 LW2 lab-app-lw2"
       ],
       "wiring_requests": []
     }

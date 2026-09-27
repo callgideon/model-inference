@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-27 18:13Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 178, updated 2026-09-27 18:13Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-27 18:13Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 179, updated 2026-09-27 18:13Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -31,7 +31,7 @@ Remaining, in order:
 - Integration branch `claude/consumer-v1` (head `387cac69`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 3 active lanes, 2 reserved.
+- Agent slots: 16 total, 6 active lanes, 2 reserved.
 - Validation: 0 error(s), 9 warning(s).
 
 ### Actionable blockers
@@ -231,6 +231,9 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | W5-TRACE-SHIP-LW2 | support (wave5 LW2 lane trace-ship-lw2) tasks T2F → T3 (+ T2I WR-3 pins lookup + build_shipper); workflow wf_adbe46dc-46a; base c9578fda (started early: dependencies merged) | complete | codex/w5-trace-ship-lw2 | c9578fda → ad0cdc5c | ports t2f, t3 (TASK_BLOCKS), prefix infrx-t2f-, db t2f | 2026-09-27 16:12Z | DONE: merged --no-ff at 24e58dc5 with WR-T-1 (t2f postgres 57549 + pins), WR-T-2 (mutant lists), WR-T-3 (harness applies the three trace schemas); WR-T-4 (composition, flag OFF, E4 regression) + WR-T-5 (alert rules/gauges) → the LW5 I2L-OBS lane; scrub_feedback schema request → LW2 lab-sql; minors C3–C6, RSI-1..4 carried | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-27 16:12Z; basis: merged |
 | W5-FEEDBACK | support (wave5 LW2 lane feedback) tasks G4F (C3F only if L2 is on the tip); workflow wf_85aabf67-834; base c9578fda (started early: dependencies merged) | running | codex/w5-feedback | c9578fda → — | ports g4f 57507; app-c3f 57509, prefix infrx-g4f-, db g4f | 2026-09-27 13:49Z | handback → coordinator merge (wirings: route mounts behind off flags, composition calls, migration pins) after the LW1 exit | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-27 13:49Z; basis: wave5-plan §5 LW2 estimates |
 | W5-EVAL-RUNNER | support (wave5 LW3 lane eval-runner, started early on the critical path) B1 → B2; workflow wf_09caea96-a00; base 995b7977; B1.b against a local fake dev endpoint until L3/L2 merge | running | codex/w5-eval-runner | 995b7977 → — | ports b1 57520 / model-fake 57521, prefix infrx-b1-, db b1 | 2026-09-27 16:22Z | handback → merge (worker entry point + L3/L2 wirings after the LW1 integration) | 6–24 h remaining (likely 12 h), confidence medium, estimated 2026-09-27 16:22Z; basis: wave5-plan B1 4/8/16 + B2 2/4/8 |
+| W5-LAB-SQL-LW2 | support (wave5 LW2 lane lab-sql-lw2) tasks D6J → L3-SQL → D9 (+ scrub_feedback, DatasetSources, the D7 minors); migrations from 0031; workflow wf_a5fefa6a-9c1; base 7fe48fe1 (the LW1 exit) | running | codex/w5-lab-sql-lw2 | 7fe48fe1 → — | ports dlab 57500, prefix infrx-dlab-, db dlab | 2026-09-27 18:13Z | handback → coordinator merge in the LW2 order (L3-SQL before L3; L3 before L4) | 6–24 h remaining (likely 12 h), confidence medium, estimated 2026-09-27 18:13Z; basis: wave5-plan §5 LW2 estimates |
+| W5-LAB-ACCESS-LW2 | support (wave5 LW2 lane lab-access-lw2) tasks L3 (fakes until L3-SQL); workflow wf_2c96dbda-ea7; base 7fe48fe1 (the LW1 exit) | running | codex/w5-lab-access-lw2 | 7fe48fe1 → — | ports l3 57502, prefix infrx-l3-, db l3 | 2026-09-27 18:13Z | handback → coordinator merge in the LW2 order (L3-SQL before L3; L3 before L4) | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-27 18:13Z; basis: wave5-plan §5 LW2 estimates |
+| W5-LAB-APP-LW2 | support (wave5 LW2 lane lab-app-lw2) tasks WR-L1-6 (sign-in/callback/middleware) → L4 → V1M; workflow wf_4ef4d7ab-f25; base 7fe48fe1 (the LW1 exit) | running | codex/w5-lab-app-lw2 | 7fe48fe1 → — | ports l4 57503; lab-v1m 57513; dev 3100, prefix infrx-l4-, db l4 | 2026-09-27 18:13Z | handback → coordinator merge in the LW2 order (L3-SQL before L3; L3 before L4) | 6–24 h remaining (likely 12 h), confidence medium, estimated 2026-09-27 18:13Z; basis: wave5-plan §5 LW2 estimates |
 
 ### Queues and locks
 
