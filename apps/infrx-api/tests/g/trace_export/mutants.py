@@ -37,6 +37,7 @@ FOREIGN = case("a_foreign_row_from_the_store_is_dropped")
 RETENTION = case("deleted_and_expired_data_is_not_exported")
 NO_KEY = case("rows_carry_no_storage_key_and_no_content")
 WALK = case("the_cursor_walks_every_row_once_in_order")
+DROPPED = case("the_cursor_advances_past_dropped_rows")
 BOUNDED = case("the_page_is_bounded")
 BAD_CURSOR = case("a_bad_cursor_is_a_400")
 WINDOW = case("the_window_filters_by_start")
@@ -95,6 +96,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("cursor_past_the_end", "a short page is the end", C,
        "encode_cursor(rows[-1]) if len(rows) == limit else None",
        "encode_cursor(rows[-1]) if rows else None", WALK),
+    _m("cursor_counts_exported_rows", "the cursor advances past rows T3 dropped", C,
+       "encode_cursor(rows[-1]) if len(rows) == limit else None",
+       "encode_cursor(rows[-1]) if len(out) == limit else None", DROPPED),
     _m("naive_cursor_accepted", "a cursor instant carries its zone", C,
        "        if at.tzinfo is None or not isinstance(trace_id, str):",
        "        if not isinstance(trace_id, str):", BAD_CURSOR),

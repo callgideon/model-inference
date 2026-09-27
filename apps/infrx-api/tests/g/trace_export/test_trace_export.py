@@ -217,6 +217,19 @@ def test_trace_export__the_cursor_walks_every_row_once_in_order(w):
     assert seen == rows and pages == 3
 
 
+def test_trace_export__the_cursor_advances_past_dropped_rows(w):
+    """A row T3 deleted inside a full page still yields a cursor: the page is short, and
+    the walk reaches the rows after it (the cursor counts rows read, not rows exported)."""
+    rows = [w.row(n=n) for n in range(4)]
+    asyncio.run(w.retention.delete(ORG, rows[2].request_id, "customer"))
+    app, _ = mounted(w.export)
+    first = get(app, {"limit": "3"})
+    assert requests(first) == [rows[0].request_id, rows[1].request_id]
+    cursor = first.json()["next_cursor"]
+    assert cursor is not None
+    assert requests(get(app, {"limit": "3", "cursor": cursor})) == [rows[3].request_id]
+
+
 def test_trace_export__the_page_is_bounded(w):
     """Oracle: the default is 100, the cap 1000; 0, 1001, a word and a repeat are a 400."""
     for n in range(101):
