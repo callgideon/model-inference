@@ -1,0 +1,6 @@
+{"id": "q1", "question": "What is shown in the first frame?", "answer": "a forklift", "episode": "e1", "split": "holdout"}
+{"id": "q2", "question": "How many pallets are stacked?", "answer": 3, "episode": "e1", "split": "holdout"}
+{"id": "q3", "question": "Is the operator wearing a helmet?", "answer": true, "episode": "e2", "split": "train"}
+{"id": "q4", "question": "Which aisle is the truck in?", "answer": "B7", "episode": "e3", "split": "train"}
+
+{"id": "q5", "question": "Détectez l'étiquette rouge.", "answer": {"x": 0.25, "y": 0.5}, "episode": "e4", "split": "validation"}
