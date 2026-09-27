@@ -28,7 +28,7 @@ test("N4-F01 a viewer is refused before any backend call", async () => {
     await deriveVersion(port, VIEWER, derive()),
     await exportVersion(port, VIEWER, form({ dataset_ref: "d", ttl_s: "60" }), UUID),
   ]) assert.equal(state.status, "error");
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 });
 
 test("N4-F02 the provider is the guarded workspace's, never a submitted field", async () => {
@@ -47,7 +47,7 @@ test("N4-F03 a malformed mapping or a missing file never leaves the Lab; a previ
   }
   assert.equal((await startImport(port, DEV, form({ spec: SPEC }))).status, "error");
   assert.equal((await previewImport(port, DEV, form({ spec: SPEC, file: file("") }))).status, "error");
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   await previewImport(port, DEV, form({ spec: SPEC, file: file("x".repeat(PREVIEW_BYTES + 10)) }));
   assert.equal((calls[0].args[2] as string).length, PREVIEW_BYTES);
 });
@@ -56,7 +56,7 @@ test("N4-F04 an upload over the bound is refused before the backend", async () =
   const { port, calls } = recordingPort();
   const state = await startImport(port, DEV, form({ spec: SPEC, file: file("x".repeat(MAX_UPLOAD_BYTES + 1)) }));
   assert.equal(state.status, "error");
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   await startImport(port, DEV, form({ spec: SPEC, file: file("x".repeat(MAX_UPLOAD_BYTES)) }));
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args[3], false);
@@ -64,10 +64,11 @@ test("N4-F04 an upload over the bound is refused before the backend", async () =
 
 test("N4-F05 a derivation needs a UUID, whole numbers within 10000 basis points and a parent", async () => {
   const { port, calls } = recordingPort();
-  for (const bad of [{ dataset_id: "D" }, { version: "0" }, { seed: "1.5" }, { train_bp: "9500", validation_bp: "600" }, { base: "", add: " " }]) {
+  const bads: Record<string, string>[] = [{ dataset_id: "D" }, { version: "0" }, { seed: "1.5" }, { train_bp: "9500", validation_bp: "600" }, { base: "", add: " " }];
+  for (const bad of bads) {
     assert.equal((await deriveVersion(port, DEV, derive(bad))).status, "error", JSON.stringify(bad));
   }
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   await deriveVersion(port, DEV, derive({ base: "", add: "lab:dataset:a\nlab:dataset:c" }));
   assert.deepEqual(calls[0].args, [DEV.providerId, { datasetId: UUID, version: 1, seed: 7, trainBp: 8000, validationBp: 1000, base: null, add: ["lab:dataset:a", "lab:dataset:c"] }]);
 });
@@ -77,7 +78,7 @@ test("N4-F06 an export lives 1 s to 7 days and names a version", async () => {
   for (const bad of [{ ttl_s: "0" }, { ttl_s: String(7 * 86_400 + 1) }, { ttl_s: "x" }, { dataset_ref: "" }]) {
     assert.equal((await exportVersion(port, DEV, form({ dataset_ref: "d", ttl_s: "60", ...bad }), UUID)).status, "error");
   }
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   await exportVersion(port, DEV, form({ dataset_ref: "d", ttl_s: String(7 * 86_400) }), UUID);
   assert.equal(calls[0].args[3], 7 * 86_400);
 });
