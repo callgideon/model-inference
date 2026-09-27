@@ -38,6 +38,25 @@ function exported(s: ts.Statement): boolean {
 }
 
 /**
+ * The entry points that run before any provider session exists (WR-L1-6), named exactly: signing in
+ * and out, and the email-link callback. Anything else these files export still needs the guard.
+ */
+export const PUBLIC: Readonly<Record<string, readonly string[]>> = {
+  "lib/auth/sign-in.ts": ["signIn", "signOut"],
+  "app/auth/callback/route.ts": ["GET"],
+};
+
+function names(s: ts.Statement): string[] {
+  const modifiers = ts.canHaveModifiers(s) ? (ts.getModifiers(s) ?? []) : [];
+  if (modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) return ["default"];
+  if (ts.isFunctionDeclaration(s) && s.name) return [s.name.text];
+  if (ts.isVariableStatement(s)) return s.declarationList.declarations.map((d) => d.name.getText());
+  if (ts.isExportDeclaration(s) && s.exportClause && ts.isNamedExports(s.exportClause)) return s.exportClause.elements.map((e) => e.name.text);
+  return ["default"];
+}
+const isPublic = (path: string, s: ts.Statement) => path in PUBLIC && names(s).every((n) => PUBLIC[path].includes(n));
+
+/**
  * Entry points with no guard: pages, route handlers and provider layouts (`path`), and every server
  * action (`path:line`): each runtime export of a "use server" file (async function, arrow const,
  * default, export list) and each function whose body opens with "use server" (an inline action).
@@ -53,9 +72,10 @@ export function unguarded(files: { path: string; source: string }[]): string[] {
     };
     const serverFile = serverPrologue(file.statements);
     if (!serverFile && (/(^|\/)(page\.tsx|route\.ts)$/.test(path) || /^app\/\(provider\)\/.*layout\.tsx$/.test(path))) {
-      if (!GUARD.test(source)) out.push(path);
+      const exports = file.statements.filter(exported);
+      if (!GUARD.test(source) && !(path in PUBLIC && exports.every((s) => isPublic(path, s)))) out.push(path);
     }
-    if (serverFile) file.statements.filter(exported).forEach(flag);
+    if (serverFile) file.statements.filter((s) => exported(s) && !isPublic(path, s)).forEach(flag);
     const inline = (node: ts.Node): void => {
       const fn = ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node);
       if (fn && node.body && ts.isBlock(node.body) && serverPrologue(node.body.statements)) flag(node.body);
@@ -85,8 +105,15 @@ test("L1-B01 every page, route, provider layout and server action calls the prov
         path: "app/(provider)/y/page.tsx",
         source: 'export default async function P() { await requireProviderWorkspace(); return <form action={async () => { "use server"; }} />; }',
       },
+      // WR-L1-6: only the named public entry points are exempt, never a neighbour in the same file.
+      { path: "lib/auth/sign-in.ts", source: server("export async function signIn() {}\nexport async function peek() {}") },
+      { path: "app/auth/callback/route.ts", source: 'export { authCallback as GET, peek as POST } from "x";' },
+      { path: "app/auth/other/route.ts", source: 'export { authCallback as GET } from "x";' },
     ]),
-    ["app/(provider)/x/page.tsx", "lib/fn.ts:2", "lib/arrow.ts:2", "lib/default.ts:2", "lib/list.ts:3", "lib/comment.ts:3", "app/(provider)/y/page.tsx:1"],
+    [
+      "app/(provider)/x/page.tsx", "lib/fn.ts:2", "lib/arrow.ts:2", "lib/default.ts:2", "lib/list.ts:3", "lib/comment.ts:3",
+      "app/(provider)/y/page.tsx:1", "lib/auth/sign-in.ts:3", "app/auth/callback/route.ts", "app/auth/other/route.ts",
+    ],
   );
 });
 
@@ -96,6 +123,16 @@ test("L1-B02 the provider layout renders its children only for a ready workspace
   const ready = layout.indexOf('access.kind === "ready"');
   assert.ok(ready !== -1 && ready < layout.indexOf("{children}"));
   assert.match(layout, /export const dynamic = "force-dynamic";/);
+});
+
+test("L1-B05 a signed-out visitor gets the Lab sign-in form, and every signed-in state can sign out", () => {
+  const layout = readFileSync(join(lab, "app/(provider)/layout.tsx"), "utf8");
+  const signedOut = layout.indexOf('access.kind === "signed-out"');
+  assert.ok(signedOut !== -1 && signedOut < layout.indexOf("<SignInForm />"));
+  assert.equal(layout.split("<SignOut />").length - 1, 3, "ready, select and denied each offer sign-out");
+  const form = readFileSync(join(lab, "lib/auth/sign-in-form.tsx"), "utf8");
+  assert.match(form, /useActionState\(signIn, null\)/);
+  assert.match(form, /SIGN_IN_COPY\[state\.error\]/);
 });
 
 test("L1-B03 the selection action stores the membership it validated, never the submitted value", () => {
