@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 168,
-  "updated": "2026-09-27T11:10:35Z",
+  "revision": 169,
+  "updated": "2026-09-27T11:32:14Z",
   "agent_slots": {
     "total": 16,
     "active": 2,
@@ -4139,27 +4139,36 @@
       "branch": "codex/w5-lab-sql",
       "worktree": ".claude/worktrees/codex-w5-lab-sql",
       "base": "9a6c3685",
-      "head": null,
+      "head": "5bf71715",
       "isolation": {
         "ports": "dlab 57500 (decoy 27500)",
         "prefix": "infrx-dlab-",
         "db": "dlab"
       },
-      "activity": "running",
+      "activity": "complete",
       "started": "2026-09-27T09:15:00Z",
-      "updated": "2026-09-27T09:15:00Z",
+      "updated": "2026-09-27T11:32:00Z",
       "blocker": null,
-      "next_action": "handback → coordinator merge in the LW1 order (L2-SQL before L2; F3 before D7/H1); wiring requests applied at merge",
+      "next_action": "DONE: L2-SQL (0027) + D6F (0028) merged --no-ff at 9fac4838 with WR-LABSQL-1 (migration pin), -2 (api-mutants), -4 (FILLED_BOUNDARIES); WR-LABSQL-3 → lab-access at its merge; D7 continues in lane W5-LAB-SQL-D7 (F3 merged)",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 6,
-        "pessimistic_h": 12,
-        "confidence": "medium",
-        "basis": "wave5-plan §5 LW1 estimates",
-        "at": "2026-09-27T09:15:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged",
+        "at": "2026-09-27T11:32:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/d/L2-SQL-fd65005.md",
+        "research/plan/evidence/d/D6F-fd65005.md"
+      ],
+      "commands": [
+        {
+          "cmd": "INFRX_D_TASK=dlab: focused suites + lane mutant lists; D migration list with 0027/0028; full pytest; coordinator: test_credit_schema + test_upgrade_lab + harness pin at the merge",
+          "exit": 0,
+          "summary": "103 passed / 0 survivors; 674 killed; 4689 passed (1 = WR-4, applied); 21+2 passed at the merge"
+        }
+      ],
       "owned_paths": [
         "wave5-plan §5 LW1 lab-sql"
       ],
@@ -4369,6 +4378,29 @@
         "wave5-plan §5 LW1 discovery"
       ],
       "wiring_requests": []
+    },
+    {
+      "id": "D7",
+      "task": "D7",
+      "activity": "blocked",
+      "evidence": [],
+      "commands": [],
+      "slice": "not started",
+      "branch": "codex/w5-lab-sql",
+      "worktree": ".claude/worktrees/codex-w5-lab-sql",
+      "head": "fd65005b",
+      "owned_paths": [],
+      "estimate": {
+        "optimistic_h": 3,
+        "likely_h": 6,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "brief estimate; D10 2/4/8 for 8 files",
+        "at": "2026-09-27T11:00Z"
+      },
+      "wiring_requests": [],
+      "blocker": "F3's reviewed commit is not on claude/consumer-v1 (no infrx/contracts/lab at 56566aab); brief: stop after D6F",
+      "updated": "2026-09-27T11:00:00Z"
     }
   ],
   "review_queue": [],
@@ -7171,6 +7203,36 @@
       "by": "tracker",
       "what": "rejected update: stale: at 2026-09-27T10:46:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z",
       "source": "updates/CERTIFY-WINDOW-20260927T1046Z.json"
+    },
+    {
+      "at": "2026-09-27T11:32:00Z",
+      "by": "coordinator (LW1)",
+      "what": "lab-sql (L2-SQL 0027 + D6F 0028) ACCEPT merged at 9fac4838 with wirings; D7 dispatched as its own lane from the merge (F3 now on the tip)",
+      "source": "research/plan/evidence/d/L2-SQL-fd65005.md"
+    },
+    {
+      "at": "2026-09-27T11:32:14Z",
+      "by": "tracker",
+      "what": "rejected update: unknown task ID 'L2-SQL'",
+      "source": "updates/L2-SQL-20260927T0943Z.json"
+    },
+    {
+      "at": "2026-09-27T11:32:14Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+      "source": "updates/D6F-20260927T1100Z.json"
+    },
+    {
+      "at": "2026-09-27T11:00:00Z",
+      "by": "D7",
+      "what": "queued → blocked; head fd65005b; estimate likely unknown → 6 h (brief estimate; D10 2/4/8 for 8 files); blocker: F3's reviewed commit is not on claude/consumer-v1 (no infrx/contracts/lab at 56566aab); brief: stop after D6F",
+      "source": "updates/D7-20260927T1100Z.json"
+    },
+    {
+      "at": "2026-09-27T11:32:14Z",
+      "by": "tracker",
+      "what": "rejected update: unknown task ID 'L2-SQL'",
+      "source": "updates/L2-SQL-20260927T1100Z.json"
     }
   ],
   "history": {
@@ -7967,10 +8029,29 @@
       "status": "rejected",
       "at": "2026-09-27T10:46:00Z",
       "reason": "stale: at 2026-09-27T10:46:00Z is not newer than lane CERTIFY-WINDOW state 2026-09-27T11:10:00Z"
+    },
+    "L2-SQL-20260927T0943Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T09:43:00Z",
+      "reason": "unknown task ID 'L2-SQL'"
+    },
+    "D6F-20260927T1100Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T11:00:00Z",
+      "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+    },
+    "D7-20260927T1100Z.json": {
+      "status": "applied",
+      "at": "2026-09-27T11:00:00Z"
+    },
+    "L2-SQL-20260927T1100Z.json": {
+      "status": "rejected",
+      "at": "2026-09-27T11:00:00Z",
+      "reason": "unknown task ID 'L2-SQL'"
     }
   },
   "eta": {
-    "computed_at": "2026-09-27T11:10:35Z",
+    "computed_at": "2026-09-27T11:32:14Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
