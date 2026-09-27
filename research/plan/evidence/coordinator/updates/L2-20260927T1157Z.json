@@ -1,0 +1,19 @@
+{"task": "L2", "slice": "L2 fix round (0-F1, 0-F2, 0-F3, 1-L2-R1, 1-L2-R2)", "activity": "review",
+ "head": "4b2a7b80", "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-access",
+ "branch": "codex/w5-lab-access",
+ "owned_paths": ["apps/infrx-api/infrx/lab/__init__.py", "apps/infrx-api/infrx/lab/access/", "apps/infrx-api/tests/l/access/"],
+ "commands": [
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/l/access/test_access.py (tests first, 7042e659)", "exit": 1, "summary": "red: 13 errors TypeError FakeAccessStore has no 'now'; 10 pg skipped"},
+  {"cmd": "cd apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q tests/l/access/ (4b2a7b80, branch alone)", "exit": 0, "summary": "35 passed, 22 skipped (10 pg cases + 12 pg mutants: L2-SQL not merged); 16/16 fake mutants killed"},
+  {"cmd": "cd apps/infrx-api && uv run --frozen ruff check infrx/lab tests/l", "exit": 0, "summary": "all checks passed"},
+  {"cmd": "make api-test (4b2a7b80)", "exit": 0, "summary": "4595 passed, 65 skipped, 9 xfailed"},
+  {"cmd": "scratch composition (4b2a7b80 + codex/w5-lab-sql 5bf71715 + WR-L2-3): INFRX_D_TASK=l2 uv run --frozen pytest -q tests/l/access/test_access.py", "exit": 0, "summary": "23 passed (13 fake + 10 pg on PG 57501)"},
+  {"cmd": "scratch composition without WR-L2-3: INFRX_D_TASK=l2 uv run --frozen pytest -q -m pg tests/l/access/test_access.py", "exit": 1, "summary": "10 failed: AttributeError PgAccessStore has no db_now"},
+  {"cmd": "scratch composition: INFRX_MUTANTS=all INFRX_D_TASK=l2 uv run --frozen pytest -q tests/l/access/test_mutants.py", "exit": 0, "summary": "34 passed: 16/16 fake + 12/12 PostgreSQL mutants killed"},
+  {"cmd": "scratch composition: INFRX_D_TASK=l2 uv run --frozen pytest -q tests/d/test_l2sql_units.py tests/d/test_l2sql_access.py tests/d/test_code_mutants_l2sql.py", "exit": 0, "summary": "11 + 32 passed (lab-sql's cases and 30 mutants stay green with WR-L2-3)"}
+ ],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium",
+  "basis": "remaining: rerun the PG matrix and PG mutants on the integration tip after L2-SQL + WR-L2-3 merge (~2 min on the scratch composition) plus one verify round", "at": "2026-09-27T11:57Z"},
+ "blockers": ["L2-SQL (lab-sql) not merged; WR-L2-3 (PgAccessStore.db_now) must land with or before it, or the 10 pg cases fail on a tree carrying L2-SQL (13:9: integration not claimed)"],
+ "wiring_requests": ["WR-L2-1 amended to lab-sql: one membership RPC lab_provider_memberships (R156), adapter PgAccessStore implementing infrx.lab.access.AccessStore (membership, current_grant, membership_rows, grant_history, deployment_aggregates, db_now); two-RPC request and grant-RLS-for-members line withdrawn", "WR-L2-3 new to lab-sql: apps/infrx-api/infrx/state/lab_access.py PgAccessStore.db_now() = select infrx.now() (exact patch in the evidence)", "WR-L2-2 amended, Makefile:21 api-mutants += tests/l/access/test_mutants.py, placed before tests/d/test_migration_mutants.py"],
+ "evidence": ["research/plan/evidence/l/L2-1e0f875.md", "research/plan/evidence/coordinator/updates/L2-20260927T1157Z.json"]}
