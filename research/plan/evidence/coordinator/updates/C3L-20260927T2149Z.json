@@ -1,0 +1,63 @@
+{
+ "task": "C3L",
+ "slice": "LW3 judge lane task 2: Lab judge configuration/budget/run-request/calibration server actions over SR-C3L-1 RPCs (fake RPC client)",
+ "activity": "review",
+ "head": "33563dd1",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-judge",
+ "branch": "codex/w5-judge",
+ "owned_paths": [
+  "apps/lab/lib/services/judge/",
+  "apps/lab/tests/c/judge/"
+ ],
+ "commands": [
+  {
+   "cmd": "node --test tests/c/judge/judge.test.ts (red, core.ts absent)",
+   "exit": 1,
+   "summary": "ERR_MODULE_NOT_FOUND lib/services/judge/core.ts"
+  },
+  {
+   "cmd": "node --test tests/c/judge/judge.test.ts",
+   "exit": 0,
+   "summary": "11 pass"
+  },
+  {
+   "cmd": "node tests/c/judge/run-mutants.mjs",
+   "exit": 0,
+   "summary": "12 cases all named; 35/35 mutants killed (first run 30/35: runner $-replacement defect fixed, 3 survivors and 1 crash-shaped case tightened)"
+  },
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "38 pass (27 L1 + 11 C3L)"
+  },
+  {
+   "cmd": "make lab-lint && make lab-typecheck && make lab-build",
+   "exit": 0,
+   "summary": "clean; build ƒ /"
+  },
+  {
+   "cmd": "make lab-mutants",
+   "exit": 0,
+   "summary": "L1 runner 27 cases, 50/50 killed (scans the new actions)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "rerun the 11 cases against SR-C3L-1's RPC names/codes on the lab-sql merge; page (WR-C3L-2) if assigned",
+  "at": "2026-09-27T21:49Z"
+ },
+ "blockers": [
+  "integration needs SR-C3L-1 RPCs (lab-sql) and D6J"
+ ],
+ "wiring_requests": [
+  "WR-C3L-1 Makefile lab-mutants: cd apps/lab && node tests/l/shell/run-mutants.mjs && node tests/c/judge/run-mutants.mjs",
+  "WR-C3L-2 a Lab judge page rendering run_id=crypto.randomUUID() per form render over the four actions; nav is coordinator-owned",
+  "SR-C3L-1 (schema request, lab-sql) public.lab_judge_configure / lab_judge_set_budget / lab_judge_request_run / lab_judge_calibration per research/plan/evidence/c/C3L-33563dd.md"
+ ],
+ "evidence": [
+  "research/plan/evidence/c/C3L-33563dd.md"
+ ]
+}
