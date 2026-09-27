@@ -1,0 +1,12 @@
+{"task": "TRACKER-PRUNE", "slice": "v1 launch scope headline; deferred collapsed; superseded footer", "activity": "review", "at": "2026-09-27T04:46:06Z",
+ "head": "0a859eee", "base": "17cc78bd", "branch": "codex/tracker-prune",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-tracker-prune",
+ "owned_paths": ["research/plan/scripts/progress.py", "research/plan/scripts/test_progress.py", "research/plan/22-consumer-v1-implementation.md",
+                 "research/plan/evidence/coordinator/TRACKER-PRUNE-0a859ee.md", "research/plan/evidence/coordinator/updates/TRACKER-PRUNE-20260927T0446Z.json"],
+ "commands": [{"cmd": "python3 -m pytest -q research/plan/scripts/test_progress.py", "exit": 0, "summary": "35 passed (4 failed before the implementation)"},
+              {"cmd": "python3 research/plan/scripts/progress.py check", "exit": 0, "summary": "PASS, 0 errors, 7 warnings (base: 0, 7)"},
+              {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"},
+              {"cmd": "python3 -m pytest -q research/plan/scripts/", "exit": 1, "summary": "41 passed, 1 pre-existing failure in test_validate_plan.py (C0 dispatch_after_gate), not owned"}],
+ "estimate": {"optimistic_h": 0, "likely_h": 0.2, "pessimistic_h": 0.5, "confidence": "high", "basis": "diff complete; review fixes only", "at": "2026-09-27T04:46:06Z"},
+ "blockers": [], "wiring_requests": ["WR-TP-1: add support lane TRACKER-PRUNE to the overlay before apply-updates", "WR-TP-2: test_validate_plan C0 -> I3"],
+ "evidence": ["research/plan/evidence/coordinator/TRACKER-PRUNE-0a859ee.md"]}
