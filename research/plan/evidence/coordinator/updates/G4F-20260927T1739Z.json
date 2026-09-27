@@ -1,0 +1,17 @@
+{"task": "G4F", "slice": "feedback lane (LW2): G4F fix round (0-F1, 1-G4F-RSI-1: WR-G4F-1 patch completed as r2); C3F not started (L2 absent)", "activity": "review",
+ "head": "95ae17ab", "worktree": ".claude/worktrees/codex-w5-feedback", "branch": "codex/w5-feedback",
+ "owned_paths": ["apps/infrx-api/infrx/gateway/routes/feedback.py", "apps/infrx-api/tests/g/feedback/"],
+ "commands": [
+  {"cmd": "old patch applied: pytest -q tests/contracts/test_config_and_imports.py tests/i/test_packaging.py tests/g/test_startup.py", "exit": 1, "summary": "3 failed (the review's three), 331 passed"},
+  {"cmd": "old patch applied: INFRX_MUTANTS=all pytest -q tests/g/test_mutants.py -k 'well_formed or every_case or composition_root_drops_jobs'", "exit": 1, "summary": "2 failed: new case uncovered; ROUTERS-anchored mutants misdeclared"},
+  {"cmd": "r2 applied: INFRX_D_TASK=g4f pytest -q tests/contracts tests/i/test_packaging.py tests/i/test_worker_unit.py tests/g tests/w", "exit": 0, "summary": "2506 passed, 14 skipped"},
+  {"cmd": "r2 applied: INFRX_MUTANTS=all g (composition_root*, feedback_switch, well_formed, every_case) / contracts DEPLOY* / i schema mutants / g/feedback list", "exit": 0, "summary": "12 / 11 / 5 / 23 passed"},
+  {"cmd": "r2 applied: INFRX_D_TASK=g4f make api-test", "exit": 2, "summary": "4928 passed; 50 failed + 8 errors only in tests/d/test_outbox_relay[valkey] and tests/i from shared-lock contention with two concurrent lanes; reruns: tests/d/test_outbox_relay.py + tests/i 273 passed (8 i8-lock errors), then those 4 files 36 passed, 1 xfailed"},
+  {"cmd": "git apply --cached --check r2 on HEAD and on merge-tree(claude/consumer-v1 a6ccde7c, HEAD)", "exit": 0, "summary": "applies on both"}],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium",
+  "basis": "confirm round + coordinator applying r2, re-proven on contracts/i/g/w and the tip merge-tree; C3F separately 2/4/8 once L2 merges", "at": "2026-09-27T17:39Z"},
+ "blockers": ["C3F waits for the L2 port (infrx/lab/access) on claude/consumer-v1"],
+ "wiring_requests": ["WR-G4F-1 (superseded file) apply research/plan/evidence/g/G4F-95ae17a-wiring-r2.patch: config feedback_api default off, pilot feedback adapter, ROUTERS += feedback, test_startup case, R44 router pin, DEPLOYMENT_EXPECTED FEEDBACK_API False, preflight NOT_SETTABLE FEEDBACK_API, G mutants re-anchored + 2 new, 08 §5.1 row",
+  "WR-G4F-2 D6F PgFeedbackService.accept reports replay so FeedbackAccepted.replayed is true on a replay",
+  "WR-G4F-3 Makefile api-mutants += tests/g/feedback/test_mutants.py"],
+ "evidence": ["research/plan/evidence/g/G4F-95ae17a.md", "research/plan/evidence/g/G4F-95ae17a-wiring-r2.patch"]}
