@@ -36,6 +36,7 @@ P = "contracts/ports.py"        # TraceCandidate moved here (F2R item 5)
 R = "judge/rubric.py"
 C = "judge/cost.py"
 D = "judge/dryrun.py"
+J2 = "judge/submit.py"         # J2's own list is tests/j/submit/mutants.py
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- consent: the gate, its currency, its tenancy and its window (R56) ----------
@@ -580,6 +581,12 @@ MUTANTS: tuple[Mutant, ...] = (
        D, "from dataclasses import dataclass", "import anthropic\nfrom dataclasses import dataclass",
        "test_the_judge_package_never_imports_the_provider_sdk",
        "test_importing_the_dry_run_path_loads_no_provider_sdk"),
+    # --- J2: the submit path egresses only through a JudgeProvider ------------------------
+    _m("provider_sdk_imported_on_the_submit_path",
+       "the submit path imports no provider SDK: egress only through a JudgeProvider (J2)",
+       J2, "from urllib.parse import urlsplit\n",
+       "from urllib.parse import urlsplit\nimport anthropic\n",
+       "test_the_judge_package_never_imports_the_provider_sdk"),
 )
 
 
