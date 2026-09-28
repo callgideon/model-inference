@@ -30,7 +30,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve()
 REPO = HERE.parents[4]
 I8 = runpy.run_path(str(REPO / "infra" / "runbooks" / "pool_budget.py"))
-ROLES = {"datasets": 2, "eval": 4, "checkpoints": 1}     # the entry point's defaults (WR-B-5)
+ROLES = {"datasets": 2, "eval": 4, "checkpoints": 1, "annotation": 1, "training": 1, "rollout": 1}     # the entry point's defaults (WR-B-5)
 LAB_LIMIT = 20
 
 

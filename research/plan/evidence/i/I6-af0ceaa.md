@@ -188,3 +188,5 @@ now also names the botocore case.
 Local vs owed (P-08): the systemd/docker agreement is proven locally under the host's user
 systemd 255.4; the box's systemd reading a refused file (a failed start in the journal) and
 the instance-role S3 call from the running container are owed from staging.
+
+Rulings: the two proposed rulings above are numbered R184 (an ambiguous external run is never resubmitted or released by the platform) and R185 (Lab worker units: local content-addressed image, `--pull never`, enable marker and the role's own 0600 env file) in `08-contracts-v1-encoding.md` §10 at the lab-workers merge (2026-09-28, `codex/w5-merge-12`).

@@ -25,6 +25,7 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab/test_mutants.py && cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_operate/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_evaluate/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_observe/test_mutants.py
+	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test

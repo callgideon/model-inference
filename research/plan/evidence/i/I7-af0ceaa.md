@@ -88,3 +88,5 @@ setting with the unit's own `EnvironmentFile=` view. Runbook: the manual preflig
 (staging proof owed, P-08). Unit and I7 tests unchanged; `INFRX_D_TASK=i7 INFRX_MUTANTS=all
 pytest -q tests/i/lab_rollout/test_mutants.py` -> 17 passed, 15 mutants killed, exit 0
 (`I7-raw/mutants-all-1ed86c80.log`).
+
+Rulings: the rollout unit is covered by R185 (local content-addressed image, `--pull never`, enable marker and the role's own 0600 env file) and its shared I6 proposal by R184, both numbered in `08-contracts-v1-encoding.md` §10 at the lab-workers merge (2026-09-28, `codex/w5-merge-12`).

@@ -34,6 +34,26 @@
       {"name": "INFRX_LAB_SUPABASE_URL", "exposure": "server", "purpose": "where the control service verifies a Lab session token"},
       {"name": "INFRX_LAB_ORIGIN", "exposure": "server", "purpose": "the one browser origin whose Lab sessions it accepts"}
     ],
+    "lab-workers": [
+      {"name": "INFRX_IMAGE", "exposure": "unit", "purpose": "the role's release in its own env file: a local content-addressed image id (sha256:<64 hex>, --pull never); never the App's INFRX_IMAGE"},
+      {"name": "LAB_DATABASE_URL", "exposure": "secret", "purpose": "the worker role's own Lab database login; never the runtime's DATABASE_URL"},
+      {"name": "LAB_S3_BUCKET", "exposure": "server", "purpose": "the Lab object store bucket (instance-role credentials only; AWS_* refused)"},
+      {"name": "LAB_S3_ENDPOINT", "exposure": "server", "purpose": "the Lab object store endpoint; its host may be in LAB_EGRESS_ALLOW"},
+      {"name": "LAB_EGRESS_ALLOW", "exposure": "unit", "purpose": "NO_PROXY allowlist: exactly the object store host, 169.254.169.254 and the enabled adapter's approved host"},
+      {"name": "LAB_ANNOTATION_CONCURRENCY", "exposure": "server", "purpose": "annotation worker concurrency (pool_budget.py role default 1)"},
+      {"name": "LAB_ANNOTATION_TEACHER", "exposure": "server", "purpose": "the annotation teacher adapter; default dry-run, any other needs its P-10 approval in egress.json"},
+      {"name": "LAB_ANNOTATION_TEACHER_URL", "exposure": "server", "purpose": "the approved teacher's https endpoint (non-default adapter only)"},
+      {"name": "LAB_ANNOTATION_TEACHER_TOKEN", "exposure": "secret", "purpose": "the teacher's purpose-specific token (non-default adapter only)"},
+      {"name": "LAB_ANNOTATION_BUDGET_USD", "exposure": "server", "purpose": "the annotation USD budget, above 0 and within the P-10 approval's cap"},
+      {"name": "LAB_ANNOTATION_PAYER_REF", "exposure": "server", "purpose": "exactly the P-10 approval's named payer"},
+      {"name": "LAB_TRAINING_CONCURRENCY", "exposure": "server", "purpose": "training worker concurrency (pool_budget.py role default 1)"},
+      {"name": "LAB_TRAINING_CONNECTOR", "exposure": "server", "purpose": "the training connector adapter; default manual-bundle, any other needs its P-11 approval in egress.json"},
+      {"name": "LAB_TRAINING_CONNECTOR_URL", "exposure": "server", "purpose": "the approved connector's https endpoint (non-default adapter only)"},
+      {"name": "LAB_TRAINING_CONNECTOR_TOKEN", "exposure": "secret", "purpose": "the connector's purpose-specific token (non-default adapter only)"},
+      {"name": "LAB_TRAINING_BUDGET_USD", "exposure": "server", "purpose": "the training USD budget, above 0 and within the P-11 approval's cap"},
+      {"name": "LAB_TRAINING_PAYER_REF", "exposure": "server", "purpose": "exactly the P-11 approval's named payer"},
+      {"name": "LAB_ROLLOUT_CONCURRENCY", "exposure": "server", "purpose": "rollout controller concurrency (pool_budget.py role default 1)"}
+    ],
     "lab-edge": [
       {"name": "INFRX_LAB_CONTROL_SITE", "exposure": "server", "purpose": "the control origin's address in the App edge (default the placeholder above)"},
       {"name": "INFRX_LAB_CONTROL_UPSTREAM", "exposure": "server", "purpose": "local drill only; the box leaves it unset (127.0.0.1:8003)"}

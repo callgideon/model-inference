@@ -48,6 +48,31 @@ Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
 Lab edge: `INFRX_LAB_CONTROL_SITE` (the control origin's address; default the placeholder in
 `lab.json`) and `INFRX_LAB_CONTROL_UPSTREAM` (local drill only; unset on the box).
 
+Lab workers (annotation, training, rollout: `/etc/infrx-lab/<role>.env`, ubuntu, mode 0600, one
+file per role holding only that role's names; checked by `infra/lab/workers/training/preflight.py`,
+runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
+
+| Name | Exposure | Value |
+|---|---|---|
+| `INFRX_IMAGE` | unit | the role's release in its own env file: a local content-addressed image id (sha256:<64 hex>, --pull never); never the App's INFRX_IMAGE |
+| `LAB_DATABASE_URL` | **secret** | the worker role's own Lab database login; never the runtime's DATABASE_URL |
+| `LAB_S3_BUCKET` | server | the Lab object store bucket (instance-role credentials only; AWS_* refused) |
+| `LAB_S3_ENDPOINT` | server | the Lab object store endpoint; its host may be in LAB_EGRESS_ALLOW |
+| `LAB_EGRESS_ALLOW` | unit | NO_PROXY allowlist: exactly the object store host, 169.254.169.254 and the enabled adapter's approved host |
+| `LAB_ANNOTATION_CONCURRENCY` | server | annotation worker concurrency (pool_budget.py role default 1) |
+| `LAB_ANNOTATION_TEACHER` | server | the annotation teacher adapter; default dry-run, any other needs its P-10 approval in egress.json |
+| `LAB_ANNOTATION_TEACHER_URL` | server | the approved teacher's https endpoint (non-default adapter only) |
+| `LAB_ANNOTATION_TEACHER_TOKEN` | **secret** | the teacher's purpose-specific token (non-default adapter only) |
+| `LAB_ANNOTATION_BUDGET_USD` | server | the annotation USD budget, above 0 and within the P-10 approval's cap |
+| `LAB_ANNOTATION_PAYER_REF` | server | exactly the P-10 approval's named payer |
+| `LAB_TRAINING_CONCURRENCY` | server | training worker concurrency (pool_budget.py role default 1) |
+| `LAB_TRAINING_CONNECTOR` | server | the training connector adapter; default manual-bundle, any other needs its P-11 approval in egress.json |
+| `LAB_TRAINING_CONNECTOR_URL` | server | the approved connector's https endpoint (non-default adapter only) |
+| `LAB_TRAINING_CONNECTOR_TOKEN` | **secret** | the connector's purpose-specific token (non-default adapter only) |
+| `LAB_TRAINING_BUDGET_USD` | server | the training USD budget, above 0 and within the P-11 approval's cap |
+| `LAB_TRAINING_PAYER_REF` | server | exactly the P-11 approval's named payer |
+| `LAB_ROLLOUT_CONCURRENCY` | server | rollout controller concurrency (pool_budget.py role default 1) |
+
 ## 3. Origins and the auth allowlist (P-05 settings, per project) [OP]
 
 - Lab web: `https://lab.callbill.ai`; control: `https://lab-control.callbill.ai`. ⚠️ TO BE VERIFIED
