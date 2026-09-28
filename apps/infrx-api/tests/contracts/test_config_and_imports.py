@@ -335,7 +335,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     from infrx.gateway import app as composition_root
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
         ["health", "models", "ingress", "uploads", "jobs", "feedback", "trace_export",
-         "lab_control", "lab_traces", "route"]
+         "lab_control", "lab_traces", "lab_evaluations", "lab_pipelines", "lab_releases",
+         "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -555,6 +556,10 @@ DEPLOYMENT_EXPECTED = {
     "LAB_EVAL_WORKER": False,
     # R1 (WR-R1-1): the switch that routes admission through the rollout router, off
     "ROLLOUT_ROUTING": False,
+    # LAB-API-2 (WR-LAB2-1): the switches that mount its three surfaces, off
+    "LAB_EVALS": False,
+    "LAB_PIPELINES": False,
+    "LAB_RELEASES": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

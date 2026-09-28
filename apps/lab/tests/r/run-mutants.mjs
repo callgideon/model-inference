@@ -3,13 +3,14 @@
 // Usage: node tests/r/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "../l/shell/harness.mjs";
 
-const SUITE = ["view", "journey", "actions", "pages"].map((f) => `tests/r/${f}.test.ts`);
+const SUITE = ["view", "journey", "actions", "pages", "http"].map((f) => `tests/r/${f}.test.ts`);
 const PORT = "lib/services/rollouts/port.ts";
 const FAKE = "lib/services/rollouts/fake.ts";
 const VIEW = "lib/services/rollouts/view.ts";
 const ACTIONS = "lib/services/rollouts/actions.ts";
 const RELEASES = "app/(provider)/releases/page.tsx";
 const OPTIMIZATIONS = "app/(provider)/optimizations/page.tsx";
+const HTTP = "lib/services/rollouts/http.ts";
 
 const C = {
   v01: "R4-V01 a release row shows the frozen plan, cohort, baseline and candidate weights from the D9 record",
@@ -34,6 +35,8 @@ const C = {
   a05: "R4-A05 a consumer-only user gets a 404 and the releases service is never asked",
   p01: "R4-P01 each page reads the records as the session's workspace and shows ?refused= only as fixed copy",
   p02: "R4-P02 no page offers a launch or allocation control or claims success; the preview stand-in is labelled only when it is on",
+  h01: "R4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched",
+  h02: "R4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
 };
 
 const MUTANTS = [
@@ -123,6 +126,21 @@ const MUTANTS = [
   m("R4-X75", "a page claims success on its own", RELEASES, "<h1>Releases</h1>", "<h1>Releases</h1>\n      <p>Rollback succeeded.</p>", [C.p02]),
   m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={a} />', '<input type="hidden" name="kind" value={a} />\n                <input name="weightBp" />', [C.p02]),
   m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
+  // the HTTP adapter (WR-R4-1, lane lab-api-2)
+  m("R4-X78", "the session token is not sent", HTTP, "authorization: `Bearer ${token}`", 'authorization: "Bearer"', [C.h01]),
+  m("R4-X79", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
+  m("R4-X80", "a read is not unwrapped from {data}", HTTP, "camel(body === undefined ? payload.data : payload)", "camel(payload)", [C.h01]),
+  m("R4-X81", "records keep the route's snake_case keys", HTTP, "k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())", "k", [C.h01]),
+  m("R4-X82", "nested records are not renamed", HTTP, "camel(v)]", "v]", [C.h01]),
+  m("R4-X83", "a list of records is not renamed", HTTP, "Array.isArray(value) ? value.map(camel)", "Array.isArray(value) ? value", [C.h01]),
+  m("R4-X84", "optimizations read the releases", HTTP, 'call(actor, "optimizations")', 'call(actor, "releases")', [C.h01]),
+  m("R4-X85", "the proposal carries the port's key", HTTP, "policy_ref: policyRef", "policyRef", [C.h01]),
+  m("R4-X86", "the proposal is a read", HTTP, 'method: body === undefined ? "GET" : "POST"', 'method: "GET"', [C.h01]),
+  m("R4-X87", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
+  m("R4-X88", "no session reads as unavailable", HTTP, '401: "denied", ', "", [C.h02]),
+  m("R4-X89", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
+  m("R4-X90", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
+  m("R4-X91", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "R4", mutants: MUTANTS }));

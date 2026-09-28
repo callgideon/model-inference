@@ -377,6 +377,12 @@ class DeploymentSettings:
     # over D9's release policies). Off by default, so the launched API is unchanged; on, a
     # gateway without a release store refuses to start. Public shadow/canary waits on P-12.
     rollout_routing: bool = False
+    # LAB-API-2 (WR-LAB2-1): mount the Lab's `/lab/v1/evaluations` (WR-B4-1),
+    # `/lab/v1/pipelines` (WR-P4-1) and `/lab/v1/releases` + `/lab/v1/optimizations`
+    # (WR-R4-1) the same way. Off by default: no such route exists.
+    lab_evals: bool = False
+    lab_pipelines: bool = False
+    lab_releases: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

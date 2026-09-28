@@ -252,6 +252,17 @@ NOT_SETTABLE = {
     "ROLLOUT_ROUTING": "routes admission through the Lab rollout router (R1, off by default): "
                        "enabling it on the hosted gateway needs D9's release store, the E4 "
                        "regression rerun and P-12, a deploy change, not a --set",
+    "LAB_EVALS": "mounts /lab/v1/evaluations (WR-B4-1, off by default): enabling it on the "
+                 "hosted gateway needs the experiments/catalog tables (WR-B4-2), the Lab "
+                 "migrations applied hosted and the E4 regression rerun, a deploy change, "
+                 "not a --set",
+    "LAB_PIPELINES": "mounts /lab/v1/pipelines (WR-P4-1, off by default): enabling it on the "
+                     "hosted gateway needs D8's label log and run ledger, the Lab migrations "
+                     "applied hosted and the E4 regression rerun, a deploy change, not a --set",
+    "LAB_RELEASES": "mounts /lab/v1/releases and /lab/v1/optimizations (WR-R4-1, off by "
+                    "default): enabling it on the hosted gateway needs D9 and the proposal "
+                    "store (WR-R4-2), the Lab migrations applied hosted and the E4 regression "
+                    "rerun, a deploy change, not a --set",
 }
 
 

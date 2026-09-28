@@ -3,13 +3,14 @@
 // Usage: node tests/p/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "../l/shell/harness.mjs";
 
-const SUITE = ["view", "journey", "actions", "pages"].map((f) => `tests/p/${f}.test.ts`);
+const SUITE = ["view", "journey", "actions", "pages", "http"].map((f) => `tests/p/${f}.test.ts`);
 const PORT = "lib/services/pipelines/port.ts";
 const FAKE = "lib/services/pipelines/fake.ts";
 const VIEW = "lib/services/pipelines/view.ts";
 const ACTIONS = "lib/services/pipelines/actions.ts";
 const ANNOT = "app/(provider)/annotations/page.tsx";
 const TRAIN = "app/(provider)/training/page.tsx";
+const HTTP = "lib/services/pipelines/http.ts";
 
 const C = {
   v01: "P4-V01 roles mirror ROLE_CAPABILITIES: a viewer runs no pipeline, a developer does, only an administrator assigns",
@@ -41,6 +42,8 @@ const C = {
   p02: "P4-P02 every import, export, bundle and checkpoint form carries an id minted at render, never typed or re-minted by the action",
   p03: "P4-P03 the paid forms show the USD budget and named payer, and no form picks a connector",
   p04: "P4-P04 labels show their kind and ground-truth status apart; the preview stand-in is labelled only when it is on",
+  h01: "P4-H01 every call is the session's token and the actor's provider on its route; keys are renamed both ways, values untouched",
+  h02: "P4-H02 the route's refusals are the port's reasons (410 is gone); anything else, or no answer, is unavailable",
 };
 
 const MUTANTS = [
@@ -148,6 +151,27 @@ const MUTANTS = [
   m("P4-X96", "automatic connectors are advertised", TRAIN, "Automatic training connectors are not offered", "Automatic training connectors are available", [C.p03]),
   m("P4-X97", "a label's ground-truth status is not shown", ANNOT, "<td>{l.kind}</td><td>{l.truth}</td>", "<td>{l.kind}</td><td>{l.state}</td>", [C.p04]),
   m("P4-X98", "the preview label shows when the stand-in is off", TRAIN, '{isPreview() && <p role="note">', '{<p role="note">', [C.p04]),
+  // the HTTP adapter (WR-P4-1, lane lab-api-2)
+  m("P4-X99", "the session token is not sent", HTTP, "authorization: `Bearer ${token}`", 'authorization: "Bearer"', [C.h01]),
+  m("P4-X100", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
+  m("P4-X101", "a list is not unwrapped from {data}", HTTP, "const list: Answer = (p) => camel(p.data);", "const list: Answer = (p) => camel(p);", [C.h01]),
+  m("P4-X102", "records keep the route's snake_case keys", HTTP, "k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())", "k", [C.h01]),
+  m("P4-X103", "bodies go out in the port's camelCase", HTTP, "k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)", "k", [C.h01]),
+  m("P4-X104", "nested keys are not renamed", HTTP, "[to(k), deep(v)]", "[to(k), v]", [C.h01]),
+  m("P4-X105", "a list of records is not renamed", HTTP, "Array.isArray(value) ? value.map(deep)", "Array.isArray(value) ? value", [C.h01]),
+  m("P4-X106", "the dataset is not the query's", HTTP, "`&dataset_ref=${encodeURIComponent(datasetRef)}`", '""', [C.h01]),
+  m("P4-X107", "the bundle is not the route's JSON text", HTTP, "(p) => JSON.stringify(p)", "list", [C.h01]),
+  m("P4-X108", "the export pin is flattened", HTTP, "export: { format: exportFormat, export_id: exportId }", "export_format: exportFormat, export_id: exportId", [C.h01]),
+  m("P4-X109", "the USD limit is sent under the port's key", HTTP, "limit: limitUsd }", "limit_usd: limitUsd }", [C.h01]),
+  m("P4-X110", "a review answer leaks the route's record", HTTP, 'post(actor, "assignments", snake(input), none)', 'post(actor, "assignments", snake(input))', [C.h01]),
+  m("P4-X111", "a submit is a read", HTTP, "submit: (actor, id) => post(actor, `${run(id)}/submit`)", "submit: (actor, id) => get(actor, `${run(id)}/submit`, camel)", [C.h01]),
+  m("P4-X112", "the approval drops its run", HTTP, "{ external_run_id: externalRunId }", "{}", [C.h01]),
+  m("P4-X113", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
+  m("P4-X114", "an expired export reads as unavailable", HTTP, '410: "gone", ', "", [C.h02]),
+  m("P4-X115", "no session reads as unavailable", HTTP, '401: "denied", ', "", [C.h02]),
+  m("P4-X116", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
+  m("P4-X117", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
+  m("P4-X118", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "P4", mutants: MUTANTS }));

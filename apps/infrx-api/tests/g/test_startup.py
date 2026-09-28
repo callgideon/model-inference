@@ -18,7 +18,8 @@ from fastapi.testclient import TestClient
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
-from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_control, lab_traces,
+from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_control,
+                                  lab_evaluations, lab_pipelines, lab_releases, lab_traces,
                                   models, trace_export, uploads)
 from infrx.observe import host
 from infrx.observe import route as metrics
@@ -159,7 +160,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
     slash redirects) is served."""
     assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, trace_export,
-                                   lab_control, lab_traces, metrics)
+                                   lab_control, lab_traces, lab_evaluations, lab_pipelines,
+                                   lab_releases, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}
@@ -375,6 +377,77 @@ def test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_i
     assert answer.status_code == 503, answer.text
     assert answer.json()["error"]["code"] == "dependency_unavailable"
     assert store.asked == [support.PUBLIC_MODEL] and world.jobs.jobs == {}
+
+
+LAB_2 = {"lab_evaluations": ("lab_evals", lab_evaluations.LabEvaluations,
+                             lab_evaluations.EVALS_PREFIX + "/runs"),
+         "lab_pipelines": ("lab_pipelines", lab_pipelines.LabPipelines,
+                           lab_pipelines.PIPELINES_PREFIX + "/training-runs"),
+         "lab_releases": ("lab_releases", lab_releases.LabReleases, lab_releases.RELEASES_PATH)}
+
+
+def test_lab_api_2__the_lab_surfaces_are_mounted_only_when_the_deployment_enables_them():
+    """LAB-API-2 (WR-LAB2-1): `LAB_EVALS`, `LAB_PIPELINES` and `LAB_RELEASES` are off by
+    default, and then none of their routes exists even with every surface composed; each
+    switch mounts its own surface only, which answers through `lab_auth` (no session: 401)."""
+    import dataclasses
+
+    from infrx.config import deployment_from_env
+
+    assert [getattr(deployment_from_env({}), s) for s, _, _ in LAB_2.values()] == [False] * 3
+    surfaces = {name: (switch, kind(None, None), path)
+                for name, (switch, kind, path) in LAB_2.items()}
+
+    def composed(**on):
+        world = relay_support.World()
+        world.stream.usage = lambda: asyncio.sleep(0, {})
+        config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
+        return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
+                                      clock=world.now_s, catalog=world.catalog,
+                                      stream=world.stream, objects=world.objects,
+                                      jobs=world.jobs, index=MemoryScheduler(world.clock.now),
+                                      **{name: deps for name, (_, deps, _) in surfaces.items()})
+
+    every = {switch: True for switch, _, _ in surfaces.values()}
+    for on in ({}, *({switch: True} for switch in every), every):
+        app = composed(**on)
+        paths = {getattr(r, "path", "") for r in app.routes}
+        for name, (switch, deps, path) in surfaces.items():
+            enabled = on.get(switch, False)
+            assert (getattr(app.state.runtime, name) is deps) is enabled, (on, name)
+            assert (path in paths) is enabled, (on, name)
+            assert local(app).get(path).status_code == (401 if enabled else 404), (on, name)
+        ingress.assert_route_table(app)
+
+
+def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled():
+    """LAB-API-2 (WR-LAB2-1): off, nothing is built; each switch builds its own surface
+    only, over the project's auth server and L2 on the pool, with D7 (merged) under the
+    evaluation and pipeline surfaces and every port whose table is not merged absent (503)."""
+    import dataclasses
+
+    from infrx.gateway import pilot
+    from infrx.lab.access import LabAccess
+    from infrx.state.lab_data import PgLabDataStore
+
+    def settings(**on):
+        return support.settings(deployment=dataclasses.replace(support.BUILD, **on))
+
+    assert pilot._lab(settings(), connect=None) == {}
+    for name, (switch, kind, _) in LAB_2.items():
+        built = pilot._lab(settings(**{switch: True}), connect=None)
+        assert list(built) == [name]
+        x = built[name]
+        assert isinstance(x, kind) and isinstance(x.access, LabAccess)
+        assert (str(x.sessions.client.base_url), x.sessions.apikey) \
+            == ("https://fake.supabase.co", "service-role")
+        ports = {f: getattr(x, f) for f in x.__dataclass_fields__
+                 if f not in ("sessions", "access")}
+        d7 = {"store"} if name != "lab_releases" else set()
+        assert {f for f, port in ports.items() if port is not None} == d7, name
+        assert all(isinstance(ports[f], PgLabDataStore) for f in d7)
+    every = pilot._lab(settings(**{s: True for s, _, _ in LAB_2.values()}), connect=None)
+    assert sorted(every) == sorted(LAB_2)
 
 
 def fixture_host(monkeypatch, root: pathlib.Path) -> None:
