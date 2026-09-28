@@ -1,0 +1,136 @@
+diff --git a/Makefile b/Makefile
+index 4d069fa4..2b60ac4b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -42,7 +42,6 @@ console-typecheck:
+ # The contracts runner covers both entries (v1 conformance and the v2 suites, F2P wire-in item 11).
+ console-mutants:
+ 	cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants
+-	cd apps/app && node tests/v/run-mutants.mjs
+ 	cd apps/app && node tests/u/run-mutants.mjs
+ 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
+ 	cd apps/app && node tests/a/run-mutants.mjs
+@@ -122,7 +121,7 @@ lab-build:
+ lab-mutants:
+ 	cd apps/lab && node tests/l/shell/run-mutants.mjs && node tests/l/ui/run-mutants.mjs
+ 	cd apps/lab && node tests/c/review/run-mutants.mjs
+-	cd apps/lab && node tests/v/detail/run-mutants.mjs && node tests/v/judge/run-mutants.mjs
++	cd apps/lab && node tests/v/detail/run-mutants.mjs && node tests/v/judge/run-mutants.mjs && node tests/v/list/run-mutants.mjs
+ 	cd apps/lab && node tests/c/judge/run-mutants.mjs
+ 	cd apps/lab && node tests/r/run-mutants.mjs
+ 	cd apps/lab && node tests/p/run-mutants.mjs
+diff --git a/apps/app/lib/services/console.ts b/apps/app/lib/services/console.ts
+index ceb09d9e..17c81e79 100644
+--- a/apps/app/lib/services/console.ts
++++ b/apps/app/lib/services/console.ts
+@@ -1597,7 +1597,7 @@ export function consoleShell(
+ }
+ 
+ /**
+- * Provider routes (/traces, /dedicated, /teams) until V1M moves them to Lab. Brief 04 keeps them out of
++ * Provider routes (/dedicated, /teams) until they move to the Lab (/traces moved in V1M). Brief 04 keeps them out of
+  * consumer navigation AND protected: anything but an operator flag of exactly `true` is a 404, thrown
+  * before the page reads anything (E3A F-2). `notFound` is Next's, passed in so this stays node-loadable.
+  */
+diff --git a/apps/app/tests/c/mutants.json b/apps/app/tests/c/mutants.json
+index bff27487..35e8ddc1 100644
+--- a/apps/app/tests/c/mutants.json
++++ b/apps/app/tests/c/mutants.json
+@@ -1838,16 +1838,6 @@
+         "C-PROV-01 a consumer gets a 404 from the provider-route guard; an operator is let through"
+       ]
+     },
+-    {
+-      "id": "PROV-04",
+-      "note": "/traces drops its notFound guard (served to a consumer)",
+-      "file": "app/(console)/traces/page.tsx",
+-      "find": "  providerRoute(await getSession(), notFound);\n",
+-      "replace": "",
+-      "cases": [
+-        "C-PROV-02 each provider page runs the guard first, before any read"
+-      ]
+-    },
+     {
+       "id": "PROV-05",
+       "note": "/dedicated drops its notFound guard",
+@@ -1868,16 +1858,6 @@
+         "C-PROV-02 each provider page runs the guard first, before any read"
+       ]
+     },
+-    {
+-      "id": "PROV-07",
+-      "note": "/traces reads (consoleContext) before the guard",
+-      "file": "app/(console)/traces/page.tsx",
+-      "find": "  providerRoute(await getSession(), notFound);\n  const params = await searchParams;\n",
+-      "replace": "  const params = await searchParams;\n  providerRoute(await getSession(), notFound);\n",
+-      "cases": [
+-        "C-PROV-02 each provider page runs the guard first, before any read"
+-      ]
+-    },
+     {
+       "id": "C0-ORG-01",
+       "note": "C0 WR-6: the first-membership pick restored (lib/session.ts's old `.eq(user_id).limit(1)`)",
+diff --git a/apps/app/tests/c/provider-routes.test.ts b/apps/app/tests/c/provider-routes.test.ts
+index 938c0864..ad0f0cd5 100644
+--- a/apps/app/tests/c/provider-routes.test.ts
++++ b/apps/app/tests/c/provider-routes.test.ts
+@@ -14,7 +14,7 @@ import orgs from "../../lib/contracts/fixtures/orgs.json" with { type: "json" };
+ import { providerRoute } from "../../lib/services/console.ts";
+ 
+ const CONSOLE = join(resolve(dirname(fileURLToPath(import.meta.url)), "../.."), "app", "(console)");
+-const PAGES = ["traces", "dedicated", "teams"];
++const PAGES = ["dedicated", "teams"]; // /traces moved to the Lab (V1M: apps/lab/app/(provider)/requests)
+ const NOT_FOUND = new Error("NEXT_HTTP_ERROR_FALLBACK;404");
+ const notFound = (): never => {
+   throw NOT_FOUND;
+diff --git a/apps/app/tests/c/run-mutants.mjs b/apps/app/tests/c/run-mutants.mjs
+index c48c7903..79060d2a 100644
+--- a/apps/app/tests/c/run-mutants.mjs
++++ b/apps/app/tests/c/run-mutants.mjs
+@@ -45,7 +45,7 @@ const SUITE = [
+   "tests/c/actions.test.ts",
+   // S1-fix B2: the production preview gate is a module-level constant, so its case lives with the module.
+   "app/(console)/usage/preview-context.test.ts",
+-  // E3A F-2: the provider-route guard and its wiring in /traces, /dedicated, /teams.
++  // E3A F-2: the provider-route guard and its wiring in /dedicated, /teams (/traces moved to the Lab, V1M).
+   "tests/c/provider-routes.test.ts",
+ ];
+ 
+diff --git a/apps/app/tests/i3/boundaries.test.ts b/apps/app/tests/i3/boundaries.test.ts
+index 66adb044..e038f9cd 100644
+--- a/apps/app/tests/i3/boundaries.test.ts
++++ b/apps/app/tests/i3/boundaries.test.ts
+@@ -77,11 +77,11 @@ const KEY = "sk-infrx-AbCdEfGh0123456789AbCdEfGh0123456789AbCd";
+ const EMAIL = "someone.person@example.com";
+ 
+ test("I3-BOUND-01 every error boundary under app/ reports once through the report client, with only digest, route and name", async () => {
+-  // Catches (review I3R-6): a segment boundary (usage, billing, traces) that renders its copy and
++  // Catches (review I3R-6): a segment boundary (usage, billing) that renders its copy and
+   // never reports, so browser throws on its route produce no app_error line; and a boundary that
+   // reports anything more than the sanitised fields (the message, the raw path).
+   const files = boundaries();
+-  assert.ok(files.length >= 5, `found only ${files.map((f) => relative(appRoot, f)).join(", ")}`);
++  assert.ok(files.length >= 4, `found only ${files.map((f) => relative(appRoot, f)).join(", ")}`);
+   const sent: { url: unknown; init: RequestInit }[] = [];
+   const realFetch = globalThis.fetch;
+   const hadWindow = "window" in globalThis;
+diff --git a/apps/app/tests/u/run-mutants.mjs b/apps/app/tests/u/run-mutants.mjs
+index 2d7d14a7..609c188f 100644
+--- a/apps/app/tests/u/run-mutants.mjs
++++ b/apps/app/tests/u/run-mutants.mjs
+@@ -208,7 +208,6 @@ const U4 = {
+ };
+ 
+ // APP-MINORS-1 (I3R-6): the error boundaries report through I3's one report client (tests/i3/boundaries).
+-const TRACES_ERROR = "app/(console)/traces/error.tsx";
+ const ERROR_VIEW = "lib/deploy/error-view.ts";
+ const I3 = {
+   bound: "I3-BOUND-01 every error boundary under app/ reports once through the report client, with only digest, route and name",
+@@ -219,7 +218,6 @@ const I3_BODY = "body: JSON.stringify(browserReport(error, window.location.pathn
+ const MUTANTS = [
+   { id: "I3-M01", what: "the usage boundary never reports (review I3R-6)", file: USAGE_ERROR, find: I3_DROP, replace: "", cases: [I3.bound] },
+   { id: "I3-M02", what: "the billing boundary never reports", file: BILLING_ERROR, find: I3_DROP, replace: "", cases: [I3.bound] },
+-  { id: "I3-M03", what: "the traces boundary never reports", file: TRACES_ERROR, find: I3_DROP, replace: "", cases: [I3.bound] },
+   { id: "I3-M04", what: "the root error page (app/error.tsx, global-error.tsx) never reports", file: ERROR_VIEW,
+     find: "  useErrorReport(error);\n  const commit", replace: "  const commit", cases: [I3.bound] },
+   { id: "I3-M05", what: "the report carries the message", file: ERROR_VIEW, find: I3_BODY,
