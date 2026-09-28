@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """L3-SQL (wave-5 LW2, lab-sql; 09-amendment-workstreams §L3, the D slice): the Lab control
 plane over 0007's registry on real PostgreSQL - LAB-PUBLISH (the SQL half) and LAB-ACCESS for
-`0032_lab_control.sql`, composed with `PgLabControlStore` and read back through the one
-catalog (`PgCatalogDirectory`) and admission's pin resolution.
+`0032_lab_control.sql`, the `ControlStore` seam of the L3 service (WR-L3-1), composed with
+`PgControlStore` and read back through the one catalog and admission's pin resolution.
 
 World: test_l2sql_access's (the operator seed: NEMO's Marlin serving version S1, its
 ready_private dev revision and its active public revision P1 listed as
 `nemostation/marlin-2b` v1; OTHER) plus a second serving version S2 with a draft dev revision
-D2 and a proposed public revision P2 carrying an effective card. Each `check_*` is the check a
-mutant in `code_mutants_l3sql.py` must break; the rolled-back ones leave nothing behind, the
-race commits its own rows.
+D2 and two proposed public revisions P2/P3 (no card yet: publication inserts it). Each
+`check_*` is the check a mutant in `code_mutants_l3sql.py` must break; the rolled-back ones
+leave nothing behind, the race commits its own rows.
 
     INFRX_D_TASK=dlab uv run --frozen pytest -q tests/d/test_l3sql_control.py
 """
@@ -22,9 +22,12 @@ import psycopg
 import pytest
 from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
+from infrx.contracts.v2.money_units import Credit
+from infrx.contracts.v2.records import (DeploymentRevision, DeploymentState, Environment,
+                                        RateCardSnapshot, Visibility)
 from infrx.state import migrations
 from infrx.state.jobstore import connector
-from infrx.state.lab_control import PgLabControlStore
+from infrx.state.lab_control import PgControlStore
 
 from . import checks_admission as ca
 from . import checks_credit as cc
@@ -44,9 +47,11 @@ S2 = "d0000006-0000-4000-8000-000000000006"
 D2 = "c0000006-0000-4000-8000-000000000006"          # S2's private dev revision (draft)
 P2 = "c0000007-0000-4000-8000-000000000007"          # S2's proposed public revision
 P3 = "c0000008-0000-4000-8000-000000000008"          # a second proposal of S2
+NEW = "c000000a-0000-4000-8000-00000000000a"          # a proposal this file inserts
 CARD1, CARD2, CARD3 = cc.CARD, "rc_marlin2b_s2", "rc_marlin2b_s2b"
-RPCS = ("lab_move_deployment", "lab_approve_publication", "lab_rollback_publication",
-        "lab_open_dev_wallet", "lab_control_history")
+RPCS = ("lab_control_endpoint", "lab_control_transition", "lab_control_propose",
+        "lab_control_dev_key", "lab_control_publish", "lab_control_rollback",
+        "lab_control_fund", "lab_control_events")
 
 
 def seed(conn) -> None:
@@ -67,39 +72,55 @@ def seed(conn) -> None:
        30720, 2048, 'dev@nemo'),
       ('{P3}', '{cc.PROD_ENDPOINT}', '{NEMO}', 'prod', '{S2}', 'public', 'proposed_public',
        30720, 4096, 'dev@nemo');
-    insert into infrx.rate_card_versions (rate_card_version, model_id, deployment_revision_id,
-      serving_version_id, input_rate_per_million, output_rate_per_million, effective_at,
-      approved_by, provisional) values
-      ('{CARD2}', '{cc.MODEL}', '{P2}', '{S2}', 300, 900, '2026-09-01T00:00:00Z', 'ops', false),
-      ('{CARD3}', '{cc.MODEL}', '{P3}', '{S2}', 300, 900, '2026-09-01T00:00:00Z', 'ops', false);
     """)
 
 
-def move(conn, revision: str, state: str, *, provider: str = NEMO, operator: bool = False):
-    return ok(conn, "lab_move_deployment", {"provider_org_id": provider,
-                                            "deployment_revision_id": revision, "state": state,
-                                            "actor": "dev@nemo", "operator": operator,
-                                            "reason": "journey"})
+def move(revision: str, expected: str, to: str, *, provider: str = NEMO,
+         actor: str = "dev@nemo") -> dict:
+    return {"deployment_revision_id": revision, "provider_org_id": provider,
+            "expected": expected, "to": to, "actor": actor, "reason": "journey"}
 
 
-def moved(conn, revision: str, state: str, *, provider: str = NEMO,
-          operator: bool = False) -> str | None:
-    return refusal(conn, "lab_move_deployment", {"provider_org_id": provider,
-                                                 "deployment_revision_id": revision,
-                                                 "state": state, "actor": "dev@nemo",
-                                                 "operator": operator, "reason": "journey"})
+def validated(conn) -> None:
+    ok(conn, "lab_control_transition", move(D2, "draft", "validating"))
+    ok(conn, "lab_control_transition", move(D2, "validating", "ready_private"))
 
 
-def approval(revision: str = P2, *, operator: bool = True, card: str = CARD2,
-             provider: str = NEMO, alias: str = ALIAS) -> dict:
-    return {"provider_org_id": provider, "deployment_revision_id": revision,
-            "public_model_id": alias, "rate_card_version": card, "actor": "ops@infrx",
-            "operator": operator, "reason": "P-01 approved"}
+def card(revision: str = P2, version: str = CARD2, *, model: str = cc.MODEL,
+         serving: str = S2) -> dict:
+    return {"rate_card_version": version, "model_id": model, "deployment_revision_id": revision,
+            "serving_version_id": serving, "input_rate_per_million": "300",
+            "output_rate_per_million": "900", "effective_at": "2026-09-01T00:00:00Z",
+            "approved_by": "ops@infrx"}
 
 
-def rollback(revision: str = P1, *, operator: bool = True) -> dict:
-    return {"public_model_id": ALIAS, "deployment_revision_id": revision, "actor": "ops@infrx",
-            "operator": operator, "reason": "regression"}
+def publish(revision: str = P2, version: str = CARD2, *, expected: int | None = 1,
+            alias: str = ALIAS, **kw) -> dict:
+    return {"public_model_id": alias, "card": card(revision, version, **kw),
+            "expected_version": expected, "actor": "ops@infrx", "reason": "P-01 approved"}
+
+
+def rollback(to: int = 1, expected: int = 2) -> dict:
+    return {"public_model_id": ALIAS, "to_version": to, "expected_version": expected,
+            "actor": "ops@infrx", "reason": "regression"}
+
+
+def proposal(revision: str = NEW, *, serving: str = S2, provider: str = NEMO,
+             state: str = "proposed_public") -> dict:
+    return {"deployment_revision_id": revision, "endpoint_id": cc.PROD_ENDPOINT,
+            "provider_org_id": provider, "serving_version_id": serving,
+            "environment": "prod", "visibility": "public", "state": state,
+            "max_input_tokens": 30720, "max_output_tokens": 2048}
+
+
+def fund(provider: str = OTHER, amount: str = "250",
+         op: str = "0f000000-0000-4000-8000-00000000000f") -> dict:
+    return {"provider_org_id": provider, "amount": amount, "operation_id": op,
+            "actor": "ops@infrx", "reason": "preview budget"}
+
+
+def events(conn, provider: str = NEMO) -> list[dict]:
+    return ok(conn, "lab_control_events", {"provider_org_id": provider})
 
 
 def listed(conn) -> str:
@@ -110,11 +131,6 @@ def listed(conn) -> str:
 def state(conn, revision: str) -> str:
     return conn.execute("select state from infrx.deployment_revisions where "
                         "deployment_revision_id = %s", (revision,)).fetchone()[0]
-
-
-def validated(conn) -> None:
-    move(conn, D2, "validating")
-    move(conn, D2, "ready_private")
 
 
 # ----------------------------------------------------------------------------- checks
@@ -137,88 +153,145 @@ def check_browser_roles_reach_nothing(conn) -> str:
 
 
 @rolled_back
-def check_providers_move_only_their_own_private_revisions(conn) -> str:
-    """LAB-ACCESS / LAB-PUBLISH: the provider validates its own private dev revision (each
-    move audited with actor and states); another provider's move is `not_found`; a provider
-    cannot drain or retire a public revision, nor activate anything (`forbidden`); a move
-    0007 does not allow is `state_conflict`; an unattributed move is refused."""
-    first = move(conn, D2, "validating")
-    assert (first["from_state"], first["to_state"], first["action"], first["by_operator"]) == \
-        ("draft", "validating", "move", False), first
-    assert moved(conn, D2, "ready_private", provider=OTHER) == "not_found"
-    assert state(conn, D2) == "validating"
-    assert moved(conn, D2, "draft") == "state_conflict", "a move 0007 forbids"
-    assert moved(conn, D2, "draining") == "state_conflict", "a private revision drained"
-    move(conn, D2, "ready_private")
-    got = {s: moved(conn, P1, s) for s in ("draining", "retired", "active")}
-    got["activate_proposal"] = moved(conn, P2, "active", operator=True)
-    assert got == dict.fromkeys(got, "forbidden"), got
+def check_transitions_are_a_cas_on_the_providers_own_private_revisions(conn) -> str:
+    """LAB-ACCESS / LAB-PUBLISH: the provider moves its own PRIVATE revision only from the
+    state it read (a stale expectation is `state_conflict`); another provider's revision and
+    any public one are `not_found`; a move 0007 does not allow is `state_conflict`; each move
+    is audited with its actor, before and after; an unattributed move is refused."""
+    first = ok(conn, "lab_control_transition", move(D2, "draft", "validating"))
+    assert (first["state"], first["deployment_revision_id"]) == ("validating", D2), first
+    assert refusal(conn, "lab_control_transition", move(D2, "draft", "retired")) == \
+        "state_conflict", "a stale expectation moved the revision"
+    assert refusal(conn, "lab_control_transition",
+                   move(D2, "validating", "ready_private", provider=OTHER)) == "not_found"
+    assert refusal(conn, "lab_control_transition", move(D2, "validating", "draft")) == \
+        "state_conflict", "a move 0007 forbids"
+    got = {s: refusal(conn, "lab_control_transition", move(P1, "active", s))
+           for s in ("draining", "retired")}
+    got["activate_proposal"] = refusal(conn, "lab_control_transition",
+                                       move(P2, "proposed_public", "active"))
+    assert got == dict.fromkeys(got, "not_found"), got
     assert state(conn, P1) == "active" and state(conn, P2) == "proposed_public"
-    assert refusal(conn, "lab_move_deployment", {"provider_org_id": NEMO,
-                                                 "deployment_revision_id": D2,
-                                                 "state": "retired", "actor": "",
-                                                 "reason": "x"}) == "invalid_request"
-    history = ok(conn, "lab_control_history", {"provider_org_id": NEMO,
-                                               "deployment_revision_id": D2})
-    assert [(e["from_state"], e["to_state"], e["actor"]) for e in history] == \
-        [("draft", "validating", "dev@nemo"), ("validating", "ready_private", "dev@nemo")], history
-    assert ok(conn, "lab_control_history", {"provider_org_id": OTHER}) == []
-    move(conn, P2, "retired")                                   # a provider withdraws its proposal
-    return "own private moves audited; foreign not_found; public moves forbidden; 0007 guards"
+    assert refusal(conn, "lab_control_transition",
+                   move(D2, "validating", "retired", actor="")) == "invalid_request"
+    assert state(conn, D2) == "validating", "an unattributed move landed"
+    ok(conn, "lab_control_transition", move(D2, "validating", "ready_private"))
+    got = [(e["action"], e["actor"], e["subject"], e["before"], e["after"])
+           for e in events(conn)]
+    assert got == [
+        ("lab_transition", "dev@nemo", D2, {"state": "draft"},
+         {"state": "validating", "reason": "journey"}),
+        ("lab_transition", "dev@nemo", D2, {"state": "validating"},
+         {"state": "ready_private", "reason": "journey"})], got
+    assert events(conn, OTHER) == []
+    return "CAS on own private revisions, audited; foreign/public not_found; 0007 guards"
 
 
 @rolled_back
-def check_an_operator_approves_a_validated_proposal(conn) -> str:
-    """LAB-PUBLISH: a provider proposes, an operator approves - a provider's approval is
-    `forbidden`; approval needs the serving version's dev revision validated and an
-    effective card of the revision; then the revision is active and the alias's NEXT
-    listing version, audited, and discovery (the one catalog) and admission both resolve
-    the alias to it."""
-    assert refusal(conn, "lab_approve_publication", approval(operator=False)) == "forbidden"
-    assert refusal(conn, "lab_approve_publication", approval(provider=OTHER)) == "not_found"
-    assert refusal(conn, "lab_approve_publication", approval()) == "state_conflict", \
-        "published without a validated dev revision"
+def check_a_proposal_comes_from_a_validated_dev_source(conn) -> str:
+    """LAB-PUBLISH: a proposal is a NEW public proposed_public revision of the provider's
+    validated (`ready_private`) dev revision's serving version; a draft source, another
+    serving version or a private "proposal" is refused; another provider's source is
+    `not_found`; the proposal is audited with its source."""
+    args = {"proposal": proposal(), "source_revision_id": D2, "actor": "admin@nemo"}
+    assert refusal(conn, "lab_control_propose", args) == "state_conflict", "a draft proposed"
     validated(conn)
-    assert refusal(conn, "lab_approve_publication", approval(card=CARD1)) == "invalid_request"
-    conn.execute("update infrx_test.clock set offset_s = offset_s - interval '3650 days'")
-    assert refusal(conn, "lab_approve_publication", approval()) == "invalid_request", \
-        "listed at a card not yet in effect"
-    conn.execute("update infrx_test.clock set offset_s = offset_s + interval '3650 days'")
-    assert refusal(conn, "lab_approve_publication", approval(alias="other/model")) == \
-        "invalid_request"
-    event = ok(conn, "lab_approve_publication", approval())
-    assert (event["action"], event["to_state"], event["listing_version"], event["by_operator"]) \
-        == ("approve", "active", 2, True), event
-    assert state(conn, P2) == "active" and listed(conn) == P2
-    assert refusal(conn, "lab_approve_publication", approval()) == "state_conflict", \
-        "an approval replayed as a second listing"
-    return "provider cannot approve; needs validated dev + effective card; next listing version"
+    assert refusal(conn, "lab_control_propose", {**args, "proposal": proposal(
+        provider=OTHER)}) == "not_found"
+    assert refusal(conn, "lab_control_propose", {**args, "proposal": proposal(
+        serving=S1)}) == "state_conflict", "another serving version proposed"
+    assert refusal(conn, "lab_control_propose", {**args, "proposal": proposal(
+        state="active")}) == "invalid_request"
+    assert refusal(conn, "lab_control_propose", {**args, "source_revision_id": P1}) == \
+        "state_conflict", "a public revision as the source"
+    row = ok(conn, "lab_control_propose", args)
+    assert (row["state"], row["visibility"], row["environment"], row["serving_version_id"]) \
+        == ("proposed_public", "public", "prod", S2), row
+    assert refusal(conn, "lab_control_propose", args) == "state_conflict", "id reused"
+    assert [(e["action"], e["subject"], e["after"]) for e in events(conn)][-1] == \
+        ("lab_propose", NEW, {"source": D2})
+    return "validated dev source only; foreign not_found; audited"
+
+
+@rolled_back
+def check_dev_keys_are_scoped_to_the_providers_dev_endpoint(conn) -> str:
+    """LAB-ACCESS: a provider_dev credential is issued only on the provider's own DEV
+    endpoint (a prod or another provider's endpoint is `not_found`), filed in the provider's
+    own organization (auth.context requires org = provider), stored as a hash only, and
+    audited without the hash; a reused hash is refused."""
+    args = {"provider_org_id": NEMO, "endpoint_id": cc.DEV_ENDPOINT, "user_id": l2.DEV,
+            "key_hash": "hash-l3-dev-1", "prefix": "sk-infrx-l3dev001", "name": "dev"}
+    assert refusal(conn, "lab_control_dev_key", {**args, "endpoint_id": cc.PROD_ENDPOINT}) == \
+        "not_found"
+    assert refusal(conn, "lab_control_dev_key", {**args, "endpoint_id": cc.OTHER_ENDPOINT}) \
+        == "not_found"
+    assert refusal(conn, "lab_control_dev_key", {**args, "provider_org_id": OTHER}) == \
+        "not_found"
+    key = ok(conn, "lab_control_dev_key", args)["key_id"]
+    row = conn.execute("select org_id::text, audience, provider_org_id::text, "
+                       "endpoint_id::text, key_hash, user_id from public.api_keys where id = %s",
+                       (key,)).fetchone()
+    assert row == (NEMO, "provider_dev", NEMO, cc.DEV_ENDPOINT, "hash-l3-dev-1", None), row
+    second = ok(conn, "lab_control_dev_key", {**args, "key_hash": "hash-l3-dev-2"})["key_id"]
+    assert second != key
+    assert refusal(conn, "lab_control_dev_key", args) == "invalid_request", "hash reused"
+    got = [(e["action"], e["actor"], e["subject"], e["after"]) for e in events(conn)]
+    assert got[0] == ("lab_dev_key", l2.DEV, key, {"endpoint_id": cc.DEV_ENDPOINT,
+                                                   "prefix": "sk-infrx-l3dev001"}), got
+    assert "hash-l3" not in str(got)
+    return "dev endpoint only, provider's own org, hash stored, audit without it"
+
+
+@rolled_back
+def check_publication_is_a_cas_on_the_listing_version(conn) -> str:
+    """LAB-PUBLISH: an operator publishes a proposed public revision at a card, only while the
+    alias is still at the version the operator read: the card is inserted, the revision is
+    active and the alias's NEXT listing version (audited with before/after); the previous
+    revision stays active (admitted pins); a replay at the old version, a card of another
+    model or an unknown revision are refused."""
+    assert refusal(conn, "lab_control_publish", publish(expected=None)) == "state_conflict"
+    assert refusal(conn, "lab_control_publish", publish(expected=2)) == "state_conflict"
+    assert refusal(conn, "lab_control_publish", publish(l2.NOBODY)) == "not_found"
+    assert refusal(conn, "lab_control_publish", publish(alias="other/model")) == \
+        "state_conflict", "another alias's version"
+    assert refusal(conn, "lab_control_publish", publish(alias="other/model", expected=None)) \
+        == "invalid_request", "listed under another model's alias"
+    assert refusal(conn, "lab_control_publish", publish(serving=S1)) == "invalid_request"
+    listing = ok(conn, "lab_control_publish", publish())
+    assert listing == {"public_model_id": ALIAS, "version": 2, "deployment_revision_id": P2,
+                       "rate_card_version": CARD2}, listing
+    assert state(conn, P2) == "active" and state(conn, P1) == "active"
+    assert listed(conn) == P2
+    assert refusal(conn, "lab_control_publish", publish(P3, CARD3)) == "state_conflict", \
+        "a publication at a stale version"
+    assert refusal(conn, "lab_control_publish", publish(expected=2)) == "state_conflict", \
+        "a publication replayed as a second listing"
+    last = events(conn)[-1]
+    assert (last["action"], last["subject"], last["before"]["version"],
+            last["after"]["version"], last["after"]["reason"]) == \
+        ("lab_publish", ALIAS, 1, 2, "P-01 approved"), last
+    return "CAS on the version; card + active + next listing; previous revision kept"
 
 
 @rolled_back
 def check_dev_revisions_never_reach_app_discovery(conn) -> str:
-    """LAB-PUBLISH: a private dev revision - even validated - is never approved, never listed
-    and never admitted by a consumer alias; only its provider_dev endpoint names it."""
+    """LAB-PUBLISH: a private dev revision - even validated - is never published, never
+    listed and never admitted by a consumer alias; only its provider_dev endpoint names it."""
     validated(conn)
-    assert refusal(conn, "lab_approve_publication", approval(D2, card=CARD2)) == \
-        "state_conflict"
-    got = cc.attempt(conn, "select infrx.lab_list_alias(%s, %s, %s, 'ops', 'x')",
-                     (D2, ALIAS, CARD2))
-    assert got is not None and "invalid_request" in got, got
+    assert refusal(conn, "lab_control_publish", publish(D2)) == "state_conflict"
     for alias in ("nemostation/marlin-2b-dev", "nemostation/marlin-2b@2026-10-01"):
         got = cc.attempt(conn, "select * from infrx.resolve_admission_pins(%s)", (alias,))
         assert got is not None and "not_found" in got, f"{alias} admitted: {got}"
     assert listed(conn) == P1
-    return "dev revisions: no approval, no listing, no consumer discovery"
+    return "dev revisions: no publication, no listing, no consumer discovery"
 
 
 @rolled_back
 def check_rollback_is_a_new_listing_and_admitted_jobs_keep_their_pins(conn) -> str:
     """LAB-PUBLISH / ROLLOUT-PIN: a job admitted before a publication keeps its revision and
-    card through the alias switch and the rollback; the rollback is an operator's new
-    listing version naming the earlier, still active revision at the card it was listed
-    with; a revision never listed under the alias, the current one, or a drained one is not
-    a rollback target."""
+    card through the alias switch and the rollback; the rollback is a CAS'd new listing
+    version repeating an earlier version (its revision and card); the current or a later
+    version, version 0, a stale expectation or a drained target are refused."""
     world = ca.World(conn)
     org = cc.personal_org(conn, cc.CONSUMER_1)
 
@@ -230,60 +303,64 @@ def check_rollback_is_a_new_listing_and_admitted_jobs_keep_their_pins(conn) -> s
             "where request_id = %s", (request.request_id,)).fetchone()
     before, pins = admitted()
     assert pins == (P1, CARD1), pins
-    validated(conn)
-    ok(conn, "lab_approve_publication", approval())
+    ok(conn, "lab_control_publish", publish())
     during, pins2 = admitted()
     assert pins2 == (P2, CARD2), pins2
-    assert refusal(conn, "lab_rollback_publication", rollback(operator=False)) == "forbidden"
-    assert refusal(conn, "lab_rollback_publication", rollback(P2)) == "state_conflict"
-    assert refusal(conn, "lab_rollback_publication", rollback(DEV1)) == "not_found"
+    assert refusal(conn, "lab_control_rollback", rollback(expected=1)) == "state_conflict"
+    assert refusal(conn, "lab_control_rollback", rollback(to=2)) == "not_found"
+    assert refusal(conn, "lab_control_rollback", rollback(to=0)) == "not_found"
     conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
                  "deployment_revision_id, serving_version_id, input_rate_per_million, "
                  "output_rate_per_million, effective_at, approved_by, provisional) values "
                  "('rc_marlin2b_repriced', %s, %s, %s, 999, 999, '2026-09-02', 'ops', false)",
                  (cc.MODEL, P1, S1))
-    event = ok(conn, "lab_rollback_publication", rollback())
-    assert (event["action"], event["listing_version"], event["deployment_revision_id"]) == \
-        ("rollback", 3, P1), event
+    listing = ok(conn, "lab_control_rollback", rollback())
+    assert listing == {"public_model_id": ALIAS, "version": 3, "deployment_revision_id": P1,
+                       "rate_card_version": CARD1}, listing
     assert listed(conn) == P1
-    rows = conn.execute("select version, deployment_revision_id::text, rate_card_version "
-                        "from infrx.catalog_listings where public_model_id = %s order by version",
-                        (ALIAS,)).fetchall()
-    assert rows == [(1, P1, CARD1), (2, P2, CARD2), (3, P1, CARD1)], rows
     kept = conn.execute("select request_id::text, deployment_revision_id::text, "
                         "rate_card_version from infrx.jobs where request_id in (%s, %s) "
                         "order by admitted_at", (before, during)).fetchall()
     assert kept == [(before, P1, CARD1), (during, P2, CARD2)], kept
-    move(conn, P2, "draining", operator=True)
-    assert refusal(conn, "lab_rollback_publication", rollback(P2)) == "state_conflict"
-    return "rollback = listing v3 at P1's card; jobs keep P1/P2 pins; drained is no target"
+    last = events(conn)[-1]
+    assert (last["action"], last["before"]["version"], last["after"]["version"]) == \
+        ("lab_rollback", 2, 3), last
+    conn.execute("update infrx.deployment_revisions set state = 'draining' "
+                 "where deployment_revision_id = %s", (P2,))
+    assert refusal(conn, "lab_control_rollback", rollback(to=2, expected=3)) == \
+        "state_conflict", "rolled back to a draining revision"
+    return "rollback = listing v3 repeating v1; jobs keep P1/P2 pins; drained is no target"
 
 
 @rolled_back
 def check_the_dev_wallet_opens_at_zero_and_is_funded_only_by_audited_allocation(conn) -> str:
-    """platforms/02-credits: a provider's provider_dev wallet opens at 0 (again: the same
-    wallet), is funded only by an audited operator allocation (D5's `grant_credit`), and a
-    provider that does not exist gets none."""
-    wallet = ok(conn, "lab_open_dev_wallet", {"provider_org_id": OTHER})
-    assert (wallet["kind"], wallet["ledger_total"], wallet["unit"]) == \
-        ("provider_dev", "0.00000000", "CREDIT"), wallet
-    assert ok(conn, "lab_open_dev_wallet", {"provider_org_id": OTHER}) == wallet
-    nemo = ok(conn, "lab_open_dev_wallet", {"provider_org_id": NEMO})
-    assert nemo["wallet_id"] == cc.PROVIDER_WALLET, "a second dev wallet for NEMO"
-    assert refusal(conn, "lab_open_dev_wallet", {"provider_org_id": l2.NOBODY}) == "not_found"
-    grant = ok(conn, "grant_credit", {"wallet_id": wallet["wallet_id"],
-                                      "kind": "operator_allocation", "amount": "250",
-                                      "operation_id": "0f000000-0000-4000-8000-00000000000f",
-                                      "actor": "ops@infrx", "reason": "preview budget",
-                                      "at": "2026-09-27T00:00:00Z"})
-    assert grant["replayed"] is False
+    """platforms/02-credits: funding opens the provider's provider_dev wallet at 0 and adds
+    ONE audited operator allocation (D5's `grant_credit`, `admin_adjust`) plus a lab_fund
+    event; the same operation id is the same entry, never a second one; nothing
+    nonpositive; no wallet for a provider that does not exist."""
+    assert cc.attempt(conn, "select 1 from infrx.credit_wallets where owner_provider_org_id = "
+                      "%s and kind = 'provider_dev'", (OTHER,)) is None
+    first = ok(conn, "lab_control_fund", fund())
+    assert (first["replayed"], first["entry"]["amount"], first["entry"]["kind"]) == \
+        (False, "250.00000000", "operator_allocation"), first
+    again = ok(conn, "lab_control_fund", fund())
+    assert again["replayed"] is True and again["entry"]["entry_id"] == \
+        first["entry"]["entry_id"], again
+    total = conn.execute("select ledger_total::text from infrx.credit_wallets where "
+                         "owner_provider_org_id = %s and kind = 'provider_dev'",
+                         (OTHER,)).fetchone()[0]
+    assert total == "250.00000000", total
     audit = conn.execute("select actor_principal, action from infrx.audit_entries where "
                          "idempotency_key = 'grant_credit:0f000000-0000-4000-8000-00000000000f'"
                          ).fetchall()
     assert audit == [("ops@infrx", "admin_adjust")], audit
-    assert ok(conn, "lab_open_dev_wallet", {"provider_org_id": OTHER})["ledger_total"] == \
-        "250.00000000"
-    return "opens at 0, idempotent, funded by the audited allocation only"
+    assert [(e["action"], e["after"]["amount"]) for e in events(conn, OTHER)] == \
+        [("lab_fund", "250.00000000")]
+    for amount in ("0", "-5"):
+        assert refusal(conn, "lab_control_fund", fund(
+            amount=amount, op="0f000000-0000-4000-8000-0000000000aa")) == "invalid_request"
+    assert refusal(conn, "lab_control_fund", fund(l2.NOBODY)) == "not_found"
+    return "opens at 0, one audited allocation per operation, replay-safe"
 
 
 def _race(conn, fn: str, calls: list[dict]) -> list:
@@ -294,9 +371,9 @@ def _race(conn, fn: str, calls: list[dict]) -> list:
         with psycopg.connect(pgharness.dsn(conn.info.dbname), autocommit=True) as mine:
             gate.wait()
             try:
-                answers[i] = call(mine, fn, calls[i])["listing_version"]
+                answers[i] = call(mine, fn, calls[i])["version"]
             except psycopg.Error as failed:
-                answers[i] = str(failed).split(":")[0]
+                answers[i] = str(failed).splitlines()[0]
     threads = [threading.Thread(target=one, args=(i,)) for i in range(len(calls))]
     for thread in threads:
         thread.start()
@@ -305,49 +382,90 @@ def _race(conn, fn: str, calls: list[dict]) -> list:
     return sorted(map(str, answers))
 
 
-def check_concurrent_publications_take_consecutive_versions(conn) -> str:
-    """LAB-PUBLISH races (commit their own rows): two approvals of one alias at once both
-    land as consecutive listing versions; two rollbacks to the same revision at once land
-    once, the other finding it already listed."""
-    with conn.transaction():
-        validated(conn)
-    approvals = _race(conn, "lab_approve_publication",
-                      [approval(), approval(P3, card=CARD3)])
-    assert approvals == ["2", "3"], approvals
-    rollbacks = _race(conn, "lab_rollback_publication", [rollback(), rollback()])
-    assert rollbacks == ["4", "state_conflict"], rollbacks
+def check_two_operators_racing_publish_once(conn) -> str:
+    """LAB-PUBLISH races (commit their own rows): two operators approving two proposals of
+    one alias from the same version - exactly one publishes, the other is told the alias
+    moved on (the CAS, not a colliding insert); two rollbacks from the same version land
+    once."""
+    approvals = _race(conn, "lab_control_publish", [publish(), publish(P3, CARD3)])
+    assert approvals == ["2", f"state_conflict: {ALIAS} is no longer at version 1"], approvals
+    rollbacks = _race(conn, "lab_control_rollback", [rollback(), rollback()])
+    assert rollbacks == ["3", f"state_conflict: {ALIAS} moved on from version 2"], rollbacks
     return f"approvals {approvals}; rollbacks {rollbacks}"
 
 
 def check_the_store_composes(conn) -> str:
-    """`PgLabControlStore` over the RPCs: open, move, history and typed refusals."""
-    store = PgLabControlStore(connector(pgharness.dsn(conn.info.dbname)))
+    """`PgControlStore` is the L3 `ControlStore` over the RPCs: typed rows and refusals."""
+    store = PgControlStore(connector(pgharness.dsn(conn.info.dbname)))
+    S = DeploymentState
+    at = conn.execute("select max(version) from infrx.catalog_listings where "
+                      "public_model_id = %s", (ALIAS,)).fetchone()[0]       # after the race
+    ready = state(conn, D2) == "ready_private"
 
     async def go() -> list:
-        got = [(await store.open_dev_wallet(NEMO))["kind"]]
+        got = [await store.model_provider(cc.MODEL), await store.model_provider("nope"),
+               await store.deployment("nope"), (await store.deployment(D2)).state,
+               type(await store.db_now()).__name__]
+        dev = await store.endpoint(NEMO, "store-dev", Environment.dev, "dev@nemo")
+        got.append(dev == await store.endpoint(NEMO, "store-dev", Environment.dev, "x"))
         try:
-            await store.move(P1, "draining", provider_org_id=NEMO, actor="dev", reason="x")
-        except errors.Forbidden:
-            got.append("forbidden")
-        try:
-            await store.rollback(ALIAS, DEV1, actor="ops", reason="x")
-        except errors.NotFound:
-            got.append("not_found")
-        await store.move(D2, "retired", provider_org_id=NEMO, actor="dev", reason="done")
-        got.append([e["to_state"] for e in await store.history(NEMO, D2)][-1:])
+            await store.transition(D2, NEMO, expected=S.validating, to=S.ready_private,
+                                   actor="dev", reason="x")
+        except errors.StateConflict:
+            got.append("state_conflict")
+        if not ready:
+            await store.transition(D2, NEMO, expected=S.draft, to=S.validating, actor="dev",
+                                   reason="smoke")
+            await store.transition(D2, NEMO, expected=S.validating, to=S.ready_private,
+                                   actor="dev", reason="passed")
+        got.append((await store.deployment(D2)).state)
+        prod = await store.endpoint(NEMO, "store-prod", Environment.prod, "admin")
+        proposed = await store.propose(DeploymentRevision(
+            deployment_revision_id="c000000b-0000-4000-8000-00000000000b", endpoint_id=prod,
+            provider_org_id=NEMO, serving_version_id=S2, environment=Environment.prod,
+            visibility=Visibility.public, state=S.proposed_public, max_input_tokens=30720,
+            max_output_tokens=2048, created_at=await store.db_now()),
+            source_revision_id=D2, actor="admin")
+        got.append(proposed.state)
+        key = await store.issue_dev_key(provider_org_id=NEMO, endpoint_id=dev, user_id=l2.DEV,
+                                        key_hash="hash-store", prefix="sk-infrx-store000",
+                                        name="dev")
+        got.append(len(key))
+        listing = await store.publish(ALIAS, RateCardSnapshot(
+            rate_card_version="rc_store", model_id=cc.MODEL,
+            deployment_revision_id=proposed.deployment_revision_id, serving_version_id=S2,
+            input_rate_per_million="300", output_rate_per_million="900",
+            effective_at=await store.db_now(), approved_by="ops@infrx"),
+            expected_version=at, actor="ops", reason="approved")
+        got.append((listing.version, listing.rate_card_version))
+        back = await store.rollback(ALIAS, to_version=1, expected_version=at + 1, actor="ops",
+                                    reason="regress")
+        got.append((back.version, back.deployment_revision_id == P1))
+        entry = await store.fund_dev_wallet(OTHER, Credit("12.5"), operation_id=
+                                            "0f000000-0000-4000-8000-0000000000bb",
+                                            actor="ops", reason="preview")
+        got.append(str(entry.amount))
+        got.append([e.action for e in await store.events(NEMO)][-5:])
         return got
     got = asyncio.run(go())
-    assert got == ["provider_dev", "forbidden", "not_found", ["retired"]], got
-    return f"store round trip: {got}"
+    assert got == [NEMO, None, None, "ready_private" if ready else "draft", "datetime", True, "state_conflict",
+                   S.ready_private, S.proposed_public, 36, (at + 1, "rc_store"), (at + 2, True),
+                   str(Credit("12.5")),
+                   ["lab_transition", "lab_propose", "lab_dev_key", "lab_publish",
+                    "lab_rollback"]], got
+    return f"store round trip: {got[-1]}"
 
 
 CHECKS = {c.__name__: c for c in (
-    check_browser_roles_reach_nothing, check_providers_move_only_their_own_private_revisions,
-    check_an_operator_approves_a_validated_proposal,
+    check_browser_roles_reach_nothing,
+    check_transitions_are_a_cas_on_the_providers_own_private_revisions,
+    check_a_proposal_comes_from_a_validated_dev_source,
+    check_dev_keys_are_scoped_to_the_providers_dev_endpoint,
+    check_publication_is_a_cas_on_the_listing_version,
     check_dev_revisions_never_reach_app_discovery,
     check_rollback_is_a_new_listing_and_admitted_jobs_keep_their_pins,
     check_the_dev_wallet_opens_at_zero_and_is_funded_only_by_audited_allocation,
-    check_concurrent_publications_take_consecutive_versions, check_the_store_composes)}
+    check_two_operators_racing_publish_once, check_the_store_composes)}
 
 
 # ----------------------------------------------------------------------------- tests
