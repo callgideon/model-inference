@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 225,
- "updated": "2026-09-28T15:32:32Z",
+ "revision": 226,
+ "updated": "2026-09-28T15:33:53Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6330,6 +6330,78 @@
     "tests/g/lab_{datasets,checkpoints}/",
     "tests/integration/lab_evaluate (j09 bind)",
     "08 settings rows"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-UI-SWAP",
+   "task": null,
+   "slice": "(wave5 LW5 lane lab-ui-swap) B4/P4/R4 ports over the lab-api-2 http adapters with v1m's server-side session token pattern; real-route journeys on b3/p1/r2; workflow wf_458c58e3-9b1; base ae72957f",
+   "agent": "opus",
+   "branch": "codex/w5-lab-ui-swap",
+   "worktree": ".claude/worktrees/codex-w5-lab-ui-swap",
+   "base": "ae72957f",
+   "head": null,
+   "isolation": {
+    "ports": "b3 57522; p1 57527; r2 57534; lab-v1m 57513",
+    "prefix": "infrx-b3-",
+    "db": "b3"
+   },
+   "activity": "running",
+   "started": "2026-09-28T15:33:53Z",
+   "updated": "2026-09-28T15:33:53Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "three L4-swap analogues 1/2/4",
+    "at": "2026-09-28T15:33:53Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/lib/services/{evaluation,pipelines,rollouts}/**",
+    "apps/lab/tests/{b,p,r}/**"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-SQL-LW4",
+   "task": null,
+   "slice": "(wave5 LW4 lane lab-sql-lw4, standing SQL writer) WR-LSQ-9 ControlReads for the infrx_lab_control role → WR-LAB-API-4 → carried minors; 0044+ only if needed; workflow wf_27b2fe41-644; base d62d96af",
+   "agent": "opus",
+   "branch": "codex/w5-lab-sql-lw4",
+   "worktree": ".claude/worktrees/codex-w5-lab-sql-lw4",
+   "base": "d62d96af",
+   "head": null,
+   "isolation": {
+    "ports": "dlab 57500 (decoy 27500)",
+    "prefix": "infrx-dlab-",
+    "db": "dlab"
+   },
+   "activity": "running",
+   "started": "2026-09-28T15:33:53Z",
+   "updated": "2026-09-28T15:33:53Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2.5,
+    "pessimistic_h": 5,
+    "confidence": "medium",
+    "basis": "four reads + a role proof",
+    "at": "2026-09-28T15:33:53Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0044+_*.sql",
+    "infrx/state/lab_control.py",
+    "tests/d/test_l3sql_*.py",
+    "tests/l/control PG cases"
    ],
    "wiring_requests": []
   }
