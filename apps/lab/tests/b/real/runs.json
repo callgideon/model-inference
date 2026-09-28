@@ -1,0 +1,46 @@
+{
+  "cancelled": {
+    "attempts": {
+      "leased": 1,
+      "succeeded": 1
+    },
+    "cases": {
+      "done": 1,
+      "leased": 1,
+      "pending": 2
+    },
+    "costs": {
+      "CREDIT": "1.56000000"
+    },
+    "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-00000000000c@sha256:e93f481980f5919a521766e4905d9c2be2d703b9227da0acdf80f61bc8594aad",
+    "run_id": "0000007e-0000-4000-8000-00000000000c",
+    "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:0000007e-0000-4000-8000-00000000000c@sha256:38bd5cfec054ffeda34ab0fc3299a96b5da1b08f163469b18aaa3d3c604b7b94",
+    "state": "cancelled"
+  },
+  "queued": {
+    "attempts": {},
+    "cases": {
+      "pending": 4
+    },
+    "costs": {},
+    "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-00000000000d@sha256:c818397fd04e7fb6ea9e5b6cf99a25c3a97368df3c97fc4af51d18852d44e809",
+    "run_id": "0000007e-0000-4000-8000-00000000000d",
+    "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:0000007e-0000-4000-8000-00000000000d@sha256:869d54e75804d74910440195cdfaf3eea8310273c0ec3b7c8fe925cbe47f940b",
+    "state": "queued"
+  },
+  "succeeded": {
+    "attempts": {
+      "succeeded": 4
+    },
+    "cases": {
+      "done": 4
+    },
+    "costs": {
+      "CREDIT": "6.24000000"
+    },
+    "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-00000000000b@sha256:782ae343c08c3f972e227f0aebb4b19e243c5e214b5f9bbd94436e890cc0d785",
+    "run_id": "0000007e-0000-4000-8000-00000000000b",
+    "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:0000007e-0000-4000-8000-00000000000b@sha256:ed921fdc89c8c512f3053d1bfa63c0fb8159a15d5d901a9196dc320be9c7e507",
+    "state": "succeeded"
+  }
+}
