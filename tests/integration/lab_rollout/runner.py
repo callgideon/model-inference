@@ -82,7 +82,8 @@ SCENARIOS = {
                      "alias CAS converges on restart with no second decision",
             "test_ids": ["ROLLOUT-RECOVER"], "lanes": []},
     "k05": {"title": "non-inferiority and cost (B2): an accepting report is approved once; "
-                     "inconclusive blocks promotion; a slice regression under an aggregate "
+                     "inconclusive blocks promotion; stale metrics or missing evidence hold; "
+                     "a slice regression under an aggregate "
                      "gain rolls back; overspend rolls back and units never mix",
             "test_ids": ["ROLLOUT-RECOVER"], "lanes": []},
     "k06": {"title": "a promoted candidate's alias rolls back through L3's CAS: the policy R1 "
@@ -110,6 +111,7 @@ REQUIRED = {
             "test_k04_a_controller_killed_before_the_alias_cas_converges_on_restart"),
     "k05": ("test_k05_an_accepting_report_after_the_horizon_is_approved_once",
             "test_k05_an_inconclusive_report_blocks_promotion",
+            "test_k05_missing_or_stale_evidence_never_expands",
             "test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back",
             "test_k05_overspend_rolls_back_and_units_never_mix"),
     "k06": ("test_k06_an_emergency_rollback_moves_a_promoted_alias_back",),

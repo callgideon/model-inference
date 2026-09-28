@@ -126,6 +126,7 @@ K04_RESTART = "test_k04_a_controller_killed_before_the_alias_cas_converges_on_re
 K05_ACCEPT = "test_k05_an_accepting_report_after_the_horizon_is_approved_once"
 K05_HOLD = "test_k05_an_inconclusive_report_blocks_promotion"
 K05_SLICE = "test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back"
+K05_GAPS = "test_k05_missing_or_stale_evidence_never_expands"
 K05_SPEND = "test_k05_overspend_rolls_back_and_units_never_mix"
 K07_STORED = "test_k07_a_variant_is_probed_compared_and_stored"
 K07_REFUSED = "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"
@@ -201,6 +202,17 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        'name == "overall"]', K05_SLICE, K07_REFUSED),
     _m("st_quality_reject_ignored", "a rejecting report bound to the release rolls back", R2,
        '    if outcome and outcome["outcome"] == "reject":', "    if False:", K05_SLICE),
+    _m("st_metrics_stale_ignored", "delayed metrics hold: no expansion on stale evidence", R2,
+       "    if now - live.observed_until > timedelta(seconds=plan.max_lag_s):", "    if False:",
+       K05_GAPS),
+    _m("st_coverage_ignored", "thin quality coverage holds", R2,
+       "    if live.quality_covered < plan.min_quality_coverage * cand.requests:",
+       "    if False:", K05_GAPS),
+    _m("st_min_requests_ignored", "too few candidate requests hold", R2,
+       "    if cand.requests < plan.min_requests:", "    if False:", K05_GAPS),
+    _m("st_cohort_skew_ignored", "a skewed cohort holds", R2,
+       "    if abs(cand.requests * 10_000 - weight * total) > plan.max_skew_bp * total:",
+       "    if False:", K05_GAPS),
     _m("st_budget_ignored", "spend past the budget rolls back", R2,
        "    if live.spent.amount > plan.budget.amount:", "    if False:", K05_SPEND),
     # (no `st_units_mix`: without R2's unit check, `lab.Amount` itself refuses to compare

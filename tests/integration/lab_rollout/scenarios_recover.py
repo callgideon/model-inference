@@ -173,6 +173,37 @@ def test_k05_an_inconclusive_report_blocks_promotion(lab, workdir):
     assert lab.decisions(ref) == [] and run(lab.releases().release(ref)).state == "running"
 
 
+def test_k05_missing_or_stale_evidence_never_expands(lab, workdir):
+    """ROLLOUT-RECOVER's delayed metrics: after the horizon, on an accepting report, each gap
+    in the live evidence alone holds - metrics older than `max_lag_s`, quality coverage under
+    `min_quality_coverage`, fewer than `min_requests` candidate requests, a cohort skewed past
+    `max_skew_bp` - the operator's approval is refused on it, and D9 records nothing."""
+    from infrx.contracts import errors
+    policy, ref, r, runs = launched(lab, 0x5e)
+    report = lab.report(runs, "improving", lw.PROTOCOL)
+    at = horizon(lab, ref)
+    pid = policy.policy_id
+    cand = r.counts[(pid, "candidate")]
+    assert cand >= lw.PLAN["min_requests"] and cand > 0
+    gaps = {
+        "metrics_stale": lw.live(r.counts, pid, now=at, lag_s=lw.PLAN["max_lag_s"] + 1),
+        "quality_coverage": lw.live(r.counts, pid, now=at, covered=0),
+        "min_requests": lw.live({(pid, "candidate"): 10, (pid, "baseline"): 10}, pid, now=at),
+        "cohort_skew": lw.live({(pid, "candidate"): 20, (pid, "baseline"): 100}, pid, now=at),
+    }
+    seen = {}
+    for reason, stale in gaps.items():
+        verdict = run(lab.controller().step(policy, ref, lw.plan(), stale, now=at,
+                                            report=report, runs=runs))
+        seen[reason] = [verdict.action, list(verdict.reasons)]
+        assert (verdict.action, verdict.reasons) == ("hold", (reason,)), (reason, verdict)
+        with pytest.raises(errors.StateConflict, match=reason):
+            run(lab.controller().approve(lw.OPERATOR, policy, ref, lw.plan(), stale, now=at,
+                                         report=report, runs=runs))
+    lw.save(workdir, "holds.json", seen)
+    assert lab.decisions(ref) == [] and run(lab.releases().release(ref)).state == "running"
+
+
 def test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back(lab, workdir):
     """`regressing` wins overall (28/40 over 16/40) and loses every math case: B2 rejects on
     the required slice and R2 rolls back on it, whatever the aggregate says."""
