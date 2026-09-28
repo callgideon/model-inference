@@ -1,0 +1,24 @@
+{
+  "task": "C2",
+  "lane": "content",
+  "slice": "C2 over the C2-RPC contract fake (real M3 on MinIO); real-PG half after lab-sql's C2-RPC",
+  "activity": "review",
+  "at": "2026-09-27T21:00:00Z",
+  "head": "ae7375e",
+  "base": "eb0734d7",
+  "worktree": ".claude/worktrees/codex-w5-content",
+  "branch": "codex/w5-content",
+  "owned_paths": ["apps/infrx-api/infrx/content/", "apps/infrx-api/tests/content/", "apps/lab/lib/services/content/", "apps/lab/tests/c/content/", "research/plan/evidence/c/C2-ae7375e.md", "research/plan/evidence/coordinator/updates/C2-20260927T2100Z.json"],
+  "commands": [
+    {"cmd": "pytest -q tests/content/test_content.py::test_content__a_cross_provider_ref_or_grant_exposes_nothing (infrx/content absent)", "exit": 4, "summary": "seam failure: ModuleNotFoundError infrx.content"},
+    {"cmd": "INFRX_C2_S3=1 uv run --frozen pytest -q tests/content/test_content.py", "exit": 0, "summary": "45 passed (22 cases x memory+MinIO 57506, +1)"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/content/test_mutants.py", "exit": 0, "summary": "34/34 mutants killed; 38 passed"},
+    {"cmd": "node apps/lab/tests/c/content/run-mutants.mjs", "exit": 0, "summary": "5 cases named; 14/14 killed"},
+    {"cmd": "make lab-test lab-lint lab-typecheck lab-build", "exit": 0, "summary": "32/32 tests; lint/typecheck/build clean"},
+    {"cmd": "make api-test (INFRX_D_TASK=lab-c2, at ecfaf2a)", "exit": 1, "summary": "50 failed, 5064 passed, 99 skipped, 9 xfailed, 8 errors (1:43:34); every failure is a shared lock held by another lane: 7 tests/d/test_outbox_relay[valkey] (HarnessBusy: /tmp/infrx-d2-valkey-55463.lock), 8 errors tests/i/{test_observe,test_pooler,test_privilege_probe,test_rollback_drill} (BlockingIOError on the i8 pooler lock), 43 tests/i/test_mutants (pristine baseline fails on those same tests/i errors: the known non-default-key baseline). Rerun alone: 7 failed, 41 passed, 8 errors - the same locks, still held by other lanes. No failure in tests/content, tests/g/trace_export or any file this lane touched"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium", "basis": "rerun 22 cases + 34 mutants on the C2-RPC once lab-sql merges it (L2 PG-world pattern; lab-sql C2-RPC 1/2/5 analogue) plus one review round", "at": "2026-09-27T21:00:00Z"},
+  "blockers": ["C2-RPC (lab-sql) not written: integration (M3+T3+L2 real, PG half) claimed only after it merges"],
+  "wiring_requests": ["WR-C2-1: lab-sql C2-RPC per the schema request in C2-ae7375e.md", "WR-C2-2: Retention(holds=ContentAccess.holds) in traces.ship.build_shipper once WR-C2-1 merges", "WR-C2-3: Makefile api-mutants += tests/content/test_mutants.py; lab-mutants += node tests/c/content/run-mutants.mjs", "WR-C2-4 (optional): INFRX_C2_S3=1 tests/content line beside a MinIO"],
+  "evidence": ["research/plan/evidence/c/C2-ae7375e.md"]
+}
