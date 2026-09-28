@@ -18,9 +18,9 @@ from fastapi.testclient import TestClient
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
-from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_control,
-                                  lab_evaluations, lab_pipelines, lab_releases, lab_traces,
-                                  models, trace_export, uploads)
+from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_checkpoints,
+                                  lab_control, lab_datasets, lab_evaluations, lab_pipelines,
+                                  lab_releases, lab_traces, models, trace_export, uploads)
 from infrx.observe import host
 from infrx.observe import route as metrics
 from infrx.scheduling.memory import MemoryScheduler
@@ -161,7 +161,7 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     slash redirects) is served."""
     assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, trace_export,
                                    lab_control, lab_traces, lab_evaluations, lab_pipelines,
-                                   lab_releases, metrics)
+                                   lab_releases, lab_datasets, lab_checkpoints, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}
@@ -304,8 +304,10 @@ def test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables
 
 def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled(monkeypatch):
     """LAB-API (WR-LAB-API-1): off, nothing Lab is built; `LAB_CONTROL` builds the control
-    over the project's auth server and L2 on the pool, with L3's operations absent (503 until
-    L3 merges); `LAB_TRACES` without the trace projection and bucket refuses startup."""
+    over the project's auth server and L2 on the pool, with L3's operations (WR-LAB-API-2:
+    `Operations` over `LabControl` on the same pool - the control store, A3's registry and
+    catalog; its listings wait on WR-LSQ-9's reads, 503); `LAB_TRACES` without the trace
+    projection and bucket refuses startup."""
     import dataclasses
 
     from infrx.gateway import pilot
@@ -315,12 +317,22 @@ def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabl
         return support.settings(deployment=dataclasses.replace(support.BUILD, **on))
 
     assert pilot._lab(settings(), connect=None) == {}
-    built = pilot._lab(settings(lab_control=True), connect=None)
+    built = pilot._lab(settings(lab_control=True), connect="pool")
     assert list(built) == ["lab_control"]
     control = built["lab_control"]
     assert (str(control.sessions.client.base_url), control.sessions.apikey) \
         == ("https://fake.supabase.co", "service-role")
-    assert isinstance(control.access, LabAccess) and control.operations is None
+    assert isinstance(control.access, LabAccess)
+    from infrx.lab.control.operations import Operations
+    from infrx.state.catalog import PgCatalogDirectory
+    from infrx.state.lab_control import PgControlStore
+    from infrx.state.operations import PgRegistry
+    ops = control.operations
+    assert type(ops) is Operations and type(ops.reads) is pilot.NoControlReads
+    l3 = ops.control
+    assert (type(l3.store), type(l3.registry), type(l3.catalog)) \
+        == (PgControlStore, PgRegistry, PgCatalogDirectory)
+    assert l3.access is control.access and l3.store._connect == "pool"
     import clickhouse_connect
 
     def connected(**kw):
@@ -448,6 +460,111 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
         assert all(isinstance(ports[f], PgLabDataStore) for f in d7)
     every = pilot._lab(settings(**{s: True for s, _, _ in LAB_2.values()}), connect=None)
     assert sorted(every) == sorted(LAB_2)
+
+
+LAB_DATA = {"lab_datasets": ("lab_datasets", lab_datasets.LabDatasets,
+                             lab_datasets.PREFIX + "/versions", "GET"),
+            "lab_checkpoints": ("lab_checkpoints", lab_checkpoints.LabCheckpoints,
+                                lab_checkpoints.CHECKPOINTS_PATH, "POST")}
+
+
+def outcome(call):
+    """What `call()` returns, or the exception it raised (a mutant's crash is compared)."""
+    try:
+        return call()
+    except Exception as died:              # noqa: BLE001
+        return died
+
+
+def test_lab_data__the_datasets_and_checkpoint_routes_are_mounted_only_when_enabled():
+    """Composition batch 2 (WR-N4-1, WR-B3-2): `LAB_DATASETS` and `LAB_CHECKPOINTS` are off
+    by default, and then neither route exists even composed; each switch mounts its own
+    surface only - the datasets as the Lab session (no session: 401), the receiver as the
+    signing key (unsigned: 401)."""
+    import dataclasses
+
+    from infrx.config import deployment_from_env
+
+    assert [getattr(deployment_from_env({}), s) for s, *_ in LAB_DATA.values()] == [False] * 2
+    fields = {name: len(dataclasses.fields(kind)) for name, (_, kind, *_) in LAB_DATA.items()}
+    surfaces = {name: (switch, kind(*[None] * fields[name]), path, method)
+                for name, (switch, kind, path, method) in LAB_DATA.items()}
+
+    def composed(**on):
+        world = relay_support.World()
+        world.stream.usage = lambda: asyncio.sleep(0, {})
+        config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
+        return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
+                                      clock=world.now_s, catalog=world.catalog,
+                                      stream=world.stream, objects=world.objects,
+                                      jobs=world.jobs, index=MemoryScheduler(world.clock.now),
+                                      **{name: deps for name, (_, deps, _, _) in surfaces.items()})
+
+    every = {switch: True for switch, *_ in surfaces.values()}
+    for on in ({}, *({switch: True} for switch in every), every):
+        app = composed(**on)
+        paths = {getattr(r, "path", "") for r in app.routes}
+        for name, (switch, deps, path, method) in surfaces.items():
+            enabled = on.get(switch, False)
+            assert (getattr(app.state.runtime, name) is deps) is enabled, (on, name)
+            assert (path in paths) is enabled, (on, name)
+            url = path.replace("{provider}", FakeProvider)
+            answer = local(app).request(method, url, content=b"{}",
+                                        headers={"content-type": "application/json"})
+            assert answer.status_code == (401 if enabled else 404), (on, name, answer.text)
+        ingress.assert_route_table(app)
+
+
+FakeProvider = "a0000000-0000-4000-8000-00000000000a"
+
+
+def test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_enabled(
+        monkeypatch):
+    """Off, nothing is built. `LAB_DATASETS`: N4's surface over the project's auth server, L2
+    and D7 on the pool and the gateway's own object store (the Lab objects, R182).
+    `LAB_CHECKPOINTS`: B3's receiver over D8's checkpoint ledger (0042) and D7 on the pool
+    with the key directory `LAB_CHECKPOINT_KEYS` names - refused by name without a valid
+    one, and without the ledger in the build."""
+    import dataclasses
+    import sys
+    import types
+
+    from infrx.gateway import pilot
+    from infrx.lab.access import LabAccess
+    from infrx.state.lab_data import PgLabDataStore
+
+    def settings(**on):
+        return support.settings(deployment=dataclasses.replace(support.BUILD, **on))
+
+    objects = object()
+    assert pilot._lab(settings(), connect=None, objects=objects) == {}
+    assert "lab_datasets" not in pilot._lab(settings(lab_control=True), None, objects)
+    built = pilot._lab(settings(lab_datasets=True), connect=None, objects=objects)
+    assert list(built) == ["lab_datasets"]
+    x = built["lab_datasets"]
+    assert isinstance(x, lab_datasets.LabDatasets) and isinstance(x.access, LabAccess)
+    assert (str(x.sessions.client.base_url), x.sessions.apikey) \
+        == ("https://fake.supabase.co", "service-role")
+    assert type(x.store) is PgLabDataStore and x.objects is objects
+    assert outcome(lambda: pilot._lab_checkpoints(settings(), None)) == {}
+    for keys in ("", "not a directory"):
+        refused = outcome(lambda: pilot._lab_checkpoints(
+            settings(lab_checkpoints=True, lab_checkpoint_keys=keys), None))
+        assert type(refused) is RuntimeMisconfigured and "LAB_CHECKPOINT_KEYS" in str(refused)
+    secret = "cd" * 32
+    good = settings(lab_checkpoints=True, lab_checkpoint_keys='{"k": {"provider_org_id": '
+                    f'"{FakeProvider}", "secret": "{secret}"}}}}')
+    monkeypatch.setitem(sys.modules, "infrx.state.lab_pipeline", None)       # before #16
+    refused = outcome(lambda: pilot._lab_checkpoints(good, None))
+    assert type(refused) is RuntimeMisconfigured and "0042" in str(refused)
+    assert secret not in str(refused)
+    ledger = types.ModuleType("infrx.state.lab_pipeline")
+    ledger.PgCheckpointLedger = lambda connect: ("ledger", connect)
+    monkeypatch.setitem(sys.modules, "infrx.state.lab_pipeline", ledger)
+    x = pilot._lab_checkpoints(good, "connect")["lab_checkpoints"]
+    assert isinstance(x, lab_checkpoints.LabCheckpoints) and x.ledger == ("ledger", "connect")
+    assert type(x.store) is PgLabDataStore and x.store._connect == "connect"
+    assert x.keys("k") == (FakeProvider, bytes.fromhex(secret)) and x.keys("other") is None
 
 
 def fixture_host(monkeypatch, root: pathlib.Path) -> None:

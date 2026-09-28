@@ -383,6 +383,14 @@ class DeploymentSettings:
     lab_evals: bool = False
     lab_pipelines: bool = False
     lab_releases: bool = False
+    # Composition batch 2: mount the Lab's `POST /lab/v1/checkpoints` (WR-B3-2: B3's signed
+    # checkpoint receiver over D8's ledger, 0042) and `/lab/v1/providers/{p}/datasets`
+    # (WR-N4-1: N1/N2/N3 over D7, L2 and the Lab objects, as the verified Lab session). Off
+    # by default: no such route exists. The receiver's key directory is a credential read by
+    # name (`LAB_CHECKPOINT_KEYS`); required when `LAB_CHECKPOINTS` is on, never in a repr.
+    lab_checkpoints: bool = False
+    lab_datasets: bool = False
+    lab_checkpoint_keys: str = field(default="", repr=False)
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

@@ -64,11 +64,14 @@ RECON_PG = "test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_
 SWITCHES_OFF = "test_worker_main__every_trace_and_lab_switch_is_off_and_composes_nothing"
 TRACE_REFUSE = "test_worker_main__trace_pumps_refuse_to_start_without_their_settings"
 TRACE_ON = "test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores"
+TRACE_HOLDS = "test_worker_main__trace_pumps_refuse_without_c2s_content_refs"
 LAB_REFUSE = "test_worker_main__the_lab_eval_worker_refuses_to_start_without_its_sources"
 LAB_ON = "test_worker_main__the_lab_eval_worker_pumps_d7s_outbox_and_recovers"
 RESUME = "test_worker_main__an_eval_run_delivery_resumes_the_created_run_never_freezes"
 PENDING = "test_worker_main__a_delivery_the_handler_cannot_finish_stays_pending"
 UNFINISHED = "test_worker_main__a_run_left_unfinished_is_not_acknowledged"
+FOREIGN_REF = ("test_worker_main__a_run_naming_another_providers_ref_is_not_found_before_any_"
+               "source")
 
 MUTANTS = (
     _m("main_validate_runtime_skipped", "the worker refuses what the gateway refuses (R44)",
@@ -312,6 +315,24 @@ MUTANTS = (
        '        if report["state"] in RUN_FINAL:\n', PENDING),
     _m("main_other_kinds_taken", "another kind's Lab event is not the eval handler's",
        MAIN, '        if event.kind != "eval_run":\n', "        if False:\n", PENDING),
+    _m("main_eval_foreign_ref_resolved", "a run's refs resolve for its own provider (R167)",
+       MAIN, "        if any(ref.split(\":\")[2:3] != [provider]",
+       "        if any(ref.split(\":\")[2:3] == [None]",
+       FOREIGN_REF),
+    _m("main_eval_foreign_serving_ref", "the serving ref too, not only the evaluator's (R167)",
+       MAIN, "for ref in (record.evaluator_ref, record.serving_ref)):",
+       "for ref in (record.evaluator_ref,)):", FOREIGN_REF),
+    # WR-C2-2 (composition batch 2): the trace sweep keeps what a live C2 content ref holds
+    _m("main_trace_sweep_unheld", "the worker's trace sweep asks C2's holds",
+       MAIN, "    retention.holds = content_holds(mode, connect, retention)          # WR-C2-2\n",
+       "", TRACE_ON),
+    _m("main_trace_holds_off_the_pool", "C2's content refs are read on the worker's pool",
+       MAIN, "    return ContentAccess(PgContentRefs(connect), retention).holds",
+       "    return ContentAccess(PgContentRefs(None), retention).holds", TRACE_ON),
+    _m("main_trace_holds_optional", "without C2's refs in the build the pumps refuse",
+       MAIN, "    except ImportError:\n        raise RuntimeMisconfigured(mode, detail=\"TRACE_PUMPS",
+       "    except ImportError:\n        return None\n        raise RuntimeMisconfigured(mode, "
+       "detail=\"TRACE_PUMPS", TRACE_HOLDS),
 )
 
 PG_MUTANTS = (
