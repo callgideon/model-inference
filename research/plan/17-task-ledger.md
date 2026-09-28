@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 25 planned; 97 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 21 planned; 101 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -117,7 +117,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | N1 | implemented / N | [Import benchmark data and existing annotation outputs](13-lab-improvement-handoffs.md) | F3 | D7, M3, L2 |
 | N2 | implemented / N | [Version, split and export reproducible datasets](13-lab-improvement-handoffs.md) | N1 | D7 |
 | N3 | implemented / N | [Derive datasets from permitted traces and propagate revocation](13-lab-improvement-handoffs.md) | N2 | T3, C2, D6F |
-| N4 | planned / N | [Build dataset import, version and split workflows in Lab](13-lab-improvement-handoffs.md) | F3, L1 | N2 |
+| N4 | implemented / N | [Build dataset import, version and split workflows in Lab](13-lab-improvement-handoffs.md) | F3, L1 | N2 |
 | H1 | implemented / H | [Version prompts and bounded replay harnesses](13-lab-improvement-handoffs.md) | F3 | L2 |
 | B1 | implemented / B | [Execute durable offline evaluation runs](13-lab-improvement-handoffs.md) | F3 | D7, N2, H1, L3, W2, D5 |
 | B2 | implemented / B | [Compare quality, costs and latency with honest uncertainty](13-lab-improvement-handoffs.md) | F3 | B1 |
@@ -133,9 +133,9 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | R2 | implemented / R | [Evaluate guardrails and roll back controlled releases](13-lab-improvement-handoffs.md) | R1 | B2, L4 |
 | R3 | implemented / R | [Register and compare optimized serving variants](13-lab-improvement-handoffs.md) | F3 | H1, B2, L2, W3 |
 | R4 | implemented / R | [Build release experiments and optimization comparison UI](13-lab-improvement-handoffs.md) | F3, L1 | R2, R3, B2 |
-| I5 | planned / I | [Package dataset and evaluation workers for independent deployment](13-lab-improvement-handoffs.md) | F3, I1 | N2, B1, B3 |
-| I6 | planned / I | [Package annotation and training integration workers](13-lab-improvement-handoffs.md) | I5 | P2, P3 |
-| I7 | planned / I | [Package release controls and optimization evidence operations](13-lab-improvement-handoffs.md) | I5 | R2, R3 |
+| I5 | implemented / I | [Package dataset and evaluation workers for independent deployment](13-lab-improvement-handoffs.md) | F3, I1 | N2, B1, B3 |
+| I6 | implemented / I | [Package annotation and training integration workers](13-lab-improvement-handoffs.md) | I5 | P2, P3 |
+| I7 | implemented / I | [Package release controls and optimization evidence operations](13-lab-improvement-handoffs.md) | I5 | R2, R3 |
 | E6L | planned / E | [Prove imported benchmark to candidate decision end to end](13-lab-improvement-handoffs.md) | F3, E2R | E3L, N2, N4, H1, B1, B2, B3, B4, I5 |
 | E7L | planned / E | [Prove the second authorized improvement iteration](13-lab-improvement-handoffs.md) | E6L | E5L, N3, P1, P2, P3, P4, I6 |
 | E8L | planned / E | [Prove controlled rollout and optimization evidence](13-lab-improvement-handoffs.md) | E6L | R1, R2, R3, R4, I7 |

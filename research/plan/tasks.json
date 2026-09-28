@@ -2703,7 +2703,7 @@
       "track": "N",
       "product": "lab",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2731,7 +2731,8 @@
       ],
       "acceptance": "A provider completes import → frozen version → inspect split → export through the UI. No placeholder navigation is published; data loading and failed authorization never render success.",
       "failure_oracle": "Cross-provider deep links, revoked media URLs, interrupted imports and malformed mappings are exercised through real server actions; browser never receives privileged storage credentials.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "datasets-lw4 merged #4 (R177/R178); WR-N4-1 router mounted behind LAB_DATASETS OFF by composition-2 (#22, R199); WR-N4-3 durable import-job queue owed (lab-sql)"
     },
     {
       "id": "H1",
@@ -3285,7 +3286,7 @@
       "track": "I",
       "product": "shared",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3312,7 +3313,8 @@
       ],
       "acceptance": "No long task runs in a frontend process. Lab worker outage does not block consumer inference. Local composition is reproducible; hosted evidence is separately recorded per enabled feature.",
       "failure_oracle": "Restart workers while jobs are active, lose object store, revoke credentials or fill spool/temp disk; no stale lease commits, unbounded retry or public inference outage.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "eval-ops merged #3 (units); entry point python -m infrx.lab.workers eval/datasets bound by composition-2 (#22, R198); j09 eval PASS as a real process; hosted P-08 staging is operator work"
     },
     {
       "id": "I6",
@@ -3320,7 +3322,7 @@
       "track": "I",
       "product": "shared",
       "milestone": "LAB-M3",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3346,7 +3348,8 @@
       ],
       "acceptance": "Dry-run and manual export/import work without external provider secrets. Unknown submission is visible and requires reconciliation; budget and data-use restrictions survive process restart.",
       "failure_oracle": "Restart after ambiguous submission, revoke a source while queued and fail secret lookup; worker does not double-submit or silently enable another provider.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "lab-workers merged #12 (R184/R185); entry point bound by composition-2 (#22): annotation/training roles refuse by name until WR-P2-4/P-11 (WR-I6-3b)"
     },
     {
       "id": "I7",
@@ -3354,7 +3357,7 @@
       "track": "I",
       "product": "shared",
       "milestone": "LAB-M4",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3380,7 +3383,8 @@
       ],
       "acceptance": "Losing Lab UI/controller never loses durable inference/accounting; current safe policy or explicit fail-closed admission behavior is documented and tested. No automatic capacity purchases.",
       "failure_oracle": "Controller outage/partition and stale telemetry cannot expand traffic; rollback preserves admitted request pins and consumer balances.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "lab-workers merged #12; entry point bound by composition-2 (#22): rollout has emergency-rollback, the pass loop waits on WR-R2-3 (WR-I7-1b)"
     },
     {
       "id": "E6L",

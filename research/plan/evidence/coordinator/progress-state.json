@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 240,
- "updated": "2026-09-28T21:30:17Z",
+ "revision": 241,
+ "updated": "2026-09-28T22:14:21Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6306,11 +6306,11 @@
     "prefix": null,
     "db": null
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-28T15:11:47Z",
-   "updated": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-28T22:14:21Z",
    "blocker": null,
-   "next_action": "merge batch #22 (wf_bcf70fd7-c5c, R197–R200, WR-CB2-MK) → flips I5/I6/I7; then WR-LSQ-9-C after #21",
+   "next_action": "composition-wiring lane: WR-LSQ-9-C, WR-LAB-API-2c, WR-*-D8-C, WR-C2-2b, WR-N3-2a/b; WR-B3-3 → lab-sql-lw5",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -6931,22 +6931,22 @@
   {
    "id": "W5-MERGE-22",
    "task": null,
-   "slice": "merge batch #22: composition-2 39426585 (+R197–R200, WR-CB2-MK); workflow wf_bcf70fd7-c5c",
+   "slice": "merge batch #22: composition-2 39426585 (+R197–R200, WR-CB2-MK); workflow wf_bcf70fd7-c5c; integrated 3529168d",
    "agent": "opus",
    "branch": "codex/w5-merge-22",
    "worktree": ".claude/worktrees/codex-w5-merge-22",
    "base": "21ee48de",
-   "head": null,
+   "head": "3cdfaa61",
    "isolation": {
     "ports": "none",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T21:06:01Z",
-   "updated": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-28T22:14:21Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (rulings reordered at integration)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
