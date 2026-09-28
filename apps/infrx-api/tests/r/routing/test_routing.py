@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import types
+from collections import Counter
 
 import pytest
 from starlette.responses import Response
@@ -106,13 +107,24 @@ def route(router, who, model=ALIAS, request_id="4d4d4d4d-0000-4000-8000-00000000
     return asyncio.run(router.route(who, request(model, request_id)))
 
 
+def admit(router, who, request_id="4d4d4d4d-0000-4000-8000-000000000004"):
+    """One fresh admission through the hook; the request the relay admitted."""
+    async def accept(_who, asked, _idem):
+        seen.append(asked)
+        return answer()
+
+    seen = []
+    asyncio.run(routing.hook(accept, router)(who, request(ALIAS, request_id), None))
+    return seen[0]
+
+
 # --- R1.a: stable assignment, explicit pins, eligibility ----------------------------------
 def test_an_explicit_pin_is_served_as_asked_and_never_routed():
     releases = Releases(release(weight=10_000))
     router = routing.Router(releases, Shadows())
     asked = request(support.MODEL_REVISION)
-    routed, shadows = asyncio.run(router.route(auth(), asked))
-    assert routed is asked and shadows == ()
+    routed, shadows, arm = asyncio.run(router.route(auth(), asked))
+    assert routed is asked and shadows == () and arm is None
     assert releases.asked == [] and releases.recorded == []
 
 
@@ -121,7 +133,7 @@ def test_no_active_policy_or_mode_off_is_todays_request():
         releases = Releases(current)
         router = routing.Router(releases, Shadows())
         asked = request()
-        assert asyncio.run(router.route(auth(), asked)) == (asked, ())
+        assert asyncio.run(router.route(auth(), asked)) == (asked, (), None)
         assert releases.recorded == []
 
 
@@ -131,8 +143,8 @@ def test_a_repeat_request_keeps_its_cohort_and_each_admission_records_it():
     router = routing.Router(releases, Shadows())
     arms = {}
     for org in orgs(40):
-        seen = {route(router, auth(org), request_id=f"4d4d4d4d-0000-4000-8000-{n:012d}")[0]
-                .model_revision for n in range(3)}
+        seen = {admit(router, auth(org), f"4d4d4d4d-0000-4000-8000-{n:012d}").model_revision
+                for n in range(3)}
         assert len(seen) == 1, f"{org} drifted between retries: {seen}"
         arms[org] = seen.pop()
     assert set(arms.values()) == {ALIAS, CANDIDATE_PIN}      # both arms, as the policy says
@@ -181,10 +193,11 @@ def test_a_revoked_subject_returns_to_the_baseline_at_once():
     who = auth()
     releases = Releases(release(weight=10_000))
     router = routing.Router(releases, Shadows())
-    assert route(router, who)[0].model_revision == CANDIDATE_PIN
+    assert admit(router, who).model_revision == CANDIDATE_PIN
     releases.ineligible.add(who.org_id)
     asked = request()
-    assert asyncio.run(router.route(who, asked)) == (asked, ())
+    assert asyncio.run(router.route(who, asked))[:2] == (asked, ())
+    assert admit(router, who).model_revision == ALIAS
     assert len(releases.recorded) == 1                  # an ineligible subject is not assigned
     assert router.counts[(POLICY["policy_id"], "ineligible")] == 1
 
@@ -193,7 +206,7 @@ def test_a_session_cohort_without_a_declared_session_serves_the_baseline():
     releases = Releases(release(weight=10_000, cohort="session"))
     router = routing.Router(releases, Shadows())
     asked = request()
-    assert asyncio.run(router.route(auth(), asked)) == (asked, ())
+    assert admit(router, auth()) == asked
     assert releases.recorded == []
 
 
@@ -278,6 +291,60 @@ def test_a_replayed_or_refused_admission_is_not_shadowed_again():
 
     asyncio.run(go())
     assert shadows.runs == []
+
+
+def test_a_refused_or_replayed_admission_records_and_counts_nothing():
+    for mode in ("canary", "shadow"):
+        releases = Releases(release(weight=10_000, mode=mode, shadow_limit=4))
+        router = routing.Router(releases, Shadows())
+        replay, _ = hooked(router, answer(replayed=True))
+        refused, _ = hooked(router, refuse=errors.InsufficientCredit())
+
+        async def go():
+            await replay(auth(), request(), None)
+            with pytest.raises(errors.InsufficientCredit):
+                await refused(auth(), request(), None)
+
+        asyncio.run(go())
+        assert releases.recorded == [] and +router.counts == Counter(), mode
+
+
+def test_an_assignment_is_keyed_by_the_admitted_job():
+    releases = Releases(release(weight=10_000))
+    router = routing.Router(releases, Shadows())
+    job = "5e5e5e5e-0000-4000-8000-000000000005"
+    accept, _ = hooked(router, Response(b"baseline", headers={wire.HEADER_INFERENCE_ID: job}))
+    asyncio.run(accept(auth(), request(), None))
+    assert [a.request_id for a in releases.recorded] == [job]
+    assert router.counts[(POLICY["policy_id"], "candidate")] == 1
+
+
+def test_a_failed_assignment_row_never_fails_the_admitted_request():
+    class Down(Releases):
+        async def record(self, assignment):
+            raise ConnectionError("release store unreachable")
+
+    router = routing.Router(Down(release(weight=10_000)), Shadows())
+    accept, _ = hooked(router)
+    assert asyncio.run(accept(auth(), request(), None)).body == b"baseline"
+    assert router.counts[(POLICY["policy_id"], "record_failed")] == 1
+
+
+def test_a_revoked_subject_is_never_shadowed():
+    who = auth()
+    shadows = Shadows()
+    releases = Releases(release(mode="shadow", shadow_limit=4), ineligible=(who.org_id,))
+    router = routing.Router(releases, shadows)
+    accept, seen = hooked(router)
+
+    async def go():
+        await accept(who, request(), None)
+        await drain(router)
+
+    asyncio.run(go())
+    assert seen[0].model_revision == ALIAS
+    assert shadows.runs == [] and releases.recorded == []
+    assert router.counts[(POLICY["policy_id"], "ineligible")] == 1
 
 
 def test_shadow_work_is_bounded_by_its_own_limit():
@@ -366,6 +433,7 @@ def test_shadow_through_the_relay_admits_holds_and_settles_one_job_only():
     assert world.only_job().settlement.charged == today.only_job().settlement.charged
     assert world.only_job().request.model_revision == ALIAS
     assert [r.model_revision for _, r in shadows.runs] == [CANDIDATE_PIN]
+    assert [a.request_id for a in router.releases.recorded] == [reply.headers[wire.HEADER_INFERENCE_ID]]
 
 
 def test_a_canary_subject_is_admitted_and_priced_on_the_candidate_revision():

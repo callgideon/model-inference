@@ -1,19 +1,98 @@
-{"task": "R1", "slice": "R1.a+R1.b+R1.c (fake D9; real-PG half after D9 merges)", "activity": "review",
- "head": "8d2e636a", "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-rollout-routing",
+{
+ "task": "R1",
+ "slice": "R1.a+R1.b+R1.c (fake D9; real-PG half after D9 merges)",
+ "activity": "fix round",
+ "head": "8d2e636a",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-rollout-routing",
  "branch": "codex/w5-rollout-routing",
- "owned_paths": ["apps/infrx-api/infrx/rollouts/__init__.py", "apps/infrx-api/infrx/rollouts/routing/", "apps/infrx-api/tests/r/routing/"],
- "commands": [
-  {"cmd": "uv run --frozen pytest -q tests/r/routing (before implementation)", "exit": 2, "summary": "ModuleNotFoundError infrx.rollouts (failing seam recorded)"},
-  {"cmd": "uv run --frozen pytest -q tests/r/routing/test_routing.py", "exit": 0, "summary": "16 passed"},
-  {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/r/routing/test_mutants.py", "exit": 0, "summary": "20/20 mutants killed, 22 passed"},
-  {"cmd": "WR-R1-1 on base: pytest tests/contracts | tests/i/test_packaging.py | tests/g | tests/w | tests/i (INFRX_D_TASK=r1)", "exit": 0, "summary": "1382 | 23 | 720+4s | 335+10s | 261+1xf passed"},
-  {"cmd": "WR-R1-1 on base: INFRX_MUTANTS=all tests/g/test_mutants.py -k rollout/well_formed/every_case", "exit": 0, "summary": "5 passed"},
-  {"cmd": "WR-R1-1 tip patch on merge-tree f4bceeba+branch: test_config_and_imports | test_packaging | tests/g | g-mutants", "exit": 0, "summary": "292 | 23 | 766+4s | 7 passed"},
-  {"cmd": "WR-R1-1 tip patch: tests/i", "exit": 1, "summary": "253 passed, 8 errors = shared pooler lock (BlockingIOError); pooler+observe rerun alone when free: 28 passed"},
-  {"cmd": "make api-test (HEAD, INFRX_D_TASK=r1)", "exit": 2, "summary": "5083 passed, 77 skipped, 9 xfailed, 7 failed = tests/d/test_outbox_relay[valkey] HarnessBusy on shared /tmp/infrx-d2-valkey-55463.lock; 18 alone-reruns 22:25-22:40Z, lock never free"}
+ "owned_paths": [
+  "apps/infrx-api/infrx/rollouts/__init__.py",
+  "apps/infrx-api/infrx/rollouts/routing/",
+  "apps/infrx-api/tests/r/routing/"
  ],
- "estimate": {"optimistic_h": 1, "likely_h": 3, "pessimistic_h": 8, "confidence": "medium-low",
-  "basis": "code, tests, mutants and wiring patch done; remaining = one verify/fix round (G4F REJECT->r2 analogue ~2 h) + real-PG rerun after D9 merges (D10-0025 analogue 1/2/5); Q6 open", "at": "2026-09-27T23:00Z"},
- "blockers": ["D9 (lab-sql-lw2) not on base: real-PG half and PgReleaseStore wait on it (SR-R1-1)", "L3 candidate revisions / shadow execution path not on base (WR-R1-3)", "P-12 before any public shadow/canary; Q6 before a live enable"],
- "wiring_requests": ["WR-R1-1 apply research/plan/evidence/r/R1-8d2e636-wiring-on-f4bceeba.patch (ROLLOUT_ROUTING off by default)", "WR-R1-2 Makefile api-mutants += tests/r/routing/test_mutants.py", "WR-R1-3 after D9+L3: adapters_from_env builds Router(PgReleaseStore, provider-funded ShadowRunner) when ROLLOUT_ROUTING on", "WR-R1-4 optional metrics family infrx_rollout_routed_total{policy,arm}"],
- "evidence": ["research/plan/evidence/r/R1-8d2e636.md", "research/plan/evidence/r/R1-8d2e636-wiring.patch", "research/plan/evidence/r/R1-8d2e636-wiring-on-f4bceeba.patch"]}
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/routing (before implementation)",
+   "exit": 2,
+   "summary": "ModuleNotFoundError infrx.rollouts (failing seam recorded)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/routing/test_routing.py",
+   "exit": 0,
+   "summary": "16 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/r/routing/test_mutants.py",
+   "exit": 0,
+   "summary": "20/20 mutants killed, 22 passed"
+  },
+  {
+   "cmd": "WR-R1-1 on base: pytest tests/contracts | tests/i/test_packaging.py | tests/g | tests/w | tests/i (INFRX_D_TASK=r1)",
+   "exit": 0,
+   "summary": "1382 | 23 | 720+4s | 335+10s | 261+1xf passed"
+  },
+  {
+   "cmd": "WR-R1-1 on base: INFRX_MUTANTS=all tests/g/test_mutants.py -k rollout/well_formed/every_case",
+   "exit": 0,
+   "summary": "5 passed"
+  },
+  {
+   "cmd": "WR-R1-1 tip patch on merge-tree f4bceeba+branch: test_config_and_imports | test_packaging | tests/g | g-mutants",
+   "exit": 0,
+   "summary": "292 | 23 | 766+4s | 7 passed"
+  },
+  {
+   "cmd": "WR-R1-1 tip patch: tests/i",
+   "exit": 1,
+   "summary": "253 passed, 8 errors = shared pooler lock (BlockingIOError); pooler+observe rerun alone when free: 28 passed"
+  },
+  {
+   "cmd": "make api-test (HEAD, INFRX_D_TASK=r1)",
+   "exit": 2,
+   "summary": "5083 passed, 77 skipped, 9 xfailed, 7 failed = tests/d/test_outbox_relay[valkey] HarnessBusy on shared /tmp/infrx-d2-valkey-55463.lock; 18 alone-reruns 22:25-22:40Z, lock never free"
+  },
+  {
+   "cmd": "fix round: uv run --frozen pytest -q tests/r/routing/test_routing.py",
+   "exit": 0,
+   "summary": "20 passed"
+  },
+  {
+   "cmd": "fix round: INFRX_MUTANTS=all uv run --frozen pytest -q tests/r/routing",
+   "exit": 0,
+   "summary": "46 passed, 24/24 mutants killed (new: assignment_before_admission, assignment_keyed_by_request, record_failure_escapes, ineligible_shadowed)"
+  },
+  {
+   "cmd": "fix round: WR-R1-1 base patch applied temporarily: pytest tests/g tests/contracts tests/i/test_packaging.py tests/w tests/r (INFRX_D_TASK=r1)",
+   "exit": 0,
+   "summary": "2484 passed, 14 skipped"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 5,
+  "confidence": "medium",
+  "basis": "fix round done; remaining = real-PG rerun after D9 merges (D10-0025 analogue 1/2/5); Q6 open",
+  "at": "2026-09-28"
+ },
+ "blockers": [
+  "D9 (lab-sql-lw2) not on base: real-PG half and PgReleaseStore wait on it (SR-R1-1)",
+  "L3 candidate revisions / shadow execution path not on base (WR-R1-3)",
+  "P-12 before any public shadow/canary; Q6 before a live enable"
+ ],
+ "wiring_requests": [
+  "WR-R1-1 apply research/plan/evidence/r/R1-8d2e636-wiring-on-f4bceeba.patch (ROLLOUT_ROUTING off by default)",
+  "WR-R1-2 Makefile api-mutants += tests/r/routing/test_mutants.py",
+  "WR-R1-3 after D9+L3: adapters_from_env builds Router(PgReleaseStore, provider-funded ShadowRunner) when ROLLOUT_ROUTING on",
+  "WR-R1-4 optional metrics family infrx_rollout_routed_total{policy,arm}"
+ ],
+ "evidence": [
+  "research/plan/evidence/r/R1-8d2e636.md",
+  "research/plan/evidence/r/R1-8d2e636-wiring.patch",
+  "research/plan/evidence/r/R1-8d2e636-wiring-on-f4bceeba.patch"
+ ],
+ "fixed": {
+  "0-RR-1": "record+count only after a fresh admission, keyed by Inference-Id",
+  "0-RR-2": "test_a_revoked_subject_is_never_shadowed + mutant ineligible_shadowed"
+ }
+}

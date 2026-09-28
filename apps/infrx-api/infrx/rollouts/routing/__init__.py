@@ -14,7 +14,8 @@ launched API is today's). Per request, before admission:
 * **Canary / A/B bounded by the policy.** A candidate subject's request is admitted on the
   candidate's pinned revision, so admission resolves, prices and pins *that* revision (the
   rate is frozen in the admission as for any request). A baseline subject's request is
-  untouched. Every eligible assignment is recorded with its request id (D9's rows).
+  untouched. Only a fresh admission (not refused, not replayed) is counted and records its
+  assignment, keyed by the admitted job's Inference-Id (D9's rows).
 * **Shadow is suppressed and never paid by the user.** In `shadow` mode the user's request
   is admitted unchanged; after a fresh (not replayed, not refused) admission each candidate
   gets a duplicate through the provider-funded `ShadowRunner`, whose result is discarded.
@@ -83,31 +84,45 @@ class Router:
         self.tasks: set[asyncio.Task] = set()
 
     async def route(self, auth, request):
-        """(the request to admit, the shadow duplicates to run once it is admitted)."""
+        """(the request to admit, the shadow duplicates to run once it is admitted, the arm
+        to record once it is admitted)."""
         if "@" in request.model_revision:
-            return request, ()
+            return request, (), None
         try:
             release = await self.releases.active(request.model_revision)
             if release is None or release.policy.mode == "off":
-                return request, ()
+                return request, (), None
             policy = release.policy
             if policy.cohort != "account" or not await self.releases.eligible(policy.policy_id,
                                                                               auth):
-                self.counts[(policy.policy_id, "ineligible")] += 1
-                return request, ()
-            assignment = assign(policy, release.policy_ref, auth.org_id, request.request_id)
-            await self.releases.record(assignment)
+                return request, (), (release, "ineligible")
         except Exception:
             log.exception("release store failed routing %s", request.request_id)
             raise errors.DependencyUnavailable("the release store did not answer") from None
-        if assignment.serving_ref != policy.baseline_ref:
-            self.counts[(policy.policy_id, "candidate")] += 1
-            pin = release.revisions[assignment.serving_ref]
-            return request.model_copy(update={"model_revision": pin}), ()
-        self.counts[(policy.policy_id, "baseline")] += 1
+        serving_ref = assign(policy, release.policy_ref, auth.org_id, request.request_id).serving_ref
+        if serving_ref != policy.baseline_ref:
+            pin = release.revisions[serving_ref]
+            return request.model_copy(update={"model_revision": pin}), (), (release, "candidate")
         if policy.mode == "shadow":
-            return request, tuple((release, c.serving_ref) for c in policy.candidates)
-        return request, ()
+            return request, tuple((release, c.serving_ref) for c in policy.candidates), \
+                (release, "baseline")
+        return request, (), (release, "baseline")
+
+    async def admitted(self, auth, arm, inference_id: str) -> None:
+        """Count the arm and record the assignment of a fresh admission, keyed by the job's
+        Inference-Id. The job exists by now, so a store failure here loses one coverage row
+        (counted `record_failed`), never the user's answer."""
+        release, name = arm
+        policy_id = release.policy.policy_id
+        self.counts[(policy_id, name)] += 1
+        if name == "ineligible":
+            return
+        try:
+            await self.releases.record(
+                assign(release.policy, release.policy_ref, auth.org_id, inference_id))
+        except Exception:
+            log.exception("release store failed recording %s", inference_id)
+            self.counts[(policy_id, "record_failed")] += 1
 
     def shadow(self, pending, request) -> None:
         """Start each duplicate within its policy's bound; never awaited by the caller."""
@@ -136,13 +151,18 @@ class Router:
 
 
 def hook(accept, router: Router):
-    """The relay's `accept`, routed. Shadows start only after a fresh admission."""
+    """The relay's `accept`, routed. Counts, assignment rows and shadows follow only a fresh
+    admission."""
 
     async def routed(auth, request, idem):
-        admitted, pending = await router.route(auth, request)
+        admitted, pending, arm = await router.route(auth, request)
         answer = await accept(auth, admitted, idem)
-        if pending and answer.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) != "true":
-            router.shadow(pending, request)
+        if answer.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) != "true":
+            if arm is not None:
+                await router.admitted(auth, arm, answer.headers.get(
+                    wire.HEADER_INFERENCE_ID, request.request_id))
+            if pending:
+                router.shadow(pending, request)
         return answer
 
     return routed
