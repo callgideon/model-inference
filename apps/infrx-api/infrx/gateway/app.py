@@ -15,8 +15,9 @@ from ..media.video import Media
 from ..usage import Usage
 from . import pilot
 from ..observe import route as metrics
-from .routes import (feedback, health, ingress, jobs, lab_control, lab_evaluations, lab_pipelines,
-                     lab_releases, lab_traces, models, trace_export, uploads)
+from .routes import (feedback, health, ingress, jobs, lab_checkpoints, lab_control, lab_datasets,
+                     lab_evaluations, lab_pipelines, lab_releases, lab_traces, models,
+                     trace_export, uploads)
 
 # The composition root's router list, fixed and documented (r1 R44). A track's router is
 # a module exposing `register(app, rt)`; the coordinator adds it here on an integration
@@ -31,8 +32,9 @@ from .routes import (feedback, health, ingress, jobs, lab_control, lab_evaluatio
 # after it, likewise (`TRACE_EXPORT_API`, default off; WR-G4T-1). The Lab's two surfaces
 # after those, each mounted only when its switch is on (`LAB_CONTROL`, `LAB_TRACES`,
 # default off; WR-LAB-API-1), then its evaluation, pipeline and release surfaces the same way
-# (`LAB_EVALS`, `LAB_PIPELINES`, `LAB_RELEASES`, default off; WR-LAB2-1).
-ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, metrics)
+# (`LAB_EVALS`, `LAB_PIPELINES`, `LAB_RELEASES`, default off; WR-LAB2-1), and its datasets
+# and checkpoint receiver (`LAB_DATASETS`, `LAB_CHECKPOINTS`, default off; WR-N4-1, WR-B3-2).
+ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)
 
 
 def upstream_client(settings):
