@@ -45,8 +45,9 @@ def test_the_lists_are_well_formed():
     known = mutation_list.case_names() | mutation_list.stack_case_names()
     for mutant in everything:
         assert mutant.cases and mutant.invariant and mutant.new != mutant.old, mutant.name
-        # every death is an assertion or a typed domain refusal: nothing declared
-        assert mutant.dies_by == (), f"{mutant.name}: {mutant.dies_by}"
+        # every death is an assertion or a typed domain refusal, or F3's contract refusal
+        # backstopping R2's approval (st_approve_on_hold), declared
+        assert set(mutant.dies_by) <= {"LabRejected"}, f"{mutant.name}: {mutant.dies_by}"
         for case in mutant.cases:
             assert case in known, f"{mutant.name} names unknown case {case}"
         base = mutation_list.API_DIR if mutant in STACK else mutation_list.REPO

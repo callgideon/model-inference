@@ -28,8 +28,8 @@ def who(org: str):
 
 
 def admit(router, org: str, n: int, *, tag: int = 0x4e, model: str | None = None):
-    """One fresh admission through R1's hook; the request the relay admitted (the job's
-    Inference-Id is the request id, as the assignment row's key)."""
+    """One fresh admission through R1's hook; the request the relay admitted. The job's
+    Inference-Id (`job_of`) is not the request id: the assignment row is keyed by the job."""
     from infrx.contracts import wire
     from infrx.rollouts import routing
     from starlette.responses import Response
@@ -37,11 +37,16 @@ def admit(router, org: str, n: int, *, tag: int = 0x4e, model: str | None = None
 
     async def accept(_who, asked, _idem):
         seen.append(asked)
-        return Response(b"ok", headers={wire.HEADER_INFERENCE_ID: asked.request_id})
+        return Response(b"ok", headers={wire.HEADER_INFERENCE_ID: job_of(asked.request_id)})
 
     run(routing.hook(accept, router)(who(org), request(model or ALIAS, n, tag), None))
     return seen[0]
 
+
+
+def job_of(request_id: str) -> str:
+    """The admitted job's Inference-Id for a request (a different uuid, derived)."""
+    return "10b" + request_id[3:]
 
 
 def router(lab, shadows=None, dsn=None):
@@ -154,7 +159,7 @@ def test_k03_a_subject_keeps_its_arm_and_each_admission_is_one_d9_row(lab, workd
     for i, org in enumerate(lab.subjects(20)):
         got = {admit(r, org, i * 3 + k).model_revision for k in range(3)}
         for k in range(3):
-            served[lw.uid(i * 3 + k, 0x4e)] = org
+            served[job_of(lw.uid(i * 3 + k, 0x4e))] = org
         assert len(got) == 1, f"{org} drifted between retries: {got}"
         arms[org] = got.pop()
     rows = lab.assignments(ref)
@@ -234,7 +239,7 @@ def test_k03_pins_ineligible_and_session_subjects_are_never_routed(lab, workdir)
             "recipient_provider_org_id": lab.NEMO, "model_ids": [lab.cc.MODEL],
             "categories": ["request_content"], "purposes": ["provider_sharing"],
             "retention_days": 30})
-    assert [a["request_id"] for a in lab.assignments(ref)] == [lw.uid(3, 0x4e)]
+    assert [a["request_id"] for a in lab.assignments(ref)] == [job_of(lw.uid(3, 0x4e))]
     assert r.counts[(policy.policy_id, "ineligible")] == 2
     policy, ref = lab.launch(lab.policy(weights=(10_000,), cohort="session",
                                         candidates=(lab.CAND,)), lw.plan())

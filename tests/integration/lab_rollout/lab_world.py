@@ -50,7 +50,7 @@ sys.path[:0] = [p for p in (str(INTEGRATION), str(INTEGRATION / "backend"), str(
                 if p not in sys.path]
 import harness  # noqa: E402 - E2's harness, namespace e8l
 
-import stack                                            # noqa: E402
+import stack  # noqa: E402,F401 - conftest and mutants read lab_world.stack
 
 RUNNER = "tests/integration/lab_rollout/runner.py"
 RERUN = f"apps/infrx-api/.venv/bin/python {RUNNER} --out <dir>"

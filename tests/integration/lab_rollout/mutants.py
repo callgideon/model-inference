@@ -145,7 +145,7 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "            if self.inflight[policy_id] > release.shadow_limit:", K02),
     _m("st_assignment_by_request", "an assignment is keyed by the admitted job", R1,
        "wire.HEADER_INFERENCE_ID, request.request_id))",
-       "wire.HEADER_INFERENCE_ID + \"-\", request.request_id))", K02),
+       "wire.HEADER_INFERENCE_ID + \"-\", request.request_id))", K03_ARMS),
     _m("st_cohort_by_version", "a subject's bucket is per policy, not per version (R179)", F3,
        '    digest = hashlib.sha256(f"{policy.policy_id}\\n{subject_key}".encode()).hexdigest()',
        '    digest = hashlib.sha256(f"{policy.policy_id}{policy.version}\\n{subject_key}"'
@@ -189,7 +189,9 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        '    observed["cost_delta"] = {u: str(cand_costs[u] + base_costs[u])', K05_ACCEPT),
     _m("st_approve_on_hold", "only an expand verdict is approvable", R2,
        '        if verdict.action != "expand":', '        if verdict.action == "rollback":',
-       K05_HOLD, K05_ACCEPT),
+       K05_HOLD, K05_ACCEPT, dies_by=("LabRejected",)),
+    # (F3's decision contract backstops it: a hold carries no evidence and an expansion names
+    # its evidence, so the approval dies as LabRejected at the store - declared)
     _m("st_inconclusive_accepts", "incomplete coverage is inconclusive, never accept", B2,
        '        {"outcome": "inconclusive", "reasons": unsure} if unsure else \\',
        '        {"outcome": "accept", "reasons": unsure} if unsure else \\', K05_HOLD),
@@ -201,8 +203,8 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        '    if outcome and outcome["outcome"] == "reject":', "    if False:", K05_SLICE),
     _m("st_budget_ignored", "spend past the budget rolls back", R2,
        "    if live.spent.amount > plan.budget.amount:", "    if False:", K05_SPEND),
-    _m("st_units_mix", "spend in another unit is refused, never compared", R2,
-       "    if live.spent.unit != plan.budget.unit:", "    if False:", K05_SPEND),
+    # (no `st_units_mix`: without R2's unit check, `lab.Amount` itself refuses to compare
+    # CREDIT with PROVIDER_USD (TypeError) - the money type backstops it, equivalent here)
     _m("st_claim_unmeasured", "an optimization is claimed only with measurements", R3,
        '"optimization_claimed": outcome == "equivalent" and performance is not None}',
        '"optimization_claimed": outcome == "equivalent"}', K07_STORED),
