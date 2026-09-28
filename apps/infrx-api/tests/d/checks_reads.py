@@ -431,6 +431,9 @@ def check_flag_freeze_race(connect, database: str) -> str:
 #: `admit_ready` and the preparation worker claims through `claim_preparation_ready` (W5).
 REVOKED_DOORS = frozenset({"infrx.admit(jsonb)", "infrx.claim_preparation(jsonb)"})
 RUNTIME_FUNCTIONS = frozenset({
+    # WR-LSQ3-4 (0043, SR-R1-1): the router's port over D9, the runtime's alone
+    "infrx.record_rollout_assignment(jsonb)", "infrx.release_active(text)",
+    "infrx.release_eligible(uuid,uuid)",
     "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)", "infrx.append(jsonb)",
     "infrx.cancel(jsonb)", "infrx.claim(jsonb)", "infrx.claim_preparation_ready(jsonb)",
     "infrx.content_acknowledge_delete(jsonb)", "infrx.content_candidates(jsonb)",
