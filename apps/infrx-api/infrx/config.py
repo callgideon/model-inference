@@ -360,6 +360,15 @@ class DeploymentSettings:
     # store's pool. Off by default: the launched API is unchanged and no Lab route exists.
     lab_control: bool = False
     lab_traces: bool = False
+    # WR-T-4 (composition lane, LW2): the worker runs T2I's shipper (over a spool on
+    # `TRACE_SPOOL_DIR`, which it then owns), T3's retention and T2F's feedback projection.
+    # Off by default; on, `TRACE_SPOOL_DIR`, `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` are
+    # required. Capture stays off: the gateway builds no trace sink either way.
+    trace_pumps: bool = False
+    # WR-B-5 (composition lane, LW2): the worker works D7's `eval_run` outbox events (B1's
+    # `resume` + `Runner`) and runs `lab_recover`. Lab-only, off by default; on, it refuses
+    # to start until an evaluator source (WR-B-2(b)) and a dev target source (WR-B-3) exist.
+    lab_eval_worker: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

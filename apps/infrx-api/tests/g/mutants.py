@@ -1027,6 +1027,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
        dies_by=("RuntimeMisconfigured",)),        # the given store refused: the defect
     _m("given_stores_replaced", "injected stores are used as given, with no pool of ours",
+       # the G4F feedback entry (f4bceeba) sits between the pool and the given adapters
        P, "                       if settings.deployment.feedback_api else {}),\n"
           "                    **adapters}",
        "                       if settings.deployment.feedback_api else {})}",

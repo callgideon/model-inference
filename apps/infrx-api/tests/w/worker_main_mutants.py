@@ -60,6 +60,15 @@ RECON_REFUSED = "test_worker_main__a_login_refused_the_views_disables_the_gauges
 RECON_DOWN = "test_worker_main__a_database_that_is_down_is_still_retried_every_tick"
 RECON_MONITOR = "test_worker_main__the_reconciliation_gauges_are_read_on_the_monitor_login"
 RECON_PG = "test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not"
+# WR-T-4 / WR-B-5 (composition lane, LW2)
+SWITCHES_OFF = "test_worker_main__every_trace_and_lab_switch_is_off_and_composes_nothing"
+TRACE_REFUSE = "test_worker_main__trace_pumps_refuse_to_start_without_their_settings"
+TRACE_ON = "test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores"
+LAB_REFUSE = "test_worker_main__the_lab_eval_worker_refuses_to_start_without_its_sources"
+LAB_ON = "test_worker_main__the_lab_eval_worker_pumps_d7s_outbox_and_recovers"
+RESUME = "test_worker_main__an_eval_run_delivery_resumes_the_created_run_never_freezes"
+PENDING = "test_worker_main__a_delivery_the_handler_cannot_finish_stays_pending"
+UNFINISHED = "test_worker_main__a_run_left_unfinished_is_not_acknowledged"
 
 MUTANTS = (
     _m("main_validate_runtime_skipped", "the worker refuses what the gateway refuses (R44)",
@@ -234,6 +243,75 @@ MUTANTS = (
     _m("service_any_failure_disables", "a database that is down is retried every tick",
        SERVICE, '            if getattr(failure, "sqlstate", None) == "42501":',
        "            if True:", RECON_DOWN),
+    # --- WR-T-4 / WR-B-5 (composition lane, LW2): each switch off, and what on composes ---
+    _m("main_trace_pumps_on_by_default", "TRACE_PUMPS is off unless the deployment sets it",
+       CONFIG, "    trace_pumps: bool = False\n", "    trace_pumps: bool = True\n", SWITCHES_OFF),
+    _m("main_lab_eval_on_by_default", "LAB_EVAL_WORKER is off unless the deployment sets it",
+       CONFIG, "    lab_eval_worker: bool = False\n", "    lab_eval_worker: bool = True\n",
+       SWITCHES_OFF),
+    _m("main_trace_switch_ignored", "TRACE_PUMPS off composes no spool, client or pump",
+       MAIN, "    if deployment.trace_pumps:  ", "    if True:  ", SWITCHES_OFF),
+    _m("main_lab_switch_ignored", "LAB_EVAL_WORKER off composes no Lab store or pump",
+       MAIN, "    if deployment.lab_eval_worker:  ", "    if True:  ", SWITCHES_OFF),
+    _m("main_trace_switch_composes_nothing", "TRACE_PUMPS on runs the three trace pumps",
+       MAIN, "        chores |= trace_pumps(settings, mode, connect)\n", "        pass\n",
+       TRACE_ON),
+    _m("main_lab_switch_composes_nothing", "LAB_EVAL_WORKER on runs the Lab pump and recover",
+       MAIN, "        chores |= lab_eval(mode, connect, objects, evaluators, targets, "
+             "worker_id)\n", "        pass\n", LAB_ON),
+    _m("main_trace_settings_not_required", "TRACE_PUMPS on refuses without its three settings",
+       MAIN, "    if missing:\n        raise RuntimeMisconfigured(mode, missing)\n    try:\n",
+       "    try:\n", TRACE_REFUSE),
+    _m("main_trace_ship_without_rotate", "each ship pass seals the spool's tail first",
+       MAIN, "        await spool.rotate()\n        return await shipper.ship()\n",
+       "        return await shipper.ship()\n", TRACE_ON),
+    _m("main_trace_sweep_without_expire", "each retention pass expires, then sweeps",
+       MAIN, "        await retention.expire()\n        return await retention.sweep()\n",
+       "        return await retention.sweep()\n", TRACE_ON),
+    _m("main_trace_shipper_endpoint_ignored", "the trace bucket is reached at the deployment's "
+       "S3 endpoint", MAIN, "        shipper = ship.build_shipper(limits, spool,\n"
+       "                                     endpoint_url=settings.deployment.s3_endpoint_url)\n",
+       "        shipper = ship.build_shipper(limits, spool)\n", TRACE_ON),
+    _m("main_feedback_projection_off_the_pool", "the feedback relay runs on the worker's pool",
+       MAIN, "    projector = FeedbackProjector(PgFeedbackOutbox(connect), retention.feedback,",
+       "    projector = FeedbackProjector(PgFeedbackOutbox(connector(limits.database_url)), "
+       "retention.feedback,", TRACE_ON),
+    _m("main_feedback_projection_ignores_retention", "a deleted request's feedback is not "
+       "projected again (T3's keep_feedback)", MAIN,
+       "                                  retention=retention)\n",
+       "                                  retention=None)\n", TRACE_ON),
+    _m("main_lab_sources_not_required", "LAB_EVAL_WORKER refuses without its two sources",
+       MAIN, "    if evaluators is None or targets is None:\n", "    if False:\n", LAB_REFUSE),
+    _m("main_lab_store_off_the_pool", "D7's store runs on the worker's pool",
+       MAIN, "    store = PgLabDataStore(connect)\n",
+       '    store = PgLabDataStore(connector(""))\n', LAB_ON),
+    _m("main_lab_recover_not_scheduled", "expired Lab leases are recovered on a timer",
+       MAIN, ',\n            "lab_recover": lambda: every(LAB_RECOVER_S, store.recover, '
+             '"lab recover")}\n', "}\n", LAB_ON),
+    _m("main_redelivery_freezes_again", "a delivery resumes the created run, never freezes it",
+       MAIN, "        frozen = await evaluation.resume(self.store, run_id,\n",
+       "        frozen = await evaluation.freeze(self.store, run_id,\n", RESUME),
+    _m("main_eval_provider_from_the_payload", "the run is read for the event's own provider",
+       MAIN, '        provider, run_id = event.provider_org_id, event.payload["run_id"]\n',
+       '        provider, run_id = event.payload.get("provider_org_id"), '
+       'event.payload["run_id"]\n', RESUME),
+    _m("main_evaluator_by_the_serving_ref", "the evaluator is the one the run record names",
+       MAIN, "evaluator=await self.evaluators(record.evaluator_ref),",
+       "evaluator=await self.evaluators(record.serving_ref),", RESUME),
+    _m("main_wallet_stop_acknowledged", "a wallet stop stays pending for redelivery",
+       MAIN, '        if report["stopped"] == "wallet_exhausted":\n', "        if False:\n",
+       PENDING),
+    _m("main_every_stop_pending", "a budget stop is final and acknowledged",
+       MAIN, '        if report["stopped"] == "wallet_exhausted":\n',
+       '        if report["stopped"] is not None:\n', PENDING),
+    _m("main_unfinished_run_acknowledged", "a run still unfinished stays pending (1-F1)",
+       MAIN, '        if report["stopped"] == "budget_exhausted" or report["state"] in RUN_FINAL:\n',
+       "        if True:\n", UNFINISHED),
+    _m("main_budget_stop_pending", "a budget stop is final and acknowledged",
+       MAIN, '        if report["stopped"] == "budget_exhausted" or report["state"] in RUN_FINAL:\n',
+       '        if report["state"] in RUN_FINAL:\n', PENDING),
+    _m("main_other_kinds_taken", "another kind's Lab event is not the eval handler's",
+       MAIN, '        if event.kind != "eval_run":\n', "        if False:\n", PENDING),
 )
 
 PG_MUTANTS = (

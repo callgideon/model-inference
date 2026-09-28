@@ -42,6 +42,15 @@ index, the build-info gauge), so the two processes cannot disagree about a store
   Preparation registers its artifacts with the same lifecycle (`content=`), the cache is
   bounded by `PROCESSING_CACHE_MAX_BYTES`, and the engine pins every file it opens from
   submit to terminal (a keeper without the pin could remove an input mid-attempt).
+
+* **Trace pumps** (WR-T-4, `TRACE_PUMPS`, off by default): T2I's shipper over a spool on
+  `TRACE_SPOOL_DIR` (rotated before each pass), T3's expire-then-sweep over the shipper's
+  retention, and T2F's feedback projection on this process's pool. Capture stays off: no
+  process adds to the spool until the capture wiring lands, and then the ship step moves to
+  the process that owns the spool (one writer per directory, `SpoolTraceSink`'s lock).
+* **Lab evaluation** (WR-B-5, `LAB_EVAL_WORKER`, off by default, Lab-only): D2's
+  `OutboxRelay` over D7's Lab outbox with `EvalRuns` as its scheduler, and `lab_recover` on
+  a timer. It refuses to start until an evaluator source and a dev target source exist.
 """
 from __future__ import annotations
 
@@ -56,6 +65,8 @@ from types import SimpleNamespace
 import httpx
 
 from ..config import RuntimeMisconfigured, from_env, runtime_mode, validate_runtime
+from ..evaluation import runner as evaluation
+from ..contracts import errors
 from ..contracts.records import OutboxKind
 from ..contracts.v2.money_units import CREDIT_REGIME
 from ..gateway import pilot
@@ -66,7 +77,13 @@ from ..media.retention import RetentionCollector
 from ..observe.metrics import Registry
 from ..state.jobstore import PgJobStore, PreparedWork, connector
 from ..state.journal import PgStreamStore
+from ..state.lab_data import PgLabDataStore
 from ..state.lifecycle import PgLifecycle
+from ..state.outbox import OutboxRelay
+from ..traces import ship
+from ..traces.feedback import FeedbackProjector
+from ..traces.feedback.pg import PgFeedbackOutbox
+from ..traces.spool import SpoolTraceSink
 from .attempt import AttemptRunner
 from .engine import VllmEngine
 from .loop import WorkerLoop
@@ -114,10 +131,12 @@ class CreditWork:
         return settled
 
 
-def compose(settings, *, objects=None, index=None):
+def compose(settings, *, objects=None, index=None, evaluators=None, targets=None):
     """`(service, pool)` from settings. `objects`/`index` are for tests only, as in
-    `create_app`; the stores are always PostgreSQL. Raises `RuntimeMisconfigured` naming
-    the setting that cannot serve. Nothing here connects except the bucket's HeadBucket."""
+    `create_app`; the stores are always PostgreSQL. `evaluators`/`targets` are the Lab
+    evaluation worker's sources (WR-B-2(b), WR-B-3), which nothing composes yet. Raises
+    `RuntimeMisconfigured` naming the setting that cannot serve. Nothing here connects
+    except the bucket's HeadBucket (and ClickHouse, only when `TRACE_PUMPS` is on)."""
     mode = validate_runtime(settings)
     limits, deployment = settings.pilot, settings.deployment
     missing = [name for name, value in (("DATABASE_URL", limits.database_url),
@@ -166,14 +185,18 @@ def compose(settings, *, objects=None, index=None):
         runner=PreparationRunner(jobs=jobs, media=media, engine=engine, worker_id=worker_id,
                                  limits=limits, readiness=lifecycle),
         limits=limits)
+    chores = housekeeping(deployment, lifecycle, objects, media, journal, rt.metrics)
+    if deployment.trace_pumps:                           # WR-T-4, off by default
+        chores |= trace_pumps(settings, mode, connect)
+    if deployment.lab_eval_worker:                       # WR-B-5, off by default
+        chores |= lab_eval(mode, connect, objects, evaluators, targets, worker_id)
     service = WorkerService(loop=loop, jobs=jobs, engine=engine,
                             concurrency=limits.worker_concurrency,
                             health_port=deployment.worker_health_port,
                             reconciliation=reconciliation_reader(deployment),
                             metrics=rt.metrics, pool=pool, preparation=preparation,
                             preparation_concurrency=limits.preparation_concurrency,
-                            housekeeping=housekeeping(deployment, lifecycle, objects, media,
-                                                      journal, rt.metrics))
+                            housekeeping=chores)
     return service, pool
 
 
@@ -224,6 +247,105 @@ async def expire_journal(journal) -> int:
     while found := await journal.expire():
         removed += found
     return removed
+
+
+# --- WR-T-4 / WR-B-5 (composition lane, LW2): the trace pumps and the Lab eval worker ----
+# ponytail: fixed cadences; deployment settings when a measured backlog asks for them.
+TRACE_SHIP_S = 10.0              # T1 rotates on size; this seals a quiet host's tail too
+FEEDBACK_PROJECTION_S = 10.0     # T3's alert fires at 15 min of projection lag
+TRACE_RETENTION_S = 300.0        # the media retention's cadence (P-25)
+LAB_PUMP_S = 5.0
+LAB_RECOVER_S = 30.0             # = the lease below: an expired lease waits at most one more
+LAB_EVAL_LIMITS = evaluation.Limits(lease_s=30, max_attempts=3, dispatch_retries=2,
+                                    concurrency=2)
+
+
+def trace_pumps(settings, mode, connect) -> dict:
+    """T3's WR-T-4 calls, by task name: `ship.build_shipper` over a spool of this
+    process's own, its retention and T2F's projector into that retention's projection."""
+    limits = settings.pilot
+    missing = [name for name, value in (("TRACE_SPOOL_DIR", limits.trace_spool_dir),
+                                        ("CLICKHOUSE_URL", limits.clickhouse_url),
+                                        ("S3_TRACE_BUCKET", limits.s3_trace_bucket))
+               if not value.strip()]
+    if missing:
+        raise RuntimeMisconfigured(mode, missing)
+    try:
+        spool = SpoolTraceSink(Wall, limits=limits)
+        shipper = ship.build_shipper(limits, spool,
+                                     endpoint_url=settings.deployment.s3_endpoint_url)
+    except Exception as failure:          # noqa: BLE001 - every failure refuses startup
+        raise RuntimeMisconfigured(mode, detail="TRACE_PUMPS: the spool or CLICKHOUSE_URL "
+                                   f"did not answer ({type(failure).__name__})") from None
+    retention = shipper.retention
+    projector = FeedbackProjector(PgFeedbackOutbox(connect), retention.feedback,
+                                  retention=retention)
+
+    async def ship_once():
+        await spool.rotate()
+        return await shipper.ship()
+
+    async def retain():
+        await retention.expire()
+        return await retention.sweep()
+    return {"trace_ship": lambda: every(TRACE_SHIP_S, ship_once, "trace ship"),
+            "trace_retention": lambda: every(TRACE_RETENTION_S, retain, "trace retention"),
+            "feedback_projection": lambda: every(FEEDBACK_PROJECTION_S, projector.pump,
+                                                 "feedback projection")}
+
+
+def lab_eval(mode, connect, objects, evaluators, targets, worker_id) -> dict:
+    """B1's WR-B-5: D7's outbox pumped into `EvalRuns`, and `lab_recover` on a timer.
+    The Lab's objects are the media store's (`lab/<provider>/...` keys, N1's WR-N-3)."""
+    if evaluators is None or targets is None:
+        raise RuntimeMisconfigured(mode, detail="LAB_EVAL_WORKER needs an evaluator source "
+                                   "(WR-B-2(b)) and a dev target source (WR-B-3)")
+    store = PgLabDataStore(connect)
+    # ponytail: the pump awaits each run, so a run longer than `redelivery_s` is handed to
+    # another worker process too; D7's leases make that a duplicate delivery (B1's drill).
+    relay = OutboxRelay(store, EvalRuns(store, objects, evaluators, targets,
+                                        worker_id=f"{worker_id}-lab"),
+                        worker_id=f"{worker_id}-lab-relay")
+    return {"lab_eval": lambda: every(LAB_PUMP_S, relay.pump, "lab eval"),
+            "lab_recover": lambda: every(LAB_RECOVER_S, store.recover, "lab recover")}
+
+
+RUN_FINAL = ("succeeded", "failed", "cancelled")
+
+
+class EvalRuns:
+    """The Lab outbox's `eval_run` handler (`OutboxRelay`'s scheduler). The event names a
+    run D7 already created (`lab_create_run` wrote it), so a delivery - first or again -
+    rebuilds it with `resume`, never `freeze`: after a revocation `freeze` is refused and the
+    run would never end (B1's recheck). Only a finished, cancelled or budget-stopped run is
+    acknowledged; a wallet stop or a run still unfinished raises (the relay hands it out
+    again after its window); any other kind is not this handler's."""
+
+    def __init__(self, store, objects, evaluators, targets, *, worker_id: str) -> None:
+        self.store, self.objects, self.worker_id = store, objects, worker_id
+        self.evaluators, self.targets = evaluators, targets    # ref -> spec / (endpoint, rev)
+
+    async def enqueue(self, event) -> bool:
+        if event.kind != "eval_run":
+            raise errors.InvalidRequest(f"no Lab worker handles {event.kind}")
+        provider, run_id = event.provider_org_id, event.payload["run_id"]
+        status = await self.store.run_status(run_id, provider_org_id=provider)
+        record = await self.store.resolve(status["run_ref"], provider_org_id=provider)
+        endpoint, deployment = await self.targets(record.serving_ref)
+        frozen = await evaluation.resume(self.store, run_id,
+                                         evaluator=await self.evaluators(record.evaluator_ref),
+                                         provider_org_id=provider)
+        report = await evaluation.Runner(self.store, self.objects, endpoint, deployment,
+                                         worker_id=self.worker_id,
+                                         limits=LAB_EVAL_LIMITS).run(frozen)
+        if report["stopped"] == "wallet_exhausted":
+            raise errors.InsufficientCredit(f"eval run {run_id}: the provider_dev wallet")
+        if report["stopped"] == "budget_exhausted" or report["state"] in RUN_FINAL:
+            return True
+        # Nothing pending, but a dead attempt's cases stay `leased` until `lab_recover`
+        # reaps them and recover emits no event: acknowledging now would orphan the run.
+        raise errors.ResultPending(f"eval run {run_id} is still {report['state']}")
+# --- end WR-T-4 / WR-B-5 ------------------------------------------------------------------
 
 
 def reprepare_with(media):

@@ -548,6 +548,9 @@ DEPLOYMENT_EXPECTED = {
     # LAB-API (WR-LAB-API-1): the switches that mount the Lab's two surfaces, off
     "LAB_CONTROL": False,
     "LAB_TRACES": False,
+    # WR-T-4 / WR-B-5 (composition lane): the worker's trace pumps and Lab eval worker, off
+    "TRACE_PUMPS": False,
+    "LAB_EVAL_WORKER": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.
