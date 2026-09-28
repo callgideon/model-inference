@@ -30,8 +30,8 @@ last line: the source (the upload's digest, `source_id` = the import id) is regi
 the grant, then the manifest is published in D7's one transaction - a crash anywhere before
 that publishes nothing.
 
-The caller's `provider_org_id` is server-derived (the L2 port's membership check at the
-route: wiring); D7 re-checks the grant.
+The caller's `provider_org_id` is server-derived: `datasets.acting_provider` (the L2 port's
+membership check, WR-N-2) at the route; D7 re-checks the grant.
 """
 from __future__ import annotations
 
@@ -71,6 +71,12 @@ def sample_key(provider: str, digest: str) -> str:
 
 def media_key(provider: str, digest: str) -> str:
     return f"lab/{provider}/media/{digest.removeprefix('sha256:')}"
+
+
+def sample_id(dataset_id: str, digest: str) -> str:
+    """A UUIDv4-shaped `sha256(dataset id \n content digest)`: one sample per content."""
+    sid = hashlib.sha256(f"{dataset_id}\n{digest}".encode()).hexdigest()
+    return f"{sid[:8]}-{sid[8:12]}-4{sid[13:16]}-8{sid[17:20]}-{sid[20:32]}"
 
 
 def spec_key(provider: str, import_id: str) -> str:
@@ -352,9 +358,8 @@ class Importer:
                 continue
             await self._once(sample_key(spec.provider_org_id, digest), data)
             seen[digest], groups[group] = line, split
-            sid = hashlib.sha256(f"{spec.dataset_id}\n{digest}".encode()).hexdigest()
             sample = {"line": line, "content_digest": digest, "group_key": group, "split": split,
-                      "sample_id": f"{sid[:8]}-{sid[8:12]}-4{sid[13:16]}-8{sid[17:20]}-{sid[20:32]}"}
+                      "sample_id": sample_id(spec.dataset_id, digest)}
             if "span_ms" in checked:
                 sample["duration_ms"] = checked["span_ms"][1] - checked["span_ms"][0]
             accepted.append(sample)

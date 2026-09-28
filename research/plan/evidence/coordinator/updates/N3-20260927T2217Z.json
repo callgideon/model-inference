@@ -1,0 +1,78 @@
+{
+ "task": "N3",
+ "slice": "N3 (trace-derived datasets, lineage, tombstones; C2 fake)",
+ "activity": "fix-round",
+ "head": "b43764e2",
+ "worktree": ".claude/worktrees/codex-w5-datasets-lw4",
+ "branch": "codex/w5-datasets-lw4",
+ "owned_paths": [
+  "apps/infrx-api/infrx/datasets/lineage/",
+  "apps/infrx-api/infrx/datasets/versions/",
+  "apps/infrx-api/tests/n/lineage/",
+  "apps/infrx-api/tests/n/versions/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/lineage/test_lineage.py (before the module)",
+   "exit": 2,
+   "summary": "ImportError: cannot import name 'lineage'"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 uv run --frozen pytest -q tests/n/lineage/test_lineage_pg.py",
+   "exit": 0,
+   "summary": "1 passed on real L2/D7/D6F; fail-first with the gate ignoring tombstones: 'a re-grant resurrected a tombstoned sample'"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/n/{imports,versions,lineage}/test_mutants.py",
+   "exit": 0,
+   "summary": "139 passed: N1 58 (incl. 3 WR-N-2), N2 45, N3 30 mutants killed; lists well-formed, every case covered"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 uv run --frozen pytest -q -rs tests/n",
+   "exit": 0,
+   "summary": "63 passed (fake + PG on n3)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 make api-test",
+   "exit": 2,
+   "summary": "5027 passed, 77 skipped, 9 xfailed, 50 failed, 8 errors; all failures shared-lock contention (tests/d/test_outbox_relay[valkey] d2 lock held by codex-w5-lab-api; tests/i i8 lock held by codex-w5-rollout-routing; tests/i/test_mutants baseline under a non-default key), none in tests/n"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/lineage/test_lineage.py",
+   "exit": 0,
+   "summary": "fix round: 8 passed (0-DS4-B1 model scope, 0-DS4-M1 narrowed grant cases added)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/n/lineage/test_mutants.py",
+   "exit": 0,
+   "summary": "36 passed: 34 N3 mutants killed incl. n3_model_unchecked, n3_narrow_model_ignored, n3_narrow_categories_ignored, n3_feedback_category_always"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 uv run --frozen pytest -q tests/n/lineage/test_lineage_pg.py tests/n",
+   "exit": 0,
+   "summary": "65 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "fix round done; remaining = re-review plus the C2 integration rerun after the content lane merges",
+  "at": "2026-09-28T00:00:00Z"
+ },
+ "blockers": [
+  "C2 not on the base: integration with the real C2 adapter is owed (13:9)"
+ ],
+ "wiring_requests": [
+  "WR-N3-1 C2 port signature (amended: sign also takes model_id; read Forbidden when the grant does not name it)",
+  "WR-N3-2 push tombstone hooks after T3 delete and L2 revoke + reconcile on a worker schedule",
+  "WR-N3-3 B1/P2/P3 re-check lineage.permitted before each lease/submission",
+  "WR-N-1 amended: Makefile api-mutants += tests/n/lineage/test_mutants.py",
+  "schema request (lab-sql, optional): tombstone/content_until columns on lab_dataset_samples",
+  "WR-N3-4 model_of(row): T3 row serving_version_id -> serving_versions.model_id (None omits the request)"
+ ],
+ "evidence": [
+  "research/plan/evidence/n/N3-39a64c3.md"
+ ]
+}

@@ -1,0 +1,54 @@
+{
+ "task": "WR-N-2",
+ "slice": "WR-N-2 (L2 acting provider for dataset callers)",
+ "activity": "fix-round",
+ "head": "b43764e2",
+ "worktree": ".claude/worktrees/codex-w5-datasets-lw4",
+ "branch": "codex/w5-datasets-lw4",
+ "owned_paths": [
+  "apps/infrx-api/infrx/datasets/__init__.py",
+  "apps/infrx-api/tests/n/imports/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/imports/test_import.py -k wrn2 (before the function)",
+   "exit": 1,
+   "summary": "ImportError: acting_provider"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/n/{imports,versions,lineage}/test_mutants.py",
+   "exit": 0,
+   "summary": "139 passed: N1 58 (incl. 3 WR-N-2), N2 45, N3 30 mutants killed; lists well-formed, every case covered"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 uv run --frozen pytest -q -rs tests/n",
+   "exit": 0,
+   "summary": "63 passed (fake + PG on n3)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 make api-test",
+   "exit": 2,
+   "summary": "5027 passed, 77 skipped, 9 xfailed, 50 failed, 8 errors; all failures shared-lock contention (tests/d/test_outbox_relay[valkey] d2 lock held by codex-w5-lab-api; tests/i i8 lock held by codex-w5-rollout-routing; tests/i/test_mutants baseline under a non-default key), none in tests/n"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/imports tests/n/versions",
+   "exit": 0,
+   "summary": "fix round (no WR-N-2 findings): green"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1.5,
+  "confidence": "high",
+  "basis": "one review round on ~30 lines",
+  "at": "2026-09-28T00:00:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "the dataset route/worker calls datasets.acting_provider first (carried by WR-N4-1's router)"
+ ],
+ "evidence": [
+  "research/plan/evidence/n/WR-N-2-9316896.md"
+ ]
+}
