@@ -334,8 +334,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     half-finished track mount itself on the public gateway."""
     from infrx.gateway import app as composition_root
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
-        ["health", "models", "ingress", "uploads", "jobs", "feedback", "lab_control",
-         "lab_traces", "route"]
+        ["health", "models", "ingress", "uploads", "jobs", "feedback", "trace_export",
+         "lab_control", "lab_traces", "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -545,6 +545,8 @@ DEPLOYMENT_EXPECTED = {
     "RETENTION_GRACE_S": 3600.0,
     # G4F (WR-G4F-1): the switch that mounts POST /v1/feedback, off
     "FEEDBACK_API": False,
+    # G4T (WR-G4T-1): the switch that mounts GET /v1/traces, off
+    "TRACE_EXPORT_API": False,
     # LAB-API (WR-LAB-API-1): the switches that mount the Lab's two surfaces, off
     "LAB_CONTROL": False,
     "LAB_TRACES": False,

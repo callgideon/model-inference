@@ -15,7 +15,8 @@ from ..media.video import Media
 from ..usage import Usage
 from . import pilot
 from ..observe import route as metrics
-from .routes import feedback, health, ingress, jobs, lab_control, lab_traces, models, uploads
+from .routes import (feedback, health, ingress, jobs, lab_control, lab_traces, models,
+                     trace_export, uploads)
 
 # The composition root's router list, fixed and documented (r1 R44). A track's router is
 # a module exposing `register(app, rt)`; the coordinator adds it here on an integration
@@ -26,10 +27,11 @@ from .routes import feedback, health, ingress, jobs, lab_control, lab_traces, mo
 # G4U uploads and G3 jobs come after the ingress, over the media store and the relay its
 # composition put on `rt` (G3 request (a), G4U request (a)); I3B's loopback-only /metrics
 # over the composition's registry last (I3B request 1). G4F feedback before it, mounted only
-# when the deployment enables it (`FEEDBACK_API`, default off; WR-G4F-1). The Lab's two
-# surfaces after it, each mounted only when its switch is on (`LAB_CONTROL`, `LAB_TRACES`,
+# when the deployment enables it (`FEEDBACK_API`, default off; WR-G4F-1); G4T's trace export
+# after it, likewise (`TRACE_EXPORT_API`, default off; WR-G4T-1). The Lab's two surfaces
+# after those, each mounted only when its switch is on (`LAB_CONTROL`, `LAB_TRACES`,
 # default off; WR-LAB-API-1).
-ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)
+ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)
 
 
 def upstream_client(settings):

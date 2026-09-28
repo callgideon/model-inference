@@ -19,7 +19,7 @@ from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
 from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_control, lab_traces,
-                                  models, uploads)
+                                  models, trace_export, uploads)
 from infrx.observe import host
 from infrx.observe import route as metrics
 from infrx.scheduling.memory import MemoryScheduler
@@ -158,8 +158,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     loopback-only /metrics last - the one chat handler is the ingress's, every upload and jobs
     route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
     slash redirects) is served."""
-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, lab_control,
-                                   lab_traces, metrics)
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, trace_export,
+                                   lab_control, lab_traces, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}
@@ -219,6 +219,47 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
     answer = local(on).post(feedback.FEEDBACK_PATH, json=body, headers=headers)
     assert answer.status_code == 201 and answer.json()["author_role"] == "customer"
     ingress.assert_route_table(on)
+
+
+def test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it():
+    """G4T (WR-G4T-1): `TRACE_EXPORT_API` is off by default, and then no export route exists
+    even with an export at hand (the launched API is unchanged); on, `GET /v1/traces` is the
+    trace export router's and answers through the composed export; on without ClickHouse
+    refuses to start rather than silently mounting nothing."""
+    import dataclasses
+
+    from infrx.config import deployment_from_env
+
+    class Stub:
+        async def page(self, org_id, **kw):
+            return [], None
+
+    assert deployment_from_env({}).trace_export_api is False
+
+    def composed(on, export=Stub()):
+        world = relay_support.World()
+        world.stream.usage = lambda: asyncio.sleep(0, {})
+        config = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                                 trace_export_api=on))
+        return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
+                                      clock=world.now_s, catalog=world.catalog,
+                                      stream=world.stream, objects=world.objects,
+                                      jobs=world.jobs, index=MemoryScheduler(world.clock.now),
+                                      trace_export=export)
+
+    off = composed(False)
+    assert off.state.runtime.trace_export is None
+    assert all(getattr(r, "path", "") != trace_export.EXPORT_PATH for r in off.routes)
+    assert local(off).get(trace_export.EXPORT_PATH, headers=support.AUTH).status_code == 404
+    on = composed(True)
+    assert on.state.runtime.trace_export is not None
+    assert [r.methods for r in on.routes
+            if getattr(r, "path", "") == trace_export.EXPORT_PATH] == [{"GET"}]
+    answer = local(on).get(trace_export.EXPORT_PATH, headers=support.AUTH)
+    assert answer.status_code == 200 and answer.json() == {"data": [], "next_cursor": None}
+    ingress.assert_route_table(on)
+    with pytest.raises(RuntimeMisconfigured, match="CLICKHOUSE_URL"):
+        composed(True, export=None)
 
 
 def test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them():

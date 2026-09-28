@@ -348,7 +348,7 @@ def build_info(rt) -> None:
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
                        pool=None, consent_for=None, attachments=None,
                        lifecycle=None, readiness=None, feedback=None, lab_control=None,
-                       lab_traces=None, rollouts=None) -> IngressDeps:
+                       lab_traces=None, rollouts=None, trace_export=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -394,6 +394,8 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     rt.relay = relay
     # G4F (WR-G4F-1): the feedback route mounts over this, and only when enabled.
     rt.feedback = feedback if deployment.feedback_api else None
+    # G4T (WR-G4T-1): the trace export mounts over this, and only when enabled.
+    rt.trace_export = _trace_export(rt, trace_export) if deployment.trace_export_api else None
     # LAB-API (WR-LAB-API-1): each Lab surface mounts over these, and only when enabled.
     rt.lab_control = lab_control if deployment.lab_control else None
     rt.lab_traces = lab_traces if deployment.lab_traces else None
@@ -401,6 +403,17 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                            relay=relay)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
                        catalog=catalog, large_bodies=rt.large_bodies)
+
+
+def _trace_export(rt, injected):
+    """C2's `OwnedExport` over ClickHouse (or a test's). Enabled without ClickHouse is a
+    refusal to start, never a silently missing route."""
+    from ..content import build_export
+    export = injected if injected is not None else build_export(rt.settings.pilot)
+    if export is None:
+        raise RuntimeMisconfigured(rt.mode, ("CLICKHOUSE_URL",),
+                                   detail="TRACE_EXPORT_API needs CLICKHOUSE_URL")
+    return export
 
 
 def admission_readiness(rt, jobs, readiness):

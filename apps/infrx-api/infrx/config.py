@@ -355,6 +355,10 @@ class DeploymentSettings:
     # store's pool. Off by default, so the launched API is unchanged; the database's own
     # `feedback` flag gates every write again (off: 503 dependency_unavailable).
     feedback_api: bool = False
+    # G4T (WR-G4T-1): mount `GET /v1/traces` over C2's `OwnedExport` on the trace projection
+    # (`CLICKHOUSE_URL`, which it then requires). Off by default, so the launched API is
+    # unchanged; it stays off until T3 and C2 are live (wave-5 plan rule 5).
+    trace_export_api: bool = False
     # LAB-API (WR-LAB-API-1): mount the Lab's `/lab/v1/control` (WR-L4-1) and `/lab/v1/traces`
     # (WR-V1M-2), each over the forwarded Supabase session and L2's `LabAccess` on the job
     # store's pool. Off by default: the launched API is unchanged and no Lab route exists.
