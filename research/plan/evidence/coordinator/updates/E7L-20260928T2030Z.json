@@ -2,7 +2,7 @@
  "task": "E7L",
  "slice": "LAB-IMPROVE-LOCAL gate runner + real e7l run, continuation (lane lab-improve, LW6)",
  "activity": "review",
- "head": "70185500",
+ "head": "6de86a80",
  "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve",
  "branch": "codex/w5-lab-improve",
  "owned_paths": [
@@ -12,17 +12,17 @@
  ],
  "commands": [
   {
-   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --keep --out <abs>/research/plan/evidence/e/E7L-raw-7018550/run",
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --keep --out <abs>/research/plan/evidence/e/E7L-raw-6de86a8/run",
    "exit": 1,
-   "summary": "gate FAIL: i01-i03, i05, i06 PASS; i04 2 PASS + 1 FAIL (0-E7L-1, P1 export/P3 submit resurrect tombstoned samples after a re-grant); i07/i08/i09 NOT RUN; 15 passed, 1 failed, 4 NOT RUN; first attempt BLOCKED on a transient compose port bind (run-1-blocked-port)"
+   "summary": "fix round 0-E7L-RV-1: gate FAIL on 0-E7L-1 only; 16 passed, 1 failed, 4 NOT RUN; new case test_i02_an_evaluation_on_another_holdout_never_makes_a_candidate_eligible PASS"
   },
   {
-   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/integration/lab_improve/test_mutants.py",
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rA tests/integration/lab_improve/test_mutants.py",
    "exit": 0,
-   "summary": "41 passed in 423 s: 18/18 layer-1 (new i07_fires_on_the_module) + 19/19 stack mutants killed, 0 survivors, self-tests, well-formed, every case named"
+   "summary": "42 passed in 374 s: 18 layer-1 + 20/20 stack mutants killed (new st_eligible_on_another_holdout), 0 survivors, every case named"
   },
   {
-   "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_improve",
+   "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_improve/test_e7l_runner.py tests/integration/lab_improve/test_mutants.py",
    "exit": 0,
    "summary": "18 passed, 1 skipped"
   },
@@ -34,7 +34,7 @@
   {
    "cmd": "INFRX_D_TASK=e7l INFRX_D2_VALKEY_CONTAINER=infrx-e7l-d2-valkey INFRX_D2_VALKEY_PORT=57391 make api-test",
    "exit": 2,
-   "summary": "43 failed, 6421 passed, 129 skipped, 9 xfailed, 8 errors; all tests/i: 8 errors = foreign i8 lock; 43 = tests/i/test_mutants pristine baselines broken by a base defect (WR-E7L-6); outbox relay and j/submit green"
+   "summary": "43 failed, 6421 passed, 129 skipped, 9 xfailed, 8 errors; all tests/i: 8 errors = foreign i8 lock; 43 = tests/i/test_mutants pristine baselines broken by a base defect (WR-E7L-6); outbox relay and j/submit green (at 70185500; not rerun in the fix round: only tests/integration/lab_improve changed, not collected by api-test)"
   },
   {
    "cmd": "cd apps/infrx-api && INFRX_D_TASK=e7l uv run --frozen pytest -q tests/i/{test_observe,test_pooler,test_privilege_probe,test_rollback_drill,test_mutants}.py",
@@ -66,9 +66,16 @@
   "WR-D2-VK vkstore container/port derived from INFRX_D_TASK"
  ],
  "evidence": [
+  "research/plan/evidence/e/E7L-raw-6de86a8/",
   "research/plan/evidence/e/E7L-7018550.md",
   "research/plan/evidence/e/E7L-raw-7018550/",
   "research/plan/evidence/e/E7L-64696c0.md",
   "research/plan/evidence/e/E7L-raw-64696c0/"
- ]
+ ],
+ "fix_round": {
+  "findings": {
+   "0-E7L-RV-1": "fixed"
+  },
+  "head": "6de86a80"
+ }
 }
