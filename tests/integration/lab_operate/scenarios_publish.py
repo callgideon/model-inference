@@ -278,6 +278,11 @@ def test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins(wo
         rolled = lab.call(ctl.rollback(lab.operator(), stack.CREDIT_ALIAS, to_version=1,
                                        expected_version=published.version,
                                        reason="e3l l06 regression"))
+        # judged before the runtime roll: a gateway refuses to start on a card the listing
+        # does not name, so a wrong rollback must fail here, on its own terms
+        assert (rolled.version, rolled.deployment_revision_id, rolled.rate_card_version) == (
+            published.version + 1, r1[0], r1[2]), rolled
+        assert lab.listing(trip) == (published.version + 1, r1[0], r1[2])
         lab.roll_runtime(trip, stack.SEED_CARD)
         trip.box.start("worker", ACTIVE_RATE_CARD_VERSION=stack.SEED_CARD)
         request_id = queued.json()["request_id"]
@@ -289,9 +294,6 @@ def test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins(wo
                                      "final": final, "fresh": fresh.status_code,
                                      "audit": audit})
         assert admitted[:3] == r2 and admitted[3] not in world.pilotbox.FINISHED, admitted
-        assert (rolled.version, rolled.deployment_revision_id, rolled.rate_card_version) == (
-            published.version + 1, r1[0], r1[2]), rolled
-        assert lab.listing(trip) == (published.version + 1, r1[0], r1[2])
         assert audit == [("lab_rollback", lab.OPERATOR, published.version,
                           published.version + 1)], audit
         assert final == "succeeded" and world.attempts(trip, request_id) == 1
