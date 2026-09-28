@@ -156,7 +156,7 @@ def _same_boundary(old: str, new: str | None) -> bool:
 #: D10 (0021): the two dedicated logins' grants are D10's own surface, asserted exactly by
 #: `checks_reads.check_reads_privileges`; the inventory compares what every OTHER principal
 #: holds, so granting them never reads as a rewrite of an earlier migration.
-D10_ROLES = ("infrx_runtime=", "infrx_monitor=")
+D10_ROLES = ("infrx_runtime=", "infrx_monitor=", "infrx_lab_control=")
 _ACL = re.compile(r"\{[^{}]*\}")
 
 
