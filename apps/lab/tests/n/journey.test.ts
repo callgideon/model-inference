@@ -1,4 +1,4 @@
-// N4 journey on the REAL N1/N2/N3 (DATA-IMPORT, DATA-SPLIT, CONSOLE-FLOWS): the server actions' cores
+// N4 journey on the REAL N1/N2/N3 (DATA-IMPORT, DATA-SPLIT, CONSOLE-FLOWS, revoked grants): the server actions' cores
 // and the Lab's HTTP port against `backend.py` - the proposed datasets route over real D7 and L2 on the
 // task-local PostgreSQL. Skipped unless LAB_N_REAL=1 (it needs INFRX_D_TASK=n3 and Docker):
 //   LAB_N_REAL=1 INFRX_D_TASK=n3 node --test tests/n/journey.test.ts
@@ -10,7 +10,7 @@ import test from "node:test";
 import type { Membership } from "../../lib/auth/access.ts";
 import { deriveVersion, exportVersion, previewImport, startImport } from "../../lib/services/datasets/flows.ts";
 import { httpDatasets, type DatasetsPort, type ImportJob } from "../../lib/services/datasets/port.ts";
-import { importView, leakageWarnings, splitSummary } from "../../lib/services/datasets/views.ts";
+import { importView, leakageWarnings, RESTRICTED_COPY, restrictedCopy, splitSummary } from "../../lib/services/datasets/views.ts";
 
 const REAL = process.env.LAB_N_REAL === "1";
 const lab = resolve(import.meta.dirname, "../..");
@@ -48,7 +48,7 @@ async function settled(port: DatasetsPort, provider: string, id: string): Promis
   throw new Error("the import did not settle");
 }
 
-test("N4-J01 import, interrupted and resumed, then a frozen version, its splits and an export, on real N1/N2", { skip: !REAL && "LAB_N_REAL=1 with a task-local key" }, async () => {
+test("N4-J01 import, interrupted and resumed, then a frozen version, its splits, an export and a revocation, on real N1/N2", { skip: !REAL && "LAB_N_REAL=1 with a task-local key" }, async () => {
   const { url, world, stop } = await backend();
   try {
     const as = (user: string) => httpDatasets({ baseUrl: url, token: user });
@@ -98,8 +98,8 @@ test("N4-J01 import, interrupted and resumed, then a frozen version, its splits 
     assert.deepEqual(listed.ok && listed.value.map((v) => v.datasetRef).sort(), [imported, second, frozen.datasetRef].sort());
     const status = await port.version(world.provider, frozen.datasetRef);
     assert.equal(status.ok, true);
-    const summary = status.ok ? splitSummary(status.value) : [];
-    assert.deepEqual(summary.map((r) => [r.split, r.samples, r.restricted]), [["train", 2, 0], ["validation", 2, 0], ["holdout", 2, 0]]);
+    const summaryOf = (s: typeof status) => (s.ok ? splitSummary(s.value) : []).map((r) => [r.split, r.samples, r.restricted]);
+    assert.deepEqual(summaryOf(status), [["train", 2, 0], ["validation", 2, 0], ["holdout", 2, 0]]);
 
     // export: never the holdout; the part is read through the backend's gate
     const exported = await exportVersion(port, dev, form({ dataset_ref: frozen.datasetRef, ttl_s: "600" }), "e4000000-0000-4000-8000-000000000001");
@@ -119,6 +119,19 @@ test("N4-J01 import, interrupted and resumed, then a frozen version, its splits 
     assert.deepEqual(await as(world.viewer).versions(world.provider).then((r) => !r.ok && r.error), "denied");
     assert.deepEqual(await as(world.consumer).version(world.provider, frozen.datasetRef).then((r) => !r.ok && r.error), "not_found");
     assert.deepEqual(await as(world.other_dev).readPart(world.provider, record.exportId, 0).then((r) => !r.ok && r.error), "not_found");
+
+    // revocation (1-DSL4-1): the grantor revokes through L2's real RPC; the export made before it
+    // stops serving the revoked items at once, and the version browser explains every sample
+    assert.equal((await fetch(`${url}/_test/revoke`, { method: "POST" })).status, 200);
+    const after = await port.readPart(world.provider, record.exportId, 0);
+    assert.deepEqual(after.ok && after.value.trim(), "");
+    const revoked = await port.version(world.provider, frozen.datasetRef);
+    assert.equal(revoked.ok, true);
+    const restricted = revoked.ok ? revoked.value.samples.map((s) => s.restricted) : [];
+    assert.deepEqual([...new Set(restricted)], ["grant_not_current"]);
+    assert.equal(restricted.length, 6);
+    assert.deepEqual(summaryOf(revoked), [["train", 2, 2], ["validation", 2, 2], ["holdout", 2, 2]]);
+    assert.equal(restrictedCopy(restricted[0]!), RESTRICTED_COPY.grant_not_current);
   } finally {
     stop();
   }

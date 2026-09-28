@@ -29,6 +29,8 @@ PORTS = "test_n3_selection_goes_through_l2_t3_and_c2_only"
 FANOUT = "test_n3_the_fan_out_is_bounded"
 REVOKE = "test_n3_revocation_tombstones_every_derived_version_and_export"
 EXPIRY = "test_n3_deletion_and_expiry_deny_at_once_and_purge_after_retention"
+MODEL_SCOPE = "test_n3_a_trace_of_another_model_is_omitted_before_c2"
+NARROW = "test_n3_a_narrowed_grant_version_tombstones_its_trace_samples"
 
 
 def m(name, invariant, old, new, *cases, file=P, dies_by=(), occurrences=1):
@@ -52,6 +54,9 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n3_projection_optional", "a missing projection never substitutes for permission",
       "        if not rows:\n            omitted.append", "        if False:\n            omitted.append",
       PORTS, dies_by=("ValueError",)),
+    m("n3_model_unchecked", "a trace of a model the grant does not name is omitted before C2",
+      "        if {await model_of(r) for r in rows} != {model_id}:", "        if False:",
+      MODEL_SCOPE),
     m("n3_expiry_left_to_c2", "expired content is omitted before C2 is asked",
       "        if not retention.content_live(started, now):", "        if False:", PORTS),
     m("n3_c2_outage_swallowed", "a C2 outage publishes nothing (it is not a refusal)",
@@ -90,7 +95,14 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n3_push_whole_grantor", "a request's push reaches only that request",
       '(f"{request_id}/" if request_id else "")', '""', EXPIRY),
     m("n3_reconcile_grant_unchecked", "reconcile tombstones a grant no longer current",
-      "or not grant.is_current(now)) else None", "or False) else None", REVOKE),
+      "or not grant.is_current(now)) else", "or False) else", REVOKE),
+    m("n3_narrow_model_ignored", "a version dropping the model tombstones its samples",
+      'entry["model_id"] not in grant.model_ids\n                    or ', "", NARROW),
+    m("n3_narrow_categories_ignored", "a version dropping a category tombstones its samples",
+      'or not set(entry["categories"]) <= set(grant.categories)) else None',
+      "or False) else None", NARROW),
+    m("n3_feedback_category_always", "only a sample carrying corrections needs feedback",
+      '+ (["feedback"] if corrections else [])', '+ ["feedback"]', NARROW),
     m("n3_reconcile_deletion_unchecked", "reconcile sees a T3 deletion",
       'reason = "deleted" if not rows else', 'reason = "deleted" if False else', EXPIRY),
     m("n3_purge_on_revocation", "a revocation is logical; only retention purges copies",

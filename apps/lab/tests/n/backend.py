@@ -6,7 +6,8 @@ the D7 world of `tests/d/test_d7_lab_data.py`). Objects are in memory.
 
 `router()` is the proposed production route (WR-N4-1: mount it in the gateway behind a flag that
 defaults off, with the Lab's verified session in place of `user_of`); only `main()` - the task-local
-database, the bearer-token-is-the-user-id stand-in and the `_crash_after_puts` knob - is test-only.
+database, the bearer-token-is-the-user-id stand-in, the `_crash_after_puts` knob and the
+`/_test/revoke` route (the grantor's real `lab_revoke_access_grant`) - is test-only.
 Long imports run as backend jobs: POST returns `running` at once and the importer runs as a task.
 
     INFRX_D_TASK=n3 uv run --frozen --project apps/infrx-api python apps/lab/tests/n/backend.py
@@ -218,6 +219,15 @@ def main() -> None:
         objects=objects, user_of=lambda r: r.headers.get("authorization", "")[7:],
         objects_for=lambda body: Dying(objects, body["_crash_after_puts"])
         if "_crash_after_puts" in body else objects))
+
+    @app.post("/_test/revoke")
+    def revoke():
+        """The grantor (C1) revokes NEMO's grant through L2's real RPC (test-only)."""
+        with pgharness.connect(db) as conn:
+            l2.call(conn, "lab_revoke_access_grant", {
+                "actor_user_id": l2.C1, "grantor_org_id": l2.org(conn, l2.C1),
+                "recipient_provider_org_id": l2.NEMO})
+        return {"revoked": True}
     world = {"provider": l2.NEMO, "other": l2.OTHER, "dev": l2.DEV, "viewer": l2.VIEWER,
              "other_dev": l2.BOTH, "consumer": l2.NOBODY, "grant_ref": d7.W["grant"]}
     config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")

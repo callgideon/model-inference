@@ -6,8 +6,11 @@ provider (`acting_provider`) and the grantor's CURRENT grant allows provider_sha
 request and response content of the model (and of feedback, or no feedback is joined). T3
 (`Retention`): the request is projected, not deleted, and its content inside its bound - a
 request T3 does not project is omitted (`missing_projection`) and C2 is never asked for it,
-so a missing projection can never stand in for permission. C2 (the content port, `Content`):
-a short-lived ref signed for this provider, the request and the grant, read once; a ref C2
+so a missing projection can never stand in for permission. Every projected row must be of
+the granted model (`model_of`, the row's serving version -> the grant's model id; WR-N3-4),
+else the request is omitted (`model_not_granted`) before C2 is asked. C2 (the content port,
+`Content`): a short-lived ref signed for this provider, the request, the grant and the
+model, read once; a ref C2
 refuses is omitted (`content_denied`), a C2 outage publishes nothing. Each sample's content
 object keeps the original request/output and the trace's time span; the grantor's D6F
 feedback (0028's durable rows) is appended as separate `corrections` records, never merged
@@ -27,7 +30,8 @@ expiry is denied the instant it passes, with no job in between). A tombstone
 (`lab/<provider>/lineage/tombstones/<sample id>.json`: reason and time, never content) is
 permanent - a later re-grant does not resurrect the sample. `tombstone` is the push (a T3
 deletion or an L2 revocation hook, wiring); `reconcile` is the pull that finds the rest
-(grant no longer current, request deleted, content expired) and, only for deletion and
+(grant no longer current, a newer version of it dropping the entry's model or one of its
+categories (`grant_narrowed`), request deleted, content expired) and, only for deletion and
 expiry, then deletes the sample copies: logical denial first, physical purge after
 retention. Nothing is claimed about data already delivered: `export_evidence` lists an
 export's items now denied and says they were not recalled, and no trained model is
@@ -62,12 +66,13 @@ class Content(Protocol):
     expiry; `read` fails closed with NotFound / Forbidden / Gone, even for an issued ref."""
 
     async def sign(self, *, provider_org_id: str, grantor_org_id: str, request_id: str,
-                   grant_id: str) -> str: ...
+                   grant_id: str, model_id: str) -> str: ...
 
     async def read(self, ref: str, *, provider_org_id: str) -> dict: ...
 
 
 Feedback = Callable[[str, str], Awaitable[Sequence[Any]]]   # (org, request) -> D6F rows
+ModelOf = Callable[[Any], Awaitable[str | None]]   # T3 row -> the grant's model id (WR-N3-4)
 
 
 @dataclass(frozen=True)
@@ -86,7 +91,8 @@ def _id(key: str) -> str:
     return key.rsplit("/", 1)[1].removesuffix(".json")
 
 
-async def select(*, access, retention, content: Content, feedback: Feedback, store, objects,
+async def select(*, access, retention, content: Content, feedback: Feedback,
+                 model_of: ModelOf, store, objects,
                  user_id: str, provider_org_id: str, grantor_org_id: str, model_id: str,
                  selection_id: str, dataset_id: str, version: int, created_at: str,
                  request_ids: list[str], actor: str) -> Selected:
@@ -111,13 +117,17 @@ async def select(*, access, retention, content: Content, feedback: Feedback, sto
         if not rows:
             omitted.append({"request_id": request, "reason": "missing_projection"})
             continue
+        if {await model_of(r) for r in rows} != {model_id}:
+            omitted.append({"request_id": request, "reason": "model_not_granted"})
+            continue
         started = min(r.started_at for r in rows)
         if not retention.content_live(started, now):
             omitted.append({"request_id": request, "reason": "content_expired"})
             continue
         try:
             ref = await content.sign(provider_org_id=provider_org_id, request_id=request,
-                                     grantor_org_id=grantor_org_id, grant_id=grant.grant_id)
+                                     grantor_org_id=grantor_org_id, grant_id=grant.grant_id,
+                                     model_id=model_id)
             document = await content.read(ref, provider_org_id=provider_org_id)
         except (errors.NotFound, errors.Forbidden, errors.Gone):
             omitted.append({"request_id": request, "reason": "content_denied"})
@@ -140,7 +150,8 @@ async def select(*, access, retention, content: Content, feedback: Feedback, sto
         await write_once(objects, f"{base}/samples/{sid}.json", lab.canonical({
             "sample_id": sid, "selection_id": selection_id, "grantor_org_id": grantor_org_id,
             "request_id": request, "grant_id": grant.grant_id, "model_id": model_id,
-            "content_digest": digest,
+            "categories": ["request_content", "response_content"]
+            + (["feedback"] if corrections else []), "content_digest": digest,
             "content_until": (started + timedelta(days=retention.content_days)).isoformat()}))
         await write_once(objects, f"{base}/traces/{grantor_org_id}/{request}/{sid}", b"{}")
         samples.append({"sample_id": sid, "content_digest": digest, "group_key": request})
@@ -224,7 +235,8 @@ async def tombstone(objects, *, provider_org_id: str, grantor_org_id: str,
 async def reconcile(directory, retention, objects, *, provider_org_id: str,
                     after: str | None = None, limit: int = PAGE) -> dict:
     """The pull over `limit` trace samples after the cursor: tombstone a sample whose grant
-    is no longer current (L2, on the store clock), whose request T3 no longer projects, or
+    is no longer current (L2, on the store clock) or whose grant's current version no longer
+    names its model or one of its categories, whose request T3 no longer projects, or
     whose content passed its bound; then, for deletion and expiry only, delete the copy.
     `next` is the cursor of the following page (None at the end)."""
     keys = [k for k in await objects.keys(f"{_base(provider_org_id)}/samples/")
@@ -238,7 +250,9 @@ async def reconcile(directory, retention, objects, *, provider_org_id: str,
         reason = "deleted" if not rows else "content_expired" if clock >= \
             datetime.fromisoformat(entry["content_until"]) else "grant_not_current" if (
                 grant is None or grant.grant_id != entry["grant_id"]
-                or not grant.is_current(now)) else None
+                or not grant.is_current(now)) else "grant_narrowed" if (
+                    entry["model_id"] not in grant.model_ids
+                    or not set(entry["categories"]) <= set(grant.categories)) else None
         if reason and await _stone(objects, provider_org_id, entry, reason, clock):
             report["tombstoned"].append({"sample_id": entry["sample_id"], "reason": reason})
         copy = sample_key(provider_org_id, entry["content_digest"])

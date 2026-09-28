@@ -47,6 +47,7 @@ export const RESTRICTED_COPY: Record<string, string> = {
   deleted: "The data owner deleted the request behind this sample. It is excluded everywhere and its copy is purged.",
   content_expired: "The content passed its retention bound. It is excluded everywhere and its copy is purged.",
   grant_revoked: "The data owner revoked access. The sample is excluded from reads, derivations and exports for good.",
+  grant_narrowed: "The data owner's current grant no longer names this sample's model or data category. It is excluded from reads, derivations and exports for good.",
 };
 
 /** Why one sample is restricted; an unknown reason is still a restriction, never readable. */

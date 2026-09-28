@@ -18,8 +18,8 @@ from infrx.contracts import errors
 from infrx.datasets import imports, lineage, versions
 
 from ..imports.world import chunks, fixture, grant_ref, run
-from .world import (CONSUMER, DEV, GRANTOR, GRANTOR_2, MODEL, NEMO, OTHER, VIEWER, World,
-                    rid)
+from .world import (CATEGORIES, CONSUMER, DEV, GRANTOR, GRANTOR_2, MODEL, NEMO, OTHER, VIEWER,
+                    World, rid)
 
 SELECTION, DATASET = "5e000000-0000-4000-8000-000000000001", "da000000-0000-4000-8000-0000000000e1"
 POLICY = versions.SplitPolicy(seed=3, train_bp=5000, validation_bp=5000)
@@ -29,7 +29,7 @@ def select(w: World, requests, *, user=DEV, grantor=GRANTOR, selection=SELECTION
            dataset=DATASET, version=1):
     return run(lineage.select(
         access=w.access, retention=w.retention, content=w.content, feedback=w.feedback,
-        store=w.lab, objects=w.objects, user_id=user, provider_org_id=NEMO,
+        model_of=w.model_of, store=w.lab, objects=w.objects, user_id=user, provider_org_id=NEMO,
         grantor_org_id=grantor, model_id=MODEL, selection_id=selection, dataset_id=dataset,
         version=version, created_at="2026-09-27T12:30:00Z", request_ids=list(requests),
         actor="dev@nemo"))
@@ -102,6 +102,7 @@ def test_n3_permitted_traces_become_a_dataset_with_lineage_per_sample() -> None:
     assert entry == {"sample_id": sample.sample_id, "selection_id": SELECTION,
                      "grantor_org_id": GRANTOR, "request_id": a, "grant_id": grant.grant_id,
                      "model_id": MODEL, "content_digest": sample.content_digest,
+                     "categories": ["request_content", "response_content", "feedback"],
                      "content_until": (row.started_at + timedelta(days=90)).isoformat()}
     assert sample.group_key == a
     assert permitted(w, got.dataset_ref) == {s.sample_id for s in manifest.samples}
@@ -153,6 +154,27 @@ def test_n3_selection_goes_through_l2_t3_and_c2_only() -> None:
     assert len(w.lab.published) == 1 and set(w.lab.sources) == {SELECTION}
     with pytest.raises(errors.NotFound):
         run(lineage.status(w.lab, w.objects, got.dataset_ref, provider_org_id=OTHER, now=w.now))
+
+
+def test_n3_a_trace_of_another_model_is_omitted_before_c2() -> None:
+    """Oracle (0-DS4-B1, DATA-RIGHTS): the grant names MODEL only; a request of the same
+    grantor served by another model - its id known from the provider's own request metadata -
+    is omitted as `model_not_granted` and C2 is never asked for it; a ref C2 signed for a
+    model the grant does not name is refused even when issued."""
+    w = World()
+    mine, theirs = w.trace(1), w.trace(9, model="kimi-k3")
+    got = ok(w, [mine, theirs])
+    assert (got.samples, got.omitted) == (1, [{"request_id": theirs,
+                                               "reason": "model_not_granted"}])
+    assert w.content.calls == [mine]
+    manifest = run(w.lab.resolve(got.dataset_ref, provider_org_id=NEMO))
+    assert [body(w, s)["trace"]["request_id"] for s in manifest.samples] == [mine]
+    assert refused(w, [theirs], selection=rid(0x53), dataset=rid(0xd4)) == "InvalidRequest"
+    grant = w.directory.grants[(GRANTOR, NEMO)]
+    ref = run(w.content.sign(provider_org_id=NEMO, grantor_org_id=GRANTOR, request_id=theirs,
+                             grant_id=grant.grant_id, model_id="kimi-k3"))
+    with pytest.raises(errors.Forbidden):
+        run(w.content.read(ref, provider_org_id=NEMO))
 
 
 def test_n3_the_fan_out_is_bounded() -> None:
@@ -236,6 +258,35 @@ def test_n3_revocation_tombstones_every_derived_version_and_export() -> None:
     stones = [run(w.objects.get(k)) for k in run(w.objects.keys(f"lab/{NEMO}/lineage/tomb"))]
     retained = b"".join(stones) + json.dumps(evidence).encode()
     assert b"question" not in retained and b"answer" not in retained
+
+
+def test_n3_a_narrowed_grant_version_tombstones_its_trace_samples() -> None:
+    """Oracle (0-DS4-M1, independent categories): a new current version of the same grant
+    that drops the response category, or the model, tombstones the samples it no longer
+    covers as `grant_narrowed` at reconcile and every gate drops them; dropping feedback
+    reaches only samples that carry corrections; a new version that narrows nothing a
+    sample uses leaves it readable."""
+    w = World()
+    rated, plain = w.trace(1, feedback=(("rating", 2),)), w.trace(2)
+    other = w.trace(3, GRANTOR_2)
+    got = ok(w, [rated, plain])
+    got_2 = ok(w, [other], grantor=GRANTOR_2, selection=rid(0x54), dataset=rid(0xd7))
+    ids = {body(w, s)["trace"]["request_id"]: s.sample_id for ref in
+           (got.dataset_ref, got_2.dataset_ref)
+           for s in run(w.lab.resolve(ref, provider_org_id=NEMO)).samples}
+
+    def reconcile():
+        return {t["sample_id"]: t["reason"] for t in run(lineage.reconcile(
+            w.directory, w.retention, w.objects, provider_org_id=NEMO))["tombstoned"]}
+    w.narrow(GRANTOR_2, retention_days=7)               # narrows nothing a sample uses
+    w.narrow(GRANTOR, categories=CATEGORIES)            # drops feedback only
+    assert reconcile() == {ids[rated]: "grant_narrowed"}
+    assert permitted(w, got.dataset_ref, "training") == {ids[plain]}
+    w.narrow(GRANTOR, categories=(CATEGORIES[0],))      # drops the response category
+    w.narrow(GRANTOR_2, model_ids=("some-other-model",))
+    assert reconcile() == {ids[plain]: "grant_narrowed", ids[other]: "grant_narrowed"}
+    assert permitted(w, got.dataset_ref, "training") == set()
+    assert permitted(w, got_2.dataset_ref, "training") == set()
 
 
 def test_n3_deletion_and_expiry_deny_at_once_and_purge_after_retention() -> None:

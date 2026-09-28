@@ -95,7 +95,8 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
     key = ship.content_key(w.grantor, "77000000-0000-4000-8000-000000000001")
     traces.rows.append(SimpleNamespace(
         org_id=w.grantor, request_id=w.request, started_at=now - timedelta(hours=1),
-        completed_at=now - timedelta(minutes=59), content_stored=True, content_key=key))
+        completed_at=now - timedelta(minutes=59), content_stored=True, content_key=key,
+        model_revision=f"{l2.MODEL}@rev1"))
     trace_objects.seed(key, b'{"request": {"q": "2+2?"}, "output": {"a": "5"}}',
                        "application/json")
     retention = Retention(stones, traces, None, trace_objects, clock=lambda: now)
@@ -104,10 +105,13 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
         return await feedback.list_owned(SimpleNamespace(org_id=org, is_operator=False),
                                          request)
 
+    async def model_of(row):
+        return row.model_revision.split("@")[0]
+
     def select(user, selection):
         return run(lineage.select(
             access=access, retention=retention, content=FakeContent(directory, retention),
-            feedback=rows, store=store, objects=w.objects, user_id=user,
+            feedback=rows, model_of=model_of, store=store, objects=w.objects, user_id=user,
             provider_org_id=NEMO, grantor_org_id=w.grantor, model_id=l2.MODEL,
             selection_id=selection, dataset_id="da000000-0000-4000-8000-0000000000e3",
             version=1, created_at="2026-09-27T12:30:00Z", request_ids=[w.request],

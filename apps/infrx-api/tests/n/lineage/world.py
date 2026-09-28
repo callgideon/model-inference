@@ -72,9 +72,10 @@ class Stones:
 
 class FakeContent:
     """C2 as its brief shapes it (WR-N3-1 files the signature): `sign` binds a short-lived
-    ref to the recipient provider, the grantor's request and the grant; `read` fails closed -
-    a forged, altered or foreign ref is `NotFound`, an expired ref `Gone`, a grant that is no
-    longer current (or another grant) `Forbidden`, content T3 no longer serves `Gone` - even
+    ref to the recipient provider, the grantor's request, the grant and the model; `read`
+    fails closed - a forged, altered or foreign ref is `NotFound`, an expired ref `Gone`, a
+    grant that is no longer current (or another grant, or one not naming the model)
+    `Forbidden`, content T3 no longer serves `Gone` - even
     for a ref issued before. `calls` records every request it was asked about."""
 
     def __init__(self, directory, retention: Retention, ttl_s: int = 60) -> None:
@@ -86,10 +87,10 @@ class FakeContent:
         return hmac.new(SIGNING_KEY, payload, hashlib.sha256).hexdigest()
 
     async def sign(self, *, provider_org_id: str, grantor_org_id: str, request_id: str,
-                   grant_id: str) -> str:
+                   grant_id: str, model_id: str) -> str:
         self.calls.append(request_id)
         expires = (await self.directory.db_now()) + self.ttl
-        payload = json.dumps([provider_org_id, grantor_org_id, request_id, grant_id,
+        payload = json.dumps([provider_org_id, grantor_org_id, request_id, grant_id, model_id,
                               expires.isoformat()]).encode()
         return base64.urlsafe_b64encode(payload).decode() + "." + self._mac(payload)
 
@@ -99,7 +100,7 @@ class FakeContent:
         try:
             body, mac = ref.split(".")
             payload = base64.urlsafe_b64decode(body)
-            recipient, grantor, request, grant_id, expires = json.loads(payload)
+            recipient, grantor, request, grant_id, model, expires = json.loads(payload)
         except ValueError:
             raise errors.NotFound("no such content reference") from None
         if not hmac.compare_digest(mac, self._mac(payload)) or recipient != provider_org_id:
@@ -108,7 +109,8 @@ class FakeContent:
         if now >= datetime.fromisoformat(expires):
             raise errors.Gone("the content reference expired")
         grant = await self.directory.current_grant(grantor, provider_org_id)
-        if grant is None or grant.grant_id != grant_id or not grant.is_current(now):
+        if grant is None or grant.grant_id != grant_id or not grant.is_current(now) \
+                or model not in grant.model_ids:
             raise errors.Forbidden("the grant is no longer current")
         data = await self.retention.read_content(grantor, request)
         if data is None:
@@ -155,6 +157,14 @@ class World:
             self.lab.grants[grant_ref(grant.grant_id, NEMO, version)] = {
                 "provider": NEMO, "purposes": {"provider_sharing", "training"}, "current": True}
 
+    def narrow(self, grantor: str, **update) -> None:
+        """A new current version of the pair's grant with `update` (e.g. fewer categories)."""
+        prev = self.directory.grants[(grantor, NEMO)]
+        grant = prev.model_copy(update={"version": prev.version + 1, **update})
+        self.directory.grants[(grantor, NEMO)] = grant
+        self.lab.grants[grant_ref(grant.grant_id, NEMO, grant.version)] = {
+            "provider": NEMO, "purposes": {"provider_sharing", "training"}, "current": True}
+
     def revoke(self, grantor: str) -> None:
         grant = self.directory.grants[(grantor, NEMO)]
         self.directory.revoke(grantor, NEMO, self.now)
@@ -163,7 +173,7 @@ class World:
                 row["current"] = False
 
     def trace(self, n: int, grantor: str = GRANTOR, *, started: datetime | None = None,
-              stored: bool = True, feedback: tuple = ()) -> str:
+              stored: bool = True, feedback: tuple = (), model: str = MODEL) -> str:
         """Request `n` of `grantor`: one projection row, its content object, and D6F rows."""
         request = rid(n)
         started = started or self.now - timedelta(hours=1)
@@ -171,6 +181,7 @@ class World:
         self.traces.rows.append(SimpleNamespace(
             org_id=grantor, request_id=request, started_at=started,
             completed_at=started + timedelta(seconds=3), content_stored=stored,
+            model_revision=f"{model}@rev1",
             content_key=key if stored else None))
         if stored:
             self.trace_objects.seed(key, json.dumps({
@@ -183,6 +194,10 @@ class World:
             for i, (name, value) in enumerate(feedback)]
         return request
 
+    async def model_of(self, row) -> str:
+        """The grant's model id of a T3 row (WR-N3-4: its serving version's model)."""
+        return row.model_revision.split("@")[0]
+
     async def feedback(self, org_id: str, request_id: str):
         """D6F's `request_feedback` for the grantor's own request (0028), oldest first."""
         return self.feedback_rows.get((org_id, request_id), [])
@@ -192,5 +207,5 @@ class World:
         await self.retention.delete(grantor, request_id, "owner request")
 
 
-__all__ = ["CONSUMER", "DEV", "GRANTOR", "GRANTOR_2", "MODEL", "NEMO", "OTHER", "REQUEST",
+__all__ = ["CATEGORIES", "CONSUMER", "DEV", "GRANTOR", "GRANTOR_2", "MODEL", "NEMO", "OTHER", "REQUEST",
            "T0", "VIEWER", "FakeContent", "Tombstone", "World", "rid"]

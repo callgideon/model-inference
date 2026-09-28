@@ -35,7 +35,7 @@ test("N4-V03 the split summary counts samples and restrictions per split", () =>
 });
 
 test("N4-V04 every restriction is explained; an unknown reason is still a restriction", () => {
-  for (const reason of ["grant_not_current", "deleted", "content_expired", "grant_revoked"]) assert.equal(restrictedCopy(reason), RESTRICTED_COPY[reason]);
+  for (const reason of ["grant_not_current", "deleted", "content_expired", "grant_revoked", "grant_narrowed"]) assert.equal(restrictedCopy(reason), RESTRICTED_COPY[reason]);
   assert.match(restrictedCopy("quarantined"), /Restricted \(quarantined\)\. The sample is excluded/);
   assert.match(RESTRICTED_COPY.deleted, /purged/);
 });
