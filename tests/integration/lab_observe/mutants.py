@@ -238,7 +238,7 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "    for request_id in run.sample_ids:", "    for request_id in run.sample_ids[:1]:",
        O04_RUN),
     _m("st_no_recheck_before_egress", "the permission is checked again just before egress",
-       SUBMIT, "        await _permitted(job, user_id, wiring)\n    except errors.DomainError:",
+       SUBMIT, "        await recheck()\n    except errors.DomainError:",
        "        pass\n    except errors.DomainError:", O05),
     _m("st_judge_reads_the_raw_projection", "the judge reads content through T3's Retention "
        "(E5L-F1)", SUBMIT,

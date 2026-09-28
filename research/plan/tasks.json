@@ -984,14 +984,15 @@
       ],
       "track": "J",
       "handoff": "handoffs/J-judge.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "modify",
       "product": "lab",
       "milestone": "LAB-M1",
       "amendment": "Use provider-purpose grants and explicit Lab USD budgets; never consume consumer credits implicitly.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-28: implemented via judge 007048f2 + the lab-sql-integration merge 5b79ef5c (submit/reconcile/collect on PgJudgeLedger = 0036 with lab_submission on, 12 PG cases; content read through T3 Retention = E5L-F1 fixed). OPEN: the judge worker entry point (WR-J2-3/WR-OBS-1, composition batch 2); E5L o06 rerun once the foreign e5l volumes are gone; live egress waits on P-10."
     },
     {
       "id": "J3",
@@ -2763,7 +2764,7 @@
       "track": "B",
       "product": "lab",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2793,7 +2794,8 @@
       ],
       "acceptance": "Both baseline and candidate run on identical frozen cases. Every scheduled case ends with a result, explicit failure, cancellation or unresolved state; costs cover attempts and missing outputs remain in the denominator. A retry is permitted only under the declared idempotency/side-effect contract.",
       "failure_oracle": "Crash after submission/before acknowledgement, expire worker lease, revoke data, exhaust budget and cancel mid-batch; no ambiguous resubmission, unbounded spending, silent dropped case or stale result overwrite.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-28: implemented via eval-runner 8f01c7df (R173) + eval-ops ddb8548a + the lab-sql-integration merge 5b79ef5c (freeze registers the evaluator, the 402 give-back proven on the real 0034 schema, all-revoked run ends failed, H1 media fields). OPEN: the eval worker entry point is composed behind LAB_EVAL_WORKER (off); the L3 dev target (WR-COMP-2) and E6L j09/j11 binds."
     },
     {
       "id": "B2",
@@ -2801,7 +2803,7 @@
       "track": "B",
       "product": "lab",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2825,7 +2827,8 @@
       ],
       "acceptance": "A failing safety/SOP slice cannot be hidden by aggregate improvement; small samples do not become a confident win. Show observed facts separately from estimates and teacher judgments. Thresholds are workload inputs, not invented platform defaults.",
       "failure_oracle": "Inject missing failures, duplicate cases, unequal case sets, skewed source clusters and a severe slice regression; report denominator/coverage and refuse unsupported improvement claims.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-28: implemented via eval-runner 8f01c7df (R174) + the lab-sql-integration merge 5b79ef5c (reports.case_records assembles B2 records from D7 rows; variant comparisons stored beside the report)."
     },
     {
       "id": "B3",
@@ -3155,7 +3158,7 @@
       "track": "R",
       "product": "lab",
       "milestone": "LAB-M4",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3181,7 +3184,8 @@
       ],
       "acceptance": "Repeated peeking does not become an unqualified statistical win. Failure to collect quality telemetry halts expansion; operational emergency rollback remains available independent of model judges.",
       "failure_oracle": "Kill controller, delay metrics, skew cohorts, breach a slice or fail candidate health; one audited decision, bounded exposure and correct future routing after recovery.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-28: implemented via rollout-control 9f77ffc3 + the lab-sql-integration merge 5b79ef5c (Controller on PgReleaseStore = 0039: concurrent-controller, restart and frozen-plan drills on PG; Serving port from L3). OPEN: the rollout controller unit composition (WR-I7-1, composition batch 2)."
     },
     {
       "id": "R3",
@@ -3189,7 +3193,7 @@
       "track": "R",
       "product": "lab",
       "milestone": "LAB-M4",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3217,7 +3221,8 @@
       ],
       "acceptance": "Offline fixture/reporting integration works locally; actual optimization or non-NVIDIA support is claimed only for a measured supported adapter. Re-registering a checkpoint with a different engine/hardware/preprocessor creates a distinct serving identity.",
       "failure_oracle": "Variant lies about capability, changes tokenizer or uses different corpus/load regime; reject equivalence claims. Better throughput cannot override a failed required quality slice.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-28: implemented via rollout-control 9f77ffc3 + the lab-sql-integration merge 5b79ef5c (optimization.store publishes the variant and its comparison beside the B2 report, 0040). OPEN: GPU evidence only through the experiment branches (WR-R3-3, none yet)."
     },
     {
       "id": "R4",
