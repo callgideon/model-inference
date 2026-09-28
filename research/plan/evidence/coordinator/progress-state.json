@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 213,
- "updated": "2026-09-28T11:15:54Z",
+ "revision": 214,
+ "updated": "2026-09-28T11:33:37Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5553,26 +5553,29 @@
    "branch": "codex/w5-lab-workers",
    "worktree": ".claude/worktrees/codex-w5-lab-workers",
    "base": "9a48300c",
-   "head": null,
+   "head": "31b405bd",
    "isolation": {
     "ports": "i6 57525; i7 57526",
     "prefix": "infrx-i6-",
     "db": "i6"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T08:39:49Z",
+   "updated": "2026-09-28T11:33:37Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real halves rerun at merge)",
+   "next_action": "ACCEPT_WITH_FIXES at 31b405bd (I6/I7 units OFF behind the I2L marker + 0600 env file, --pull never, gid 10003, python3 -I preflight; security lens major LW-1 fixed+rechecked; 77 mutants; staging residuals recorded) → merge batch #12 (wf_b886cdd0-6a0) with WR-I6-1 (own line), WR-I6-2, WR-I6-4 + runbook rows, rulings R184/R185; WR-I6-3 + WR-I7-1 entry points → composition batch 2; I5 follow-up (marker/--pull never/gid) → eval-ops minor",
    "estimate": {
-    "optimistic_h": 0,
-    "likely_h": 0,
-    "pessimistic_h": 0,
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
     "confidence": "medium",
-    "basis": "plan 2/3/6 + 2/3/6",
-    "at": "2026-09-28T06:59:31Z"
+    "basis": "handback: I6 1/2/4 + I7 1/2/4 (staging excluded)",
+    "at": "2026-09-28T11:33:37Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/i/I6-af0ceaa.md",
+    "research/plan/evidence/i/I7-af0ceaa.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infra/lab/workers/{annotation,training,rollout}/",
@@ -6017,6 +6020,40 @@
     "apps/lab/components/traces/list/",
     "apps/lab/tests/v/list/",
     "apps/app/app/(console)/traces + apps/app/tests/v (moved)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-12",
+   "task": null,
+   "slice": "(wave5 merge lane #12, parallel to #6 on its own lines) lab-workers 31b405bd (WR-I6-1/2/4, R184/R185); workflow wf_b886cdd0-6a0; base 19e80bf1",
+   "agent": "opus",
+   "branch": "codex/w5-merge-12",
+   "worktree": ".claude/worktrees/codex-w5-merge-12",
+   "base": "19e80bf1",
+   "head": null,
+   "isolation": {
+    "ports": null,
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T11:33:37Z",
+   "updated": "2026-09-28T11:33:37Z",
+   "blocker": null,
+   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "one merge, no docker",
+    "at": "2026-09-28T11:33:37Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
    ],
    "wiring_requests": []
   }
