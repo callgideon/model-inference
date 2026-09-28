@@ -1,0 +1,608 @@
+FFFFFFFFFFFFFFFFFFF                                                      [100%]
+=================================== FAILURES ===================================
+_______ test_p1_import_keeps_provenance_and_links_the_original_evidence ________
+
+    def test_p1_import_keeps_provenance_and_links_the_original_evidence() -> None:
+        """Oracle (PIPELINE-LINEAGE): a model row is `synthetic`, a human row `imported`; neither
+        is ground truth; the record links the sample's own source as evidence and carries the
+        annotator, model, prompt, confidence, spans and declared method; the sample's content
+        object is untouched; a re-import is the same refs and no new log events."""
+        store, log, objects, _, ref = world()
+        m = manifest(store, ref)
+        before = run(objects.get(imports.sample_key(NEMO, m.samples[0].content_digest)))
+        items = [{"sample_id": m.samples[0].sample_id, "method": "model", "method_version": "v3",
+                  "label": {"answer": "yes"}, "annotator": "labeler", "model": "m-7b",
+                  "prompt": "Is it?", "confidence": 0.75, "spans": [[0, 1500], [2000, 2600]]},
+                 {"sample_id": m.samples[1].sample_id, "method": "human", "method_version": "tool-2",
+                  "label": "no", "annotator": "ann-17"}]
+>       got = load(store, log, ref, items)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e34d8d910>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e345dd400>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '17c8af3b-6806-4c14-85c2-33a9f260a56f', 'method': 'model', 'method_version': 'v3', 'label': {'answer': ...sample_id': '5641f81b-e439-4bdf-84f5-8c2e7c1bd0e8', 'method': 'human', 'method_version': 'tool-2', 'label': 'no', ...}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+_____________ test_p1_rejected_rows_are_reported_with_their_reason _____________
+
+    def test_p1_rejected_rows_are_reported_with_their_reason() -> None:
+        """Oracle: a row naming no sample of the dataset is missing evidence, a ground-truth
+        claim is forged, and an unreadable mapping (unknown method, no version, no label, an
+        extra key, confidence outside 0..1, an empty, reversed or non-list span, a non-finite
+        number) is
+        `bad_mapping` - each reported by row number, none published."""
+        store, log, _, _, ref = world()
+        s = manifest(store, ref).samples[0].sample_id
+        ok = label_rows([s])[0]
+        bad = [{**ok, "sample_id": uid(9, 0x99)}, {**ok, "ground_truth": True},
+               {**ok, "method": "oracle"}, {k: v for k, v in ok.items() if k != "method_version"},
+               {k: v for k, v in ok.items() if k != "label"}, {**ok, "extra": 1},
+               {**ok, "confidence": 1.5}, {**ok, "confidence": True}, {**ok, "spans": [[5, 5]]},
+               {**ok, "spans": [[9, 3]]}, {**ok, "spans": 5}, {**ok, "label": float("nan")}, ok]
+>       got = load(store, log, ref, bad)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33bbca10>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbce30>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '00000099-0000-4000-8000-000000000009', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...b-6806-4c14-85c2-33a9f260a56f', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a0'}, ...}, ...]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+___________________ test_p1_each_step_reads_its_own_gate_now ___________________
+
+    def test_p1_each_step_reads_its_own_gate_now() -> None:
+        """Oracle (DATA-RIGHTS): labels import through the access gate (provider_sharing) and
+        export through the training gate: a sharing-only source imports and reviews but exports
+        nothing (`grant_not_current`); after a grant is revoked, its samples' labels are
+        `grant_not_current` and nothing is published."""
+        store, log, objects, access, ref = world(grant=GRANT_3)
+>       labels = load(store, log, ref, label_rows(split_ids(store, ref)["train"])).accepted
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33bbdb50>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbdfd0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:fd820b71849216743d57a4286f11bfd9ccfae38c8ecd1748344488501cc80ed1'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a1'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+______________ test_p1_a_forged_or_unassigned_reviewer_is_denied _______________
+
+    def test_p1_a_forged_or_unassigned_reviewer_is_denied() -> None:
+        """Oracle (PIPELINE-LINEAGE): only an administrator assigns, only a current
+        developer-or-above is assigned or reviews, a review needs its own assignment under the
+        rubric version it cites; every refusal leaves the log unchanged."""
+        store, log, _, access, ref = world()
+>       (label,) = load(store, log, ref, label_rows([manifest(store, ref).samples[0].sample_id])
+                        ).accepted
+
+tests/p/annotations/test_annotations.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33bbe750>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbedb0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '17c8af3b-6806-4c14-85c2-33a9f260a56f', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a0'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+_____________________ test_p1_a_review_moves_a_label_once ______________________
+
+    def test_p1_a_review_moves_a_label_once() -> None:
+        """Oracle: accept moves submitted -> accepted by F3's machine; the same review again is
+        a replay (no event), another decision on it a conflict; an accepted synthetic label stays
+        synthetic and not ground truth; a label is reviewed only under its own dataset."""
+        store, log, objects, access, ref = world()
+>       (label,) = load(store, log, ref, label_rows([manifest(store, ref).samples[0].sample_id])
+                        ).accepted
+
+tests/p/annotations/test_annotations.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33bbf710>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbfb30>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '17c8af3b-6806-4c14-85c2-33a9f260a56f', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a0'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+____________ test_p1_a_human_correction_round_trips_with_provenance ____________
+
+    def test_p1_a_human_correction_round_trips_with_provenance() -> None:
+        """Oracle (PIPELINE-LINEAGE): a correction rejects the pipeline label, which still
+        resolves unchanged, and writes the reviewer's `human` ground-truth label on the same
+        evidence citing what it corrects; replaying it is the same label; the training export
+        carries the correction with its lineage."""
+        store, log, objects, access, ref = world()
+        train = split_ids(store, ref)["train"][0]
+>       (label,) = load(store, log, ref, label_rows([train])).accepted
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:204: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c68170>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33c68680>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a0'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+___________________ test_p1_only_an_adjudication_supersedes ____________________
+
+    def test_p1_only_an_adjudication_supersedes() -> None:
+        """Oracle (0-P1-SUPERSEDE-BYPASS): a review accepts or rejects and nothing else - another
+        assigned reviewer cannot retire a human ground-truth correction by reviewing it
+        `superseded` (or back to `submitted`); the log is unchanged and the correction still
+        exports."""
+        store, log, objects, access, ref = world()
+        train = split_ids(store, ref)["train"][0]
+>       (label,) = load(store, log, ref, label_rows([train])).accepted
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:233: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33d93e60>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbf8f0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a0'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+____________ test_p1_a_disagreement_across_versions_is_adjudicated _____________
+
+    def test_p1_a_disagreement_across_versions_is_adjudicated() -> None:
+        """Oracle (0-P1-CROSS-VERSION-DISAGREEMENT-STUCK): a label accepted on the parent and a
+        differing one accepted on a child that keeps the sample in train are one disagreement of
+        the child - the export omits it and `disagreements` and `adjudicate` see it; the
+        adjudication supersedes the parent's label under the parent's log and the child's under
+        the child's, and the child then exports the adjudicated label alone; the adjudicator
+        reviewed neither label, on either version; a parent-only sample is not the child's."""
+        store, log, objects, access, parent = world()
+        t = next(s for s in manifest(store, parent).samples
+                 if s.sample_id == split_ids(store, parent)["train"][0])
+        child = run(store.publish({
+            "schema": "lab.dataset_manifest.1", "provider_org_id": NEMO,
+            "dataset_id": uid(9, 0xda), "version": 1, "created_at": "2026-09-27T15:00:00Z",
+            "derivation": "derive", "parent_refs": [parent], "samples": [t.model_dump()],
+            "splits": {"train": [t.sample_id], "validation": [], "holdout": []}},
+            provider_org_id=NEMO, actor="dev@nemo"))
+>       (old,) = load(store, log, parent, label_rows([t.sample_id])).accepted
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:262: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33bbdf70>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbf5f0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a0'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+_______ test_p1_a_disagreement_is_adjudicated_by_an_independent_reviewer _______
+
+    def test_p1_a_disagreement_is_adjudicated_by_an_independent_reviewer() -> None:
+        """Oracle: two accepted labels that differ are a disagreement the export refuses; the
+        reviewer who accepted them cannot adjudicate; an independent assigned reviewer writes one
+        `human` label, the disputed ones are superseded and kept; a replay is the same, another
+        value a conflict; a sample without a disagreement cannot be adjudicated."""
+        store, log, objects, access, ref = world()
+        train = split_ids(store, ref)["train"]
+>       a, b = load(store, log, ref, [label_rows([train[0]])[0],
+                                      {**label_rows([train[0]])[0], "method": "human",
+                                       "label": {"answer": "other"}}]).accepted
+
+tests/p/annotations/test_annotations.py:292: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33bbdb50>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbce00>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'human', 'method_version': 'labeler-3', 'label': {'answer': 'other'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+_______________ test_p1_an_adjudication_rejects_submitted_labels _______________
+
+    def test_p1_an_adjudication_rejects_submitted_labels() -> None:
+        """Oracle: a disputed label nobody reviewed yet is rejected (not superseded) by the
+        adjudication, and the corrector of a label may not adjudicate against it."""
+        store, log, _, access, ref = world()
+        s = split_ids(store, ref)["train"][0]
+>       a, b = load(store, log, ref, [label_rows([s])[0], {**label_rows([s])[0], "label": 2}]
+                    ).accepted
+
+tests/p/annotations/test_annotations.py:329: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33bbddc0>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbd6d0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...}, {'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': 2}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+___________ test_p1_select_keeps_splits_and_only_authorized_samples ____________
+
+    def test_p1_select_keeps_splits_and_only_authorized_samples() -> None:
+        """Oracle (DATA-SPLIT, DATA-RIGHTS): a selection is a new derived version of the chosen
+        samples the access gate allows now, each in its original split; an unknown id adds
+        nothing and a revoked source's samples are left out."""
+        store, log, objects, _, a = world()
+        b = imported(store, objects, rows(4, "b"), 2, grant=GRANT_2, split=True)
+        both = derive(store, objects, add=[a, b]).dataset_ref
+        store.revoke(grant_ref(GRANT_2))
+        chosen = [s.sample_id for s in manifest(store, both).samples] + [uid(9, 0x99)]
+>       new = run(p1.select(store, objects=objects, now=NOW, provider_org_id=NEMO, actor="dev@nemo",
+                            dataset_ref=both,
+                            sample_ids=chosen, dataset_id=uid(7, 0xda), version=1,
+                            created_at="2026-09-27T14:00:00Z"))
+E       TypeError: select() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:349: TypeError
+__________ test_p1_a_training_export_is_train_only_and_byte_identical __________
+
+    def test_p1_a_training_export_is_train_only_and_byte_identical() -> None:
+        """Oracle (DATA-SPLIT, PIPELINE-LINEAGE): accepted labels on train samples are examples;
+        validation and holdout labels are omitted by split, unlabelled samples are not examples;
+        the lines are the adapter's schema; a rerun is the same record and bytes, and bytes an
+        earlier attempt left under the id are never replaced; after the
+        grant stops allowing training, a new export omits them and the same export id with other
+        bytes is a conflict; unknown adapters and non-UUID ids are refused."""
+        store, log, objects, access, ref = world()
+        ids = split_ids(store, ref)
+>       labels = load(store, log, ref, label_rows(ids["train"] + ids["validation"] + ids["holdout"])
+                      ).accepted
+
+tests/p/annotations/test_annotations.py:370: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c699a0>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33c69bb0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: 'd7dfc405-2aca-4114-8cb2-15f87e5e5781', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a5'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+_________ test_p1_a_label_export_expires_and_rereads_the_training_gate _________
+
+    def test_p1_a_label_export_expires_and_rereads_the_training_gate() -> None:
+        """Oracle (1-PIPE-R2, DATA-RIGHTS): a label export lives 1 s..7 days (N2's bound) and
+        records its expiry; `read_export` serves its lines while the training grant stands, drops
+        a sample's line once the grant is revoked, and is `Gone` at expiry."""
+        store, log, objects, access, ref = world()
+>       labels = load(store, log, ref, label_rows(split_ids(store, ref)["train"])).accepted
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:404: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c6a600>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33c6ab10>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a1'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+_________________ test_p1_preference_pairs_map_or_are_reported _________________
+
+    def test_p1_preference_pairs_map_or_are_reported() -> None:
+        """Oracle: the preference adapter emits {prompt, chosen, rejected} from a label holding
+        exactly a chosen and a rejected answer; any other label is `bad_mapping`, not dropped."""
+        store, log, objects, access, ref = world()
+        t = split_ids(store, ref)["train"]
+>       labels = load(store, log, ref, [
+            {**label_rows([t[0]])[0], "label": {"chosen": "A", "rejected": "B"}},
+            {**label_rows([t[1]])[0], "label": {"chosen": "A"}}]).accepted
+
+tests/p/annotations/test_annotations.py:427: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c6b9b0>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33c6bf80>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'ch...': 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d', 'method': 'model', 'method_version': 'labeler-3', 'label': {'chosen': 'A'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+__________ test_p1_holdout_descendants_never_reach_a_training_export ___________
+
+    def test_p1_holdout_descendants_never_reach_a_training_export() -> None:
+        """Oracle (DATA-SPLIT): a child version that moves an ancestor's holdout sample into
+        train (even re-described), or adds a train sample with a holdout sample's content or
+        group, cannot export it (`holdout_descendant`); a train sample unrelated to the holdout,
+        labelled on the parent version, is exported from the child."""
+        store, log, objects, access, parent = world()
+        m = manifest(store, parent)
+        ids = split_ids(store, parent)
+        (h,) = [s for s in m.samples if s.sample_id == ids["holdout"][0]]
+        t = next(s for s in m.samples if s.sample_id == ids["train"][0])
+        moved = {**h.model_dump(), "content_digest": t.content_digest, "group_key": "moved"}
+        copy = {**h.model_dump(), "sample_id": uid(1, 0xc0), "group_key": "copy"}
+        kin = {**t.model_dump(), "sample_id": uid(2, 0xc0), "group_key": h.group_key}
+        child = run(store.publish({
+            "schema": "lab.dataset_manifest.1", "provider_org_id": NEMO,
+            "dataset_id": uid(8, 0xda), "version": 1, "created_at": "2026-09-27T15:00:00Z",
+            "derivation": "derive", "parent_refs": [parent],
+            "samples": [moved, t.model_dump(), copy, kin],
+            "splits": {"train": [h.sample_id, t.sample_id, copy["sample_id"], kin["sample_id"]],
+                       "validation": [], "holdout": []}}, provider_org_id=NEMO, actor="dev@nemo"))
+>       labels = load(store, log, child, label_rows([h.sample_id, copy["sample_id"],
+                                                     kin["sample_id"]])).accepted
+
+tests/p/annotations/test_annotations.py:457: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c6d580>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33c6c230>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000008@sha256:b7b842e8490b452bd72f428ac26acb31933a7b3509bfa7de00e73a20ab51af1d'
+items = [{'sample_id': '5641f81b-e439-4bdf-84f5-8c2e7c1bd0e8', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: '000000c0-0000-4000-8000-000000000002', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a2'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+__________ test_p1_a_regrant_imports_no_label_for_a_tombstoned_sample __________
+
+    def test_p1_a_regrant_imports_no_label_for_a_tombstoned_sample() -> None:
+        """Oracle (R193, DATA-LINEAGE): after the re-grant a label row for the tombstoned
+        sample is refused `grant_not_current` and nothing is logged; its neighbours import."""
+>       store, log, objects, ref, train, _ = regranted_world()
+                                             ^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:487: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/annotations/test_annotations.py:476: in regranted_world
+    accept_all(store, log, access, ref, load(store, log, ref, label_rows(train)).accepted)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c6ccb0>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33bbd850>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a1'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+________________ test_p1_a_regrant_selects_no_tombstoned_sample ________________
+
+    def test_p1_a_regrant_selects_no_tombstoned_sample() -> None:
+        """Oracle (R193): a selection after the re-grant leaves the tombstoned sample out."""
+>       store, _, objects, ref, train, _ = regranted_world()
+                                           ^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:496: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/annotations/test_annotations.py:476: in regranted_world
+    accept_all(store, log, access, ref, load(store, log, ref, label_rows(train)).accepted)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c6dc10>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33c6e3c0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a1'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+________________ test_p1_a_regrant_exports_no_tombstoned_sample ________________
+
+    def test_p1_a_regrant_exports_no_tombstoned_sample() -> None:
+        """Oracle (R193): a new training export after the re-grant omits the tombstoned sample
+        (`grant_not_current`) and ships its neighbours."""
+>       store, log, objects, ref, train, _ = regranted_world()
+                                             ^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:506: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/annotations/test_annotations.py:476: in regranted_world
+    accept_all(store, log, access, ref, load(store, log, ref, label_rows(train)).accepted)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c6eed0>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33c6f3e0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a1'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+_________________ test_p1_a_regrant_rereads_no_tombstoned_line _________________
+
+    def test_p1_a_regrant_rereads_no_tombstoned_line() -> None:
+        """Oracle (R193): an export made before the tombstone serves, after the re-grant, every
+        line but the tombstoned sample's."""
+>       store, _, objects, _, train, rec = regranted_world()
+                                           ^^^^^^^^^^^^^^^^^
+
+tests/p/annotations/test_annotations.py:515: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/annotations/test_annotations.py:476: in regranted_world
+    accept_all(store, log, access, ref, load(store, log, ref, label_rows(train)).accepted)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.annotations.world.Store object at 0x748e33c69ca0>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x748e33c6b500>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:2b46170274685e36d2b7ca100a7af6db53b66fe2de50fb1ab383c3111ecfc280'
+items = [{'sample_id': '6fe7eb7b-0488-4633-876f-de82e461cb96', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a1'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = None
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+=========================== short test summary info ============================
+FAILED tests/p/annotations/test_annotations.py::test_p1_import_keeps_provenance_and_links_the_original_evidence
+FAILED tests/p/annotations/test_annotations.py::test_p1_rejected_rows_are_reported_with_their_reason
+FAILED tests/p/annotations/test_annotations.py::test_p1_each_step_reads_its_own_gate_now
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_forged_or_unassigned_reviewer_is_denied
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_review_moves_a_label_once
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_human_correction_round_trips_with_provenance
+FAILED tests/p/annotations/test_annotations.py::test_p1_only_an_adjudication_supersedes
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_disagreement_across_versions_is_adjudicated
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_disagreement_is_adjudicated_by_an_independent_reviewer
+FAILED tests/p/annotations/test_annotations.py::test_p1_an_adjudication_rejects_submitted_labels
+FAILED tests/p/annotations/test_annotations.py::test_p1_select_keeps_splits_and_only_authorized_samples
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_training_export_is_train_only_and_byte_identical
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_label_export_expires_and_rereads_the_training_gate
+FAILED tests/p/annotations/test_annotations.py::test_p1_preference_pairs_map_or_are_reported
+FAILED tests/p/annotations/test_annotations.py::test_p1_holdout_descendants_never_reach_a_training_export
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_regrant_imports_no_label_for_a_tombstoned_sample
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_regrant_selects_no_tombstoned_sample
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_regrant_exports_no_tombstoned_sample
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_regrant_rereads_no_tombstoned_line
+19 failed in 0.78s
