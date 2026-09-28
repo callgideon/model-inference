@@ -215,3 +215,10 @@ extension). Every harness collision above is in that block.
 - basis: E3L's 3/6/12 second half. This slice took about 3.5 h, including 4 gate attempts under
   host load. What remains is a rerun after the F1/F2 fixes plus binding the ControlReads route
   halves and J01/J02 (about 1-2 cases each) once WR-LSQ-9 and composition-2 merge.
+
+## Rulings
+
+Numbered R203–R205 in `research/plan/08-contracts-v1-encoding.md` §10 at the e3l-bind merge on
+`codex/w5-merge-25` (this file's "Proposed rulings" above, in order). LAB-OPERATE-LOCAL is not
+accepted at this integration: E3L-F1 routes to lane e3l-f1, E3L-F2 to lab-sql-lw6, then a rerun
+that also binds J01/J02 and the ControlReads route halves now on the tip.
