@@ -5,10 +5,12 @@
 -- A policy REVISION is 0029's immutable `lab.rollout_policy.1` record (kind `policy`, one row
 -- per version, content-addressed). This file adds:
 --   lab_rollouts             one live control row per policy id: its endpoint, the policy
---                            version in force, state (running | paused | stopped |
---                            rolled_back) and a FENCE every transition compares and bumps
+--                            version in force, state (running | paused | approved |
+--                            stopped | rolled_back; `approved` is R2's operator-approved
+--                            expansion, set only by 0039's release store, awaiting D9's
+--                            expand) and a FENCE every transition compares and bumps
 --                            (CAS: a stale publisher's move is `state_conflict`). At most
---                            one live (running or paused) rollout per endpoint.
+--                            one live (running, paused or approved) rollout per endpoint.
 --   lab_rollout_events       append-only: every start and transition with its decision
 --                            (expand | hold | rollback, F3 RolloutDecision), evidence run
 --                            refs, deciding user and reason. A rollback is a new decision,
@@ -49,12 +51,13 @@ create table if not exists infrx.lab_rollouts (
   provider_org_id uuid not null references infrx.provider_orgs on delete restrict,
   endpoint_id uuid not null,
   policy_ref text not null references infrx.lab_records on delete restrict,
-  state text not null check (state in ('running', 'paused', 'stopped', 'rolled_back')),
+  state text not null check (state in ('running', 'paused', 'approved', 'stopped',
+    'rolled_back')),
   fence bigint not null check (fence >= 1),
   updated_at timestamptz not null default infrx.now()
 );
 create unique index if not exists lab_rollouts_one_live_per_endpoint
-  on infrx.lab_rollouts (endpoint_id) where state in ('running', 'paused');
+  on infrx.lab_rollouts (endpoint_id) where state in ('running', 'paused', 'approved');
 
 create table if not exists infrx.lab_rollout_events (
   policy_id uuid not null references infrx.lab_rollouts on delete restrict,
@@ -187,9 +190,10 @@ begin
   v_to := case
     when v_action = 'pause' and o.state = 'running' then 'paused'
     when v_action = 'resume' and o.state = 'paused' then 'running'
-    when v_action = 'expand' and o.state = 'running' then 'running'
-    when v_action = 'stop' and o.state in ('running', 'paused') then 'stopped'
-    when v_action = 'rollback' and o.state in ('running', 'paused') then 'rolled_back' end;
+    when v_action = 'expand' and o.state in ('running', 'approved') then 'running'
+    when v_action = 'stop' and o.state in ('running', 'paused', 'approved') then 'stopped'
+    when v_action = 'rollback' and o.state in ('running', 'paused', 'approved')
+      then 'rolled_back' end;
   if v_to is null then
     perform infrx.refuse('state_conflict', 'rollout: ' || coalesce(v_action, '?')
                          || ' from ' || o.state || ' is not a declared transition');

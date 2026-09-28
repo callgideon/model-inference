@@ -51,12 +51,12 @@ SQL_MUTANTS = (
        "a provider runs another provider's policy"),
     _s("d9_two_live_per_endpoint", "create unique index if not exists "
        "lab_rollouts_one_live_per_endpoint\n  on infrx.lab_rollouts (endpoint_id) where state "
-       "in ('running', 'paused');", "create index if not exists "
+       "in ('running', 'paused', 'approved');", "create index if not exists "
        "lab_rollouts_one_live_per_endpoint\n  on infrx.lab_rollouts (endpoint_id) where state "
-       "in ('running', 'paused');", START,
+       "in ('running', 'paused', 'approved');", START,
        "two policies split one endpoint's traffic past 100%"),
-    _s("d9_stopped_blocks_endpoint", "where state in ('running', 'paused');",
-       "where state in ('running', 'paused', 'stopped');", START,
+    _s("d9_stopped_blocks_endpoint", "where state in ('running', 'paused', 'approved');",
+       "where state in ('running', 'paused', 'approved', 'stopped');", START,
        "a stopped experiment blocks the endpoint forever"),
     _s("d9_start_unattributed", "      (p_args->>'decided_by')::uuid, p_args->>'reason');\n  "
        "exception when unique_violation", "      '00000000-0000-4000-8000-000000000000', "
@@ -68,8 +68,9 @@ SQL_MUTANTS = (
     _s("d9_fence_not_bumped", "  update infrx.lab_rollouts set state = v_to, policy_ref = v_ref, "
        "fence = o.fence + 1,", "  update infrx.lab_rollouts set state = v_to, policy_ref = v_ref, "
        "fence = o.fence,", MOVES, "a fence never goes stale, so racing moves all land"),
-    _s("d9_expand_paused", "    when v_action = 'expand' and o.state = 'running' then 'running'",
-       "    when v_action = 'expand' and o.state in ('running', 'paused') then 'running'", MOVES,
+    _s("d9_expand_paused", "    when v_action = 'expand' and o.state in ('running', 'approved') "
+       "then 'running'", "    when v_action = 'expand' and o.state in ('running', 'paused', "
+       "'approved') then 'running'", MOVES,
        "a held experiment is expanded (and silently resumed)"),
     _s("d9_terminal_resumes", "    when v_action = 'resume' and o.state = 'paused' then 'running'",
        "    when v_action = 'resume' and o.state <> 'running' then 'running'", MOVES,
@@ -146,6 +147,7 @@ SQL_NAMES = tuple(m.name for m in SQL_MUTANTS)
 RUNNER = Runner(name="d9", targets=("tests/d/test_d9_units.py",))
 F = "state/lab_rollout.py"
 CALLS = "test_calls__carry_the_provider_the_fence_and_expansion_evidence_only"
+RELEASE_UNITS = "test_release__sends_the_revision_the_fence_and_a_validated_decision"
 
 
 def _p(name, invariant, old, new, *cases, **kw) -> Mutant:
@@ -171,6 +173,18 @@ CODE_MUTANTS = (
     _p("d9_py_start_unattributed", "a start names its deciding user",
        '"policy_ref": policy_ref,\n            "decided_by": decided_by, "reason": reason}',
        '"policy_ref": policy_ref,\n            "reason": reason}', CALLS),
+    _p("d9_py_release_unvalidated", "a decision is a validated lab.rollout_decision.1",
+       "        records.parse(decision)                 # the contract refuses first (LabRejected)\n",
+       "", RELEASE_UNITS),
+    _p("d9_py_release_reasons_dropped", "a decision keeps its reasons",
+       '"decision": decision,\n            "reasons": list(reasons)}))', '"decision": decision,\n'
+       '            "reasons": []}))', RELEASE_UNITS),
+    _p("d9_py_release_plan_dropped", "a launch freezes its plan digest",
+       '            "plan_digest": plan_digest, "decided_by": decided_by,',
+       '            "plan_digest": None, "decided_by": decided_by,', RELEASE_UNITS),
+    _p("d9_py_release_fence_lost", "the controller gets the new fence",
+       '            "reasons": list(reasons)}))["fence"]', '            "reasons": list(reasons)}))'
+       ' and fence', RELEASE_UNITS),
 )
 
 
@@ -180,3 +194,112 @@ def kill(mutant) -> tuple[str, str]:
 
 def run_code_mutant(mutant):
     return shared.run_mutant(mutant, RUNNER)
+
+
+# --- WR-R2-1: R2's release store, `0039_lab_release.sql` (test_d9_release's world) ---------
+RELEASE_FILE, FILE_33 = "0039_lab_release.sql", FILE
+DB_R = f"{pgharness.DATABASE}_d9rmut"
+R_ROLES = "check_browser_roles_reach_nothing"
+R_PLAN = "check_a_release_is_its_revisions_row_with_the_plan_frozen"
+R_MOVES = "check_r2_moves_are_a_cas_on_the_fence"
+R_DECISION = "check_a_decision_is_this_revisions_and_matches_the_move"
+R_APPROVED = "check_approved_is_live_routes_to_the_baseline_and_expands_in_d9"
+R_RACE = "check_two_controllers_racing_decide_once"
+R_STORE = "check_the_store_composes"
+
+
+def _r(name, old, new, check, why, file=RELEASE_FILE, **kw):
+    return _d.Mutant(name, file, old, new, "lab", check, why, **kw)
+
+
+RELEASE = (
+    _r("r2_browser_reads_releases", "create or replace function infrx.lab_release_transition("
+       "p_args jsonb) returns jsonb", "grant usage on schema infrx to authenticated;\ngrant "
+       "execute on function infrx.lab_release(jsonb) to authenticated;\n\ncreate or replace "
+       "function infrx.lab_release_transition(p_args jsonb) returns jsonb", R_ROLES,
+       "a browser session reads another provider's release state"),
+    _r("r2_service_cannot_read", "create or replace function infrx.lab_release_transition("
+       "p_args jsonb) returns jsonb", "revoke execute on function infrx.lab_release(jsonb) from "
+       "service_role;\n\ncreate or replace function infrx.lab_release_transition(p_args "
+       "jsonb) returns jsonb", R_ROLES, "the controller cannot read its release"),
+    _r("r2_plan_not_frozen", "  if old.plan_digest is not null and new.plan_digest is distinct "
+       "from old.plan_digest then", "  if false then", R_PLAN,
+       "thresholds are loosened after launch"),
+    _r("r2_plan_not_stored", "  update infrx.lab_rollouts set plan_digest = "
+       "p_args->>'plan_digest' where policy_id = v_id", "  update infrx.lab_rollouts set "
+       "plan_digest = null where policy_id = v_id", R_PLAN,
+       "the controller refuses every plan (none was frozen)"),
+    _r("r2_launch_without_plan", "  if coalesce(p_args->>'plan_digest', '') !~ "
+       "'^sha256:[0-9a-f]{64}$' then", "  if false then", R_PLAN,
+       "a release launches with no frozen plan (raw error or null)"),
+    _r("r2_started_at_lost", "                    where e.policy_id = o.policy_id and e.action = "
+       "'start'))", "                    where false))", R_PLAN,
+       "the fixed horizon has no start"),
+    _r("r2_fence_ignored", "  if o.fence is distinct from (p_args->>'fence')::bigint then\n"
+       "    perform infrx.refuse('state_conflict', 'stale fence: the release is at '",
+       "  if false then\n    perform infrx.refuse('state_conflict', 'stale fence: the release "
+       "is at '", R_MOVES, "a stale controller's decision overwrites a newer one"),
+    _r("r2_any_move", "  if (o.state, v_to) not in (('running', 'approved'), ('running', "
+       "'rolled_back'),\n                             ('approved', 'rolled_back')) then",
+       "  if v_to not in ('approved', 'rolled_back', 'paused') then", R_MOVES,
+       "a rolled-back release is approved again"),
+    _r("r2_fence_not_bumped", "  update infrx.lab_rollouts set state = v_to, fence = o.fence + "
+       "1, updated_at = infrx.now()", "  update infrx.lab_rollouts set state = v_to, fence = "
+       "o.fence, updated_at = infrx.now()", R_MOVES,
+       "a decision never makes the fence stale: racing controllers all land"),
+    _r("r2_reasons_dropped", "      coalesce(nullif(left(array_to_string(v_reasons, '; '), 500), "
+       "''), d->>'decision'), d,\n      v_reasons);", "      coalesce(nullif(left("
+       "array_to_string(v_reasons, '; '), 500), ''), d->>'decision'), d,\n      '{}');",
+       R_MOVES, "the stored decision loses why it was taken"),
+    _r("r2_decision_doc_dropped", "d->>'decision'), d,\n      v_reasons);",
+       "d->>'decision'), null,\n      v_reasons);", R_MOVES,
+       "the append-only history does not keep the decision record"),
+    _r("r2_decision_any_revision", "     or d->>'policy_ref' is distinct from o.policy_ref\n",
+       "", R_DECISION, "a decision about one revision moves another"),
+    _r("r2_decision_any_provider", "     or d->>'provider_org_id' is distinct from "
+       "o.provider_org_id::text\n", "", R_DECISION,
+       "a decision attributed to another provider is stored"),
+    _r("r2_decision_any_kind", "     or d->>'decision' is distinct from (case v_to when "
+       "'approved' then 'expand'\n                                                    else "
+       "'rollback' end) then", "     then", R_DECISION,
+       "a rollback decision approves the release"),
+    _r("r2_decision_any_schema", "  if d->>'schema' is distinct from 'lab.rollout_decision.1'\n"
+       "     or", "  if false\n     or", R_DECISION, "any JSON is stored as a decision"),
+    _r("r2_expand_without_evidence", "  if v_to = 'approved' and (cardinality(v_evidence) = 0 or "
+       "exists (", "  if v_to = 'approved' and (exists (", R_DECISION,
+       "an expansion is approved on missing evidence"),
+    _r("r2_any_record_is_evidence", "         select 1 from infrx.lab_records r where r.ref = x "
+       "and r.kind = 'run'\n            and r.provider_org_id = o.provider_org_id))) then",
+       "         select 1 from infrx.lab_records r where r.ref = x\n            and "
+       "r.provider_org_id = o.provider_org_id))) then", R_DECISION,
+       "a policy record is taken as evaluation evidence"),
+    _r("r2_approved_not_live", "where state in ('running', 'paused', 'approved');",
+       "where state in ('running', 'paused');", R_APPROVED,
+       "a second policy starts on an endpoint whose approved expansion is pending",
+       file=FILE_33),
+    _r("r2_approved_not_expandable", "    when v_action = 'expand' and o.state in ('running', "
+       "'approved') then 'running'", "    when v_action = 'expand' and o.state = 'running' "
+       "then 'running'", R_APPROVED, "an approved expansion can never be carried out",
+       file=FILE_33),
+    _r("r2_approved_not_stoppable", "    when v_action = 'stop' and o.state in ('running', "
+       "'paused', 'approved') then 'stopped'", "    when v_action = 'stop' and o.state in "
+       "('running', 'paused') then 'stopped'", R_APPROVED,
+       "an approved release cannot be stopped", file=FILE_33),
+    _r("r2_approved_not_rollbackable", "    when v_action = 'rollback' and o.state in "
+       "('running', 'paused', 'approved')", "    when v_action = 'rollback' and o.state in "
+       "('running', 'paused')", R_APPROVED, "an approved release cannot be rolled back by D9",
+       file=FILE_33),
+    _r("r2_release_unlocked", "  select * into o from infrx.lab_rollouts where policy_ref = "
+       "p_args->>'policy_ref' for update;", "  select * into o from infrx.lab_rollouts where "
+       "policy_ref = p_args->>'policy_ref';", R_RACE,
+       "two controllers' decisions both land at one fence"),
+    _r("r2_fence_misreported", "  return jsonb_build_object('fence', o.fence);",
+       "  return jsonb_build_object('fence', o.fence - 1);", R_STORE,
+       "the controller is handed a stale fence"),
+)
+RELEASE_NAMES = tuple(m.name for m in RELEASE)
+
+
+def kill_release(mutant) -> tuple[str, str]:
+    from . import test_d9_release as release_world
+    return d7.kill(mutant, DB_R, release_world)
