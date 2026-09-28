@@ -1,0 +1,14 @@
+None
+1
+FF..................                                                     [100%]
+=================================== FAILURES ===================================
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-5mtmusl_/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-5mtmusl_/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+=========================== short test summary info ============================
+FAILED ../../tests/integration/lab_operate/scenarios_access.py::test_l01_each_provider_session_sees_only_its_own_workspace
+FAILED ../../tests/integration/lab_operate/scenarios_access.py::test_l01_a_member_of_one_provider_is_refused_every_operation_on_the_other
+2 failed, 18 passed, 2 deselected in 172.25s (0:02:52)
+
+

@@ -1,0 +1,526 @@
+..............FFFFFFFFFFFFFFFFFFFFFFFFFFFFF..                            [100%]
+=================================== FAILURES ===================================
+________ test_stack_mutant_is_killed[st_membership_read_of_every_user] _________
+
+mutant = Mutant(name='st_membership_read_of_every_user', invariant="the membership read is the user's own rows", file='../app/s...ession_sees_only_its_own_workspace', 'test_l07_a_consumer_owner_has_no_provider_workspace'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_membership_read_of_every_user is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_________ test_stack_mutant_is_killed[st_session_door_serves_revoked] __________
+
+mutant = Mutant(name='st_session_door_serves_revoked', invariant='the session door answers current memberships only', file='../...mestamptz)\n", new='', cases=('test_l01_a_revoked_membership_is_refused_on_its_next_call',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_session_door_serves_revoked is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_aggregates_unguarded] _____________
+
+mutant = Mutant(name='st_aggregates_unguarded', invariant="another provider's health is refused", file='infrx/lab/access/__init...ew='', cases=('test_l01_a_member_of_one_provider_is_refused_every_operation_on_the_other',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_aggregates_unguarded is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+________ test_stack_mutant_is_killed[st_private_resolves_for_consumers] ________
+
+mutant = Mutant(name='st_private_resolves_for_consumers', invariant='a private dev revision never resolves for a consumer crede...ble_or_admissible', 'test_l02_a_provider_created_dev_revision_never_reaches_app_discovery'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_private_resolves_for_consumers is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____ test_stack_mutant_is_killed[st_control_path_on_the_consumer_origin] ______
+
+mutant = Mutant(name='st_control_path_on_the_consumer_origin', invariant='the consumer origin mounts no provider-control path',.../providers"', cases=('test_l07_a_consumer_key_reaches_no_provider_control_on_the_gateway',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_control_path_on_the_consumer_origin is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+__________ test_stack_mutant_is_killed[st_session_door_open_to_anon] ___________
+
+mutant = Mutant(name='st_session_door_open_to_anon', invariant='the session door is for signed-in users only', file='../app/sup...emberships() to authenticated, anon;', cases=('test_l07_a_consumer_key_is_no_lab_session',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_session_door_open_to_anon is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_grant_of_any_grantor] _____________
+
+mutant = Mutant(name='st_grant_of_any_grantor', invariant='a grant is read for its own grantor only', file='../app/supabase/mig...')::uuid\n     and", new='   where true\n     and', cases=('test_l08_no_grant_no_content',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_grant_of_any_grantor is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_______________ test_stack_mutant_is_killed[st_purpose_ignored] ________________
+
+mutant = Mutant(name='st_purpose_ignored', invariant='each purpose is its own permission', file='infrx/contracts/v2/records.py'...rue)', cases=('test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_purpose_ignored is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_first_grant_version] ______________
+
+mutant = Mutant(name='st_first_grant_version', invariant='the current grant is the latest version (a revocation is one)', file=...None', cases=('test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_first_grant_version is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+____________ test_stack_mutant_is_killed[st_consumer_keys_readable] ____________
+
+mutant = Mutant(name='st_consumer_keys_readable', invariant='a provider session reads no consumer rows', file='../app/supabase/...d\n  using (true);', cases=('test_l08_a_provider_session_reads_no_consumer_rows_directly',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_consumer_keys_readable is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_lab_never_went_down] ______________
+
+mutant = Mutant(name='st_lab_never_went_down', invariant='the drill judges the App only with the Lab really down', file='../../...swers() is None', cases=('test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_lab_never_went_down is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_________ test_stack_mutant_is_killed[st_rollback_to_the_bad_release] __________
+
+mutant = Mutant(name='st_rollback_to_the_bad_release', invariant='the rollback is judged on the Lab answering again', file='../...ses=('test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_rollback_to_the_bad_release is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_moving_tag_registers] _____________
+
+mutant = Mutant(name='st_moving_tag_registers', invariant='a runtime is pinned by digest, never a moving tag', file='infrx/lab/...t)$")', cases=('test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_moving_tag_registers is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+____________ test_stack_mutant_is_killed[st_any_runtime_registers] _____________
+
+mutant = Mutant(name='st_any_runtime_registers', invariant='only a supported runtime registers', file='infrx/lab/control/__init...alse:', cases=('test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_any_runtime_registers is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_any_schema_registers] _____________
+
+mutant = Mutant(name='st_any_schema_registers', invariant="only the gateway's schemas register", file='infrx/lab/control/__init...alse:', cases=('test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_any_schema_registers is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+___________ test_stack_mutant_is_killed[st_foreign_model_registers] ____________
+
+mutant = Mutant(name='st_foreign_model_registers', invariant='a provider registers only its own models', file='infrx/lab/contro...alse:', cases=('test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_foreign_model_registers is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+______________ test_stack_mutant_is_killed[st_developer_proposes] ______________
+
+mutant = Mutant(name='st_developer_proposes', invariant='only an administrator proposes publication', file='infrx/lab/control/_...eployment)', cases=('test_l04_publication_needs_operator_approval_and_snapshots_the_rate',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_developer_proposes is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+______________ test_stack_mutant_is_killed[st_card_unattributed] _______________
+
+mutant = Mutant(name='st_card_unattributed', invariant='the rate snapshot names the approving operator', file='infrx/lab/contro...operator")', cases=('test_l04_publication_needs_operator_approval_and_snapshots_the_rate',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_card_unattributed is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_publish_audit_actor] ______________
+
+mutant = Mutant(name='st_publish_audit_actor', invariant='the publish audit names its actor', file='../app/supabase/migrations/...operator',", cases=('test_l04_publication_needs_operator_approval_and_snapshots_the_rate',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_publish_audit_actor is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+___________ test_stack_mutant_is_killed[st_card_input_rate_misfiled] ___________
+
+mutant = Mutant(name='st_card_input_rate_misfiled', invariant='the card is the approved rates, each in its place', file='../app...proval_and_snapshots_the_rate', 'test_l05_app_discovers_and_serves_the_published_revision'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_card_input_rate_misfiled is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+____________ test_stack_mutant_is_killed[st_unapproved_card_listed] ____________
+
+mutant = Mutant(name='st_unapproved_card_listed', invariant='discovery lists only the card the runtime approved (R69)', file='i...', new='    if False:', cases=('test_l05_app_discovers_and_serves_the_published_revision',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_unapproved_card_listed is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_________ test_stack_mutant_is_killed[st_rollback_relists_the_current] _________
+
+mutant = Mutant(name='st_rollback_relists_the_current', invariant="a rollback lists the earlier version's target", file='../app...ion,', cases=('test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_rollback_relists_the_current is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_publish_without_cas] ______________
+
+mutant = Mutant(name='st_publish_without_cas', invariant='a publication is a compare-and-set on the listing', file='../app/supa...no longer at version '", cases=('test_l09_publish_and_rollback_cas_under_injected_faults',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_publish_without_cas is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_____________ test_stack_mutant_is_killed[st_rollback_without_cas] _____________
+
+mutant = Mutant(name='st_rollback_without_cas', invariant='a rollback is a compare-and-set on the listing', file='../app/supaba...oved on from version '", cases=('test_l09_publish_and_rollback_cas_under_injected_faults',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_rollback_without_cas is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_________ test_stack_mutant_is_killed[st_any_token_role_is_a_session] __________
+
+mutant = Mutant(name='st_any_token_role_is_a_session', invariant="only a signed-in user's token is a Lab session", file='infrx/...   if False \\\n', cases=('test_l12_a_consumer_key_is_refused_by_every_control_operation',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_any_token_role_is_a_session is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+____________ test_stack_mutant_is_killed[st_unshaped_bearer_passes] ____________
+
+mutant = Mutant(name='st_unshaped_bearer_passes', invariant='a /v1 key or no bearer is refused before any read', file='infrx/ga...s.InvalidApiKey(', cases=('test_l12_a_consumer_key_is_refused_by_every_control_operation',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_unshaped_bearer_passes is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+_________ test_stack_mutant_is_killed[st_consumer_session_not_denied] __________
+
+mutant = Mutant(name='st_consumer_session_not_denied', invariant='a consumer account has no provider workspace', file='infrx/ga...rrors.Forbidden(', cases=('test_l12_a_consumer_key_is_refused_by_every_control_operation',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_consumer_session_not_denied is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+__________ test_stack_mutant_is_killed[st_restarted_proposal_misread] __________
+
+mutant = Mutant(name='st_restarted_proposal_misread', invariant='the Lab lists a committed proposal as proposed', file='infrx/l...proposed_public', cases=('test_l10_a_control_service_restart_mid_operation_loses_nothing',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_restarted_proposal_misread is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+____________ test_stack_mutant_is_killed[st_control_never_crashed] _____________
+
+mutant = Mutant(name='st_control_never_crashed', invariant='the restart drill judges only a service really killed', file='../.....thread.join(60)', cases=('test_l10_a_control_service_restart_mid_operation_loses_nothing',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e3l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_control_never_crashed is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_operate/scenarios_publish.py::test_l09_publish_and_rollback_cas_under_injected_faults', '../../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../tests/integration/lab_operate/scenarios_publish.py::test_l10_a_control_service_restart_mid_operation_loses_nothing']").killed
+
+tests/integration/lab_operate/test_mutants.py:76: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_membership_read_of_every_user]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_session_door_serves_revoked]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_aggregates_unguarded]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_private_resolves_for_consumers]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_control_path_on_the_consumer_origin]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_session_door_open_to_anon]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_grant_of_any_grantor]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_purpose_ignored]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_first_grant_version]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_consumer_keys_readable]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_lab_never_went_down]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_rollback_to_the_bad_release]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_moving_tag_registers]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_any_runtime_registers]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_any_schema_registers]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_foreign_model_registers]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_developer_proposes]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_card_unattributed]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_publish_audit_actor]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_card_input_rate_misfiled]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_unapproved_card_listed]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_rollback_relists_the_current]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_publish_without_cas]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_rollback_without_cas]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_any_token_role_is_a_session]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_unshaped_bearer_passes]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_consumer_session_not_denied]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_restarted_proposal_misread]
+FAILED tests/integration/lab_operate/test_mutants.py::test_stack_mutant_is_killed[st_control_never_crashed]
+29 failed, 16 passed in 245.42s (0:04:05)
