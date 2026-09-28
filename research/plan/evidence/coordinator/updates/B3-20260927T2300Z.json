@@ -5,7 +5,7 @@
  "worktree": ".claude/worktrees/codex-w5-eval-ops",
  "branch": "codex/w5-eval-ops",
  "blockers": [],
- "head": "582c7e46",
+ "head": "52dfe57c",
  "owned_paths": [
   "apps/infrx-api/infrx/evaluation/checkpoints/",
   "apps/infrx-api/tests/b/checkpoints/"
@@ -45,15 +45,35 @@
    "cmd": "reruns alone: INFRX_D_TASK=b3 pytest tests/d/test_outbox_relay.py tests/m/test_retention.py; then outbox_relay when the lock was free; tests/i/test_mutants.py default key",
    "exit": 0,
    "summary": "retention green (92 passed, 7 lock-held); outbox_relay 20 passed at 22:55Z; tests/i/test_mutants.py 50 passed"
+  },
+  {
+   "cmd": "fix round fail-first: pytest tests/b/checkpoints/test_checkpoints.py with cedcad6c's module",
+   "exit": 1,
+   "summary": "2 failed (0-F1 REVOKED, 0-F2 ORDER reverse handling)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/b/checkpoints/test_checkpoints.py (52dfe57c)",
+   "exit": 0,
+   "summary": "9 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/b/checkpoints/test_mutants.py (52dfe57c)",
+   "exit": 0,
+   "summary": "39 passed: 37 mutants killed (+b3_evaluated_without_a_run, b3_owner_checked_after_deploy)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b3 uv run --frozen pytest -q tests/b -k 'not test_mutant' (52dfe57c)",
+   "exit": 0,
+   "summary": "48 passed, 1 xfailed (B-R1 kept)"
   }
  ],
  "estimate": {
-  "optimistic_h": 2,
-  "likely_h": 4,
-  "pessimistic_h": 8,
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 6,
   "confidence": "medium",
-  "basis": "one review round on ~300 lines (B1 analogue 2/4/8) + real ledger/deployer integration after WR-B3-1/WR-B3-3",
-  "at": "2026-09-27T23:00Z"
+  "basis": "fix round done (0-F1, 0-F2); a recheck plus real ledger/deployer integration after WR-B3-1/WR-B3-3",
+  "at": "2026-09-28T00:00Z"
  },
  "wiring_requests": [
   "WR-EO-1 Makefile:21 api-mutants: append ' tests/b/checkpoints/test_mutants.py tests/i/lab_eval/test_mutants.py' after ' tests/b/reports/test_mutants.py'",
