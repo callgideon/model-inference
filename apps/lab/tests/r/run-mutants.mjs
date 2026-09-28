@@ -3,7 +3,7 @@
 // Usage: node tests/r/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "../l/shell/harness.mjs";
 
-const SUITE = ["view", "journey", "actions", "pages", "http"].map((f) => `tests/r/${f}.test.ts`);
+const SUITE = ["view", "journey", "actions", "pages", "http", "wiring"].map((f) => `tests/r/${f}.test.ts`);
 const PORT = "lib/services/rollouts/port.ts";
 const FAKE = "lib/services/rollouts/fake.ts";
 const VIEW = "lib/services/rollouts/view.ts";
@@ -11,6 +11,7 @@ const ACTIONS = "lib/services/rollouts/actions.ts";
 const RELEASES = "app/(provider)/releases/page.tsx";
 const OPTIMIZATIONS = "app/(provider)/optimizations/page.tsx";
 const HTTP = "lib/services/rollouts/http.ts";
+const SERVER = "lib/services/rollouts/server.ts";
 
 const C = {
   v01: "R4-V01 a release row shows the frozen plan, cohort, baseline and candidate weights from the D9 record",
@@ -37,11 +38,15 @@ const C = {
   p02: "R4-P02 no page offers a launch or allocation control or claims success; the preview stand-in is labelled only when it is on",
   h01: "R4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched",
   h02: "R4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
+  h03: "R4-H03 one unreadable release, decision, proposal or variant fails the whole answer closed",
+  h04: "R4-H04 without a session token nothing is sent and every call is unavailable",
+  w01: "R4-W01 LAB_RELEASES_API_URL set: the port reads the route as the session's own access token",
+  w02: "R4-W02 a missing LAB_RELEASES_API_URL or Supabase config fails closed: every call unavailable, nothing sent",
 };
 
 const MUTANTS = [
   // port
-  m("R4-X01", "the default port is the stand-in, not unavailable", PORT, "  return UNAVAILABLE;\n}", "  return (preview ??= new FakeReleases());\n}", [C.v11]),
+  m("R4-X01", "the default port is the stand-in, not unavailable", PORT, "labReleases(env) ?? UNAVAILABLE", "labReleases(env) ?? (preview ??= new FakeReleases())", [C.v11, C.w02]),
   m("R4-X02", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v11]),
   m("R4-X03", "any preview flag value turns the stand-in on", PORT, 'env.LAB_RELEASES_PREVIEW === "1"', "env.LAB_RELEASES_PREVIEW !== undefined", [C.v11]),
   // release rows
@@ -127,13 +132,13 @@ const MUTANTS = [
   m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={a} />', '<input type="hidden" name="kind" value={a} />\n                <input name="weightBp" />', [C.p02]),
   m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
   // the HTTP adapter (WR-R4-1, lane lab-api-2)
-  m("R4-X78", "the session token is not sent", HTTP, "authorization: `Bearer ${token}`", 'authorization: "Bearer"', [C.h01]),
+  m("R4-X78", "the session token is not sent", HTTP, "authorization: `Bearer ${bearer}`", 'authorization: "Bearer"', [C.h01]),
   m("R4-X79", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
   m("R4-X80", "a read is not unwrapped from {data}", HTTP, "camel(body === undefined ? payload.data : payload)", "camel(payload)", [C.h01]),
   m("R4-X81", "records keep the route's snake_case keys", HTTP, "k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())", "k", [C.h01]),
   m("R4-X82", "nested records are not renamed", HTTP, "camel(v)]", "v]", [C.h01]),
   m("R4-X83", "a list of records is not renamed", HTTP, "Array.isArray(value) ? value.map(camel)", "Array.isArray(value) ? value", [C.h01]),
-  m("R4-X84", "optimizations read the releases", HTTP, 'call(actor, "optimizations")', 'call(actor, "releases")', [C.h01]),
+  m("R4-X84", "optimizations read the releases", HTTP, 'call(actor, "optimizations", list(VARIANT))', 'call(actor, "releases", list(VARIANT))', [C.h01]),
   m("R4-X85", "the proposal carries the port's key", HTTP, "policy_ref: policyRef", "policyRef", [C.h01]),
   m("R4-X86", "the proposal is a read", HTTP, 'method: body === undefined ? "GET" : "POST"', 'method: "GET"', [C.h01]),
   m("R4-X87", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
@@ -141,6 +146,34 @@ const MUTANTS = [
   m("R4-X89", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
   m("R4-X90", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
   m("R4-X91", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
+  // the swap (WR-R4-1): the configured adapter, the session's token, the row check
+  m("R4-X92", "the configured adapter is ignored", PORT, "return labReleases(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
+  m("R4-X93", "another server env names the backend", SERVER, "env.LAB_RELEASES_API_URL", "env.LAB_PIPELINES_API_URL", [C.w01]),
+  m("R4-X94", "the token is not the session's", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
+  m("R4-X95", "a call is sent without a session token", HTTP, '    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent\n', "", [C.h04, C.w01]),
+  m("R4-X96", "an answer is not checked", HTTP, 'return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: "unavailable" };', "return { ok: true, value: value as T };", [C.h03]),
+  m("R4-X97", "an unknown release state is read", HTTP, 'state: oneOf("running", "approved", "rolled_back"), fence: num,', "state: str, fence: num,", [C.h03]),
+  m("R4-X98", "a release without its fence is read", HTTP, "fence: num, planDigest: str,", "planDigest: str,", [C.h03]),
+  m("R4-X99", "a plan without its budget is read", HTTP, "maxLagS: num, budget: AMOUNT }", "maxLagS: num }", [C.h03]),
+  m("R4-X100", "an amount that is not an exact string is read", HTTP, "const AMOUNT = obj({ amount: str,", "const AMOUNT = obj({ amount: () => true,", [C.h03]),
+  m("R4-X101", "an arm without its p99 (null or a number) is read", HTTP, "p99Ms: nul(num) });", "p99Ms: () => true });", [C.h03]),
+  m("R4-X102", "an unknown assignment pin is read", HTTP, 'pinnedBy: oneOf("cohort", "explicit")', "pinnedBy: str", [C.h03]),
+  m("R4-X103", "an unknown verdict action is read", HTTP, 'action: oneOf("rollback", "hold", "expand")', "action: str", [C.h03]),
+  m("R4-X104", "a missing verdict reads as none", HTTP, "  verdict: nul(obj({", "  verdict: (v) => v === undefined || nul(obj({", [C.h03]),
+  m("R4-X105", "a candidate without its weight is read", HTTP, "candidates: list(obj({ servingRef: str, weightBp: num }))", "candidates: list(obj({ servingRef: str }))", [C.h03]),
+  m("R4-X106", "an unknown release mode is read", HTTP, 'mode: oneOf("off", "shadow", "canary")', "mode: str", [C.h03]),
+  m("R4-X107", "an unknown decision is read", HTTP, 'decision: oneOf("expand", "hold", "rollback")', "decision: str", [C.h03]),
+  m("R4-X108", "a decision without its time is read", HTTP, "decidedBy: str, decidedAt: str });", "decidedBy: str });", [C.h03]),
+  m("R4-X109", "an unknown proposal state is read", HTTP, 'state: oneOf("proposed", "approved", "rejected"), proposedAt', "state: str, proposedAt", [C.h03]),
+  m("R4-X110", "a proposal without its fence is read", HTTP, "policyRef: str, fence: num, state:", "policyRef: str, state:", [C.h03]),
+  m("R4-X111", "the records' proposals are not checked", HTTP, "proposals: list(PROPOSAL) }", "proposals: () => true }", [C.h03]),
+  m("R4-X112", "an unknown comparison outcome is read", HTTP, 'outcome: oneOf("equivalent", "not_equivalent", "inconclusive", "rejected")', "outcome: str", [C.h03]),
+  m("R4-X113", "a variant without its base identity is read", HTTP, "changes: list(str), base: IDENTITY,", "changes: list(str),", [C.h03]),
+  m("R4-X114", "an identity without its quantization is read", HTTP, "hardware: str, quantization: str,", "hardware: str,", [C.h03]),
+  m("R4-X115", "a performance ratio that is not a number is read", HTTP, "throughputRatio: num,", "throughputRatio: () => true,", [C.h03]),
+  m("R4-X116", "a comparison without its claim flag is read", HTTP, "reportDigest: str, optimizationClaimed: bool,", "reportDigest: str,", [C.h03]),
+  m("R4-X117", "a variants answer that is one record is read", HTTP, 'call(actor, "optimizations", list(VARIANT))', 'call(actor, "optimizations", (v) => list(VARIANT)(v) || VARIANT(v))', [C.h03]),
+  m("R4-X118", "a proposal's answer is not checked", HTTP, '"releases/proposals", PROPOSAL, {', '"releases/proposals", () => true, {', [C.h03]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "R4", mutants: MUTANTS }));
