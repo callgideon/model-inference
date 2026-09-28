@@ -1,0 +1,10 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve
+plugins: anyio-4.15.1
+collected 41 items
+
+tests/integration/lab_improve/test_mutants.py .......................... [ 63%]
+...............                                                          [100%]
+
+======================== 41 passed in 422.77s (0:07:02) ========================

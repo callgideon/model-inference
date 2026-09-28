@@ -1,0 +1,17 @@
+{
+ "reservation": {
+  "cost": "12.50000000",
+  "limit": "25.00000000",
+  "payer_ref": "lab:payer:b0000001-0000-4000-8000-000000000001:000009a7-0000-4000-8000-000000000001@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "state": "settled"
+ },
+ "run": {
+  "connector": "protocol-test",
+  "cost": "12.50000000",
+  "job_id": "job-1",
+  "limit": "25.00000000",
+  "payer_ref": "lab:payer:b0000001-0000-4000-8000-000000000001:000009a7-0000-4000-8000-000000000001@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "run_ref": "lab:external_run:b0000001-0000-4000-8000-000000000001:00000e71-0000-4000-8000-000000000006@sha256:e1ef5a576181026f2a3ea91a85333c4e4690be13cea7a61ca072a05f464b5f16",
+  "state": "completed"
+ }
+}

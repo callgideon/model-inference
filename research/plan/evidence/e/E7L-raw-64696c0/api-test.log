@@ -1,0 +1,1704 @@
+cd apps/infrx-api && uv run --frozen pytest -q
+.........ss.........................................................ssss [  1%]
+sssss.s.s.s.s.s.s.s.s.s.s.s.s.s.s.s.s.s..s.s.s.s.s...................... [  2%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  5%]
+........................................................................ [  6%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 10%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+........................................................................ [ 19%]
+........................................................................ [ 20%]
+........................................................................ [ 21%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+...............................x........................................ [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 27%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+........................................................................ [ 30%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 33%]
+........................................................................ [ 34%]
+........................................................................ [ 35%]
+.........................................................xx....x........ [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 39%]
+..................................................x..................... [ 40%]
+........................................................................ [ 41%]
+........................................................................ [ 42%]
+........................................................................ [ 43%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 46%]
+....................................................F..F..F..F.F..F..F.. [ 47%]
+...............s..................................xx....x............... [ 49%]
+........................................................................ [ 50%]
+........................................................................ [ 51%]
+........................................................................ [ 52%]
+........................................................................ [ 53%]
+.....s............................s........................s............ [ 54%]
+..............s......................................................... [ 55%]
+........................................................................ [ 56%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 59%]
+.ssss................................................................... [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 64%]
+........................................................................ [ 65%]
+.................s.....................ssss............................. [ 66%]
+........................................................................ [ 67%]
+..................................................FFFFFFFFFFFFFFFFFFFFFF [ 68%]
+FFFFFFFFFFFFFFFFFFFFF......x....E....................................... [ 69%]
+...............E..EEE..E.................E........E..................... [ 70%]
+..............................................FFF....................... [ 71%]
+........................................................................ [ 72%]
+........................................................................ [ 74%]
+........................................................................ [ 75%]
+........................................................................ [ 76%]
+.................s.................................s.................... [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 79%]
+...............................s........................................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+.............................s.s.s.s.s.s.s.sssss..s......s.....s...ss... [ 83%]
+................................................................ssssssss [ 84%]
+s....................................................................... [ 86%]
+........................................................................ [ 87%]
+............................................................ss.......... [ 88%]
+........................................................................ [ 89%]
+........................................................................ [ 90%]
+...............................................................sss...... [ 91%]
+....................s.........................s.s.s..s........ssssssssss [ 92%]
+s.............s.s.s.s..s.s.s.s.s................s.s.s.s.s.s.s..s.s...... [ 93%]
+........................................................................ [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+...........sss........s................................................. [ 98%]
+.......................................................s...sss.......... [ 99%]
+..........................ssss..........................ss               [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler _
+
+    @pytest.fixture(scope="session")
+    def i8_stack():
+        why = pooler.unavailable()
+        if why:
+            pytest.skip(f"NOT RUN (needs Linux + docker): {why}")
+        stack = pooler.Stack()
+        try:
+>           yield stack.up()
+                  ^^^^^^^^^^
+
+tests/i/conftest.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.i.pooler.Stack object at 0x779736b7c7a0>, extra_users = None
+
+    def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
+        self.users.update(extra_users or {})
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+>       fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BlockingIOError: [Errno 11] Resource temporarily unavailable
+
+tests/i/pooler.py:110: BlockingIOError
+_ ERROR at setup of test_ops_continuous__the_computed_budget_is_what_the_session_pooler_admits _
+
+    @pytest.fixture(scope="session")
+    def i8_stack():
+        why = pooler.unavailable()
+        if why:
+            pytest.skip(f"NOT RUN (needs Linux + docker): {why}")
+        stack = pooler.Stack()
+        try:
+>           yield stack.up()
+                  ^^^^^^^^^^
+
+tests/i/conftest.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.i.pooler.Stack object at 0x779736b7c7a0>, extra_users = None
+
+    def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
+        self.users.update(extra_users or {})
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+>       fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BlockingIOError: [Errno 11] Resource temporarily unavailable
+
+tests/i/pooler.py:110: BlockingIOError
+_ ERROR at setup of test_ops_continuous__session_state_is_lost_and_leaked_on_the_transaction_pooler _
+
+    @pytest.fixture(scope="session")
+    def i8_stack():
+        why = pooler.unavailable()
+        if why:
+            pytest.skip(f"NOT RUN (needs Linux + docker): {why}")
+        stack = pooler.Stack()
+        try:
+>           yield stack.up()
+                  ^^^^^^^^^^
+
+tests/i/conftest.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.i.pooler.Stack object at 0x779736b7c7a0>, extra_users = None
+
+    def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
+        self.users.update(extra_users or {})
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+>       fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BlockingIOError: [Errno 11] Resource temporarily unavailable
+
+tests/i/pooler.py:110: BlockingIOError
+_ ERROR at setup of test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler _
+
+    @pytest.fixture(scope="session")
+    def i8_stack():
+        why = pooler.unavailable()
+        if why:
+            pytest.skip(f"NOT RUN (needs Linux + docker): {why}")
+        stack = pooler.Stack()
+        try:
+>           yield stack.up()
+                  ^^^^^^^^^^
+
+tests/i/conftest.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.i.pooler.Stack object at 0x779736b7c7a0>, extra_users = None
+
+    def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
+        self.users.update(extra_users or {})
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+>       fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BlockingIOError: [Errno 11] Resource temporarily unavailable
+
+tests/i/pooler.py:110: BlockingIOError
+_ ERROR at setup of test_ops_continuous__transaction_scoped_patterns_survive_the_transaction_pooler _
+
+    @pytest.fixture(scope="session")
+    def i8_stack():
+        why = pooler.unavailable()
+        if why:
+            pytest.skip(f"NOT RUN (needs Linux + docker): {why}")
+        stack = pooler.Stack()
+        try:
+>           yield stack.up()
+                  ^^^^^^^^^^
+
+tests/i/conftest.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.i.pooler.Stack object at 0x779736b7c7a0>, extra_users = None
+
+    def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
+        self.users.update(extra_users or {})
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+>       fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BlockingIOError: [Errno 11] Resource temporarily unavailable
+
+tests/i/pooler.py:110: BlockingIOError
+_ ERROR at setup of test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pooler _
+
+    @pytest.fixture(scope="session")
+    def i8_stack():
+        why = pooler.unavailable()
+        if why:
+            pytest.skip(f"NOT RUN (needs Linux + docker): {why}")
+        stack = pooler.Stack()
+        try:
+>           yield stack.up()
+                  ^^^^^^^^^^
+
+tests/i/conftest.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.i.pooler.Stack object at 0x779736b7c7a0>, extra_users = None
+
+    def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
+        self.users.update(extra_users or {})
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+>       fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BlockingIOError: [Errno 11] Resource temporarily unavailable
+
+tests/i/pooler.py:110: BlockingIOError
+_ ERROR at setup of test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail _
+
+    @pytest.fixture(scope="session")
+    def i8_stack():
+        why = pooler.unavailable()
+        if why:
+            pytest.skip(f"NOT RUN (needs Linux + docker): {why}")
+        stack = pooler.Stack()
+        try:
+>           yield stack.up()
+                  ^^^^^^^^^^
+
+tests/i/conftest.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.i.pooler.Stack object at 0x779736b7c7a0>, extra_users = None
+
+    def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
+        self.users.update(extra_users or {})
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+>       fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BlockingIOError: [Errno 11] Resource temporarily unavailable
+
+tests/i/pooler.py:110: BlockingIOError
+_ ERROR at setup of test_ops_recover__the_settlement_check_passes_either_regime_and_fails_the_unsettled _
+
+    @pytest.fixture(scope="session")
+    def i8_stack():
+        why = pooler.unavailable()
+        if why:
+            pytest.skip(f"NOT RUN (needs Linux + docker): {why}")
+        stack = pooler.Stack()
+        try:
+>           yield stack.up()
+                  ^^^^^^^^^^
+
+tests/i/conftest.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.i.pooler.Stack object at 0x779736b7c7a0>, extra_users = None
+
+    def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
+        self.users.update(extra_users or {})
+        # WR-KGP2-4: the SAME file tests/d/pgharness.py locks for this port, so a D harness run
+        # and a pooler run on i8 refuse each other instead of colliding on container names.
+        path = Path("/tmp") / f"infrx-i8-postgres-{PORTS[PG]}.lock"   # not TMPDIR: copies too
+        self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+>       fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BlockingIOError: [Errno 11] Resource temporarily unavailable
+
+tests/i/pooler.py:110: BlockingIOError
+=================================== FAILURES ===================================
+__ test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged[valkey] __
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            relay = OutboxRelay(h.extra["store"], q, redelivery_s=REDELIVERY_S)
+            a, c = await admitted(h, 2)
+            first = await relay.pump()
+            assert first == {"read": 2, "indexed": 2, "acknowledged": 2, "deferred": 0}, first
+            prep = await drain(q, OutboxKind.prepare_dispatch)
+            assert sorted(e.job_id for e in prep) == sorted([a.request_id, c.request_id])
+            lease = await h.port.claim_preparation(a.request_id, "prep-a")
+            await h.port.prepared(lease, ())
+            h.clock.advance(REDELIVERY_S)
+            second = await relay.pump()
+            assert second["read"] == 1 and second["acknowledged"] == 1, second
+            inference = await drain(q, OutboxKind.inference_dispatch)
+            assert [(e.job_id, e.kind) for e in inference] == \
+                [(a.request_id, OutboxKind.inference_dispatch)]
+            h.clock.advance(REDELIVERY_S)
+            assert (await relay.pump())["read"] == 0, "an acknowledged row was delivered again"
+>       run(body)
+
+tests/d/test_outbox_relay.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:80: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+tests/d/vkstore.py:73: in ensure
+    _lock()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _lock() -> None:
+        global _lock_fd
+        if _lock_fd is not None:
+            return
+        path = lock_path()
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+>           raise HarnessBusy(f"another run holds {path}; nothing was altered") from None
+E           tests.d.vkstore.HarnessBusy: another run holds /tmp/infrx-d2-valkey-55463.lock; nothing was altered
+
+tests/d/vkstore.py:65: HarnessBusy
+_ test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate[valkey] _
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            # the relay reads and indexes, then dies before `acknowledge_dispatch`
+            [event] = await store.dispatch_pending(worker_id="relay-dead",
+                                                   redelivery_s=REDELIVERY_S)
+            assert await q.enqueue(event) is True
+            relay = OutboxRelay(store, q, redelivery_s=REDELIVERY_S)     # a restarted relay
+            assert (await relay.pump())["read"] == 0, "redelivered inside the window"
+            h.clock.advance(REDELIVERY_S)
+            again = await relay.pump()
+            assert again == {"read": 1, "indexed": 1, "acknowledged": 1, "deferred": 0}, again
+            got = await drain(q)
+            assert [(e.event_id, e.job_id) for e in got] == [(event.event_id, a.request_id)], \
+                "a redelivery indexed a second candidate"
+>       run(body)
+
+tests/d/test_outbox_relay.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:106: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+tests/d/vkstore.py:73: in ensure
+    _lock()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _lock() -> None:
+        global _lock_fd
+        if _lock_fd is not None:
+            return
+        path = lock_path()
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+>           raise HarnessBusy(f"another run holds {path}; nothing was altered") from None
+E           tests.d.vkstore.HarnessBusy: another run holds /tmp/infrx-d2-valkey-55463.lock; nothing was altered
+
+tests/d/vkstore.py:65: HarnessBusy
+____ test_outbox__a_duplicate_delivery_never_makes_a_second_attempt[valkey] ____
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_duplicate_delivery_never_makes_a_second_attempt(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()
+            [event] = await store.dispatch_snapshot()
+            assert await q.enqueue(event) is False, "a replayed event indexed a second candidate"
+            mine = await q.claim_candidate("w1", kind=OutboxKind.prepare_dispatch)
+            # the index loses w1's claim and is rebuilt from PostgreSQL: the job reappears
+            await OutboxRelay(store, q).rebuild()
+            theirs = await q.claim_candidate("w2", kind=OutboxKind.prepare_dispatch)
+            assert mine.job_id == theirs.job_id == a.request_id
+            results = await asyncio.gather(h.port.claim_preparation(a.request_id, "w1"),
+                                           h.port.claim_preparation(a.request_id, "w2"),
+                                           return_exceptions=True)
+            leases = [r for r in results if not isinstance(r, BaseException)]
+            refused = [r for r in results if isinstance(r, errors.NotClaimable)]
+            assert len(leases) == 1 and len(refused) == 1, results
+            loser = "w2" if leases[0].worker_id == "w1" else "w1"
+            forged = leases[0].model_copy(update={"worker_id": loser})
+            with pytest.raises(errors.StaleLease):
+                await h.port.prepared(forged, ())
+            queued = await h.port.prepared(leases[0], ())
+            assert queued.state.value == "queued"
+            kinds = h.extra["outbox_kinds"](a.request_id)
+            assert kinds.count(OutboxKind.inference_dispatch) == 1, kinds
+>       run(body)
+
+tests/d/test_outbox_relay.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:130: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+tests/d/vkstore.py:73: in ensure
+    _lock()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _lock() -> None:
+        global _lock_fd
+        if _lock_fd is not None:
+            return
+        path = lock_path()
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+>           raise HarnessBusy(f"another run holds {path}; nothing was altered") from None
+E           tests.d.vkstore.HarnessBusy: another run holds /tmp/infrx-d2-valkey-55463.lock; nothing was altered
+
+tests/d/vkstore.py:65: HarnessBusy
+_ test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job[valkey] _
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            jobs = await admitted(h, 4)
+            await OutboxRelay(store, q).pump()
+            await h.port.prepared(await h.port.claim_preparation(jobs[0].request_id, "p"), ())
+            busy = await h.port.claim_preparation(jobs[1].request_id, "p")   # being prepared
+            # the index loses everything (a Valkey restart) and the relay process restarts
+            fresh = index(backend, h)
+            rebuilt = await OutboxRelay(store, fresh).rebuild()
+            got = {(e.job_id, e.kind) for e in await drain(fresh)}
+            want = {(jobs[0].request_id, OutboxKind.inference_dispatch),
+                    (jobs[2].request_id, OutboxKind.prepare_dispatch),
+                    (jobs[3].request_id, OutboxKind.prepare_dispatch)}
+            assert rebuilt == 3 and got == want, (rebuilt, got)
+            # the job under a live preparation lease comes back once that lease is lost
+            h.clock.advance(busy.expires_at.timestamp() - h.clock.now().timestamp())
+            again = await OutboxRelay(store, fresh).rebuild()
+            assert again == 4 and (jobs[1].request_id, OutboxKind.prepare_dispatch) in \
+                {(e.job_id, e.kind) for e in await drain(fresh)}
+>       run(body)
+
+tests/d/test_outbox_relay.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:164: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+tests/d/vkstore.py:73: in ensure
+    _lock()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _lock() -> None:
+        global _lock_fd
+        if _lock_fd is not None:
+            return
+        path = lock_path()
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+>           raise HarnessBusy(f"another run holds {path}; nothing was altered") from None
+E           tests.d.vkstore.HarnessBusy: another run holds /tmp/infrx-d2-valkey-55463.lock; nothing was altered
+
+tests/d/vkstore.py:65: HarnessBusy
+______ test_outbox__a_full_index_defers_rows_and_never_drops_them[valkey] ______
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", ("memory", "valkey"))
+    def test_outbox__a_full_index_defers_rows_and_never_drops_them(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h, max_items=1)
+            store = h.extra["store"]
+            jobs = await admitted(h, 3)
+            relay = OutboxRelay(store, q, redelivery_s=REDELIVERY_S)
+            first = await relay.pump()
+            assert (first["indexed"], first["deferred"]) == (1, 2), first
+            seen = set()
+            for _ in range(3):                  # no clock movement: deferred rows are released
+                seen |= {e.job_id for e in await drain(q)}
+                await relay.pump()
+            seen |= {e.job_id for e in await drain(q)}
+            assert seen == {j.request_id for j in jobs}, "a deferred row was lost"
+>       run(body)
+
+tests/d/test_outbox_relay.py:204: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:192: in body
+    q = index(backend, h, max_items=1)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+tests/d/vkstore.py:73: in ensure
+    _lock()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _lock() -> None:
+        global _lock_fd
+        if _lock_fd is not None:
+            return
+        path = lock_path()
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+>           raise HarnessBusy(f"another run holds {path}; nothing was altered") from None
+E           tests.d.vkstore.HarnessBusy: another run holds /tmp/infrx-d2-valkey-55463.lock; nothing was altered
+
+tests/d/vkstore.py:65: HarnessBusy
+___ test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[valkey] ___
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job(backend) -> None:
+        """OB-1: a acknowledged; the rebuild snapshots; c is admitted; a second relay pumps
+        (indexes + acknowledges) c; the rebuild lands on the snapshot, which lacks c. Without
+        the reopen fence c sat queued with its row "delivered" until its queue deadline."""
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+            late = {}
+    
+            async def race():
+                [late["c"]] = await admitted(h)
+                report = await OutboxRelay(store, q, worker_id="relay-b").pump()
+                assert report["acknowledged"] == 1, report        # c delivered and acked
+                # OB-1c: the store clock moves on after B's ack, so a fence read AFTER the
+                # snapshot (a later `since`) would miss that ack and measurably strand c
+                h.clock.advance(1)
+    
+            await OutboxRelay(_SnapshotThenRace(store, race), q).rebuild()
+            got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+            assert got == {a.request_id, late["c"].request_id}, \
+                f"the rebuild stranded a pumped job: dispatchable {got}"
+>       run(body)
+
+tests/d/test_outbox_relay.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:233: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+tests/d/vkstore.py:73: in ensure
+    _lock()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _lock() -> None:
+        global _lock_fd
+        if _lock_fd is not None:
+            return
+        path = lock_path()
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+>           raise HarnessBusy(f"another run holds {path}; nothing was altered") from None
+E           tests.d.vkstore.HarnessBusy: another run holds /tmp/infrx-d2-valkey-55463.lock; nothing was altered
+
+tests/d/vkstore.py:65: HarnessBusy
+__ test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job[valkey] __
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job(backend) -> None:
+        """OB-1b: B's index write is wiped by A's rebuild; B's ack arrives after A reopened the
+        row. The ack must be refused (the reopen cleared B's claim), so A's pump re-sends c."""
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+            seen: dict = {}
+    
+            async def relay_b_reads_and_indexes():
+                [seen["c"]] = await admitted(h)
+                events = await store.dispatch_pending(worker_id="relay-b",
+                                                      redelivery_s=REDELIVERY_S)
+                for event in events:
+                    await q.enqueue(event)
+                seen["ids"] = [event.event_id for event in events]
+    
+            async def relay_b_acknowledges_late():
+                seen["late_ack"] = await store.acknowledge_dispatch(seen["ids"],
+                                                                    worker_id="relay-b")
+    
+            await OutboxRelay(_AckAfterReopen(store, relay_b_reads_and_indexes,
+                                              relay_b_acknowledges_late), q).rebuild()
+            assert seen["late_ack"] == 0, \
+                f"relay B's late acknowledgment landed after the reopen: {seen['late_ack']}"
+            got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+            assert got == {a.request_id, seen["c"].request_id}, \
+                f"the late acknowledgment stranded a job: dispatchable {got}"
+>       run(body)
+
+tests/d/test_outbox_relay.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:283: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+tests/d/vkstore.py:73: in ensure
+    _lock()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _lock() -> None:
+        global _lock_fd
+        if _lock_fd is not None:
+            return
+        path = lock_path()
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+>           raise HarnessBusy(f"another run holds {path}; nothing was altered") from None
+E           tests.d.vkstore.HarnessBusy: another run holds /tmp/infrx-d2-valkey-55463.lock; nothing was altered
+
+tests/d/vkstore.py:65: HarnessBusy
+_________________ test_mutant_is_killed[denied_read_tolerated] _________________
+
+mutant = Mutant(name='denied_read_tolerated', invariant='a denied or unexplained read is never an absent value', file='deploy/p...de):', cases=('test_deploy_failclosed__an_optional_parameter_is_omitted_only_when_absent',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: denied_read_tolerated is broken_runner (a denied or unexplained read is never an absent value): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__an_optional_parameter_is_omitted_only_when_absent'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+______________ test_mutant_is_killed[unknown_error_is_not_found] _______________
+
+mutant = Mutant(name='unknown_error_is_not_found', invariant='an unrecognised AWS failure is not `not_found`', file='deploy/pre...lls_nothing', 'test_deploy_failclosed__a_failed_read_is_classified_before_it_is_tolerated'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: unknown_error_is_not_found is broken_runner (an unrecognised AWS failure is not `not_found`): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_denied_or_unexplained_read_installs_nothing', 'test_deploy_failclosed__a_failed_read_is_classified_before_it_is_tolerated'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[validation_skipped] ___________________
+
+mutant = Mutant(name='validation_skipped', invariant='no value is written before it is validated', file='deploy/preflight.py', ..._shape_installs_nothing', 'test_deploy_failclosed__a_value_cannot_write_a_second_variable'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: validation_skipped is broken_runner (no value is written before it is validated): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_value_of_the_wrong_shape_installs_nothing', 'test_deploy_failclosed__a_value_cannot_write_a_second_variable'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+___________________ test_mutant_is_killed[problems_ignored] ____________________
+
+mutant = Mutant(name='problems_ignored', invariant='a problem stops the install before the file is touched', file='deploy/prefl...ssing_is_a_failure', 'test_deploy_failclosed__the_old_installer_published_an_open_gateway'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: problems_ignored is broken_runner (a problem stops the install before the file is touched): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_required_parameter_that_is_missing_is_a_failure', 'test_deploy_failclosed__the_old_installer_published_an_open_gateway'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_________________ test_mutant_is_killed[unknown_mode_accepted] _________________
+
+mutant = Mutant(name='unknown_mode_accepted', invariant='there is no default mode and a typo is not a mode', file='deploy/prefl...   if False:', cases=('test_deploy_failclosed__an_unset_or_unknown_mode_installs_nothing',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: unknown_mode_accepted is broken_runner (there is no default mode and a typo is not a mode): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__an_unset_or_unknown_mode_installs_nothing'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_______________ test_mutant_is_killed[composition_gate_removed] ________________
+
+mutant = Mutant(name='composition_gate_removed', invariant='pilot is refused while the pilot routers are absent', file='deploy/...('test_deploy_failclosed__pilot_passes_the_composition_gate_once_the_ingress_is_composed',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: composition_gate_removed is broken_runner (pilot is refused while the pilot routers are absent): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__pilot_passes_the_composition_gate_once_the_ingress_is_composed'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[rename_before_validate] _________________
+
+mutant = Mutant(name='rename_before_validate', invariant='the installed file is replaced only after every check', file='deploy/...ssing_is_a_failure', 'test_deploy_failclosed__the_old_installer_published_an_open_gateway'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: rename_before_validate is broken_runner (the installed file is replaced only after every check): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_required_parameter_that_is_missing_is_a_failure', 'test_deploy_failclosed__the_old_installer_published_an_open_gateway'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_____________ test_mutant_is_killed[staged_file_is_world_readable] _____________
+
+mutant = Mutant(name='staged_file_is_world_readable', invariant='the staged file is 0600 before it is renamed', file='deploy/pr...he_file_and_restarts', 'test_deploy_failclosed__a_crash_before_the_rename_changes_nothing'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: staged_file_is_world_readable is broken_runner (the staged file is 0600 before it is renamed): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_valid_install_replaces_the_file_and_restarts', 'test_deploy_failclosed__a_crash_before_the_rename_changes_nothing'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[stale_staged_file_kept] _________________
+
+mutant = Mutant(name='stale_staged_file_kept', invariant="a crashed run's staged secret is removed", file='deploy/preflight.py'..._never_left_in_place', 'test_deploy_failclosed__a_crash_before_the_rename_changes_nothing'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: stale_staged_file_kept is broken_runner (a crashed run's staged secret is removed): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_stale_staged_file_is_never_left_in_place', 'test_deploy_failclosed__a_crash_before_the_rename_changes_nothing'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+______________ test_mutant_is_killed[value_passed_as_an_argument] ______________
+
+mutant = Mutant(name='value_passed_as_an_argument', invariant='a secret value never becomes an argument', file='deploy/prefligh...]', cases=('test_deploy_failclosed__no_secret_value_reaches_stdout_stderr_or_an_argument',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: value_passed_as_an_argument is broken_runner (a secret value never becomes an argument): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__no_secret_value_reaches_stdout_stderr_or_an_argument'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_______________ test_mutant_is_killed[value_printed_on_success] ________________
+
+mutant = Mutant(name='value_printed_on_success', invariant='a secret value never reaches stdout', file='deploy/preflight.py', o...)', cases=('test_deploy_failclosed__no_secret_value_reaches_stdout_stderr_or_an_argument',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: value_printed_on_success is broken_runner (a secret value never reaches stdout): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__no_secret_value_reaches_stdout_stderr_or_an_argument'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_______________ test_mutant_is_killed[value_printed_on_refusal] ________________
+
+mutant = Mutant(name='value_printed_on_refusal', invariant='a refusal names settings, never values', file='deploy/preflight.py'...or backslash; "', cases=('test_deploy_failclosed__a_value_cannot_write_a_second_variable',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: value_printed_on_refusal is broken_runner (a refusal names settings, never values): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_value_cannot_write_a_second_variable'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_____________ test_mutant_is_killed[release_not_required_in_pilot] _____________
+
+mutant = Mutant(name='release_not_required_in_pilot', invariant='a pilot env carries the deployed commit', file='deploy/preflig...)),', cases=('test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: release_not_required_in_pilot is broken_runner (a pilot env carries the deployed commit): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_____________ test_mutant_is_killed[credit_without_card_installs] ______________
+
+mutant = Mutant(name='credit_without_card_installs', invariant='a CREDIT pilot needs an approved card', file='infrx/config.py',...se \\\n', cases=('test_deploy_failclosed__pilot_refuses_a_regime_or_card_it_cannot_serve',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: credit_without_card_installs is broken_runner (a CREDIT pilot needs an approved card): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__pilot_refuses_a_regime_or_card_it_cannot_serve'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[python_pin_dropped] ___________________
+
+mutant = Mutant(name='python_pin_dropped', invariant='the runtime interpreter is at least 3.12.4', file='deploy/preflight.py', ...  if False:', cases=('test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: python_pin_dropped is broken_runner (the runtime interpreter is at least 3.12.4): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[transport_check_dropped] ________________
+
+mutant = Mutant(name='transport_check_dropped', invariant='a below-WARNING transport logger refuses the install', file='deploy/...s', cases=('test_deploy_failclosed__a_transport_logger_below_warning_refuses_the_install',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: transport_check_dropped is broken_runner (a below-WARNING transport logger refuses the install): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_transport_logger_below_warning_refuses_the_install'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[engine_digest_unchecked] ________________
+
+mutant = Mutant(name='engine_digest_unchecked', invariant='pilot runs a digest-pinned engine image', file='deploy/preflight.py'...se:', cases=('test_deploy_failclosed__the_engine_image_must_be_pinned_by_digest_in_pilot',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: engine_digest_unchecked is broken_runner (pilot runs a digest-pinned engine image): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__the_engine_image_must_be_pinned_by_digest_in_pilot'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+______________ test_mutant_is_killed[transport_logs_not_silenced] ______________
+
+mutant = Mutant(name='transport_logs_not_silenced', invariant='the runtime itself silences the transport loggers', file='infrx/...n', cases=('test_deploy_failclosed__a_transport_logger_below_warning_refuses_the_install',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: transport_logs_not_silenced is broken_runner (the runtime itself silences the transport loggers): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_transport_logger_below_warning_refuses_the_install'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_________________ test_mutant_is_killed[manifest_modes_drift] __________________
+
+mutant = Mutant(name='manifest_modes_drift', invariant='the installer and the runtime share one mode vocabulary', file='infrx/c...", "prod")', cases=('test_deploy_failclosed__the_manifest_is_the_only_source_of_env_keys',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: manifest_modes_drift is broken_runner (the installer and the runtime share one mode vocabulary): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__the_manifest_is_the_only_source_of_env_keys'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_______________ test_mutant_is_killed[unset_mode_starts_legacy] ________________
+
+mutant = Mutant(name='unset_mode_starts_legacy', invariant='an unset INFRX_MODE refuses to start (F2.2 item 14)', file='infrx/c...egacy"', cases=('test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: unset_mode_starts_legacy is broken_runner (an unset INFRX_MODE refuses to start (F2.2 item 14)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+______________ test_mutant_is_killed[unit_runs_the_retired_shim] _______________
+
+mutant = Mutant(name='unit_runs_the_retired_shim', invariant='the gateway unit runs the create_app factory', file='deploy/marli...t', cases=('test_backend_deploy__the_gateway_runs_the_factory_from_what_the_image_copies',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: unit_runs_the_retired_shim is broken_runner (the gateway unit runs the create_app factory): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_gateway_runs_the_factory_from_what_the_image_copies'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+______________ test_mutant_is_killed[probe_on_host_despite_image] ______________
+
+mutant = Mutant(name='probe_on_host_despite_image', invariant='with an image, the probe runs inside it', file='deploy/preflight...[*cfg.docker,', cases=('test_deploy_failclosed__pilot_runs_only_the_pinned_runtime_image',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: probe_on_host_despite_image is broken_runner (with an image, the probe runs inside it): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__pilot_runs_only_the_pinned_runtime_image'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_______________ test_mutant_is_killed[unknown_setting_accepted] ________________
+
+mutant = Mutant(name='unknown_setting_accepted', invariant='a name outside the schema is refused', file='deploy/preflight.py', ...f False:', cases=('test_deploy_failclosed__a_setting_outside_the_schema_installs_nothing',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: unknown_setting_accepted is broken_runner (a name outside the schema is refused): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_setting_outside_the_schema_installs_nothing'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+______________ test_mutant_is_killed[worker_killed_before_drain] _______________
+
+mutant = Mutant(name='worker_killed_before_drain', invariant="systemd outlasts docker's stop on the worker", file='deploy/infrx...topSec=300', cases=('test_ops_recover__every_container_unit_stops_later_than_docker_does',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: worker_killed_before_drain is broken_runner (systemd outlasts docker's stop on the worker): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_ops_recover__every_container_unit_stops_later_than_docker_does'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[gateway_public_bind] __________________
+
+mutant = Mutant(name='gateway_public_bind', invariant='the gateway listens on loopback only', file='deploy/marlin2b-gateway.ser... 0.0.0.0 --port 8001', cases=('test_backend_deploy__the_runtime_listens_only_on_loopback',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: gateway_public_bind is broken_runner (the gateway listens on loopback only): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_runtime_listens_only_on_loopback'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[valkey_public_bind] ___________________
+
+mutant = Mutant(name='valkey_public_bind', invariant='the index listens on loopback only', file='deploy/infrx-valkey.service', ... new='--bind 0.0.0.0', cases=('test_backend_deploy__the_runtime_listens_only_on_loopback',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: valkey_public_bind is broken_runner (the index listens on loopback only): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_runtime_listens_only_on_loopback'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[dockerfile_base_by_tag] _________________
+
+mutant = Mutant(name='dockerfile_base_by_tag', invariant='the runtime base image is pinned by digest', file='deploy/Dockerfile'...ython:3.12.14-slim-trixie', cases=('test_backend_deploy__every_image_is_pinned_by_digest',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: dockerfile_base_by_tag is broken_runner (the runtime base image is pinned by digest): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__every_image_is_pinned_by_digest'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+____________________ test_mutant_is_killed[metrics_public] _____________________
+
+mutant = Mutant(name='metrics_public', invariant='/metrics never leaves the host', file='deploy/Caddyfile', old='@private path ...readyz', cases=('test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: metrics_public is broken_runner (/metrics never leaves the host): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________ test_mutant_is_killed[edge_strips_a_contract_response_header] _________
+
+mutant = Mutant(name='edge_strips_a_contract_response_header', invariant='Location etc. reach the client untouched', file='depl... cases=('test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: edge_strips_a_contract_response_header is broken_runner (Location etc. reach the client untouched): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_______________ test_mutant_is_killed[edge_site_encodes_streams] _______________
+
+mutant = Mutant(name='edge_site_encodes_streams', invariant='nothing in the site compresses or buffers a stream', file='deploy/... cases=('test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: edge_site_encodes_streams is broken_runner (nothing in the site compresses or buffers a stream): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[edge_buffers_events] __________________
+
+mutant = Mutant(name='edge_buffers_events', invariant='a stream (jobs events, chat SSE) is never buffered', file='deploy/Caddyf... cases=('test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: edge_buffers_events is broken_runner (a stream (jobs events, chat SSE) is never buffered): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+____________________ test_mutant_is_killed[edge_hides_jobs] ____________________
+
+mutant = Mutant(name='edge_hides_jobs', invariant='the edge proxies the jobs routes', file='deploy/Caddyfile', old='@private pa... cases=('test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: edge_hides_jobs is broken_runner (the edge proxies the jobs routes): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_____________ test_mutant_is_killed[engine_second_setting_source] ______________
+
+mutant = Mutant(name='engine_second_setting_source', invariant='the engine takes its settings from the file only', file='deploy... 32', cases=('test_backend_deploy__the_engine_takes_its_settings_from_the_validated_file',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: engine_second_setting_source is broken_runner (the engine takes its settings from the file only): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__the_engine_takes_its_settings_from_the_validated_file'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[maintenance_proxies] __________________
+
+mutant = Mutant(name='maintenance_proxies', invariant='maintenance serves nothing from the runtime', file='deploy/Caddyfile.mai..., cases=('test_backend_deploy__maintenance_answers_every_request_with_the_retry_envelope',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: maintenance_proxies is broken_runner (maintenance serves nothing from the runtime): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__maintenance_answers_every_request_with_the_retry_envelope'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[units_before_preflight] _________________
+
+mutant = Mutant(name='units_before_preflight', invariant='no unit file changes before the env file is validated', file='deploy/...secrets)', cases=('test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: units_before_preflight is broken_runner (no unit file changes before the env file is validated): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[edge_opened_unready] __________________
+
+mutant = Mutant(name='edge_opened_unready', invariant='the edge changes only after readiness', file='deploy/install.sh', old='w...come ready', cases=('test_ops_recover__a_runtime_that_is_not_ready_leaves_the_edge_alone',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: edge_opened_unready is broken_runner (the edge changes only after readiness): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_ops_recover__a_runtime_that_is_not_ready_leaves_the_edge_alone'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[drain_leaves_edge_open] _________________
+
+mutant = Mutant(name='drain_leaves_edge_open', invariant='pause closes the edge first', file='deploy/drain.sh', old='    caddy_...  true \\\n', cases=('test_ops_recover__drain_closes_the_edge_before_stopping_the_worker',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: drain_leaves_edge_open is broken_runner (pause closes the edge first): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_ops_recover__drain_closes_the_edge_before_stopping_the_worker'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[maintenance_not_sticky] _________________
+
+mutant = Mutant(name='maintenance_not_sticky', invariant='maintenance is the active site, surviving a restart', file='deploy/li..."\n', new='', cases=('test_ops_recover__drain_closes_the_edge_before_stopping_the_worker',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: maintenance_not_sticky is broken_runner (maintenance is the active site, surviving a restart): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_ops_recover__drain_closes_the_edge_before_stopping_the_worker'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_____________ test_mutant_is_killed[rollback_to_unmetered_allowed] _____________
+
+mutant = Mutant(name='rollback_to_unmetered_allowed', invariant='a pilot host never rolls back to an unmetered runtime', file='..., cases=('test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runtime',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: rollback_to_unmetered_allowed is broken_runner (a pilot host never rolls back to an unmetered runtime): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runtime'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+_____________ test_mutant_is_killed[reviewed_digest_not_enforced] ______________
+
+mutant = Mutant(name='reviewed_digest_not_enforced', invariant='apply runs only the reviewed plan', file='deploy/migrate.py', o...      if False:', cases=('test_deploy_failclosed__migrate_applies_only_the_reviewed_plan',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: reviewed_digest_not_enforced is broken_runner (apply runs only the reviewed plan): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__migrate_applies_only_the_reviewed_plan'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+________________ test_mutant_is_killed[failure_not_rolled_back] ________________
+
+mutant = Mutant(name='failure_not_rolled_back', invariant='a failed file rolls every file back', file='deploy/migrate.py', old=...L error\n', cases=('test_deploy_failclosed__a_failed_migration_rolls_back_the_whole_plan',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: failure_not_rolled_back is broken_runner (a failed file rolls every file back): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_deploy_failclosed__a_failed_migration_rolls_back_the_whole_plan'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[ssm_drops_arguments] __________________
+
+mutant = Mutant(name='ssm_drops_arguments', invariant='a step runs with the arguments it was given', file='../../infra/rollout/..."$step"; } | base64 -w0)', cases=('test_backend_deploy__ssm_carries_a_step_byte_for_byte',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: ssm_drops_arguments is broken_runner (a step runs with the arguments it was given): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_backend_deploy__ssm_carries_a_step_byte_for_byte'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+______________ test_mutant_is_killed[revert_runtime_before_tree] _______________
+
+mutant = Mutant(name='revert_runtime_before_tree', invariant='the revert restores the tree before the runtime', file='../../inf...rollback.sh"', cases=('test_ops_recover__the_revert_restores_the_tree_before_the_runtime',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+        support.blocked_off_linux(result)              # E2C (RV-12)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: revert_runtime_before_tree is broken_runner (the revert restores the tree before the runtime): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name', 'tests/i/test_ops_steps.py::test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']. The cases ['test_ops_recover__the_revert_restores_the_tree_before_the_runtime'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...ion', 'tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler']").killed
+
+tests/i/test_mutants.py:66: AssertionError
+__________________ test_mutant_is_killed[any_caller_egresses] __________________
+
+mutant = Mutant(name='any_caller_egresses', invariant='only the call that created the intent sends', file='judge/submit.py', ol...antined_and_never_retried', 'test_j2_ledger__one_intent_one_batch_and_the_worst_case_held'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: any_caller_egresses is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/j/submit/test_http.py::test_j2_http__submit_and_collect_round_trip_through_the_fake', 'tests/j/submit/test_http.py::test_j2_http__a_rejection_releases_the_hold', 'tests/j/submit/test_http.py::test_j2_http__a_lost_answer_is_ambiguous_one_request_and_reconciled']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...leases_the_hold', 'tests/j/submit/test_http.py::test_j2_http__a_lost_answer_is_ambiguous_one_request_and_reconciled']").killed
+
+tests/j/submit/test_mutants.py:41: AssertionError
+----------------------------- Captured stderr call -----------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 57314)
+Traceback (most recent call last):
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/tests/j/submit/judge_fake.py", line 49, in do_POST
+    return self._send(504, {})
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/tests/j/submit/judge_fake.py", line 40, in _send
+    self.wfile.write(data)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+_______________ test_mutant_is_killed[no_recheck_before_egress] ________________
+
+mutant = Mutant(name='no_recheck_before_egress', invariant='the permission is checked again immediately before egress', file='j...ks_egress_and_releases_it', 'test_j2_ledger__a_revocation_before_egress_releases_the_hold'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: no_recheck_before_egress is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/j/submit/test_http.py::test_j2_http__submit_and_collect_round_trip_through_the_fake', 'tests/j/submit/test_http.py::test_j2_http__a_rejection_releases_the_hold', 'tests/j/submit/test_http.py::test_j2_http__a_lost_answer_is_ambiguous_one_request_and_reconciled']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...leases_the_hold', 'tests/j/submit/test_http.py::test_j2_http__a_lost_answer_is_ambiguous_one_request_and_reconciled']").killed
+
+tests/j/submit/test_mutants.py:41: AssertionError
+_______________ test_mutant_is_killed[unknown_outcome_released] ________________
+
+mutant = Mutant(name='unknown_outcome_released', invariant='an unknown outcome keeps its hold (ambiguous)', file='judge/submit....never_retried', 'test_j2_ledger__an_unknown_outcome_is_held_then_reconciled_from_evidence'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: unknown_outcome_released is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/j/submit/test_http.py::test_j2_http__submit_and_collect_round_trip_through_the_fake', 'tests/j/submit/test_http.py::test_j2_http__a_rejection_releases_the_hold', 'tests/j/submit/test_http.py::test_j2_http__a_lost_answer_is_ambiguous_one_request_and_reconciled']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...leases_the_hold', 'tests/j/submit/test_http.py::test_j2_http__a_lost_answer_is_ambiguous_one_request_and_reconciled']").killed
+
+tests/j/submit/test_mutants.py:41: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/contracts/test_config_and_imports.py::test_each_lab_gate_owns_a_compose_block_below_the_band, argvalues type: enumerate
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/d/test_code_mutants_d6f.py::test_sql_mutant_is_killed[d6f_concurrent_duplicate_fails]
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-103 (<lambda>)
+  
+  Traceback (most recent call last):
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/tests/d/test_d6f_feedback.py", line 276, in <lambda>
+      "second", call(second, "accept_feedback", accept_args(key, n=41))))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/tests/d/test_d6f_feedback.py", line 69, in call
+      return conn.execute(f"select infrx.{name}(%s)", (Jsonb(args),)).fetchone()[0]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection.py", line 304, in execute
+      raise ex.with_traceback(None)
+  psycopg.errors.UniqueViolation: duplicate key value violates unique constraint "idempotency_pkey"
+  DETAIL:  Key (org_id, operation, key)=(0a000000-0000-4000-8000-00000000000a, feedback, race-d78b6ab4-ca82-4aea-b585-ce7cbf93e534) already exists.
+  CONTEXT:  SQL statement "insert into infrx.idempotency (org_id, operation, key, payload_digest, feedback_id)
+    values (v_org, p_args->'idem'->>'operation', p_args->'idem'->>'key',
+            p_args->'idem'->>'payload_hash', f.feedback_id)"
+  PL/pgSQL function accept_feedback(jsonb) line 47 at SQL statement
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/d/test_code_mutants_l2sql.py::test_sql_mutant_is_killed[l2_writers_race]
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-135 (<lambda>)
+  
+  Traceback (most recent call last):
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/tests/d/test_l2sql_access.py", line 256, in <lambda>
+      "second", call(second, "lab_put_access_grant", pair)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/tests/d/test_l2sql_access.py", line 71, in call
+      return conn.execute(f"select infrx.{name}(%s)", (Jsonb(args),)).fetchone()[0]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve/apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection.py", line 304, in execute
+      raise ex.with_traceback(None)
+  psycopg.errors.UniqueViolation: duplicate key value violates unique constraint "lab_access_grants_one_pair"
+  DETAIL:  Key (grantor_org_id, recipient_provider_org_id, version)=(a74987cc-57b7-4b17-a2b4-638f013c0906, b0000001-0000-4000-8000-000000000001, 1) already exists.
+  CONTEXT:  SQL statement "insert into infrx.lab_access_grants (grant_id, version, grantor_org_id,
+        recipient_provider_org_id, model_ids, categories, purposes, retention_days,
+        effective_at, expires_at, written_by)
+      values (coalesce(prev.grant_id, gen_random_uuid()), coalesce(prev.version, 0) + 1,
+        (p_args->>'grantor_org_id')::uuid, v_provider, v_models,
+        array(select jsonb_array_elements_text(p_args->'categories')),
+        array(select jsonb_array_elements_text(p_args->'purposes')),
+        (p_args->>'retention_days')::int, infrx.now(), (p_args->>'expires_at')::timestamptz,
+        (p_args->>'actor_user_id')::uuid)
+      returning *"
+  PL/pgSQL function lab_put_access_grant(jsonb) line 15 at SQL statement
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/d/test_outbox_relay.py::test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_duplicate_delivery_never_makes_a_second_attempt[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_full_index_defers_rows_and_never_drops_them[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job[valkey]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[denied_read_tolerated]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[unknown_error_is_not_found]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[validation_skipped] - A...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[problems_ignored] - Ass...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[unknown_mode_accepted]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[composition_gate_removed]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[rename_before_validate]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[staged_file_is_world_readable]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[stale_staged_file_kept]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[value_passed_as_an_argument]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[value_printed_on_success]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[value_printed_on_refusal]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[release_not_required_in_pilot]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[credit_without_card_installs]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[python_pin_dropped] - A...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[transport_check_dropped]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[engine_digest_unchecked]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[transport_logs_not_silenced]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[manifest_modes_drift]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[unset_mode_starts_legacy]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[unit_runs_the_retired_shim]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[probe_on_host_despite_image]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[unknown_setting_accepted]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[worker_killed_before_drain]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[gateway_public_bind] - ...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[valkey_public_bind] - A...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[dockerfile_base_by_tag]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[metrics_public] - Asser...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[edge_strips_a_contract_response_header]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[edge_site_encodes_streams]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[edge_buffers_events] - ...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[edge_hides_jobs] - Asse...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[engine_second_setting_source]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[maintenance_proxies] - ...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[units_before_preflight]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[edge_opened_unready] - ...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[drain_leaves_edge_open]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[maintenance_not_sticky]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[rollback_to_unmetered_allowed]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[reviewed_digest_not_enforced]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[failure_not_rolled_back]
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[ssm_drops_arguments] - ...
+FAILED tests/i/test_mutants.py::test_mutant_is_killed[revert_runtime_before_tree]
+FAILED tests/j/submit/test_mutants.py::test_mutant_is_killed[any_caller_egresses]
+FAILED tests/j/submit/test_mutants.py::test_mutant_is_killed[no_recheck_before_egress]
+FAILED tests/j/submit/test_mutants.py::test_mutant_is_killed[unknown_outcome_released]
+ERROR tests/i/test_observe.py::test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler
+ERROR tests/i/test_pooler.py::test_ops_continuous__the_computed_budget_is_what_the_session_pooler_admits
+ERROR tests/i/test_pooler.py::test_ops_continuous__session_state_is_lost_and_leaked_on_the_transaction_pooler
+ERROR tests/i/test_pooler.py::test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler
+ERROR tests/i/test_pooler.py::test_ops_continuous__transaction_scoped_patterns_survive_the_transaction_pooler
+ERROR tests/i/test_pooler.py::test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pooler
+ERROR tests/i/test_privilege_probe.py::test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail
+ERROR tests/i/test_rollback_drill.py::test_ops_recover__the_settlement_check_passes_either_regime_and_fails_the_unsettled
+53 failed, 6411 passed, 129 skipped, 9 xfailed, 5 warnings, 8 errors in 5442.37s (1:30:42)
+make: *** [Makefile:13: api-test] Error 1
