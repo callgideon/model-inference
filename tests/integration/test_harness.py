@@ -222,6 +222,11 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0027_lab_access.sql", "0028_feedback_durable.sql", "0029_lab_data.sql",
     # Lab (local-only, R151): LW1 integration (R156 session door)
     "0030_lab_access_self.sql",
+    # Lab (local-only, R151): lab-sql LW2 (D6J, L3-SQL, D9, D7/D6F follow-ups, the LW2 schema requests)
+    "0031_lab_consent.sql", "0032_lab_control.sql", "0033_lab_rollout.sql",
+    "0034_lab_eval_followup.sql", "0035_feedback_scrub.sql", "0036_lab_judge_ledger.sql",
+    "0037_lab_judge_doors.sql", "0038_feedback_doors.sql", "0039_lab_release.sql",
+    "0040_lab_variant_comparisons.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()

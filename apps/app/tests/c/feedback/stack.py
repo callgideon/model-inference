@@ -61,7 +61,9 @@ LABEL = "ai.infrx.app-c3f.checkout"
 JWT_SECRET = "infrx-app-c3f-local-jwt-secret-not-a-real-one"
 AUTHN_PASSWORD = "infrx-app-c3f-authenticator-local"
 DB = f"{pgharness.DATABASE}_c3f"
-DOORS = Path(__file__).with_name("proposed_doors.sql")
+# WR-LSQ-7: once a 0038_* migration exists the doors are the migration's (body byte-identical to
+# proposed_doors.sql), so build() applies nothing and --mutants mutates the real migration.
+DOORS = next(migrations.DIR.glob("0038_*.sql"), Path(__file__).with_name("proposed_doors.sql"))
 C1, C2, DEV, ADMIN, VIEWER, BOTH = t.C1, t.BOTH, t.DEV, t.ADMIN, t.VIEWER, t.BOTH
 NEMO, OTHER, MODEL = t.NEMO, t.OTHER, t.MODEL
 UNKNOWN = "9f000000-0000-4000-8000-00000000009f"
