@@ -360,10 +360,10 @@ def test_n3_a_bound_passed_on_either_clock_denies() -> None:
 
 
 def test_n3_backfill_moves_the_object_restrictions_into_d7_once() -> None:
-    """Oracle (WR-N3-5): a tombstone written as an object before 0041 held it is invisible
-    to the gate until `backfill` moves it; afterwards the sample is denied with the object's
-    reason, every trace entry's bound is D7's, and a rerun moves nothing new - a sample D7
-    had already tombstoned keeps its first reason."""
+    """Oracle (WR-N3-5): a tombstone written as an object before 0041 held it is denied by
+    the gate (fix round: object records stay deny-only) but absent from 0041 until
+    `backfill` moves it with the object's reason; every trace entry's bound is D7's, and a
+    rerun moves nothing new - a sample D7 had already tombstoned keeps its first reason."""
     w = World()
     got = ok(w, [w.trace(1), w.trace(2), w.trace(3)])
     a, b, c = sorted(permitted(w, got.dataset_ref))
@@ -372,7 +372,9 @@ def test_n3_backfill_moves_the_object_restrictions_into_d7_once() -> None:
         w.objects.seed(f"lab/{NEMO}/lineage/tombstones/{sid}.json", json.dumps(
             {"sample_id": sid, "reason": reason}).encode(), "application/json")
     run(w.lab.restrictions.tombstone([b], provider_org_id=NEMO, reason="grant_narrowed"))
-    assert permitted(w, got.dataset_ref) == {a, c}             # the object stone is unseen
+    assert permitted(w, got.dataset_ref) == {c}                # the gate honors the object
+    assert run(w.lab.restrictions.blocked(got.dataset_ref, provider_org_id=NEMO)) == \
+        {b: "grant_narrowed"}                                  # but 0041 has not got it
 
     def move():
         return run(lineage.backfill(w.objects, provider_org_id=NEMO,

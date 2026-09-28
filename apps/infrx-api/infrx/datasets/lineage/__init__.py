@@ -31,7 +31,11 @@ expiry is denied the instant it passes, with no job in between) - 0041's
 `lab_permitted_samples` on D7's clock, less the bounds the caller's `now` has passed. A
 tombstone (0041 `lab_sample_tombstones`, WR-N3-5: reason and D7's time, never content;
 `restrictions` is `PgSampleRestrictions`) is permanent - a later re-grant does not resurrect
-the sample; the object tombstones of before WR-N3-5 move once with `backfill`. `tombstone`
+the sample; the object tombstones of before WR-N3-5 move once with `backfill`. Every
+tombstone also keeps its write-once object record and every gate honors it (deny-only), so
+a caller without the database (`restrictions` omitted and not resolvable: composition's
+push, `export_evidence`, P1/P2's `_stone`, a store with no port) can neither miss nor undo a
+tombstone; `reconcile` without `restrictions` reaches 0041 through its directory. `tombstone`
 is the push (a T3 deletion or an L2 revocation hook, wiring); `reconcile` is the pull that
 finds the rest
 (grant no longer current, a newer version of it dropping the entry's model or one of its
@@ -97,10 +101,14 @@ def _id(key: str) -> str:
 
 
 def restrictions_of(store):
-    """0041's tombstones and bounds beside D7's rows: a store that carries them (the fakes),
-    else the real store's own connection (WR-DS5-1: `PgLabDataStore.restrictions`)."""
+    """0041's tombstones and bounds beside D7's rows: a store (or directory) that carries
+    them (the fakes), else its own connection (WR-DS5-1: `PgLabDataStore.restrictions`),
+    else None - the object records alone (a fake with neither, e.g. P2's)."""
     found = getattr(store, "restrictions", None)
-    return found if found is not None else PgSampleRestrictions(store._connect)
+    if found is not None:
+        return found
+    connect = getattr(store, "_connect", None)
+    return None if connect is None else PgSampleRestrictions(connect)
 
 
 async def select(*, access, retention, content: Content, feedback: Feedback,
@@ -170,7 +178,8 @@ async def select(*, access, retention, content: Content, feedback: Feedback,
         samples.append({"sample_id": sid, "content_digest": digest, "group_key": request})
     if not samples:
         raise errors.InvalidRequest("no selected request is permitted: nothing to publish")
-    await restrictions_of(store).bound(bounds, provider_org_id=provider_org_id)
+    if (restrictions := restrictions_of(store)) is not None:
+        await restrictions.bound(bounds, provider_org_id=provider_org_id)
     whole = hashlib.sha256(lab.canonical(sorted(
         [s["group_key"], s["content_digest"]] for s in samples))).hexdigest()
     source_ref = await store.register_source(
@@ -209,48 +218,78 @@ async def _expired(objects, provider: str, sample_ids, now: datetime) -> dict:
     return out
 
 
-async def blocked(objects, *, provider_org_id: str, sample_ids, now: datetime, restrictions,
-                  dataset_ref: str) -> dict:
-    """sample id -> why it is denied now: 0041's answer for the dataset (the tombstone's
-    reason, or `content_expired` on D7's clock), else `content_expired` at the caller's `now`."""
+async def _stone(objects, provider: str, entry: dict, reason: str, at: datetime, *,
+                 restrictions=None) -> bool:
+    """Tombstone one sample: its write-once object record (the first reason stands) and,
+    with `restrictions`, 0041's row; True when either was new."""
+    wrote = await objects.put_if_absent(
+        f"{_base(provider)}/tombstones/{entry['sample_id']}.json", lab.canonical({
+            "sample_id": entry["sample_id"], "grantor_org_id": entry["grantor_org_id"],
+            "request_id": entry["request_id"], "reason": reason, "at": at.isoformat()}),
+        "application/json")
+    return bool(restrictions is not None and await restrictions.tombstone(
+        [entry["sample_id"]], provider_org_id=provider, reason=reason)) or wrote
+
+
+async def _stones(objects, provider: str, sample_ids) -> dict:
+    """The object tombstones among `sample_ids` -> their reason."""
+    base = _base(provider)
+    found = {_id(k) for k in await objects.keys(f"{base}/tombstones/")} & set(sample_ids)
+    return {s: json.loads(await objects.get(f"{base}/tombstones/{s}.json"))["reason"]
+            for s in sorted(found)}
+
+
+async def blocked(objects, *, provider_org_id: str, sample_ids, now: datetime,
+                  restrictions=None, dataset_ref: str | None = None) -> dict:
+    """sample id -> why it is denied now: the object tombstone's reason (the first), else
+    0041's answer for `dataset_ref` when given (its tombstone's reason, or `content_expired`
+    on D7's clock), else `content_expired` at the caller's `now`."""
     wanted = set(sample_ids)
-    out = {s: r for s, r in (await restrictions.blocked(
-        dataset_ref, provider_org_id=provider_org_id)).items() if s in wanted}
+    out = {} if restrictions is None or dataset_ref is None else {
+        s: r for s, r in (await restrictions.blocked(
+            dataset_ref, provider_org_id=provider_org_id)).items() if s in wanted}
+    out.update(await _stones(objects, provider_org_id, wanted))
     return {**await _expired(objects, provider_org_id, wanted - set(out), now), **out}
 
 
 async def permitted(store, objects, dataset_ref: str, *, provider_org_id: str, purpose: str,
                     now: datetime) -> set[str]:
-    """The gate: D7's samples under a grant current now for `purpose`, less the denied."""
-    allowed = set(await restrictions_of(store).permitted(
+    """The gate: D7's samples under a grant current now for `purpose` (0041's
+    `lab_permitted_samples` when the store has it), less the denied."""
+    restrictions = restrictions_of(store)
+    allowed = set(await (store.accessible_samples if restrictions is None
+                         else restrictions.permitted)(
         dataset_ref, provider_org_id=provider_org_id, purpose=purpose))
-    return allowed - set(await _expired(objects, provider_org_id, allowed, now))
+    return allowed - set(await blocked(objects, provider_org_id=provider_org_id,
+                                       sample_ids=allowed, now=now))
 
 
 async def tombstone(objects, *, provider_org_id: str, grantor_org_id: str,
                     request_id: str | None = None, reason: str, at: datetime,
-                    limit: int = PAGE, restrictions) -> dict:
+                    limit: int = PAGE, restrictions=None) -> dict:
     """The push: tombstone up to `limit` not-yet-tombstoned samples of the grantor (or of
-    one request); call again while `more`. 0041 stamps its own time (R7), so `at` is not
-    stored."""
+    one request); call again while `more`."""
     base = _base(provider_org_id)
     prefix = f"{base}/traces/{grantor_org_id}/" + (f"{request_id}/" if request_id else "")
-    ids = sorted(_id(k) for k in await objects.keys(prefix))
-    for start in range(0, len(ids), limit):
-        new = await restrictions.tombstone(ids[start:start + limit],
-                                           provider_org_id=provider_org_id, reason=reason)
-        if new:
-            return {"tombstoned": len(new), "more": start + limit < len(ids)}
-    return {"tombstoned": 0, "more": False}
+    done = {_id(k) for k in await objects.keys(f"{base}/tombstones/")}
+    todo = [k for k in await objects.keys(prefix) if _id(k) not in done]
+    for key in todo[:limit]:
+        await _stone(objects, provider_org_id, await trace_of(
+            objects, provider_org_id=provider_org_id, sample_id=_id(key)), reason, at,
+            restrictions=restrictions)
+    return {"tombstoned": len(todo[:limit]), "more": len(todo) > limit}
 
 
 async def reconcile(directory, retention, objects, *, provider_org_id: str,
-                    after: str | None = None, limit: int = PAGE, restrictions) -> dict:
+                    after: str | None = None, limit: int = PAGE, restrictions=None) -> dict:
     """The pull over `limit` trace samples after the cursor: tombstone a sample whose grant
     is no longer current (L2, on the store clock) or whose grant's current version no longer
     names its model or one of its categories, whose request T3 no longer projects, or
     whose content passed its bound; then, for deletion and expiry only, delete the copy.
-    `next` is the cursor of the following page (None at the end)."""
+    `restrictions` defaults to the directory's (PgAccessStore's connection). `next` is the
+    cursor of the following page (None at the end)."""
+    if restrictions is None:
+        restrictions = restrictions_of(directory)
     keys = [k for k in await objects.keys(f"{_base(provider_org_id)}/samples/")
             if after is None or k > after]
     page, report = keys[:limit], {"checked": 0, "tombstoned": [], "purged": 0}
@@ -265,8 +304,8 @@ async def reconcile(directory, retention, objects, *, provider_org_id: str,
                 or not grant.is_current(now)) else "grant_narrowed" if (
                     entry["model_id"] not in grant.model_ids
                     or not set(entry["categories"]) <= set(grant.categories)) else None
-        if reason and await restrictions.tombstone([entry["sample_id"]],
-                                                   provider_org_id=provider_org_id, reason=reason):
+        if reason and await _stone(objects, provider_org_id, entry, reason, clock,
+                                   restrictions=restrictions):
             report["tombstoned"].append({"sample_id": entry["sample_id"], "reason": reason})
         copy = sample_key(provider_org_id, entry["content_digest"])
         if reason in PURGED_BY_RETENTION and await objects.head(copy) is not None:
@@ -303,7 +342,7 @@ async def status(store, objects, dataset_ref: str, *, provider_org_id: str,
 
 
 async def export_evidence(objects, *, provider_org_id: str, export_id: str,
-                          now: datetime, restrictions) -> dict:
+                          now: datetime, restrictions=None) -> dict:
     """Reconciliation evidence for an export already made: its items denied now. Sample
     ids and reasons only - never content - and an honest `recalled: False`."""
     record = json.loads(await objects.get(f"lab/{provider_org_id}/exports/{export_id}/"
