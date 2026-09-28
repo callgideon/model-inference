@@ -226,16 +226,25 @@ def ready_dev(ctl, label: str):
     return revision, call(ctl.validate(DEV_A, PROVIDER_A, dev.deployment_revision_id))
 
 
-def ship(ctl, label: str, expected_version: int, rates=("300", "900")):
-    """register -> dev smoke -> ADMIN_A's proposal -> the operator's approval at `rates`."""
+def proposed(ctl, label: str):
+    """register -> dev smoke -> ADMIN_A's publication proposal: (revision, proposal)."""
     revision, dev = ready_dev(ctl, label)
-    proposal = call(ctl.propose(ADMIN_A, PROVIDER_A, dev.deployment_revision_id,
-                                endpoint_name="marlin-2b"))
-    listing = call(ctl.approve(operator(), proposal.deployment_revision_id,
-                               rate_card_version=card_of(label), input_rate=rates[0],
-                               output_rate=rates[1], expected_version=expected_version,
-                               reason="e3l publication"))
-    return revision, proposal, listing
+    return revision, call(ctl.propose(ADMIN_A, PROVIDER_A, dev.deployment_revision_id,
+                                      endpoint_name="marlin-2b"))
+
+
+def approve(ctl, proposal, label: str, expected_version: int, rates=("300", "900")):
+    """The operator's approval of `proposal` at `rates` under the card `card_of(label)`."""
+    return ctl.approve(operator(), proposal.deployment_revision_id,
+                       rate_card_version=card_of(label), input_rate=rates[0],
+                       output_rate=rates[1], expected_version=expected_version,
+                       reason="e3l publication")
+
+
+def ship(ctl, label: str, expected_version: int, rates=("300", "900")):
+    """`proposed`, then the operator's approval: (revision, proposal, listing)."""
+    revision, proposal = proposed(ctl, label)
+    return revision, proposal, call(approve(ctl, proposal, label, expected_version, rates))
 
 
 def card_of(label: str) -> str:

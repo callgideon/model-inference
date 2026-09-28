@@ -321,11 +321,116 @@ def test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins(wo
 # ------------------------------------------------------------------ l09, l10, l12
 
 
-def test_l09_publish_and_rollback_cas_under_injected_faults(workdir):
-    waits("l09", "L3", steps="two concurrent publish/rollback transitions on one alias with a "
-          "stale expected version: exactly one wins, the other is a typed conflict; a crash "
-          "between the CAS and the audit write leaves no transition without its audit")
-    unbound()
+ADVISORY = "select pg_advisory_{}(hashtextextended('catalog_listings/' || %s, 0))"
+
+
+def raced(trip, *calls):
+    """`calls` (coroutine factories) started together while this test holds the alias's
+    listing lock (0032's advisory lock), released once every one waits on it: each call's
+    typed outcome - the Listing, or the refusal's class name."""
+    import threading
+
+    import psycopg
+    outcomes: list = [None] * len(calls)
+
+    def run(i, make):
+        try:
+            outcomes[i] = lab.call(make())
+        except Exception as refused:                      # noqa: BLE001 - recorded, judged
+            outcomes[i] = type(refused).__name__
+    with psycopg.connect(harness.pg_dsn(trip.world.database), autocommit=True) as holder:
+        holder.execute(ADVISORY.format("lock"), (stack.CREDIT_ALIAS,))
+        threads = [threading.Thread(target=run, args=(i, make)) for i, make in enumerate(calls)]
+        for thread in threads:
+            thread.start()
+        world.wait_for(lambda: waiting(trip, "advisory") >= len(calls), 30,
+                       f"{len(calls)} transitions waiting on the listing lock")
+        holder.execute(ADVISORY.format("unlock"), (stack.CREDIT_ALIAS,))
+    for thread in threads:
+        thread.join(60)
+    return outcomes
+
+
+def waiting(trip, event: str) -> int:
+    """Backends of the scenario's clone waiting on a lock of this kind (advisory/relation)."""
+    return trip.one("select count(*) from pg_stat_activity where datname = %s and "
+                    "wait_event_type = 'Lock' and wait_event = %s",
+                    trip.world.database, event)[0]
+
+
+def published(trip) -> int:
+    return trip.one("select count(*) from infrx.lab_control_events where action = "
+                    "'lab_publish'")[0]
+
+
+def test_l09_publish_and_rollback_cas_under_injected_faults(workdir, record_property):
+    """Oracle: (1) two operators approving two proposals against listing 1 at the same time
+    publish exactly one - the other is a typed state_conflict and its proposal stays
+    proposed; (2) a rollback on a stale fence is refused and moves nothing; (3) two racing
+    rollbacks move the alias once; (4) a publisher killed after its CAS wrote listing 4 but
+    before its audit row (its backend terminated while the audit insert waits) leaves no
+    listing, card or state move and no audit - and the retry on the same fence publishes
+    once, with one audit row."""
+    import psycopg
+    with world.composed(workdir, start=()) as trip:
+        lab.seed_lab(trip)
+        ctl = lab.control(trip)
+        (_, p1), (_, p2), (_, p3) = (lab.proposed(ctl, f"l09{x}") for x in "abc")
+        race = raced(trip, lambda: lab.approve(ctl, p1, "l09a", 1),
+                     lambda: lab.approve(ctl, p2, "l09b", 1))
+        won = [o for o in race if not isinstance(o, str)]
+        loser = p2 if won and won[0].deployment_revision_id == p1.deployment_revision_id else p1
+        stale = lab.refused_as(ctl.rollback(lab.operator(), stack.CREDIT_ALIAS, to_version=1,
+                                            expected_version=1, reason="stale"))
+        after_stale = lab.listing(trip)
+        rollbacks = raced(trip, *[lambda: ctl.rollback(lab.operator(), stack.CREDIT_ALIAS,
+                                                       to_version=1, expected_version=2,
+                                                       reason="race")] * 2)
+        before_crash, audits = lab.listing(trip), published(trip)
+        crashed: list = []
+        with psycopg.connect(harness.pg_dsn(trip.world.database)) as holder:
+            holder.execute("lock table infrx.lab_control_events in exclusive mode")
+            import threading
+
+            def publisher():
+                try:
+                    crashed.append(lab.call(lab.approve(ctl, p3, "l09c", before_crash[0])))
+                except Exception as died:                 # noqa: BLE001 - the injected fault
+                    crashed.append(type(died).__name__)
+            thread = threading.Thread(target=publisher)
+            thread.start()
+            world.wait_for(lambda: trip.db(
+                "select pid from pg_stat_activity where datname = %s and wait_event = "
+                "'relation' and query like %s", trip.world.database,
+                "%lab_control_publish%"), 30, "the publisher waiting on its audit insert")
+            killed = trip.db("select pg_terminate_backend(pid) from pg_stat_activity where "
+                             "datname = %s and wait_event = 'relation' and query like %s",
+                             trip.world.database, "%lab_control_publish%")
+            thread.join(60)
+            holder.rollback()
+        left = {"listing": lab.listing(trip), "audits": published(trip),
+                "card": trip.db("select 1 from infrx.rate_card_versions where "
+                                "rate_card_version = 'rc_e3l_l09c'"),
+                "state": trip.one("select state from infrx.deployment_revisions where "
+                                  "deployment_revision_id = %s", p3.deployment_revision_id)[0]}
+        retried = lab.call(lab.approve(ctl, p3, "l09c", before_crash[0]))
+        record_property("cas", {"race": [str(o) for o in race], "stale": stale,
+                                "rollbacks": [str(o) for o in rollbacks], "crashed": crashed,
+                                "killed": killed, "left": left, "retried": vars(retried)})
+        assert len(won) == 1 and race.count("StateConflict") == 1, race
+        assert won[0].version == 2
+        assert trip.one("select state from infrx.deployment_revisions where "
+                        "deployment_revision_id = %s", loser.deployment_revision_id)[0] \
+            == "proposed_public"
+        assert stale == "StateConflict" and after_stale[0] == 2, (stale, after_stale)
+        assert sorted(str(getattr(o, "version", o)) for o in rollbacks) == ["3", "StateConflict"], \
+            rollbacks
+        assert before_crash[0] == 3
+        assert killed == [(True,)] and crashed and isinstance(crashed[0], str), (killed, crashed)
+        assert left == {"listing": before_crash, "audits": audits, "card": [],
+                        "state": "proposed_public"}, left
+        assert (retried.version, retried.deployment_revision_id) == (4, p3.deployment_revision_id)
+        assert published(trip) == audits + 1
 
 
 def test_l10_a_control_service_restart_mid_operation_loses_nothing(workdir):
