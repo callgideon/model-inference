@@ -8,6 +8,7 @@ Reuse these files instead of creating an unrelated dashboard:
 
 - [Renderer](../scripts/progress.py)
 - [Coordinator state overlay](../evidence/coordinator/progress-state.json)
+- [Post-launch wave map](07-post-launch-waves.md)
 - [HTML output](../evidence/coordinator/progress.html)
 - [Markdown output](../evidence/coordinator/PROGRESS.md)
 
