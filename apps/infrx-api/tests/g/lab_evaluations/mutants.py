@@ -29,6 +29,10 @@ CHECKED, CANCEL = C + "a_launch_is_checked_before_anything_is_written", \
 RUNS, REPORT = C + "runs_are_the_providers_experiment_and_subscription_runs_verbatim", \
     C + "an_experiment_carries_b2s_report_verbatim"
 SUBSCRIBE = C + "subscribe_is_b3s_with_the_catalogs_evaluator_and_the_session_owner"
+UNKNOWN_RUN = C + "a_run_the_provider_does_not_have_is_not_found_whatever_the_role"
+NOT_HELD = C + "a_subscription_naming_what_the_provider_does_not_hold_is_invalid"
+LOOKUP = "    status = await store.run_status(rid, provider_org_id=who.provider_org_id)\n"
+REQUIRE = "    require(who, Cap.run_evaluation)\n"
 UNWIRED, BODY = C + "an_unwired_port_is_unavailable_after_the_access_checks", \
     C + "a_body_is_json_bounded_and_valid_before_the_backends"
 LAUNCH_ROUTE = ("        who = await actor(request, Cap.run_evaluation)\n"
@@ -67,11 +71,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "            who = await actor(request, Cap.run_evaluation)\n", ROLES),
     _m("viewer_launches", "a launch needs run_evaluation", LAUNCH_ROUTE,
        LAUNCH_ROUTE.replace("run_evaluation", "read_aggregate_health"), ROLES),
-    _m("viewer_cancels", "a cancel needs run_evaluation",
-       "        who = await actor(request, Cap.run_evaluation)\n"
-       "        return lab_auth.ok(await cancel(",
-       "        who = await actor(request, Cap.read_aggregate_health)\n"
-       "        return lab_auth.ok(await cancel(", ROLES),
+    _m("viewer_cancels", "a cancel needs run_evaluation", REQUIRE, "", ROLES),
+    _m("require_ignores_the_role", "a role without the capability is refused",
+       "    if capability not in ROLE_CAPABILITIES[who.role]:\n", "    if False:\n", ROLES),
+    _m("cancel_role_before_lookup", "an unknown run is a 404 whatever the role (B4-J02)",
+       LOOKUP + REQUIRE, REQUIRE + LOOKUP, UNKNOWN_RUN),
     _m("viewer_subscribes", "a subscription needs run_evaluation",
        "        who = await actor(request, Cap.run_evaluation)\n        wanted = await lab_body(",
        "        who = await actor(request, Cap.read_aggregate_health)\n"
@@ -100,6 +104,19 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if None in runs:\n        return None", "    if False:\n        return None", RESUME),
     _m("missing_runs_listed", "a run D7 does not hold is not listed",
        "    return [run for run in found if run is not None]", "    return found", RESUME),
+    _m("catalog_unchecked", "a launch names only what the provider's catalog offers",
+       "    if any(getattr(wanted, field) not in",
+       "    if False and any(getattr(wanted, field) not in", CHECKED),
+    _m("dataset_unchecked", "a launch's dataset is in the provider's catalog",
+       'OFFERED = (("datasets", "dataset_ref"),\n', "OFFERED = (\n", CHECKED),
+    _m("harness_unchecked", "a launch's harness is in the provider's catalog",
+       '           ("harnesses", "harness_ref"),\n', "", CHECKED),
+    _m("evaluator_unchecked", "a launch's evaluator is in the provider's catalog",
+       '           ("evaluators", "evaluator_ref"),\n', "", CHECKED),
+    _m("baseline_unchecked", "a launch's baseline serving is in the provider's catalog",
+       '           ("servings", "baseline_serving_ref"),\n', "", CHECKED),
+    _m("candidate_unchecked", "a launch's candidate serving is in the provider's catalog",
+       '           ("servings", "candidate_serving_ref"))\n', "           )\n", CHECKED),
     _m("usd_run_limit", "a launch spends CREDIT: another unit is refused before any write",
        '    unit: Literal["CREDIT"]', "    unit: str", CHECKED),
     # --- cancel ------------------------------------------------------------------------------
@@ -127,6 +144,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if False:\n", SUBSCRIBE),
     _m("evaluator_not_the_catalogs", "the subscription's evaluator spec is the catalog's",
        '             "evaluator": spec}', '             "evaluator": {}}', SUBSCRIBE),
+    _m("unknown_ref_is_a_page", "a ref the provider does not hold is a 422 (B4-J03)",
+       "    except errors.NotFound:\n        raise errors.InvalidRequest(",
+       "    except errors.Conflict:\n        raise errors.InvalidRequest(", NOT_HELD),
+    _m("foreign_external_run_not_held", "another provider's external run is a 422",
+       "    stored = await held(checkpoints.subscribe(",
+       "    stored = await (checkpoints.subscribe(",
+       NOT_HELD),
+    _m("unknown_evaluator_not_held", "an evaluator the catalog lacks is a 422 on subscribe",
+       '    spec = await held(x.port("catalog").evaluator(',
+       '    spec = await (x.port("catalog").evaluator(',
+       NOT_HELD),
     _m("subscribed_with_200", "a subscription is a 201",
        "return lab_auth.ok(await subscribe(x, who, wanted), 201)",
        "return lab_auth.ok(await subscribe(x, who, wanted))", SUBSCRIBE),

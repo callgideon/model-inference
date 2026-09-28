@@ -12,8 +12,11 @@ backends' own JSON, verbatim; lists are `{"data": ...}`.
 
 As `/lab/v1/control` (`lab_auth`): every call re-derives the actor from the forwarded session
 and the user's current membership before a body is read; every role reads
-(`read_aggregate_health`), launch, cancel and subscribe need `run_evaluation`; nothing in a
-body names a provider, user or role. Nothing executes in a request:
+(`read_aggregate_health`), launch, cancel and subscribe need `run_evaluation` - a cancel's
+checked once its run is found, so an unknown run is a 404 whatever the role (the Lab fake's
+order, B4-J02); nothing in a body names a provider, user or role. A ref in a form the
+provider does not hold (not in its catalog; another provider's external run) is a 422.
+Nothing executes in a request:
 
 * **Launch** writes the experiment once (`ExperimentStore.put`, keyed by the form's
   `experiment_id`: the same launch again is the stored row, another launch under it a
@@ -45,6 +48,7 @@ from pydantic import Field, ValidationError
 
 from ...contracts import errors
 from ...contracts.lab import records as lab
+from ...contracts.v2.records import ROLE_CAPABILITIES
 from ...contracts.v2.records import ProviderCapability as Cap
 from ...evaluation import checkpoints, runner
 from ...evaluation.reports import Protocol as ComparisonProtocol
@@ -57,6 +61,12 @@ MAX_BODY_BYTES = 16_384
 LIVE = ("queued", "running")
 ARMS = ("baseline", "candidate")
 PRIVATE = ("evaluator", "owner_user_id")         # B3's, never the Lab's
+#: (catalog list, launch field): a launch names only what the provider's catalog offers.
+OFFERED = (("datasets", "dataset_ref"),
+           ("harnesses", "harness_ref"),
+           ("evaluators", "evaluator_ref"),
+           ("servings", "baseline_serving_ref"),
+           ("servings", "candidate_serving_ref"))
 
 
 class Credit(lab.Amount):
@@ -137,6 +147,22 @@ async def lab_actor(request: Request, sessions, access, capability: Cap) -> Acto
                  role=membership.role)
 
 
+def require(who: Actor, capability: Cap) -> None:
+    """The role's capability, for a write addressed to a record: checked once the record is
+    found, so a 404 is the same whatever the role (the Lab fakes' order, B4-J02/R4)."""
+    if capability not in ROLE_CAPABILITIES[who.role]:
+        raise errors.Forbidden(f"this provider role does not hold {capability}")
+
+
+async def held(answer):
+    """A ref in a form that the provider does not hold is a wrong form (422), not a missing
+    page (B4-J02/J03)."""
+    try:
+        return await answer
+    except errors.NotFound:
+        raise errors.InvalidRequest("the form names what the provider does not hold") from None
+
+
 async def lab_body(request: Request, rt, model, max_bytes: int = MAX_BODY_BYTES):
     """A JSON object body, bounded, validated by `model` (422 otherwise)."""
     intake.check_content_type(request)
@@ -188,6 +214,10 @@ def _public(row: dict[str, Any]) -> dict[str, Any]:
 
 
 async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any]:
+    offered = await x.port("catalog").catalog(who.provider_org_id)
+    if any(getattr(wanted, field) not in {o["ref"] for o in offered[kind]}
+           for kind, field in OFFERED):
+        raise errors.InvalidRequest("the launch names what the provider's catalog lacks")
     spec = await x.port("catalog").evaluator(who.provider_org_id, wanted.evaluator_ref)
     store = x.port("store")
     now = await x.access.store.db_now()
@@ -222,6 +252,7 @@ async def runs(x: LabEvaluations, who: Actor) -> list[dict[str, Any]]:
 async def cancel(x: LabEvaluations, who: Actor, rid: str) -> dict[str, Any]:
     store = x.port("store")
     status = await store.run_status(rid, provider_org_id=who.provider_org_id)
+    require(who, Cap.run_evaluation)
     if status["state"] not in LIVE:
         raise errors.StateConflict("the run already finished")
     # ponytail: read-then-cancel races a run finishing in between; lab-sql closes it by
@@ -234,12 +265,12 @@ async def subscriptions(x: LabEvaluations, who: Actor) -> list[dict[str, Any]]:
 
 
 async def subscribe(x: LabEvaluations, who: Actor, wanted: SubscriptionRequest) -> dict:
-    spec = await x.port("catalog").evaluator(who.provider_org_id, wanted.evaluator_ref)
+    spec = await held(x.port("catalog").evaluator(who.provider_org_id, wanted.evaluator_ref))
     ledger = x.port("ledger")
     asked = {**wanted.model_dump(mode="json"), "provider_org_id": who.provider_org_id,
              "evaluator": spec}
-    stored = await checkpoints.subscribe(ledger, x.port("store"), asked, access=x.access,
-                                         user_id=who.user_id)
+    stored = await held(checkpoints.subscribe(ledger, x.port("store"), asked, access=x.access,
+                                              user_id=who.user_id))
     if stored.model_dump(mode="json", exclude={"owner_user_id"}) != asked:
         raise errors.IdempotencyConflict("the subscription id names another subscription")
     rows = await ledger.listing(who.provider_org_id)
@@ -274,7 +305,7 @@ def register(app, rt, evaluations: LabEvaluations | None = None):
     @app.post(EVALS_PREFIX + "/runs/{run_id}/cancel")
     @lab_auth.guarded
     async def cancel_run(request: Request):
-        who = await actor(request, Cap.run_evaluation)
+        who = await actor(request, Cap.read_aggregate_health)   # the run first: `require`
         return lab_auth.ok(await cancel(x, who, request.path_params["run_id"]))
 
     @app.post(f"{EVALS_PREFIX}/experiments")

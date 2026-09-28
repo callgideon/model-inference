@@ -214,15 +214,21 @@ def test_lab_evaluations__a_consumer_only_user_is_denied_and_another_provider_is
 
 
 def test_lab_evaluations__every_role_reads_and_only_run_evaluation_writes():
-    """Oracle: a viewer reads the four listings and is refused (403) launch, cancel and
-    subscribe before any backend is asked; a developer's launch and subscribe succeed."""
+    """Oracle: a viewer reads the four listings and is refused (403) launch and subscribe
+    before any backend is asked, and the cancel of a run the provider has (B4-J02: the run is
+    looked up first) without it moving; a developer's launch, subscribe and cancel succeed."""
     w = World()
     c = w.client()
-    got = [call(c, VIEWER, m, path, body).status_code for m, path, body in routes(w)]
-    assert got == [200, 200, 200, 200, 403, 403, 403]
-    assert (w.store.runs, w.experiments.rows, w.ledger.subs) == ({}, {}, {})
-    assert w.catalog.calls == ["catalog"]              # no write reached a backend
     assert call(c, DEV, "POST", "experiments", w.launch()).status_code == 202
+    w.catalog.calls.clear()
+    runs, experiments = dict(w.store.runs), dict(w.experiments.rows)
+    got = [call(c, VIEWER, m, path, body).status_code
+           for m, path, body in routes(w)[:5] + ((routes(w)[5][0], routes(w)[5][1],
+                                                   w.launch(experiment_id=uid(2, 0xe0))),
+                                                  routes(w)[6])]
+    assert got == [200, 200, 200, 200, 403, 403, 403]
+    assert (w.store.runs, w.experiments.rows, w.ledger.subs) == (runs, experiments, {})
+    assert w.catalog.calls == ["catalog"]              # no write reached a backend
     assert call(c, DEV, "POST", "subscriptions", w.subscription()).status_code == 201
     assert call(c, DEV, "POST", f"runs/{le.run_id(EXPERIMENT, 'baseline')}/cancel"
                 ).status_code == 200
@@ -289,14 +295,22 @@ def test_lab_evaluations__a_launch_interrupted_between_the_freezes_resumes_as_th
 
 
 def test_lab_evaluations__a_launch_is_checked_before_anything_is_written():
-    """Oracle: an evaluator the provider does not hold is a 404, a run limit in another unit
-    than CREDIT or a protocol with no margin rule is a 422, a body naming a provider or user a
-    422 - and no experiment or run exists after any of them."""
+    """Oracle (B4-J02): a dataset, harness, serving or evaluator not in the provider's
+    catalog (another provider's, or none) is a 422 like a run limit in another unit than
+    CREDIT, a protocol with no margin rule or a body naming a provider or user; another
+    provider's member launching this form reaches nothing of it (422) - and no experiment or
+    run exists after any of them."""
     w = World()
     c = w.client()
     other = le.runner.evaluator_ref(SPEC, provider_org_id=NEMO, evaluator_id=uid(9, 0xee))
+    answer = call(c, OUTSIDER, "POST", "experiments", w.launch(), provider=OTHER)
+    assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"})
     for body, status, reason in (
-            (w.launch(evaluator_ref=other), 404, "not_found"),
+            (w.launch(evaluator_ref=other), 422, "invalid"),
+            (w.launch(dataset_ref=w.dataset.replace(NEMO, OTHER)), 422, "invalid"),
+            (w.launch(harness_ref=w.harness[:-64] + "0" * 64), 422, "invalid"),
+            (w.launch(baseline_serving_ref=SERVING.replace(NEMO, OTHER)), 422, "invalid"),
+            (w.launch(candidate_serving_ref=SERVING[:-64] + "8" * 64), 422, "invalid"),
             (w.launch(run_limit={"unit": "PROVIDER_USD", "value": "10.00000000"}), 422,
              "invalid"),
             (w.launch(protocol={**PROTOCOL, "confidence": 0.4}), 422, "invalid"),
@@ -327,6 +341,18 @@ def test_lab_evaluations__cancel_stops_a_live_run_and_a_finished_run_is_a_confli
         assert w.store.runs[base]["state"] == state
     answer = call(c, OUTSIDER, "POST", f"runs/{cand}/cancel", provider=OTHER)
     assert (answer.status_code, answer.json()) == (404, {"refusal": "not_found"})
+
+
+def test_lab_evaluations__a_run_the_provider_does_not_have_is_not_found_whatever_the_role():
+    """Oracle (LAB-ACCESS, B4-J02: existence is not confirmed by role): a viewer cancelling a
+    run the provider does not have is a 404, as a developer is - never a 403 - and nothing
+    moves."""
+    w = World()
+    c = w.client()
+    for user in (VIEWER, DEV):
+        answer = call(c, user, "POST", f"runs/{uid(9, 0xe1)}/cancel")
+        assert (answer.status_code, answer.json()) == (404, {"refusal": "not_found"}), user
+    assert w.store.runs == {}
 
 
 # --- the listings ---------------------------------------------------------------------------
@@ -408,6 +434,19 @@ def test_lab_evaluations__subscribe_is_b3s_with_the_catalogs_evaluator_and_the_s
                                                      "value": "100.00000000"}})
     assert (usd.status_code, usd.json()) == (422, {"refusal": "invalid"})
     assert list(w.ledger.subs) == [uid(1, 0x5b)]
+
+
+def test_lab_evaluations__a_subscription_naming_what_the_provider_does_not_hold_is_invalid():
+    """Oracle (B4-J03): an external run of another provider, or an evaluator the catalog does
+    not hold, is a 422 (the form is wrong, not a missing page), and nothing is subscribed."""
+    w = World()
+    c = w.client()
+    foreign = w.external.replace(NEMO, OTHER)
+    unknown = le.runner.evaluator_ref(SPEC, provider_org_id=NEMO, evaluator_id=uid(9, 0xee))
+    for over in ({"external_run_ref": foreign}, {"evaluator_ref": unknown}):
+        answer = call(c, DEV, "POST", "subscriptions", w.subscription(**over))
+        assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"}), over
+    assert w.ledger.subs == {}
 
 
 # --- the ports not merged yet -----------------------------------------------------------------
