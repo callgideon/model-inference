@@ -216,11 +216,62 @@ def test_l04_publication_needs_operator_approval_and_snapshots_the_rate(workdir,
         assert [float(r) for r in seed_card] == [400, 1200], seed_card
 
 
-def test_l05_app_discovers_and_serves_the_published_revision(workdir):
-    waits("l05", "L3", "L4", steps="after l04's approval /v1/models lists the revision with its "
-          "rate; alpha's request is admitted on its pins and settles once at the snapshot rate; "
-          "the App runs unchanged with the Lab control service stopped")
-    unbound()
+def published_l05(trip):
+    """l05's world: A's revision `l05` published at 300/900 (listing 2); the App's processes
+    still on the seed's card. Yields (alpha, revision, proposal, listing, card)."""
+    lab.seed_lab(trip)
+    revision, proposal, published = lab.ship(lab.control(trip), "l05", expected_version=1)
+    return trip.world.alpha, revision, proposal, published, lab.card_of("l05")
+
+
+def test_l05_app_discovers_and_serves_the_published_revision(workdir, record_property):
+    """Oracle: after the operator's approval the App never serves the new listing at a card
+    its runtime did not approve (R69: the alias is unlisted and a call is 400 invalid_request,
+    nothing admitted or charged); once the runtime is rolled onto the approved card,
+    /v1/models lists the alias on the published deployment, serving revision and card at the
+    snapshot rates, and alpha's call is admitted on exactly those pins and settled once at the
+    snapshot rate (CREDIT books conserved)."""
+    with world.composed(workdir) as trip:
+        alpha, revision, proposal, published, card = published_l05(trip)
+        unrolled = trip.send(alpha, "sync", world.TEXT, "e3l-l05-unrolled")
+        unrolled_listing = discovery(trip, alpha)
+        lab.roll_runtime(trip, card, roles=("worker", "gateway"))
+        entries = discovery(trip, alpha)
+        served = trip.send(alpha, "sync", world.TEXT, "e3l-l05")
+        record_property("app", {"unrolled": [unrolled.status_code, world.code(unrolled),
+                                             [e["id"] for e in unrolled_listing]],
+                                "listed": [(e["id"], e["listing_version"],
+                                            e["deployment_revision_id"], e["pricing"])
+                                           for e in entries],
+                                "served": served.status_code})
+        assert (unrolled.status_code, world.code(unrolled)) == (400, "invalid_request"), \
+            unrolled.text[:300]
+        assert unrolled_listing == [], unrolled_listing
+        assert world.job_of(trip, alpha.org_id, "e3l-l05-unrolled") == []
+        assert [(e["id"], e["deployment_revision_id"], e["serving"]["serving_version_id"],
+                 e["pricing"]["credit"]["rate_card_version"],
+                 e["pricing"]["credit"]["input_rate_per_million"],
+                 e["pricing"]["credit"]["output_rate_per_million"]) for e in entries] == [
+            (stack.CREDIT_ALIAS, proposal.deployment_revision_id, revision.serving_version_id,
+             card, "300.00000000", "900.00000000")], entries
+        assert served.status_code == 200, served.text[:300]
+        assert lab.pins(trip, alpha.org_id, "e3l-l05") == (
+            proposal.deployment_revision_id, revision.serving_version_id, card, "succeeded")
+        world.settled_once(trip, world.job_of(trip, alpha.org_id, "e3l-l05")[0][0])
+        trip.conserved(alpha)
+
+
+def test_l05_discovery_reports_the_listing_version_it_serves(workdir, record_property):
+    """Oracle: /v1/models' `listing_version` is the catalog listing the entry serves - after
+    the publication, listing 2 (the published deployment), never a constant."""
+    with world.composed(workdir, start=()) as trip:
+        alpha, _, proposal, published, card = published_l05(trip)
+        trip.box.start("gateway", ACTIVE_RATE_CARD_VERSION=card)
+        entries = discovery(trip, alpha)
+        record_property("listed", [(e["listing_version"], e["deployment_revision_id"])
+                                   for e in entries])
+        assert [(e["listing_version"], e["deployment_revision_id"]) for e in entries] == [
+            (published.version, proposal.deployment_revision_id)], entries
 
 
 def test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins(workdir):

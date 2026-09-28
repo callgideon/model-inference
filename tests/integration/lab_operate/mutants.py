@@ -120,6 +120,7 @@ L08_PURPOSE = "test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_n
 L08_DIRECT = "test_l08_a_provider_session_reads_no_consumer_rows_directly"
 L03 = "test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership"
 L04 = "test_l04_publication_needs_operator_approval_and_snapshots_the_rate"
+L05 = "test_l05_app_discovers_and_serves_the_published_revision"
 L3 = "infrx/lab/control/__init__.py"
 M32 = M + "0032_lab_control.sql"
 L11_DOWN = "test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving"
@@ -193,7 +194,17 @@ STACK_MUTANTS += (
     _m("st_publish_audit_actor", "the publish audit names its actor", M32,
        "perform infrx.lab_control_audit(d.provider_org_id, 'lab_publish', p_args->>'actor',",
        "perform infrx.lab_control_audit(d.provider_org_id, 'lab_publish', 'operator',", L04),
+    _m("st_card_input_rate_misfiled", "the card is the approved rates, each in its place", M32,
+       "      (c->>'serving_version_id')::uuid, (c->>'input_rate_per_million')::numeric,",
+       "      (c->>'serving_version_id')::uuid, (c->>'output_rate_per_million')::numeric,",
+       L04, L05),
+    _m("st_unapproved_card_listed", "discovery lists only the card the runtime approved (R69)",
+       MODELS, "    if regime == CREDIT and card.rate_card_version != "
+               "settings.pilot.active_rate_card_version:", "    if False:", L05),
 )
+#: Cases whose FAIL is a recorded cross-lane finding (evidence E3L-BIND): kept out of the
+#: stack list's pristine baseline until the owning lane fixes it (as E8L's KNOWN_FAIL).
+KNOWN_FAIL = {"test_l05_discovery_reports_the_listing_version_it_serves"}
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 
 
@@ -206,7 +217,7 @@ def case_names() -> set[str]:
 def stack_case_names() -> set[str]:
     return {name for path in HERE.glob("scenarios_*.py")
             for name in re.findall(r"^def (test_l\d\d_\w+)\(", path.read_text(), re.M)} \
-        - set(UNBOUND)
+        - set(UNBOUND) - KNOWN_FAIL
 
 
 def _layer1(root: pathlib.Path) -> pathlib.Path:
