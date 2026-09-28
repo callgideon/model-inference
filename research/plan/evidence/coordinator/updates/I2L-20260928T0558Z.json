@@ -1,0 +1,59 @@
+{
+  "task": "I2L",
+  "slice": "I2L local half: Lab control unit (off by default, loopback 8003, own image/env/uid, bounded, drained), Lab control Caddy site (consumer keys 401, /lab/v1 only, 503 when down), names-only lab.json, disabled-by-default staging runbook; l11 local proof PASS; hosted staging needs P-08",
+  "activity": "review",
+  "head": "d1b0f21f",
+  "worktree": ".claude/worktrees/codex-w5-lab-operate",
+  "branch": "codex/w5-lab-operate",
+  "blockers": [],
+  "owned_paths": [
+    "infra/lab/app/",
+    "apps/infrx-api/deploy/lab/app/",
+    "apps/infrx-api/tests/i/lab/"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/i/lab/test_lab_packaging.py",
+      "exit": 0,
+      "summary": "10 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab/",
+      "exit": 0,
+      "summary": "32 passed, 18/18 mutants killed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=i2l uv run --frozen pytest -q tests/i (alone)",
+      "exit": 0,
+      "summary": "277 passed, 1 xfailed"
+    },
+    {
+      "cmd": "runner.py --out <dir> --keep (l11)",
+      "exit": 3,
+      "summary": "l11 PASS (gate NOT RUN only for L3/L4 cells)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=i2l make api-test",
+      "exit": 2,
+      "summary": "5028 passed; 50 failed + 8 errors all shared-lock (d2 valkey, i8); tests/i rerun alone green; outbox_relay[valkey] rerun blocked by foreign infrx-d2-valkey"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 5,
+    "confidence": "medium",
+    "basis": "WR-I2L-1..4 one-liners + L3 factory bind of the control-service half of the drill (I2A 2/5/12 analogue; packaging and drill done)",
+    "at": "2026-09-28T05:58Z"
+  },
+  "wiring_requests": [
+    "WR-I2L-1 deploy/Caddyfile: append `import /etc/caddy/lab/*.caddy` outside the site block",
+    "WR-I2L-2 L3 control factory infrx.lab.control.app:create_app on 127.0.0.1:8003",
+    "WR-I2L-3 Makefile api-mutants: add tests/i/lab/test_mutants.py",
+    "WR-I2L-4 lab-sql: control-service DB login role with CONNECTION LIMIT"
+  ],
+  "evidence": [
+    "research/plan/evidence/i/I2L-d1b0f21.md",
+    "research/plan/evidence/e/E3L-raw-d1b0f21/"
+  ]
+}
