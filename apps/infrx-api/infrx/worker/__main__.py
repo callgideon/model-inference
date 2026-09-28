@@ -345,6 +345,9 @@ class EvalRuns:
         provider, run_id = event.provider_org_id, event.payload["run_id"]
         status = await self.store.run_status(run_id, provider_org_id=provider)
         record = await self.store.resolve(status["run_ref"], provider_org_id=provider)
+        if any(ref.split(":")[2:3] != [provider]            # R167: never another provider's
+               for ref in (record.evaluator_ref, record.serving_ref)):
+            raise errors.NotFound(f"eval run {run_id} names another provider's ref")
         endpoint, deployment = await self.targets(record.serving_ref)
         frozen = await evaluation.resume(self.store, run_id,
                                          evaluator=await self.evaluators(record.evaluator_ref),

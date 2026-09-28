@@ -1383,6 +1383,8 @@ def test_worker_main__the_lab_eval_worker_pumps_d7s_outbox_and_recovers(tmp_path
 class LabStore:
     """D7's reads the handler makes, over one created run."""
 
+    evaluator_ref, serving_ref = "lab:evaluator:p:e", "lab:serving:p:s"
+
     def __init__(self) -> None:
         self.reads = []
 
@@ -1392,7 +1394,8 @@ class LabStore:
 
     async def resolve(self, ref, *, provider_org_id):
         self.reads.append(("resolve", ref, provider_org_id))
-        return type("Run", (), {"evaluator_ref": "eval-ref", "serving_ref": "serving-ref"})()
+        return type("Run", (), {"evaluator_ref": self.evaluator_ref,
+                                "serving_ref": self.serving_ref})()
 
 
 def eval_handler(monkeypatch, stopped=None, state="succeeded"):
@@ -1444,10 +1447,31 @@ def test_worker_main__an_eval_run_delivery_resumes_the_created_run_never_freezes
     assert asyncio.run(handler.enqueue(delivery())) is True
     assert store.reads[0] == ("run_status", "r1", "p")
     assert store.reads[1][0] == "resolve" and store.reads[1][2] == "p"
-    assert seen == [("resume", "r1", {"spec-for": "eval-ref"}, "p"),
-                    ("runner", "objects", "endpoint-for-serving-ref",
-                     "deployment-for-serving-ref", "w-lab", worker_main.LAB_EVAL_LIMITS),
+    assert seen == [("resume", "r1", {"spec-for": "lab:evaluator:p:e"}, "p"),
+                    ("runner", "objects", "endpoint-for-lab:serving:p:s",
+                     "deployment-for-lab:serving:p:s", "w-lab", worker_main.LAB_EVAL_LIMITS),
                     ("run", "frozen")]
+
+
+@pytest.mark.parametrize("field", ["evaluator_ref", "serving_ref"])
+def test_worker_main__a_run_naming_another_providers_ref_is_not_found_before_any_source(
+        field, monkeypatch):
+    """R167 at the worker: the run's evaluator and serving refs resolve for the EVENT's
+    provider only; a foreign provider segment is not_found before either source is asked
+    (the Lab sources read with the ref's own provider, so this is the one place the run's
+    provider meets them) and nothing runs."""
+    from infrx.contracts import errors
+    handler, store, seen = eval_handler(monkeypatch)
+    asked = []
+
+    async def source(ref):
+        asked.append(ref)
+        return ref, ref
+    handler.evaluators = handler.targets = source
+    setattr(store, field, getattr(store, field).replace(":p:", ":q:"))
+    with pytest.raises(errors.NotFound):
+        asyncio.run(handler.enqueue(delivery()))
+    assert asked == [] and seen == []
 
 
 @pytest.mark.parametrize("stopped", ["wallet_exhausted", "other_kind"])
