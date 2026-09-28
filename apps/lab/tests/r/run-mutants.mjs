@@ -40,6 +40,7 @@ const C = {
   h02: "R4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
   h03: "R4-H03 one unreadable release, decision, proposal or variant fails the whole answer closed",
   h04: "R4-H04 without a session token nothing is sent and every call is unavailable",
+  h05: "R4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable",
   w01: "R4-W01 LAB_RELEASES_API_URL set: the port reads the route as the session's own access token",
   w02: "R4-W02 a missing LAB_RELEASES_API_URL or Supabase config fails closed: every call unavailable, nothing sent",
 };
@@ -174,6 +175,7 @@ const MUTANTS = [
   m("R4-X116", "a comparison without its claim flag is read", HTTP, "reportDigest: str, optimizationClaimed: bool,", "reportDigest: str,", [C.h03]),
   m("R4-X117", "a variants answer that is one record is read", HTTP, 'call(actor, "optimizations", list(VARIANT))', 'call(actor, "optimizations", (v) => list(VARIANT)(v) || VARIANT(v))', [C.h03]),
   m("R4-X118", "a proposal's answer is not checked", HTTP, '"releases/proposals", PROPOSAL, {', '"releases/proposals", () => true, {', [C.h03]),
+  m("R4-X119", "a session-token getter that rejects escapes the adapter", HTTP, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "R4", mutants: MUTANTS }));

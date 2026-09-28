@@ -47,6 +47,7 @@ const C = {
   h02: "P4-H02 the route's refusals are the port's reasons (410 is gone); anything else, or no answer, is unavailable",
   h03: "P4-H03 the route's records pass (renamed only); one unreadable row fails the whole answer closed",
   h04: "P4-H04 without a session token nothing is sent and every call is unavailable",
+  h05: "P4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable",
   w01: "P4-W01 LAB_PIPELINES_API_URL set: the port reads the route as the session's own access token",
   w02: "P4-W02 a missing LAB_PIPELINES_API_URL or Supabase config fails closed: every call unavailable, nothing sent",
 };
@@ -210,6 +211,7 @@ const MUTANTS = [
   m("P4-X148", "an export's answer is not checked", HTTP, 'post(actor, "label-exports", EXPORT, snake(input))', 'post(actor, "label-exports", () => true, snake(input))', [C.h03]),
   m("P4-X149", "a checkpoint import's answer is not checked", HTTP, 'post(actor, "checkpoints", CHECKPOINT, snake(input))', 'post(actor, "checkpoints", () => true, snake(input))', [C.h03]),
   m("P4-X150", "an approval's answer is not checked", HTTP, "/approve`, CHECKPOINT, {", "/approve`, () => true, {", [C.h03]),
+  m("P4-X151", "a session-token getter that rejects escapes the adapter", HTTP, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "P4", mutants: MUTANTS }));

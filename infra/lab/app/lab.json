@@ -27,7 +27,10 @@
       {"name": "NEXT_PUBLIC_SUPABASE_URL", "exposure": "public", "purpose": "the auth/DB project the Lab session door (0030) is served from"},
       {"name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "exposure": "public", "purpose": "publishable key; the Lab holds no service-role key"},
       {"name": "LAB_DATASETS_API_URL", "exposure": "server", "purpose": "server-only base URL of the datasets backend (WR-N4-5); unset = the datasets pages are unavailable"},
-      {"name": "LAB_TRACES_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for the provider trace read (V1M/WR-LAB-API-5); unset = the request pages read nothing and say so"}
+      {"name": "LAB_TRACES_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for the provider trace read (V1M/WR-LAB-API-5); unset = the request pages read nothing and say so"},
+      {"name": "LAB_EVALS_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for /lab/v1/evaluations (WR-B4-1, behind LAB_EVALS); unset = the evaluation pages are unavailable"},
+      {"name": "LAB_PIPELINES_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for /lab/v1/pipelines (WR-P4-1, behind LAB_PIPELINES); unset = the annotation and training pages are unavailable"},
+      {"name": "LAB_RELEASES_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for /lab/v1/releases and /lab/v1/optimizations (WR-R4-1, behind LAB_RELEASES); unset = the release and optimization pages are unavailable"}
     ],
     "lab-control": [
       {"name": "INFRX_LAB_IMAGE", "exposure": "unit", "purpose": "the Lab control release: a content-addressed image id, rolled back by itself"},

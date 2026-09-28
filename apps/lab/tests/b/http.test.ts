@@ -96,3 +96,12 @@ test("B4-H04 without a session token nothing is sent and every call is unavailab
   for (const call of [port.runs(A), port.cancel(A, "r1"), port.launch(A, {} as never)]) assert.deepEqual(await call, { ok: false, reason: "unavailable" });
   assert.equal(seen.length, 0);
 });
+
+test("B4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable", async () => {
+  const seen: string[] = [];
+  const fetch = (async (url: string) => { seen.push(url); return json({ data: [] }); }) as unknown as typeof globalThis.fetch;
+  const port = httpEvaluation({ baseUrl: "https://api.test/", token: async () => { throw new Error("session store unreadable"); }, fetch });
+  const calls = [port.runs(A), port.cancel(A, "r1"), port.launch(A, {} as never)].map((call) => call.catch((e: unknown) => ({ threw: String(e) })));
+  for (const call of calls) assert.deepEqual(await call, { ok: false, reason: "unavailable" });
+  assert.equal(seen.length, 0);
+});

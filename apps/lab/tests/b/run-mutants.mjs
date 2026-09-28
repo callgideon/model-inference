@@ -49,6 +49,7 @@ const C = {
   h02: "B4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
   h03: "B4-H03 the backends' records pass verbatim; one unreadable row fails the whole answer closed",
   h04: "B4-H04 without a session token nothing is sent and every call is unavailable",
+  h05: "B4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable",
   w01: "B4-W01 LAB_EVALS_API_URL set: the port reads the route as the session's own access token",
   w02: "B4-W02 a missing LAB_EVALS_API_URL or Supabase config fails closed: every call unavailable, nothing sent",
 };
@@ -218,6 +219,7 @@ const MUTANTS = [
   m("B4-X149", "map values are not checked", SHAPE, "isObj(v) && Object.values(v).every(check)", "isObj(v)", [C.h03]),
   m("B4-X150", "any value is one of a set", SHAPE, "(v) => values.includes(v)", "() => true", [C.h03]),
   m("B4-X151", "a missing nullable field reads as null", SHAPE, "(v) => v === null || check(v)", "(v) => v == null || check(v)", [C.h03]),
+  m("B4-X152", "a session-token getter that rejects escapes the adapter", HTTP, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "B4", mutants: MUTANTS }));

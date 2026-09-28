@@ -36,6 +36,9 @@ Lab web (Vercel project `infrx-lab`, per environment; `apps/lab/.env.example`) [
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | that project's publishable key. **Never** `SUPABASE_SERVICE_ROLE_KEY` |
 | `LAB_DATASETS_API_URL` | server | server-only base URL of the datasets backend (WR-N4-5, `apps/lab/lib/services/datasets/server.ts`); unset = the datasets pages answer "unavailable" |
 | `LAB_TRACES_API_URL` | server | server-only lab-api base URL for the provider trace read (V1M/WR-LAB-API-5, `apps/lab/lib/services/traces/`, `GET /lab/v1/traces` behind `LAB_TRACES`); unset = the request pages read nothing and say so |
+| `LAB_EVALS_API_URL` | server | server-only lab-api base URL for the evaluation pages (WR-B4-1, `apps/lab/lib/services/evaluation/server.ts`, `/lab/v1/evaluations` behind `LAB_EVALS`); unset = those pages answer "unavailable" |
+| `LAB_PIPELINES_API_URL` | server | server-only lab-api base URL for the annotation and training pages (WR-P4-1, `apps/lab/lib/services/pipelines/server.ts`, `/lab/v1/pipelines` behind `LAB_PIPELINES`); unset = those pages answer "unavailable" |
+| `LAB_RELEASES_API_URL` | server | server-only lab-api base URL for the release and optimization pages (WR-R4-1, `apps/lab/lib/services/rollouts/server.ts`, `/lab/v1/releases` + `/lab/v1/optimizations` behind `LAB_RELEASES`); unset = those pages answer "unavailable" |
 
 Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
 
