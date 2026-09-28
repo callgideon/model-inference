@@ -10,7 +10,6 @@ egress allowlist names only the object store and the approved host. No docker.
 from __future__ import annotations
 
 import json
-import os
 import runpy
 import shutil
 import subprocess

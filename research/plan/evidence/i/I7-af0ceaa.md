@@ -77,3 +77,14 @@ hardware row beyond the measured one.
 
 optimistic 1 h / likely 2 h / pessimistic 4 h, confidence medium. Basis: one review round
 (I5 analogue) on a small diff; the real D9/L3 rerun and staging are outside this task.
+
+## Fix round (2026-09-28, findings 0-LW-1, 1-LW5-LW-1, 1-LW5-LW-2)
+
+The rollout unit shares I6's preflight, so the I6 fix covers it unchanged (see
+`I6-af0ceaa.md` "Fix round"): the continuation repro that hid `INFRX_IMAGE=--privileged` is
+run with `--role rollout` under the host's systemd and refused; the preflight compares every
+setting with the unit's own `EnvironmentFile=` view. Runbook: the manual preflight runs under
+`systemd-run`; `LAB_EGRESS_ALLOW` may name `169.254.169.254` for instance-role S3 credentials
+(staging proof owed, P-08). Unit and I7 tests unchanged; `INFRX_D_TASK=i7 INFRX_MUTANTS=all
+pytest -q tests/i/lab_rollout/test_mutants.py` -> 17 passed, 15 mutants killed, exit 0
+(`I7-raw/mutants-all-1ed86c80.log`).

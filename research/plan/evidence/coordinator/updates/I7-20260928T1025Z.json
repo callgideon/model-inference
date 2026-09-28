@@ -1,0 +1,102 @@
+{
+ "task": "I7",
+ "slice": "I7.a-c complete locally: rollout controller unit (OFF, enable marker, independent readiness 8016, no adapter/spend/mount, --pull never), emergency controls, rollback exercise over R2 (restart converges), staging + hardware-matrix notes; fix round (0-LW-1, 1-LW5-LW-1, 1-LW5-LW-2): preflight refuses env-file lines systemd and docker read differently and compares with the unit's EnvironmentFile= view; 169.254.169.254 allowlistable for instance-role S3 credentials",
+ "activity": "review",
+ "head": "1ed86c80",
+ "worktree": ".claude/worktrees/codex-w5-lab-workers",
+ "branch": "codex/w5-lab-workers",
+ "owned_paths": [
+  "infra/lab/workers/rollout/",
+  "apps/infrx-api/deploy/lab/rollout/",
+  "apps/infrx-api/tests/i/lab_rollout/"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first (ef7f2c3a) pytest tests/i/lab_rollout",
+   "exit": 1,
+   "summary": "2 failed, 1 passed (I7-raw/seam-red.log)"
+  },
+  {
+   "cmd": "pytest -q tests/i/lab_pipeline tests/i/lab_rollout",
+   "exit": 0,
+   "summary": "47 passed, 1 skipped (P3 drills skip until P3 on base)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py",
+   "exit": 0,
+   "summary": "77 passed: I6 58 + I7 15 mutants killed, 0 survivors, every case covered"
+  },
+  {
+   "cmd": "pytest -q tests/i/lab_eval/{test_units,test_pool_budget,test_mutants}.py tests/r/control",
+   "exit": 0,
+   "summary": "44 passed"
+  },
+  {
+   "cmd": "pytest -q tests/i/test_mutants.py -k 'well_formed or every_case'",
+   "exit": 0,
+   "summary": "2 passed"
+  },
+  {
+   "cmd": "ruff check tests/i/lab_pipeline tests/i/lab_rollout ../../infra/lab/workers/training",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i6 make api-test (af0ceaab)",
+   "exit": 2,
+   "summary": "7 failed, 5320 passed, 92 skipped, 9 xfailed; the 7 = tests/d/test_outbox_relay[valkey], rerun alone same 7 (ForeignContainer infrx-d2-valkey held by another checkout); tests/i green"
+  },
+  {
+   "cmd": "fix round fail-first: new lens cases vs the handback preflight",
+   "exit": 1,
+   "summary": "6 failed, 31 passed (I6-raw/seam-red-fix-round.log)"
+  },
+  {
+   "cmd": "pytest -q tests/i/lab_pipeline tests/i/lab_rollout tests/i/lab_eval",
+   "exit": 0,
+   "summary": "69 passed, 5 skipped"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i6 INFRX_MUTANTS=all pytest -q tests/i/lab_pipeline/test_mutants.py",
+   "exit": 0,
+   "summary": "74 passed: 72 mutants killed (58 + 14 fix round), 0 survivors (I6-raw/mutants-all-1ed86c80.log)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i7 INFRX_MUTANTS=all pytest -q tests/i/lab_rollout/test_mutants.py",
+   "exit": 0,
+   "summary": "17 passed: 15 killed (I7-raw/mutants-all-1ed86c80.log)"
+  },
+  {
+   "cmd": "ruff check tests/i/lab_pipeline tests/i/lab_rollout infra/lab/workers/training",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i6 make api-test (1ed86c80)",
+   "exit": 2,
+   "summary": "7 failed, 5329 passed, 92 skipped, 9 xfailed; the 7 = tests/d/test_outbox_relay[valkey], rerun alone same 7 (ForeignContainer infrx-d2-valkey held by another checkout); tests/i green"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "at": "2026-09-28T10:25Z",
+  "basis": "fix round done; one re-review of a small diff; staging P-08 excluded"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-I6-1 Makefile:21 api-mutants: append ' tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py' after ' tests/i/lab_eval/test_mutants.py' (proof: 91 passed: 72 + 15 mutants + 4 list checks)",
+  "WR-I6-2 infra/lab/workers/eval/pool_budget.py:33 ROLES += annotation 1, training 1, rollout 1 (proof: --enable annotation --enable training --enable rollout -> PASS lab: peak 6 <= limit 20, exit 0)",
+  "WR-I7-1 composition: python -m infrx.lab.workers rollout (pass loop + emergency-rollback subcommand per infra/lab/workers/rollout/RUNBOOK.md \u00a71; proof: test_exercise.py through the entry point on real D9/L3)"
+ ],
+ "evidence": [
+  "research/plan/evidence/i/I7-af0ceaa.md",
+  "research/plan/evidence/i/I7-raw/seam-red.log",
+  "research/plan/evidence/i/I7-raw/mutants-all.log",
+  "research/plan/evidence/i/I6-raw/mutants-all-af0ceaab.log",
+  "research/plan/evidence/i/I6-raw/api-test-af0ceaab.log",
+  "research/plan/evidence/i/I7-raw/mutants-all-1ed86c80.log"
+ ]
+}

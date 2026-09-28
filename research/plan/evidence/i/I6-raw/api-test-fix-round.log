@@ -1,0 +1,11 @@
+# root: INFRX_D_TASK=i6 make api-test at 1ed86c80 (fix round; lint-only edit in the tree); failures + tail. The harness's wrapper shell was killed (144) before writing EXIT; pytest ran to completion (make's exit would be 2).
+FAILED tests/d/test_outbox_relay.py::test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_duplicate_delivery_never_makes_a_second_attempt[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_full_index_defers_rows_and_never_drops_them[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job[valkey]
+7 failed, 5329 passed, 92 skipped, 9 xfailed, 5 warnings in 3729.68s (1:02:09)
+
+# rerun alone: INFRX_D_TASK=i6 uv run --frozen pytest -q tests/d/test_outbox_relay.py -> 7 failed, 13 passed (the same 7 [valkey]); cause: tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's (shared d2 Valkey held by another checkout; not touched)

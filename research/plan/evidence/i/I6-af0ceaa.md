@@ -134,3 +134,57 @@ egress rule.
 optimistic 1 h / likely 2 h / pessimistic 4 h, confidence medium. Basis: one review round on
 a small diff (I5 analogue 2/4/8 minus the drills already run) plus the P3-base drill rerun;
 staging (P-08) excluded.
+
+## Fix round (2026-09-28, findings 0-LW-1, 1-LW5-LW-1, 1-LW5-LW-2)
+
+Head before: `9c876cde`. Fix commit `1ed86c80` (+ a lint-only follow-up). Local only; nothing
+touched staging, the pilot box or any hosted service.
+
+* **0-LW-1 / 1-LW5-LW-1 (fixed, at the root).** `preflight.py` `main` now compares every
+  parsed setting, and always `INFRX_IMAGE` and `LAB_EGRESS_ALLOW`, with `os.environ` - which
+  in `ExecStartPre` is exactly systemd's `EnvironmentFile=` view (`-I` keeps it) - and
+  refuses by name on any difference, never printing a value. `parse` splits on `\n` only (as
+  both readers do; `splitlines` split a form feed neither does) and refuses, by line number,
+  any line with a backslash (comments too: systemd continues them), a name set twice, and a
+  value with a quote, a control character or surrounding space. Consequence: a plain
+  `python3 preflight.py` outside the unit refuses; both runbooks now run the manual check
+  under `sudo systemd-run --wait --pipe -q --uid ubuntu -p EnvironmentFile=...` (systemd's
+  reading, as the unit gets it). A DSN password with a quote or backslash is refused (rotate).
+* **1-LW5-LW-2 (fixed: instance-role path chosen).** `LAB_EGRESS_ALLOW` may name exactly
+  `169.254.169.254` (no range, port, neighbour or name); `AWS_*` stays refused, so botocore's
+  only credential source is the instance role. Host networking makes the container the
+  instance's own hop (IMDSv2 hop limit 1 suffices); the role must be scoped to the Lab bucket.
+  The unit is unchanged (the entry is opt-in per env file; without it every S3 call fails
+  closed). Staging proof owed and recorded in the training runbook's P-08 ledger and §2
+  residuals (an S3 `HeadBucket` from the running container, and a denied one without it).
+
+New cases (tests first; red against the handback preflight: `I6-raw/seam-red-fix-round.log`,
+6 failed / 31 passed):
+`test_i6_a_file_systemd_reads_otherwise_is_refused_as_the_unit_runs_it` (the three repros
+from the findings, parametrized; each asserts the host's user systemd 255.4 reads the file as
+recorded, then runs the preflight both with that view and inside `systemd-run` with
+`EnvironmentFile=` - exit 1, no `PASS`, nothing echoed),
+`test_i6_a_line_systemd_and_docker_could_read_differently_is_refused_unprinted`,
+`test_i6_the_values_checked_are_the_values_systemd_passes_the_unit`,
+`test_i6_the_object_store_credentials_come_from_the_instance_role_via_imds`,
+`test_egress.py::test_i6_botocore_reaches_the_instance_role_only_when_imds_is_allowlisted`
+(botocore's `get_environ_proxies` under each unit's container env; no network).
+
+New mutants (14, all killed): `i6_pf_environ_unchecked`, `i6_pf_environ_file_names_only`,
+`i6_pf_environ_image_only`, `i6_pf_backslash_allowed`, `i6_pf_comment_backslash_allowed`,
+`i6_pf_duplicate_last_wins`, `i6_pf_quote_allowed`, `i6_pf_parse_refusals_dropped`,
+`i6_pf_control_allowed`, `i6_pf_space_allowed`, `i6_pf_splitlines`, `i6_pf_imds_refused`,
+`i6_pf_imds_link_local`, `i6_annotation_no_proxy_imds_always`; `i6_training_http_proxy_empty`
+now also names the botocore case.
+
+| command | exit | result |
+|---|---|---|
+| `pytest -q tests/i/lab_pipeline tests/i/lab_rollout tests/i/lab_eval` | 0 | 69 passed, 5 skipped (P3 drills skip until P3 on base) |
+| `INFRX_D_TASK=i6 INFRX_MUTANTS=all pytest -q tests/i/lab_pipeline/test_mutants.py` | 0 | 74 passed: 72 mutants killed, 0 survivors, every case named (`I6-raw/mutants-all-1ed86c80.log`) |
+| `INFRX_D_TASK=i7 INFRX_MUTANTS=all pytest -q tests/i/lab_rollout/test_mutants.py` | 0 | 17 passed: 15 killed (`I7-raw/mutants-all-1ed86c80.log`) |
+| `ruff check tests/i/lab_pipeline tests/i/lab_rollout infra/lab/workers/training` | 0 | clean (after dropping an unused `import os`, lint-only) |
+| `INFRX_D_TASK=i6 make api-test` | 2 | 7 failed, 5329 passed, 92 skipped, 9 xfailed: the 7 are `tests/d/test_outbox_relay[valkey]`, rerun alone the same 7 (ForeignContainer `infrx-d2-valkey` held by another checkout, not touched); `tests/i` green (`I6-raw/api-test-fix-round.log`) |
+
+Local vs owed (P-08): the systemd/docker agreement is proven locally under the host's user
+systemd 255.4; the box's systemd reading a refused file (a failed start in the journal) and
+the instance-role S3 call from the running container are owed from staging.
