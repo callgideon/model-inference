@@ -1,0 +1,84 @@
+{
+ "evidence": {
+  "affected": [
+   {
+    "reason": "grant_not_current",
+    "sample_id": "1f5b4a9c-24c6-45c5-86a4-059b940d2028"
+   },
+   {
+    "reason": "grant_not_current",
+    "sample_id": "36552a6f-50ac-4166-812f-2bb52a79f84f"
+   },
+   {
+    "reason": "grant_not_current",
+    "sample_id": "7f5d0f43-f40e-4301-881b-8e99f581df29"
+   }
+  ],
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da8-0000-4000-8000-000000000004@sha256:76855c33b25082b04fce279defff53aef1d4bd9c29e6ad5bd7c6d34879b0224c",
+  "delivered_from": "2026-09-20T12:00:00+00:00",
+  "export_id": "000000e9-0000-4000-8000-000000000004",
+  "note": "items already read from this export were delivered and are not recalled; no model trained on them is unlearned; future reads exclude them",
+  "recalled": false
+ },
+ "reconciled": {
+  "checked": 3,
+  "next": null,
+  "purged": 0,
+  "tombstoned": [
+   {
+    "reason": "grant_not_current",
+    "sample_id": "1f5b4a9c-24c6-45c5-86a4-059b940d2028"
+   },
+   {
+    "reason": "grant_not_current",
+    "sample_id": "36552a6f-50ac-4166-812f-2bb52a79f84f"
+   },
+   {
+    "reason": "grant_not_current",
+    "sample_id": "7f5d0f43-f40e-4301-881b-8e99f581df29"
+   }
+  ]
+ },
+ "view": {
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da8-0000-4000-8000-000000000004@sha256:76855c33b25082b04fce279defff53aef1d4bd9c29e6ad5bd7c6d34879b0224c",
+  "parent_refs": [],
+  "samples": [
+   {
+    "grant_ref": "lab:grant:b0000001-0000-4000-8000-000000000001:414363c9-3041-4d84-bc42-3034be5156a8@sha256:5fe6c14ade79be6769741fc4ca78aebfe22ca5bc45e19a8e37d0d8d707b524ea",
+    "restricted": "grant_not_current",
+    "sample_id": "1f5b4a9c-24c6-45c5-86a4-059b940d2028",
+    "source_ref": "lab:source:b0000001-0000-4000-8000-000000000001:000005e1-0000-4000-8000-000000000004@sha256:0cf602fd9d64dc1927b4195e1a97e1de677734f997b407f2f5845aa1a4642da0",
+    "split": "train",
+    "trace": {
+     "content_until": "2026-12-19T11:00:00+00:00",
+     "grantor_org_id": "17a26fc7-3933-4032-9d07-d17ea3e9b8d0",
+     "request_id": "7e7e0000-0000-4000-8000-000000000003"
+    }
+   },
+   {
+    "grant_ref": "lab:grant:b0000001-0000-4000-8000-000000000001:414363c9-3041-4d84-bc42-3034be5156a8@sha256:5fe6c14ade79be6769741fc4ca78aebfe22ca5bc45e19a8e37d0d8d707b524ea",
+    "restricted": "grant_not_current",
+    "sample_id": "36552a6f-50ac-4166-812f-2bb52a79f84f",
+    "source_ref": "lab:source:b0000001-0000-4000-8000-000000000001:000005e1-0000-4000-8000-000000000004@sha256:0cf602fd9d64dc1927b4195e1a97e1de677734f997b407f2f5845aa1a4642da0",
+    "split": "train",
+    "trace": {
+     "content_until": "2026-12-19T11:00:00+00:00",
+     "grantor_org_id": "17a26fc7-3933-4032-9d07-d17ea3e9b8d0",
+     "request_id": "7e7e0000-0000-4000-8000-000000000002"
+    }
+   },
+   {
+    "grant_ref": "lab:grant:b0000001-0000-4000-8000-000000000001:414363c9-3041-4d84-bc42-3034be5156a8@sha256:5fe6c14ade79be6769741fc4ca78aebfe22ca5bc45e19a8e37d0d8d707b524ea",
+    "restricted": "grant_not_current",
+    "sample_id": "7f5d0f43-f40e-4301-881b-8e99f581df29",
+    "source_ref": "lab:source:b0000001-0000-4000-8000-000000000001:000005e1-0000-4000-8000-000000000004@sha256:0cf602fd9d64dc1927b4195e1a97e1de677734f997b407f2f5845aa1a4642da0",
+    "split": "train",
+    "trace": {
+     "content_until": "2026-12-19T11:00:00+00:00",
+     "grantor_org_id": "17a26fc7-3933-4032-9d07-d17ea3e9b8d0",
+     "request_id": "7e7e0000-0000-4000-8000-000000000001"
+    }
+   }
+  ]
+ }
+}

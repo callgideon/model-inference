@@ -1,0 +1,221 @@
+{
+ "checkpoints": {
+  "bad": {
+   "train_loss": 0.02
+  },
+  "cand1": {
+   "train_loss": 0.21
+  },
+  "cand2": {
+   "train_loss": 0.18
+  }
+ },
+ "corrections": {
+  "T07": "Santiago"
+ },
+ "decisions": {
+  "bad_vs_base": [
+   "reject",
+   false
+  ],
+  "cand1_vs_base": [
+   "accept",
+   true
+  ],
+  "cand2_vs_cand1": [
+   "accept",
+   true
+  ]
+ },
+ "endpoints": {
+  "bad": [
+   "T01",
+   "T02",
+   "T03",
+   "T04",
+   "T05",
+   "T06",
+   "T07",
+   "T08",
+   "T09",
+   "T10",
+   "V01",
+   "V02"
+  ],
+  "base": [
+   "H01",
+   "H02",
+   "H03",
+   "H04",
+   "H05",
+   "T01",
+   "T02"
+  ],
+  "cand1": [
+   "H01",
+   "H02",
+   "H03",
+   "H04",
+   "H05",
+   "H06",
+   "H07",
+   "H08",
+   "H09",
+   "T01",
+   "T02",
+   "T03",
+   "T04",
+   "T05",
+   "T06",
+   "T07",
+   "T08",
+   "T09",
+   "T10"
+  ],
+  "cand2": [
+   "H01",
+   "H02",
+   "H03",
+   "H04",
+   "H05",
+   "H06",
+   "H07",
+   "H08",
+   "H09",
+   "H10",
+   "H11",
+   "H12",
+   "T01",
+   "T02",
+   "T03",
+   "T04",
+   "T05",
+   "T06",
+   "T07",
+   "T08",
+   "T09",
+   "T10"
+  ]
+ },
+ "export_1": {
+  "lines": [
+   "T01",
+   "T02",
+   "T03",
+   "T04",
+   "T05",
+   "T06",
+   "T07",
+   "T09",
+   "T10"
+  ],
+  "methods": {
+   "T01": [
+    "imported",
+    "synthetic"
+   ],
+   "T02": [
+    "imported",
+    "synthetic"
+   ],
+   "T03": [
+    "imported",
+    "synthetic"
+   ],
+   "T04": [
+    "imported",
+    "synthetic"
+   ],
+   "T05": [
+    "synthetic"
+   ],
+   "T06": [
+    "synthetic"
+   ],
+   "T07": [
+    "human"
+   ],
+   "T09": [
+    "synthetic"
+   ],
+   "T10": [
+    "synthetic"
+   ]
+  },
+  "omitted": {
+   "H01": "holdout",
+   "V01": "validation",
+   "V02": "validation"
+  }
+ },
+ "forged_ground_truth": "T05",
+ "human_labels": {
+  "H01": "Berlin",
+  "T01": "Paris",
+  "T02": "Tokyo",
+  "T03": "Nairobi",
+  "T04": "Lima"
+ },
+ "protocol": {
+  "confidence": 0.9,
+  "margin": 0.05,
+  "metric_source": "deterministic_metric",
+  "min_cases": 4,
+  "required_slices": {}
+ },
+ "spec": {
+  "annotation": {
+   "method": "human",
+   "method_version": "e7l-1"
+  },
+  "fields": {
+   "content": "q",
+   "group": "episode",
+   "split": "split"
+  },
+  "license": "CC0-1.0 (written for E7L by the infrx team)",
+  "modality": "text",
+  "ownership": "provider_owned",
+  "use_restrictions": [
+   "evaluation",
+   "training",
+   "no-redistribution-outside-infrx-tests"
+  ]
+ },
+ "teacher": {
+  "T01": "Paris",
+  "T02": "Tokyo",
+  "T03": "Nairobi",
+  "T04": "Lima",
+  "T05": "Cairo",
+  "T06": "Ottawa",
+  "T07": "Valparaiso",
+  "T08": null,
+  "T09": "Accra",
+  "T10": "Kathmandu",
+  "V01": "Rome",
+  "V02": "Madrid"
+ },
+ "traces": [
+  {
+   "correction": "Canberra",
+   "output": "Sydney",
+   "question": "What is the capital of Australia?"
+  },
+  {
+   "correction": "Brasilia",
+   "output": "Rio de Janeiro",
+   "question": "What is the capital of Brazil?"
+  },
+  {
+   "correction": "Ankara",
+   "output": "Istanbul",
+   "question": "What is the capital of Turkey?"
+  },
+  {
+   "correction": "Rabat",
+   "output": "Casablanca",
+   "question": "What is the capital of Morocco?"
+  }
+ ]
+}
