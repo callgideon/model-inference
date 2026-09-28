@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "6f627953",
+ "integration_head": "ef37d72a",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 232,
- "updated": "2026-09-28T19:45:47Z",
+ "revision": 233,
+ "updated": "2026-09-28T19:46:30Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6506,9 +6506,9 @@
    },
    "activity": "review",
    "started": "2026-09-28T15:38:37Z",
-   "updated": "2026-09-28T19:41:40Z",
+   "updated": "2026-09-28T19:46:30Z",
    "blocker": "k06 FAIL = E8L-F1 (0043 release_active resolves a candidate by serving_version_id, ignoring the R188 digest) → WR-E8L-2 lab-sql; k09 needs composition-2's rollout entry point; k10 needs lab-ui-swap (merging); k08 needs a GPU target (P-08)",
-   "next_action": "ACCEPT_WITH_FIXES at 5bf71de3 (E8L runner: k01–k05, k07 PASS for real; major RV-1 fixed+rechecked; 16 + 28 mutants) → merge batch #18 (wf_c23e44dc-c8a) with WR-E8L-1 + R191; WR-E8L-2/3/4 → lab-sql-lw5, WR-E8L-5 → composition-2; WR-E8L-6 applied on the tip at f99a0152; LAB-ROLLOUT-LOCAL not accepted until k06 + the binds rerun",
+   "next_action": "DONE (runner merged): 6175a701 + 3073954e; LAB-ROLLOUT-LOCAL not accepted until E8L-F1 (lab-sql-lw5: 0043 release_active by deployment revision + digest), the k09 bind (composition-2's rollout entry point) and k10 (lab-ui-swap merged: bind now) rerun via `make lab-rollout`",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -6569,24 +6569,24 @@
    "branch": "codex/w5-merge-18",
    "worktree": ".claude/worktrees/codex-w5-merge-18",
    "base": "8f39b124",
-   "head": null,
+   "head": "3073954e",
    "isolation": {
     "ports": null,
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T19:41:40Z",
-   "updated": "2026-09-28T19:41:40Z",
+   "updated": "2026-09-28T19:46:30Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "next_action": "DONE: merged onto claude/consumer-v1 at ef37d72a (verify ok; R191 numbered, next free R192)",
    "estimate": {
-    "optimistic_h": 0.5,
-    "likely_h": 1,
-    "pessimistic_h": 2,
-    "confidence": "medium",
-    "basis": "one merge, no docker",
-    "at": "2026-09-28T19:41:40Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T19:46:30Z"
    },
    "evidence": [],
    "commands": [],
