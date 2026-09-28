@@ -1,8 +1,8 @@
 {
  "task": "WR-N-2",
  "slice": "WR-N-2 (L2 acting provider for dataset callers)",
- "activity": "review",
- "head": "b642f2f2",
+ "activity": "fix-round",
+ "head": "b43764e2",
  "worktree": ".claude/worktrees/codex-w5-datasets-lw4",
  "branch": "codex/w5-datasets-lw4",
  "owned_paths": [
@@ -29,6 +29,11 @@
    "cmd": "INFRX_D_TASK=n3 make api-test",
    "exit": 2,
    "summary": "5027 passed, 77 skipped, 9 xfailed, 50 failed, 8 errors; all failures shared-lock contention (tests/d/test_outbox_relay[valkey] d2 lock held by codex-w5-lab-api; tests/i i8 lock held by codex-w5-rollout-routing; tests/i/test_mutants baseline under a non-default key), none in tests/n"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/n/imports tests/n/versions",
+   "exit": 0,
+   "summary": "fix round (no WR-N-2 findings): green"
   }
  ],
  "estimate": {
@@ -37,7 +42,7 @@
   "pessimistic_h": 1.5,
   "confidence": "high",
   "basis": "one review round on ~30 lines",
-  "at": "2026-09-27T22:17:18Z"
+  "at": "2026-09-28T00:00:00Z"
  },
  "blockers": [],
  "wiring_requests": [

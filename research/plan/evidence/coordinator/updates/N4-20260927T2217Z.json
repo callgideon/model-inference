@@ -1,8 +1,8 @@
 {
  "task": "N4",
  "slice": "N4 (Lab datasets UI, fake then real N1/N2)",
- "activity": "review",
- "head": "b642f2f2",
+ "activity": "fix-round",
+ "head": "b43764e2",
  "worktree": ".claude/worktrees/codex-w5-datasets-lw4",
  "branch": "codex/w5-datasets-lw4",
  "owned_paths": [
@@ -35,15 +35,30 @@
    "cmd": "LAB_N_REAL=1 INFRX_D_TASK=n3 node --test tests/n/journey.test.ts",
    "exit": 0,
    "summary": "1 pass on real N1/N2/N3 + D7 + L2 (after fixing a created_at format defect the real run found)"
+  },
+  {
+   "cmd": "LAB_N_REAL=1 INFRX_D_TASK=n3 node --test tests/n/journey.test.ts",
+   "exit": 0,
+   "summary": "fix round: 1 pass incl. revocation via real lab_revoke_access_grant (earlier export's part empty, all 6 samples grant_not_current); fail-first with a no-op revoke fails"
+  },
+  {
+   "cmd": "make lab-test && make lab-lint && make lab-typecheck && make lab-build",
+   "exit": 0,
+   "summary": "44 pass 1 skipped; lint/typecheck/build clean"
+  },
+  {
+   "cmd": "node tests/n/run-mutants.mjs",
+   "exit": 0,
+   "summary": "21 cases, 39/39 killed"
   }
  ],
  "estimate": {
-  "optimistic_h": 1,
-  "likely_h": 3,
-  "pessimistic_h": 7,
+  "optimistic_h": 0.5,
+  "likely_h": 2,
+  "pessimistic_h": 5,
   "confidence": "medium",
-  "basis": "one review round on ~900 TS lines (App lanes 2.3-3.8 h dispatch->merge) + WR-N4-1 mount and a journey rerun",
-  "at": "2026-09-27T22:17:18Z"
+  "basis": "fix round done; remaining = re-review plus WR-N4-1's mount and a journey rerun against it",
+  "at": "2026-09-28T00:00:00Z"
  },
  "blockers": [],
  "wiring_requests": [
