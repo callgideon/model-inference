@@ -47,7 +47,9 @@ class Catalog:
         self.dataset, self.harness = dataset, harness_ref
 
     async def catalog(self, provider_org_id):
-        return {"datasets": [{"ref": self.dataset, "label": "d"}]}
+        return {"datasets": [{"ref": self.dataset, "label": "d"}],
+                "harnesses": [{"ref": self.harness}], "evaluators": [{"ref": EVALUATOR}],
+                "servings": [{"ref": SERVING}, {"ref": CANDIDATE}]}
 
     async def evaluator(self, provider_org_id, evaluator_ref):
         assert (provider_org_id, evaluator_ref) == (NEMO, EVALUATOR)
