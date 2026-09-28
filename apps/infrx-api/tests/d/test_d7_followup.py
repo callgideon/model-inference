@@ -165,18 +165,23 @@ def check_a_sample_without_its_source_is_refused(conn) -> str:
 
 @rolled_back
 def check_a_revocation_stops_leasing_mid_run(conn) -> str:
-    """F6 (DATA-RIGHTS): once the grant is revoked no further case of a running run is
-    leased (`forbidden`), and nothing moved; a re-grant resumes it."""
+    """F6 (DATA-RIGHTS), as B1 consumes it: once the grant is revoked a running run's cases
+    still lease (so the worker can end each one `revoked` and the run can finish - B1's
+    `revoked data fails its cases without dispatch`), but no case of the revoked grant can
+    finish `succeeded` with results (`forbidden`, nothing moved); a failure is accepted; a
+    re-grant lets results land again."""
     _, run = t.a_run(conn, n=3, tag=0xf6)
     first = t.lease(conn, run["run_id"])
     revoke(conn)
-    assert refusal(conn, "lab_lease_case", {"provider_org_id": NEMO, "run_id": run["run_id"],
-                                            "worker_id": "w2", "lease_s": 30}) == "forbidden"
-    assert t.count(conn, "select count(*) from infrx.lab_eval_cases where run_id = %s and "
-                   "state = 'leased'", run["run_id"]) == 1
+    assert refusal(conn, "lab_finish_attempt", t.finish(first)) == "forbidden"
+    assert t.count(conn, "select count(*) from infrx.lab_eval_results where run_id = %s",
+                   run["run_id"]) == 0
+    ok(conn, "lab_finish_attempt", fail(first, "revoked"))
+    second = t.lease(conn, run["run_id"], worker="w2")
+    assert second["case_id"] != first["case_id"], "a revoked run's next case is not leased"
     ok(conn, "lab_put_access_grant", l2.scope(conn, purposes=["provider_sharing"]))
-    assert t.lease(conn, run["run_id"], worker="w2")["case_id"] != first["case_id"]
-    return "revoked: no lease; re-granted: leasing resumes"
+    ok(conn, "lab_finish_attempt", t.finish(second))
+    return "revoked: leases end failed, no results; re-granted: results land"
 
 
 @rolled_back

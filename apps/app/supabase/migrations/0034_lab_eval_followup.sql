@@ -8,9 +8,12 @@
 --   F5     a dataset record whose sample names no source (or not as a string) is refused
 --          before any row is written, instead of publishing without that sample
 --          (trigger lab_records_shape).
---   F6     no case is leased once its sample's grant is no longer in force for
---          provider_sharing - a revocation mid-run stops leasing at once (trigger
---          lab_eval_attempts_rights, on new leases).
+--   F6     no attempt finishes `succeeded` (with results) once its case's grant is no longer
+--          in force for provider_sharing - a revocation mid-run stops results at once
+--          (trigger lab_eval_attempts_rights, on finishes). Leases still go out so the
+--          worker ends each such case `revoked` and the run ends (B1's revoked-data drills;
+--          refusing the lease instead left the case pending and the run wedged - fix round
+--          1-LSQ-INT-1).
 --   F7     sources and checkpoint receipts are keyed by (provider, id): another provider's
 --          use of the same id is its own row, never a conflict that reveals or blocks the
 --          first (lab_register_source, lab_receive_checkpoint).
@@ -43,7 +46,7 @@
 --   infrx.lab_release_attempt(jsonb), infrx.lab_run_results(jsonb), infrx.lab_evaluator(jsonb),
 --   infrx.lab_put_evaluator(jsonb); drop trigger lab_records_shape on infrx.lab_records,
 --   lab_eval_attempts_rights on infrx.lab_eval_attempts; drop function
---   infrx.lab_records_shape(), infrx.lab_lease_rights(); re-run 0029's definitions of
+--   infrx.lab_records_shape(), infrx.lab_result_rights(); re-run 0029's definitions of
 --   lab_register_source, lab_receive_checkpoint and lab_finish_attempt; restore the one-column
 --   primary keys of lab_sources (source_id) and lab_checkpoint_receipts (checkpoint_id) - only
 --   while no id is used by two providers; drop table infrx.lab_eval_reports,
@@ -136,8 +139,8 @@ end $$;
 create or replace trigger lab_records_shape before insert on infrx.lab_records
   for each row execute function infrx.lab_records_shape();
 
--- ============================================ F6: leases re-read the grant ===
-create or replace function infrx.lab_lease_rights() returns trigger
+-- =========================================== F6: results re-read the grant ===
+create or replace function infrx.lab_result_rights() returns trigger
 language plpgsql set search_path = infrx, public, pg_temp as $$
 begin
   if not exists (select 1 from infrx.lab_eval_runs r
@@ -145,13 +148,13 @@ begin
                      on s.dataset_ref = r.dataset_ref and s.sample_id = new.case_id
                   where r.run_id = new.run_id
                     and infrx.lab_grant_current(s.grant_id, 'provider_sharing')) then
-    perform infrx.refuse('forbidden', 'lease: the case''s grant is not in force for '
+    perform infrx.refuse('forbidden', 'results: the case''s grant is not in force for '
                          'provider_sharing');
   end if;
   return new;
 end $$;
-create or replace trigger lab_eval_attempts_rights before insert on infrx.lab_eval_attempts
-  for each row when (new.state = 'leased') execute function infrx.lab_lease_rights();
+create or replace trigger lab_eval_attempts_rights before update on infrx.lab_eval_attempts
+  for each row when (new.state = 'succeeded') execute function infrx.lab_result_rights();
 
 -- ===================================================== redefined 0029 RPCs ===
 create or replace function infrx.lab_register_source(p_args jsonb) returns jsonb

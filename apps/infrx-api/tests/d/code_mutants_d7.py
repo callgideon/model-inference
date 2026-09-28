@@ -319,12 +319,17 @@ FOLLOWUP = (
     _f("d7f_no_shape_trigger", "create or replace trigger lab_records_shape before insert on "
        "infrx.lab_records\n  for each row execute function infrx.lab_records_shape();\n", "",
        SOURCELESS, "a manifest is published short of its sourceless samples"),
-    _f("d7f_lease_ignores_revocation", "                    and infrx.lab_grant_current("
+    _f("d7f_results_ignore_revocation", "                    and infrx.lab_grant_current("
        "s.grant_id, 'provider_sharing')) then", "                    ) then", MID_RUN,
-       "revoked content keeps being leased to workers until the run ends"),
-    _f("d7f_lease_rights_off", "  for each row when (new.state = 'leased') execute function "
-       "infrx.lab_lease_rights();", "  for each row when (false) execute function "
-       "infrx.lab_lease_rights();", MID_RUN, "a revocation mid-run changes nothing"),
+       "revoked content keeps producing results until the run ends"),
+    _f("d7f_result_rights_off", "  for each row when (new.state = 'succeeded') execute function "
+       "infrx.lab_result_rights();", "  for each row when (false) execute function "
+       "infrx.lab_result_rights();", MID_RUN, "a revocation mid-run changes nothing"),
+    _f("d7f_rights_refuse_leases", "create or replace trigger lab_eval_attempts_rights before "
+       "update on infrx.lab_eval_attempts\n  for each row when (new.state = 'succeeded')",
+       "create or replace trigger lab_eval_attempts_rights before insert or update on "
+       "infrx.lab_eval_attempts\n  for each row when (new.state in ('leased', 'succeeded'))",
+       MID_RUN, "a revoked case can never be leased to end it, so the run never finishes"),
     _f("d7f_source_replay_any_provider", "  select * into s from infrx.lab_sources where "
        "provider_org_id = v_provider\n     and source_id = v_source;", "  select * into s from "
        "infrx.lab_sources where source_id = v_source limit 1;", IDS,
