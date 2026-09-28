@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 42 planned; 80 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 41 planned; 81 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -111,7 +111,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | I2L | planned / I | [Independent Lab app and control-service deployment](09-amendment-workstreams.md) | I1, F2P | L1, L2, L3, L4 |
 | E3L | planned / E | [Provider access, publication and rollback integration gate](09-amendment-workstreams.md) | E2, F2P | L1, L2, L3, L4, E2R, D1R |
 | E5L | planned / E | [Provider traces, review and evaluation integration gate](09-amendment-workstreams.md) | E3L, F2P | D6F, D6J, G4F, G4T, T3, J2, J3, C3F, C3L, V3 |
-| V1M | planned / V | [Move the implemented trace explorer into the authorized Lab shell](11-wave3-revision-handoffs.md) | F2P, L1 | L2, C0, T2I |
+| V1M | implemented / V | [Move the implemented trace explorer into the authorized Lab shell](11-wave3-revision-handoffs.md) | F2P, L1 | L2, C0, T2I |
 | F3 | implemented / F | [Freeze dataset, evaluation, training and rollout contracts](13-lab-improvement-handoffs.md) | F2P | — |
 | D7 | implemented / D | [Persist datasets, harnesses and evaluation coordination](13-lab-improvement-handoffs.md) | F3, D1R | — |
 | N1 | implemented / N | [Import benchmark data and existing annotation outputs](13-lab-improvement-handoffs.md) | F3 | D7, M3, L2 |

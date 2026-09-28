@@ -2453,7 +2453,7 @@
       "title": "Move the implemented trace explorer into the authorized Lab shell",
       "track": "V",
       "handoff": "11-wave3-revision-handoffs.md",
-      "status": "planned",
+      "status": "implemented",
       "start_dependencies": [
         "F2P",
         "L1"
@@ -2471,7 +2471,8 @@
       "milestone": "LAB-M1",
       "disposition": "new-revision",
       "amendment": "Move existing V1 tests/components; remove App provider route; no cross-app server-action imports.",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-29: implemented via the v1m merge (8328cebd + 5b5cffb3, R190): the trace explorer moved App → Lab with git mv (3,280 lines, history kept), provider session + L2 grants, reads through GET /lab/v1/traces (LAB_TRACES off) with grant_ref rows; real L2 stack 6/6 on lab-v1m + the pinned ClickHouse; the App-side removal applied (WR-V1M-3). OPEN: granted-detail content text waits on WR-V2-2 (content over C2-RPC 0041, lab-sql-integration-2); hosted enable needs LAB_TRACES_API_URL on the Lab and LAB_TRACES on an infrx-api with the traces extra + the E4 rerun."
     },
     {
       "id": "U1R",
