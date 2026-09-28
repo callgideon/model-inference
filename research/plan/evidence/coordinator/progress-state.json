@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 218,
- "updated": "2026-09-28T13:01:11Z",
+ "revision": 219,
+ "updated": "2026-09-28T13:05:46Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5998,26 +5998,31 @@
    "branch": "codex/w5-v1m",
    "worktree": ".claude/worktrees/codex-w5-v1m",
    "base": "8ae65fa8",
-   "head": null,
+   "head": "8ce6acd2",
    "isolation": {
     "ports": "lab-v1m 57513; t2i 57540/57541; l4 57503",
     "prefix": "infrx-lab-v1m-",
     "db": "lab_v1m"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T10:45:41Z",
-   "updated": "2026-09-28T10:45:41Z",
+   "updated": "2026-09-28T13:05:46Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "ACCEPT_WITH_FIXES at 8ce6acd2 (git mv of 13 files/3,280 lines; provider session + L2 grants; lib/services/traces over GET /lab/v1/traces; WR-V2-1/5 applied; real stack 6/6 on lab-v1m + t2i ClickHouse; 71/71 mutants; major V1M-R1 = the env-name declaration gap fixed+rechecked) → merge batch #15 after #11 (WR-V1M-3 App-side removal patch, WR-V1M-4 nav + .env + lab.json/runbook name, WR-LAB-API-6 grant_ref in lab_traces + G mutant; ruling LAB-REQUESTS numbered R190); granted-detail content still waits on WR-V2-2 (content lane, C2-RPC)",
    "estimate": {
-    "optimistic_h": 4,
-    "likely_h": 8,
-    "pessimistic_h": 16,
-    "confidence": "low",
-    "basis": "lab-app's V1M estimate (3,280 lines moved, real L2 evidence)",
-    "at": "2026-09-28T10:45:41Z"
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "handback: three proven patches + one verify round",
+    "at": "2026-09-28T13:05:46Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/v/V1M-82db4a9.md",
+    "research/plan/evidence/v/WR-V1M-3-82db4a9.patch",
+    "research/plan/evidence/v/WR-V1M-4-82db4a9.patch",
+    "research/plan/evidence/v/WR-LAB-API-6-82db4a9.patch"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/lab/app/(provider)/requests/page.tsx",
