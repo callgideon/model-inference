@@ -1708,7 +1708,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     # I2B.c: the rollout scripts one suite file reads, at their repository path
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
     # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
-    for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "alerts"),
+    for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "lab", "observe"), ("infra", "alerts"),
                  ("infra", "app"),              # I3 (WR-I3-3): AppDown's runbook section
                  ("models", "marlin2b", "profiles"),  # E1B-MUTANTS: the window cases' base profiles
                  ("apps", "app", "supabase", "migrations")):
