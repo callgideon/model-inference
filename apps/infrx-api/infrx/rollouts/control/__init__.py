@@ -165,6 +165,9 @@ class Release:
 
 
 class ReleaseStore(Protocol):
+    """D9's release rows: on PostgreSQL `infrx.state.lab_rollout.PgReleaseStore` (0039,
+    WR-LSQ-5); `tests/r/control`'s `FakeReleases` in the unit cases."""
+
     async def release(self, policy_ref: str) -> Release: ...
 
     async def transition(self, policy_ref: str, *, fence: int, to: str, decision: dict[str, Any],
