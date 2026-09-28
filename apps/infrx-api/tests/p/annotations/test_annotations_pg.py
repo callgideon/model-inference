@@ -67,11 +67,11 @@ def test_p1_pg_labels_are_d7_records_reviewed_on_the_l2_clock(world) -> None:
     conn, store, objects, access, log, ref = world
     m = run(store.resolve(ref, provider_org_id=NEMO))
     items = label_rows(sorted(s.sample_id for s in m.samples))
-    got = run(p1.import_labels(store, log, provider_org_id=NEMO, actor="dev@nemo",
-                               dataset_ref=ref, rubric_ref=RUBRIC, rows=items))
+    got = run(p1.import_labels(store, log, objects=objects, now=NOW, provider_org_id=NEMO,
+                               actor="dev@nemo", dataset_ref=ref, rubric_ref=RUBRIC, rows=items))
     assert not got.rejected and len(got.accepted) == 6
-    again = run(p1.import_labels(store, log, provider_org_id=NEMO, actor="dev@nemo",
-                                 dataset_ref=ref, rubric_ref=RUBRIC, rows=items))
+    again = run(p1.import_labels(store, log, objects=objects, now=NOW, provider_org_id=NEMO,
+                                 actor="dev@nemo", dataset_ref=ref, rubric_ref=RUBRIC, rows=items))
     assert again.accepted == got.accepted
     assert d7.count(conn, "select count(*) from infrx.lab_records where kind = 'annotation'") \
         == 6
@@ -113,8 +113,8 @@ def test_p1_pg_a_revoked_grant_stops_labels_and_exports(world) -> None:
                                             "grantor_org_id": l2.org(conn, l2.C1),
                                             "recipient_provider_org_id": NEMO})
     m = run(store.resolve(ref, provider_org_id=NEMO))
-    got = run(p1.import_labels(store, log, provider_org_id=NEMO, actor="dev@nemo",
-                               dataset_ref=ref, rubric_ref=RUBRIC,
+    got = run(p1.import_labels(store, log, objects=objects, now=NOW, provider_org_id=NEMO,
+                               actor="dev@nemo", dataset_ref=ref, rubric_ref=RUBRIC,
                                rows=label_rows([m.samples[0].sample_id], method="human")))
     assert got.rejected == [{"row": 1, "reason": "grant_not_current"}]
     rec = run(p1.export(store, log, objects, provider_org_id=NEMO, dataset_ref=ref,

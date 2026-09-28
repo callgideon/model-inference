@@ -17,12 +17,13 @@ import pytest
 from infrx.contracts import errors
 from infrx.contracts.lab import records
 from infrx.datasets import imports
+from infrx.media.store import InMemoryObjectStore
 from infrx.pipelines import annotations as p1
 
 from ...n.imports.world import NEMO, grant_ref, run
 from ...n.versions.test_versions import derive, imported, uid
 from .world import (ADMIN, DEV, DEV2, GONE, GRANT_2, GRANT_3, NOW, RUBRIC, RUBRIC_2, VIEWER,
-                    manifest, rows, split_ids, world)
+                    manifest, rows, split_ids, tombstone_regranted, world)
 
 
 def label_rows(sample_ids, **over) -> list[dict]:
@@ -30,8 +31,10 @@ def label_rows(sample_ids, **over) -> list[dict]:
              "label": {"answer": f"a{i}"}, **over} for i, s in enumerate(sample_ids)]
 
 
-def load(store, log, ref, items, rubric=RUBRIC) -> p1.Imported:
-    return run(p1.import_labels(store, log, provider_org_id=NEMO, actor="dev@nemo",
+def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+    """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+    return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                provider_org_id=NEMO, actor="dev@nemo",
                                 dataset_ref=ref, rubric_ref=rubric, rows=items))
 
 
@@ -343,7 +346,8 @@ def test_p1_select_keeps_splits_and_only_authorized_samples() -> None:
     both = derive(store, objects, add=[a, b]).dataset_ref
     store.revoke(grant_ref(GRANT_2))
     chosen = [s.sample_id for s in manifest(store, both).samples] + [uid(9, 0x99)]
-    new = run(p1.select(store, provider_org_id=NEMO, actor="dev@nemo", dataset_ref=both,
+    new = run(p1.select(store, objects=objects, now=NOW, provider_org_id=NEMO, actor="dev@nemo",
+                        dataset_ref=both,
                         sample_ids=chosen, dataset_id=uid(7, 0xda), version=1,
                         created_at="2026-09-27T14:00:00Z"))
     m, parent = manifest(store, new), split_ids(store, both)
@@ -461,3 +465,55 @@ def test_p1_holdout_descendants_never_reach_a_training_export() -> None:
         [h.sample_id, copy["sample_id"], kin["sample_id"]])
     assert {o["reason"] for o in rec["omitted"]} == {"holdout_descendant"}
     assert records.REF_RE.fullmatch(child)
+
+
+# --- R193 (0-E7L-1): a re-grant never resurrects a tombstoned sample --------------------------
+def regranted_world():
+    """Labels accepted on every train sample and an export made; then the grant is revoked,
+    N3 tombstones the first train sample, and the grant comes back (D7 reads it again)."""
+    store, log, objects, access, ref = world()
+    train = sorted(split_ids(store, ref)["train"])
+    accept_all(store, log, access, ref, load(store, log, ref, label_rows(train)).accepted)
+    rec = export(store, log, objects, ref)
+    tombstone_regranted(store, objects, train[0])
+    assert train[0] in run(store.accessible_samples(ref, provider_org_id=NEMO,
+                                                    purpose="training"))
+    return store, log, objects, ref, train, rec
+
+
+def test_p1_a_regrant_imports_no_label_for_a_tombstoned_sample() -> None:
+    """Oracle (R193, DATA-LINEAGE): after the re-grant a label row for the tombstoned
+    sample is refused `grant_not_current` and nothing is logged; its neighbours import."""
+    store, log, objects, ref, train, _ = regranted_world()
+    events = len(log.rows)
+    got = load(store, log, ref, label_rows(train, method="human"), objects=objects)
+    assert got.rejected == [{"row": 1, "reason": "grant_not_current"}], got
+    assert len(got.accepted) == len(train) - 1 and len(log.rows) == events + len(train) - 1
+
+
+def test_p1_a_regrant_selects_no_tombstoned_sample() -> None:
+    """Oracle (R193): a selection after the re-grant leaves the tombstoned sample out."""
+    store, _, objects, ref, train, _ = regranted_world()
+    new = run(p1.select(store, objects=objects, now=NOW, provider_org_id=NEMO,
+                        actor="dev@nemo", dataset_ref=ref, sample_ids=train,
+                        dataset_id=uid(8, 0xda), version=1, created_at="2026-09-27T14:00:00Z"))
+    assert {s.sample_id for s in manifest(store, new).samples} == set(train[1:])
+
+
+def test_p1_a_regrant_exports_no_tombstoned_sample() -> None:
+    """Oracle (R193): a new training export after the re-grant omits the tombstoned sample
+    (`grant_not_current`) and ships its neighbours."""
+    store, log, objects, ref, train, _ = regranted_world()
+    later = export(store, log, objects, ref, export_id=uid(6, 0xe7))
+    assert [x["sample_id"] for x in later["lineage"]] == train[1:]
+    assert {"sample_id": train[0], "reason": "grant_not_current"} in later["omitted"]
+
+
+def test_p1_a_regrant_rereads_no_tombstoned_line() -> None:
+    """Oracle (R193): an export made before the tombstone serves, after the re-grant, every
+    line but the tombstoned sample's."""
+    store, _, objects, _, train, rec = regranted_world()
+    whole = run(objects.get(rec["examples_key"])).splitlines(keepends=True)
+    assert [x["sample_id"] for x in rec["lineage"]] == train
+    assert run(p1.read_export(store, objects, provider_org_id=NEMO,
+                              export_id=rec["export_id"], now=NOW)) == b"".join(whole[1:])

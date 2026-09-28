@@ -10,10 +10,11 @@ from datetime import UTC, datetime, timedelta
 from infrx.contracts import errors
 from infrx.contracts.lab import records
 from infrx.contracts.v2 import records as v2
+from infrx.datasets import lineage
 from infrx.lab.access.fakes import FakeAccessStore
 from infrx.media.store import InMemoryObjectStore
 
-from ...n.imports.world import GRANT_ID, NEMO, FakeLabStore, run
+from ...n.imports.world import GRANT_ID, NEMO, FakeLabStore, grant_ref, run
 from ...n.versions.test_versions import imported, uid
 
 NOW = datetime(2026, 9, 27, 12, tzinfo=UTC)
@@ -103,3 +104,15 @@ def manifest(store, ref):
 def split_ids(store, ref) -> dict[str, list[str]]:
     m = manifest(store, ref)
     return {n: list(getattr(m.splits, n)) for n in ("train", "validation", "holdout")}
+
+
+def tombstone_regranted(store, objects, *sample_ids, grant: str = GRANT_ID) -> None:
+    """E7L i04's re-grant (0-E7L-1, R193): `grant` is revoked, N3 tombstones `sample_ids`
+    (what `lineage.reconcile` writes), then the grantor grants again - D7 reads them again,
+    N3's gate never does."""
+    ref = grant_ref(grant)
+    store.revoke(ref)
+    for sid in sample_ids:
+        run(lineage._stone(objects, NEMO, {"sample_id": sid, "grantor_org_id": NEMO,
+                                           "request_id": sid}, "grant_not_current", NOW))
+    store.grants[ref]["current"] = True
