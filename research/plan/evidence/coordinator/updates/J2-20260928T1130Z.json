@@ -1,0 +1,72 @@
+{
+  "task": "J2",
+  "lane": "lab-sql-integration",
+  "head": "a6b4bbb",
+  "base": "8ae65fa8",
+  "worktree": ".claude/worktrees/codex-w5-lab-sql-integration",
+  "branch": "codex/w5-lab-sql-integration",
+  "slice": "WR-LSQ-4 (PgJudgeLedger as JudgeLedger) + WR-OBS-3 (content through Retention)",
+  "activity": "review",
+  "at": "2026-09-28T11:30:00Z",
+  "owned_paths": [
+    "apps/infrx-api/infrx/judge/submit.py",
+    "apps/infrx-api/tests/j/submit/",
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=j2 pytest -q tests/j/submit/test_submit_ledgers.py (flag row false, scratch)",
+      "exit": 1,
+      "summary": "seam: 5 failed [pg] DependencyUnavailable"
+    },
+    {
+      "cmd": "INFRX_D_TASK=j2 pytest -q tests/j/submit/test_submit_ledgers.py",
+      "exit": 0,
+      "summary": "12 passed (6 fake + 6 PgJudgeLedger)"
+    },
+    {
+      "cmd": "pytest -q tests/j/submit/test_submit.py -k deleted_or_expired (before WR-OBS-3)",
+      "exit": 1,
+      "summary": "seam: deleted request sent to the judge"
+    },
+    {
+      "cmd": "INFRX_D_TASK=j2 pytest -q tests/j",
+      "exit": 0,
+      "summary": "310 passed (before WR-OBS-3); tests/j/submit green after"
+    },
+    {
+      "cmd": "INFRX_D_TASK=j2 INFRX_MUTANTS=all pytest -q tests/j/submit/test_mutants.py tests/j/test_mutants.py",
+      "exit": 0,
+      "summary": "161 passed"
+    },
+    {
+      "cmd": "tests/integration/lab_observe/runner.py --only o06",
+      "exit": 3,
+      "summary": "BLOCKED: foreign infrx-e5l_* volumes (rv-lab-observe-0F2)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=b1 make api-test",
+      "exit": 2,
+      "summary": "5819 passed, 90 skipped, 9 xfailed, 60 failed, 8 errors; none in tests/j|b|r|h - foreign d2-valkey (7), tests/i key baseline (43), i8 pooler lock held elsewhere (8 errors), base defects I5 72-observe-install (6) and I2L LAB_DATASETS_API_URL (3), lab-sql race mutant c3l_double_click_twice (1)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "one review round (D10-0025 1/2/5 analogue) plus the merge-time rerun; this lane's swaps took 0.3-1 h each",
+    "at": "2026-09-28T11:30:00Z"
+  },
+  "blockers": [
+    "E5L o06 rerun blocked by foreign infrx-e5l_* volumes; needs WR-LSQ-INT-1"
+  ],
+  "wiring_requests": [
+    "WR-LSQ-INT-1 tests/integration/lab_observe/observe_world.py JudgeWiring(retention=trip.traces.retention) + mutants.py KNOWN_FAIL={} and an O06_JUDGE mutant (evidence has the patch)",
+    "WR-LSQ-INT-2 tests/integration/lab_evaluate/lab_world.py case_records -> reports.case_records(...); j11 rebind to NOT RUN[L3]; B4/lab-api-2 use reports.case_records",
+    "WR-LSQ-INT-3 composition: JudgeWiring(ledger=PgJudgeLedger, retention=Retention); Controller(PgReleaseStore); optimization.store(PgLabDataStore)"
+  ],
+  "evidence": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
+  ]
+}
