@@ -1277,6 +1277,7 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
         built.update(limits=limits, spool=spool, **kw)
         return Shipper()
     monkeypatch.setattr(ship, "build_shipper", build)
+    content_refs(monkeypatch)
     steps = captured_steps(monkeypatch)
     service, pool = composed(environment(tmp_path, TRACE_SPOOL_DIR=str(tmp_path / "spool"),
                                          S3_ENDPOINT_URL="http://127.0.0.1:9", **TRACE_ENV))
@@ -1306,7 +1307,43 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
     assert projector.outbox.connect is service.jobs._connect
     assert projector.projection is Shipper.retention.feedback
     assert projector.retention is Shipper.retention
+    from infrx.content import ContentAccess
+    holds = getattr(Shipper.retention, "holds", None)    # WR-C2-2: C2's holds on the sweep
+    assert getattr(holds, "__func__", None) is ContentAccess.holds
+    assert holds.__self__.retention is Shipper.retention
+    assert holds.__self__.refs.connect is service.jobs._connect
     asyncio.run(spool.close())
+
+
+class ContentRefs:
+    """0041's `PgContentRefs` (lab-sql-lw3) as the worker composes it."""
+
+    def __init__(self, connect) -> None:
+        self.connect = connect
+
+
+def content_refs(monkeypatch, module=True) -> None:
+    """C2's content refs in the build (a module), or not yet (None: the import fails)."""
+    import types
+    fake = None
+    if module:
+        fake = types.ModuleType("infrx.state.lab_content")
+        fake.PgContentRefs = ContentRefs
+    monkeypatch.setitem(sys.modules, "infrx.state.lab_content", fake)
+
+
+def test_worker_main__trace_pumps_refuse_without_c2s_content_refs(tmp_path, monkeypatch):
+    """WR-C2-2: the sweep deletes content only when no live ref holds it; without C2's refs
+    (0041) in the build the pumps refuse to start by name rather than sweep unheld."""
+    from infrx.traces import ship
+
+    class Shipper:
+        retention = type("Retention", (), {"feedback": None})()
+    monkeypatch.setattr(ship, "build_shipper", lambda *a, **kw: Shipper())
+    content_refs(monkeypatch, module=False)
+    with pytest.raises(Exception) as refused:
+        composed(environment(tmp_path, TRACE_SPOOL_DIR=str(tmp_path / "spool"), **TRACE_ENV))
+    assert type(refused.value) is RuntimeMisconfigured and "0041" in str(refused.value)
 
 
 def test_worker_main__the_lab_eval_worker_refuses_to_start_without_its_sources(tmp_path):

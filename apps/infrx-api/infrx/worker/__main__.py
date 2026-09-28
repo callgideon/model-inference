@@ -278,6 +278,7 @@ def trace_pumps(settings, mode, connect) -> dict:
         raise RuntimeMisconfigured(mode, detail="TRACE_PUMPS: the spool or CLICKHOUSE_URL "
                                    f"did not answer ({type(failure).__name__})") from None
     retention = shipper.retention
+    retention.holds = content_holds(mode, connect, retention)          # WR-C2-2
     projector = FeedbackProjector(PgFeedbackOutbox(connect), retention.feedback,
                                   retention=retention)
 
@@ -292,6 +293,19 @@ def trace_pumps(settings, mode, connect) -> dict:
             "trace_retention": lambda: every(TRACE_RETENTION_S, retain, "trace retention"),
             "feedback_projection": lambda: every(FEEDBACK_PROJECTION_S, projector.pump,
                                                  "feedback projection")}
+
+
+def content_holds(mode, connect, retention):
+    """WR-C2-2: T3's sweep keeps an object a live C2 content ref still holds - C2's
+    `ContentAccess.holds` over 0041's refs (lab-sql-lw3) on this pool. Without them in the
+    build the pumps refuse by name. ponytail: drop the refusal once #16 is on every base."""
+    from ..content import ContentAccess
+    try:
+        from ..state.lab_content import PgContentRefs
+    except ImportError:
+        raise RuntimeMisconfigured(mode, detail="TRACE_PUMPS needs C2's content refs "
+                                                "(0041)") from None
+    return ContentAccess(PgContentRefs(connect), retention).holds
 
 
 def lab_eval(mode, connect, objects, evaluators, targets, worker_id) -> dict:
