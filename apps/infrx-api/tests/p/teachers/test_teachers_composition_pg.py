@@ -12,6 +12,7 @@ and its `lw_teacher_*` mutants.
 
     INFRX_D_TASK=p2 uv run --frozen pytest -q tests/p/teachers/test_teachers_composition_pg.py
 """
+# ruff: noqa: F811 - the pytest fixture imported from its world module is the parameter
 from __future__ import annotations
 
 from infrx.lab.workers import __main__ as lab_workers

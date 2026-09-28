@@ -12,6 +12,7 @@ and its `lw_report_*` mutants.
 
     INFRX_D_TASK=j2 uv run --frozen pytest -q tests/j/calibration/test_calibration_composition_pg.py
 """
+# ruff: noqa: F811 - the pytest fixture imported from its world module is the parameter
 from __future__ import annotations
 
 import asyncio

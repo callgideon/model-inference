@@ -184,7 +184,6 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
     even with a service at hand (the launched API is unchanged); on, `POST /v1/feedback` is
     the feedback router's and acknowledges through the composed service."""
     import dataclasses
-    from unittest import mock
 
     from infrx.config import deployment_from_env
     from infrx.contracts.records import Feedback

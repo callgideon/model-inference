@@ -13,6 +13,7 @@ and its `rollout_router_*` mutants.
 
     INFRX_D_TASK=r1 uv run --frozen pytest -q tests/r/routing/test_routing_composition_pg.py
 """
+# ruff: noqa: F811 - the pytest fixture imported from its world module is the parameter
 from __future__ import annotations
 
 import dataclasses

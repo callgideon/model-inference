@@ -14,6 +14,7 @@ and its `lab_pipelines_*` mutants.
 
     INFRX_D_TASK=p3 uv run --frozen pytest -q tests/p/training/test_training_composition_pg.py
 """
+# ruff: noqa: F811 - the pytest fixture imported from its world module is the parameter
 from __future__ import annotations
 
 import dataclasses

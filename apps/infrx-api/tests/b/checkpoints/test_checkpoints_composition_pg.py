@@ -12,6 +12,7 @@ T2I/G8's pattern: outside the mutant runner; the fake-level oracles are
 
     INFRX_D_TASK=b3 uv run --frozen pytest -q tests/b/checkpoints/test_checkpoints_composition_pg.py
 """
+# ruff: noqa: F811 - the pytest fixture imported from its world module is the parameter
 from __future__ import annotations
 
 import asyncio
