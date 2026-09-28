@@ -4,7 +4,8 @@
 record (purpose `training`, PROVIDER_USD with a named payer) through D7 and writes one
 write-once bundle: the dataset ref, the config (objective `sft`/`preference`; adaptation
 `full`/`lora` - LoRA is how the weights adapt, not a competing objective), the environment,
-the train and dev ids the training gate allows NOW, the export that carries their content
+the train and dev ids the training gate (N3's `lineage.permitted`: a re-grant never
+resurrects a tombstoned sample, R193) allows NOW, the export that carries their content
 (N2's or P1's, of this dataset), and a pin of the frozen holdout (its size and the digest of
 its ids) - never the holdout itself. The provider trains on its own compute. The export is
 read back from the object store, never taken from the caller: its stored record must be of
@@ -49,6 +50,7 @@ from ...contracts import errors
 from ...contracts.ids import UUID_RE
 from ...contracts.lab import records as lab
 from ...contracts.v2.records import ProviderCapability
+from ...datasets.lineage import permitted
 from ...datasets.imports import write_once
 
 MANUAL = "manual-bundle"
@@ -212,8 +214,8 @@ async def prepare(store, objects, ledger: RunLedger, *, provider_org_id: str, ac
     except ValidationError as refused:
         raise errors.InvalidRequest(f"training config: {refused}") from None
     manifest = await store.resolve(dataset_ref, provider_org_id=provider_org_id)
-    allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
-                                                 purpose="training"))
+    allowed = await permitted(store, objects, dataset_ref, now=now,
+                              provider_org_id=provider_org_id, purpose="training")
     train = [i for i in manifest.splits.train if i in allowed]
     dev = [i for i in manifest.splits.validation if i in allowed]
     if not train:
@@ -282,9 +284,9 @@ async def submit(store, objects, ledger: RunLedger, connector: Connector, member
         return run
     await _member(members, provider_org_id, user_id)
     bundle = await _bundle(objects, provider_org_id, external_run_id)
-    allowed = set(await store.accessible_samples(bundle["dataset_ref"],
-                                                 provider_org_id=provider_org_id,
-                                                 purpose="training"))
+    allowed = await permitted(store, objects, bundle["dataset_ref"],
+                              now=await members.db_now(),
+                              provider_org_id=provider_org_id, purpose="training")
     if set(bundle["train"] + bundle["dev"]) - allowed:
         raise errors.Forbidden("a bundled sample's training grant is no longer current")
     paid = connector.name != MANUAL             # the manual bundle trains on provider compute

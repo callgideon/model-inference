@@ -40,7 +40,8 @@ def labels1(lab):
              "label": "x"}
     imported = lab.import_labels(ref, human + [forged, stray])
     batch, wiring = lab.batch(ref, 1), lab.wiring()
-    planned = run(plan(batch, store=lab.store, rates=wiring.rates, now=lab.judge.now))
+    planned = run(plan(batch, store=lab.store, objects=lab.objects, rates=wiring.rates,
+                       now=lab.judge.now))
     report = run(run_batch(batch, wiring=wiring))
     lab.answer_posts()
     collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]

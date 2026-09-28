@@ -116,13 +116,18 @@ def test_i04_a_regrant_leaves_the_n3_gate_closed(lab):
 
 
 def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdir):
-    """DATA-LINEAGE (transitive revocation): after the re-grant every training path must
-    still refuse the tombstoned samples - a new P1 label export and the prepared P3 run's
-    submit (N3: `permitted` is the one gate every export and external submission
-    re-checks). Today P1/P3 read D7's `accessible_samples` only: 0-E7L-1."""
+    """DATA-LINEAGE (transitive revocation, R193): after the re-grant every training path
+    must still refuse the tombstoned samples - the label queue, a new P1 label export, the
+    earlier export's read and the prepared P3 run's submit (N3: `permitted` is the one gate
+    every export and external submission re-checks). 0-E7L-1 until WR-E7L-3."""
     r = regranted(lab)
     try:
         leaks = []
+        queued = lab.import_labels(r.ref, [dict(row, method_version="e7l-r3") for row in r.rows])
+        if queued.accepted:
+            leaks.append(f"P1 queue imports {len(queued.accepted)} labels")
+        if lab.read_export(4):
+            leaks.append("P1 export read serves tombstoned lines")
         export = lab.export(r.ref, 5)
         shipped = sorted({x["sample_id"] for x in export["lineage"]} & set(r.samples))
         if shipped:

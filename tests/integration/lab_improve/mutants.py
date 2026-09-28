@@ -20,9 +20,9 @@ check is relaxed for the SQL targets, as E3L's, E6L's and track I's).
     INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l apps/infrx-api/.venv/bin/python -m pytest -q \\
         -p no:cacheprovider tests/integration/lab_improve/test_mutants.py
 
-`test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training` FAILS on this base
-(0-E7L-1: P1/P3 read D7's gate, not N3's): it is outside the stack list until the fix, whose
-own edit is the defect a mutant would re-introduce.
+`test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training` failed before WR-E7L-3
+(0-E7L-1: P1/P3 read D7's gate, not N3's); since R193's fix `st_pipelines_read_d7_gate` and
+`st_submit_reads_d7_gate` re-introduce that defect and name it.
 """
 from __future__ import annotations
 
@@ -144,8 +144,9 @@ I05_DUP = "test_i05_a_duplicate_teacher_submit_is_one_paid_job"
 I05_AMBIGUOUS = "test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted"
 I05_BUDGET = "test_i05_the_budget_stops_the_batch_before_the_chunk_it_cannot_cover"
 I06 = "test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job"
-#: FAILS on this base (0-E7L-1); outside the stack list until P1/P3 read N3's gate
-FAILING = ("test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training",)
+I04_REGRANT = "test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training"
+#: cases that fail on this base (none since WR-E7L-3 fixed 0-E7L-1)
+FAILING: tuple[str, ...] = ()
 
 STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_forged_truth_imported", "a row claiming ground truth is refused (relabeled "
@@ -221,6 +222,26 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_tombstones_ignored", "a tombstone is permanent: a re-grant resurrects nothing",
        N3, '    stones = {_id(k) for k in await objects.keys(f"{base}/tombstones/")} & wanted',
        "    stones = set()", I04_GATE),
+    _m("st_pipelines_read_d7_gate", "R193: a P1 export gates on N3's permitted, never D7's "
+       "grant read alone (missing transitive revocation)", P1,
+       "allowed = await permitted(store, objects, dataset_ref, now=now,\n"
+       '                              provider_org_id=provider_org_id, purpose="training")',
+       "allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,"
+       ' purpose="training"))', I04_REGRANT),
+    _m("st_submit_reads_d7_gate", "R193: a P3 submit gates on N3's permitted, never D7's "
+       "grant read alone (missing transitive revocation)", P3,
+       'allowed = await permitted(store, objects, bundle["dataset_ref"],\n'
+       "                              now=await members.db_now(),\n"
+       '                              provider_org_id=provider_org_id, purpose="training")',
+       'allowed = set(await store.accessible_samples(bundle["dataset_ref"], '
+       'provider_org_id=provider_org_id, purpose="training"))', I04_REGRANT),
+    _m("st_queue_reads_d7_gate", "R193: a label import gates on N3's permitted, never D7's "
+       "grant read alone", P1,
+       "readable = await permitted(store, objects, dataset_ref, now=now,\n"
+       '                               provider_org_id=provider_org_id, purpose="provider_sharing")'
+       "\n    done = Imported()",
+       "readable = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,"
+       ' purpose="provider_sharing"))\n    done = Imported()', I04_REGRANT),
     _m("st_inferior_accepted", "an inferior candidate is rejected (training loss never "
        "decides)", B2,
        '    inferior = [f"{name} inferior" for name, v in verdicts if v == "inferior"]',

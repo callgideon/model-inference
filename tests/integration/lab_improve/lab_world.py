@@ -243,9 +243,9 @@ class Lab:
     # --------------------------------------------------------------------- labels (P1, P2)
     def import_labels(self, ref: str, rows: list[dict]):
         from infrx.pipelines import annotations as p1
-        return run(p1.import_labels(self.store, self.log, provider_org_id=self.NEMO,
-                                    actor=self.DEV, dataset_ref=ref, rubric_ref=self.rubric,
-                                    rows=rows))
+        return run(p1.import_labels(self.store, self.log, objects=self.objects,
+                                    now=self.db_now(), provider_org_id=self.NEMO, actor=self.DEV,
+                                    dataset_ref=ref, rubric_ref=self.rubric, rows=rows))
 
     def labels(self, ref: str) -> dict[str, tuple[str, str, object]]:
         """annotation ref -> (sample id, state, record) of every label logged under `ref`."""
