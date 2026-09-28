@@ -1,10 +1,11 @@
-// P4: the Lab's view of P1 (infrx/pipelines/annotations) and P3 (infrx/pipelines/training) through a
-// LAB_PIPELINES route that does not exist yet. The shape is filed as WR-P4-1; until the real adapter is
-// wired the port is "unavailable" (fails closed), or, only outside production and only when asked for,
-// the labelled preview fake. The route derives the user from the forwarded session (LAB-AUTH) and
+// P4: the Lab's view of P1 (infrx/pipelines/annotations) and P3 (infrx/pipelines/training) through
+// lab-api's LAB_PIPELINES route (WR-P4-1, `/lab/v1/pipelines`). With LAB_PIPELINES_API_URL set the port
+// is the HTTP adapter (server.ts); unset it is "unavailable" (fails closed), or, only outside production
+// and only when asked for, the labelled preview fake. The route derives the user from the forwarded session (LAB-AUTH) and
 // re-checks every call; the Lab only ever names the session's workspace.
 import type { Role } from "../../auth/access.ts";
 import { FakePipelines } from "./fake.ts";
+import { labPipelines } from "./server.ts";
 
 /** contracts/v2 ROLE_CAPABILITIES: P1/P3 need run_evaluation; assigning a reviewer, manage_members. */
 export type Capability = "run_evaluation" | "manage_members";
@@ -134,5 +135,5 @@ export const isPreview = (env: Record<string, string | undefined> = process.env)
 
 export function pipelinesPort(env: Record<string, string | undefined> = process.env): PipelinesPort {
   if (isPreview(env)) return (preview ??= new FakePipelines());
-  return UNAVAILABLE;
+  return labPipelines(env) ?? UNAVAILABLE;
 }
