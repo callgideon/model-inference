@@ -1,0 +1,95 @@
+{
+ "baseline_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000003d@sha256:04f5854754ae2a65a25fb4efce50879d3698b77af3b63d1dbc88aaada214650f",
+ "candidate_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-000000000041@sha256:ad642f03a3bcac3285716e4748bd2a05692957f22197d340072a9e30a77a95f5",
+ "decision": {
+  "outcome": "inconclusive",
+  "reasons": [
+   "slice math uncertain"
+  ]
+ },
+ "estimates": {
+  "basis": "deterministic_metric",
+  "overall": {
+   "clusters": 20,
+   "diff": 0.45,
+   "high": 0.7330559109375604,
+   "improved": true,
+   "low": 0.16694408906243963,
+   "n": 20,
+   "verdict": "non_inferior"
+  },
+  "slices": {
+   "math": {
+    "clusters": 6,
+    "diff": -0.16666666666666666,
+    "high": 0.26129416211090206,
+    "improved": false,
+    "low": -0.5946274954442353,
+    "n": 6,
+    "verdict": "uncertain"
+   }
+  }
+ },
+ "observed": {
+  "baseline": {
+   "costs": {
+    "CREDIT": "50.28000000"
+   },
+   "errors": 0,
+   "latency_ms": {
+    "max": 37,
+    "n": 20,
+    "p50": 27,
+    "p90": 32,
+    "p99": 37
+   },
+   "mean": 0.5,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "candidate": {
+   "costs": {
+    "CREDIT": "48.08000000"
+   },
+   "errors": 1,
+   "latency_ms": {
+    "max": 32,
+    "n": 19,
+    "p50": 28,
+    "p90": 31,
+    "p99": 32
+   },
+   "mean": 0.95,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "cost_delta": {
+   "CREDIT": "-2.20000000"
+  },
+  "paired": 20,
+  "universe": 20
+ },
+ "pairing": {
+  "factors": [
+   "serving_ref"
+  ],
+  "kind": "single_factor",
+  "tag": null
+ },
+ "protocol": {
+  "confidence": 0.95,
+  "margin": 0.05,
+  "metric_source": "deterministic_metric",
+  "min_cases": 10,
+  "required_slices": {
+   "math": {
+    "margin": 0.0,
+    "min_cases": 5
+   }
+  }
+ },
+ "protocol_digest": "sha256:5a63aba5f370f36ca9cfe6cddda0960fb3537f355ee9892063eb6957c136b109",
+ "report_digest": "sha256:67ad29c3ff7c1207c964040aed812024de6973964cfcbf3e3e8a6a26af36ee32",
+ "schema": "infrx.eval_report.1",
+ "universe_digest": "sha256:6e96cb0a140ece00989b0d2b33c951098801586ca02b50e3581f2813622d19c6"
+}

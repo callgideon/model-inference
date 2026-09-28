@@ -1,0 +1,5 @@
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/tests/integration/lab_evaluate/runner.py'
+=========================== short test summary info ============================
+ERROR tests/integration/lab_evaluate/test_e6l_runner.py - FileNotFoundError: ...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.10s

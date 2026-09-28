@@ -1,0 +1,32 @@
+..................Fsss                                                                                                                                                                                                                                                                                                                                                                                   [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+____________________________________________________________________________________________________________________________________________________________________________ test_j11_a_finite_video_case_reaches_the_dev_endpoint _____________________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x7abf97c229c0>, workdir = PosixPath('research/plan/evidence/e/E6L-raw-420ec1d/run/cases/test_j11_a_finite_video_case_reaches_the_dev_endpoint')
+
+    def test_j11_a_finite_video_case_reaches_the_dev_endpoint(lab, workdir):
+        """The imported clips through a `finite_video` harness: each case must reach H1's adapter
+        with its media and duration (comparable, sent), then the dev endpoint - whose media path
+        is L3's (HttpDevEndpoint refuses media until it merges)."""
+        video = lab.dataset("video", 2).dataset_ref
+        harness_ref = lab.harness_ref(11, adapter="finite_video", template="label {{media_ref}}")
+        frozen = lab.freeze(lab.run_payload(111, video, harness_ref, lab.serving("video")))
+        with lw.endpoint("video") as (wallet, http):
+            report = run(lab.runner(http).run(frozen))
+        results = lab.results(frozen.run.run_id)
+        lw.save(workdir, "video-run.json", {"report": report, "results": results})
+        unreached = {case: body["reasons"] for case, body in results.items()
+                     if body["status"] == "unsupported"}
+>       assert not unreached, (
+            "N1's finite-video content object (media_digest, span_ms) does not carry what H1's "
+            f"finite_video adapter reads (sample.media_ref, sample.duration_ms): {unreached}")
+E       AssertionError: N1's finite-video content object (media_digest, span_ms) does not carry what H1's finite_video adapter reads (sample.media_ref, sample.duration_ms): {'4f715318-0b01-4792-80dc-9db1b40e7746': ['missing_input:sample.media_ref', 'missing_input:sample.duration_ms'], '51ceafd3-3f75-4053-858f-432059ed1fe1': ['missing_input:sample.media_ref', 'missing_input:sample.duration_ms'], 'b38b1fb2-b9e2-41b1-852f-491de3b3c2a9': ['missing_input:sample.media_ref', 'missing_input:sample.duration_ms']}
+E       assert not {'4f715318-0b01-4792-80dc-9db1b40e7746': ['missing_input:sample.media_ref', 'missing_input:sample.duration_ms'], '51ce...n_ms'], 'b38b1fb2-b9e2-41b1-852f-491de3b3c2a9': ['missing_input:sample.media_ref', 'missing_input:sample.duration_ms']}
+
+tests/integration/lab_evaluate/scenarios_eval.py:320: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_evaluate/scenarios_eval.py::test_j11_a_finite_video_case_reaches_the_dev_endpoint - AssertionError: N1's finite-video content object (media_digest, span_ms) does not carry what H1's finite_video adapter reads (sample.media_ref, sample.duration_ms): {'4f715318-0b01-4792-80dc-9db1b40e7746': ['missing_input:sample.media_ref', 'missing_input:sample.duration_ms'], '51cea...
+SKIPPED [1] tests/integration/lab_evaluate/lab_world.py:73: NOT RUN[composition] no I5 eval worker entry point on this base. Steps: start the eval worker entry point on DATABASE; SIGKILL it mid-attempt; restart; every case of the run scored once, the killed attempt expired; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j09
+SKIPPED [1] tests/integration/lab_evaluate/lab_world.py:73: NOT RUN[composition] no I5 checkpoint worker entry point on this base. Steps: start the checkpoints worker; deliver one checkpoint_received event twice (release, redeliver); one receipt, one run, one eval_run event; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j09
+SKIPPED [1] tests/integration/lab_evaluate/lab_world.py:73: NOT RUN[B4,lab-api-2] the provider evaluation UI or its /lab/v1/evaluations route is not on this base. Steps: launch, progress, cancel and the j07 comparison through apps/lab/tests/e2e/evaluate/; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j10
+1 failed, 18 passed, 3 skipped in 22.69s

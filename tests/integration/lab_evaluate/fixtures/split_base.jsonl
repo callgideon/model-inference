@@ -1,0 +1,5 @@
+{"episode": "h1", "id": "H1", "split": "holdout", "text": "How many legs does a spider have?"}
+{"episode": "h2", "id": "H2", "split": "holdout", "text": "What is the boiling point of water at sea level?"}
+{"episode": "r1", "id": "R1", "split": "train", "text": "What colour is chlorophyll?"}
+{"episode": "r2", "id": "R2", "split": "train", "text": "Who wrote Hamlet?"}
+{"episode": "r3", "id": "R3", "split": "validation", "text": "What is the chemical symbol of gold?"}

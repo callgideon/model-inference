@@ -1,0 +1,15 @@
+[ok  ] backend-teardown: {"removed": []}
+[ok  ] teardown: {"removed": ["infrx-e6l-clickhouse", "infrx-e6l-postgres", "infrx-e6l-s3", "infrx-e6l-valkey"], "still_named_ours_but_not_ours": []}
+ NOT RUN  j01  owned text/tool benchmark imported through N1 onto D7 + MinIO: bad rows quarantined and refused until accepted; a replay is the same dataset, a changed upload conflicts
+ NOT RUN  j02  owned finite-video benchmark: clips in the import bundle, the 82 s cap, missing and non-video clips refused
+ NOT RUN  j03  a foreign dataset is refused at import, resolve and schedule; a revoked grant stops derivation and scheduling
+ NOT RUN  j04  split traps: related sources placed whole and deterministically; a leaking base refused; the frozen holdout admits no relative
+    PASS  j05  B1 on real D7 through HttpDevEndpoint: a worker killed mid-attempt, a duplicate delivery, a cancel mid-run
+ NOT RUN  j06  two serving versions reproduce the frozen benchmark; the same run payload is the same run
+    PASS  j07  compare -> decide: a required-slice regression rejects despite an aggregate gain, a clean win is accepted, a missing output is counted, tool cases are visible and not comparable
+ NOT RUN  j08  a checkpoint delivered twice is one receipt and one run; a crash before the decision is one run on redelivery
+ NOT RUN  j09  the I5 eval and checkpoint worker processes: a worker killed mid-run, the outbox drained once
+ NOT RUN  j10  the provider UI: launch, progress, cancel, compare with slices and uncertainty
+ NOT RUN  j11  a finite-video case reaches the dev endpoint through H1/B1
+cells {'DATA-IMPORT': 'NOT RUN', 'DATA-SPLIT': 'NOT RUN', 'DATA-RIGHTS': 'NOT RUN', 'EVAL-DURABLE': 'NOT RUN', 'EVAL-REPRO': 'NOT RUN', 'EVAL-COMPARE': 'NOT RUN', 'CHECKPOINT-IDEM': 'NOT RUN'}
+gate NOT RUN -> /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e6l-td/verdict.json
