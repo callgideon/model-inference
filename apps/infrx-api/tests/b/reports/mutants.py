@@ -181,6 +181,8 @@ MUTANTS: tuple[Mutant, ...] = (
     m("b2r_last_cost_only", "every attempt's cost is kept",
       'costs.setdefault(attempt["case_id"], []).append(attempt["cost"])',
       'costs[attempt["case_id"]] = [attempt["cost"]]', ROWS),
+    m("b2r_null_cost_kept", "an attempt without a cost adds none (0-LSQI-2)",
+      '        if attempt["cost"]:\n', "        if True:\n", ROWS),
     m("b2r_failed_case_missing", "a failed case without a result is an error, not missing",
       '        elif states.get(cid) == "failed":', "        elif False:", ROWS),
     m("b2r_pending_case_is_an_error", "a case neither scored nor failed is missing",

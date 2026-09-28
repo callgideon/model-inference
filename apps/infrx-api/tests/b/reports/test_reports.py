@@ -259,7 +259,8 @@ def test_b2_case_records_are_built_from_d7_rows_and_the_manifest() -> None:
                             {"case_id": ids[2], "state": "pending"},
                             {"case_id": ids[3], "state": "done"}],
             "attempt_rows": [{"case_id": ids[0], "cost": cost}, {"case_id": ids[0], "cost": cost},
-                             {"case_id": ids[1], "cost": cost}, {"case_id": ids[2], "cost": None}],
+                             {"case_id": ids[1], "cost": cost}, {"case_id": ids[2], "cost": None},
+                             {"case_id": ids[3], "cost": None}],   # a done case's null cost
             "results": [{"case_id": ids[0], "evaluator_ref": ev, "body": body},
                         {"case_id": ids[1], "evaluator_ref": other, "body": body},
                         {"case_id": ids[3], "evaluator_ref": ev,

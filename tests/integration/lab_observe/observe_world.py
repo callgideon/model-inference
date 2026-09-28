@@ -338,8 +338,7 @@ def judge(trip, *, mode: str = "live", budget: str = "1.00", timeout_s: float = 
                                        judge_live_budget_usd=Decimal(budget))
         wiring = JudgeWiring(access=access(trip), ledger=ledger,
                              provider=HttpJudgeProvider(fake.url, timeout_s=timeout_s),
-                             projection=trip.traces.projection, objects=trip.traces.objects,
-                             rates=rates, settings=settings)
+                             retention=trip.traces.retention, rates=rates, settings=settings)
         yield Judge(wiring, ledger, fake, payer)
     finally:
         fake.close()
