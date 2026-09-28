@@ -34,6 +34,7 @@ ROWS = "test_j3__rejected_duplicate_and_unusable_rows_are_counted_not_paired"
 CROSS = "test_j3__an_interval_crossing_the_target_is_inconclusive"
 ALONE = "test_j3__kappa_alone_never_calibrates_a_configuration"
 SHAPE = "test_j3__the_report_projects_into_the_v3_calibration_shape"
+JOB = "test_j3__the_report_job_stores_its_configurations_calibration"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- truth: C3F/R43 operator verdicts of this org and rubric version only ------------------
@@ -119,15 +120,30 @@ MUTANTS: tuple[Mutant, ...] = (
        R, '"agreement": k.value,', '"agreement": None,', SHAPE),
     _m("port_state_literal", "the V3 shape carries the computed state",
        R, '{"state": self.state,', '{"state": "calibrated",', SHAPE),
+    # --- the report job (WR-J3-D8): D8's put_calibration, keyed by the configuration -----------
+    _m("job_stores_nothing", "the job stores the report's calibration",
+       R, "    await ledger.put_calibration(quality.calibration(),",
+       "    ledger.put_calibration(quality.calibration(),", JOB),
+    _m("job_grantor_is_the_provider", "the calibration is the grantor's, not the provider's",
+       R, "grantor_org_id=org_id, judge_model", "grantor_org_id=provider_org_id, judge_model",
+       JOB),
+    _m("job_reports_every_org", "the job reports the grantor's own labels only",
+       R, "    quality = report(results, feedback, org_id=org_id, rubric_version=rubric_version)",
+       "    quality = report(results, feedback, org_id=provider_org_id, "
+       "rubric_version=rubric_version)", JOB),
 )
 
-RUNNER = Runner(name="j3", targets=(SUITE,), extra_args=(f"--ignore={SUITE}/test_mutants.py",))
+#: the real-store half (WR-J3-D8) is outside the runner (T2I/G8's pattern): the fake cases'
+#: mutants are its oracles.
+OUTSIDE = ("test_mutants.py", "test_calibration_pg.py")
+RUNNER = Runner(name="j3", targets=(SUITE,),
+                extra_args=tuple(f"--ignore={SUITE}/{name}" for name in OUTSIDE))
 
 
 def case_names() -> set[str]:
     import re
     pattern = re.compile(r"^def (test_\w+)", re.MULTILINE)
-    return {name for path in (API_DIR / SUITE).glob("test_*.py") if path.name != "test_mutants.py"
+    return {name for path in (API_DIR / SUITE).glob("test_*.py") if path.name not in OUTSIDE
             for name in pattern.findall(path.read_text())}
 
 

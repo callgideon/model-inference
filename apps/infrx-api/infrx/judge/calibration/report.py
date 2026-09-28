@@ -196,3 +196,17 @@ def report(results: Iterable[JudgeScores | Rejected], feedback: Iterable[Feedbac
     return QualityReport(org_id=org_id, rubric_version=rubric_version, labels=len(truth),
                          kappa=kappa(binary), rho={c: rho(p) for c, p in ordinal.items()},
                          exemplars=tuple(exemplars), excluded=+excluded)
+
+
+async def publish(ledger, results: Iterable[JudgeScores | Rejected],
+                  feedback: Iterable[Feedback], *, provider_org_id: str, org_id: str,
+                  judge_model: str, rubric_version: int) -> QualityReport:
+    """The report job (SR-J3-1): `org_id`'s (the grantor's) report for one configuration, its
+    calibration stored with D8's `PgJudgeLedger.put_calibration` under (provider, grantor,
+    judge model, rubric version). The latest stored one is what the Lab's judge-runs door
+    shows; the database refuses a `calibrated` claim its evidence does not support."""
+    quality = report(results, feedback, org_id=org_id, rubric_version=rubric_version)
+    await ledger.put_calibration(quality.calibration(), provider_org_id=provider_org_id,
+                                 grantor_org_id=org_id, judge_model=judge_model,
+                                 rubric_version=rubric_version)
+    return quality
