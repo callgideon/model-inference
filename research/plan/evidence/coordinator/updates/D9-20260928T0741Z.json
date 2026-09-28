@@ -1,0 +1,51 @@
+{
+ "task": "D9",
+ "slice": "D9 + WR-R2-1",
+ "activity": "review",
+ "head": "be40bda",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw2",
+ "branch": "codex/w5-lab-sql-lw2",
+ "blockers": [],
+ "owned_paths": [
+  "apps/app/supabase/migrations/0033_lab_rollout.sql",
+  "apps/app/supabase/migrations/0039_lab_release.sql",
+  "apps/infrx-api/infrx/state/lab_rollout.py",
+  "apps/infrx-api/tests/d/test_d9_*.py",
+  "apps/infrx-api/tests/d/code_mutants_d9.py",
+  "apps/infrx-api/tests/d/test_code_mutants_d9.py"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_d9_rollout.py tests/d/test_d9_release.py tests/d/test_d9_units.py",
+   "exit": 0,
+   "summary": "9 + 7 + 2 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_d9.py",
+   "exit": 0,
+   "summary": "71 passed: 58 SQL + 10 Python killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab make api-test",
+   "exit": 1,
+   "summary": "5475 passed, 77 skipped, 9 xfailed, 9 failed: 2 = WR-LSQ-3 (the six new door signatures, until EXPECTED_FUNCTION_CALLERS is wired), 7 = test_outbox_relay[valkey] ForeignContainer infrx-d2-valkey (another checkout); rerun alone: same 7"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "one review round (D10-0025 1/2/5) plus the consuming lane's merge-time rerun over this store; code, checks and mutants are complete",
+  "at": "2026-09-28T07:41Z"
+ },
+ "wiring_requests": [
+  "WR-LSQ-1 tests/integration/test_harness.py migration pin: 0031-0040 after 0030",
+  "WR-LSQ-2 Makefile api-mutants own-process PG line: + tests/d/test_code_mutants_d6j.py tests/d/test_code_mutants_l3sql.py tests/d/test_code_mutants_d9.py",
+  "WR-LSQ-3 tests/d/checks.py EXPECTED_FUNCTION_CALLERS: public.lab_judge_configure/set_budget/request_run/calibration (0037), public.submit_feedback/lab_review_feedback (0038) = {authenticated, service_role}",
+  "WR-LSQ-5 rollout-control lane at merge: compose PgReleaseStore as R2's ReleaseStore, rerun tests/r/control on key r2"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/D9-be40bda.md"
+ ]
+}
