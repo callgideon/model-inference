@@ -1,0 +1,56 @@
+{
+ "task": "L3",
+ "slice": "L3-SQL (ControlStore seam, WR-L3-1)",
+ "activity": "review",
+ "head": "be40bda",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw2",
+ "branch": "codex/w5-lab-sql-lw2",
+ "blockers": [],
+ "owned_paths": [
+  "apps/app/supabase/migrations/0032_lab_control.sql",
+  "apps/infrx-api/infrx/state/lab_control.py",
+  "apps/infrx-api/tests/d/test_l3sql_*.py",
+  "apps/infrx-api/tests/d/code_mutants_l3sql.py",
+  "apps/infrx-api/tests/d/test_code_mutants_l3sql.py"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_l3sql_control.py tests/d/test_l3sql_units.py",
+   "exit": 0,
+   "summary": "10 + 2 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_l3sql.py",
+   "exit": 0,
+   "summary": "49 passed: 38 SQL + 8 Python killed"
+  },
+  {
+   "cmd": "L3 probe: tests/l/control/test_control.py from codex/w5-lab-access-lw2@08a353e7 over PgControlStore",
+   "exit": 1,
+   "summary": "25 passed, 1 failed = WR-L3-5; with catalog.py WR-L3-5 applied (reverted): 26 passed, 13 pg; L3 PG mutants 20/21 (pg_dev_revision_of_any_environment: also enforced by the store)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab make api-test",
+   "exit": 1,
+   "summary": "5475 passed, 77 skipped, 9 xfailed, 9 failed: 2 = WR-LSQ-3 (the six new door signatures, until EXPECTED_FUNCTION_CALLERS is wired), 7 = test_outbox_relay[valkey] ForeignContainer infrx-d2-valkey (another checkout); rerun alone: same 7"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "one review round (D10-0025 1/2/5) plus the consuming lane's merge-time rerun over this store; code, checks and mutants are complete",
+  "at": "2026-09-28T07:41Z"
+ },
+ "wiring_requests": [
+  "WR-LSQ-1 tests/integration/test_harness.py migration pin: 0031-0040 after 0030",
+  "WR-LSQ-2 Makefile api-mutants own-process PG line: + tests/d/test_code_mutants_d6j.py tests/d/test_code_mutants_l3sql.py tests/d/test_code_mutants_d9.py",
+  "WR-LSQ-3 tests/d/checks.py EXPECTED_FUNCTION_CALLERS: public.lab_judge_configure/set_budget/request_run/calibration (0037), public.submit_feedback/lab_review_feedback (0038) = {authenticated, service_role}",
+  "WR-LSQ-8 L3 lane: drop pg_dev_revision_of_any_environment from tests/l/control/mutants.py PG_MUTANTS",
+  "WR-L3-5 (A3) catalog.py _PRIVATE: d.state = 'ready_private'"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/L3-SQL-be40bda.md"
+ ]
+}
