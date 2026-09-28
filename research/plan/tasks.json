@@ -2870,7 +2870,7 @@
       "track": "B",
       "product": "lab",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2900,7 +2900,8 @@
       ],
       "acceptance": "A provider imports a benchmark, runs a baseline and candidate, inspects failures and exports a reproducible comparison. Live jobs do not execute in Next.js handlers; inaccessible evidence is not embedded in responses.",
       "failure_oracle": "Reload during run, forbidden deep links, failed/cancelled cases and inconclusive results remain accurate in browser tests; CREDIT and USD are never summed.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-29: implemented via eval-ui 55354846 + lab-api-2 3f413ecf/2df7b8bb + the lab-ui-swap merge 6f627953 (the evaluations pages read GET/POST /lab/v1/evaluations with the session token; real-route journey J01–J03 on b3 at the lane; 152 mutants). OPEN: the B4 real-route rerun at the merge head once the b3 key is free (composition-2 held it); the experiments/catalog/B3-listing fakes swap with lab-sql-integration-2; hosted enable needs LAB_EVALS + LAB_EVALS_API_URL + the E4 rerun."
     },
     {
       "id": "D8",
@@ -3052,7 +3053,7 @@
       "track": "P",
       "product": "lab",
       "milestone": "LAB-M3",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3083,7 +3084,8 @@
       ],
       "acceptance": "Provider can complete a data correction → training export → external checkpoint → held-out comparison journey. No nonfunctional managed-training buttons or success state for unknown paid jobs.",
       "failure_oracle": "Unauthorized reviewer, revoked source, unknown job, partial artifact and comparison regression surface actionable states and cannot be bypassed by direct server action calls.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-29: implemented via pipeline-ui 1be964bd + lab-api-2 + the lab-ui-swap merge 6f627953 (the annotations/training pages over /lab/v1/pipelines with the session token; real-route journey J01–J05 on p1 6/6; 151 mutants). OPEN: P4.b teacher slice (P2 is merged: bind it), the D8 label log/run ledger fakes swap with lab-sql-integration-2."
     },
     {
       "id": "D9",
@@ -3232,7 +3234,7 @@
       "track": "R",
       "product": "lab",
       "milestone": "LAB-M4",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3262,7 +3264,8 @@
       ],
       "acceptance": "Provider proposes and operator controls a bounded release, sees reasons for stop/inconclusive decisions, and can inspect rollback lineage. UI does not label synthetic performance fixtures as measurements.",
       "failure_oracle": "Role escalation through direct actions, stale revision approval, empty metrics and double-click rollback cannot corrupt policy or bypass publication controls.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-29: implemented via release-ui 288cc573 + lab-api-2 + the lab-ui-swap merge 6f627953 (the releases/optimizations pages over /lab/v1/releases with the session token; real-route journey J01–J04 on r2 5/5 with R2 deciding on real D9; 119 mutants). OPEN: the proposal store (0043 PgReleaseProposals) swap; the WR-R4-1 read-model ruling (store only R2 evaluate verdicts)."
     },
     {
       "id": "I5",

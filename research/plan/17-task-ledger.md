@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 40 planned; 82 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 37 planned; 85 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -122,17 +122,17 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | B1 | implemented / B | [Execute durable offline evaluation runs](13-lab-improvement-handoffs.md) | F3 | D7, N2, H1, L3, W2, D5 |
 | B2 | implemented / B | [Compare quality, costs and latency with honest uncertainty](13-lab-improvement-handoffs.md) | F3 | B1 |
 | B3 | planned / B | [Benchmark externally produced checkpoints continuously](13-lab-improvement-handoffs.md) | F3 | B1, L2 |
-| B4 | planned / B | [Build evaluations and experiment comparisons in Lab](13-lab-improvement-handoffs.md) | F3, L1 | B2, B3, H1 |
+| B4 | implemented / B | [Build evaluations and experiment comparisons in Lab](13-lab-improvement-handoffs.md) | F3, L1 | B2, B3, H1 |
 | D8 | implemented / D | [Persist annotations and external training lifecycle](13-lab-improvement-handoffs.md) | F3, D7 | D6J |
 | P1 | planned / P | [Import, review and export annotation records](13-lab-improvement-handoffs.md) | F3 | D8, N2 |
 | P2 | planned / P | [Run bounded teacher annotation batches](13-lab-improvement-handoffs.md) | F3 | P1, D8, N2, J2, J3 |
 | P3 | planned / P | [Integrate external training and import candidates](13-lab-improvement-handoffs.md) | F3 | D8, N2, B3, L2 |
-| P4 | planned / P | [Build annotation and training workflows in Lab](13-lab-improvement-handoffs.md) | F3, L1 | P1, P2, P3, B2 |
+| P4 | implemented / P | [Build annotation and training workflows in Lab](13-lab-improvement-handoffs.md) | F3, L1 | P1, P2, P3, B2 |
 | D9 | implemented / D | [Persist release policies and stable experiment assignment](13-lab-improvement-handoffs.md) | F3, D7 | — |
 | R1 | planned / R | [Route bounded shadow, canary and A/B experiments](13-lab-improvement-handoffs.md) | F3 | D9, L3, G2, G3 |
 | R2 | implemented / R | [Evaluate guardrails and roll back controlled releases](13-lab-improvement-handoffs.md) | R1 | B2, L4 |
 | R3 | implemented / R | [Register and compare optimized serving variants](13-lab-improvement-handoffs.md) | F3 | H1, B2, L2, W3 |
-| R4 | planned / R | [Build release experiments and optimization comparison UI](13-lab-improvement-handoffs.md) | F3, L1 | R2, R3, B2 |
+| R4 | implemented / R | [Build release experiments and optimization comparison UI](13-lab-improvement-handoffs.md) | F3, L1 | R2, R3, B2 |
 | I5 | planned / I | [Package dataset and evaluation workers for independent deployment](13-lab-improvement-handoffs.md) | F3, I1 | N2, B1, B3 |
 | I6 | planned / I | [Package annotation and training integration workers](13-lab-improvement-handoffs.md) | I5 | P2, P3 |
 | I7 | planned / I | [Package release controls and optimization evidence operations](13-lab-improvement-handoffs.md) | I5 | R2, R3 |

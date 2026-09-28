@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "f99a0152",
+ "integration_head": "6f627953",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 231,
- "updated": "2026-09-28T19:41:40Z",
+ "revision": 232,
+ "updated": "2026-09-28T19:45:47Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6347,18 +6347,18 @@
     "prefix": "infrx-b3-",
     "db": "b3"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T15:33:53Z",
-   "updated": "2026-09-28T18:52:22Z",
+   "updated": "2026-09-28T19:45:47Z",
    "blocker": null,
-   "next_action": "ACCEPT at a4114656 (B4/P4/R4 ports over the http adapters with the session-token helper; real-route journeys 4/4, 6/6, 5/5; b 151 / p 150 / r 118 mutants; minor UISWAP-R1 token-rejection guard untested) → merge batch #17 (wf_cb803f5f-d69) with WR-LAB-UI-SWAP-1 env names + the minor's cases; then B4, P4, R4 → implemented; their last fakes (experiments/B3 listing, D8 ledgers, proposals) swap with lab-sql-integration-2's landing",
+   "next_action": "DONE: B4, P4, R4 → implemented (manifest flipped); B4 stack rerun on b3 owed; their last fakes swap with lab-sql-integration-2",
    "estimate": {
-    "optimistic_h": 1.5,
-    "likely_h": 3,
-    "pessimistic_h": 7,
-    "confidence": "medium",
-    "basis": "handback: 0.5/1/3 + 0.5/1/2 + 0.5/1/2",
-    "at": "2026-09-28T18:52:22Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T19:45:47Z"
    },
    "evidence": [
     "research/plan/evidence/b/B4-swap-a408d8f.md",
@@ -6535,24 +6535,24 @@
    "branch": "codex/w5-merge-17",
    "worktree": ".claude/worktrees/codex-w5-merge-17",
    "base": "2c64ca02",
-   "head": null,
+   "head": "94212474",
    "isolation": {
     "ports": "b3 / p1 / r2 (checks only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T18:52:22Z",
-   "updated": "2026-09-28T18:52:22Z",
+   "updated": "2026-09-28T19:45:47Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch; then B4/P4/R4 flips",
+   "next_action": "DONE: merged onto claude/consumer-v1 at 6f627953 (verify ok; the B4 real-route stack rerun owed once b3 is free — composition-2 holds it)",
    "estimate": {
-    "optimistic_h": 0.5,
-    "likely_h": 1.5,
-    "pessimistic_h": 3,
-    "confidence": "medium",
-    "basis": "one Lab-only merge with three real-route stacks",
-    "at": "2026-09-28T18:52:22Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T19:45:47Z"
    },
    "evidence": [],
    "commands": [],
