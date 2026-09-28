@@ -62,7 +62,7 @@ next=$(mktemp -d "$pinned.next.XXXXXX")
 mkdir -p "$next/infra"
 cp -r "$repo/infra/observe" "$repo/infra/alerts" "$next/infra/"
 # I2L-OBS (WR-OBS-5): the Lab observe rules and exporter the observe cycle and
-# infrx-lab-trace-gauges.service read from this copy (inert until /etc/infrx-lab/traces.env exists).
+# The Lab trace-gauges unit reads its alert rules from this copy (inert until the Lab traces env file exists).
 mkdir -p "$next/infra/lab"
 cp -r "$repo/infra/lab/observe" "$next/infra/lab/"
 echo "$RELEASE" > "$next/RELEASE"
