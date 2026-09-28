@@ -67,6 +67,7 @@ GATE = "test_e7l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_doe
 NO_STACK = "test_e7l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e7l_the_namespace_is_the_reserved_block"
 RERUN = "test_e7l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
+TRIPWIRE = "test_e7l_the_i07_tripwire_fires_on_a_worker_pass_not_the_module"
 UNBOUND = tuple(re.findall(r"^def (test_i\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -111,6 +112,10 @@ MUTANTS: tuple[Mutant, ...] = (
        NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
+    _m("i07_fires_on_the_module", "composition-2's module alone binds nothing (its roles "
+       "refuse by name); a real pass does", P,
+       '    return main.exists() and f"{role} has no worker pass" not in main.read_text()',
+       "    return main.exists()", TRIPWIRE),
     _m("unbound_case_runs", "a case waiting on composition-2/LAB_PIPELINES/staging is never a "
        "pass", P, "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )

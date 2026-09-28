@@ -1,0 +1,15 @@
+E   AttributeError: module 'e7l_runner' has no attribute 'SERVICE_PORTS'
+
+tests/integration/lab_improve/lab_world.py:79: AttributeError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_the_required_cases_are_exactly_what_the_scenario_modules_define
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_a_skip_is_never_a_pass_and_names_its_kind
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_a_scenario_missing_a_required_case_is_not_run
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_a_harness_error_is_invalid_not_a_product_fail[psycopg.OperationalError: connection refused-INVALID]
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_a_harness_error_is_invalid_not_a_product_fail[OSError: address already in use: the protocol server did not start on 57365-INVALID]
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_a_harness_error_is_invalid_not_a_product_fail[AssertionError: 0-E7L-1 missing transitive revocation-FAIL]
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_does
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_the_namespace_is_the_reserved_block
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_a_not_run_case_names_its_lanes_and_the_exact_rerun
+10 failed, 1 passed in 0.12s

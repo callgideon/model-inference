@@ -58,7 +58,7 @@ def test_e7l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
         assert any(tid in spec["test_ids"] for spec in runner.SCENARIOS.values()), tid
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 9
-    assert runner.SCENARIOS["i07"]["lanes"] == ["composition-2"]
+    assert runner.SCENARIOS["i07"]["lanes"] == ["composition-2", "WR-P2-4"]
     assert runner.SCENARIOS["i08"]["lanes"] == ["LAB_PIPELINES", "P3-evaluations"]
     assert runner.SCENARIOS["i09"]["lanes"] == ["staging-target"]
     assert not [sid for sid in ("i01", "i02", "i03", "i04", "i05", "i06")
@@ -149,3 +149,20 @@ def test_e7l_a_not_run_case_names_its_lanes_and_the_exact_rerun():
     message = str(skipped.value)
     assert message.startswith("NOT RUN[LAB_PIPELINES] absent")
     assert message.endswith(f"{runner.PY} {runner.RUNNER} --out <dir> --only i08")
+
+
+def test_e7l_the_i07_tripwire_fires_on_a_worker_pass_not_the_module(tmp_path, monkeypatch):
+    """composition-2's `python -m infrx.lab.workers` refuses `annotation`/`training` by name:
+    its merge alone must not turn i07 into a FAIL, but a real pass must (never a silent NOT
+    RUN once the worker exists)."""
+    import lab_world
+    pending = _load("e7l_pending", "scenarios_pending.py")
+    monkeypatch.setattr(lab_world, "API", tmp_path)
+    assert not pending.pass_landed("annotation")                    # no module
+    main = tmp_path / "infrx" / "lab" / "workers" / "__main__.py"
+    main.parent.mkdir(parents=True)
+    main.write_text('detail="annotation has no worker pass: ..."\n'
+                    'detail="training has no worker pass: ..."\n')
+    assert not pending.pass_landed("annotation") and not pending.pass_landed("training")
+    main.write_text('detail="training has no worker pass: ..."\n')
+    assert pending.pass_landed("annotation") and not pending.pass_landed("training")

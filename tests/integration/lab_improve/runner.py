@@ -98,7 +98,8 @@ SCENARIOS = {
             "lanes": []},
     "i07": {"title": "the I6 annotation and training worker processes: a batch and a training "
                      "run driven by `python -m infrx.lab.workers <role>`, killed and restarted",
-            "test_ids": ["PIPELINE-BUDGET", "TRAIN-RECOVER"], "lanes": ["composition-2"]},
+            "test_ids": ["PIPELINE-BUDGET", "TRAIN-RECOVER"],
+            "lanes": ["composition-2", "WR-P2-4"]},
     "i08": {"title": "the provider UI (P4): labels, review, export, bundle, checkpoint and "
                      "eligibility over /lab/v1/pipelines", "test_ids": ["PIPELINE-LINEAGE"],
             "lanes": ["LAB_PIPELINES", "P3-evaluations"]},

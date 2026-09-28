@@ -1,0 +1,8 @@
+tests/integration/lab_improve/test_e7l_runner.py:161: AttributeError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_improve/test_e7l_runner.py::test_e7l_the_i07_tripwire_fires_on_a_worker_pass_not_the_module
+1 failed, 11 deselected in 0.07s
+old test_i07_the_annotation_worker_process_resumes_a_batch_once FAIL: the worker entry point landed: bind this case
+old test_i07_the_training_worker_process_never_resubmits FAIL: the worker entry point landed: bind this case
+new test_i07_the_annotation_worker_process_resumes_a_batch_once NOT RUN: NOT RUN[composition-2,WR-P2-4] no annotation worker pass. Steps: start `python -m infrx.la
+new test_i07_the_training_worker_process_never_resubmits NOT RUN: NOT RUN[composition-2,WR-P2-4] no training worker pass. Steps: start `python -m infrx.lab.

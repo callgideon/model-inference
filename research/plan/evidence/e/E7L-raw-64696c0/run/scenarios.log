@@ -1,0 +1,36 @@
+..F.............ssss                                                                                                                                                                                                                                                                                                                                                                                     [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+_______________________________________________________________________________________________________________________________________________________________________ test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training _______________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x7aad6db72c60>, workdir = PosixPath('research/plan/evidence/e/E7L-raw-64696c0/run/cases/test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training')
+
+    def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdir):
+        """DATA-LINEAGE (transitive revocation): after the re-grant every training path must
+        still refuse the tombstoned samples - a new P1 label export and the prepared P3 run's
+        submit (N3: `permitted` is the one gate every export and external submission
+        re-checks). Today P1/P3 read D7's `accessible_samples` only: 0-E7L-1."""
+        r = regranted(lab)
+        try:
+            leaks = []
+            export = lab.export(r.ref, 5)
+            shipped = sorted({x["sample_id"] for x in export["lineage"]} & set(r.samples))
+            if shipped:
+                leaks.append(f"P1 export ships {len(shipped)} tombstoned samples")
+            try:
+                submitted = lab.submit_manual(r.ext)
+                leaks.append(f"P3 submit of the prepared bundle -> {submitted['state']}")
+            except errors.Forbidden:
+                pass
+            lw.save(workdir, "regrant.json", {"leaks": leaks, "export": export})
+>           assert not leaks, "0-E7L-1 missing transitive revocation: " + "; ".join(leaks)
+E           AssertionError: 0-E7L-1 missing transitive revocation: P1 export ships 3 tombstoned samples; P3 submit of the prepared bundle -> submitted
+E           assert not ['P1 export ships 3 tombstoned samples', 'P3 submit of the prepared bundle -> submitted']
+
+tests/integration/lab_improve/scenarios_faults.py:136: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_improve/scenarios_faults.py::test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training - AssertionError: 0-E7L-1 missing transitive revocation: P1 export ships 3 tombstoned samples; P3 submit of the prepared bundle -> submitted
+SKIPPED [1] tests/integration/lab_improve/lab_world.py:85: NOT RUN[composition-2] no I6 worker entry point on this base. Steps: start `python -m infrx.lab.workers annotation` on DATABASE; SIGKILL between chunks; restart; one teacher job per chunk, labels imported once; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i07
+SKIPPED [1] tests/integration/lab_improve/lab_world.py:85: NOT RUN[composition-2] no I6 worker entry point on this base. Steps: start `python -m infrx.lab.workers training` on an ambiguous automatic run; SIGKILL mid-poll; restart; one job at the protocol server, one settlement; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i07
+SKIPPED [1] tests/integration/lab_improve/lab_world.py:85: NOT RUN[LAB_PIPELINES,P3-evaluations] `/lab/v1/pipelines` is composed with the store only (label log, run ledger and P3's evaluation port answer 503). Steps: labels, review, export, bundle, checkpoint and approve through apps/lab/tests/e2e/improve/; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i08
+SKIPPED [1] tests/integration/lab_improve/lab_world.py:85: NOT RUN[staging-target] no private or allocated staging deployment for key e7l. Steps: register candidate 1 through L3, propose/approve it through L4/R2, collect its traces pinned to that serving version, then i03 over them; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i09
+1 failed, 15 passed, 4 skipped in 22.23s

@@ -2,9 +2,11 @@
 pass, each naming its lane and the exact rerun. Each case states the steps it will run once
 bound; each asserts first that its binding has not landed (so a merge fails it loudly).
 
-* i07 (composition-2): the I6 annotation and training worker processes
+* i07 (composition-2 + WR-P2-4): the I6 annotation and training worker processes
   (`deploy/lab/pipelines/*.service` run `python -m infrx.lab.workers <role>`); the entry
-  module is composition-2's, not on this base. Bound: start the annotation worker against
+  module is composition-2's (99a9dbf6), not on this base, and even there both roles refuse by
+  name ("<role> has no worker pass"): the tripwire fires when a pass lands, not the module.
+  Bound: start the annotation worker against
   this stack's Lab database, SIGKILL it between a batch's chunks, restart it, and require one
   teacher job per chunk; start the training worker on an ambiguous automatic run, kill it
   mid-poll, restart, and require one job and one settlement.
@@ -30,6 +32,13 @@ def waits(sid: str, *lanes: str, why: str) -> None:
     lw.not_run(sid, *lanes, why=why)
 
 
+def pass_landed(role: str) -> bool:
+    """composition-2's entry module refuses `annotation`/`training` by name until a pass
+    exists; the module alone binds nothing."""
+    main = lw.API / "infrx" / "lab" / "workers" / "__main__.py"
+    return main.exists() and f"{role} has no worker pass" not in main.read_text()
+
+
 def unbound():
     """Reached only if `lw.not_run` did not skip: an unbound case is never a pass."""
     import pytest
@@ -39,20 +48,16 @@ def unbound():
 def test_i07_the_annotation_worker_process_resumes_a_batch_once():
     steps = ("start `python -m infrx.lab.workers annotation` on DATABASE; SIGKILL between "
              "chunks; restart; one teacher job per chunk, labels imported once")
-    assert not (lw.API / "infrx" / "lab" / "workers" / "__main__.py").exists(), \
-        "the worker entry point landed: bind this case"
-    waits("i07", "composition-2", why=f"no I6 worker entry point on this base. Steps: "
-                                           f"{steps}")
+    assert not pass_landed("annotation"), "an annotation worker pass landed: bind this case"
+    waits("i07", "composition-2", "WR-P2-4", why=f"no annotation worker pass. Steps: {steps}")
     unbound()
 
 
 def test_i07_the_training_worker_process_never_resubmits():
     steps = ("start `python -m infrx.lab.workers training` on an ambiguous automatic run; "
              "SIGKILL mid-poll; restart; one job at the protocol server, one settlement")
-    assert not (lw.API / "infrx" / "lab" / "workers" / "__main__.py").exists(), \
-        "the worker entry point landed: bind this case"
-    waits("i07", "composition-2", why=f"no I6 worker entry point on this base. Steps: "
-                                           f"{steps}")
+    assert not pass_landed("training"), "a training worker pass landed: bind this case"
+    waits("i07", "composition-2", "WR-P2-4", why=f"no training worker pass. Steps: {steps}")
     unbound()
 
 
