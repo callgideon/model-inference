@@ -3,7 +3,8 @@ Description=infrx Lab trace gauges - T3 loss, lag and retention numbers as a tex
 # I2L-OBS (WR-T-5). Disabled by default (see infrx-lab-judge.service). Read-only against the
 # trace stores: ClickHouse (loss, tombstones), PostgreSQL (the feedback outbox lag) and the
 # spool directory's size. The textfile is evaluated against infra/lab/observe/alerts.json
-# (WR-OBS-2); a failure writes `infrx_trace_gauges_up 0`, never silence.
+# (WR-OBS-2) from the monitor's pinned copy (WR-OBS-5 installs infra/lab/observe there); a
+# failure writes `infrx_trace_gauges_up 0`, which TraceGaugesDown pages on: never silence.
 ConditionPathExists=/etc/infrx-lab/traces.env
 Requires=docker.service
 After=docker.service

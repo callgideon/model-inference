@@ -240,7 +240,12 @@ def test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_onc
         time.sleep(1.0)
         trip.box.start("worker")
         request_id = accepted.json()["request_id"]
-        assert world.terminal(trip, request_id, timeout=120.0) == "succeeded"
+        # A kill after the first worker claimed a phase leaves the job waiting for that lease to
+        # expire (inference 120 s, preparation 30 s) before the new worker may claim it: the
+        # deadline covers both leases plus the served run, or the case races the TTL (0-F2).
+        from infrx.contracts.limits import DEFAULTS
+        leases = DEFAULTS.lease_ttl_s + DEFAULTS.preparation_lease_ttl_s
+        assert world.terminal(trip, request_id, timeout=leases + 90.0) == "succeeded"
         world.settled_once(trip, request_id)
         ow.app_serves(trip, alpha, "o09-after-restart")
         trip.conserved(alpha)

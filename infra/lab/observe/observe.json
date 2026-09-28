@@ -12,7 +12,7 @@
     "judge": {
       "env_file": "/etc/infrx-lab/judge.env",
       "units": ["infrx-lab-judge.service"],
-      "health_port": 8014
+      "health_port": 8017
     }
   },
   "env": {

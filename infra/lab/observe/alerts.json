@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "I2L-OBS (WR-T-5): T3's trace loss, lag and retention alarms (infrx.traces.retention.policy.RULES, copied exactly; test_i2l_obs holds them equal) over the Lab trace gauges textfile (trace_gauges.py). Same rule shape as infra/alerts/*.json. Lab-only: evaluated by the observe cycle only once WR-OBS-2 merges it and the traces role is enabled.",
+  "description": "I2L-OBS (WR-T-5): T3's trace loss, lag and retention alarms (infrx.traces.retention.policy.RULES, copied exactly; test_i2l_obs holds them equal) plus the Lab-only TraceGaugesDown (the exporter's own up gauge) over the Lab trace gauges textfile (trace_gauges.py). Same rule shape as infra/alerts/*.json. Lab-only: evaluated by the observe cycle only once WR-OBS-2 merges it and the traces role is enabled.",
   "rules": [
     {
       "name": "TraceDeletionBacklogOld",
@@ -41,6 +41,16 @@
       "threshold": 8589934592,
       "threshold_status": "derived: 80% of TRACE_SPOOL_MAX_BYTES (contracts limits)",
       "runbook": "infra/lab/observe/README.md#tracespoolfilling"
+    },
+    {
+      "name": "TraceGaugesDown",
+      "severity": "page",
+      "summary": "The Lab trace gauges exporter could not read its stores: every trace alarm above is blind until it recovers.",
+      "metric": "infrx_trace_gauges_up",
+      "op": "<",
+      "threshold": 1,
+      "threshold_status": "exact: the gauge is 1 or 0 (Lab-only, beside T3's RULES; E5L fix round 0-F3)",
+      "runbook": "infra/lab/observe/README.md#tracegaugesdown"
     }
   ]
 }

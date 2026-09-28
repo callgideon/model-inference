@@ -61,6 +61,10 @@ GRANTS = "test_i2l_obs__storage_grants_are_object_prefixes_under_the_trace_root_
 EGRESS = "test_i2l_obs__judge_egress_is_the_local_fake_and_a_zero_budget_until_p10"
 ALARMS = "test_i2l_obs__the_alarms_are_t3s_rules_with_runbook_anchors_and_no_name_clash"
 EXPORTER = "test_i2l_obs__the_exporter_writes_t3s_gauges_and_a_failure_is_up_0_never_silence"
+UP0 = "test_i2l_obs__an_exporter_that_wrote_up_0_fires_an_alarm_through_the_evaluator"
+PORTS = "test_i2l_obs__no_two_lab_worker_units_share_a_health_port"
+PINNED = "test_i2l_obs__the_pinned_monitor_copy_holds_the_lab_files_and_an_old_pin_keeps_app_alerts"
+WIRING = "research/plan/evidence/e/E5L-wiring/"
 # the E5L runner cases
 MATRIX = "test_e5l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases"
 REQUIRED = "test_e5l_the_required_cases_are_exactly_what_the_scenario_modules_define"
@@ -128,6 +132,19 @@ MUTANTS: tuple[Mutant, ...] = (
        "for name in os.listdir(spool_dir))", EXPORTER),
     _m("exporter_up_always_1", "up is 0 when nothing was read", OBS + "trace_gauges.py",
        "{1 if values is not None else 0}", "1", EXPORTER),
+    # --- the fix round (0-F3, 1-LO-INT-1, 0-F4 / 1-LO-SCOPE-1)
+    _m("gauges_down_never_fires", "an exporter that wrote up 0 pages", OBS + "alerts.json",
+       '"metric": "infrx_trace_gauges_up",\n      "op": "<",',
+       '"metric": "infrx_trace_gauges_up",\n      "op": ">",', UP0),
+    _m("judge_on_the_eval_port", "each Lab worker unit has its own health port", JUDGE_UNIT,
+       "-e LAB_WORKER_HEALTH_PORT=8017", "-e LAB_WORKER_HEALTH_PORT=8012", PORTS, DRAINS),
+    _m("pin_without_the_lab_files", "step 72 pins infra/lab/observe where the units read it",
+       WIRING + "WR-OBS-5.diff", '+cp -r "$repo/infra/lab/observe" "$next/infra/lab/"',
+       '+cp -r "$repo/infra/lab/observe" "$next/infra/lab/observe.new"', PINNED),
+    _m("lab_rules_merged_unguarded", "a pin without the Lab rules keeps the App's rules",
+       WIRING + "WR-OBS-2.diff",
+       '+  [[ -f $repo/infra/lab/observe/alerts.json ]] && lab_rules=("$repo/infra/lab/observe/alerts.json")',
+       '+  lab_rules=("$repo/infra/lab/observe/alerts.json")', PINNED),
     # --- the E5L runner
     _m("xfail_is_a_pass", "an xfail is never a pass", R,
        '        return NOT_RUN, "xfail is not a pass here: " + message[:300]',
@@ -280,9 +297,11 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(REPO / "tests" / "integration", root / "tests" / "integration", ignore=junk)
     for part in ("infrx", "deploy"):
         shutil.copytree(API_DIR / part, root / "apps" / "infrx-api" / part, ignore=junk)
-    for part in ("lab/observe", "alerts"):
+    for part in ("lab/observe", "alerts", "observe", "rollout/steps"):
         shutil.copytree(REPO / "infra" / part, root / "infra" / part, ignore=junk)
-    (root / "research" / "plan").mkdir(parents=True)
+    wiring = pathlib.Path("research", "plan", "evidence", "e", "E5L-wiring")
+    shutil.copytree(REPO / wiring, root / wiring)
+    (root / "research" / "plan").mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO / "research" / "plan" / "tasks.json", root / "research" / "plan" / "tasks.json")
     return root
 

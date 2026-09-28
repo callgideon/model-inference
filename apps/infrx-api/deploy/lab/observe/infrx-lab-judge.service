@@ -22,12 +22,12 @@ EnvironmentFile=/etc/infrx-lab/judge.env
 ExecStartPre=-/usr/bin/docker rm -f infrx-lab-judge
 # Bounded and least privilege as I5's workers (a quarter of the default CPU weight, so
 # inference wins contention). The entry point (WR-OBS-1) exits 2 naming a missing setting,
-# answers /readyz and /metrics on 127.0.0.1:8014 and drains on SIGTERM.
+# answers /readyz and /metrics on 127.0.0.1:8017 and drains on SIGTERM.
 ExecStart=/usr/bin/docker run --rm --init --name infrx-lab-judge --network host \
   --user 10004:10000 --read-only --tmpfs /tmp:rw,size=64m,mode=1777 \
   --cap-drop ALL --security-opt no-new-privileges \
   --memory 512m --memory-swap 512m --cpus 0.5 --cpu-shares 256 --pids-limit 64 \
-  --env-file /etc/infrx-lab/judge.env -e LAB_WORKER_HEALTH_PORT=8014 \
+  --env-file /etc/infrx-lab/judge.env -e LAB_WORKER_HEALTH_PORT=8017 \
   ${INFRX_IMAGE} python -m infrx.lab.workers judge
 ExecStop=/usr/bin/docker stop -t 60 infrx-lab-judge
 TimeoutStopSec=90

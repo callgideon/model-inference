@@ -17,7 +17,7 @@ local services, with faults).
 | Role | Unit | What it runs | Env file (0600, root) |
 |---|---|---|---|
 | `traces` | `infrx-lab-trace-gauges.service` + `.timer` (every 60 s, oneshot) | `trace_gauges.py`: T3 loss, deletion backlog, feedback lag, spool bytes → `/var/lib/infrx/metrics/lab-traces.prom` | `/etc/infrx-lab/traces.env` |
-| `judge` | `infrx-lab-judge.service` (health `127.0.0.1:8014`) | `python -m infrx.lab.workers judge` (entry point: WR-OBS-1): J2 submit / reconcile / collect | `/etc/infrx-lab/judge.env` |
+| `judge` | `infrx-lab-judge.service` (health `127.0.0.1:8017`; 8011-8016 are the eval, annotation, training and rollout workers') | `python -m infrx.lab.workers judge` (entry point: WR-OBS-1): J2 submit / reconcile / collect | `/etc/infrx-lab/judge.env` |
 
 The trace **pumps** (ship, retention sweep, feedback projection) are not a Lab unit: they run in the
 consumer worker behind `TRACE_PUMPS` (composition WR-T-4, off by default, never installer-settable),
@@ -43,9 +43,15 @@ from those rows, `Resource: arn:aws:s3:::<bucket>/<prefix>*`, never `<bucket>/*`
 
 1. Budget first: `python infra/lab/workers/eval/pool_budget.py --consumer-env-file /etc/marlin2b-gateway.env --lab-env-dir /etc/infrx-lab`.
 2. Write `/etc/infrx-lab/<role>.env` (root 0600) with the names in `observe.json`; secrets only there.
-3. `sudo cp apps/infrx-api/deploy/lab/observe/infrx-lab-<unit> /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now <the .timer or the judge .service>`.
-4. Verify: `cat /var/lib/infrx/metrics/lab-traces.prom` shows `infrx_trace_gauges_up 1`; or
-   `curl -fsS 127.0.0.1:8014/readyz`; the consumer checks (`infra/rollout/steps/60-verify-local.sh`) unchanged.
+3. Pin the Lab files into the monitor's copy: re-run `infra/rollout/steps/72-observe-install.sh` at the
+   release (WR-OBS-5 copies `infra/lab/observe` into `/opt/infrx/observe`), then
+   `test -f /opt/infrx/observe/infra/lab/observe/alerts.json && test -f /opt/infrx/observe/infra/lab/observe/trace_gauges.py`.
+   The gauges unit mounts that directory and the observe cycle (WR-OBS-2) reads its alarms there;
+   a pin without them keeps the App's rules (the Lab file is merged only when present) and the
+   missing textfile pages as `ScrapeFailed`.
+4. `sudo cp apps/infrx-api/deploy/lab/observe/infrx-lab-<unit> /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now <the .timer or the judge .service>`.
+5. Verify: `cat /var/lib/infrx/metrics/lab-traces.prom` shows `infrx_trace_gauges_up 1`; or
+   `curl -fsS 127.0.0.1:8017/readyz`; the consumer checks (`infra/rollout/steps/60-verify-local.sh`) unchanged.
 
 ## 5. Disable / roll back
 
@@ -53,7 +59,7 @@ from those rows, `Resource: arn:aws:s3:::<bucket>/<prefix>*`, never `<bucket>/*`
 gauges are recomputed from the stores; a judge run interrupted mid-submit stays `submitting` or
 `ambiguous` in D6J with its hold kept and is reconciled by its submit key, never sent twice.
 
-## 6. Alarms (`alerts.json`, T3's `RULES`; evaluated once WR-OBS-2 merges)
+## 6. Alarms (`alerts.json`, T3's `RULES` + `TraceGaugesDown`; evaluated once WR-OBS-2 and WR-OBS-5 merge)
 
 ### TraceDeletionBacklogOld
 
@@ -76,11 +82,18 @@ spool (budget or disk); inference is never slowed to capture (TRACE-BOUNDS).
 The spool holds > 80 % of `TRACE_SPOOL_MAX_BYTES`: capture will pause. The shipper is not keeping
 up (ClickHouse or S3 down, or held segments): restore the store; sealed segments ship on the next pass.
 
+### TraceGaugesDown
+
+The exporter wrote `infrx_trace_gauges_up 0`: it could not read ClickHouse, the feedback outbox or
+the spool (its stderr names only the error's type: `journalctl -u infrx-lab-trace-gauges`). Every
+trace alarm above is blind until it recovers. Check `CLICKHOUSE_URL` / `LAB_DATABASE_URL`
+reachability from the box and the spool mount; the next timer run rewrites the file.
+
 ## 7. Drills
 
 | Drill | Local evidence | Owed from staging (P-08) |
 |---|---|---|
 | units off by default, bounded, no App coupling | `test_i2l_obs.py` | `systemctl show` of each installed unit |
 | alarms = T3's rules, runbook anchors | `test_i2l_obs.py` | the evaluator firing on a seeded textfile |
-| exporter up/down | `test_i2l_obs.py` (a failing store writes `up 0`) | a stopped ClickHouse on the box |
+| exporter up/down | `test_i2l_obs.py` (a failing store writes `up 0`; `TraceGaugesDown` fires through the evaluator) | a stopped ClickHouse on the box |
 | capture → search → review → judge dry-run, faults, no App outage | E5L `runner.py` (`research/plan/evidence/e/E5L-*`) | the same with the staging stores |

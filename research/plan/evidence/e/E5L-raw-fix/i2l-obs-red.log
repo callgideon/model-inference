@@ -1,0 +1,15 @@
+>           assert (pinned / mount[0].removeprefix(install + "/") / name).is_file(), name
+E           AssertionError: alerts.json
+E           assert False
+E            +  where False = is_file()
+E            +    where is_file = ((PosixPath('/tmp/pytest-of-rey/pytest-7200/test_i2l_obs__the_pinned_monit0/pinned') / 'infra/lab/observe') / 'alerts.json').is_file
+E            +      where 'infra/lab/observe' = <built-in method removeprefix of str object at 0x7db1a930a100>(('/opt/infrx/observe' + '/'))
+E            +        where <built-in method removeprefix of str object at 0x7db1a930a100> = '/opt/infrx/observe/infra/lab/observe'.removeprefix
+
+tests/integration/lab_observe/test_i2l_obs.py:367: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__the_alarms_are_t3s_rules_with_runbook_anchors_and_no_name_clash
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__an_exporter_that_wrote_up_0_fires_an_alarm_through_the_evaluator
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__no_two_lab_worker_units_share_a_health_port
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__the_pinned_monitor_copy_holds_the_lab_files_and_an_old_pin_keeps_app_alerts
+4 failed, 9 passed in 0.36s

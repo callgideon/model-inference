@@ -9,8 +9,11 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import os
 import re
 import shlex
+import shutil
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +24,10 @@ API = REPO / "apps" / "infrx-api"
 DEPLOY, UNITS = API / "deploy", API / "deploy" / "lab" / "observe"
 OBSERVE = REPO / "infra" / "lab" / "observe"
 MANIFEST, ALERTS, RUNBOOK = OBSERVE / "observe.json", OBSERVE / "alerts.json", OBSERVE / "README.md"
+#: the wiring patches this lane files (the coordinator applies them; tests apply them to a copy)
+WIRING = REPO / "research" / "plan" / "evidence" / "e" / "E5L-wiring"
+#: Lab-only rules beside T3's RULES (the exporter's own health)
+LAB_ONLY = {"TraceGaugesDown"}
 sys.path.insert(0, str(API))
 
 
@@ -208,7 +215,9 @@ def test_i2l_obs__the_alarms_are_t3s_rules_with_runbook_anchors_and_no_name_clas
     from infrx.traces.retention.policy import RULES
     doc = json.loads(ALERTS.read_text())
     rules = doc["rules"]
-    assert [{k: v for k, v in r.items() if k != "runbook"} for r in rules] == list(RULES)
+    t3 = [r for r in rules if r["name"] not in LAB_ONLY]
+    assert [{k: v for k, v in r.items() if k != "runbook"} for r in t3] == list(RULES)
+    assert {r["name"] for r in rules} - {r["name"] for r in t3} == LAB_ONLY
     headings = {re.sub(r"[^a-z0-9 -]", "", h.lower()).replace(" ", "-")
                 for h in re.findall(r"^#+ (.+)$", RUNBOOK.read_text(), re.M)}
     for rule in rules:
@@ -270,3 +279,116 @@ def test_i2l_obs__the_exporter_writes_t3s_gauges_and_a_failure_is_up_0_never_sil
     assert code == 1 and out.read_text() == "infrx_trace_gauges_up 0\n"
     printed = capsys.readouterr()
     assert "ConnectionError" in printed.err and "secret" not in printed.out + printed.err
+
+
+def test_i2l_obs__an_exporter_that_wrote_up_0_fires_an_alarm_through_the_evaluator(tmp_path,
+                                                                                   capsys):
+    """A failed exporter's textfile (`up 0` alone) is fresh and non-empty, so ScrapeFailed stays
+    quiet: `TraceGaugesDown` must fire over it through the real evaluator (`infrx.observe.
+    alerts`), and stay quiet over a healthy file. Oracle: without it a broken exporter silences
+    every trace alarm (E5L fix round, 0-F3)."""
+    from infrx.observe import alerts
+    from infrx.traces.retention.policy import Retention
+    exporter = gauges_module()
+    out = tmp_path / "lab-traces.prom"
+    clock = lambda: datetime(2026, 9, 3, tzinfo=timezone.utc)          # noqa: E731
+    broken = Retention(FakeStore(fail=True), None, None, None, clock=clock)
+    assert exporter.run(out, lambda: (broken, None, None)) == 1
+    rules = json.loads(ALERTS.read_text())["rules"]
+    down = [a for a in alerts.evaluate(rules, alerts.parse(out.read_text()))]
+    assert [(a["alert"], a["severity"]) for a in down] == [("TraceGaugesDown", "page")], down
+    assert alerts.main(["--rules", str(ALERTS), "--source", str(out), "--max-age", "900"]) == 1
+    fired = [json.loads(line)["alert"] for line in capsys.readouterr().out.splitlines()]
+    assert fired == ["TraceGaugesDown"], fired
+    assert exporter.write(out, {"infrx_trace_spool_bytes": 0.0}) == 0
+    assert alerts.evaluate(rules, alerts.parse(out.read_text())) == []
+
+
+def test_i2l_obs__no_two_lab_worker_units_share_a_health_port():
+    """Every Lab worker unit runs on the host network, so each `LAB_WORKER_HEALTH_PORT` is its
+    own (the judge's is the manifest's). Oracle: two units on one port - the judge and the
+    annotation worker both on 8014 (0-LO-INT-1) - and the second cannot bind /readyz."""
+    ports: dict[str, str] = {}
+    for path in sorted((DEPLOY / "lab").rglob("*.service")):
+        for port in re.findall(r"LAB_WORKER_HEALTH_PORT=(\d+)", path.read_text()):
+            assert port not in ports, (port, ports.get(port), path.name)
+            ports[port] = path.name
+    judge = str(manifest()["roles"]["judge"]["health_port"])
+    assert ports.get(judge) == "infrx-lab-judge.service", ports
+    # the sibling lanes' reservations (lab-workers: annotation 8014, training 8015, rollout 8016)
+    assert judge not in {"8011", "8012", "8013", "8014", "8015", "8016"}, judge
+
+
+def wired_checkout(root: Path) -> Path:
+    """The monitor's sources as the coordinator will merge them: this tree's `infra/observe`,
+    `infra/alerts`, step 72 and `infra/lab/observe`, with each E5L wiring patch applied unless
+    the tree already carries it."""
+    for part in ("infra/observe", "infra/alerts", "infra/lab/observe", "infra/rollout/steps"):
+        shutil.copytree(REPO / part, root / part, ignore=shutil.ignore_patterns("__pycache__"))
+    for patch in sorted(WIRING.glob("WR-OBS-*.diff")):
+        forward = subprocess.run(["git", "apply", "--check", str(patch)], cwd=root,
+                                 capture_output=True, text=True)
+        if forward.returncode == 0:
+            done = subprocess.run(["git", "apply", str(patch)], cwd=root, capture_output=True,
+                                  text=True)
+        else:
+            done = subprocess.run(["git", "apply", "-R", "--check", str(patch)], cwd=root,
+                                  capture_output=True, text=True)
+        assert done.returncode == 0, (patch.name, forward.stderr, done.stderr)
+    return root
+
+
+def between(text: str, start: str, end: str) -> str:
+    assert start in text and end in text, (start, end)
+    return text[text.index(start):text.index(end)]
+
+
+def test_i2l_obs__the_pinned_monitor_copy_holds_the_lab_files_and_an_old_pin_keeps_app_alerts(
+        tmp_path):
+    """Step 72 pins the monitor's copy (`/opt/infrx/observe`); the gauges unit mounts
+    `infra/lab/observe` from it and WR-OBS-2's cycle reads its alarms there. So WR-OBS-5 must
+    copy that directory into the pin, and WR-OBS-2 must merge the Lab rules only when the pin
+    has them. Runs step 72's copy block and WR-OBS-2's merge block as shipped (patched copy).
+    Oracle: a pin without the Lab files makes rules.py exit 1 and the evaluator gets an empty
+    rule file - every App alert silent (0-F4, 1-LO-SCOPE-1)."""
+    src = wired_checkout(tmp_path / "src")
+    env = {"PATH": os.environ["PATH"], "repo": str(src)}
+    step = (src / "infra/rollout/steps/72-observe-install.sh").read_text()
+    pinned = tmp_path / "pinned"
+    copy = between(step, 'mkdir -p "$next/infra"', 'echo "$RELEASE"')
+    done = subprocess.run(["bash", "-euo", "pipefail", "-c", copy], env={**env, "next": str(pinned)},
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    install = manifest()["roles"]["traces"]["install_dir"]
+    mount = [v.split(":")[0] for v in flag(docker_run("infrx-lab-trace-gauges.service"), "-v")
+             if v.endswith(":/observe:ro")]
+    assert len(mount) == 1 and mount[0].startswith(install + "/"), mount
+    for name in ("alerts.json", "trace_gauges.py"):
+        assert (pinned / mount[0].removeprefix(install + "/") / name).is_file(), name
+
+    observe = (src / "infra/observe/observe.sh").read_text()
+    merge = between(observe, "lab_rules=() lab_sources=()", 'chmod 0644 "$rules"')
+    enabled = tmp_path / "traces.env"
+    enabled.write_text("")
+    merge = merge.replace("/etc/infrx-lab/traces.env", str(enabled)) \
+        + '\nprintf "%s\\n" "${lab_sources[@]}" > "$sources"\n'
+
+    def cycle(repo: Path) -> tuple[set[str], list[str]]:
+        rules, sources = tmp_path / "rules.json", tmp_path / "sources"
+        ran = subprocess.run(["bash", "-uo", "pipefail", "-c", merge], capture_output=True,
+                             text=True, env={**env, "repo": str(repo), "rules": str(rules),
+                                             "sources": str(sources)})
+        assert ran.returncode == 0, ran.stderr
+        assert rules.read_text().strip(), "an empty rule file: every App alert silent"
+        return ({r["name"] for r in json.loads(rules.read_text())["rules"]},
+                sources.read_text().split())
+
+    app = {r["name"] for f in ("alerts.json", "operations.json")
+           for r in json.loads((REPO / "infra/alerts" / f).read_text())["rules"]}
+    lab = {r["name"] for r in json.loads(ALERTS.read_text())["rules"]}
+    names, sources = cycle(pinned)
+    assert app | lab <= names and sources == ["--source", "/m/lab-traces.prom"]
+    shutil.rmtree(pinned / "infra" / "lab")                          # a pre-WR-OBS-5 pin
+    names, sources = cycle(pinned)
+    assert app <= names and not lab & names, "the App's rules must survive a pin without Lab's"
+    assert sources == ["--source", "/m/lab-traces.prom"], "its textfile still scrapes (ScrapeFailed)"
