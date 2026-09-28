@@ -1,0 +1,61 @@
+{
+ "task": "P4",
+ "slice": "swap: pipelines port -> HTTP adapter over lab-api (WR-P4-1 adapter half), session token, row check, real-route journeys",
+ "activity": "review",
+ "head": "a408d8ff",
+ "task_commit": "3dea0f83",
+ "worktree": ".claude/worktrees/codex-w5-lab-ui-swap",
+ "branch": "codex/w5-lab-ui-swap",
+ "owned_paths": [
+  "apps/lab/lib/services/pipelines/",
+  "apps/lab/tests/p/"
+ ],
+ "commands": [
+  {
+   "cmd": "node --test tests/p/http.test.ts tests/p/wiring.test.ts (base code)",
+   "exit": 1,
+   "summary": "6 tests, 4 fail: H01 H03 H04 W01 (red first)"
+  },
+  {
+   "cmd": "node tests/p/run-mutants.mjs",
+   "exit": 0,
+   "summary": "35 cases all named; 150/150 killed"
+  },
+  {
+   "cmd": "LAB_P4_REAL=1 INFRX_D_TASK=p1 node --test tests/p/stack.test.ts",
+   "exit": 0,
+   "summary": "6 pass: J01-J05 on the real /lab/v1/pipelines over real D7 + L2 (57527)"
+  },
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "238 tests, 229 pass, 0 fail, 9 skipped (base 223)"
+  },
+  {
+   "cmd": "make lab-lint && make lab-typecheck && make lab-build",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-mutants",
+   "exit": 0,
+   "summary": "12 runners, 0 survivors (b 151, p 150, r 118)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "L4 swap analogue 1/2/4 per adapter; implemented this session; remaining = verify round + WR-LAB-UI-SWAP-1 + rerun stack when D8's label log / run ledger merge (SR-P1-1, SR-P3-1)",
+  "at": "2026-09-28T16:20Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LAB-UI-SWAP-1: declare LAB_EVALS_API_URL, LAB_PIPELINES_API_URL, LAB_RELEASES_API_URL in infra/lab/app/lab.json env.lab-web + infra/lab/app/README.md \u00a72 + apps/lab/.env.example; diff research/plan/evidence/b/WR-LAB-UI-SWAP-1-a408d8f.patch; without the manifest/runbook half, tests/i/lab test_i2l__secret_names_only_and_every_name_the_files_read_is_declared fails (:152 / :155); with all three, 11 passed"
+ ],
+ "evidence": [
+  "research/plan/evidence/p/P4-swap-a408d8f.md",
+  "research/plan/evidence/b/WR-LAB-UI-SWAP-1-a408d8f.patch"
+ ]
+}

@@ -1,10 +1,11 @@
-// R4: the Lab's view of the releases surface (WR-R4-1, `/lab/v1/releases`, not on the base yet): D9's
-// release rows and decisions, R1's aggregates, R2's latest verdict, R3's variants and comparisons, and
-// expand/rollback proposals through the D9 CAS (an operator decides them via R2). Until the adapter is
-// wired the port is "unavailable" (fails closed), or, only outside production and only when asked
-// for, the labelled preview fake. Actor, refusals and capabilities are L4's (contracts/v2 roles).
+// R4: the Lab's view of the releases surface (WR-R4-1, `/lab/v1/releases`): D9's release rows and
+// decisions, R1's aggregates, R2's latest verdict, R3's variants and comparisons, and expand/rollback
+// proposals through the D9 CAS (an operator decides them via R2). With LAB_RELEASES_API_URL set the port
+// is the HTTP adapter (server.ts); unset it is "unavailable" (fails closed), or, only outside production
+// and only when asked for, the labelled preview fake. Actor, refusals and capabilities are L4's (contracts/v2 roles).
 import { holds, REFUSALS, type Actor, type Refusal, type Result } from "../control/port.ts";
 import { FakeReleases } from "./fake.ts";
+import { labReleases } from "./server.ts";
 
 export { holds, REFUSALS, type Actor, type Refusal, type Result };
 
@@ -68,5 +69,5 @@ export const isPreview = (env: Record<string, string | undefined> = process.env)
 
 export function releasesPort(env: Record<string, string | undefined> = process.env): ReleasesPort {
   if (isPreview(env)) return (preview ??= new FakeReleases());
-  return UNAVAILABLE;
+  return labReleases(env) ?? UNAVAILABLE;
 }

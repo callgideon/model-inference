@@ -3,7 +3,7 @@
 // Usage: node tests/b/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "../l/shell/harness.mjs";
 
-const SUITE = ["view", "real", "journey", "actions", "pages", "http"].map((f) => `tests/b/${f}.test.ts`);
+const SUITE = ["view", "real", "journey", "actions", "pages", "http", "wiring"].map((f) => `tests/b/${f}.test.ts`);
 const PORT = "lib/services/evaluation/port.ts";
 const FAKE = "lib/services/evaluation/fake.ts";
 const VIEW = "lib/services/evaluation/view.ts";
@@ -14,6 +14,8 @@ const CHECKPOINTS = "app/(provider)/evaluations/checkpoints/page.tsx";
 const EXPERIMENT = "app/(provider)/experiments/[id]/page.tsx";
 const RUNS = "app/(provider)/evaluations/runs.tsx";
 const HTTP = "lib/services/evaluation/http.ts";
+const SERVER = "lib/services/evaluation/server.ts";
+const SHAPE = "lib/services/evaluation/shape.ts";
 
 const C = {
   v01: "B4-V01 everyone in the workspace reads evaluations; only developer and administrator run or cancel them",
@@ -45,6 +47,11 @@ const C = {
   p04: "B4-P04 the preview stand-in is labelled on every page only when it is on",
   h01: "B4-H01 every call is the session's token and the actor's provider on its route, reads unwrapped from {data}",
   h02: "B4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
+  h03: "B4-H03 the backends' records pass verbatim; one unreadable row fails the whole answer closed",
+  h04: "B4-H04 without a session token nothing is sent and every call is unavailable",
+  h05: "B4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable",
+  w01: "B4-W01 LAB_EVALS_API_URL set: the port reads the route as the session's own access token",
+  w02: "B4-W02 a missing LAB_EVALS_API_URL or Supabase config fails closed: every call unavailable, nothing sent",
 };
 
 const MUTANTS = [
@@ -95,7 +102,7 @@ const MUTANTS = [
   m("B4-X41", "a developer may not run evaluations", PORT, 'capability === "read_aggregate_health" || role !== "viewer"', 'capability === "read_aggregate_health" || role === "administrator"', [C.v01, C.a01, C.j01]),
   m("B4-X42", "a viewer may not read", PORT, 'capability === "read_aggregate_health" || ', "", [C.v01]),
   m("B4-X43", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v09]),
-  m("B4-X44", "the default port is the stand-in, not unavailable", PORT, "  return UNAVAILABLE;\n}", "  return (preview ??= new FakeEvaluation());\n}", [C.v09]),
+  m("B4-X44", "the default port is the stand-in, not unavailable", PORT, "labEvaluation(env) ?? UNAVAILABLE", "labEvaluation(env) ?? (preview ??= new FakeEvaluation())", [C.v09, C.w02]),
   m("B4-X45", "any preview flag value turns the stand-in on", PORT, 'env.LAB_EVALS_PREVIEW === "1"', "env.LAB_EVALS_PREVIEW !== undefined", [C.v09]),
   // fake: what the backends must enforce
   m("B4-X46", "reads are not scoped to the provider", FAKE, "rows.filter((r) => r.providerId === actor.providerId).map(", "rows.map(", [C.j02, C.j03]),
@@ -174,9 +181,9 @@ const MUTANTS = [
   m("B4-X112", "the export is offered before the report exists", EXPERIMENT, "      <h2>Runs</h2>", "      <a href={`/experiments/${e.experiment_id}/report`}>Export</a>\n      <h2>Runs</h2>", [C.p03]),
   m("B4-X113", "the preview label shows when the stand-in is off", EVALS, "{isPreview() && <PreviewNote />}", "{<PreviewNote />}", [C.p04]),
   // the HTTP adapter (WR-B4-1, lane lab-api-2)
-  m("B4-X115", "the session token is not sent", HTTP, "authorization: `Bearer ${token}`", 'authorization: "Bearer"', [C.h01]),
+  m("B4-X115", "the session token is not sent", HTTP, "authorization: `Bearer ${bearer}`", 'authorization: "Bearer"', [C.h01]),
   m("B4-X116", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
-  m("B4-X117", "a read is not unwrapped from {data}", HTTP, '(method === "GET" ? payload.data : payload)', "payload", [C.h01]),
+  m("B4-X117", "a read is not unwrapped from {data}", HTTP, 'method === "GET" ? payload.data : payload;', "payload;", [C.h01]),
   m("B4-X118", "a cancel is a read", HTTP, 'call(actor, "POST", `runs/', 'call(actor, "GET", `runs/', [C.h01]),
   m("B4-X119", "the body is dropped", HTTP, "body: body === undefined ? undefined : JSON.stringify(body),", "body: undefined,", [C.h01]),
   m("B4-X120", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
@@ -184,6 +191,35 @@ const MUTANTS = [
   m("B4-X122", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
   m("B4-X123", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
   m("B4-X124", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
+  // the swap (WR-B4-1): the configured adapter, the session's token, the row check
+  m("B4-X125", "the configured adapter is ignored", PORT, "return labEvaluation(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
+  m("B4-X126", "another server env names the backend", SERVER, "env.LAB_EVALS_API_URL", "env.LAB_TRACES_API_URL", [C.w01]),
+  m("B4-X127", "the publishable key is sent as the credential", SERVER, "data.session?.access_token ?? null", "data.session?.access_token ?? config.anonKey", [C.w01]),
+  m("B4-X128", "the session is read from another cookie", SERVER, "      cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
+  m("B4-X129", "the session cookies are not the request's", SERVER, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),
+  m("B4-X130", "a call is sent without a session token", HTTP, '    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent\n', "", [C.h04, C.w01]),
+  m("B4-X131", "an answer is not checked", HTTP, 'return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: "unavailable" };', "return { ok: true, value: value as T };", [C.h03]),
+  m("B4-X132", "a run in an unknown state is read", HTTP, 'state: oneOf("queued", "running", "succeeded", "failed", "cancelled"),', "state: str,", [C.h03]),
+  m("B4-X133", "a run without case counts is read", HTTP, "  cases: map(num), attempts", "  cases: opt(map(num)), attempts", [C.h03]),
+  m("B4-X134", "a run cost that is not an exact string is read", HTTP, "attempts: map(num), costs: map(str),", "attempts: map(num), costs: map(() => true),", [C.h03]),
+  m("B4-X135", "a list answer that is one record is read", HTTP, 'call(actor, "GET", "runs", list(RUN))', 'call(actor, "GET", "runs", (v) => list(RUN)(v) || RUN(v))', [C.h03]),
+  m("B4-X136", "a report without its decision is read", HTTP, '  decision: obj({ outcome: oneOf("accept", "reject", "inconclusive"), reasons: list(str) }),', '  decision: opt(obj({ outcome: oneOf("accept", "reject", "inconclusive"), reasons: list(str) })),', [C.h03]),
+  m("B4-X137", "an unknown outcome is read", HTTP, 'outcome: oneOf("accept", "reject", "inconclusive")', "outcome: str", [C.h03]),
+  m("B4-X138", "an experiment without its candidate run is read", HTTP, "baseline: RUN, candidate: RUN, report", "baseline: RUN, candidate: nul(RUN), report", [C.h03]),
+  m("B4-X139", "an experiment without its protocol is read", HTTP, "created_at: str, protocol: PROTOCOL,", "created_at: str, protocol: opt(PROTOCOL),", [C.h03]),
+  m("B4-X140", "an unnamed harness revision is offered", HTTP, 'ref: str, harness_id: str, version: num, adapter: oneOf("text", "finite_video", "structured")', "ref: str", [C.h03]),
+  m("B4-X141", "a catalog without servings is read", HTTP, "datasets: list(OPTION), servings: list(OPTION),", "datasets: list(OPTION), servings: opt(list(OPTION)),", [C.h03]),
+  m("B4-X142", "subscription decisions are not checked", HTTP, "  decisions: list(obj({", "  decisions: list((v) => true || obj({", [C.h03]),
+  m("B4-X143", "an amount without its unit is read", HTTP, 'const AMOUNT = obj({ unit: oneOf("CREDIT", "PROVIDER_USD"), value: str });', "const AMOUNT = obj({ value: str });", [C.h03]),
+  m("B4-X144", "a cancel's answer is not checked", HTTP, "/cancel`, RUN)", "/cancel`, () => true)", [C.h03]),
+  m("B4-X145", "a launch's answer is not checked", HTTP, '"experiments", EXPERIMENT, launch)', '"experiments", () => true, launch)', [C.h03]),
+  m("B4-X146", "a subscription's answer is not checked", HTTP, '"subscriptions", SUBSCRIPTION, request)', '"subscriptions", () => true, request)', [C.h03]),
+  m("B4-X147", "a record's missing field is not checked", SHAPE, "Object.entries(spec).every(([k, check]) => check(v[k]))", "Object.entries(v).every(([k]) => !(k in spec) || spec[k](v[k]))", [C.h03]),
+  m("B4-X148", "list items are not checked", SHAPE, "Array.isArray(v) && v.every(check)", "Array.isArray(v)", [C.h03]),
+  m("B4-X149", "map values are not checked", SHAPE, "isObj(v) && Object.values(v).every(check)", "isObj(v)", [C.h03]),
+  m("B4-X150", "any value is one of a set", SHAPE, "(v) => values.includes(v)", "() => true", [C.h03]),
+  m("B4-X151", "a missing nullable field reads as null", SHAPE, "(v) => v === null || check(v)", "(v) => v == null || check(v)", [C.h03]),
+  m("B4-X152", "a session-token getter that rejects escapes the adapter", HTTP, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "B4", mutants: MUTANTS }));
