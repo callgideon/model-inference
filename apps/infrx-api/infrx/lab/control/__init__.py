@@ -154,7 +154,7 @@ class LabControl:
                    capability: ProviderCapability) -> DeploymentRevision:
         """The provider's own dev revision, for a member holding `capability`; anything else
         is `not_found` (never a 403 that confirms another provider's row)."""
-        await self.access._member(user_id, provider_org_id, capability)
+        await self.access.require(user_id, provider_org_id, capability)
         deployment = await self.store.deployment(deployment_revision_id)
         if (deployment is None or deployment.provider_org_id != provider_org_id
                 or deployment.environment is not Environment.dev):
@@ -166,7 +166,7 @@ class LabControl:
                        serving: ServingRevision) -> bool:
         """A serving revision of one of the provider's own models (A3's immutable `put`:
         True written, False already there, `Conflict` another row under its id)."""
-        await self.access._member(user_id, provider_org_id,
+        await self.access.require(user_id, provider_org_id,
                                   ProviderCapability.manage_dev_deployment)
         if serving.provider_org_id != provider_org_id:
             raise errors.NotFound("no such model in this provider workspace")
@@ -182,7 +182,7 @@ class LabControl:
                          max_output_tokens: int) -> DeploymentRevision:
         """A private `draft` revision of the provider's own serving revision on its dev
         endpoint `endpoint_name`."""
-        await self.access._member(user_id, provider_org_id,
+        await self.access.require(user_id, provider_org_id,
                                   ProviderCapability.manage_dev_deployment)
         serving = await self.catalog.serving_revision(serving_version_id)
         if serving is None or serving.provider_org_id != provider_org_id:
@@ -249,7 +249,7 @@ class LabControl:
 
     async def events(self, user_id: str, provider_org_id: str) -> tuple[ControlEvent, ...]:
         """The provider's control history (it names members and operators: developer+)."""
-        await self.access._member(user_id, provider_org_id,
+        await self.access.require(user_id, provider_org_id,
                                   ProviderCapability.manage_dev_deployment)
         return tuple(await self.store.events(provider_org_id))
 
