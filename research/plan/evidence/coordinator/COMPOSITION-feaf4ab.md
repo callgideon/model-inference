@@ -112,3 +112,5 @@ Tests first (red before the fix: 2 failed, `[queued]`/`[running]`):
 Harness note: one earlier attempt at F5 ran without `INFRX_D_TASK` and created `infrx-d1-postgres` labelled with this checkout; it was stopped at once. Removing that container was not permitted from this session, so it is still there (ours by label, d1 default ports) for the coordinator to remove.
 
 Not rerun in this round: `make app-e2e` (the fix is inside the `LAB_EVAL_WORKER`-on path only, which the App gate never composes; last run PASS 17/17 at feaf4ab), and `tests/g`/`tests/contracts` mutants (no gateway or contract file changed).
+
+Rulings: numbered R182 (worker-side Lab and trace pumps: own switch each, off, never installer-settable; eval_run resumes never freezes, acknowledges only a finished, cancelled or budget-stopped run, wallet stop pending; Lab objects under `lab/<provider>/` in the media store) in `research/plan/08-contracts-v1-encoding.md` §10 at the composition merge (2026-09-28); WR-N-3 stays unmounted and unruled.
