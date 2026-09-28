@@ -1,10 +1,10 @@
 {
   "task": "P2",
   "lane": "lab-sql-integration-2",
-  "slice": "WR-P2-D8 d91cce76: collect records per-item failures in D8's log; carry case on PgTeacherLedger",
+  "slice": "WR-P2-D8 d91cce76: collect records per-item failures in D8's log; carry case on PgTeacherLedger; fix round cc0df9c4 (0-LSI2-F1/1-LSI2-1): collect logs only UUID sample ids, a provider's foreign id never blocks import/settle",
   "activity": "review",
   "at": "2026-09-28T20:30:00Z",
-  "head": "368c87ab",
+  "head": "cc0df9c4",
   "base": "6ab5ee47",
   "worktree": ".claude/worktrees/codex-w5-lab-sql-integration-2",
   "branch": "codex/w5-lab-sql-integration-2",
@@ -18,14 +18,19 @@
   },
   "commands": [
     {
-      "cmd": "INFRX_D_TASK=p2 uv run --frozen pytest -q tests/p/teachers",
+      "cmd": "uv run --frozen pytest -q tests/p/teachers",
       "exit": 0,
-      "summary": "13 passed (teacher fake 57529)"
+      "summary": "19 passed, 2 skipped (new foreign-id case, fail-first)"
     },
     {
-      "cmd": "INFRX_D_TASK=p2 INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/teachers/test_mutants.py",
+      "cmd": "INFRX_D_TASK=p2 uv run --frozen pytest -q tests/p/teachers/test_teachers_pg.py",
       "exit": 0,
-      "summary": "40 mutants, 42 passed, 0 survivors (new failures_unrecorded)"
+      "summary": "2 passed; PG twin fails with the guard removed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/teachers/test_mutants.py",
+      "exit": 0,
+      "summary": "41 mutants, 43 passed, 0 survivors (new foreign_id_jams_the_collect)"
     },
     {
       "cmd": "INFRX_D_TASK=r1 INFRX_D2_VALKEY_CONTAINER=infrx-r1-valkey INFRX_D2_VALKEY_PORT=57533 make api-test",

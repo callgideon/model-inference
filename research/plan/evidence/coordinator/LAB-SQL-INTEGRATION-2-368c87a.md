@@ -71,3 +71,20 @@ An external run in `ambiguous` ends only by a platform operator's move to `faile
 
 ## Estimate (remaining for this lane)
 optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium. Basis: all eight items proven on their keys with 0 survivors; remaining is one review round (LAB-SQL-INTEGRATION took one ACCEPT_WITH_FIXES) plus the coordinator's C2/D8 flips; WR-N3-5 is a separate datasets-lane task (est. 3/5/10 h, 1.5× N3's own lineage slice).
+
+## Fix round (code head cc0df9c4)
+Findings 0-LSI2-F1 and 1-LSI2-1 (the same defect): d91cce76 made P2's `collect` send every failure to `record_failures` before import and settle; a teacher-returned id that is not a UUID (raw provider output, `judge/submit.py:289-291`) made 0042's `(f->>'sample_id')::uuid` refuse the whole batch (`invalid_request`), so no label imported, the run never settled, its PROVIDER_USD hold stayed and every poll raised again. The evidence's "none needed a fix" for WR-P2-D8 was wrong.
+
+- Fix (`infrx/pipelines/teachers/__init__.py`): `collect` logs only failures whose sample id parses as a UUID (`_is_uuid`); every failure is still returned in `Collected.failures`. No migration edit.
+- Fake (`tests/p/teachers/fakes.py`): `TeacherLedger.record_failures` mirrors 0042 — refuses the whole batch with `InvalidRequest` on a non-UUID sample id or a reason outside `^[a-z][a-z_]{0,63}$`.
+- Fake case `test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_or_the_settlement` (fail-first: red at 368c87ab), named by the new mutant `foreign_id_jams_the_collect`; `failures_unrecorded` retargeted to the `logged` line.
+- PG twin `test_p2_pg_a_provider_id_that_is_no_sample_id_never_jams_the_collect` (p2): with the guard removed it fails (`1 failed, 1 passed`); with it, the good label imports (1 accepted), `failures == (("junk-id","not_sent"),)`, D8's log for that run is empty, state `completed`, the second collect returns the same run.
+
+| command | exit | result |
+|---|---|---|
+| `uv run --frozen pytest -q tests/p/teachers` | 0 | 19 passed, 2 skipped |
+| `INFRX_D_TASK=p2 uv run --frozen pytest -q tests/p/teachers/test_teachers_pg.py` | 0 | 2 passed (guard removed: 1 failed) |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/teachers/test_mutants.py` | 0 | 41 mutants, 43 passed, 0 survivors |
+| `uv run --frozen ruff check infrx/pipelines/teachers tests/p/teachers` | 0 | clean |
+
+Only P2's suite is touched; the other seven items and `make api-test` stand as recorded above. Isolation: p2 key only; no foreign container touched.
