@@ -289,6 +289,53 @@ def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabl
     assert pilot._lab(settings(lab_traces=True), connect=None) == {"lab_traces": "traces"}
 
 
+def test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it():
+    """R1 (WR-R1-1): `ROLLOUT_ROUTING` is off by default, and then the relay's own `accept`
+    serves the ingress and the jobs route even with a router at hand (the launched API is
+    unchanged); on without a router the gateway refuses to start; on, every admission goes
+    through the router first - here a release-store outage, answered 503 before anything is
+    admitted."""
+    import dataclasses
+
+    from infrx.config import deployment_from_env
+    from infrx.gateway.routes.relay import Relay
+    from infrx.rollouts import routing
+
+    class Down:
+        asked: list = []
+
+        async def active(self, requested_model):
+            self.asked.append(requested_model)
+            raise ConnectionError("release store unreachable")
+
+    assert deployment_from_env({}).rollout_routing is False
+
+    def composed(on, router):
+        world = relay_support.World()
+        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.during.append(lambda: world.clock.advance(3_600))    # a wait ends, never hangs
+        config = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                                 rollout_routing=on))
+        return world, composition.create_app(
+            config, client=support.upstream(), sb=support.supabase(), clock=world.now_s,
+            catalog=world.catalog, stream=world.stream, objects=world.objects, jobs=world.jobs,
+            index=MemoryScheduler(world.clock.now), rollouts=router)
+
+    store = Down()
+    _, off = composed(False, routing.Router(store, None))
+    rt = off.state.runtime
+    assert getattr(rt.relay.accept, "__func__", None) is Relay.accept
+    assert rt.ingress.accept == rt.relay.accept
+    with pytest.raises(RuntimeMisconfigured, match="ROLLOUT_ROUTING"):
+        composed(True, None)
+    world, on = composed(True, routing.Router(store, None))
+    assert on.state.runtime.ingress.accept is on.state.runtime.relay.accept
+    answer = local(on).post(support.CHAT_PATH, json=support.BODY, headers=support.AUTH)
+    assert answer.status_code == 503, answer.text
+    assert answer.json()["error"]["code"] == "dependency_unavailable"
+    assert store.asked == [support.PUBLIC_MODEL] and world.jobs.jobs == {}
+
+
 def fixture_host(monkeypatch, root: pathlib.Path) -> None:
     """E2C (RV-12): the scrape reads a fixture procfs, not this machine's `/proc`, so a case
     about the build gauge runs on any developer host. `collect_host(proc=...)` is the seam

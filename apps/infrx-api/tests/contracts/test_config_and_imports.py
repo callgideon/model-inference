@@ -551,6 +551,8 @@ DEPLOYMENT_EXPECTED = {
     # WR-T-4 / WR-B-5 (composition lane): the worker's trace pumps and Lab eval worker, off
     "TRACE_PUMPS": False,
     "LAB_EVAL_WORKER": False,
+    # R1 (WR-R1-1): the switch that routes admission through the rollout router, off
+    "ROLLOUT_ROUTING": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

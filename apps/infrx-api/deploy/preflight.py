@@ -246,6 +246,9 @@ NOT_SETTABLE = {
                    "and the E4 regression rerun, a deploy change, not a --set",
     "LAB_EVAL_WORKER": "runs the Lab eval_run worker (WR-B-5, off by default, Lab-only): the "
                        "hosted database has no Lab schema (plan rule 4), never a --set",
+    "ROLLOUT_ROUTING": "routes admission through the Lab rollout router (R1, off by default): "
+                       "enabling it on the hosted gateway needs D9's release store, the E4 "
+                       "regression rerun and P-12, a deploy change, not a --set",
 }
 
 

@@ -369,6 +369,10 @@ class DeploymentSettings:
     # `resume` + `Runner`) and runs `lab_recover`. Lab-only, off by default; on, it refuses
     # to start until an evaluator source (WR-B-2(b)) and a dev target source (WR-B-3) exist.
     lab_eval_worker: bool = False
+    # R1 (WR-R1-1): route admission through the Lab rollout router (shadow, canary, A/B
+    # over D9's release policies). Off by default, so the launched API is unchanged; on, a
+    # gateway without a release store refuses to start. Public shadow/canary waits on P-12.
+    rollout_routing: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

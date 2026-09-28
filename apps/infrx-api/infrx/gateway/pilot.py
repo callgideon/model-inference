@@ -348,7 +348,7 @@ def build_info(rt) -> None:
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
                        pool=None, consent_for=None, attachments=None,
                        lifecycle=None, readiness=None, feedback=None, lab_control=None,
-                       lab_traces=None) -> IngressDeps:
+                       lab_traces=None, rollouts=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -383,6 +383,14 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                                          threshold=deployment.large_body_threshold_bytes)
     checks = {"price_source": Probe(models.price_check(catalog, settings)),
               "journal": Probe(journal_check(stream))}
+    if deployment.rollout_routing:
+        # R1 (WR-R1-1): the rollout router around admission, for the ingress and the jobs
+        # route alike (both call `relay.accept`). Off, the relay's own accept serves.
+        if rollouts is None:
+            raise RuntimeMisconfigured(rt.mode, detail="ROLLOUT_ROUTING needs the rollout "
+                                                       "router over D9's release store: rollouts")
+        from ..rollouts import routing
+        relay.accept = routing.hook(relay.accept, rollouts)
     rt.relay = relay
     # G4F (WR-G4F-1): the feedback route mounts over this, and only when enabled.
     rt.feedback = feedback if deployment.feedback_api else None

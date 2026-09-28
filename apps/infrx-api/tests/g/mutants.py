@@ -35,6 +35,7 @@ K = "auth/keys.py"                      # F1's caches: G owns the file, and the 
 C = "gateway/routes/catalog.py"         # G1R: model resolution for a credential's audience
 R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and the SSE relay
 P = "gateway/pilot.py"                  # G2: the pilot composition
+ROLLOUT_CASE = "test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it"
 OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
 ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
 M = "gateway/routes/models.py"          # G7: public discovery, one projection
@@ -924,6 +925,16 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "    rt.feedback = feedback if deployment.feedback_api else None\n",
        "    rt.feedback = feedback\n",
        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
+    # R1 (WR-R1-1): admission is routed only when ROLLOUT_ROUTING turns it on, over a router
+    _m("rollout_switch_ignored", "ROLLOUT_ROUTING off leaves the relay's own accept serving",
+       P, "    if deployment.rollout_routing:\n        # R1", "    if rollouts is not None:\n        # R1",
+       ROLLOUT_CASE),
+    _m("rollout_router_dropped", "ROLLOUT_ROUTING on routes every admission",
+       P, "        relay.accept = routing.hook(relay.accept, rollouts)\n", "        pass\n",
+       ROLLOUT_CASE),
+    _m("rollout_store_optional", "ROLLOUT_ROUTING on without a router refuses to start",
+       P, "        if rollouts is None:\n            raise RuntimeMisconfigured",
+       "        if False:\n            raise RuntimeMisconfigured", ROLLOUT_CASE),
     # LAB-API (WR-LAB-API-1): each Lab surface is mounted only when its switch turns it on
     _m("composition_root_drops_lab_control", "the composition root mounts WR-L4-1's control",
        "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
