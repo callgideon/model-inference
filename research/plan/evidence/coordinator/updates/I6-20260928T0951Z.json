@@ -1,0 +1,80 @@
+{
+ "task": "I6",
+ "slice": "I6.a-c complete locally: units + preflight + egress deny + runbook + protocol drills (P3 scratch tree); security lens extended (enable marker, python3 -I, --pull never, gid 10003, local image id, owner-only env file, no value echoed, exact docker flag set)",
+ "activity": "review",
+ "head": "af0ceaab",
+ "worktree": ".claude/worktrees/codex-w5-lab-workers",
+ "branch": "codex/w5-lab-workers",
+ "owned_paths": [
+  "infra/lab/workers/training/",
+  "apps/infrx-api/deploy/lab/pipelines/",
+  "apps/infrx-api/tests/i/lab_pipeline/"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first security lens: pytest test_preflight/test_units (pipeline+rollout)",
+   "exit": 1,
+   "summary": "10 failed, 20 passed (I6-raw/seam-red-lens.log)"
+  },
+  {
+   "cmd": "pytest -q tests/i/lab_pipeline tests/i/lab_rollout",
+   "exit": 0,
+   "summary": "47 passed, 1 skipped (P3 drills skip until P3 on base)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py",
+   "exit": 0,
+   "summary": "77 passed: I6 58 + I7 15 mutants killed, 0 survivors, every case covered"
+  },
+  {
+   "cmd": "pytest -q tests/i/lab_eval/{test_units,test_pool_budget,test_mutants}.py tests/r/control",
+   "exit": 0,
+   "summary": "44 passed"
+  },
+  {
+   "cmd": "pytest -q tests/i/test_mutants.py -k 'well_formed or every_case'",
+   "exit": 0,
+   "summary": "2 passed"
+  },
+  {
+   "cmd": "ruff check tests/i/lab_pipeline tests/i/lab_rollout ../../infra/lab/workers/training",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i6 make api-test (af0ceaab)",
+   "exit": 2,
+   "summary": "7 failed, 5320 passed, 92 skipped, 9 xfailed; the 7 = tests/d/test_outbox_relay[valkey], rerun alone same 7 (ForeignContainer infrx-d2-valkey held by another checkout); tests/i green"
+  },
+  {
+   "cmd": "merge-tree af0ceaab + codex/w5-pipelines 5e0d6f8d (tree b9bc6031, scratch): pytest test_protocol_drills.py test_egress.py",
+   "exit": 0,
+   "summary": "5 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "at": "2026-09-28T09:51Z",
+  "basis": "one review round on a small diff (I5 analogue 2/4/8 minus drills already run) + P3-base drill rerun; staging P-08 excluded"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-I6-1 Makefile:21 api-mutants: append ' tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py' after ' tests/i/lab_eval/test_mutants.py' (proof: 77 passed)",
+  "WR-I6-2 infra/lab/workers/eval/pool_budget.py:33 ROLES += annotation 1, training 1, rollout 1 (proof: --enable annotation --enable training --enable rollout -> PASS lab: peak 6 <= limit 20, exit 0)",
+  "WR-I6-3 composition: python -m infrx.lab.workers annotation|training per infra/lab/workers/training/RUNBOOK.md \u00a71 (proof: test_protocol_drills.py through the entry point)",
+  "WR-I6-4 infra/lab/app/lab.json env gains a lab-workers list = preflight.allowed_names(role) for annotation/training/rollout (secrets marked)"
+ ],
+ "evidence": [
+  "research/plan/evidence/i/I6-af0ceaa.md",
+  "research/plan/evidence/i/I6-raw/seam-red.log",
+  "research/plan/evidence/i/I6-raw/seam-red-lens.log",
+  "research/plan/evidence/i/I6-raw/mutants-all-af0ceaab.log",
+  "research/plan/evidence/i/I6-raw/protocol-drills-on-p3-tree-af0ceaab.log",
+  "research/plan/evidence/i/I6-raw/api-test-af0ceaab.log",
+  "research/plan/evidence/i/I6-raw/mutants-all.log",
+  "research/plan/evidence/i/I6-raw/protocol-drills-on-p3-merge.log"
+ ]
+}
