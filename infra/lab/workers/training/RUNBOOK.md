@@ -40,6 +40,15 @@ so no `PYTHON*` setting steers the checker) refuses the start, naming the settin
 its value, when:
 
 * the env file is readable by another account (not 0600/0400);
+* systemd and docker could read a line differently: docker's `--env-file` fills the container
+  while systemd's `EnvironmentFile=` fills `${INFRX_IMAGE}` and `${LAB_EGRESS_ALLOW}` in
+  argv, and systemd joins a line ending in `\` to the next and unquotes a value (one stray
+  backslash hid `INFRX_IMAGE=--privileged` and `LAB_EGRESS_ALLOW=*` from the old check). So a
+  line with a backslash (comments too), a value with a quote, a control character or
+  surrounding space, and a name set twice are refused by line number; and every setting must
+  equal the value `EnvironmentFile=` gave the preflight itself (`ExecStartPre` runs in the
+  unit's environment; `-I` keeps it), so the values checked are the values run. A DSN whose
+  password holds a quote or backslash is refused: rotate it;
 * a setting is not the role's own (a consumer secret, another purpose's token, `AWS_*`, any
   `*_proxy` in any letter case, `DOCKER_HOST` and other settings that steer the unit's docker
   CLI, `PYTHONPATH`, `LD_PRELOAD`, `SSL_CERT_FILE`), a line is a bare name, or a line's name
@@ -53,7 +62,17 @@ its value, when:
   worker never falls back to another adapter**), a budget that is not a finite USD amount
   above 0 and within the approval's, or a payer other than the approval's named one;
 * `LAB_EGRESS_ALLOW` holds anything but the object store's host (`LAB_S3_ENDPOINT`, named
-  explicitly, the regional endpoint on AWS) or the enabled adapter's approved host.
+  explicitly, the regional endpoint on AWS), `169.254.169.254` or the enabled adapter's
+  approved host.
+
+Object-store credentials: the instance role, through botocore's metadata lookup, and nothing
+else (`AWS_*` is refused, so no long-lived key sits in an env file). botocore sends that
+lookup through the environment's proxy, so it reaches the metadata address only when
+`LAB_EGRESS_ALLOW` names `169.254.169.254` exactly (no range, port or name). The units use
+`--network host`, so the container is the instance's own hop and IMDSv2's default hop limit
+of 1 suffices; any process in the container with the entry can read the role's credentials,
+so the role's policy must name the Lab bucket only. Without the entry every object-store call
+fails closed.
 
 Egress deny: the unit points `HTTP(S)_PROXY` (both cases) at `127.0.0.1:9` (privileged, so no
 unprivileged process can become the proxy) with `NO_PROXY` = `LAB_EGRESS_ALLOW`. An
@@ -68,6 +87,9 @@ operator's P-08 decision):
   `all://*<host>`), so allowing the regional S3 endpoint also allows virtual-hosted URLs of
   any bucket (`<bucket>.s3.<region>.amazonaws.com`), as path-style URLs are anyway: a host
   allowlist cannot pin the bucket; an S3 VPC endpoint policy naming the Lab bucket does;
+* the instance-role path (IMDSv2 token and credentials through `NO_PROXY`, hop limit 1 under
+  host networking, a role scoped to the Lab bucket) is proven locally only as botocore's
+  proxy decision; a real object-store call from the running container is owed;
 * `docker inspect` shows the container's environment (the token) to the docker group, as
   for every consumer unit.
 
@@ -90,8 +112,9 @@ token and restart (the preflight refuses the start, so nothing runs on a stale c
    `payer_ref`, `budget_usd`) and deploy that commit; never edit the box's checkout.
 2. Budget the pooler: `infra/lab/workers/eval/pool_budget.py` (wiring WR-I6-2 adds these
    roles to its `ROLES`), then write `/etc/infrx-lab/<role>.env`.
-3. `python3 -I infra/lab/workers/training/preflight.py --role <role> --env-file
-   /etc/infrx-lab/<role>.env` prints `PASS <role>`; then install the unit (I5 runbook §2 step
+3. `sudo systemd-run --wait --pipe -q --uid ubuntu -p EnvironmentFile=/etc/infrx-lab/<role>.env /usr/bin/python3 -I /home/ubuntu/model-inference/infra/lab/workers/training/preflight.py --role <role> --env-file /etc/infrx-lab/<role>.env`
+   prints `PASS <role>` (systemd's reading of the file, as `ExecStartPre` gets it; a plain
+   `python3 preflight.py` refuses because its environment is not the unit's); then install the unit (I5 runbook §2 step
    3), make sure I2L's marker exists (`sudo install -d -m 0755 /etc/infrx-lab && sudo touch
    /etc/infrx-lab/enabled`, I2L's Enable), `enable --now` it and
    `curl -fsS 127.0.0.1:<port>/readyz`.
@@ -132,6 +155,8 @@ Local (task-local key `i6`, no container needed): from `apps/infrx-api`,
 |---|---|---|
 | unit shape, OFF by default, preflight gate | `test_units.py` | `systemctl show` of each unit |
 | setting / secret / adapter / budget refusals, no value printed | `test_preflight.py` | a refused start in the journal |
+| a file systemd reads otherwise (continuation, quotes, duplicates) refused; values checked = values run | `test_preflight.py` (the repros under the host's user systemd 255 when reachable) | a refused start in the journal under the box's systemd |
+| object-store credentials from the instance role only when `169.254.169.254` is allowlisted | `test_preflight.py`, `test_egress.py` (botocore's proxy decision, no network) | an S3 `HeadBucket` from the running container; a denied one without the entry |
 | blocked egress fails closed, env file cannot widen it | `test_egress.py` (httpx under the unit's env) | a request to an unlisted host from the running container |
 | submit with egress blocked -> `ambiguous`, nothing sent; restart reconciles, never resubmits; a protocol server that accepted then went down converges on lookup | `test_protocol_drills.py` (P3's `HttpConnector` and protocol server over TCP, D8 faked; skips until P3 is on the base) | the same against the P-11 provider's sandbox |
 | restart keeps budget and data-use limits | P3's ledger (D8/D6J) holds them; the drill restarts with a fresh connector and the same ledger | real D8 on PostgreSQL (lab-sql) |
@@ -148,3 +173,7 @@ rule), D8/D6J merged (the ledger), and the entry point (composition).
   group 10003, local image id only, owner-only env file, no value echoed (adapter or pasted
   line), exact `docker run` flag set; residuals (host network, httpx subdomain match, docker
   inspect) recorded. Local only.
+- 2026-09-28 (fix round): the preflight refuses any line systemd's `EnvironmentFile=` and
+  docker's `--env-file` could read differently and compares every setting with the unit's
+  own environment (0-LW-1, 1-LW5-LW-1); `169.254.169.254` may be allowlisted for the
+  instance-role credentials (1-LW5-LW-2); manual preflight under `systemd-run`. Local only.

@@ -10,7 +10,9 @@ egress allowlist names only the object store and the approved host. No docker.
 from __future__ import annotations
 
 import json
+import os
 import runpy
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -48,6 +50,23 @@ def paid(**changes) -> dict[str, str]:
 
 def check(role: str, env: dict[str, str], approvals=None) -> list[str]:
     return PF["check"](role, env, APPROVED if approvals is None else approvals)
+
+
+def cli(env_file: Path, role: str = "training", approvals: Path | None = None,
+        environ: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """The unit's ExecStartPre: `environ` is what EnvironmentFile= gave it (by default the
+    file's own settings, systemd and docker agreeing)."""
+    if environ is None:
+        environ = PF["parse"](env_file.read_text())[0]
+    extra = ["--approvals", str(approvals)] if approvals else []
+    return subprocess.run([sys.executable, "-I", str(SCRIPT), "--role", role, "--env-file",
+                           str(env_file), *extra], capture_output=True, text=True, env=environ)
+
+
+def write(path: Path, text: str) -> Path:
+    path.write_text(text)
+    path.chmod(0o600)
+    return path
 
 
 def test_i6_the_shipped_approvals_are_empty_so_every_role_is_local_or_manual_only() -> None:
@@ -201,13 +220,7 @@ def test_i6_the_cli_exits_1_on_a_refusal_and_never_prints_a_value(tmp_path) -> N
         LAB_TRAINING_CONNECTOR_URL=f"https://{SECRET}.evil.example/",
         LAB_TRAINING_CONNECTOR=SECRET, DATABASE_URL=SECRET).items()))
     good.chmod(0o600), bad.chmod(0o600)
-
-    def cli(env_file: Path) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, str(SCRIPT), "--role", "training", "--env-file",
-                               str(env_file), "--approvals", str(approvals)],
-                              capture_output=True, text=True)
-
-    ok, refused = cli(good), cli(bad)
+    ok, refused = cli(good, approvals=approvals), cli(bad, approvals=approvals)
     assert (ok.returncode, refused.returncode) == (0, 1), (ok.stdout, refused.stdout)
     assert "FAIL" in refused.stdout and "PASS" in ok.stdout
     for out in (ok, refused):
@@ -222,8 +235,124 @@ def test_i6_the_cli_refuses_an_env_file_another_account_can_read(tmp_path) -> No
     env_file.write_text("".join(f"{k}={v}\n" for k, v in BASE.items()))
     for mode, code in ((0o600, 0), (0o400, 0), (0o640, 1), (0o604, 1)):
         env_file.chmod(mode)
-        out = subprocess.run([sys.executable, str(SCRIPT), "--role", "training",
-                              "--env-file", str(env_file)], capture_output=True, text=True)
+        out = cli(env_file)
         assert out.returncode == code, (oct(mode), out.stdout)
     assert "FAIL training: the env file is readable by another account (chmod 0600)" in \
         out.stdout
+
+
+IMAGE_ID = BASE["INFRX_IMAGE"]
+S3 = "s3.us-east-1.amazonaws.com"
+# The fix round's repros: (env file, what systemd's EnvironmentFile= makes of it). docker and
+# an unguarded preflight take every line literally, last duplicate winning, and pass it.
+REPROS = {
+    "continuation_hides_the_image_and_the_allowlist": (
+        f"LAB_EGRESS_ALLOW=evil.example.com\nINFRX_IMAGE=--privileged\nLAB_S3_BUCKET=x\\\n"
+        f"INFRX_IMAGE={IMAGE_ID}\nLAB_DATABASE_URL=y\\\nLAB_EGRESS_ALLOW=\n",
+        {"LAB_EGRESS_ALLOW": "evil.example.com", "INFRX_IMAGE": "--privileged",
+         "LAB_S3_BUCKET": f"xINFRX_IMAGE={IMAGE_ID}", "LAB_DATABASE_URL": "yLAB_EGRESS_ALLOW="}),
+    "continuation_hides_the_allowlist": (
+        f"INFRX_IMAGE={IMAGE_ID}\nLAB_EGRESS_ALLOW=evil.example\nLAB_S3_BUCKET=bucket\\\n"
+        f"LAB_EGRESS_ALLOW=\n",
+        {"INFRX_IMAGE": IMAGE_ID, "LAB_EGRESS_ALLOW": "evil.example",
+         "LAB_S3_BUCKET": "bucketLAB_EGRESS_ALLOW="}),
+    "quoted_value_spans_lines": (
+        f"INFRX_IMAGE={IMAGE_ID}\nLAB_EGRESS_ALLOW=*\nLAB_S3_BUCKET=\"x\nLAB_EGRESS_ALLOW=\n"
+        f"LAB_DATABASE_URL=y\"\n",
+        {"INFRX_IMAGE": IMAGE_ID, "LAB_EGRESS_ALLOW": "*",
+         "LAB_S3_BUCKET": "x\nLAB_EGRESS_ALLOW=\nLAB_DATABASE_URL=y"}),
+}
+
+
+def systemd_view(env_file: Path) -> dict[str, str] | None:
+    """What systemd's EnvironmentFile= gives a unit (the user manager), or None without one."""
+    if not shutil.which("systemd-run"):
+        return None
+    out = subprocess.run(["systemd-run", "--user", "--wait", "--pipe", "-q", "-p",
+                          f"EnvironmentFile={env_file}", "/usr/bin/env", "-0"],
+                         capture_output=True, text=True, timeout=30)
+    if out.returncode:
+        return None
+    pairs = (item.partition("=") for item in out.stdout.split("\0") if item)
+    return {k: v for k, _, v in pairs if k.startswith(("LAB_", "INFRX_"))}
+
+
+@pytest.mark.parametrize("repro", sorted(REPROS))
+def test_i6_a_file_systemd_reads_otherwise_is_refused_as_the_unit_runs_it(
+        repro, tmp_path) -> None:
+    """The security lens, fix round (0-LW-1, 1-LW5-LW-1): a trailing backslash or a quoted
+    value makes systemd - which fills `${INFRX_IMAGE}` and `${LAB_EGRESS_ALLOW}` in argv -
+    read another file than docker does. Failure oracle: PASS (exit 0) while the unit would run
+    `--privileged` or `NO_PROXY=evil.example`/`*`. Under the host's systemd when a user
+    manager is reachable (the view is asserted, then the preflight runs inside it); otherwise
+    with that view recorded."""
+    text, view = REPROS[repro]
+    env_file = write(tmp_path / "rollout.env", text)
+    real = systemd_view(env_file)
+    if real is not None:
+        assert real == view, real
+    out = cli(env_file, role="rollout", environ=view)
+    assert out.returncode == 1 and "PASS" not in out.stdout, out.stdout
+    assert "a backslash" in out.stdout or "has a quote" in out.stdout, out.stdout
+    for secret in ("evil.example", "--privileged", "*"):
+        assert secret not in out.stdout + out.stderr
+    if real is not None:
+        run = subprocess.run(["systemd-run", "--user", "--wait", "--pipe", "-q", "-p",
+                              f"EnvironmentFile={env_file}", "/usr/bin/python3", "-I",
+                              str(SCRIPT), "--role", "rollout", "--env-file", str(env_file)],
+                             capture_output=True, text=True, timeout=30)
+        assert run.returncode == 1 and "PASS" not in run.stdout, run.stdout
+
+
+def test_i6_a_line_systemd_and_docker_could_read_differently_is_refused_unprinted() -> None:
+    """Failure oracle: a backslash (in a setting or a comment: systemd continues both), a
+    quote, a control character (Python's `splitlines` would split a form feed neither reader
+    splits), surrounding space (systemd strips it, docker keeps it) or a name set twice
+    accepted, or the value printed."""
+    env, refusals = PF["parse"](
+        f"LAB_S3_BUCKET=b\n# note\\\nLAB_S3_ENDPOINT=a\\b\nLAB_DATABASE_URL='{SECRET}'\n"
+        f"LAB_DATABASE_URL=\"{SECRET}\"\nINFRX_IMAGE={IMAGE_ID} \nINFRX_IMAGE= {IMAGE_ID}\n"
+        f"LAB_EGRESS_ALLOW={S3}\x0cINFRX_IMAGE=--privileged\nLAB_S3_BUCKET=c\n"
+        f"LAB_TRAINING_CONCURRENCY=1\r\n")
+    assert env == {"LAB_S3_BUCKET": "b"}
+    odd = "has a quote, control character or surrounding space (systemd reads it differently)"
+    assert refusals == [
+        "line 2: a backslash (systemd joins the next line)",
+        "line 3: a backslash (systemd joins the next line)",
+        f"line 4: LAB_DATABASE_URL {odd}", f"line 5: LAB_DATABASE_URL {odd}",
+        f"line 6: INFRX_IMAGE {odd}", f"line 7: INFRX_IMAGE {odd}",
+        f"line 8: LAB_EGRESS_ALLOW {odd}", "line 9: LAB_S3_BUCKET is set twice",
+        f"line 10: LAB_TRAINING_CONCURRENCY {odd}"]
+    assert SECRET not in " ".join(refusals)
+
+
+def test_i6_the_values_checked_are_the_values_systemd_passes_the_unit(tmp_path) -> None:
+    """Root of 0-LW-1: the check compares against what EnvironmentFile= gave ExecStartPre.
+    Failure oracle: a clean file passed while the unit's `${INFRX_IMAGE}` or
+    `${LAB_EGRESS_ALLOW}` (or any setting) is another value, absent, or present only in
+    systemd's view; or the agreeing file refused."""
+    env_file = write(tmp_path / "training.env", "".join(f"{k}={v}\n" for k, v in BASE.items()))
+    assert cli(env_file).returncode == 0
+    drift = "EnvironmentFile= gives the unit another value (not printed)"
+    for name, value in (("INFRX_IMAGE", "--privileged"), ("LAB_EGRESS_ALLOW", "*"),
+                        ("LAB_EGRESS_ALLOW", None), ("LAB_S3_BUCKET", "other")):
+        environ = {k: v for k, v in {**BASE, name: value}.items() if v is not None}
+        out = cli(env_file, environ=environ)
+        assert (out.returncode, out.stdout) == (1, f"FAIL training: {name}: {drift}\n"), name
+    no_allow = {k: v for k, v in BASE.items() if k != "LAB_EGRESS_ALLOW"}
+    env_file = write(env_file, "".join(f"{k}={v}\n" for k, v in no_allow.items()))
+    out = cli(env_file, environ={**no_allow, "LAB_EGRESS_ALLOW": "*"})
+    assert (out.returncode, out.stdout) == (1, f"FAIL training: LAB_EGRESS_ALLOW: {drift}\n")
+
+
+def test_i6_the_object_store_credentials_come_from_the_instance_role_via_imds() -> None:
+    """1-LW5-LW-2: `AWS_*` is refused, so botocore's only credential source is the instance
+    role at the metadata address, which the dead proxy blocks unless allowlisted. Failure
+    oracle: that exact address refused (every object-store call fails on AWS), or a port,
+    range, neighbour or name standing in for it accepted."""
+    for role in ("annotation", "training", "rollout"):
+        assert check(role, {**BASE, "LAB_EGRESS_ALLOW": f"{S3},169.254.169.254"}) == [], role
+    for bad in ("169.254.169.254:80", "169.254.0.0/16", "169.254.169.253", ".169.254.169.254",
+                "http://169.254.169.254", "instance-data", "fd00:ec2::254"):
+        assert check("training", {**BASE, "LAB_EGRESS_ALLOW": f"{S3},{bad}"}) == [
+            "LAB_EGRESS_ALLOW: entry 2 is neither the object store nor an approved endpoint"], bad

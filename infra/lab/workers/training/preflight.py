@@ -20,6 +20,13 @@ python3 runs it from the deployed checkout, so the approvals are the deployed co
   flag, never absent (docker would run the public `python`), never a registry reference
   (the daemon's pull is egress the container's deny proxy never sees).
 * **The file.** Readable by its owner only (0600 or 0400): it holds the token and password.
+  docker's `--env-file` fills the container and systemd's `EnvironmentFile=` fills
+  `${INFRX_IMAGE}`/`${LAB_EGRESS_ALLOW}` in the unit's argv, and the two read a file
+  differently (systemd joins a line ending in `\\` to the next, unquotes, strips spaces; the
+  last duplicate wins in both). So a line with a backslash, a value with a quote, a control
+  character or surrounding space, and a name set twice are refused, and every checked name
+  must equal what this process received from `EnvironmentFile=` (the unit's `ExecStartPre`
+  gets systemd's view; `-I` keeps `os.environ`): the values checked are the values run.
 * **Adapters.** The default (`dry-run` teacher, `manual-bundle` training; rollout has none)
   needs no approval and carries no endpoint, token, budget or payer (a stray one is refused,
   so nothing turns on by editing one line). Any other adapter needs its role's entry in
@@ -29,12 +36,15 @@ python3 runs it from the deployed checkout, so the approvals are the deployed co
   approval's named payer.
 * **Egress.** The unit sends every HTTP client through a dead proxy except `NO_PROXY` =
   `LAB_EGRESS_ALLOW`; each of its entries must be exactly the object store's host
-  (`LAB_S3_ENDPOINT`) or the enabled adapter's approved host (no `*`, suffix, port or scheme).
+  (`LAB_S3_ENDPOINT`), the instance metadata address `169.254.169.254` (botocore's
+  instance-role credentials; the object store has no other credential path, `AWS_*` being
+  refused) or the enabled adapter's approved host (no `*`, suffix, port or scheme).
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from decimal import Decimal, InvalidOperation
@@ -51,6 +61,9 @@ ADAPTERS = {"annotation": ("LAB_ANNOTATION_TEACHER", "dry-run", "LAB_ANNOTATION_
 ROLES = (*ADAPTERS, "rollout")
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 IMAGE = re.compile(r"sha256:[0-9a-f]{64}")
+IMDS = "169.254.169.254"                  # botocore's instance-role credentials (IMDSv2)
+UNSAFE = re.compile(r"[\\'\"\x00-\x1f\x7f]")   # read differently by systemd and docker
+ARGV = ("INFRX_IMAGE", "LAB_EGRESS_ALLOW")  # expanded by systemd into the unit's argv
 
 
 def paid_names(role: str) -> tuple[str, ...]:
@@ -67,9 +80,13 @@ def allowed_names(role: str) -> set[str]:
 
 
 def parse(text: str) -> tuple[dict[str, str], list[str]]:
-    """docker's --env-file: `NAME=VALUE` taken literally; `#` comments and blank lines."""
+    """docker's --env-file: `NAME=VALUE` taken literally; `#` comments and blank lines. Any
+    line systemd's EnvironmentFile= could read otherwise is refused, never printed."""
     env, refusals = {}, []
-    for n, line in enumerate(text.splitlines(), 1):
+    for n, line in enumerate(text.split("\n"), 1):   # both split on \n only
+        if "\\" in line:                                # even a comment's joins the next
+            refusals.append(f"line {n}: a backslash (systemd joins the next line)")
+            continue
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         name, eq, value = line.partition("=")
@@ -77,6 +94,11 @@ def parse(text: str) -> tuple[dict[str, str], list[str]]:
             refusals.append(f"line {n}: a bare name copies the caller's environment")
         elif not NAME.fullmatch(name):
             refusals.append(f"line {n}: not a setting name (not printed)")
+        elif name in env:
+            refusals.append(f"line {n}: {name} is set twice")
+        elif UNSAFE.search(value) or value != value.strip():
+            refusals.append(f"line {n}: {name} has a quote, control character or surrounding "
+                            f"space (systemd reads it differently)")
         else:
             env[name] = value
     return env, refusals
@@ -101,6 +123,7 @@ def check(role: str, env: dict[str, str], approvals: dict[str, list[dict]]) -> l
     if not IMAGE.fullmatch(env.get("INFRX_IMAGE", "")):
         refusals.append("INFRX_IMAGE: not a local image id (sha256:<64 hex>)")
     hosts = {_host(env["LAB_S3_ENDPOINT"])} if env.get("LAB_S3_ENDPOINT") else set()
+    hosts.add(IMDS)
     if role in ADAPTERS:
         setting, default, prefix, approval_id = ADAPTERS[role]
         budget, url, token, payer = paid_names(role)
@@ -147,6 +170,8 @@ def main(argv=None) -> int:
     env, refusals = parse(path.read_text())
     if path.stat().st_mode & 0o077:
         refusals.append("the env file is readable by another account (chmod 0600)")
+    refusals += [f"{name}: EnvironmentFile= gives the unit another value (not printed)"
+                 for name in sorted({*env, *ARGV}) if os.environ.get(name) != env.get(name)]
     refusals += check(a.role, env, load_approvals(Path(a.approvals)))
     for refusal in refusals:
         print(f"FAIL {a.role}: {refusal}")

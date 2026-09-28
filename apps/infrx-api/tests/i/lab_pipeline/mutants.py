@@ -38,6 +38,11 @@ ECHO = "test_i6_a_refusal_never_echoes_a_value_pasted_as_a_name_or_an_adapter"
 ARGV = "test_i6_argv_carries_no_mount_privilege_namespace_pull_or_secret"
 WIDEN = "test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it"
 EMPTY = "test_i6_an_empty_allowlist_denies_every_http_host"
+REPRO = "test_i6_a_file_systemd_reads_otherwise_is_refused_as_the_unit_runs_it"
+DIVERGE = "test_i6_a_line_systemd_and_docker_could_read_differently_is_refused_unprinted"
+ENVIRON = "test_i6_the_values_checked_are_the_values_systemd_passes_the_unit"
+IMDS = "test_i6_the_object_store_credentials_come_from_the_instance_role_via_imds"
+BOTO = "test_i6_botocore_reaches_the_instance_role_only_when_imds_is_allowlisted"
 PRE = ("ExecStartPre=/usr/bin/python3 -I /home/ubuntu/model-inference/infra/lab/workers/training/"
        "preflight.py --role training --env-file /etc/infrx-lab/training.env\n")
 m = i5.m
@@ -96,7 +101,12 @@ MUTANTS: tuple[Mutant, ...] = (
     m("i6_training_http_lowercase_dropped", "http_proxy is set in both cases", TR,
       " -e http_proxy=http://127.0.0.1:9", "", BOUNDED, FLAGS, WIDEN),
     m("i6_training_http_proxy_empty", "the proxy is a dead address, never empty", TR,
-      "-e http_proxy=http://127.0.0.1:9", "-e http_proxy=", BOUNDED, WIDEN, EMPTY),
+      "-e http_proxy=http://127.0.0.1:9", "-e http_proxy=", BOUNDED, WIDEN, EMPTY, BOTO),
+    m("i6_annotation_no_proxy_imds_always", "IMDS only when allowlisted", AN,
+      "-e NO_PROXY=${LAB_EGRESS_ALLOW} -e no_proxy=${LAB_EGRESS_ALLOW}",
+      "-e NO_PROXY=169.254.169.254,${LAB_EGRESS_ALLOW} -e no_proxy=169.254.169.254,"
+      "${LAB_EGRESS_ALLOW}",
+      BOUNDED, BOTO),
     m("i6_training_no_proxy_lowercase_dropped", "no_proxy is set in both cases", TR,
       " -e no_proxy=${LAB_EGRESS_ALLOW}", "", BOUNDED, FLAGS, WIDEN),
     m("i6_training_no_proxy_star", "NO_PROXY is the checked allowlist", TR,
@@ -180,6 +190,34 @@ MUTANTS: tuple[Mutant, ...] = (
       "    hosts = set()", SHIPPED, PAID, SILENT, NAMES, ALLOW, CLI),
     m("i6_pf_egress_unstripped", "entries are trimmed", PF,
       "entries = [e.strip() for e", "entries = [e for e", ALLOW),
+    # --- the preflight: systemd's EnvironmentFile= and docker's --env-file read one file
+    m("i6_pf_environ_unchecked", "the values checked are the values the unit runs", PF,
+      "for name in sorted({*env, *ARGV}) if os.environ.get(name) != env.get(name)]",
+      "for name in sorted({*env, *ARGV}) if False]", ENVIRON),
+    m("i6_pf_environ_file_names_only", "an argv setting only systemd sees is refused", PF,
+      "for name in sorted({*env, *ARGV}) if", "for name in sorted(env) if", ENVIRON),
+    m("i6_pf_environ_image_only", "every setting is compared, not only the image", PF,
+      "for name in sorted({*env, *ARGV}) if", 'for name in ("INFRX_IMAGE",) if', ENVIRON),
+    m("i6_pf_backslash_allowed", "a backslash line is refused", PF,
+      '        if "\\\\" in line:', "        if False:", DIVERGE),
+    m("i6_pf_comment_backslash_allowed", "a comment's backslash is refused too", PF,
+      '        if "\\\\" in line:', '        if "\\\\" in line and "#" not in line:', DIVERGE),
+    m("i6_pf_duplicate_last_wins", "a name set twice is refused", PF,
+      "        elif name in env:\n", "        elif False:\n", DIVERGE),
+    m("i6_pf_quote_allowed", "a quote is refused", PF,
+      "[\\\\'\\\"\\x00", "[\\\\\\x00", DIVERGE),
+    m("i6_pf_parse_refusals_dropped", "a line read differently is refused, not only its value",
+      PF, "    return env, refusals\n", "    return env, []\n", DIVERGE, PARSE, ECHO, REPRO),
+    m("i6_pf_control_allowed", "a control character is refused", PF,
+      "\\x00-\\x1f\\x7f]", "]", DIVERGE),
+    m("i6_pf_space_allowed", "surrounding space is refused", PF,
+      " or value != value.strip():", ":", DIVERGE),
+    m("i6_pf_splitlines", "lines split on \\n only, as both readers do", PF,
+      'text.split("\\n")', "text.splitlines()", DIVERGE),
+    m("i6_pf_imds_refused", "botocore's instance-role address may be allowlisted", PF,
+      "    hosts.add(IMDS)\n", "", IMDS),
+    m("i6_pf_imds_link_local", "exactly the metadata address, not its range", PF,
+      "    hosts.add(IMDS)\n", '    hosts |= {IMDS, "169.254.169.253"}\n', IMDS),
     # --- the CLI
     m("i6_cli_exit_ignores_refusals", "a refusal exits 1", PF,
       "return 1 if refusals else 0", "return 0", CLI),

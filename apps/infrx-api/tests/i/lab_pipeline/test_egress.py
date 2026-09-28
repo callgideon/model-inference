@@ -20,7 +20,9 @@ import httpx
 import pytest
 
 from ..lab_eval.test_units import directive
-from .test_units import unit
+from .test_units import UNITS as PIPELINES, unit
+
+UNITS = PIPELINES.parent
 
 
 @contextmanager
@@ -49,7 +51,8 @@ def server(host: str):
 def container_env(env_file: dict[str, str], role: str = "training") -> dict[str, str]:
     """docker: the env file first, then every `-e` flag (systemd expanded `${NAME}` from the
     same env file)."""
-    (start,) = directive(unit(role), "ExecStart")
+    (start,) = directive(unit(role, UNITS / ("rollout" if role == "rollout" else "pipelines")),
+                         "ExecStart")
     env = dict(env_file)
     for name, value in re.findall(r"-e (\w+)=(\S*)", start):
         env[name] = re.sub(r"\$\{(\w+)\}", lambda m: env_file.get(m.group(1), ""), value)
@@ -101,3 +104,22 @@ def test_i6_an_empty_allowlist_denies_every_http_host(monkeypatch) -> None:
     with server("127.0.0.1") as (url, hits):
         assert reach(container_env({}), monkeypatch, url) in ("ConnectError", "ProxyError")
         assert hits == []
+
+
+@pytest.mark.parametrize("role", ["annotation", "training", "rollout"])
+def test_i6_botocore_reaches_the_instance_role_only_when_imds_is_allowlisted(
+        role, monkeypatch) -> None:
+    """1-LW5-LW-2: botocore's instance-role lookup (`IMDSFetcher`, the only credential path:
+    `AWS_*` is refused) asks `get_environ_proxies` before each call. Failure oracle: the
+    metadata address sent to the dead proxy even when allowlisted (every object-store call
+    fails on AWS), or reached without the entry, or an unlisted HTTP host unproxied. No
+    network: the proxy decision only."""
+    from botocore.utils import METADATA_BASE_URL, get_environ_proxies
+    s3 = "s3.us-east-1.amazonaws.com"
+    open_env = container_env({"LAB_EGRESS_ALLOW": f"{s3},169.254.169.254"}, role)
+    shut_env = container_env({"LAB_EGRESS_ALLOW": s3}, role)
+    apply(open_env, monkeypatch)
+    assert get_environ_proxies(METADATA_BASE_URL) == {}
+    assert get_environ_proxies("http://unlisted.example/").get("http") == "http://127.0.0.1:9"
+    apply(shut_env, monkeypatch)
+    assert get_environ_proxies(METADATA_BASE_URL).get("http") == "http://127.0.0.1:9"

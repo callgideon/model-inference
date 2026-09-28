@@ -1,0 +1,9 @@
+# fix round seam red: new cases against the handback preflight (9c876cde's infra/lab/workers/training/preflight.py), tests at the fix; 2026-09-28
+        Failure oracle: a clean file passed while the unit's `${INFRX_IMAGE}` or
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_a_file_systemd_reads_otherwise_is_refused_as_the_unit_runs_it[continuation_hides_the_allowlist]
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_a_file_systemd_reads_otherwise_is_refused_as_the_unit_runs_it[continuation_hides_the_image_and_the_allowlist]
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_a_file_systemd_reads_otherwise_is_refused_as_the_unit_runs_it[quoted_value_spans_lines]
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_a_line_systemd_and_docker_could_read_differently_is_refused_unprinted
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_the_values_checked_are_the_values_systemd_passes_the_unit
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_the_object_store_credentials_come_from_the_instance_role_via_imds
+6 failed, 31 passed in 2.16s

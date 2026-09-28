@@ -47,9 +47,10 @@ is the release's local id; the daemon never fetches one).
 
 Enable (window only): write `/etc/infrx-lab/rollout.env` (ubuntu, 0600: `INFRX_IMAGE`,
 `LAB_DATABASE_URL` on the transaction pooler, `LAB_ROLLOUT_CONCURRENCY=1`, optional
-`LAB_EGRESS_ALLOW` naming nothing but the object store), run the preflight
-(`python3 -I infra/lab/workers/training/preflight.py --role rollout --env-file
-/etc/infrx-lab/rollout.env` prints `PASS rollout`), install the unit, make sure I2L's marker
+`LAB_EGRESS_ALLOW` naming nothing but the object store and, for the instance-role
+credentials, `169.254.169.254`), run the preflight under systemd's reading of the file, as the
+unit does (`sudo systemd-run --wait --pipe -q --uid ubuntu -p EnvironmentFile=/etc/infrx-lab/rollout.env /usr/bin/python3 -I /home/ubuntu/model-inference/infra/lab/workers/training/preflight.py --role rollout --env-file /etc/infrx-lab/rollout.env` prints `PASS rollout`; a
+plain `python3 preflight.py` refuses, since its environment is not the unit's), install the unit, make sure I2L's marker
 `/etc/infrx-lab/enabled` exists, `enable --now` the unit, then
 `curl -fsS 127.0.0.1:8016/readyz`.
 
@@ -107,3 +108,7 @@ route to it. A new hardware row needs a measured `results/` commit first.
 - 2026-09-28: I7 packaging and the local rollback exercise written (lab-workers lane, LW5);
   I2L's enable marker, `python3 -I`, `--pull never` and group 10003 added. Nothing run on
   staging or the pilot box.
+- 2026-09-28 (fix round): the preflight refuses a file systemd and docker read differently
+  and compares with the unit's own environment; the manual preflight runs under
+  `systemd-run`; `169.254.169.254` may be allowlisted for the instance role (training
+  runbook §2). Local only.
