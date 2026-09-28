@@ -340,14 +340,26 @@ ENDPOINTS = ("baseline", "baseline_v2", "checkpoint", "improving", "missing", "r
              "tools", "video")
 
 
+def _bind(wallet, port: int):
+    """The endpoint's own port, else the first free spare of the block (runner.SPARE_PORTS)."""
+    import errno
+    from tests.b.runner.world import serve
+    for candidate in (port, *_gate().SPARE_PORTS):
+        try:
+            return serve(wallet, candidate, KEY), candidate
+        except OSError as busy:
+            if busy.errno != errno.EADDRINUSE:
+                raise
+    raise OSError(errno.EADDRINUSE, f"address already in use: {port} and every spare port")
+
+
 @contextlib.contextmanager
 def endpoint(name: str, *, funded: str = "100000"):
     """Endpoint `name` served on its port; yields (wallet, HttpDevEndpoint)."""
     from infrx.evaluation.runner import HttpDevEndpoint
-    from tests.b.runner.world import RATE_CARD, DevWallet, serve
+    from tests.b.runner.world import RATE_CARD, DevWallet
     wallet = DevWallet(funded, answer=answer_for(name))
-    port = ENDPOINT_PORTS[name]
-    server = serve(wallet, port, KEY)
+    server, port = _bind(wallet, ENDPOINT_PORTS[name])
     try:
         yield wallet, HttpDevEndpoint(f"http://127.0.0.1:{port}", api_key=KEY,
                                       model=f"e6l-{name}", rate_card=RATE_CARD)

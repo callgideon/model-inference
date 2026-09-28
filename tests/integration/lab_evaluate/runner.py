@@ -59,6 +59,10 @@ TEST_IDS = ("DATA-IMPORT", "DATA-SPLIT", "DATA-RIGHTS", "EVAL-DURABLE", "EVAL-RE
 ENDPOINT_PORTS = {"baseline": 57260, "regressing": 57261, "improving": 57262,
                   "baseline_v2": 57263, "missing": 57264, "tools": 57265, "video": 57266,
                   "checkpoint": 57267}
+#: The block sits inside Linux's ephemeral range: a client socket of any process can hold an
+#: endpoint's port for a while (measured: 57264 in TIME-WAIT towards e5l's PostgreSQL), so an
+#: endpoint that finds its port taken binds the first free spare, still inside the block.
+SPARE_PORTS = tuple(range(57268, 57279))
 
 # The matrix (13:491-509 + the lane brief). `lanes`: what must merge before it can go green.
 SCENARIOS = {

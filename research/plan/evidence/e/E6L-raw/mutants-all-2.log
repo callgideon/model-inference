@@ -1,0 +1,22 @@
+..............................F............                              [100%]
+=================================== FAILURES ===================================
+______________ test_stack_mutant_is_killed[st_error_not_counted] _______________
+
+mutant = Mutant(name='st_error_not_counted', invariant='an errored case scores 0, it is never dropped', file='infrx/evaluation/...record.get("score")', cases=('test_j07_a_missing_candidate_output_is_counted_not_dropped',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e6l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_error_not_counted is broken_runner: undeclared exception deaths ['OSError@socketserver.py']: 1 failed, 17 deselected in 3.52s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['OSError@socketserver.py']: 1 failed, 17 deselected in 3.52s").killed
+
+tests/integration/lab_evaluate/test_mutants.py:78: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_evaluate/test_mutants.py::test_stack_mutant_is_killed[st_error_not_counted]
+1 failed, 42 passed in 232.60s (0:03:52)

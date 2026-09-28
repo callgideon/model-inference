@@ -130,7 +130,8 @@ def test_e6l_the_namespace_is_the_reserved_block():
     import harness
     assert harness.ports_for("e6l")["postgres"] == 57232
     assert list(harness.range_for("e6l")) == list(range(57200, 57300))
-    ports = set(runner.ENDPOINT_PORTS.values())
+    ports = set(runner.ENDPOINT_PORTS.values()) | set(runner.SPARE_PORTS)
+    assert not set(runner.ENDPOINT_PORTS.values()) & set(runner.SPARE_PORTS)
     assert ports <= set(harness.range_for("e6l"))
     assert not ports & set(harness.ports_for("e6l").values())
 
