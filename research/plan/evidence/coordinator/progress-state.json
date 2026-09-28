@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 212,
- "updated": "2026-09-28T10:45:41Z",
+ "revision": 213,
+ "updated": "2026-09-28T11:15:54Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5701,26 +5701,31 @@
    "branch": "codex/w5-lab-api-2",
    "worktree": ".claude/worktrees/codex-w5-lab-api-2",
    "base": "1bf53455",
-   "head": null,
+   "head": "f42d0d83",
    "isolation": {
     "ports": "b3 57522 / p1 57527 / r2 57534",
     "prefix": "infrx-b3-",
     "db": "b3"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T07:32:29Z",
-   "updated": "2026-09-28T08:39:49Z",
+   "updated": "2026-09-28T11:15:54Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge with its wiring patch after batch #4 (lab_auth dependency)",
+   "next_action": "ACCEPT at f42d0d83 (evaluations/pipelines/releases routes over D7 + fakes, real halves on b3/p1/r2, two inherited contract bugs fixed: record-before-role 404, catalog refs 422; 46+39+23 mutants; three TS adapter patches) → merge batch #11 after #6 lands: WR-LAB2-1 wiring patch (LAB_EVALS/LAB_PIPELINES/LAB_RELEASES OFF, pilot._lab_2, ROUTERS, 13 G mutants, 08 row) + the three http.ts patches + ruling LAB-REFUSAL-ORDER numbered R183; lab-sql requests (WR-B4-2, WR-LAB2-2/3/4, WR-R4-1 half, WR-R4-2) → lab-sql-lw3 is already carrying most; the LAB_DATASETS_API_URL declaration gap fixed on the tip",
    "estimate": {
     "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 12,
+    "likely_h": 6.5,
+    "pessimistic_h": 13,
     "confidence": "medium",
-    "basis": "lab-api 1/2/4 per route × 3",
-    "at": "2026-09-28T07:32:29Z"
+    "basis": "handback: B4 1/2/4 + P4 1/2/4 + R4 1/2.5/5 (wiring + real tables)",
+    "at": "2026-09-28T11:15:54Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/g/WR-B4-1-1464f50.md",
+    "research/plan/evidence/g/WR-P4-1-1464f50.md",
+    "research/plan/evidence/g/WR-R4-1-1464f50.md",
+    "research/plan/evidence/g/LAB-API-2-1464f50-wiring.patch"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/gateway/routes/lab_{evaluations,pipelines,releases}.py",
