@@ -285,6 +285,38 @@ def _lab_2(deployment, connect, sessions, access) -> dict:
                if deployment.lab_releases else {})}
 
 
+class NoControlReads:
+    """L3's `ControlReads` until lab-sql writes them (WR-LSQ-9, not in 0041-0043): each read
+    is a typed 503, so a listing or an alias read waits instead of failing as a bug."""
+
+    async def _pending(self, *args):
+        raise errors.DependencyUnavailable("L3's control reads are not wired (WR-LSQ-9)")
+
+    provider_servings = provider_deployments = endpoint_alias = listing_versions = _pending
+
+
+def lab_control(connect, access):
+    """L3's `LabControl` on this pool: the control store, A3's registry and catalog, and the
+    control service's engine stand-in (a smoke is 503 until WR-L3-2)."""
+    from ..lab.control import LabControl
+    from ..lab.control.app import NoEngine
+    from ..state.lab_control import PgControlStore
+    from ..state.operations import PgRegistry
+    return LabControl(access, PgControlStore(connect), PgRegistry(connect),
+                      PgCatalogDirectory(connect), engine=NoEngine())
+
+
+def control_serving(connect, principal: str):
+    """WR-R2-2's composition: R2's `ServingControl` as L3's `Serving`, acting as
+    `principal` (the audited actor of every alias CAS)."""
+    from ..lab.access import LabAccess
+    from ..lab.control.operations import Serving
+    from ..operations.service import OperatorSession
+    from ..state.lab_access import PgAccessStore
+    return Serving(lab_control(connect, LabAccess(PgAccessStore(connect))), NoControlReads(),
+                   OperatorSession(ops=None, principal=principal))
+
+
 def _lab_traces(settings, connect, sessions, access):
     """WR-V1M-2 over T2I's projection and T3's retention on `CLICKHOUSE_URL`, and the trace
     bucket at the shipper's prefix (`build_shipper`'s `infrx/`)."""
