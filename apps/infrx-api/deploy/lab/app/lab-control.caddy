@@ -1,0 +1,37 @@
+# I2L: the Lab control origin - one site file the App edge imports through a single glob line
+# at the end of deploy/Caddyfile (`import /etc/caddy/lab/*.caddy`, WR-I2L-1). The glob matches
+# nothing until the operator installs this file (infra/lab/app/README.md "Install the site"),
+# so the App edge's configuration is unchanged while the Lab is disabled. The site is
+# validated with the App's before it is installed: a broken file, or one claiming the App's
+# address ("ambiguous site definition"), never reaches the running edge.
+# INFRX_LAB_CONTROL_UPSTREAM exists for the local drill; the box leaves it unset.
+{$INFRX_LAB_CONTROL_SITE:lab-control.callbill.ai} {
+	request_body {
+		max_size 1MiB
+	}
+
+	# The control service down, restarting or rolled back is "Lab unavailable", never an
+	# empty 502 and never another origin's route.
+	handle_errors 502 503 504 {
+		header Content-Type application/json
+		respond `{"error":{"message":"Lab controls are unavailable.","type":"unavailable_error","code":"lab_unavailable","param":null,"request_id":"{http.request.uuid}","infrx":null}}` 503
+	}
+
+	route {
+		# A consumer /v1 key never reaches a provider control, whatever the path: control
+		# operations take a Lab session only (09 L3: separate from consumer credentials).
+		# The control service checks the session itself; this refusal is the edge's half.
+		@consumer_key header_regexp Authorization (?i)^Bearer\s+sk-
+		handle @consumer_key {
+			header Content-Type application/json
+			respond `{"error":{"message":"Consumer API keys cannot call provider controls.","type":"authentication_error","code":"invalid_audience","param":null,"request_id":"{http.request.uuid}","infrx":null}}` 401
+		}
+		handle /lab/v1/* {
+			reverse_proxy {$INFRX_LAB_CONTROL_UPSTREAM:127.0.0.1:8003}
+		}
+		handle {
+			header Content-Type application/json
+			respond `{"error":{"message":"The requested resource was not found.","type":"not_found_error","code":"not_found","param":null,"request_id":"{http.request.uuid}","infrx":null}}` 404
+		}
+	}
+}

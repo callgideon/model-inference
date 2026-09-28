@@ -1,0 +1,16 @@
+........................................................................ [ 25%]
+........................................................................ [ 51%]
+.x...................................................................... [ 77%]
+..............................................................           [100%]
+=============================== warnings summary ===============================
+tests/i/test_observe.py::test_ops_continuous__both_processes_export_their_db_pool_at_scrape
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-operate/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/i/test_observe.py::test_ops_continuous__both_processes_export_their_db_pool_at_scrape
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-operate/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+277 passed, 1 xfailed, 2 warnings in 402.28s (0:06:42)
+EXIT=0

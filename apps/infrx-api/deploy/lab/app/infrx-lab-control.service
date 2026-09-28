@@ -1,0 +1,40 @@
+[Unit]
+Description=infrx Lab control service (provider control operations, 127.0.0.1:8003)
+# I2L: independent of the App runtime in both directions - no ordering or lifecycle link to
+# the gateway, worker, engine or index units (and none of theirs names this one), so a Lab
+# outage, crash loop or rollback never stops or holds back App inference.
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+# Off by default (hosted Lab needs P-08): without the operator's enable marker a start is a
+# condition-failed no-op. infra/lab/app/README.md "Enable" writes it; "Disable" removes it.
+ConditionPathExists=/etc/infrx-lab/enabled
+
+[Service]
+User=ubuntu
+# The Lab's own configuration (names in infra/lab/app/lab.json), never the App's env file.
+# INFRX_LAB_IMAGE is the Lab's own pinned image variable, so a Lab release rolls forward and
+# back without touching the App's INFRX_IMAGE.
+EnvironmentFile=/etc/infrx-lab-control.env
+ExecStartPre=-/usr/bin/docker rm -f infrx-lab-control
+# Protected: loopback only (the Lab control site, lab-control.caddy, is its one public path),
+# uid 10003 in its own group (not the runtime's 10000: no media root, no usage log, no
+# volume), read-only, no capabilities, and bounded so it cannot starve the gateway (8g/4
+# cpus) or the worker (4g/2 cpus). The factory is L3's composition root (WR-I2L-2).
+ExecStart=/usr/bin/docker run --rm --init --name infrx-lab-control --network host \
+  --user 10003:10003 --read-only --tmpfs /tmp:rw,size=64m,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --memory 1g --cpus 1 --pids-limit 128 \
+  --env-file /etc/infrx-lab-control.env \
+  ${INFRX_LAB_IMAGE} uvicorn --factory infrx.lab.control.app:create_app --host 127.0.0.1 --port 8003 \
+  --workers 1 \
+  --timeout-graceful-shutdown 25
+# Drain: in-flight control operations finish within 25 s, docker waits 35 s, systemd 45 s
+# (a systemd kill of the `docker run` client would not stop the container).
+ExecStop=/usr/bin/docker stop -t 35 infrx-lab-control
+TimeoutStopSec=45
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

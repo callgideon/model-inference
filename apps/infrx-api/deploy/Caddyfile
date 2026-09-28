@@ -76,3 +76,5 @@
 		}
 	}
 }
+
+import /etc/caddy/lab/*.caddy

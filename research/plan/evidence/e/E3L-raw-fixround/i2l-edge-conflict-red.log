@@ -1,0 +1,27 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_i2l__an_app_release_that_conflicts_with_the_installed_lab_site_never_replaces_the_edge _
+
+tmp_path = PosixPath('/tmp/pytest-of-rey/pytest-7097/test_i2l__an_app_release_that_0')
+
+    def test_i2l__an_app_release_that_conflicts_with_the_installed_lab_site_never_replaces_the_edge(tmp_path):
+        """Once the Lab site is installed, an App release (or a Caddy bump) is validated against it
+        before the edge is touched: a release claiming the Lab site's address is exit 4 with no
+        reload, no `docker rm -f caddy`, no new container and the running edge files unchanged, on a
+        reload (same image) and on a replacement (new image) alike; a release that composes with it
+        is installed. Oracle: lib.sh validating the App file alone would let an installed Lab file
+        fail the reload or keep a new edge container from starting, leaving App inference unrouted."""
+        address = re.search(r"^\{\$INFRX_LAB_CONTROL_SITE:([^}]+)\}", site(), re.M).group(1)
+        conflicting = composed_main() + f"\n{address} {{\n\trespond 200\n}}\n"
+        for n, running in enumerate((CADDY_IMAGE, "caddy:2.10")):
+            done, calls, root = edge_install(tmp_path / f"bad{n}", conflicting, running)
+>           assert done.returncode == 4 and "does not validate" in done.stderr, (done.stderr, calls)
+E           AssertionError: ('{"level":"info","ts":1790576347.7831678,"msg":"using config from file","file":"/etc/caddy/Caddyfile"}
+E             {"level":"war... 'docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address unix//config/admin.sock'])
+E           assert (0 == 4)
+E            +  where 0 = CompletedProcess(args=['bash', '-c', 'set -euo pipefail; . "$0"; edge_install "$1"', '/tmp/pytest-of-rey/pytest-7097/t...89335,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x14161052ca80"}\n').returncode
+
+tests/i/lab/test_lab_packaging.py:287: AssertionError
+=========================== short test summary info ============================
+FAILED tests/i/lab/test_lab_packaging.py::test_i2l__an_app_release_that_conflicts_with_the_installed_lab_site_never_replaces_the_edge
+1 failed, 10 deselected in 0.95s
