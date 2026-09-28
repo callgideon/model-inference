@@ -68,12 +68,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("viewer_launches", "a launch needs run_evaluation", LAUNCH_ROUTE,
        LAUNCH_ROUTE.replace("run_evaluation", "read_aggregate_health"), ROLES),
     _m("viewer_cancels", "a cancel needs run_evaluation",
-       "        who = await actor(request, Cap.run_evaluation)\n        return lab_auth.ok(await cancel(",
+       "        who = await actor(request, Cap.run_evaluation)\n"
+       "        return lab_auth.ok(await cancel(",
        "        who = await actor(request, Cap.read_aggregate_health)\n"
        "        return lab_auth.ok(await cancel(", ROLES),
     _m("viewer_subscribes", "a subscription needs run_evaluation",
        "        who = await actor(request, Cap.run_evaluation)\n        wanted = await lab_body(",
-       "        who = await actor(request, Cap.read_aggregate_health)\n        wanted = await lab_body(",
+       "        who = await actor(request, Cap.read_aggregate_health)\n"
+       "        wanted = await lab_body(",
        ROLES),
     # --- EVAL-DURABLE: the launch ------------------------------------------------------------
     _m("run_ids_not_derived", "a run id is derived from (experiment, arm)",
