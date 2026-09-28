@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 215,
- "updated": "2026-09-28T11:50:26Z",
+ "revision": 216,
+ "updated": "2026-09-28T11:51:53Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4707,9 +4707,9 @@
    },
    "activity": "review",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T21:31:06Z",
-   "blocker": "L3-SQL not merged: the PG half of tests/l/control skips (1-L3-INT-1 open by design → the L3 integration lane after lab-sql-lw2 merges)",
-   "next_action": "REJECT-as-held at 08a353e7: L3 (LabControl over a fake ControlStore; majors C1 smoke-gate bypass and C2 fixed+rechecked); like L2 in LW1 it merges through an L3-INTEGRATION lane after lab-sql-lw2 lands: reconcile PgControlStore with the ControlStore surface (WR-L3-1 delta), WR-L3-5 (catalog.py _PRIVATE = ready_private, A3 wiring), run the l3 PG world + 19 PG mutants, WR-L3-2 (api-mutants own-process line); WR-L3-3 (engine SmokeTest adapter + Lab control route → lab-api), WR-L3-4 (provider_dev admission, D) recorded; minors C3–C6, EVID-1/2, CORR-1 carried",
+   "updated": "2026-09-28T11:51:53Z",
+   "blocker": null,
+   "next_action": "L3 integrated by the l3-integration lane (05c7ff34): merges with batch #13 → implemented",
    "estimate": {
     "optimistic_h": 1.5,
     "likely_h": 3,
@@ -5812,26 +5812,28 @@
    "branch": "codex/w5-l3-integration",
    "worktree": ".claude/worktrees/codex-w5-l3-integration",
    "base": "0bfaa6ed",
-   "head": null,
+   "head": "05c7ff34",
    "isolation": {
     "ports": "l3 57502; l4 57503",
     "prefix": "infrx-l3-",
     "db": "l3"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T09:15:45Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T11:51:53Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "ACCEPT_WITH_FIXES at 05c7ff34 (L3 on real PgControlStore 13/13 after WR-L3-5; Operations adapter, control factory, R2 Serving port, LabAccess.require public; major L3I-R1 registration shape fixed+rechecked; 86 mutants) → merge batch #13 (wf_96ec195b-575) with WR-L3-MK, WR-LAB-API-2b, WR-I2L-2b, rulings R186–R189, L3 → implemented; WR-LSQ-9 ControlReads → lab-sql-lw3; WR-LAB-API-2/WR-R2-2 compositions → composition batch 2; WR-L3-2 engine smoke adapter → G/W",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 12,
+    "optimistic_h": 1,
+    "likely_h": 2.5,
+    "pessimistic_h": 5,
     "confidence": "medium",
-    "basis": "L2's LW1 integration analogue + four adapters",
-    "at": "2026-09-28T09:15:45Z"
+    "basis": "handback: WR-LSQ-9 + PG halves + one verify round",
+    "at": "2026-09-28T11:51:53Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/l/L3-INTEGRATION-6a5f3df.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/lab/control/**",
@@ -6049,6 +6051,40 @@
     "confidence": "high",
     "basis": "merged",
     "at": "2026-09-28T11:50:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-13",
+   "task": null,
+   "slice": "(wave5 merge lane #13, parallel to #6 on its own lines) l3-integration 05c7ff34 (WR-L3-MK, WR-LAB-API-2b, WR-I2L-2b, R186–R189, L3 implemented); workflow wf_96ec195b-575; base cb1a2f4f",
+   "agent": "opus",
+   "branch": "codex/w5-merge-13",
+   "worktree": ".claude/worktrees/codex-w5-merge-13",
+   "base": "cb1a2f4f",
+   "head": null,
+   "isolation": {
+    "ports": "l3 57502 / l4 57503 (checks only)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T11:51:53Z",
+   "updated": "2026-09-28T11:51:53Z",
+   "blocker": null,
+   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "one merge with a factory wiring and PG checks",
+    "at": "2026-09-28T11:51:53Z"
    },
    "evidence": [],
    "commands": [],
