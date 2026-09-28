@@ -385,3 +385,47 @@ def test_n3_backfill_moves_the_object_restrictions_into_d7_once() -> None:
         lineage.trace_of(w.objects, provider_org_id=NEMO, sample_id=s))["content_until"])
         for s in (a, b, c)}
     assert move() == {"stones": 2, "tombstoned": 0, "bounded": 3}
+
+
+# --- fix round 0-DS5-R1/R2: callers that predate WR-N3-5 keep their shapes and still deny
+def test_n3_callers_without_the_port_still_deny_for_good() -> None:
+    """Oracle (0-DS5-R1/R2, 1-DS5-R1/R2): the tip's callers written before WR-N3-5 - P1/P2's
+    `_stone`, composition's push `tombstone` and the Lab worker's `reconcile` without
+    `restrictions`, `export_evidence` without it, and a store with no restrictions port
+    (P2's fake) - still deny: a re-grant resurrects nothing, 0041 gets every stone once the
+    directory carries the port (PgAccessStore by its connection), and the evidence names
+    every delivered item now denied."""
+    w = World()
+    requests = [w.trace(n) for n in range(1, 5)]
+    got = ok(w, requests)
+    ids = {body(w, s)["trace"]["request_id"]: s.sample_id
+           for s in run(w.lab.resolve(got.dataset_ref, provider_org_id=NEMO)).samples}
+    a, b, c, d = (ids[r] for r in requests)
+    run(versions.export(w.lab, w.objects, provider_org_id=NEMO, dataset_ref=got.dataset_ref,
+                        export_id=rid(0xe3), now=w.now, ttl_s=3600))
+    run(lineage._stone(w.objects, NEMO, run(lineage.trace_of(          # P1/P2's shape
+        w.objects, provider_org_id=NEMO, sample_id=a)), "grant_not_current", w.now))
+    assert permitted(w, got.dataset_ref) == {b, c, d}
+    run(w.delete(GRANTOR, requests[1]))
+    assert run(lineage.tombstone(w.objects, provider_org_id=NEMO, grantor_org_id=GRANTOR,
+                                 request_id=requests[1], reason="deleted", at=w.now)) == \
+        {"tombstoned": 1, "more": False}                                 # composition's push
+    assert permitted(w, got.dataset_ref) == {c, d}
+    w.directory.restrictions = w.lab.restrictions      # PgAccessStore: 0041 by `_connect`
+    w.revoke(GRANTOR)
+    report = run(lineage.reconcile(w.directory, w.retention, w.objects,  # the worker's shape
+                                   provider_org_id=NEMO))
+    assert {t["sample_id"]: t["reason"] for t in report["tombstoned"]} == {
+        a: "grant_not_current", b: "deleted", c: "grant_not_current", d: "grant_not_current"}
+    assert run(w.lab.restrictions.blocked(got.dataset_ref, provider_org_id=NEMO)) == {
+        a: "grant_not_current", b: "deleted", c: "grant_not_current", d: "grant_not_current"}
+    w.grant(GRANTOR, 0x91, *w.directory.grants[(GRANTOR, NEMO)].categories[2:])
+    assert permitted(w, got.dataset_ref) == set(), "a re-grant resurrected"
+
+    class Bare:                                        # P2's fake: no port, no connection
+        accessible_samples = w.lab.accessible_samples
+    assert run(lineage.permitted(Bare(), w.objects, got.dataset_ref, provider_org_id=NEMO,
+                                 purpose="provider_sharing", now=w.now)) == set()
+    evidence = run(lineage.export_evidence(w.objects, provider_org_id=NEMO,
+                                           export_id=rid(0xe3), now=w.now))
+    assert sorted(x["sample_id"] for x in evidence["affected"]) == sorted(ids.values())

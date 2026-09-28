@@ -85,7 +85,8 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
     sample bound to the current grant, with its durable D6F row as a correction; a
     consumer-only user and a viewer are refused; after the real `lab_revoke_access_grant`
     the gate returns nothing, reconcile tombstones the sample, and a re-grant does not bring
-    it back."""
+    it back. The reconcile is the Lab worker's call, without `restrictions` (1-DS5-R1):
+    PgAccessStore's connection reaches 0041."""
     w, dsn = world, world.dsn
     directory = PgAccessStore(connector(dsn))
     access, store = LabAccess(directory), PgLabDataStore(connector(dsn))
@@ -157,8 +158,8 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
         "recipient_provider_org_id": NEMO})
     assert gate() == set()
     restrictions = PgSampleRestrictions(connector(dsn))      # WR-N3-5: 0041 is the authority
-    report = run(lineage.reconcile(directory, retention, w.objects, provider_org_id=NEMO,
-                                   restrictions=restrictions))
+    report = run(lineage.reconcile(directory, retention, w.objects,   # the worker's shape
+                                   provider_org_id=NEMO))             # (1-DS5-R1)
     assert report["tombstoned"] == [{"sample_id": sample["sample_id"],
                                      "reason": "grant_not_current"}]
     l2.call(w.conn, "lab_put_access_grant", l2.scope(
