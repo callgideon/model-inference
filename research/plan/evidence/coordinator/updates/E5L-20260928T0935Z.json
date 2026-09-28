@@ -1,0 +1,57 @@
+{
+ "activity": "review",
+ "head": "8e3e8e21",
+ "worktree": ".claude/worktrees/codex-w5-lab-observe",
+ "branch": "codex/w5-lab-observe",
+ "owned_paths": [
+  "infra/lab/observe/",
+  "apps/infrx-api/deploy/lab/observe/",
+  "tests/integration/lab_observe/",
+  "research/plan/evidence/e/E5L-*"
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 2,
+  "pessimistic_h": 6,
+  "confidence": "medium",
+  "basis": "fix round ~1.5 h; remaining = WR-OBS-3 in the judge lane then --only o06 (~2 min) + stack list (~11 min), NOT RUN cells after COMPOSITION/LAB-API/D6J merges",
+  "at": "2026-09-28T09:35Z"
+ },
+ "wiring_requests": [
+  "WR-OBS-1 judge entry point (health port now 8017)",
+  "WR-OBS-2 (revised) observe.sh/rules.py: Lab rules only when pinned; patch research/plan/evidence/e/E5L-wiring/WR-OBS-2.diff",
+  "WR-OBS-3 J2 reads through Retention.read_content (closes 0-F1)",
+  "WR-OBS-4 Makefile api-mutants += tests/integration/lab_observe/test_mutants.py",
+  "WR-OBS-5 (new) 72-observe-install.sh pins infra/lab/observe; patch research/plan/evidence/e/E5L-wiring/WR-OBS-5.diff",
+  "coordinator: Lab worker health-port registry 8011-8017"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E5L-3da696a.md",
+  "research/plan/evidence/e/E5L-I2L-OBS-3da696a.md",
+  "research/plan/evidence/e/E5L-raw-fix/",
+  "research/plan/evidence/e/E5L-wiring/"
+ ],
+ "task": "E5L",
+ "slice": "fix round: 0-F2 fixed; 0-F1 still FAIL (WR-OBS-3, outside owned paths)",
+ "commands": [
+  {
+   "cmd": "tests/integration/lab_observe/runner.py --keep --out research/plan/evidence/e/E5L-raw-fix/gate",
+   "exit": 1,
+   "summary": "gate FAIL unchanged: 13 PASS / 1 FAIL (o06 judge before sweep, E5L-F1) / 3 NOT RUN; o09 PASS with 240 s deadline"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e5l pytest tests/integration/lab_observe/test_mutants.py -k stack_mutant",
+   "exit": 0,
+   "summary": "14/14 stack mutants killed, pristine baseline green, 660 s"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py",
+   "exit": 0,
+   "summary": "47 passed (41/41 layer-1 mutants), 14 stack skipped visibly"
+  }
+ ],
+ "blockers": [
+  "E5L-F1 (WR-OBS-3, judge lane)",
+  "D6J/J3, LAB-API/C3L/G4T, COMPOSITION unmerged (NOT RUN cells)"
+ ]
+}

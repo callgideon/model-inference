@@ -1,0 +1,152 @@
+........................................................................ [ 12%]
+................sss.sssss.ss....ssssss.....ssssssssssssssssss........F.. [ 25%]
+....................................................s.s.s.s.s.s.s.s.s.s. [ 37%]
+s.ssssssssssssss...s...............ssssssssssss.ssssssss................ [ 50%]
+.........................s.......................s...................... [ 62%]
+....................................................................F... [ 75%]
+......................................................F................. [ 87%]
+..............................F.............sssssssssssssssssssssssss.   [100%]
+=================================== FAILURES ===================================
+______ test_e4c_rb09_the_copy_is_seeded_with_hosted_s_own_applied_history ______
+
+    def test_e4c_rb09_the_copy_is_seeded_with_hosted_s_own_applied_history():
+        """rollout.md W6: the restored copy has no supabase_migrations schema, so its history is
+        seeded before the copy's `plan`. Oracle: the seed was the literal 0001/0002 of the
+        prep-time hosted; hosted is at 0018 (20-platform-handoff-2026-09-24.md:73), so the copy
+        planned 0003-0025 while hosted plans 0019-0025, their digests differ and W7 aborts - or,
+        worse, an operator re-types the seed. The seed is now derived at the window from
+        hosted's own read-only `migrate.py plan` `applied:` line; fed the line migrate.py prints
+        for a 0001-0018 history, it yields exactly those 18 rows."""
+        sys.path.insert(0, str(kit.ROOT / "apps" / "infrx-api" / "deploy"))
+        import migrate
+        block = _section((RUNBOOKS / "rollout.md").read_text(), "### W6")
+        assert "values ('0001', 'init'), ('0002', 'seed_models')" not in block, "the stale seed"
+        read = re.search(r'^export MIGRATE_DATABASE_URL="\$HOSTED".*\n'
+                         r"^HOSTED_APPLIED=\$\(\$PY apps/infrx-api/deploy/migrate\.py plan \| "
+                         r"sed -n 's/\^applied: //p'\)", block, re.M)
+        assert read, "the seed is not read from hosted's own plan"
+        derive = re.search(r"^SEED=.*$", block, re.M)
+        assert derive and block.index(read.group(0)) < derive.start(), "no SEED derived after it"
+        assert re.search(r'-c "insert into supabase_migrations\.schema_migrations '
+                         r'\(version, name\) values \$SEED"', block), "the insert is not the seed"
+        local = migrate.local_migrations(MIGRATIONS)
+        applied = {v: n for v, n, _ in local if v <= "0018"}
+        line = migrate.describe([], applied).splitlines()[0].removeprefix("applied: ")
+        done = subprocess.run(["bash", "-c", f'set -euo pipefail; HOSTED_APPLIED="$1"; '
+                                             f'{derive.group(0)}; printf %s "$SEED"', "_", line],
+                              capture_output=True, text=True)
+        assert done.returncode == 0, done.stderr
+        rows = re.findall(r"\('(\d{4})', '([a-z0-9_]*)'\)", done.stdout)
+        assert rows == sorted(applied.items()) and len(rows) == 18, done.stdout
+        assert done.stdout == ",".join(f"('{v}', '{n}')" for v, n in rows), done.stdout
+        last = local[-1][0]                                   # the tree's newest migration (0026 today)
+>       assert "0001-0018" in block and f"0001-{last}" in _section((RUNBOOKS / "rollout.md").read_text(), "### W7")
+E       AssertionError: assert ('0001-0018' in '### W6 — the fresh hosted backup and its restore check\n\n`restore.md` A1-A6 with one addition, measured by this lane... 0002 hosted with no flag rows); `drift_rows` 0. Retention of\n`$BACKUP`: [restore.md A9](restore.md#a9-clean-up).\n\n' and '0001-0030' in '### W7 — the hosted apply\n\n`PGPASSWORD` is still exported from W6; libpq reads it, so the DSN carries no secret.\nR...d.json` `schema_proof.through`; §3\nKnown-good record): extend it to 0027 before relying on R2 after a 0027 apply.\n\n')
+E        +  where '### W7 — the hosted apply\n\n`PGPASSWORD` is still exported from W6; libpq reads it, so the DSN carries no secret.\nR...d.json` `schema_proof.through`; §3\nKnown-good record): extend it to 0027 before relying on R2 after a 0027 apply.\n\n' = _section('# Rollout — phase 2: the Marlin pilot on the box (checklist)\n\n**Coordinator-run, in this order, after checkpoint 2....probes (F4), no staged leftover\n  (F5); the resume is the new `56-resume.sh` (RB4-1). Not run on the box or hosted.\n', '### W7')
+E        +    where '# Rollout — phase 2: the Marlin pilot on the box (checklist)\n\n**Coordinator-run, in this order, after checkpoint 2....probes (F4), no staged leftover\n  (F5); the resume is the new `56-resume.sh` (RB4-1). Not run on the box or hosted.\n' = read_text()
+E        +      where read_text = (PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/runbooks') / 'rollout.md').read_text
+
+tests/integration/backend/recovery/test_runbooks.py:183: AssertionError
+_____________ test_nothing_in_this_directory_points_at_production ______________
+
+    def test_nothing_in_this_directory_points_at_production():
+        """No production credential is needed, and none may be reachable by accident."""
+        # Assembled from parts so this guard does not trip over its own needles, and so it
+        # still scans itself: a leak added to this very file would be caught.
+        forbidden = ("supabase" ".co", "amazonaws" ".com", "callbill" ".ai", "llm-" "bootcamp",
+                     "SUPABASE_SERVICE" "_ROLE_KEY", "AWS_SECRET" "_ACCESS_KEY",
+                     "GATEWAY" "_API_KEY")
+        offenders = {path.name: needle for path in OWNED_FILES
+                     for needle in forbidden
+                     if needle in path.read_text(errors="ignore")}
+>       assert offenders == {}, offenders
+E       AssertionError: {'test_certify.py': 'callbill.ai', 'test_create_test_user.py': 'SUPABASE_SERVICE_ROLE_KEY'}
+E       assert {'test_certif...ICE_ROLE_KEY'} == {}
+E         
+E         Left contains 2 more items:
+E         {'test_certify.py': 'callbill.ai',
+E          'test_create_test_user.py': 'SUPABASE_SERVICE_ROLE_KEY'}
+E         Use -v to get more diff
+
+tests/integration/test_harness.py:148: AssertionError
+_____ test_a_green_consumer_local_composition_passes_on_its_own_namespace ______
+
+tmp_path = PosixPath('/tmp/pytest-of-rey/pytest-7151/test_a_green_consumer_local_co0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7aacbcfcb5c0>
+
+    def test_a_green_consumer_local_composition_passes_on_its_own_namespace(tmp_path, monkeypatch):
+        from infrx.contracts.tasklocal import local_services
+        own = local_services("e2c")
+        composed = Composed(monkeypatch, tmp_path)
+        code, verdict = composed.gate(tmp_path)
+        assert (code, verdict["verdict"]) == (0, "PASS")
+        names = [s["stage"] for s in verdict["stages"]]
+>       assert names == ["preflight:consumer-local", "s3", *[f"api-{s}" for s in API_SUITES],
+                         "bench-test", "integration-l3", "backend-local"], names
+E       AssertionError: ['preflight:consumer-local', 's3', 'api-contracts', 'api-d', 'api-g', 'api-i', ...]
+E       assert ['preflight:c... 'api-i', ...] == ['preflight:c... 'api-g', ...]
+E         
+E         At index 2 diff: 'api-contracts' != 'api-b'
+E         Right contains 5 more items, first extra item: 'api-t'
+E         Use -v to get more diff
+
+tests/integration/test_preflight.py:571: AssertionError
+----------------------------- Captured stdout call -----------------------------
+PASS     preflight:consumer-local
+PASS     s3
+PASS     api-contracts
+PASS     api-d
+PASS     api-g
+PASS     api-i
+PASS     api-j
+PASS     api-m
+PASS     api-q
+PASS     api-t
+PASS     api-w
+PASS     bench-test
+PASS     integration-l3
+PASS     backend-local
+consumer-local: PASS (exit 0) - /tmp/pytest-of-rey/pytest-7151/test_a_green_consumer_local_co0/out/verdict.json
+_________ test_every_mutant_anchor_occurs_as_declared_on_the_checkout __________
+
+    def test_every_mutant_anchor_occurs_as_declared_on_the_checkout():
+        """Verification GATE-B1: a shared-line edit (e3eefac widened the suites status line) left
+        E2's e2m69 anchored on text that no longer existed - `stale` in the mutation stage and
+        invisible at layer 0. Every mutant of every list the stage runs (E2's, E3B's, I3B's) must
+        find its `before` exactly `occurrences` times in the checkout, known exceptions aside."""
+        import mutants
+        recovery = str(harness.HERE / "backend" / "recovery")
+        if recovery not in sys.path:
+            sys.path.insert(0, recovery)
+        import mutants_i3b
+        checked = mutants.all_mutants()
+        stale = {m.id: (harness.REPO_ROOT / m.path).read_text().count(m.before)
+                 for m in checked
+                 if (harness.REPO_ROOT / m.path).read_text().count(m.before) != m.occurrences}
+        assert {m.id for m in (*mutants.MUTANTS, *mutants_i3b.MUTANTS)} <= {m.id for m in checked}
+>       assert set(stale) == set(KNOWN_STALE), f"stale anchors (id: occurrences found): {stale}"
+E       AssertionError: stale anchors (id: occurrences found): {'e3bm62': 0}
+E       assert {'e3bm62'} == set()
+E         
+E         Extra items in the left set:
+E         'e3bm62'
+E         Use -v to get more diff
+
+tests/integration/test_run.py:944: AssertionError
+=============================== warnings summary ===============================
+tests/integration/backend/recovery/test_observe.py::test_i3b_ob07_metrics_answer_only_a_direct_loopback_peer
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/integration/backend/recovery/test_observe.py::test_i3b_ob07_metrics_answer_only_a_direct_loopback_peer
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/backend/recovery/test_runbooks.py::test_e4c_rb09_the_copy_is_seeded_with_hosted_s_own_applied_history
+FAILED tests/integration/test_harness.py::test_nothing_in_this_directory_points_at_production
+FAILED tests/integration/test_preflight.py::test_a_green_consumer_local_composition_passes_on_its_own_namespace
+FAILED tests/integration/test_run.py::test_every_mutant_anchor_occurs_as_declared_on_the_checkout
+4 failed, 463 passed, 107 skipped, 2 warnings in 147.28s (0:02:27)
+exit 1

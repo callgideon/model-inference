@@ -1,0 +1,15 @@
+diff --git a/infra/rollout/steps/72-observe-install.sh b/infra/rollout/steps/72-observe-install.sh
+index adcfff2..0200974 100755
+--- a/infra/rollout/steps/72-observe-install.sh
++++ b/infra/rollout/steps/72-observe-install.sh
+@@ -61,6 +61,10 @@ install -d -m 0755 "$(dirname "$pinned")"
+ next=$(mktemp -d "$pinned.next.XXXXXX")
+ mkdir -p "$next/infra"
+ cp -r "$repo/infra/observe" "$repo/infra/alerts" "$next/infra/"
++# I2L-OBS (WR-OBS-5): the Lab observe rules and exporter the observe cycle and
++# infrx-lab-trace-gauges.service read from this copy (inert until /etc/infrx-lab/traces.env exists).
++mkdir -p "$next/infra/lab"
++cp -r "$repo/infra/lab/observe" "$next/infra/lab/"
+ echo "$RELEASE" > "$next/RELEASE"
+ chmod -R go-w "$next"; chmod 0755 "$next"
+ rm -rf "$pinned.previous"; [ -d "$pinned" ] && mv "$pinned" "$pinned.previous"

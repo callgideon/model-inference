@@ -1,0 +1,37 @@
+..s.F....s..s....                                                                                                                                                                                                                                                                                                                                                                                        [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+__________________________________________________________________________________________________________________________________________________________________ test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge ___________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/research/plan/evidence/e/E5L-raw-3da696a/gate/cases/test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge')
+
+    def test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge(workdir):
+        """The owner deletes one request and the other's content passes its bound; the sweep has
+        not run yet. Oracle: J2 reading the raw projection sends what every read already hides."""
+        from infrx.traces.retention import Retention
+        with ow.observe_trip(workdir) as trip:
+            alpha = trip.world.alpha
+            expiring, deleted = traced(trip, 2, "o06")
+            live = trip.traces.retention
+            later = Retention(live.store, live.traces, live.feedback, live.objects,
+                              content_days=live.content_days, metadata_months=live.metadata_months,
+                              clock=lambda: ow.Wall.now() + timedelta(days=live.content_days + 1))
+            assert run(later.expire()) >= 1
+            run(live.delete(alpha.org_id, deleted, "owner"))
+            with ow.judge(trip) as judge:
+                job = judge.job(trip, [expiring, deleted])
+                outcome = run(ow.submit(judge, trip, [expiring, deleted], job=job))
+                sent = [item["sample_id"] for post in judge.posts() for item in post["items"]]
+>               assert sent == [], f"expired/deleted content reached the judge: {sent}"
+E               AssertionError: expired/deleted content reached the judge: ['6b3692e7-bcd4-4d10-8a2f-fc73655af69a', 'f944ca02-1a6f-44c7-818d-0a4e077538fe']
+E               assert ['6b3692e7-bc...0a4e077538fe'] == []
+E                 
+E                 Left contains 2 more items, first extra item: '6b3692e7-bcd4-4d10-8a2f-fc73655af69a'
+E                 Use -v to get more diff
+
+tests/integration/lab_observe/scenarios_judge.py:125: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_observe/scenarios_judge.py::test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge - AssertionError: expired/deleted content reached the judge: ['6b3692e7-bcd4-4d10-8a2f-fc73655af69a', 'f944ca02-1a6f-44c7-818d-0a4e077538fe']
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[D6J,J3] the judge ledger here is J2's in-memory D6J fake (tests/j/submit/fakes.py); reservation races under real PostgreSQL contention and J3's calibration need D6J/J3 merged; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o04
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[COMPOSITION] capture off -> on in the box needs the gateway's spool sink (WR-COMP-4) and the worker's TRACE_PUMPS switch (codex/w5-composition), neither on this base; TRACE-BOUNDS' peak-budget accumulation is only observable there; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[LAB-API,C3L,G4T] the provider traces route (codex/w5-lab-api) and the provider review read (C3L/G4T) are not on this base; the V2/V3 panels have no server read to render against; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o03
+1 failed, 13 passed, 3 skipped in 135.35s (0:02:15)
