@@ -1,0 +1,74 @@
+{
+ "task": "E7L",
+ "slice": "LAB-IMPROVE-LOCAL gate runner + real e7l run, continuation (lane lab-improve, LW6)",
+ "activity": "review",
+ "head": "70185500",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-improve",
+ "branch": "codex/w5-lab-improve",
+ "owned_paths": [
+  "tests/integration/lab_improve/",
+  "apps/lab/tests/e2e/ (none written; i08 NOT RUN)",
+  "research/plan/evidence/e/E7L-*"
+ ],
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --keep --out <abs>/research/plan/evidence/e/E7L-raw-7018550/run",
+   "exit": 1,
+   "summary": "gate FAIL: i01-i03, i05, i06 PASS; i04 2 PASS + 1 FAIL (0-E7L-1, P1 export/P3 submit resurrect tombstoned samples after a re-grant); i07/i08/i09 NOT RUN; 15 passed, 1 failed, 4 NOT RUN; first attempt BLOCKED on a transient compose port bind (run-1-blocked-port)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/integration/lab_improve/test_mutants.py",
+   "exit": 0,
+   "summary": "41 passed in 423 s: 18/18 layer-1 (new i07_fires_on_the_module) + 19/19 stack mutants killed, 0 survivors, self-tests, well-formed, every case named"
+  },
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_improve",
+   "exit": 0,
+   "summary": "18 passed, 1 skipped"
+  },
+  {
+   "cmd": "uvx ruff check --line-length 100 tests/integration/lab_improve",
+   "exit": 0,
+   "summary": "all checks passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e7l INFRX_D2_VALKEY_CONTAINER=infrx-e7l-d2-valkey INFRX_D2_VALKEY_PORT=57391 make api-test",
+   "exit": 2,
+   "summary": "43 failed, 6421 passed, 129 skipped, 9 xfailed, 8 errors; all tests/i: 8 errors = foreign i8 lock; 43 = tests/i/test_mutants pristine baselines broken by a base defect (WR-E7L-6); outbox relay and j/submit green"
+  },
+  {
+   "cmd": "cd apps/infrx-api && INFRX_D_TASK=e7l uv run --frozen pytest -q tests/i/{test_observe,test_pooler,test_privilege_probe,test_rollback_drill,test_mutants}.py",
+   "exit": 1,
+   "summary": "i8 lock free: 0 errors, 43 passed; the same 43 mutant baselines fail: cp cannot stat <copy>/infra/lab/observe (tests/i/mutants.py layout, since 8e3e8e21)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 2,
+  "likely_h": 4,
+  "pessimistic_h": 9,
+  "confidence": "medium",
+  "basis": "plan 3/6/12; continuation ~1.5 h incl. one gate run and one mutant round; remaining = bind i07 after composition-2 + WR-P2-4 and i08 after WR-E7L-1 + LAB_PIPELINES (E3L/E6L bind analogues 1-3 h each), D8 rebind ~1 h, rerun after WR-E7L-3, one verify round 47-234 min (session-03)",
+  "at": "2026-09-28T20:30Z"
+ },
+ "blockers": [
+  "0-E7L-1: P1 (import_labels/select/export/read_export), P2 _allowed and P3 prepare/submit read D7 accessible_samples, not N3 lineage.permitted (R177): a re-grant resurrects tombstoned samples into training - owner pipelines lane (WR-E7L-3)",
+  "i07 waits on composition-2 AND a P2/P3 worker pass (composition-2 99a9dbf6 refuses annotation/training by name, WR-P2-4)",
+  "i08 waits on LAB_PIPELINES composing P3's evaluation port (WR-E7L-1)",
+  "i09 waits on a staging target for e7l"
+ ],
+ "wiring_requests": [
+  "WR-E7L-1 P3 Evaluations port over B3/B1 composed into LabPipelines (off)",
+  "WR-E7L-2 Makefile: api-mutants line for tests/integration/lab_improve/test_mutants.py + lab-improve target (not in check)",
+  "WR-E7L-3 P1/P2/P3 gate on lineage.permitted (0-E7L-1)",
+  "WR-E7L-4 rebind lab_world to PgLabelLog/PgRunLedger/PgTeacherLedger after lab-sql-integration-2",
+  "WR-E7L-5 tests/integration test_mutants.py basename collision",
+  "WR-E7L-6 tests/i/mutants.py copy layout must include infra/lab/observe (43 broken_runner baselines on base)",
+  "WR-D2-VK vkstore container/port derived from INFRX_D_TASK"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E7L-7018550.md",
+  "research/plan/evidence/e/E7L-raw-7018550/",
+  "research/plan/evidence/e/E7L-64696c0.md",
+  "research/plan/evidence/e/E7L-raw-64696c0/"
+ ]
+}

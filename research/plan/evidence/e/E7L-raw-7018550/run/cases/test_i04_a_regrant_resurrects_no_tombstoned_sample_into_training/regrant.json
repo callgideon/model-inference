@@ -1,0 +1,48 @@
+{
+ "export": {
+  "adapter": "sft.1",
+  "created_at": "2026-09-20T12:00:00+00:00",
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da8-0000-4000-8000-000000000004@sha256:76855c33b25082b04fce279defff53aef1d4bd9c29e6ad5bd7c6d34879b0224c",
+  "examples_key": "lab/b0000001-0000-4000-8000-000000000001/label-exports/000000e8-0000-4000-8000-000000000005/examples.jsonl",
+  "expires_at": "2026-09-20T13:00:00+00:00",
+  "export_id": "000000e8-0000-4000-8000-000000000005",
+  "format": "infrx.label_export.1",
+  "items": 3,
+  "lineage": [
+   {
+    "label_refs": [
+     "lab:annotation:b0000001-0000-4000-8000-000000000001:1a239bc8-7460-406f-a1de-3054289b7f9a@sha256:8808334ff5ab28026396788da3b3220923c7296343e49324d41cef53da3a3cc3"
+    ],
+    "methods": [
+     "imported"
+    ],
+    "sample_id": "1f5b4a9c-24c6-45c5-86a4-059b940d2028"
+   },
+   {
+    "label_refs": [
+     "lab:annotation:b0000001-0000-4000-8000-000000000001:37f06a1a-346a-4bb4-b880-ee9367713728@sha256:42aabe77edbb8a143e6d12238d5138c06343826fceab5ccfa7afd54c8087ed72"
+    ],
+    "methods": [
+     "imported"
+    ],
+    "sample_id": "36552a6f-50ac-4166-812f-2bb52a79f84f"
+   },
+   {
+    "label_refs": [
+     "lab:annotation:b0000001-0000-4000-8000-000000000001:8e165761-5154-4582-910d-d80ac7f2ee45@sha256:b22e6a6d1d70eedb060cc6eac8ec769ffbf5077b2ce8fabe8997bac0b8d60889"
+    ],
+    "methods": [
+     "imported"
+    ],
+    "sample_id": "7f5d0f43-f40e-4301-881b-8e99f581df29"
+   }
+  ],
+  "omitted": [],
+  "sha256": "def7e0aed804a7f04112574024500dadd8293add5c0b770ef4b482795d520f50",
+  "split": "train"
+ },
+ "leaks": [
+  "P1 export ships 3 tombstoned samples",
+  "P3 submit of the prepared bundle -> submitted"
+ ]
+}
