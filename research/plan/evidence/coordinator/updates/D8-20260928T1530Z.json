@@ -1,0 +1,89 @@
+{
+ "task": "D8",
+ "slice": "D8 = SR-P1-1 + SR-P3-1 + SR-P2-1 + WR-B3-1 (0042); WR-N4-2, WR-B4-2, WR-R4-2, SR-J3-1, SR-R1-1, WR-I2L-4, WR-COMP-1 (0043); lane lab-sql-lw3",
+ "activity": "review",
+ "head": "08b17160",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw3",
+ "branch": "codex/w5-lab-sql-lw3",
+ "blockers": [],
+ "owned_paths": [
+  "apps/app/supabase/migrations/0042_lab_d8_ledgers.sql",
+  "apps/app/supabase/migrations/0043_lab_reads_and_proposals.sql",
+  "apps/infrx-api/infrx/state/lab_pipeline.py",
+  "apps/infrx-api/infrx/state/lab_consent.py",
+  "apps/infrx-api/infrx/state/lab_data.py",
+  "apps/infrx-api/infrx/state/lab_rollout.py",
+  "apps/infrx-api/tests/d/test_d8_*.py",
+  "apps/infrx-api/tests/d/code_mutants_d8.py",
+  "apps/infrx-api/tests/d/test_code_mutants_d8.py",
+  "apps/infrx-api/tests/d/code_mutants_d6j.py",
+  "apps/infrx-api/tests/d/test_upgrade_lab.py",
+  "apps/infrx-api/tests/d/test_l2sql_access.py"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_d8_ledgers.py tests/d/test_d8_requests.py tests/d/test_l2sql_access.py (seam first)",
+   "exit": 1,
+   "summary": "3 failed (ambiguous, control login, L2 ACL), 30 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_d8_ledgers.py tests/d/test_d8_requests.py tests/d/test_l2sql_access.py tests/d/test_upgrade_lab.py tests/d/test_d8_units.py",
+   "exit": 0,
+   "summary": "43 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_d8.py",
+   "exit": 0,
+   "summary": "152 passed, 0 survivors (65 + 56 SQL, 28 Python)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_l2sql.py tests/d/test_code_mutants_d6j.py",
+   "exit": 0,
+   "summary": "147 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab make api-test (27fcb67e)",
+   "exit": 2,
+   "summary": "5734 passed, 77 skipped, 9 xfailed, 14 failed: 7 valkey ForeignContainer (same alone), 5 WR-LSQ3-3/4, 1 WR-LSQ3-5, 1 cluster membership leak fixed in 08b17160 (13 passed after)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q test_credit_schema test_operator_d10 test_reads test_schema_postgres (08b17160; then with WR-LSQ3-3/4/5 patches applied and reverted)",
+   "exit": 1,
+   "summary": "6 failed/86 passed; with patches 92 passed, 3 xfailed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "merge of WR-I2L-4b, WR-LSQ3-3/4/5, WR-P3-R184 plus one rerun of the D privilege suites on the merged tree",
+  "at": "2026-09-28T15:30Z"
+ },
+ "wiring_requests": [
+  "WR-LSQ3-1 tests/integration/test_harness.py migration pin: 0041, 0042, 0043 after 0040",
+  "WR-LSQ3-2 Makefile api-mutants own-process PG line: + tests/d/test_code_mutants_c2rpc.py tests/d/test_code_mutants_d8.py",
+  "WR-LSQ3-3 tests/d/checks.py EXPECTED_FUNCTION_CALLERS: public.lab_content_ref_issue(text,uuid,text,uuid,text), public.lab_judge_runs(uuid,uuid) = {authenticated, service_role} (+ WR-LSQ-3's six if not yet in) - D8-1079c32-wiring.patch",
+  "WR-LSQ3-4 tests/d/checks_reads.py RUNTIME_FUNCTIONS += record_rollout_assignment(jsonb), release_active(text), release_eligible(uuid,uuid); checks_operator.py:478 41 -> 44 - D8-1079c32-wiring.patch",
+  "WR-P1-D8 pipelines: test_annotations_pg uses PgLabelLog(connect)",
+  "WR-P3-D8 pipelines: test_training_services uses PgRunLedger + lab_submission flag + payer budget; compose PgRunLedger",
+  "WR-B3-D8 eval-ops: test_checkpoints_pg on PgCheckpointLedger (DB clock at NOW, per-world subscription ids) + WR-LSQ-7",
+  "WR-P2-D8 judge lane: TeacherWiring.ledger = PgTeacherLedger(connect); collect failures -> record_failures",
+  "WR-J3-D8 judge lane: J3 report job -> PgJudgeLedger.put_calibration; WR-J3-2 port now has lab_judge_runs",
+  "WR-R1-3 (amended) composition: Router(PgRoutingReleases(<infrx_runtime login>), ShadowRunner) behind ROLLOUT_ROUTING",
+  "WR-R4-1/WR-B4-1/WR-N4-1 lab-api: routes over PgReleaseProposals, PgLabReads, PgCheckpointLedger.listing",
+  "WR-I2L-4 operator: password for infrx_lab_control out of band; INFRX_LAB_DATABASE_URL names it",
+  "WR-COMP-1 worker: evaluators = lambda ref: store.evaluator(ref, provider_org_id=ref.split(':')[2]) (0034 already provides the read)",
+  "WR-I2L-4b infrx/lab/control/app.py connector(..., set_role=False) in _store and _compose (research/plan/evidence/d/D8-27fcb67-wiring-i2l4b.patch)",
+  "WR-LSQ3-5 tests/d/checks_credit.py D10_ROLES += 'infrx_lab_control=' (research/plan/evidence/d/D8-08b1716-wiring-lsq3-5.patch)",
+  "WR-P3-R184 tests/p/training/world.py FakeRunLedger: release refuses while ambiguous; ambiguous->failed needs operator + confirmation_ref and releases"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/D8-1079c32.md",
+  "research/plan/evidence/d/D8-1079c32-wiring.patch",
+  "research/plan/evidence/d/D8-1079c32-merged-swap.patch",
+  "research/plan/evidence/d/C2-dd08e1e.md",
+  "research/plan/evidence/d/D8-27fcb67-wiring-i2l4b.patch",
+  "research/plan/evidence/d/D8-08b1716-wiring-lsq3-5.patch"
+ ]
+}
