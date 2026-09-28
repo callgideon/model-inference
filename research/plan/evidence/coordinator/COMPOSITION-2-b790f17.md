@@ -147,3 +147,16 @@ Nothing else changed: the rest of (1)-(5) held up (switches all default OFF and 
 ## Estimate (remaining for this lane to merge)
 
 optimistic 0.5 h / likely 2 h / pessimistic 6 h, confidence medium. Basis: every item is implemented and every check of item 6 is green at `b790f17b` (E4 2806/0, mutants 1152/0, j09 eval PASS x2, App 17/17); what remains is one verify round (the first composition lane needed one fix round, ~2 h) and, after merge #16 is on the tip, the t2f proof (`INFRX_D_TASK=t2f INFRX_T2F_STACK=1 tests/w/test_worker_traces_pg.py`) with 0041's holds composed. Continuation time: ~2.5 h wall (one fix + reruns; the mutant lists alone 57 min).
+
+## Fix round (2026-09-28T20:59Z, head b44f3287 over handback 92c83b63)
+
+Tests only; no product line changed (both findings were coverage gaps over correct code).
+
+- **0-F1 (fixed).** `tests/g/lab_datasets/test_lab_datasets.py::test_lab_datasets__an_import_job_is_read_only_by_its_own_provider`: DEV_A imports into A; DEV_B's `GET /lab/v1/providers/{B}/datasets/imports/{A's id}` is a 404 that does not carry `dataset_ref`. New mutant `import_job_any_provider` in `tests/g/lab_datasets/mutants.py` (the reviewer's hand mutant: lookup ignoring the provider) is killed by it.
+- **0-F2 (fixed).** `tests/w/test_lab_workers.py::test_lab_workers__trace_retention_is_t3s_over_the_shippers_bucket_and_bounds` calls the real `trace_retention(limits, url)` with `clickhouse_connect.get_client` and `S3ObjectStore.connect` recorded. It asserts the DSN, the bucket, the prefix (equal to `build_shipper`'s `prefix` default, `"infrx/"`), the endpoint, and both retention bounds. New mutants in `tests/w/lab_workers_mutants.py`: `lw_trace_prefix_lost`, `lw_trace_content_days_lost`, `lw_trace_metadata_months_lost`. All three are killed.
+
+Reruns (`apps/infrx-api`, key b1, no services):
+- `pytest -q tests/g/lab_datasets tests/w/test_lab_workers.py tests/w/test_lab_workers_mutants.py tests/g/test_mutants.py`: 79 passed (declared-anchor checks included).
+- `INFRX_MUTANTS=all pytest -q tests/g/lab_datasets/test_mutants.py`: 15 passed, 0 survivors (12 mutants now).
+- `INFRX_MUTANTS=all pytest -q tests/w/test_lab_workers_mutants.py`: 49 passed, 0 survivors.
+- The full E4 regression, j09 and App e2e were not rerun: the fix round touches only these two test files and their mutant lists, which are not imported by the other suites.
