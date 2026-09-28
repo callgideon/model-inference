@@ -9,8 +9,10 @@
    **named payer** of this provider (D6J; never a CREDIT wallet, never the consumer's money);
 4. one submit intent (D6J `begin_submit`): only the call that created it may egress, so a
    double click or a restarted worker never sends a second batch;
-5. the content, read from T2I by durable request id with the grantor's organization bound;
-   a request with no stored content is skipped before egress, and the ids that do leave are
+5. the content, read through T3's `Retention` by durable request id with the grantor's
+   organization bound - never the raw T2I projection, so a request its owner deleted or
+   content past its bound is unreadable even before the sweep (WR-OBS-3, E5L-F1); a request
+   with no readable content is skipped before egress, and the ids that do leave are
    recorded (D6J `record_sent`) so collection scores only what the judge actually saw;
 6. the permission again, immediately before egress: a revocation since step 2 releases the
    hold and nothing leaves;
@@ -36,7 +38,6 @@ from ..contracts.lab.records import REF_RE
 from ..contracts.limits import PilotSettings
 from ..contracts.v2.money_units import ProviderUsd
 from ..contracts.v2.records import DataCategory, DataPurpose
-from ..traces.ship.shipper import read_content
 from .cost import JUDGE_MODE_LIVE, RateTable, TokenCeilings, worst_case
 from .dryrun import DEFAULT_CEILINGS
 from .rubric import MARLIN_VIDEO_V1, Result, Rubric, ScoreLedger, validate_json
@@ -87,7 +88,8 @@ class ProviderResults:
 
 
 class JudgeLedger(Protocol):
-    """D6J (lab-sql): schema request SR-J2-1 in the J2 evidence names the RPCs."""
+    """D6J (lab-sql, SR-J2-1): on PostgreSQL `infrx.state.lab_consent.PgJudgeLedger` (0036,
+    WR-LSQ-4), gated by the `lab_submission` flag; `fakes.FakeJudgeLedger` in the unit cases."""
 
     async def db_now(self) -> datetime: ...
 
@@ -121,8 +123,7 @@ class JudgeWiring:
     access: Any                  # infrx.lab.access.LabAccess
     ledger: JudgeLedger
     provider: JudgeProvider
-    projection: Any              # T2I projection (`find`)
-    objects: Any                 # T2I content objects (`get`)
+    retention: Any               # T3 `Retention`: `read_content` (tombstones, content bound)
     rates: RateTable
     settings: PilotSettings
 
@@ -176,8 +177,7 @@ async def submit(job: JudgeJob, *, user_id: str, wiring: JudgeWiring) -> LedgerR
         return run               # another call holds (or held) the intent: never a second batch
     items = []
     for request_id in run.sample_ids:
-        body = await read_content(wiring.projection, wiring.objects, job.grantor_org_id,
-                                  request_id)
+        body = await wiring.retention.read_content(job.grantor_org_id, request_id)
         if body is not None:
             items.append({"sample_id": request_id, "content": body.decode()})
     return await send(ledger, wiring.provider, run, items,

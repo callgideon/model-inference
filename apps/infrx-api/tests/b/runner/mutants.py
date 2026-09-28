@@ -104,6 +104,11 @@ MUTANTS: tuple[Mutant, ...] = (
     m("b1_shared_worker_id", "each worker leases under its own id",
       'self._work(f"{self._worker}/{i}", loop)', "self._work(self._worker, loop)", CONC,
       dies_by=("BrokenBarrierError",)),
+    # the kill mode is D7's own refusal (0034: a run under an unregistered evaluator is
+    # `not_found`), which the fake store raises as D7 does
+    m("b1_evaluator_unregistered", "freeze registers the run's evaluator in D7 first (R167)",
+      "    await store.put_evaluator(evaluator,", "    None and store.put_evaluator(evaluator,",
+      FREEZE, dies_by=("NotFound",)),
     m("b1_attempts_unbounded", "past max_attempts a case fails without a call",
       'if lease["attempt"] > self._limits.max_attempts:', "if False:", KILLED),
     m("b1_attempts_off_by_one", "max_attempts attempts are allowed",
@@ -124,8 +129,8 @@ MUTANTS: tuple[Mutant, ...] = (
       "            return await self._release(lease, bill)",
       "            return self._abandon(case_id, bill)", WALLET, GIVEBACK),
     m("b1_402_release_refusal_raises", "a release refused by the fence is abandoned, not raised",
-      "            except errors.StaleLease:\n                pass\n",
-      "            except errors.IdempotencyConflict:\n                pass\n", CANCEL,
+      "        except errors.StaleLease:\n            pass\n",
+      "        except errors.IdempotencyConflict:\n            pass\n", CANCEL,
       dies_by=("StaleLease",)),
     m("b1_stale_replay_unreported", "an attempt refused by the fence is abandoned",
       "        except errors.StaleLease:\n            return self._abandon(case_id, bill)",

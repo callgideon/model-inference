@@ -1,0 +1,44 @@
+diff --git a/tests/integration/lab_observe/mutants.py b/tests/integration/lab_observe/mutants.py
+index 52652307..f5a7d5ec 100644
+--- a/tests/integration/lab_observe/mutants.py
++++ b/tests/integration/lab_observe/mutants.py
+@@ -214,11 +214,7 @@ O09_WORKER = "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_eve
+ #: Cases that FAIL on this base (a product finding, recorded in the evidence): no mutant can
+ #: name them (the pristine baseline refuses a failing case), so coverage lists them here and
+ #: `test_every_case_is_covered_by_a_mutant` holds the list to exactly the failing ones.
+-KNOWN_FAIL: dict[str, str] = {
+-    O06_JUDGE: "E5L-F1: J2 `submit` reads content with `ship.read_content` over the raw "
+-               "projection, so an owner-deleted or content-expired request whose sweep has not "
+-               "run yet is sent to the judge (T3 requires reads through `Retention`); WR-OBS-3",
+-}
++KNOWN_FAIL: dict[str, str] = {}   # E5L-F1 fixed by WR-OBS-3 (J2 reads through Retention)
+ 
+ STACK_MUTANTS: tuple[Mutant, ...] = (
+     _m("st_capture_on_in_the_box", "the drill judges capture off with the box at its defaults",
+@@ -244,6 +240,12 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
+     _m("st_no_recheck_before_egress", "the permission is checked again just before egress",
+        SUBMIT, "        await _permitted(job, user_id, wiring)\n    except errors.DomainError:",
+        "        pass\n    except errors.DomainError:", O05),
++    _m("st_judge_reads_the_raw_projection", "the judge reads content through T3's Retention "
++       "(E5L-F1)", SUBMIT,
++       "        body = await wiring.retention.read_content(job.grantor_org_id, request_id)",
++       "        body = await __import__(\"infrx.traces.ship.shipper\", fromlist=[\"x\"]).read_content(\n"
++       "            wiring.retention.traces, wiring.retention.objects, job.grantor_org_id, request_id)",
++       O06_JUDGE),
+     _m("st_deleted_request_found", "a deleted request has no rows for any read", RET,
+        "        if REQUEST in await self._scopes(org_id, request_id):\n            return []\n"
+        "        now = self.clock()\n        return [r for r in await self.traces.find",
+diff --git a/tests/integration/lab_observe/observe_world.py b/tests/integration/lab_observe/observe_world.py
+index f1f43de6..403b4d56 100644
+--- a/tests/integration/lab_observe/observe_world.py
++++ b/tests/integration/lab_observe/observe_world.py
+@@ -338,8 +338,7 @@ def judge(trip, *, mode: str = "live", budget: str = "1.00", timeout_s: float =
+                                        judge_live_budget_usd=Decimal(budget))
+         wiring = JudgeWiring(access=access(trip), ledger=ledger,
+                              provider=HttpJudgeProvider(fake.url, timeout_s=timeout_s),
+-                             projection=trip.traces.projection, objects=trip.traces.objects,
+-                             rates=rates, settings=settings)
++                             retention=trip.traces.retention, rates=rates, settings=settings)
+         yield Judge(wiring, ledger, fake, payer)
+     finally:
+         fake.close()

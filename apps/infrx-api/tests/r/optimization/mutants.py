@@ -30,6 +30,7 @@ EQ = "test_r3_an_equivalent_measured_variant_claims_its_optimization"
 SLICE = "test_r3_better_throughput_cannot_override_a_failed_slice"
 TOK = "test_r3_a_tokenizer_change_or_a_lost_capability_is_never_equivalent"
 UNMEAS = "test_r3_unmeasured_or_inconclusive_claims_nothing"
+STORE = "test_r3_a_comparison_is_stored_after_its_variant_and_report"
 DIGEST = '_digest(identity.model_dump(mode="json"))'
 
 
@@ -142,6 +143,18 @@ MUTANTS: tuple[Mutant, ...] = (
     m("r3_report_unnamed", "the comparison names its report",
       '"report_digest": report["report_digest"], "performance"',
       '"report_digest": None, "performance"', EQ),
+    # R3.d storage (WR-LSQ-6)
+    m("r3_store_any_variant", "a comparison is stored only with its own variant",
+      'if comparison["variant_ref"] != lab.ref_of(variant) or \\\n',
+      'if False and comparison["variant_ref"] != lab.ref_of(variant) or \\\n', STORE),
+    m("r3_store_any_report", "a comparison is stored only on its own report",
+      '            comparison["report_digest"] != report.get("report_digest"):',
+      '            False:', STORE),
+    m("r3_store_report_skipped", "the B2 report is stored before the comparison",
+      "    await data.put_eval_report(report,", "    None and data.put_eval_report(report,",
+      STORE),
+    m("r3_store_variant_unpublished", "the variant is published before the comparison",
+      "    await data.publish(variant,", "    None and data.publish(variant,", STORE),
 )
 
 

@@ -1,0 +1,66 @@
+{
+  "task": "B1",
+  "lane": "lab-sql-integration",
+  "head": "a6b4bbb",
+  "base": "8ae65fa8",
+  "worktree": ".claude/worktrees/codex-w5-lab-sql-integration",
+  "branch": "codex/w5-lab-sql-integration",
+  "slice": "WR-LSQ-7 eval half (put_evaluator at freeze, all-revoked run ends failed) + B-R1 (402 give-back via lab_release_attempt, xfail removed) + E6L-O1 (media_ref/duration_ms) + E6L-O2 (reports.case_records)",
+  "activity": "review",
+  "at": "2026-09-28T11:30:00Z",
+  "owned_paths": [
+    "apps/infrx-api/infrx/evaluation/",
+    "apps/infrx-api/tests/b/",
+    "apps/infrx-api/tests/h/ (E6L-O1 case)",
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=b3 pytest -q tests/b/runner/test_runner_pg.py tests/b/checkpoints/test_checkpoints_pg.py (before)",
+      "exit": 1,
+      "summary": "seam: 10 failed"
+    },
+    {
+      "cmd": "same, after",
+      "exit": 0,
+      "summary": "11 passed (402 case without xfail; + E6L-O2 PG case)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=b1 pytest -q tests/b/runner/test_runner_pg.py",
+      "exit": 0,
+      "summary": "8 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=b3 pytest -q tests/b",
+      "exit": 0,
+      "summary": "75 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=b3 INFRX_MUTANTS=all pytest -q tests/b/*/test_mutants.py tests/h/test_mutants.py tests/i/lab_eval/test_mutants.py",
+      "exit": 1,
+      "summary": "216 passed; 32 failed = I5's list broken_runner on the base (72-observe-install.sh), not this lane's"
+    },
+    {
+      "cmd": "INFRX_D_TASK=b1 make api-test",
+      "exit": 2,
+      "summary": "5819 passed, 90 skipped, 9 xfailed, 60 failed, 8 errors; none in tests/j|b|r|h - foreign d2-valkey (7), tests/i key baseline (43), i8 pooler lock held elsewhere (8 errors), base defects I5 72-observe-install (6) and I2L LAB_DATASETS_API_URL (3), lab-sql race mutant c3l_double_click_twice (1)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "one review round (D10-0025 1/2/5 analogue) plus the merge-time rerun; this lane's swaps took 0.3-1 h each",
+    "at": "2026-09-28T11:30:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-LSQ-INT-1 tests/integration/lab_observe/observe_world.py JudgeWiring(retention=trip.traces.retention) + mutants.py KNOWN_FAIL={} and an O06_JUDGE mutant (evidence has the patch)",
+    "WR-LSQ-INT-2 tests/integration/lab_evaluate/lab_world.py case_records -> reports.case_records(...); j11 rebind to NOT RUN[L3]; B4/lab-api-2 use reports.case_records",
+    "WR-LSQ-INT-3 composition: JudgeWiring(ledger=PgJudgeLedger, retention=Retention); Controller(PgReleaseStore); optimization.store(PgLabDataStore)"
+  ],
+  "evidence": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "task": "R1",
+  "lane": "lab-sql-integration",
+  "head": "a6b4bbb",
+  "base": "8ae65fa8",
+  "worktree": ".claude/worktrees/codex-w5-lab-sql-integration",
+  "branch": "codex/w5-lab-sql-integration",
+  "slice": "R1 real half (tests/r/routing on PgLabRolloutStore / SR-R1-1): NOT RUN",
+  "activity": "blocked",
+  "at": "2026-09-28T11:30:00Z",
+  "owned_paths": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=r1 uv run --frozen pytest -q tests/r/routing",
+      "exit": -1,
+      "summary": "NOT RUN: R1 (batch #6 22ae31dc) and PgRoutingReleases (codex/w5-lab-sql-lw3 1079c328) absent from base 8ae65fa8"
+    },
+    {
+      "cmd": "INFRX_D_TASK=b1 make api-test",
+      "exit": 2,
+      "summary": "5819 passed, 90 skipped, 9 xfailed, 60 failed, 8 errors; none in tests/j|b|r|h - foreign d2-valkey (7), tests/i key baseline (43), i8 pooler lock held elsewhere (8 errors), base defects I5 72-observe-install (6) and I2L LAB_DATASETS_API_URL (3), lab-sql race mutant c3l_double_click_twice (1)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2.5,
+    "confidence": "medium",
+    "basis": "one review round (D10-0025 1/2/5 analogue) plus the merge-time rerun; this lane's swaps took 0.3-1 h each",
+    "at": "2026-09-28T11:30:00Z"
+  },
+  "blockers": [
+    "merge batch #6 (rollout-routing) and lab-sql-lw3 SR-R1-1 not on the base"
+  ],
+  "wiring_requests": [
+    "WR-LSQ-INT-1 tests/integration/lab_observe/observe_world.py JudgeWiring(retention=trip.traces.retention) + mutants.py KNOWN_FAIL={} and an O06_JUDGE mutant (evidence has the patch)",
+    "WR-LSQ-INT-2 tests/integration/lab_evaluate/lab_world.py case_records -> reports.case_records(...); j11 rebind to NOT RUN[L3]; B4/lab-api-2 use reports.case_records",
+    "WR-LSQ-INT-3 composition: JudgeWiring(ledger=PgJudgeLedger, retention=Retention); Controller(PgReleaseStore); optimization.store(PgLabDataStore)"
+  ],
+  "evidence": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
+  ]
+}

@@ -7,7 +7,7 @@ and the provider_dev endpoint over HTTP on the b1 model-fake port, through
 Drills (EVAL-DURABLE): a worker killed after the endpoint charged and before it finished;
 a connection lost after the charge (the same key replays, no second debit); a durable cancel
 mid-batch; duplicate delivery; an exhausted dev wallet, funded again; data revoked mid-run;
-402 deliveries past max_attempts (strict xfail until WR-B-2(d)'s release is in D7); a kill,
+402 deliveries past max_attempts (0034 `lab_release_attempt`, B-R1); a kill,
 then a revocation, then a delivery that resumes the created run.
 Outside the mutant runner (N2/T2I's pattern); the oracles are the fake-world cases' mutants.
 
@@ -247,9 +247,6 @@ def test_b1_pg_revoked_data_fails_its_cases_without_dispatch(world, endpoint) ->
         restore(c.conn)
 
 
-@pytest.mark.xfail(not hasattr(PgLabDataStore, "release"), strict=True,
-                   reason="WR-B-2(d): 0029 has no lab_release_attempt, so a 402's lease expires "
-                          "and counts toward max_attempts (0-B-R1)")
 def test_b1_pg_402_deliveries_past_max_attempts_never_fail_a_case(world, endpoint) -> None:
     """0-B-R1 on real D7: two unfunded deliveries (recovered between them) under
     max_attempts=2, then an allocation: every case is done, none `attempts_exhausted`."""
@@ -292,7 +289,28 @@ def test_b1_pg_a_created_run_resumes_after_a_revocation_and_ends_revoked(world, 
             c.frozen.run_ref, c.frozen.cases, c.frozen.limit)
         report = run(c.runner("w2").run(again))
         assert report["failures"] == {i: "revoked" for i in c.ids}
-        assert report["cases"] == {"failed": N} and report["state"] == "succeeded"
+        assert report["cases"] == {"failed": N} and report["state"] == "failed"
         assert len(c.wallet.calls) == 1 and c.results() == []
     finally:
         restore(c.conn)
+
+
+def test_b1_pg_b2_case_records_come_from_d7_rows(world, endpoint) -> None:
+    """E6L-O2 on real D7 (0034 `lab_run_results`): after a run, `reports.case_records` gives
+    one scored record per case, clustered by the sample's group key, whose costs total the
+    wallet's debit."""
+    from decimal import Decimal
+
+    from infrx.evaluation import reports
+    c = Case(world, 9)
+    endpoint(c.wallet)
+    assert run(c.runner().run(c.frozen))["cases"] == {"done": N}
+    rows = run(c.store.run_results(c.run_id, provider_org_id=NEMO))
+    records = run(reports.case_records(c.frozen, rows, c.objects))
+    groups = {s["sample_id"]: s["group_key"] for s in c.manifest["samples"]}
+    assert [r["case_id"] for r in records] == c.ids
+    assert all(r["score"] is not None and r["latency_ms"] >= 0 and "error" not in r
+               for r in records)
+    assert {r["case_id"]: r["cluster"] for r in records} == groups
+    assert str(sum(Decimal(x["value"]) for r in records for x in r["costs"])) == \
+        str(c.wallet.debited)

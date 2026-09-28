@@ -43,6 +43,8 @@ DEV = "test_h1_replay_only_targets_dev_endpoints"
 MID = "test_h1_a_harness_changed_mid_run_is_refused"
 ADAPT = "test_h1_adapters_are_built_in_and_bounded"
 COV = "test_h1_coverage_reports_every_unsupported_case"
+CLIP = "test_h1_an_imported_clip_reaches_the_finite_video_adapter"
+B1 = "evaluation/runner/__init__.py"
 SINGLE = "test_h1_a_prompt_only_variant_is_a_single_factor_comparison"
 MULTI = "test_h1_multifactor_needs_an_explicit_tag_and_the_same_universe"
 
@@ -103,6 +105,15 @@ MUTANTS: tuple[Mutant, ...] = (
       ADAPT),
     m("h1_video_media_dropped", "the clip is passed by reference",
       'media = [values["media_ref"]]', "media = []", ADAPT),
+    # E6L-O1 (B1's side of the seam, proved through H1's adapter)
+    Mutant(name="b1_clip_media_ref_dropped", invariant="a clip is passed as its N1 media key",
+           file=B1, old='"media_ref": media_key(provider_org_id, content["media_digest"]),',
+           new='"media_ref": content["media_digest"],', cases=(CLIP,)),
+    Mutant(name="b1_clip_duration_is_the_end", invariant="duration_ms is the span's length",
+           file=B1, old='"duration_ms": end - start}', new='"duration_ms": end}', cases=(CLIP,)),
+    Mutant(name="b1_clip_inputs_never_added", invariant="a clip carries H1's video inputs",
+           file=B1, old='    if "media_digest" in content:\n        start, end',
+           new='    if False:\n        start, end', cases=(CLIP,)),
     m("h1_text_adapter_parses_json", "only the structured adapter parses output",
       'if rev.adapter != "structured":', 'if rev.adapter == "text":', ADAPT),
     m("h1_bad_json_scored_complete", "unparseable structured output is a failure",

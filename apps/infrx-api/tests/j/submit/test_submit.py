@@ -51,8 +51,9 @@ class Case:
             asyncio.run(fakes.trace(self.projection, self.objects, self.w.C1, request_id,
                                     body=b'{"n":%d}' % n))
         self.wiring = JudgeWiring(access=self.w.access, ledger=self.ledger,
-                                  provider=self.provider, projection=self.projection,
-                                  objects=self.objects, rates=rates, settings=settings)
+                                  provider=self.provider,
+                                  retention=fakes.retention(self.projection, self.objects),
+                                  rates=rates, settings=settings)
 
     def job(self, n: int = 1, **kw) -> JudgeJob:
         fields = dict(run_id=fakes.rid(100 + n), provider_org_id=self.w.A,
@@ -107,7 +108,7 @@ def test_j2__the_judge_is_checked_against_the_current_grant(world):
     ids = (fakes.rid(1),)
     asyncio.run(fakes.trace(projection, objects, world.C1, ids[0]))
     wiring = JudgeWiring(access=world.access, ledger=ledger, provider=provider,
-                         projection=projection, objects=objects, rates=j1.TEST_RATES,
+                         retention=fakes.retention(projection, objects), rates=j1.TEST_RATES,
                          settings=LIVE)
 
     def run(n, user):
@@ -219,6 +220,23 @@ def test_j2__only_stored_content_of_the_grantor_leaves_by_durable_request_id():
     assert [item["sample_id"] for item in items] == list(case.ids)
     assert [item["content"] for item in items] == ['{"n":0}', '{"n":1}', '{"n":2}']
     assert {org for org, _ in case.projection.reads} == {case.w.C1}
+
+
+def test_j2__deleted_or_expired_content_never_reaches_the_judge():
+    """WR-OBS-3 (E5L-F1): content is read through T3's `Retention`, never the raw projection:
+    a request its owner deleted, and content past its bound, are skipped before egress even
+    while the rows and objects still exist (the sweep has not run)."""
+    case = Case()
+    asyncio.run(case.wiring.retention.delete(case.w.C1, case.ids[0], "owner"))
+    run = case.submit()
+    [(_, items)] = case.provider.calls
+    assert [item["sample_id"] for item in items] == list(case.ids[1:])
+    assert run.sent_ids == case.ids[1:]
+    later = Case()
+    bound = fakes.T0 + timedelta(days=DEFAULTS.trace_content_max_days)
+    later.wiring = dataclasses.replace(later.wiring, retention=fakes.retention(
+        later.projection, later.objects, now=bound))
+    assert later.submit().state == "failed" and later.provider.calls == []
 
 
 def test_j2__a_run_with_no_content_left_is_cancelled_without_egress():

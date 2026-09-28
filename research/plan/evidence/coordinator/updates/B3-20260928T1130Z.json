@@ -1,0 +1,51 @@
+{
+  "task": "B3",
+  "lane": "lab-sql-integration",
+  "head": "a6b4bbb",
+  "base": "8ae65fa8",
+  "worktree": ".claude/worktrees/codex-w5-lab-sql-integration",
+  "branch": "codex/w5-lab-sql-integration",
+  "slice": "WR-LSQ-7 via runner.freeze: test_checkpoints_pg.py green on b3 against 0034; PgCheckpointLedger not on the base (fake kept)",
+  "activity": "review",
+  "at": "2026-09-28T11:30:00Z",
+  "owned_paths": [
+    "apps/infrx-api/tests/b/checkpoints/ (unchanged)",
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=b3 pytest -q tests/b/checkpoints/test_checkpoints_pg.py (with runner PG)",
+      "exit": 0,
+      "summary": "2 checkpoint PG cases pass (were failing before WR-LSQ-7)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/b/checkpoints/test_mutants.py",
+      "exit": 0,
+      "summary": "all killed (in the 216)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=b1 make api-test",
+      "exit": 2,
+      "summary": "5819 passed, 90 skipped, 9 xfailed, 60 failed, 8 errors; none in tests/j|b|r|h - foreign d2-valkey (7), tests/i key baseline (43), i8 pooler lock held elsewhere (8 errors), base defects I5 72-observe-install (6) and I2L LAB_DATASETS_API_URL (3), lab-sql race mutant c3l_double_click_twice (1)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.25,
+    "likely_h": 0.5,
+    "pessimistic_h": 1.5,
+    "confidence": "medium",
+    "basis": "one review round (D10-0025 1/2/5 analogue) plus the merge-time rerun; this lane's swaps took 0.3-1 h each",
+    "at": "2026-09-28T11:30:00Z"
+  },
+  "blockers": [
+    "B3's PgCheckpointLedger arrives with lab-sql-lw3 (0041+); the fake stays"
+  ],
+  "wiring_requests": [
+    "WR-LSQ-INT-1 tests/integration/lab_observe/observe_world.py JudgeWiring(retention=trip.traces.retention) + mutants.py KNOWN_FAIL={} and an O06_JUDGE mutant (evidence has the patch)",
+    "WR-LSQ-INT-2 tests/integration/lab_evaluate/lab_world.py case_records -> reports.case_records(...); j11 rebind to NOT RUN[L3]; B4/lab-api-2 use reports.case_records",
+    "WR-LSQ-INT-3 composition: JudgeWiring(ledger=PgJudgeLedger, retention=Retention); Controller(PgReleaseStore); optimization.store(PgLabDataStore)"
+  ],
+  "evidence": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
+  ]
+}
