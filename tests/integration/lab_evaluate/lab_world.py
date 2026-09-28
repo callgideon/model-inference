@@ -42,6 +42,10 @@ import harness                                          # noqa: E402  E2's, name
 
 import stack                                            # noqa: E402
 
+#: The video benchmark's bundle: owned synthetic bytes (N1 hashes a clip, it does not decode it)
+CLIPS = {"clips/a.mp4": b"\x00\x00\x00\x18ftypmp42e6l-a" * 64,
+         "clips/b.mp4": b"\x00\x00\x00\x18ftypmp42e6l-b" * 64,
+         "clips/notes.txt": b"not a video"}
 RUNNER = "tests/integration/lab_evaluate/runner.py"
 RERUN = f"apps/infrx-api/.venv/bin/python {RUNNER} --out <dir>"
 DATABASE = f"{harness.PG_DATABASE}_lab"         # infrx_e6l_lab: D1's clock gate needs infrx_%
@@ -157,10 +161,19 @@ class Lab:
             actor="dev@nemo", accept_rejects=accept))
 
     def dataset(self, name: str, n: int):
-        """`name` imported once per session with its rejects accepted."""
+        """`name` imported once per session with its rejects accepted (a video benchmark's
+        clips uploaded into its import bundle first)."""
         if name not in self.imported:
+            if "media" in BENCH["specs"][name]["fields"]:
+                self.upload_clips(self.spec(name, n=n)["import_id"])
             self.imported[name] = self.do_import(name, n=n, accept=True)
         return self.imported[name]
+
+    def upload_clips(self, import_id: str) -> None:
+        from infrx.datasets.imports import bundle_key
+        for path, data in CLIPS.items():
+            run(self.objects.put_if_absent(bundle_key(self.NEMO, import_id, path), data,
+                                           "text/plain" if path.endswith(".txt") else "video/mp4"))
 
     def manifest(self, ref: str, provider: str | None = None):
         return run(self.store.resolve(ref, provider_org_id=provider or self.NEMO))

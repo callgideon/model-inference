@@ -130,18 +130,24 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_published_with_rejects", "an import with rejected rows is refused unless accepted",
        N1, "        if not accepted or (rejected and not accept_rejects):",
        "        if not accepted:", J01_REFUSED),
-    _m("st_changed_upload_redefines", "changed bytes under one import id are a conflict", N1,
-       '                if chunk["lines"] != lines.hexdigest():', "                if False:",
-       J01_REPLAY),
+    # (a changed upload's own chunk check is backstopped by D7's source digest: both refuse
+    # with a Conflict, so a mutant of either alone is equivalent at this seam - N1's list
+    # kills them one by one)
+    _m("st_replay_conflicts", "the same bytes again are a no-op: a replay is the same "
+       "dataset", N1, "            await objects.head(key) != digest_of(data):",
+       "            True:", J01_REPLAY),
+    # F3's manifest contract backstops N1's row checks at publication: the typed refusal
+    # (LabRejected) is the kill, declared.
     _m("st_video_over_the_cap", "a finite-video span is at most 82 s", N1,
        "not 0 <= start < end <= start + lab.MAX_VIDEO_MS:",
-       "not 0 <= start < end <= start + lab.MAX_VIDEO_MS + 1000:", J02),
+       "not 0 <= start < end <= start + lab.MAX_VIDEO_MS + 1000:", J02,
+       dies_by=("LabRejected",)),
     _m("st_grant_of_another_provider", "an import names a grant to its own provider", N1,
        "    if lab.REF_RE.fullmatch(spec.grant_ref).group(2) != spec.provider_org_id:",
        "    if False:", J03_FOREIGN),
     _m("st_split_conflict_accepted", "one group is never declared in two splits", N1,
        "                if groups.get(group, split) != split:", "                if False:",
-       J04_LEAK),
+       J04_LEAK, dies_by=("LabRejected",)),
     _m("st_resolve_any_provider", "a Lab record resolves for its own provider only", D7,
        "   where ref = p_args->>'ref' and provider_org_id = (p_args->>'provider_org_id')::uuid;",
        "   where ref = p_args->>'ref';", J03_FOREIGN),

@@ -69,16 +69,10 @@ def test_j02_finite_video_imports_with_its_cap_and_bundle_checks(lab, workdir):
     exactly 82 s import (one media object per clip); 83 s is `invalid_span`, an absent clip
     `media_missing`, a text object `unsupported_type`, a path out of the bundle
     `bad_media_path`."""
-    from infrx.datasets.imports import bundle_key, media_key
+    from infrx.datasets.imports import media_key
     from infrx.media.fetch import digest_of
-    spec = lab.spec("video", n=2)
-    clips = {"clips/a.mp4": b"\x00\x00\x00\x18ftypmp42e6l-a" * 64,
-             "clips/b.mp4": b"\x00\x00\x00\x18ftypmp42e6l-b" * 64,
-             "clips/notes.txt": b"not a video"}
-    for path, data in clips.items():
-        run(lab.objects.put_if_absent(bundle_key(lab.NEMO, spec["import_id"], path), data,
-                                      "text/plain" if path.endswith(".txt") else "video/mp4"))
-    report = lab.dataset("video", 2)
+    clips = lw.CLIPS
+    report = lab.dataset("video", 2)                     # uploads lw.CLIPS into its bundle
     assert reasons(report) == {4: "invalid_span", 5: "media_missing", 6: "unsupported_type",
                                7: "bad_media_path"}
     manifest = lab.manifest(report.dataset_ref)
