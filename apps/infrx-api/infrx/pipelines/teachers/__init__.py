@@ -26,7 +26,7 @@ stops the batch (`stopped="permission"`).
 **Collection** reads a submitted run's results once per poll: a label is one short text with
 an optional confidence (`parse_label`); a result for a sample the run never sent, a
 duplicate, a malformed label or a sample the provider may no longer train on is a per-item
-failure, never imported. The rest reconcile into D8 through P1's `import_labels` as method
+failure, never imported, and recorded in D8's per-item failure log. The rest reconcile into D8 through P1's `import_labels` as method
 `model` - P1 publishes those as `synthetic`, never `human` and never ground truth - with the
 teacher model and prompt pinned on each row. The run settles once, when the provider is done.
 """
@@ -71,7 +71,7 @@ class TeacherBatch:
 @dataclass(frozen=True)
 class TeacherWiring:
     members: Any                  # the L2 AccessStore (`membership`, `db_now`)
-    ledger: JudgeLedger           # D6J (J2's seam; D8's purpose-specific twin is SR-P2-1)
+    ledger: JudgeLedger           # D8's PgTeacherLedger: J2's ledger + `record_failures`
     provider: JudgeProvider       # J2's HttpJudgeProvider to the local teacher fake
     store: Any                    # the D7/N2 store (`resolve`, `accessible_samples`)
     objects: Any                  # N2 sample content objects
@@ -215,6 +215,14 @@ async def _samples(batch: TeacherBatch, store, ids) -> list:
     return [s for s in manifest.samples if s.sample_id in wanted]
 
 
+def _is_uuid(value) -> bool:
+    try:
+        uuid.UUID(value)
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return True
+
+
 def parse_label(text: str) -> tuple[str, float | int | None] | None:
     """`{"label": <short text>, "confidence"?: 0..1}`, or None. Never raises."""
     try:
@@ -263,6 +271,9 @@ async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) ->
         if parsed[1] is not None:
             row["confidence"] = parsed[1]
         rows.append(row)
+    logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+    if logged:                                          # in the result only (0-LSI2-F1)
+        await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
     imported = None
     if rows:
         imported = await wiring.labels(wiring.store, wiring.log,

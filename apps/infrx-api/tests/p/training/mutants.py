@@ -29,6 +29,7 @@ MANUAL = "test_p3_the_manual_workflow_round_trips_to_an_eligible_candidate"
 HIDDEN = "test_p3_automatic_connectors_stay_hidden_until_p11"
 AMBIG = "test_p3_an_ambiguous_submit_is_reconciled_without_a_second_paid_job"
 CRASH = "test_p3_a_crash_mid_submit_never_resubmits"
+R184 = "test_p3_an_ambiguous_run_ends_only_on_an_operators_written_confirmation"
 REJECT = "test_p3_a_refused_submit_fails_and_releases_its_budget"
 CONSENT = "test_p3_revoked_consent_stops_a_prepared_submission"
 COST = "test_p3_reported_cost_is_settled_exactly_or_unknown"
@@ -179,7 +180,13 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p3_not_found_is_failed", "a lookup that finds nothing stays ambiguous",
       "    if job_id is None:\n        return run\n",
       "    if job_id is None:\n        return await ledger.move(external_run_id, "
-      "provider_org_id=provider_org_id, expected=\"ambiguous\", target=\"failed\")\n", CRASH),
+      "provider_org_id=provider_org_id, expected=\"ambiguous\", target=\"failed\")\n", CRASH,
+      R184, dies_by=("Forbidden",)),             # R184: D8 refuses the platform's failure
+    m("p3_not_found_released", "an ambiguous run's hold is never released by the platform",
+      "    if job_id is None:\n        return run\n",
+      "    if job_id is None:\n        await ledger.release(lab.submit_key(external_run_id), "
+      "provider_org_id=provider_org_id)\n        return run\n", CRASH, R184,
+      dies_by=("StateConflict",)),               # R184: D8 refuses the release
     m("p3_http_404_raises", "a key the server never saw is not found, not an error",
       "        if response.status_code == 404:\n            return None\n", "", CRASH,
       dies_by=("KeyError",)),

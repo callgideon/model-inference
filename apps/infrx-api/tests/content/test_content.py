@@ -3,7 +3,8 @@ C2-RPC contract fake (`infrx.content.fakes`), T3 retention and the object store.
 
     uv run --frozen pytest -q tests/content
 
-The real-PostgreSQL half runs once lab-sql's C2-RPC merges (the coordinator's rerun).
+The real-PostgreSQL half (WR-C2-5): the same cases on lab-sql's `PgContentRefs` (0041) and
+L2's `PgAccessStore` - `INFRX_D_TASK=lab-c2` (+ `INFRX_C2_S3=1` for M3's store on MinIO).
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ from infrx.contracts.v2 import records as v2
 from infrx.state.lab_data import grant_ref
 from infrx.traces import ship
 
+from . import world_pg
 from .world import (A, B, BODY, BOTH, C1, C2, DEV_A, DEV_A2, DEV_B, MODEL_A, MODEL_B, REQ, REQ_B,
                     SHARING, VIEWER_A, World, s3_store)
 
@@ -31,16 +33,23 @@ def run(coroutine):
 
 
 S3 = os.environ.get("INFRX_C2_S3") == "1"
+PG = world_pg.unavailable()
 
 
 @pytest.fixture(params=["memory", pytest.param("s3", marks=[pytest.mark.s3, pytest.mark.skipif(
     not S3, reason="C2 on M3's S3ObjectStore: start infrx-lab-c2-s3 (MinIO on 57506) and "
-                   "export INFRX_C2_S3=1")])])
+                   "export INFRX_C2_S3=1")]), pytest.param("pg", marks=[pytest.mark.pg, pytest.mark.skipif(
+    PG is not None, reason=f"C2-RPC on task-local PostgreSQL: {PG}")])])
 def w(request):
-    """Every case in memory and, with INFRX_C2_S3=1, over the real M3 object store."""
-    if request.param == "memory":
-        return World()
-    return World(s3_store(f"test/lab-c2/{uuid.uuid4().hex}/"))
+    """Every case in memory; with INFRX_C2_S3=1 over the real M3 object store; with
+    INFRX_D_TASK=lab-c2 on lab-sql's RPC (and MinIO too when INFRX_C2_S3=1)."""
+    objects = s3_store(f"test/lab-c2/{uuid.uuid4().hex}/") if request.param == "s3" or (
+        request.param == "pg" and S3) else None
+    if request.param != "pg":
+        yield World(objects)
+        return
+    with world_pg.pgharness.connect(world_pg.fresh_database()) as conn:
+        yield world_pg.PgWorld(conn, objects)
 
 
 # --- the seam: a ref reaches its own grant's content, for its own recipient only ---------
