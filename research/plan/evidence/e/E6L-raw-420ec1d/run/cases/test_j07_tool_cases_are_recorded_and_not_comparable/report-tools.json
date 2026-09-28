@@ -1,0 +1,78 @@
+{
+ "baseline_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-000000000051@sha256:d5d6a0e34280e9d0c17c8d8c81ce06f6eb56a16ab6eb2d6f5413b2e9e8c4706f",
+ "candidate_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-000000000051@sha256:d5d6a0e34280e9d0c17c8d8c81ce06f6eb56a16ab6eb2d6f5413b2e9e8c4706f",
+ "decision": {
+  "outcome": "inconclusive",
+  "reasons": [
+   "coverage 2/4"
+  ]
+ },
+ "estimates": {
+  "basis": "deterministic_metric",
+  "overall": {
+   "clusters": 2,
+   "diff": 0.0,
+   "high": 0.0,
+   "improved": false,
+   "low": 0.0,
+   "n": 2,
+   "verdict": "non_inferior"
+  },
+  "slices": {}
+ },
+ "observed": {
+  "baseline": {
+   "costs": {
+    "CREDIT": "10.96000000"
+   },
+   "errors": 1,
+   "latency_ms": {
+    "max": 33,
+    "n": 3,
+    "p50": 33,
+    "p90": 33,
+    "p99": 33
+   },
+   "mean": 0.25,
+   "missing": 0,
+   "not_comparable": 2
+  },
+  "candidate": {
+   "costs": {
+    "CREDIT": "10.96000000"
+   },
+   "errors": 1,
+   "latency_ms": {
+    "max": 33,
+    "n": 3,
+    "p50": 33,
+    "p90": 33,
+    "p99": 33
+   },
+   "mean": 0.25,
+   "missing": 0,
+   "not_comparable": 2
+  },
+  "cost_delta": {
+   "CREDIT": "0.00000000"
+  },
+  "paired": 2,
+  "universe": 4
+ },
+ "pairing": {
+  "factors": [],
+  "kind": "rerun",
+  "tag": null
+ },
+ "protocol": {
+  "confidence": 0.95,
+  "margin": 0.05,
+  "metric_source": "deterministic_metric",
+  "min_cases": 2,
+  "required_slices": {}
+ },
+ "protocol_digest": "sha256:f134d596939af4839ce41b5afedef91b2052dfa592880f6c204783068fb006c7",
+ "report_digest": "sha256:1ab1f4096f888b49ab7f070ff8ed8a4680de4ac2c256fc60ce56a9aaab86d6e9",
+ "schema": "infrx.eval_report.1",
+ "universe_digest": "sha256:fdde0f7f84f5f4535497b53b54199274bf06827ba0bd45a92fb66dd609f7ed6b"
+}

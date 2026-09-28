@@ -1,0 +1,79 @@
+{
+ "task": "E6L",
+ "slice": "LAB-EVALUATE-LOCAL gate runner + real e6l run (lane lab-evaluate, LW5)",
+ "activity": "review",
+ "head": "420ec1d9",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate",
+ "branch": "codex/w5-lab-evaluate",
+ "owned_paths": [
+  "tests/integration/lab_evaluate/",
+  "apps/lab/tests/e2e/evaluate/",
+  "research/plan/evidence/e/E6L-*"
+ ],
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --keep --out research/plan/evidence/e/E6L-raw-420ec1d/run",
+   "exit": 1,
+   "summary": "fix round: gate FAIL unchanged - j01-j08 PASS (18 cases incl. RV-1's new j07 case and RV-2's two-worker j05 cancel), j09/j10 NOT RUN, j11 FAIL (E6L-O1); first attempt BLOCKED on a transient compose port bind (run-1-blocked-port)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e6l apps/infrx-api/.venv/bin/python -m pytest -v -p no:cacheprovider tests/integration/lab_evaluate/test_mutants.py",
+   "exit": 0,
+   "summary": "47 passed: 15/15 layer-1 + 28/28 stack mutants killed (new st_missing_not_counted, st_mean_over_the_records, st_no_call_fence), 0 survivors, every case named"
+  },
+  {
+   "cmd": "pytest -q tests/integration/lab_evaluate",
+   "exit": 0,
+   "summary": "17 passed, 1 skipped"
+  },
+  {
+   "cmd": "uvx ruff check --line-length 100 tests/integration/lab_evaluate",
+   "exit": 0,
+   "summary": "all checks passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e6l make api-test (run 2)",
+   "exit": 2,
+   "summary": "7 failed (tests/d/test_outbox_relay.py[valkey] ForeignContainer on shared infrx-d2-valkey), 5273 passed, 91 skipped, 9 xfailed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e6l INFRX_D2_VALKEY_CONTAINER=infrx-e6l-d2-valkey INFRX_D2_VALKEY_PORT=57290 uv run --frozen pytest -q tests/d/test_outbox_relay.py",
+   "exit": 0,
+   "summary": "20 passed (the 7 on this lane's own Valkey)"
+  },
+  {
+   "cmd": "make api-test (run 1, d1 default)",
+   "exit": 2,
+   "summary": "982 ForeignContainer refusals on infrx-d1-postgres held by codex-w5-composition + i8 lock busy; not this lane"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 2,
+  "likely_h": 4,
+  "pessimistic_h": 8,
+  "confidence": "medium",
+  "basis": "remaining to a green LAB-EVALUATE-LOCAL: bind j09 after composition (batch #6) and j10 after lab-api-2 (E3L bind analogue 1-3 h each); E6L-O1 fix in B1 (1-2 h, another lane); one verify round 47-234 min (session-03)",
+  "at": "2026-09-28T09:41Z"
+ },
+ "blockers": [
+  "E6L-O1: finite-video cases never reach the endpoint (N1 content has media_digest/span_ms, H1 finite_video reads sample.media_ref/sample.duration_ms) - owner B1/H1",
+  "j09 waits on composition LAB_EVAL_WORKER (+ a checkpoint_received role, absent there too)",
+  "j10 waits on lab-api-2 /lab/v1/evaluations (B4 merged on tip)"
+ ],
+ "wiring_requests": [
+  "WR-E6L-1: Makefile api-mutants new recipe line after tip line 25: INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_evaluate/test_mutants.py"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E6L-457d714.md",
+  "research/plan/evidence/e/E6L-raw-457d714/",
+  "research/plan/evidence/e/E6L-raw/",
+  "research/plan/evidence/e/E6L-raw-420ec1d/"
+ ],
+ "fix_round": {
+  "findings": {
+   "0-E6L-RV-1": "fixed",
+   "0-E6L-RV-2": "fixed"
+  },
+  "evidence": "research/plan/evidence/e/E6L-457d714.md#fix-round"
+ }
+}
