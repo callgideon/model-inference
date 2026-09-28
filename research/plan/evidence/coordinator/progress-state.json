@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "0efb70c6",
+ "integration_head": "270b0f62",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 188,
- "updated": "2026-09-28T05:45:52Z",
+ "revision": 193,
+ "updated": "2026-09-28T06:27:15Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4943,26 +4943,29 @@
    "branch": "codex/w5-pipelines",
    "worktree": ".claude/worktrees/codex-w5-pipelines",
    "base": "eb0734d7",
-   "head": null,
+   "head": "5e0d6f8d",
    "isolation": {
     "ports": "p1 57527; p3 57530/57531",
     "prefix": "infrx-p1-",
     "db": "p1"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-28T05:45:52Z",
+   "updated": "2026-09-28T06:11:18Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
+   "next_action": "ACCEPT_WITH_FIXES at 5e0d6f8d (P1 annotations import/review/adjudicate/export over D7 + fake D8 log; P3 manual bundle + protocol connector + checkpoint receipts over fake D8/D6J ledger and B3; majors incl. supersede bypass fixed+rechecked; real PG cases on p1/p3) → merge batch #4 with WR-P-1; SR-P1-1/SR-P3-1 → lab-sql LW3, SR-P3-2 → eval-ops B3, WR-P-2/5 → L2 wiring, WR-P-3 → judge P2, WR-P-4 → H1/L2, WR-P-6 → P4; P3 integration after B3 + D8",
    "estimate": {
-    "optimistic_h": 0,
-    "likely_h": 0,
-    "pessimistic_h": 0,
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 13,
     "confidence": "medium",
-    "basis": "wave5-plan §5 estimate; set at handback",
-    "at": "2026-09-27T19:05:00Z"
+    "basis": "handback: P1 1/2/5 + P3 2/4/8 after D8/B3",
+    "at": "2026-09-28T06:11:18Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/p/P1-f3acfe2.md",
+    "research/plan/evidence/p/P3-c9d2948.md"
+   ],
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW4 pipelines"
@@ -4983,18 +4986,18 @@
     "prefix": "infrx-r2-",
     "db": "r2"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T22:44:07Z",
+   "updated": "2026-09-28T06:27:15Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at ae5e263d (R2 controller over fake D9/L3/B2 ports; R3 variant identity/compare with real W3 capabilities + H1 compare; major RC-C1 policy binding fixed+rechecked) → merge batch #3 with WR-R2-5 (api-mutants); WR-R2-1 → lab-sql D9, WR-R2-2/WR-R3-1 → L3 integration, WR-R2-3 → R1, WR-R2-4 → B2 (already merged shape), WR-R2-6 → R1's __init__, WR-R3-2 → lab-sql, WR-R3-3 → experiment owners; real D9/L3/B2/R1 halves rerun at their merges",
+   "next_action": "DONE (code): merged --no-ff at 9f77ffc3 + WR-R2-5 46d3fa29 (tests/r 48; R2 63/63, R3 44/44); integration NOT claimed until D9/L3/B2/R1 real halves rerun on r2",
    "estimate": {
-    "optimistic_h": 1.5,
-    "likely_h": 4,
-    "pessimistic_h": 10,
-    "confidence": "medium",
-    "basis": "handback: R2 1/2.5/6 + R3 0.5/1.5/4 after D9/L3/R1",
-    "at": "2026-09-27T22:44:07Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T06:27:15Z"
    },
    "evidence": [
     "research/plan/evidence/r/R2-3146a24.md",
@@ -5014,26 +5017,30 @@
    "branch": "codex/w5-datasets-lw4",
    "worktree": ".claude/worktrees/codex-w5-datasets-lw4",
    "base": "eb0734d7",
-   "head": null,
+   "head": "e3fe2494",
    "isolation": {
     "ports": "n3 57518/57519",
     "prefix": "infrx-n3-",
     "db": "n3"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-28T05:45:52Z",
+   "updated": "2026-09-28T06:11:36Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
+   "next_action": "ACCEPT_WITH_FIXES at e3fe2494 (WR-N-2 acting_provider; N3 lineage/tombstones/permitted gate over real T3 + fake C2, blocking model-scope finding fixed+rechecked; N4 Lab datasets pages with a real N1/N2/N3 journey on n3) → merge batch #4 with WR-N-1 amended (lineage mutants), WR-N4-3 nav link, WR-N4-4 lab-mutants, WR-N4-5 .env.example; WR-N4-1 mount + WR-N3-2 hooks → composition batch 2; WR-N3-1 → content; WR-N3-3 → B1/P2/P3; WR-N4-2 + sample tombstone columns → lab-sql LW3",
    "estimate": {
-    "optimistic_h": 0,
-    "likely_h": 0,
-    "pessimistic_h": 0,
+    "optimistic_h": 2.25,
+    "likely_h": 6,
+    "pessimistic_h": 14.5,
     "confidence": "medium",
-    "basis": "wave5-plan §5 estimate; set at handback",
-    "at": "2026-09-27T19:05:00Z"
+    "basis": "handback total incl. one verify round + the C2 rerun and the WR-N4-1 mount",
+    "at": "2026-09-28T06:11:36Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/n/WR-N-2-9316896.md",
+    "research/plan/evidence/n/N3-39a64c3.md",
+    "research/plan/evidence/n/N4-b642f2f.md"
+   ],
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW4 datasets-lw4"
@@ -5048,26 +5055,30 @@
    "branch": "codex/w5-lab-api",
    "worktree": ".claude/worktrees/codex-w5-lab-api",
    "base": "f4bceeba",
-   "head": null,
+   "head": "f9892c30",
    "isolation": {
     "ports": "l4 57503",
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-27T20:16:44Z",
-   "updated": "2026-09-28T05:45:52Z",
+   "updated": "2026-09-28T06:17:33Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge with its wiring patch; control adapter real only after L3 merges",
+   "next_action": "ACCEPT_WITH_FIXES at f9892c30 (GoTrueSessions auth seam over SUPABASE_URL /auth/v1/user, no new secret; /lab/v1/control over a fake ControlOperations + real L2 aggregates; /lab/v1/traces over PgServing + ClickHouse rows + T3 tombstones; PG l4 role matrix; major RSI-1 = wiring patch vs the G anchor, fixed+rechecked) → merge batch #4 with WR-LAB-API-1 (the wiring patch: LAB_CONTROL/LAB_TRACES OFF, pins, mutants, api-mutants lines, 08 row) and rulings LAB-AUTH/LAB-TRACES numbered R175/R176; WR-LAB-API-2 → L3 integration, WR-LAB-API-3/5 → lab-app (L4 http adapter, V1M traces adapter), WR-LAB-API-4 → lab-sql optional; enable step needs the 'traces' extra in the gateway image",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
-    "pessimistic_h": 8,
+    "pessimistic_h": 9,
     "confidence": "medium",
-    "basis": "G4F 1/2/4 per route + the auth seam",
-    "at": "2026-09-27T20:16:44Z"
+    "basis": "handback: 1/2/4 + 1/2/5 (wiring apply, L3 composition, one verify round)",
+    "at": "2026-09-28T06:17:33Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/g/WR-L4-1-f36a6ab.md",
+    "research/plan/evidence/g/WR-V1M-2-f36a6ab.md",
+    "research/plan/evidence/g/LAB-API-f36a6ab-wiring.patch"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/gateway/routes/lab_control.py",
@@ -5121,26 +5132,30 @@
    "branch": "codex/w5-eval-ops",
    "worktree": ".claude/worktrees/codex-w5-eval-ops",
    "base": "2252e5a0",
-   "head": null,
+   "head": "cf1ce002",
    "isolation": {
     "ports": "b3 57522; i5 57523/57524",
     "prefix": "infrx-b3-",
     "db": "b3"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-27T21:02:36Z",
-   "updated": "2026-09-28T05:45:52Z",
+   "updated": "2026-09-28T06:27:15Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "DONE (code): merged --no-ff at ddb8548a + WR-EO-1 270b0f62 (tests/b+lab_eval+contracts 1459; PG b3 26+1 xfail, i5 17; mutants 200/0); B3/I5 integration NOT claimed (WR-B3-1/3, WR-B-5); B-R1 strict-xfail until lab_release_attempt merges",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
     "pessimistic_h": 0,
-    "confidence": "medium",
-    "basis": "plan 2/4/8 + 2/4/8",
-    "at": "2026-09-27T21:02:36Z"
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T06:27:15Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/b/B1-568f9ea.md",
+    "research/plan/evidence/b/B3-582c7e4.md",
+    "research/plan/evidence/i/I5-4086f26.md"
+   ],
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW4 eval-ops"
@@ -5244,6 +5259,40 @@
     "confidence": "high",
     "basis": "merged",
     "at": "2026-09-27T22:49:32Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-3",
+   "task": null,
+   "slice": "(wave5 merge lane #3) rollout-control ae5e263d + eval-ops cf1ce002 with their wirings; workflow wf_a48cd93c-268; base ff3d81eb",
+   "agent": "opus",
+   "branch": "codex/w5-merge-3",
+   "worktree": ".claude/worktrees/codex-w5-merge-3",
+   "base": "ff3d81eb",
+   "head": "270b0f62",
+   "isolation": {
+    "ports": "b3 / i5 (checks only)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "complete",
+   "started": "2026-09-28T06:04:37Z",
+   "updated": "2026-09-28T06:27:15Z",
+   "blocker": null,
+   "next_action": "DONE: fast-forwarded onto claude/consumer-v1 at 270b0f62 (verify ok, no findings)",
+   "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T06:27:15Z"
    },
    "evidence": [],
    "commands": [],
