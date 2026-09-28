@@ -928,14 +928,15 @@
       ],
       "track": "T",
       "handoff": "handoffs/T-traces.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "reuse-later",
       "product": "shared",
       "milestone": "LAB-M1",
       "amendment": "Keep retention/deletion; apply provider access grants at read/export boundary.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-27: implemented via 24e58dc5 (retention/deletion over T2I+T2F with receipts; scrub_feedback via 0035 at cd0a8af2)."
     },
     {
       "id": "J1",
@@ -1702,11 +1703,12 @@
         "DUR-RLS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "D6",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-27: implemented via 9fac4838 (0028_feedback_durable: accept_feedback, outbox, immutable rows; PgFeedbackService)."
     },
     {
       "id": "D6J",
@@ -1726,11 +1728,12 @@
         "LAB-ACCESS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "D6",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-28: implemented via 594554ca (0031_lab_consent: consent snapshots, PROVIDER_USD budgets with a named payer, reserve → intent → ack; 0036/0037 judge ledger + doors)."
     },
     {
       "id": "G4U",
@@ -1771,11 +1774,12 @@
         "FEEDBACK-ACK"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "G4",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-27: implemented via 85a8dd66 + WR-G4F-1 f4bceeba (FEEDBACK_API off; 31 route + 4 real-PG cases; 20/20 mutants)."
     },
     {
       "id": "G4T",
@@ -1820,11 +1824,12 @@
         "TRACE-TENANT"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "T2",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-27: implemented via a7bafee0 (shipper + ClickHouse projection, R165); the worker-side pumps are composed behind TRACE_PUMPS (composition lane, batch #6)."
     },
     {
       "id": "T2F",
@@ -1844,11 +1849,12 @@
         "TRACE-RECOVER"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "T2",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-27: implemented via 24e58dc5 (feedback projection over the D6F outbox; t2f block)."
     },
     {
       "id": "C3A",
@@ -1910,11 +1916,12 @@
         "LAB-ACCESS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "C3",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-27: implemented via a580ef49 + 4dabcb38 (App own-feedback + Lab review actions; the two SQL doors landed as 0038 at cd0a8af2; console-c3f-real 6/6 + 22/22)."
     },
     {
       "id": "C3L",
@@ -1959,10 +1966,11 @@
         "SPLIT-CONTRACT"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-27: implemented via 7fe48fe1 (the one membership seam = 0030 lab_provider_memberships, R171) + lab-app-lw2 b5e1d9d9/b83c5f1b (WR-L1-6 sign-in, /auth/callback, proxy)."
     },
     {
       "id": "L2",
@@ -1980,10 +1988,11 @@
         "LAB-ACCESS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-27: implemented on claude/consumer-v1 via the LW1 integration merge 7fe48fe1 (L2 on PgAccessStore, 23/23 on l2 with the 2+2+1 role matrix; migrations 0027/0030; rulings R156, R171)."
     },
     {
       "id": "L3",
@@ -2005,10 +2014,11 @@
         "LAB-ACCESS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "2026-09-28: implemented via the l3-integration merge 7f660065 (LabControl over PgControlStore = 0032, 13/13 PG cases after WR-L3-5; Operations adapter, control factory, R2 Serving port; rulings R186–R189). OPEN: WR-LSQ-9 ControlReads (lab-sql-lw3) before the Operations/Serving PG halves and the L4 journey; WR-L3-2 engine smoke adapter."
     },
     {
       "id": "L4",
@@ -2509,7 +2519,7 @@
       "track": "F",
       "product": "shared",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2533,7 +2543,8 @@
       ],
       "acceptance": "All feature teams consume one reviewed schema/fixture commit. Existing serving contracts remain compatible; optional features default off. Specify server-derived identity and permission checks at scheduling, access, export and external submission.",
       "failure_oracle": "Cross-provider refs, mutable version refs, mixed USD/CREDIT and unknown schemas fail; role alone cannot authorize data reuse. Run fake/real conformance with the same fixtures.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-27: implemented via d970e88a (Python + TS validators, fakes, rejected examples; rulings R157–R163; frozen pin)."
     },
     {
       "id": "D7",
@@ -2541,7 +2552,7 @@
       "track": "D",
       "product": "shared",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2567,7 +2578,8 @@
       ],
       "acceptance": "Immutable version publication is atomic; partial uploads remain invisible. One logical result per run/case/evaluator; receipts and reservations survive restart. Tenant filters do not rely on the UI.",
       "failure_oracle": "Race two publishers, duplicate checkpoint delivery and stale worker writes; kill around commit/ack and recover once. Foreign IDs and stale content grants fail actual DB/route tests.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-27: implemented via 7c11b6d8 (0029_lab_data, PgLabDataStore; rulings R166–R168) + 0034 follow-ups (cd0a8af2)."
     },
     {
       "id": "N1",
@@ -2575,7 +2587,7 @@
       "track": "N",
       "product": "lab",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2602,7 +2614,8 @@
       ],
       "acceptance": "Provider can import an owned benchmark and a SAM/Gemini-style exported annotation fixture without replacing their pipeline or installing their tools. Publication reports accepted/rejected counts and cannot silently omit errors.",
       "failure_oracle": "Oversized/archive traversal/SSRF sources, invalid timestamp units, duplicate upload replay and cross-provider objects are rejected. Process crash cannot publish half a dataset.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-27: implemented via e89af4df (R169) + WR-N-2 acting_provider over the L2 port (991486df, batch #4)."
     },
     {
       "id": "N2",
@@ -2610,7 +2623,7 @@
       "track": "N",
       "product": "lab",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2636,7 +2649,8 @@
       ],
       "acceptance": "Same inputs/policy/seed produce the same version and split digest. Baselines and candidates use a frozen holdout; adding samples creates a new version. Export includes exact schema/rights and omitted-item reasons.",
       "failure_oracle": "Related clips or sessions cannot cross splits; revoked source blocks new reads/exports even if its immutable manifest survives as inaccessible metadata. Duplicate imports cannot silently change the holdout.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-27: implemented via e89af4df (R170) + the lineage.permitted read gate (R178, batch #4)."
     },
     {
       "id": "N3",
@@ -2715,7 +2729,7 @@
       "track": "H",
       "product": "lab",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2740,7 +2754,8 @@
       ],
       "acceptance": "Changing a prompt/processor changes the manifest identity. An unchanged candidate can be compared to a prompt-only variant. Unsupported replay behavior is visible and cannot silently invoke production tools.",
       "failure_oracle": "Attempt tool network mutation, actuator execution, missing recorded response and prompt/config mutation mid-run; block or mark unsupported rather than produce falsely comparable scores.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-27: implemented via d970e88a + the LW1 integration merge 7fe48fe1 (LabAccess.authorize as the RightsPort, R172)."
     },
     {
       "id": "B1",
@@ -3071,7 +3086,7 @@
       "track": "D",
       "product": "shared",
       "milestone": "LAB-M4",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3096,7 +3111,8 @@
       ],
       "acceptance": "D8/D9 migration ordering is reserved by the sole D owner; independent feature scheduling does not permit migration filename collisions. Rollback creates a new policy decision, not edits to history.",
       "failure_oracle": "Concurrent promotions, stale policy publisher and repeated assignment cannot mutate admitted jobs or allocate beyond defined policy. Pinned clients remain pinned.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-28: implemented via 594554ca (0033_lab_rollout + 0039 R2 ReleaseStore: fenced CAS transitions, append-only decisions, stable assignment)."
     },
     {
       "id": "R1",

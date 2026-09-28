@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 63 planned; 59 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 47 planned; 75 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -87,7 +87,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | D1 | integrated / D | [Migrate durable schema, wallet summaries and permissions](handoffs/D-durable-state.md) | F2 | — |
 | G1 | implemented / G | [Ingress, auth and capability validation](handoffs/G-gateway.md) | F2 | D2 |
 | T1 | implemented / T | [Byte-budgeted capture and persistent spool](handoffs/T-traces.md) | F2 | — |
-| T3 | planned / T | [Logical retention, deletion and observability](handoffs/T-traces.md) | T2I, F2P | T2F |
+| T3 | implemented / T | [Logical retention, deletion and observability](handoffs/T-traces.md) | T2I, F2P | T2F |
 | J1 | implemented / J | [Dry-run sampler, rubric and score validation](handoffs/J-judge.md) | F2 | — |
 | J2 | planned / J | [Consent/budget coordinated submission and collection](handoffs/J-judge.md) | J1, F2P | D6J, T2I, L2 |
 | J3 | planned / J | [Operator calibration and quality report](handoffs/J-judge.md) | J2, F2P | C3L, V2 |
@@ -96,29 +96,29 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | V1 | implemented / V | [Paginated trace list and filters](handoffs/V-trace-ui.md) | F2 | V1M |
 | V2 | planned / V | [Trace detail, content and feedback](handoffs/V-trace-ui.md) | V1M | C2, C3F |
 | V3 | planned / V | [Judge score and calibration presentation](handoffs/V-trace-ui.md) | V2, F2P | J2 |
-| D6F | planned / D | [Durable feedback and immutable author provenance](09-amendment-workstreams.md) | D5, F2P | — |
-| D6J | planned / D | [Lab consent, USD budget and external submission coordination](09-amendment-workstreams.md) | D5, F2P | L2 |
-| G4F | planned / G | [Owned feedback HTTP adapter](09-amendment-workstreams.md) | G1R | D6F |
+| D6F | implemented / D | [Durable feedback and immutable author provenance](09-amendment-workstreams.md) | D5, F2P | — |
+| D6J | implemented / D | [Lab consent, USD budget and external submission coordination](09-amendment-workstreams.md) | D5, F2P | L2 |
+| G4F | implemented / G | [Owned feedback HTTP adapter](09-amendment-workstreams.md) | G1R | D6F |
 | G4T | planned / G | [Owned trace export HTTP adapter](09-amendment-workstreams.md) | G1R | T2I, T3, C2 |
-| T2I | planned / T | [Inference analytics and content projection](09-amendment-workstreams.md) | T1, F2P | D5 |
-| T2F | planned / T | [Feedback analytics projection](09-amendment-workstreams.md) | T2I, F2P | D6F |
-| C3F | planned / C | [Authorized feedback and review actions](09-amendment-workstreams.md) | F2P, C0 | D6F, L2 |
+| T2I | implemented / T | [Inference analytics and content projection](09-amendment-workstreams.md) | T1, F2P | D5 |
+| T2F | implemented / T | [Feedback analytics projection](09-amendment-workstreams.md) | T2I, F2P | D6F |
+| C3F | implemented / C | [Authorized feedback and review actions](09-amendment-workstreams.md) | F2P, C0 | D6F, L2 |
 | C3L | planned / C | [Lab judge and calibration control actions](09-amendment-workstreams.md) | F2P, C0 | D6J, J2, L2 |
-| L1 | planned / L | [Provider app shell and separate build/auth boundary](09-amendment-workstreams.md) | F2P | L2 |
-| L2 | planned / L | [Provider role and purpose-specific data-access services](09-amendment-workstreams.md) | F2P | D1R |
-| L3 | planned / L | [Assisted model registration and dev/prod revision services](09-amendment-workstreams.md) | L2, F2P | G1R, W2, A3 |
+| L1 | implemented / L | [Provider app shell and separate build/auth boundary](09-amendment-workstreams.md) | F2P | L2 |
+| L2 | implemented / L | [Provider role and purpose-specific data-access services](09-amendment-workstreams.md) | F2P | D1R |
+| L3 | implemented / L | [Assisted model registration and dev/prod revision services](09-amendment-workstreams.md) | L2, F2P | G1R, W2, A3 |
 | L4 | planned / L | [Model/deployment/publication UI and aggregate health](09-amendment-workstreams.md) | L1, F2P | L3 |
 | I2L | planned / I | [Independent Lab app and control-service deployment](09-amendment-workstreams.md) | I1, F2P | L1, L2, L3, L4 |
 | E3L | planned / E | [Provider access, publication and rollback integration gate](09-amendment-workstreams.md) | E2, F2P | L1, L2, L3, L4, E2R, D1R |
 | E5L | planned / E | [Provider traces, review and evaluation integration gate](09-amendment-workstreams.md) | E3L, F2P | D6F, D6J, G4F, G4T, T3, J2, J3, C3F, C3L, V3 |
 | V1M | planned / V | [Move the implemented trace explorer into the authorized Lab shell](11-wave3-revision-handoffs.md) | F2P, L1 | L2, C0, T2I |
-| F3 | planned / F | [Freeze dataset, evaluation, training and rollout contracts](13-lab-improvement-handoffs.md) | F2P | — |
-| D7 | planned / D | [Persist datasets, harnesses and evaluation coordination](13-lab-improvement-handoffs.md) | F3, D1R | — |
-| N1 | planned / N | [Import benchmark data and existing annotation outputs](13-lab-improvement-handoffs.md) | F3 | D7, M3, L2 |
-| N2 | planned / N | [Version, split and export reproducible datasets](13-lab-improvement-handoffs.md) | N1 | D7 |
+| F3 | implemented / F | [Freeze dataset, evaluation, training and rollout contracts](13-lab-improvement-handoffs.md) | F2P | — |
+| D7 | implemented / D | [Persist datasets, harnesses and evaluation coordination](13-lab-improvement-handoffs.md) | F3, D1R | — |
+| N1 | implemented / N | [Import benchmark data and existing annotation outputs](13-lab-improvement-handoffs.md) | F3 | D7, M3, L2 |
+| N2 | implemented / N | [Version, split and export reproducible datasets](13-lab-improvement-handoffs.md) | N1 | D7 |
 | N3 | planned / N | [Derive datasets from permitted traces and propagate revocation](13-lab-improvement-handoffs.md) | N2 | T3, C2, D6F |
 | N4 | planned / N | [Build dataset import, version and split workflows in Lab](13-lab-improvement-handoffs.md) | F3, L1 | N2 |
-| H1 | planned / H | [Version prompts and bounded replay harnesses](13-lab-improvement-handoffs.md) | F3 | L2 |
+| H1 | implemented / H | [Version prompts and bounded replay harnesses](13-lab-improvement-handoffs.md) | F3 | L2 |
 | B1 | planned / B | [Execute durable offline evaluation runs](13-lab-improvement-handoffs.md) | F3 | D7, N2, H1, L3, W2, D5 |
 | B2 | planned / B | [Compare quality, costs and latency with honest uncertainty](13-lab-improvement-handoffs.md) | F3 | B1 |
 | B3 | planned / B | [Benchmark externally produced checkpoints continuously](13-lab-improvement-handoffs.md) | F3 | B1, L2 |
@@ -128,7 +128,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | P2 | planned / P | [Run bounded teacher annotation batches](13-lab-improvement-handoffs.md) | F3 | P1, D8, N2, J2, J3 |
 | P3 | planned / P | [Integrate external training and import candidates](13-lab-improvement-handoffs.md) | F3 | D8, N2, B3, L2 |
 | P4 | planned / P | [Build annotation and training workflows in Lab](13-lab-improvement-handoffs.md) | F3, L1 | P1, P2, P3, B2 |
-| D9 | planned / D | [Persist release policies and stable experiment assignment](13-lab-improvement-handoffs.md) | F3, D7 | — |
+| D9 | implemented / D | [Persist release policies and stable experiment assignment](13-lab-improvement-handoffs.md) | F3, D7 | — |
 | R1 | planned / R | [Route bounded shadow, canary and A/B experiments](13-lab-improvement-handoffs.md) | F3 | D9, L3, G2, G3 |
 | R2 | planned / R | [Evaluate guardrails and roll back controlled releases](13-lab-improvement-handoffs.md) | R1 | B2, L4 |
 | R3 | planned / R | [Register and compare optimized serving variants](13-lab-improvement-handoffs.md) | F3 | H1, B2, L2, W3 |

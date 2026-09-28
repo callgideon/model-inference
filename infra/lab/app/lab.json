@@ -32,6 +32,7 @@
       {"name": "INFRX_LAB_IMAGE", "exposure": "unit", "purpose": "the Lab control release: a content-addressed image id, rolled back by itself"},
       {"name": "INFRX_LAB_DATABASE_URL", "exposure": "secret", "purpose": "the control service's own database login (L3-SQL names the role); never the runtime's DATABASE_URL"},
       {"name": "INFRX_LAB_SUPABASE_URL", "exposure": "server", "purpose": "where the control service verifies a Lab session token"},
+      {"name": "INFRX_LAB_SUPABASE_ANON_KEY", "exposure": "server", "purpose": "the publishable anon key the control service presents as apikey when verifying a Lab session token (GoTrueSessions); never the service-role key"},
       {"name": "INFRX_LAB_ORIGIN", "exposure": "server", "purpose": "the one browser origin whose Lab sessions it accepts"}
     ],
     "lab-workers": [

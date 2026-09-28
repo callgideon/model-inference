@@ -43,6 +43,7 @@ Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
 | `INFRX_LAB_IMAGE` | unit | the Lab control release, a content-addressed image id (`sha256:…`) |
 | `INFRX_LAB_DATABASE_URL` | **secret** | the control service's own database login (L3-SQL names the role); never the runtime's `DATABASE_URL` |
 | `INFRX_LAB_SUPABASE_URL` | server | the project whose Lab session tokens it verifies |
+| `INFRX_LAB_SUPABASE_ANON_KEY` | server | the publishable anon key the control service presents as `apikey` when it verifies a Lab session token (`infrx.lab.control.app`); never the service-role key |
 | `INFRX_LAB_ORIGIN` | server | the Lab web origin whose sessions it accepts |
 
 Lab edge: `INFRX_LAB_CONTROL_SITE` (the control origin's address; default the placeholder in

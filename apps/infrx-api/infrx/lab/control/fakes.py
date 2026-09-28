@@ -110,10 +110,10 @@ class FakeControl:
     async def active_rate_card(self, deployment_revision_id: str) -> v2.RateCardSnapshot | None:
         """The card of the newest listing naming the deployment, else (never listed) its
         newest effective card."""
-        named = [l for ls in self.listings.values() for l in ls
-                 if l.deployment_revision_id == deployment_revision_id]
+        named = [lst for lists in self.listings.values() for lst in lists
+                 if lst.deployment_revision_id == deployment_revision_id]
         if named:
-            return self.cards[max(named, key=lambda l: l.version).rate_card_version]
+            return self.cards[max(named, key=lambda lst: lst.version).rate_card_version]
         own = [c for c in self.cards.values() if c.deployment_revision_id
                == deployment_revision_id and c.effective_at <= self.clock.now]
         return max(own, key=lambda c: c.effective_at, default=None)
