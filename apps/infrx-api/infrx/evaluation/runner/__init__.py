@@ -40,8 +40,12 @@ data, attempts spent) fail the attempt with no result and their cost. A finish r
 the fence (cancelled, expired, taken over) is dropped: no stale result overwrites a live
 one. D7 keeps one result per run x case x evaluator.
 
-`provider_org_id` is the caller's server-derived provider (the L2 port: wiring); the worker
-entry point that runs `resume`/`Runner.run` for an `eval_run` outbox event is wiring.
+**Who schedules (WR-B-4, R160's membership half).** `freeze` takes the provider from the
+L2 port: `user_id` must hold a current membership of `provider_org_id` whose role carries
+`run_evaluation`, read on the store's clock at the call (no membership, a revoked one or
+another provider's is `NotFound`; a viewer is `Forbidden`); D7 then checks the grant half.
+The worker entry point that runs `resume`/`Runner.run` for an `eval_run` outbox event is
+wiring (WR-B-5).
 """
 from __future__ import annotations
 
@@ -59,12 +63,22 @@ from ...contracts import errors
 from ...contracts.lab import records as lab
 from ...contracts.v2 import records as v2
 from ...contracts.v2.money_units import Credit
+from ...contracts.v2.records import ProviderCapability
 from ...datasets.imports import sample_key
 from ...datasets.versions import split_digest
-from ...harnesses.replay import _MISSING, Bounds, Replayer, ReplayBoundExceeded, _at
+from ...harnesses.replay import Bounds, Replayer, ReplayBoundExceeded
+from ...lab.access import LabAccess
 
 MAX_BODY = 65536                        # D7's bound on one result body
 RETRYABLE = (errors.RateLimitError, errors.ServerError)
+_MISSING = object()
+
+
+def _at(case: dict[str, Any], path: str) -> Any:
+    """The value at a dotted path into the case, or `_MISSING`."""
+    for part in path.split("."):
+        case = case.get(part, _MISSING) if isinstance(case, dict) else _MISSING
+    return case
 
 
 class EvaluatorSpec(lab.LabModel):
@@ -125,12 +139,25 @@ async def _pinned(store, run: lab.EvalRun, run_ref: str, evaluator: dict[str, An
                   limit=limit)
 
 
+async def may_schedule(access: LabAccess, *, user_id: str, provider_org_id: str) -> None:
+    """WR-B-4: a current member of the provider whose role runs evaluations."""
+    membership = await access.store.membership(provider_org_id, user_id)
+    now = await access.store.db_now()
+    if membership is None or not membership.permits(
+            ProviderCapability.read_aggregate_health, now, provider_org_id):
+        raise errors.NotFound("no such provider workspace")
+    if not membership.permits(ProviderCapability.run_evaluation, now, provider_org_id):
+        raise errors.Forbidden("this provider role does not run evaluations")
+
+
 async def freeze(store, payload: dict[str, Any], *, evaluator: dict[str, Any],
-                 provider_org_id: str, actor: str) -> Frozen:
-    """The run published and created in D7; the same payload is the same run."""
+                 access: LabAccess, user_id: str, provider_org_id: str) -> Frozen:
+    """The run published and created in D7 for a member allowed to schedule it; the same
+    payload is the same run."""
     run = lab.parse(payload)
     limit = _checked(run, evaluator)
-    run_ref = await store.publish(payload, provider_org_id=provider_org_id, actor=actor)
+    await may_schedule(access, user_id=user_id, provider_org_id=provider_org_id)
+    run_ref = await store.publish(payload, provider_org_id=provider_org_id, actor=user_id)
     await store.create_run(run_ref, provider_org_id=provider_org_id)
     return await _pinned(store, run, run_ref, evaluator, limit)
 
@@ -206,8 +233,10 @@ class Runner:
         run = self._frozen.run
         while self._stop is None:
             status = await self._store.run_status(run.run_id, provider_org_id=run.provider_org_id)
-            # ponytail: in-flight attempts may overshoot by one attempt per worker.
-            if Credit(status["costs"].get("CREDIT", "0")) >= self._frozen.limit:
+            # ponytail: in-flight attempts may overshoot by one attempt per worker. B-R8: a
+            # charge this delivery could not record still counts.
+            if Credit(status["costs"].get("CREDIT", "0")) + self._unrecorded \
+                    >= self._frozen.limit:
                 self._stop = "budget_exhausted"
                 return
             try:
@@ -229,15 +258,16 @@ class Runner:
                 purpose="provider_sharing"):
             return await self._finish(lease, "failed", reason="revoked")
         sample = next(s for s in f.manifest.samples if s.sample_id == case_id)
-        # ponytail: a missing content object raises here; the lease expires and the case
-        # fails at max_attempts. Finite video waits on L3's media path (see HttpDevEndpoint).
-        case = {"sample": json.loads(await self._objects.get(
-            sample_key(f.run.provider_org_id, sample.content_digest)))}
         spec, bill, started = f.evaluator, _Bill(), time.monotonic()
-        replayer = Replayer(f.harness, self._deployment, self._bridge(lease, bill, loop),
-                            self._recordings, Bounds(spec["max_requests"], spec["max_bytes"],
-                                                     spec["max_seconds"]))
         try:
+            raw = await self._objects.get(sample_key(f.run.provider_org_id,
+                                                     sample.content_digest))
+            if raw is None:
+                return await self._finish(lease, "failed", reason="missing_content")
+            case = {"sample": json.loads(raw)}
+            replayer = Replayer(f.harness, self._deployment, self._bridge(lease, bill, loop),
+                                self._recordings, Bounds(spec["max_requests"],
+                                                         spec["max_bytes"], spec["max_seconds"]))
             outcome = await asyncio.to_thread(replayer.replay, case)
         except errors.InsufficientCredit:
             self._stop = "wallet_exhausted"
@@ -248,6 +278,9 @@ class Runner:
             return await self._finish(lease, "failed", reason=f"bound:{bound.bound}", bill=bill)
         except errors.DomainError as refused:
             return await self._finish(lease, "failed", reason=refused.code, bill=bill)
+        except Exception as broken:        # B-R7: this case's, never the whole delivery's
+            return await self._finish(lease, "failed", reason=f"error:{type(broken).__name__}",
+                                      bill=bill)
         reference = _at(case, spec["reference"])
         reasons = list(outcome.reasons)
         if reference is _MISSING:
@@ -342,8 +375,9 @@ class HttpDevEndpoint:
                        idempotency_key: str) -> Completion:
         if media:
             raise errors.InvalidRequest("finite video dispatch waits on L3's media path")
-        messages = [{"role": "user", "content": prompt}] + [
-            {"role": "tool", "content": json.dumps(r)} for r in tool_results]
+        if tool_results:        # B-R3: the gateway takes system/user/assistant, no tools
+            raise errors.InvalidRequest("tool replay waits on the gateway's tool support")
+        messages = [{"role": "user", "content": prompt}]
         try:
             answer = await self._client.post(
                 self._url, json={"model": self._model, "seed": seed, "messages": messages},

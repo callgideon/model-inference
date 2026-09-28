@@ -21,8 +21,9 @@ from infrx.evaluation.runner import HttpDevEndpoint, Limits, Runner
 from infrx.harnesses.replay import recording_key
 from infrx.media.store import InMemoryObjectStore
 
-from .world import (DEPLOYMENT, EVALUATOR, EVALUATOR_ID, NEMO, OTHER, RATE_CARD, SPEC, Crash, DevWallet,
-                    FakeEvalStore, content, eval_run, harness, manifest)
+from .world import (DEPLOYMENT, DEV, EVALUATOR, EVALUATOR_ID, NEMO, OTHER, OUTSIDER, RATE_CARD, SPEC,
+                    VIEWER, Crash, DevWallet, FakeEvalStore, access, content, eval_run, harness,
+                    manifest)
 
 N = 5
 LIMITS = Limits(lease_s=30, max_attempts=2, dispatch_retries=2, concurrency=1)
@@ -35,6 +36,7 @@ def run(coro):
 class World:
     def __init__(self, n: int = N, funded: str = "1000", **run_kw) -> None:
         self.store, self.objects = FakeEvalStore(), InMemoryObjectStore()
+        self.access = access()
         self.grant = self.store.add_grant()
         source = run(self.store.register_source(
             provider_org_id=NEMO, source_id="5a000000-0000-4000-8000-000000000001",
@@ -51,9 +53,9 @@ class World:
         self.wallet = DevWallet(funded)
         self.ids = sorted(s["sample_id"] for s in self.manifest["samples"])
 
-    def freeze(self, payload=None, spec=SPEC):
+    def freeze(self, payload=None, spec=SPEC, user=DEV, provider=NEMO):
         return run(runner.freeze(self.store, payload or self.payload, evaluator=spec,
-                                 provider_org_id=NEMO, actor="dev@nemo"))
+                                 access=self.access, user_id=user, provider_org_id=provider))
 
     def runner(self, limits=LIMITS, worker="w1", endpoint=None) -> Runner:
         return Runner(self.store, self.objects, endpoint or self.wallet, DEPLOYMENT,
@@ -105,9 +107,31 @@ def test_b1_freeze_refuses_an_unbound_evaluator_unbounded_spend_and_another_prov
         with pytest.raises(errors.InvalidRequest, match="CREDIT budget"):
             w.freeze(eval_run(w.dataset, w.harness_ref, budgets=budgets))
     with pytest.raises(errors.Forbidden):
-        run(runner.freeze(w.store, w.payload, evaluator=SPEC, provider_org_id=OTHER,
-                          actor="dev@other"))
+        w.freeze(user=OUTSIDER, provider=OTHER)
     assert w.store.runs == {}
+
+
+def test_b1_only_a_current_member_allowed_to_run_evaluations_schedules() -> None:
+    """WR-B-4 (R160's membership half; D7 checks the grant half): the provider a run is
+    frozen for comes from the L2 port - a user with no current membership of it is told the
+    workspace does not exist (a member of another provider, a revoked member), a viewer is
+    refused, and nothing is published or created for either; a developer schedules."""
+    w = World()
+    before = w.store.catalog.refs()
+    for user, provider, refusal in ((OUTSIDER, NEMO, errors.NotFound),
+                                    (VIEWER, NEMO, errors.Forbidden),
+                                    (DEV, OTHER, errors.NotFound)):
+        with pytest.raises(refusal):
+            w.freeze(user=user, provider=provider)
+    store = w.access.store
+    store.memberships[(NEMO, DEV)] = store.memberships[(NEMO, DEV)].model_copy(
+        update={"revoked_at": store.now})
+    with pytest.raises(errors.NotFound):
+        w.freeze()
+    assert w.store.runs == {} and w.store.catalog.refs() == before
+    store.memberships[(NEMO, DEV)] = store.memberships[(NEMO, DEV)].model_copy(
+        update={"revoked_at": None})
+    assert w.freeze().run.provider_org_id == NEMO and len(w.store.runs) == 1
 
 
 # ----------------------------------------------------------------- B1.b/c the loop
@@ -285,11 +309,17 @@ def test_b1_a_402_gives_its_attempt_back_so_billing_never_exhausts_a_case() -> N
 
 def test_b1_the_credit_budget_bounds_spending() -> None:
     """EVAL-DURABLE: once the run's recorded CREDIT reaches its budget limit no further case
-    is leased; the rest stay pending."""
+    is leased; the rest stay pending. B-R8: a charge this delivery made but could not record
+    (its finish was fenced out) counts toward the limit too."""
     w = World(limit=str(RATE_CARD.debit(900, 1000) + RATE_CARD.debit(900, 1000)))
     report = run(w.runner().run(w.freeze()))
     assert report["stopped"] == "budget_exhausted" and len(w.wallet.calls) == 2
     assert report["cases"] == {"done": 2, "pending": N - 2}
+    lost = World(limit=per_case())
+    lost.wallet.answer = lambda p: setattr(lost.store, "now", lost.store.now + 31) or "a1"
+    report = run(lost.runner().run(lost.freeze()))
+    assert report["unrecorded"] == {"CREDIT": per_case()} and report["costs"] == {}
+    assert report["stopped"] == "budget_exhausted" and len(lost.wallet.calls) == 1
 
 
 def test_b1_revoked_data_fails_its_case_without_dispatch() -> None:
@@ -339,6 +369,21 @@ def test_b1_a_created_run_resumes_after_a_revocation_and_ends_revoked() -> None:
         resume(provider=OTHER)
     with pytest.raises(errors.InvalidRequest, match="evaluator"):
         resume(evaluator={**SPEC, "max_requests": 5})
+
+
+def test_b1_an_unexpected_error_fails_its_case_visibly_and_the_delivery_goes_on() -> None:
+    """B-R7: a case that cannot be read (its content object is gone) or whose attempt
+    raises anything unexpected fails at once with the reason visible, never aborting the
+    delivery (its other cases are scored) nor surfacing later as `attempts_exhausted`."""
+    w = World(n=3)
+    frozen = w.freeze()
+    missing = sample_key(NEMO, w.manifest["samples"][0]["content_digest"])
+    w.objects.objects.pop(missing)
+    w.wallet.answer = lambda p: 1 / 0 if p.endswith("q2") else "a" + p.split("q")[-1]
+    report = run(w.runner().run(frozen))
+    assert report["failures"] == {w.ids[0]: "missing_content",
+                                  w.ids[1]: "error:ZeroDivisionError"}
+    assert report["cases"] == {"failed": 2, "done": 1} and list(w.results()) == [w.ids[2]]
 
 
 def test_b1_harness_outcomes_are_results_and_bounds_fail_the_attempt() -> None:
@@ -445,8 +490,8 @@ def test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_c
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     port = HttpDevEndpoint("http://dev", api_key="k", model="m", rate_card=RATE_CARD,
                            client=client)
-    got = run(port.complete(prompt="p", media=[], tool_results=[{"name": "look", "result": 2}],
-                            seed=7, idempotency_key="attempt:x"))
+    got = run(port.complete(prompt="p", media=[], tool_results=[], seed=7,
+                            idempotency_key="attempt:x"))
     assert (got.text, got.tool_calls) == ("hi", [{"name": "look", "arguments": {"x": 1}}])
     assert got.charged == RATE_CARD.debit(10, 20)
     assert (got.prompt_tokens, got.completion_tokens) == (10, 20)
@@ -455,8 +500,7 @@ def test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_c
     assert sent.headers["Authorization"] == "Bearer k"
     assert sent.headers["Idempotency-Key"] == "attempt:x"
     assert json.loads(sent.content) == {"model": "m", "seed": 7, "messages": [
-        {"role": "user", "content": "p"},
-        {"role": "tool", "content": json.dumps({"name": "look", "result": 2})}]}
+        {"role": "user", "content": "p"}]}
     for prompt, error in (("poor", errors.InsufficientCredit),
                           ("busy", errors.DependencyUnavailable),
                           ("slow", errors.DependencyUnavailable),
@@ -468,3 +512,9 @@ def test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_c
     with pytest.raises(errors.InvalidRequest, match="video"):
         run(port.complete(prompt="p", media=["m"], tool_results=[], seed=0,
                           idempotency_key="k"))
+    # B-R3: the gateway takes {role, content} messages of system/user/assistant only, and no
+    # tools; a recorded tool result is refused here, never sent as a message it refuses.
+    with pytest.raises(errors.InvalidRequest, match="tool"):
+        run(port.complete(prompt="p", media=[], tool_results=[{"name": "look", "result": 2}],
+                          seed=0, idempotency_key="k"))
+    assert len(seen) == 6                  # neither refusal reached the endpoint

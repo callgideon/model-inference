@@ -28,9 +28,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from infrx.contracts import errors
 from infrx.contracts.lab import records
+from datetime import timedelta
+
+from infrx.contracts.fakes.support import DEFAULT_START
 from infrx.contracts.v2 import fixtures as v2fixtures
+from infrx.contracts.v2 import records as v2
 from infrx.contracts.v2.money_units import Credit
 from infrx.evaluation.runner import Completion, evaluator_ref
+from infrx.lab.access import LabAccess
+from infrx.lab.access.fakes import FakeAccessStore
 
 from ...n.imports.world import NEMO, OTHER, FakeLabStore, grant_ref  # noqa: F401
 
@@ -41,6 +47,22 @@ SERVING = (f"lab:serving:{NEMO}:{DEPLOYMENT.deployment_revision_id}@sha256:" + "
 SPEC = {"metric": "exact_match", "reference": "sample.original.answer",
         "max_requests": 4, "max_bytes": 100_000, "max_seconds": 60}
 EVALUATOR = evaluator_ref(SPEC, provider_org_id=NEMO, evaluator_id=EVALUATOR_ID)
+
+
+DEV, VIEWER, OUTSIDER = (f"d0000b1{n}-0000-4000-8000-000000000001" for n in (1, 2, 3))
+
+
+def access() -> LabAccess:
+    """The L2 port (WR-B-4): DEV develops for NEMO, VIEWER views NEMO, OUTSIDER develops for
+    OTHER only. The clock is the store's."""
+    store = FakeAccessStore(now=DEFAULT_START)
+    for provider, user, role in ((NEMO, DEV, v2.ProviderRole.developer),
+                                 (NEMO, VIEWER, v2.ProviderRole.viewer),
+                                 (OTHER, OUTSIDER, v2.ProviderRole.developer)):
+        store.memberships[(provider, user)] = v2.ProviderMembership(
+            provider_org_id=provider, user_id=user, role=role, granted_by="ops",
+            granted_at=DEFAULT_START - timedelta(days=1))
+    return LabAccess(store)
 
 
 def uid(n: int, tag: int = 0xb1) -> str:

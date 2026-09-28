@@ -39,6 +39,8 @@ LARGE = "test_b1_an_oversized_output_is_scored_and_recorded_without_its_body"
 NOREF = "test_b1_a_case_without_its_reference_is_recorded_unscored"
 CONC = "test_b1_cases_run_with_bounded_concurrency"
 HTTP = "test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_card"
+MEMBER = "test_b1_only_a_current_member_allowed_to_run_evaluations_schedules"
+UNEXPECTED = "test_b1_an_unexpected_error_fails_its_case_visibly_and_the_delivery_goes_on"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -83,11 +85,11 @@ MUTANTS: tuple[Mutant, ...] = (
       "_pinned(store, run, run_ref, evaluator, run.budgets[0].limit.amount)", RESUME),
     # --- B1.b the loop (EVAL-DURABLE)
     m("b1_budget_unchecked", "the run's recorded CREDIT stops leasing at its limit",
-      'if Credit(status["costs"].get("CREDIT", "0")) >= self._frozen.limit:', "if False:",
+      "                    >= self._frozen.limit:", "                    >= self._frozen.limit and False:",
       BUDGET),
     m("b1_budget_off_by_one", "reaching the limit exactly stops the run",
-      'if Credit(status["costs"].get("CREDIT", "0")) >= self._frozen.limit:',
-      'if Credit(status["costs"].get("CREDIT", "0")) > self._frozen.limit:', BUDGET),
+      "                    >= self._frozen.limit:", "                    > self._frozen.limit:",
+      BUDGET),
     m("b1_stop_not_sticky", "a stop ends every worker's loop",
       "        while self._stop is None:\n", "        while True:\n", GIVEBACK),
     m("b1_terminal_run_raises", "a delivery of a finished run is a no-op",
@@ -195,12 +197,32 @@ MUTANTS: tuple[Mutant, ...] = (
       dies_by=("InvalidRequest",)),
     m("b1_oversize_unreported", "a dropped output says why",
       'reasons=[*reasons, "output_too_large"]', "reasons=reasons", LARGE),
+    # --- WR-B-4: who schedules (the L2 port)
+    m("b1_schedule_unchecked", "freeze asks the L2 port first",
+      "    await may_schedule(access, user_id=user_id, provider_org_id=provider_org_id)\n",
+      "", MEMBER),
+    m("b1_viewer_schedules", "the role must carry run_evaluation",
+      "if not membership.permits(ProviderCapability.run_evaluation, now, provider_org_id):",
+      "if not membership.permits(ProviderCapability.read_aggregate_health, now,"
+      " provider_org_id):", MEMBER),
+    m("b1_revoked_member_confirmed", "a revoked membership is no workspace (404, not 403)",
+      "    if membership is None or not membership.permits(\n"
+      "            ProviderCapability.read_aggregate_health, now, provider_org_id):",
+      "    if membership is None:", MEMBER, dies_by=("Forbidden",)),
+    # --- B-R7/B-R8
+    m("b1_unexpected_error_masked", "an unexpected error names itself",
+      'reason=f"error:{type(broken).__name__}"', 'reason="attempts_exhausted"', UNEXPECTED),
+    m("b1_missing_content_unnamed", "a missing content object is named",
+      "            if raw is None:\n", "            if False:\n", UNEXPECTED),
+    m("b1_unrecorded_not_budgeted", "an unrecorded charge counts toward the budget (B-R8)",
+      'Credit(status["costs"].get("CREDIT", "0")) + self._unrecorded',
+      'Credit(status["costs"].get("CREDIT", "0"))', BUDGET),
     # --- the HTTP dev endpoint (L3 stand-in)
     m("b1_http_media_sent", "finite video is refused until L3's media path",
       "        if media:\n", "        if False:\n", HTTP),
     m("b1_http_seed_dropped", "the seed is sent", '"seed": seed,', '"seed": 0,', HTTP),
-    m("b1_http_tool_results_dropped", "recorded tool results are sent",
-      "for r in tool_results]", "for r in []]", HTTP),
+    m("b1_http_tool_results_sent", "a tool result is refused, not sent as a refused role (B-R3)",
+      "        if tool_results:        # B-R3", "        if False:        # B-R3", HTTP),
     m("b1_http_key_dropped", "the idempotency key is sent",
       '"Idempotency-Key": idempotency_key}', '"Idempotency-Key": "k"}', HTTP),
     m("b1_http_transport_final", "a lost connection is retryable",
