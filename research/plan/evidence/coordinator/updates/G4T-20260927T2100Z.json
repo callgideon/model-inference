@@ -4,7 +4,7 @@
   "slice": "GET /v1/traces route + OwnedExport (unmounted); WR-G4T-1 mount behind TRACE_EXPORT_API (off) as a proven patch",
   "activity": "fix-round",
   "at": "2026-09-28T00:00:00Z",
-  "head": "FIXHEAD",
+  "head": "b59e47d3",
   "base": "eb0734d7",
   "worktree": ".claude/worktrees/codex-w5-content",
   "branch": "codex/w5-content",
