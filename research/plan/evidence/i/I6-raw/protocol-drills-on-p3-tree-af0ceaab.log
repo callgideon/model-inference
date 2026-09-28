@@ -1,0 +1,9 @@
+# scratch tree: git merge-tree --write-tree af0ceaab codex/w5-pipelines(5e0d6f8d) = tree b9bc6031 (no commit, no worktree; git archive into the scratchpad, lane venv); cmd: pytest -q -rA tests/i/lab_pipeline/test_protocol_drills.py tests/i/lab_pipeline/test_egress.py
+=========================== short test summary info ============================
+PASSED tests/i/lab_pipeline/test_protocol_drills.py::test_i6_blocked_egress_is_an_ambiguous_submit_that_no_restart_resends
+PASSED tests/i/lab_pipeline/test_protocol_drills.py::test_i6_a_server_that_accepted_then_went_down_converges_on_restart_to_one_job
+PASSED tests/i/lab_pipeline/test_egress.py::test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it[plain]
+PASSED tests/i/lab_pipeline/test_egress.py::test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it[overrides]
+PASSED tests/i/lab_pipeline/test_egress.py::test_i6_an_empty_allowlist_denies_every_http_host
+5 passed in 2.96s
+exit 0

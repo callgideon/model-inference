@@ -1,0 +1,223 @@
+
+==================================== ERRORS ====================================
+___________ ERROR collecting tests/i/lab_pipeline/test_preflight.py ____________
+tests/i/lab_pipeline/test_preflight.py:23: in <module>
+    PF = runpy.run_path(str(SCRIPT))
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen runpy>:286: in run_path
+    ???
+<frozen runpy>:254: in _get_code_from_file
+    ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/infra/lab/workers/training/preflight.py'
+=========================== short test summary info ============================
+ERROR tests/i/lab_pipeline/test_preflight.py - FileNotFoundError: [Errno 2] N...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.18s
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+____ test_i6_each_role_is_bounded_off_by_default_and_gated_by_the_preflight ____
+
+    def test_i6_each_role_is_bounded_off_by_default_and_gated_by_the_preflight() -> None:
+        """Failure oracle: a teacher or training worker that is unbounded, starts without its own
+        env file, runs as root or the consumer's uid, is coupled to a consumer unit, starts when
+        the preflight fails (or runs it as root), or shares a health port with another Lab role."""
+>       runbook = RUNBOOK.read_text()
+                  ^^^^^^^^^^^^^^^^^^^
+
+tests/i/lab_pipeline/test_units.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/infra/lab/workers/training/RUNBOOK.md')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/infra/lab/workers/training/RUNBOOK.md'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_i6_egress_is_denied_by_default_through_a_dead_proxy_the_env_file_cannot_override _
+
+    def test_i6_egress_is_denied_by_default_through_a_dead_proxy_the_env_file_cannot_override() -> None:
+        """Failure oracle: a proxy flag missing in one letter case (a lowercase `https_proxy=` in
+        the env file then switches the deny off, see test_egress.py), a live proxy address, or a
+        NO_PROXY that is not the preflight-checked LAB_EGRESS_ALLOW. Port 9 is privileged: no
+        unprivileged process can listen there and become the proxy."""
+        for role in ROLES:
+>           (start,) = directive(unit(role), "ExecStart")
+                                 ^^^^^^^^^^
+
+tests/i/lab_pipeline/test_units.py:82: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/i/lab_pipeline/test_units.py:29: in unit
+    return (units / f"infrx-lab-{role}.service").read_text()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/pipelines/infrx-lab-annotation.service')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/pipelines/infrx-lab-annotation.service'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it[plain] _
+
+overrides = {}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7086869180e0>
+
+    @pytest.mark.parametrize("overrides", [{}, OVERRIDES], ids=["plain", "overrides"])
+    def test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it(
+            overrides, monkeypatch) -> None:
+        """Failure oracle: an unlisted host reached (the deny proxy missing, live, or switched off
+        by an env file's lowercase or mixed-case proxy setting), or the allowlisted host (the
+        object store, an approved endpoint) blocked so the worker cannot run at all."""
+        with server("127.0.0.1") as (allowed, allowed_hits), \
+                server("127.0.0.2") as (unlisted, unlisted_hits):
+>           env = container_env({"LAB_EGRESS_ALLOW": "127.0.0.1", **overrides})
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/i/lab_pipeline/test_egress.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/i/lab_pipeline/test_egress.py:52: in container_env
+    (start,) = directive(unit(role), "ExecStart")
+                         ^^^^^^^^^^
+tests/i/lab_pipeline/test_units.py:29: in unit
+    return (units / f"infrx-lab-{role}.service").read_text()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/pipelines/infrx-lab-training.service')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/pipelines/infrx-lab-training.service'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it[overrides] _
+
+overrides = {'https_proxy': '', 'http_proxy': '', 'HTTPS_PROXY': '', 'No_Proxy': '*', ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x708686b34830>
+
+    @pytest.mark.parametrize("overrides", [{}, OVERRIDES], ids=["plain", "overrides"])
+    def test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it(
+            overrides, monkeypatch) -> None:
+        """Failure oracle: an unlisted host reached (the deny proxy missing, live, or switched off
+        by an env file's lowercase or mixed-case proxy setting), or the allowlisted host (the
+        object store, an approved endpoint) blocked so the worker cannot run at all."""
+        with server("127.0.0.1") as (allowed, allowed_hits), \
+                server("127.0.0.2") as (unlisted, unlisted_hits):
+>           env = container_env({"LAB_EGRESS_ALLOW": "127.0.0.1", **overrides})
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/i/lab_pipeline/test_egress.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/i/lab_pipeline/test_egress.py:52: in container_env
+    (start,) = directive(unit(role), "ExecStart")
+                         ^^^^^^^^^^
+tests/i/lab_pipeline/test_units.py:29: in unit
+    return (units / f"infrx-lab-{role}.service").read_text()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/pipelines/infrx-lab-training.service')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/pipelines/infrx-lab-training.service'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+______________ test_i6_an_empty_allowlist_denies_every_http_host _______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x70868691b6b0>
+
+    def test_i6_an_empty_allowlist_denies_every_http_host(monkeypatch) -> None:
+        """The shipped default (no approval, no object-store endpoint named). Failure oracle: an
+        empty NO_PROXY read as "no proxy" (everything reachable)."""
+        with server("127.0.0.1") as (url, hits):
+>           assert reach(container_env({}), monkeypatch, url) in ("ConnectError", "ProxyError")
+                         ^^^^^^^^^^^^^^^^^
+
+tests/i/lab_pipeline/test_egress.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/i/lab_pipeline/test_egress.py:52: in container_env
+    (start,) = directive(unit(role), "ExecStart")
+                         ^^^^^^^^^^
+tests/i/lab_pipeline/test_units.py:29: in unit
+    return (units / f"infrx-lab-{role}.service").read_text()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/pipelines/infrx-lab-training.service')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/pipelines/infrx-lab-training.service'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+=========================== short test summary info ============================
+FAILED tests/i/lab_pipeline/test_units.py::test_i6_each_role_is_bounded_off_by_default_and_gated_by_the_preflight
+FAILED tests/i/lab_pipeline/test_units.py::test_i6_egress_is_denied_by_default_through_a_dead_proxy_the_env_file_cannot_override
+FAILED tests/i/lab_pipeline/test_egress.py::test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it[plain]
+FAILED tests/i/lab_pipeline/test_egress.py::test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it[overrides]
+FAILED tests/i/lab_pipeline/test_egress.py::test_i6_an_empty_allowlist_denies_every_http_host
+5 failed in 2.68s

@@ -1,0 +1,13 @@
+# root: INFRX_D_TASK=i6 make api-test at af0ceaab (both tasks); tail + failures
+FAILED tests/d/test_outbox_relay.py::test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_duplicate_delivery_never_makes_a_second_attempt[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_full_index_defers_rows_and_never_drops_them[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job[valkey]
+7 failed, 5320 passed, 92 skipped, 9 xfailed, 5 warnings in 3496.81s (0:58:16)
+make: *** [Makefile:13: api-test] Error 1
+EXIT=2
+
+# rerun alone: INFRX_D_TASK=i6 uv run --frozen pytest -q tests/d/test_outbox_relay.py -> 7 failed, 13 passed (the same 7 [valkey] cases); cause: tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's (the shared d2 Valkey is held by another checkout; not this lane's namespace, not touched)
