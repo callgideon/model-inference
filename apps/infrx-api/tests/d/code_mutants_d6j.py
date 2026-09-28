@@ -357,9 +357,12 @@ JUDGE = (
     _j("d6jj_intent_unlocked", "  select * into r from infrx.lab_judge_runs where run_id = "
        "p_run for update;", "  select * into r from infrx.lab_judge_runs where run_id = "
        "p_run;", J_ONE, "two racing workers are each told they created the intent"),
-    _j("d6jj_reserved_misreported", "    'price_version', r.price_version, 'reserved', "
+    _d.Mutant("d6jj_reserved_misreported", "0042_lab_d8_ledgers.sql", "    'price_version', "
+              "r.price_version, 'reserved', "
        "r.reserved::text,", "    'price_version', r.price_version, 'reserved', "
-       "coalesce(r.actual, 0)::text,", J_STORE, "the port reports no hold"),
+       "coalesce(r.actual, 0)::text,", "lab", J_STORE, "the port reports no hold"),
+    # (0042, D8 SR-P2-1, redefines lab_judge_json with purpose and dataset_ref: the anchor
+    # follows the live body)
 )
 JUDGE_NAMES = tuple(m.name for m in JUDGE)
 

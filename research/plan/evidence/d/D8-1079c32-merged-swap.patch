@@ -1,0 +1,110 @@
+diff --git a/apps/app/supabase/migrations/0042_lab_d8_ledgers.sql b/apps/app/supabase/migrations/0042_lab_d8_ledgers.sql
+index 72964200..5ed4dfe4 100644
+--- a/apps/app/supabase/migrations/0042_lab_d8_ledgers.sql
++++ b/apps/app/supabase/migrations/0042_lab_d8_ledgers.sql
+@@ -236,7 +236,7 @@ create table if not exists infrx.lab_checkpoint_rejections (
+ create table if not exists infrx.lab_checkpoint_subscriptions (
+   subscription_id uuid primary key,
+   provider_org_id uuid not null references infrx.provider_orgs on delete restrict,
+-  owner_user_id uuid not null references public.profiles(id) on delete restrict,
++  owner_user_id uuid not null,         -- the subscriber (server-derived, as D9's decided_by)
+   external_run_ref text not null references infrx.lab_records on delete restrict,
+   body jsonb not null check (jsonb_typeof(body) = 'object'),
+   created_at timestamptz not null default infrx.now()
+diff --git a/apps/infrx-api/tests/b/checkpoints/test_checkpoints_pg.py b/apps/infrx-api/tests/b/checkpoints/test_checkpoints_pg.py
+index cf44dd82..48742ec5 100644
+--- a/apps/infrx-api/tests/b/checkpoints/test_checkpoints_pg.py
++++ b/apps/infrx-api/tests/b/checkpoints/test_checkpoints_pg.py
+@@ -28,7 +28,7 @@ from ...d import test_d7_lab_data as d7
+ from ..runner.world import harness, manifest, uid
+ from .world import DEV, NEMO, Crash, World, safetensors
+ 
+-_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") == "b3" else \
++_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") in ("b3", "dlab") else \
+     "PostgreSQL only on the b3 task-local key (INFRX_D_TASK=b3)"
+ pytestmark = pytest.mark.skipif(_reason is not None,
+                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
+@@ -54,6 +54,21 @@ def on_pg(world, n: int) -> World:
+     conn, store = world
+     w = World()
+     w.conn, w.store = conn, store
++    from infrx.state.lab_pipeline import PgCheckpointLedger  # scratch: D8's real ledger
++
++    class Ledger(PgCheckpointLedger):
++        crash_on_decide = 0
++
++        async def decide(self, *a, **kw):
++            if self.crash_on_decide:
++                self.crash_on_decide -= 1
++                raise Crash("died before recording the decision")
++            return await super().decide(*a, **kw)
++    w.ledger = Ledger(connector(pgharness.dsn(DB)))
++    from .world import NOW as _now  # scratch: the DB clock is the ledger's (infrx.now())
++    conn.execute('select infrx_test.freeze(%s)', (_now,))
++    from ..runner.world import EVALUATOR_ID, SPEC  # scratch: WR-LSQ-7's registration
++    run(store.put_evaluator(SPEC, provider_org_id=NEMO, evaluator_id=EVALUATOR_ID, actor=DEV))
+     w.dataset = run(store.publish(manifest(3, d7.W["grant"], d7.W["source"], dataset=0x30 + n),
+                                   provider_org_id=NEMO, actor=DEV))
+     w.harness = run(store.publish(harness(harness_id=uid(0x30 + n, 0xa7)),
+@@ -61,6 +76,7 @@ def on_pg(world, n: int) -> World:
+     w.external = run(store.publish(w.external_run(uid(0x30 + n, 0xe3)), provider_org_id=NEMO,
+                                    actor=DEV))
+     w.tag = n
++    w.subscription = lambda k, **kw: World.subscription(w, k + 100 * n, **kw)  # scratch: ids per world on one ledger
+     return w
+ 
+ 
+@@ -98,6 +114,7 @@ def test_b3_pg_a_checkpoint_is_received_once_and_queues_one_run_per_subscription
+     with pytest.raises(errors.IdempotencyConflict):
+         receive(w, event(w, 1, data=safetensors(7), uri="mem://changed"))
+     out = handle(w, e)
++    print("DECISIONS", out)
+     assert {d["state"] for d in out.values()} == {"queued"} and handle(w, e) == out
+     run_ids = sorted(d["run_id"] for d in out.values())
+     assert rows(w, "select run_id::text from infrx.lab_eval_runs where run_id::text = any(%s) "
+diff --git a/apps/infrx-api/tests/p/annotations/test_annotations_pg.py b/apps/infrx-api/tests/p/annotations/test_annotations_pg.py
+index e73b4c8d..77fdac92 100644
+--- a/apps/infrx-api/tests/p/annotations/test_annotations_pg.py
++++ b/apps/infrx-api/tests/p/annotations/test_annotations_pg.py
+@@ -57,7 +57,8 @@ def world():
+                         for i in rows(6, splits=("train", "holdout", "validation")))
+         ref = run(imports.Importer(store, objects).run(
+             spec, chunks(data, 64), provider_org_id=NEMO, actor="dev@nemo")).dataset_ref
+-        yield conn, store, objects, PgAccessStore(connect), FakeLabelLog(), ref
++        from infrx.state.lab_pipeline import PgLabelLog  # scratch: D8's real log
++        yield conn, store, objects, PgAccessStore(connect), PgLabelLog(connect), ref
+ 
+ 
+ def test_p1_pg_labels_are_d7_records_reviewed_on_the_l2_clock(world) -> None:
+diff --git a/apps/infrx-api/tests/p/training/test_training_services.py b/apps/infrx-api/tests/p/training/test_training_services.py
+index e01b680f..424fe118 100644
+--- a/apps/infrx-api/tests/p/training/test_training_services.py
++++ b/apps/infrx-api/tests/p/training/test_training_services.py
+@@ -36,7 +36,7 @@ from ..annotations.world import DEV, NOW, members, rows
+ from .test_training import CONFIG
+ from .world import PAYER, FakeEvaluations, FakeRunLedger, descriptor, digest, protocol_app
+ 
+-_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") == "p3" else \
++_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") in ("p3", "dlab") else \
+     "real services only on p3's task-local key (INFRX_D_TASK=p3)"
+ pytestmark = pytest.mark.skipif(_reason is not None,
+                                 reason=f"task-local services unavailable: {_reason}")
+@@ -51,6 +51,8 @@ def world():
+     pgharness.apply(DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+     with pgharness.connect(DB) as conn:
+         d7.seed(conn)
++        conn.execute("insert into infrx.feature_flags (name, enabled, updated_by, reason) values ('lab_submission', true, 'scratch', 'x')")
++        d7.ok(conn, 'lab_put_budget', {'provider_org_id': NEMO, 'payer_ref': PAYER, 'limit': '100.00000000', 'actor': 'ops', 'reason': 'x'})
+         store, objects = PgLabDataStore(connector(pgharness.dsn(DB))), InMemoryObjectStore()
+         spec, _ = fixture("benchmark")
+         spec = {**spec, "import_id": uid(1, 0x1d), "dataset_id": uid(1, 0xdd),
+@@ -67,7 +69,8 @@ def world():
+ 
+ def prepare(w, ext, connector_name=p3.MANUAL, ledger=None):
+     conn, store, objects, ref, export = w
+-    ledger = ledger or FakeRunLedger()
++    from infrx.state.lab_pipeline import PgRunLedger  # scratch: D8's real ledger
++    ledger = ledger or PgRunLedger(connector(pgharness.dsn(DB)))
+     run(p3.prepare(store, objects, ledger, provider_org_id=NEMO, actor="dev@nemo",
+                    external_run_id=ext, dataset_ref=ref, config=CONFIG, export=export,
+                    payer_ref=PAYER, limit="25.00000000", now=NOW, connector=connector_name))

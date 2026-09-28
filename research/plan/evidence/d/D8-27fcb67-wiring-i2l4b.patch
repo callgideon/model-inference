@@ -1,0 +1,25 @@
+--- a/apps/infrx-api/infrx/lab/control/app.py
++++ b/apps/infrx-api/infrx/lab/control/app.py
+@@ -44,10 +44,11 @@
+ 
+ def _store():
+     """The control service's own database login (`INFRX_LAB_DATABASE_URL`, never the
+-    runtime's `DATABASE_URL`)."""
++    runtime's `DATABASE_URL`), with its own privileges: no `set role service_role`
++    (0043 WR-I2L-4 grants `infrx_lab_control` exactly these calls)."""
+     from ...state.jobstore import connector
+     from ...state.lab_control import PgControlStore
+-    return PgControlStore(connector(os.environ[DATABASE_URL]))
++    return PgControlStore(connector(os.environ[DATABASE_URL], set_role=False))
+ 
+ 
+ def _compose(lab: dict[str, str], store):
+@@ -65,7 +66,7 @@
+     from ..access import LabAccess
+     from . import LabControl
+     from .operations import Operations
+-    settings, connect = from_env(), connector(lab[DATABASE_URL])
++    settings, connect = from_env(), connector(lab[DATABASE_URL], set_role=False)
+     # ponytail: process-lifetime client, as in `pilot._lab`.
+     sessions = GoTrueSessions(httpx.AsyncClient(base_url=lab[SUPABASE_URL].rstrip("/"),
+                                                 timeout=httpx.Timeout(5, connect=2)),

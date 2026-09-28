@@ -211,3 +211,30 @@ class PgLabDataStore:
 
     async def record_dispatch_error(self, event_id: str, error: str) -> None:
         await self._call("lab_outbox_error", {"event_id": event_id, "error": error})
+
+
+# --- WR-N4-2 / WR-B4-2 reads (`0043_lab_reads_and_proposals.sql`) ---------------------------
+class PgLabReads:
+    """N4's dataset versions list and B4's experiments (write-once launch records, listed with
+    their runs' status and the stored B2 report of those runs under that protocol)."""
+
+    _call = PgLabDataStore._call
+
+    def __init__(self, connect: Connect) -> None:
+        self._connect = connect
+
+    async def datasets(self, *, provider_org_id: str) -> list[dict[str, Any]]:
+        return await self._call("lab_list_datasets", {"provider_org_id": provider_org_id})
+
+    async def put_experiment(self, experiment_id: str, *, provider_org_id: str,
+                             protocol: dict[str, Any], protocol_digest: str,
+                             baseline_run_ref: str, candidate_run_ref: str,
+                             actor: str) -> dict[str, Any]:
+        return await self._call("lab_put_experiment", {
+            "provider_org_id": provider_org_id, "experiment_id": experiment_id,
+            "protocol": protocol, "protocol_digest": protocol_digest,
+            "baseline_run_ref": baseline_run_ref, "candidate_run_ref": candidate_run_ref,
+            "actor": actor})
+
+    async def experiments(self, *, provider_org_id: str) -> list[dict[str, Any]]:
+        return await self._call("lab_experiments", {"provider_org_id": provider_org_id})

@@ -1733,6 +1733,9 @@ EXPECTED_FUNCTION_CALLERS = {
     "public.lab_judge_calibration(uuid,uuid,integer)": {"authenticated", "service_role"},
     "public.submit_feedback(jsonb)": {"authenticated", "service_role"},
     "public.lab_review_feedback(jsonb)": {"authenticated", "service_role"},
+    # WR-LSQ3-3: the LW3 doors (0041 content refs, 0043 judge runs; Lab, local-only)
+    "public.lab_content_ref_issue(text,uuid,text,uuid,text)": {"authenticated", "service_role"},
+    "public.lab_judge_runs(uuid,uuid)": {"authenticated", "service_role"},
     # D10-0025 (U3 WR-U3-1, R143): the operator console's writes, with the operator's own
     # JWT (is_operator() inside); never the platform key - service_role holds no EXECUTE.
     "public.operator_adjust_credit(uuid,text,text,text)": {"authenticated"},

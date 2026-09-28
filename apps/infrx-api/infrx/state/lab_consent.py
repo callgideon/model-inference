@@ -115,7 +115,10 @@ def _run(doc: dict[str, Any] | None) -> JudgeRun | None:
         return None
     return JudgeRun(
         run_id=str(doc["run_id"]), provider_org_id=str(doc["provider_org_id"]),
-        payer_ref=doc["payer_ref"], consent=Consent(str(doc["grant_id"]), doc["grant_version"]),
+        payer_ref=doc["payer_ref"],
+        # a teacher run (0042) is consented per sample of its dataset: its ref stands for it
+        consent=Consent(doc["dataset_ref"], 1) if doc.get("dataset_ref") else
+        Consent(str(doc["grant_id"]), doc["grant_version"]),
         sample_ids=tuple(doc["sample_ids"]), media_ids=frozenset(doc["media_ids"]),
         price_version=doc["price_version"], reserved=ProviderUsd(doc["reserved"]),
         state=doc["state"], submit_key=doc["submit_key"], external_id=doc["external_id"],
@@ -186,6 +189,16 @@ class PgJudgeLedger:
 
     async def run(self, run_id: str) -> JudgeRun | None:
         return _run(await self._call("lab_judge_run", {"run_id": run_id}))
+
+    async def put_calibration(self, calibration: dict[str, Any], *, provider_org_id: str,
+                              grantor_org_id: str, judge_model: str,
+                              rubric_version: int) -> int:
+        """SR-J3-1: J3's `QualityReport.calibration()` of one configuration; the latest one is
+        what the Lab's judge-runs door shows."""
+        return (await self._call("lab_put_judge_calibration", {
+            "provider_org_id": provider_org_id, "grantor_org_id": grantor_org_id,
+            "judge_model": judge_model, "rubric_version": rubric_version,
+            "calibration": calibration}))["calibration_id"]
 
     async def sweep(self, older_than_s: int) -> int:
         """`submitting` runs whose worker went silent -> `ambiguous` (then `reconcile`)."""
