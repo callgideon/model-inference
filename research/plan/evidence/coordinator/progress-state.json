@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 236,
- "updated": "2026-09-28T20:48:38Z",
+ "revision": 237,
+ "updated": "2026-09-28T20:59:01Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6381,26 +6381,29 @@
    "branch": "codex/w5-lab-sql-lw4",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw4",
    "base": "d62d96af",
-   "head": "807227fb",
+   "head": "0a1b1d27",
    "isolation": {
     "ports": "dlab 57500 (decoy 27500)",
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T15:33:53Z",
-   "updated": "2026-09-28T18:48:37Z",
+   "updated": "2026-09-28T20:59:01Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "merge batch #21 after #20 integrates: apply LSQ4-807227f-wiring.patch (WR-LSQ4-1 harness pin 0044, WR-LSQ4-2 tests/l/control PG cases), rulings R194–R196; endpoint_alias multi-alias oracle (m1/LSQ4-R3) → lab-sql-lw5",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2.5,
-    "pessimistic_h": 5,
-    "confidence": "medium",
-    "basis": "four reads + a role proof",
-    "at": "2026-09-28T15:33:53Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "high",
+    "basis": "ACCEPT 0a1b1d27; two verified wiring hunks + one merge round",
+    "at": "2026-09-28T20:59:01Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/d/LSQ4-807227f-wiring.patch",
+    "research/plan/evidence/d/LSQ4-807227f.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/app/supabase/migrations/0044+_*.sql",
@@ -6408,7 +6411,10 @@
     "tests/d/test_l3sql_*.py",
     "tests/l/control PG cases"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-LSQ4-1",
+    "WR-LSQ4-2"
+   ]
   },
   {
    "id": "W5-LAB-SQL-INTEGRATION-2",
@@ -6474,32 +6480,43 @@
    "branch": "codex/w5-lab-improve",
    "worktree": ".claude/worktrees/codex-w5-lab-improve",
    "base": "b2906856",
-   "head": "64696c0f",
+   "head": "49a19656",
    "isolation": {
     "ports": "e7l 57300-57399 (PG 57332)",
     "prefix": "infrx-e7l-",
     "db": "e7l"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T15:38:37Z",
-   "updated": "2026-09-28T18:48:37Z",
+   "updated": "2026-09-28T20:59:01Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (gate runner; accepted run after composition-2 + E5L/E6L)",
+   "next_action": "merge batch #20 (wf_0bcd7fc2-cb4, +R193, WR-E7L-2) → E7L runner on the tip; LAB-IMPROVE-LOCAL not accepted until WR-E7L-3 (pipelines-lineage) + WR-E7L-1/4 binds + rerun",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 12,
-    "confidence": "medium",
-    "basis": "plan 3/6/12",
-    "at": "2026-09-28T15:38:37Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT_WITH_FIXES 49a19656; merge #20 running",
+    "at": "2026-09-28T20:59:01Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E7L-7018550.md",
+    "research/plan/evidence/e/E7L-raw-7018550/"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_improve/",
     "research/plan/evidence/e/E7L-*"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-D2-VK",
+    "WR-E7L-1",
+    "WR-E7L-2",
+    "WR-E7L-3",
+    "WR-E7L-4",
+    "WR-E7L-5",
+    "WR-E7L-6"
+   ]
   },
   {
    "id": "W5-LAB-ROLLOUT",
@@ -6783,6 +6800,72 @@
    ],
    "commands": [],
    "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-20",
+   "task": null,
+   "slice": "merge batch #20: lab-improve 49a19656 (+R193, WR-E7L-2 Makefile); workflow wf_0bcd7fc2-cb4",
+   "agent": "opus",
+   "branch": "codex/w5-merge-20",
+   "worktree": ".claude/worktrees/codex-w5-merge-20",
+   "base": "1b2fab07",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T20:59:01Z",
+   "updated": "2026-09-28T20:59:01Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 → then #21",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch like #18",
+    "at": "2026-09-28T20:59:01Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-DATASETS-LW5",
+   "task": "N3",
+   "slice": "(wave5 LW5 lane datasets-lw5) WR-N3-5: N3's restrictions over 0041's PgSampleRestrictions (bound/tombstone/blocked/permitted), N2's callers re-threaded, object tombstones/bounds backfilled; public lineage signatures unchanged; workflow wf_3896d18f-9a9; base 1b2fab07",
+   "agent": "opus",
+   "branch": "codex/w5-datasets-lw5",
+   "worktree": ".claude/worktrees/codex-w5-datasets-lw5",
+   "base": "1b2fab07",
+   "head": null,
+   "isolation": {
+    "ports": "n3 57518/57519; n2 57516/57517",
+    "prefix": "infrx-n3-",
+    "db": "n3"
+   },
+   "activity": "running",
+   "started": "2026-09-28T20:59:01Z",
+   "updated": "2026-09-28T20:59:01Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "medium",
+    "basis": "lab-sql-integration-2's estimate for WR-N3-5"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/datasets/**",
+    "tests/n/**"
+   ],
    "wiring_requests": []
   }
  ],
