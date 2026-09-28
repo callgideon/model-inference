@@ -379,11 +379,12 @@ class Lab:
         return f"lab:serving:{self.NEMO}:{uid(sorted(ENDPOINT_PORTS).index(name) + 1, 0x5e7)}" \
                f"@sha256:{digest}"
 
-    async def evaluate(self, name: str, ref: str):
-        """Endpoint `name`'s B1 run over every case of version `ref`, once per session."""
+    async def evaluate(self, name: str, ref: str, *, work: bool = True):
+        """Endpoint `name`'s B1 run over every case of version `ref`, frozen once per session
+        and worked (unless `work` is False: queued, as B3 leaves it for the worker)."""
         from infrx.contracts.lab import records
         from infrx.evaluation import runner
-        if (name, ref) not in self.frozen:
+        if (name, ref, work) not in self.frozen:
             run_id = uid(len(self.frozen) + 1, 0x7e7)
             payload = {"schema": "lab.eval_run.1", "provider_org_id": self.NEMO,
                        "run_id": run_id, "created_at": "2026-09-28T10:00:00Z",
@@ -395,11 +396,12 @@ class Lab:
                                     "reserved": {"unit": "CREDIT", "value": "0.00000000"}}]}
             frozen = await runner.freeze(self.store, payload, evaluator=SPEC, access=self.access,
                                          user_id=self.DEV, provider_org_id=self.NEMO)
-            with endpoint(name) as (wallet, http):
-                await self.b1(http).run(frozen)
-            self.wallets.append((name, wallet))
-            self.frozen[(name, ref)] = frozen
-        return self.frozen[(name, ref)]
+            if work:
+                with endpoint(name) as (wallet, http):
+                    await self.b1(http).run(frozen)
+                self.wallets.append((name, wallet))
+            self.frozen[(name, ref, work)] = frozen
+        return self.frozen[(name, ref, work)]
 
     def b1(self, endpoint_):
         from infrx.evaluation.runner import Limits, Runner
@@ -522,7 +524,8 @@ class Evaluations:
     checkpoint is served by the synthetic endpoint the scenario deployed it as (L3's
     stand-in) and B1 runs the bundle's dataset in-process (the worker process is i07's). The
     evaluation's `holdout_sha256` is computed from the holdout B1 froze - never copied from
-    the ask - and its state is D7's run state. A `held` checkpoint is queued and never worked."""
+    the ask - and its state is D7's run state. A `held` checkpoint's run is frozen (queued in
+    D7) and never worked."""
 
     def __init__(self, lab: Lab) -> None:
         self.lab, self.served, self.held, self.done = lab, {}, set(), {}
@@ -534,21 +537,20 @@ class Evaluations:
         self.calls += 1
         if checkpoint_id not in self.done:
             name = self.served[checkpoint_id]
-            entry = {"run_ref": None, "run_id": None, "dataset_ref": dataset_ref,
-                     "split": split, "holdout_sha256": None, "serving": name}
-            if checkpoint_id not in self.held:          # a held run is queued, never worked
-                frozen = await self.lab.evaluate(name, dataset_ref)
-                entry.update(run_ref=records.ref_of(frozen.run.model_dump(
-                    by_alias=True, exclude_unset=True)), run_id=frozen.run.run_id,
-                    holdout_sha256=pin_of(frozen.holdout))
-            self.done[checkpoint_id] = entry
-        return self.done[checkpoint_id]["run_ref"] or f"queued:{checkpoint_id}"
+            frozen = await self.lab.evaluate(name, dataset_ref,
+                                             work=checkpoint_id not in self.held)
+            self.done[checkpoint_id] = {
+                "run_ref": records.ref_of(frozen.run.model_dump(by_alias=True,
+                                                                exclude_unset=True)),
+                "run_id": frozen.run.run_id, "dataset_ref": dataset_ref, "split": split,
+                "holdout_sha256": pin_of(frozen.holdout), "serving": name}
+        return self.done[checkpoint_id]["run_ref"]
 
     async def evaluation(self, *, provider_org_id: str, checkpoint_id: str) -> dict | None:
         found = self.done.get(checkpoint_id)
         if found is None:
             return None
-        state = "queued" if found["run_id"] is None else self.lab.run_state(found["run_id"])
+        state = self.lab.run_state(found["run_id"])
         return {**found, "state": state}
 
 

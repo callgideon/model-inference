@@ -103,7 +103,8 @@ def iteration2(lab):
     ref = derived.dataset_ref
     traced = {s.sample_id: lab.body(s) for s in lab.manifest(selected.dataset_ref).samples}
     rows = [{"sample_id": sid, "method": "human", "method_version": "e7l-2",
-             "label": body["corrections"][0]["value"], "annotator": "annotator-2"}
+             "label": next((c["value"] for c in body["corrections"]), None),
+             "annotator": "annotator-2"}
             for sid, body in sorted(traced.items())]
     imported = lab.import_labels(ref, rows)
     for annotation, (sample, state, _) in sorted(lab.labels(ref).items()):
@@ -277,7 +278,7 @@ def test_i02_missing_and_late_checkpoints_are_rejected_and_never_evaluated(lab):
     run(p3.cancel(lab.runs, p3.ManualConnector(), provider_org_id=lab.NEMO,
                   external_run_id=ext))
     late = lab.checkpoint(ext, 8, serve="cand1")
-    assert (missing["reason"], tampered["reason"], late["reason"]) == \
+    assert (missing.get("reason"), tampered.get("reason"), late.get("reason")) == \
         ("missing_artifact", "digest_mismatch", "run_cancelled")
     assert lab.sql("select array_agg(state order by checkpoint_id) from "
                    "infrx.lab_checkpoint_receipts where checkpoint_id = any(%s)",

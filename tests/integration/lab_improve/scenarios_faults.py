@@ -285,7 +285,7 @@ def test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job(lab, workdi
         assert lab.runs.reservations[held]["state"] == "held"
         time.sleep(1.2)                                       # the answer is long gone
         resumed = call(submit, url)
-        assert (resumed["state"], resumed["job_id"]) == ("submitted", "job-1")
+        assert (resumed["state"], resumed.get("job_id")) == ("submitted", "job-1")
     with pytest.raises(httpx.TransportError):
         call(poll, url)                                       # the poll is lost
     assert run(lab.runs.get(ext, provider_org_id=lab.NEMO))["state"] == "submitted"
