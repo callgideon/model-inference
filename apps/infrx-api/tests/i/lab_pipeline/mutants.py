@@ -85,6 +85,8 @@ MUTANTS: tuple[Mutant, ...] = (
     m("i6_pf_other_role_knob", "another Lab role's knob is refused", PF,
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY"}',
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY", "LAB_EVAL_CONCURRENCY"}', NAMES),
+    m("i6_pf_image_flag_allowed", "the image is not a docker flag", PF,
+      'if env.get("INFRX_IMAGE", "").startswith("-"):', "if False:", NAMES),
     m("i6_pf_bare_name_allowed", "a bare name is refused", PF,
       "        if not eq:\n", "        if False:\n", PARSE),
     m("i6_pf_indented_comment", "an indented comment is a comment", PF,

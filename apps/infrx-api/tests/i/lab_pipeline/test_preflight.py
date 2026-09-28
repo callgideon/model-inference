@@ -128,8 +128,11 @@ def test_i6_an_adapter_is_approved_per_role_and_nothing_is_enabled_silently() ->
 def test_i6_every_setting_is_named_for_its_role_and_purpose(role, name) -> None:
     """Failure oracle: an env file that smuggles a consumer secret, another purpose's secret,
     cloud credentials (capacity purchases) or a proxy override (egress bypass) past the
-    preflight because the name was not on the role's own list."""
+    preflight because the name was not on the role's own list, or an image setting that is a
+    docker flag (`${INFRX_IMAGE}` is one argv word of the unit, before the command)."""
     assert check(role, {**BASE, name: "x"}) == [f"{name}: not a {role} setting"]
+    assert check(role, {**BASE, "INFRX_IMAGE": "--privileged"}) == [
+        "INFRX_IMAGE: an image reference, not a docker flag"]
 
 
 def test_i6_the_egress_allowlist_is_exact_hosts_of_the_object_store_and_the_approval() -> None:

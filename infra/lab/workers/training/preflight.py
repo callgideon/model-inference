@@ -13,7 +13,8 @@ python3 runs it from the deployed checkout, so the approvals are the deployed co
   (connector, P-11) roles only - that role's adapter, endpoint, token, USD budget and payer.
   Anything else (a consumer secret, another purpose's token, cloud credentials, a proxy
   override in any letter case) is refused. A bare `NAME` line is refused: docker's
-  `--env-file` would copy it unchecked from the calling environment.
+  `--env-file` would copy it unchecked from the calling environment. `INFRX_IMAGE` (expanded
+  into the unit's argv) may not be a docker flag such as `--privileged`.
 * **Adapters.** The default (`dry-run` teacher, `manual-bundle` training; rollout has none)
   needs no approval and carries no endpoint, token, budget or payer (a stray one is refused,
   so nothing turns on by editing one line). Any other adapter needs its role's entry in
@@ -87,6 +88,8 @@ def check(role: str, env: dict[str, str], approvals: dict[str, list[dict]]) -> l
         raise ValueError(f"unknown role {role!r}")
     names = allowed_names(role)
     refusals = [f"{name}: not a {role} setting" for name in sorted(env) if name not in names]
+    if env.get("INFRX_IMAGE", "").startswith("-"):       # one argv word before the command
+        refusals.append("INFRX_IMAGE: an image reference, not a docker flag")
     hosts = {_host(env["LAB_S3_ENDPOINT"])} if env.get("LAB_S3_ENDPOINT") else set()
     if role in ADAPTERS:
         setting, default, prefix, approval_id = ADAPTERS[role]
