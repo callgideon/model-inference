@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 187,
- "updated": "2026-09-27T22:49:32Z",
+ "revision": 188,
+ "updated": "2026-09-28T05:45:52Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4654,12 +4654,12 @@
   {
    "id": "W5-LAB-SQL-LW2",
    "task": null,
-   "slice": "(wave5 LW2 lane lab-sql-lw2) tasks D6J → L3-SQL → D9 (+ scrub_feedback, DatasetSources, D7 minors, WR-B-2/7, WR-G4F-2); workflow wf_e67ca1a2-3e4; base eb0734d7 (relaunched: the 2026-09-27T18:xxZ launch returned NO_HANDBACK — weekly subagent limit; worktree recreated)",
+   "slice": "(wave5 LW2 lane lab-sql-lw2) tasks D6J → L3-SQL → D9 (+ scrub_feedback, DatasetSources, D7 minors, WR-B-2/7, WR-G4F-2); workflow wf_e67ca1a2-3e4; base eb0734d7 (relaunched: the 2026-09-27T18:xxZ launch returned NO_HANDBACK — weekly subagent limit; worktree recreated); session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → implementer cut at 9b8cf423 (0031 D6J, 0032 L3-SQL, 0033 D9, 0034 eval follow-up, 0035 feedback scrub; no evidence) → relaunched as a continuation wf_a095b3a0-3d7 (reconcile WR-L3-1, add SR-J2-1/SR-C3L-1/WR-C3F-1/WR-R2-1/WR-R3-2/WR-G4F-2 from 0036, tests, mutants, evidence)",
    "agent": "opus",
    "branch": "codex/w5-lab-sql-lw2",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw2",
    "base": "eb0734d7",
-   "head": null,
+   "head": "9b8cf423",
    "isolation": {
     "ports": "dlab 57500 (decoy 27500)",
     "prefix": "infrx-dlab-",
@@ -4667,7 +4667,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
    "estimate": {
@@ -4799,12 +4799,12 @@
   {
    "id": "W5-LAB-OPERATE",
    "task": null,
-   "slice": "(wave5 LW3 lane lab-operate) tasks I2L → E3L (runner now; L3/L4-dependent cases NOT RUN until the LW2 merges); workflow wf_c6204945-6a4; base eb0734d7",
+   "slice": "(wave5 LW3 lane lab-operate) tasks I2L → E3L (runner now; L3/L4-dependent cases NOT RUN until the LW2 merges); workflow wf_c6204945-6a4; base eb0734d7; session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → implementer cut at d1b0f21f (I2L unit/site/runbook, E3L runner; no evidence) → relaunched as a continuation wf_7e4482f4-0db",
    "agent": "opus",
    "branch": "codex/w5-lab-operate",
    "worktree": ".claude/worktrees/codex-w5-lab-operate",
    "base": "eb0734d7",
-   "head": null,
+   "head": "d1b0f21f",
    "isolation": {
     "ports": "i2l 57504; e3l 57000-57099 (PG 57032)",
     "prefix": "infrx-i2l-",
@@ -4812,7 +4812,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
    "estimate": {
@@ -4870,7 +4870,7 @@
   {
    "id": "W5-CONTENT",
    "task": null,
-   "slice": "(wave5 LW3 lane content) tasks C2 (fake C2-RPC port, RPC spec filed) → G4T (unmounted); workflow wf_5e3e9e2c-5c0; base eb0734d7",
+   "slice": "(wave5 LW3 lane content) tasks C2 (fake C2-RPC port, RPC spec filed) → G4T (unmounted); workflow wf_5e3e9e2c-5c0; base eb0734d7; session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → resumed from cache (impl bdff6ffe + 2 lenses ACCEPT_WITH_FIXES; fix round b59e47d3 on the branch; rechecks rerun)",
    "agent": "opus",
    "branch": "codex/w5-content",
    "worktree": ".claude/worktrees/codex-w5-content",
@@ -4883,7 +4883,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
    "estimate": {
@@ -4904,7 +4904,7 @@
   {
    "id": "W5-ROLLOUT-ROUTING",
    "task": null,
-   "slice": "(wave5 LW3 lane rollout-routing) tasks R1 (fake D9 port; admission hook as a wiring patch, flag OFF); workflow wf_5863f8bc-f98; base eb0734d7",
+   "slice": "(wave5 LW3 lane rollout-routing) tasks R1 (fake D9 port; admission hook as a wiring patch, flag OFF); workflow wf_5863f8bc-f98; base eb0734d7; session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → resumed (impl 2834ad74 cached; lenses rerun)",
    "agent": "opus",
    "branch": "codex/w5-rollout-routing",
    "worktree": ".claude/worktrees/codex-w5-rollout-routing",
@@ -4917,7 +4917,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
    "estimate": {
@@ -4938,7 +4938,7 @@
   {
    "id": "W5-PIPELINES",
    "task": null,
-   "slice": "(wave5 LW4 lane pipelines) tasks P1 → P3 (fake D8/B3 ports); workflow wf_517d4609-30e; base eb0734d7",
+   "slice": "(wave5 LW4 lane pipelines) tasks P1 → P3 (fake D8/B3 ports); workflow wf_517d4609-30e; base eb0734d7; session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → resumed (impl a9bbd8c0 + 1 lens cached)",
    "agent": "opus",
    "branch": "codex/w5-pipelines",
    "worktree": ".claude/worktrees/codex-w5-pipelines",
@@ -4951,7 +4951,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
    "estimate": {
@@ -5009,7 +5009,7 @@
   {
    "id": "W5-DATASETS-LW4",
    "task": null,
-   "slice": "(wave5 LW4 lane datasets-lw4) tasks WR-N-2 → N3 (fake C2 port) → N4; workflow wf_b030d80a-077; base eb0734d7",
+   "slice": "(wave5 LW4 lane datasets-lw4) tasks WR-N-2 → N3 (fake C2 port) → N4; workflow wf_b030d80a-077; base eb0734d7; session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → resumed (impl a43c4863 cached; lenses rerun)",
    "agent": "opus",
    "branch": "codex/w5-datasets-lw4",
    "worktree": ".claude/worktrees/codex-w5-datasets-lw4",
@@ -5022,7 +5022,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-27T19:05:00Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real-dependency halves rerun at merge)",
    "estimate": {
@@ -5043,7 +5043,7 @@
   {
    "id": "W5-LAB-API",
    "task": null,
-   "slice": "(wave5 LW2 lane lab-api, coordinator-created from WR-L4-1 + WR-V1M-2) /lab/v1/control + /lab/v1/traces behind LAB_CONTROL/LAB_TRACES (OFF), forwarded Supabase JWT auth; workflow wf_cafd7936-839; base f4bceeba",
+   "slice": "(wave5 LW2 lane lab-api, coordinator-created from WR-L4-1 + WR-V1M-2) /lab/v1/control + /lab/v1/traces behind LAB_CONTROL/LAB_TRACES (OFF), forwarded Supabase JWT auth; workflow wf_cafd7936-839; base f4bceeba; session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → resumed (impl 6487d36a + 2 lenses cached: RSI-1 major = wiring patch re-breaks given_stores_replaced, already re-anchored on the tip at 37859776; fix round + rechecks rerun)",
    "agent": "opus",
    "branch": "codex/w5-lab-api",
    "worktree": ".claude/worktrees/codex-w5-lab-api",
@@ -5056,7 +5056,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T20:16:44Z",
-   "updated": "2026-09-27T20:16:44Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → merge with its wiring patch; control adapter real only after L3 merges",
    "estimate": {
@@ -5116,7 +5116,7 @@
   {
    "id": "W5-EVAL-OPS",
    "task": null,
-   "slice": "(wave5 LW4 lane eval-ops) tasks WR-B-4 → B3 → I5 (+ B1 minors); workflow wf_95878a02-8f1; base 2252e5a0",
+   "slice": "(wave5 LW4 lane eval-ops) tasks WR-B-4 → B3 → I5 (+ B1 minors); workflow wf_95878a02-8f1; base 2252e5a0; session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → resumed (impl cedcad6c cached; lenses rerun)",
    "agent": "opus",
    "branch": "codex/w5-eval-ops",
    "worktree": ".claude/worktrees/codex-w5-eval-ops",
@@ -5129,7 +5129,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T21:02:36Z",
-   "updated": "2026-09-27T21:02:36Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → coordinator merge",
    "estimate": {
@@ -5187,7 +5187,7 @@
   {
    "id": "W5-COMPOSITION",
    "task": null,
-   "slice": "(wave5 LW2 lane composition) tasks WR-T-4 → WR-N-3 → WR-B-5 → E4 regression (switches OFF); workflow wf_95f6e885-95e; base 2252e5a0",
+   "slice": "(wave5 LW2 lane composition) tasks WR-T-4 → WR-N-3 → WR-B-5 → E4 regression (switches OFF); workflow wf_95f6e885-95e; base 2252e5a0; session cut 2026-09-28 (cux false 'all accounts exhausted' loop) → resumed (impl 3549edd0 + 1 lens cached)",
    "agent": "opus",
    "branch": "codex/w5-composition",
    "worktree": ".claude/worktrees/codex-w5-composition",
@@ -5200,7 +5200,7 @@
    },
    "activity": "running",
    "started": "2026-09-27T21:02:36Z",
-   "updated": "2026-09-27T21:02:36Z",
+   "updated": "2026-09-28T05:45:52Z",
    "blocker": null,
    "next_action": "handback → 2 lenses → one fix round → coordinator merge",
    "estimate": {
