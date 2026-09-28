@@ -118,6 +118,8 @@ L07_OWNER = "test_l07_a_consumer_owner_has_no_provider_workspace"
 L08_GRANT = "test_l08_no_grant_no_content"
 L08_PURPOSE = "test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call"
 L08_DIRECT = "test_l08_a_provider_session_reads_no_consumer_rows_directly"
+L03 = "test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership"
+L3 = "infrx/lab/control/__init__.py"
 L11_DOWN = "test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving"
 L11_BAD = "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once"
 
@@ -165,6 +167,19 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_rollback_to_the_bad_release", "the rollback is judged on the Lab answering again",
        SPLIT, "        web.start(LAB_DIR)                                # rollback",
        "        web.start(bad)                                    # rollback", L11_BAD),
+)
+STACK_MUTANTS += (
+    # E3L-BIND: L3's control decisions on the real stores (LabControl over PgControlStore)
+    _m("st_moving_tag_registers", "a runtime is pinned by digest, never a moving tag", L3,
+       '@sha256:[0-9a-f]{64}$")', '[@:](sha256:[0-9a-f]{64}|latest)$")', L03),
+    _m("st_any_runtime_registers", "only a supported runtime registers", L3,
+       '    if runtime["repo"] not in SUPPORTED_RUNTIMES:', "    if False:", L03),
+    _m("st_any_schema_registers", "only the gateway's schemas register", L3,
+       "    if (capability.input_schema_ref, capability.output_schema_ref) not in "
+       "SUPPORTED_SCHEMAS:", "    if False:", L03),
+    _m("st_foreign_model_registers", "a provider registers only its own models", L3,
+       "        if await self.store.model_provider(serving.model_id) != provider_org_id:",
+       "        if False:", L03),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 

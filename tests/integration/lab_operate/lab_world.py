@@ -131,6 +131,16 @@ def refused(coroutine) -> str:
     return "allowed"
 
 
+def refused_as(coroutine) -> str:
+    """The typed refusal's class name (any `errors.DomainError`), or 'allowed'."""
+    from infrx.contracts import errors
+    try:
+        call(coroutine)
+    except errors.DomainError as denied:
+        return type(denied).__name__
+    return "allowed"
+
+
 def rest(rest_url: str, user: str | None, path: str, *, token: str | None = None,
          method: str = "GET"):
     """PostgREST as a signed-in user (their JWT), or with `token` as the bearer."""

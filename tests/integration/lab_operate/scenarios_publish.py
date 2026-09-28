@@ -124,11 +124,43 @@ def test_l02_a_provider_created_dev_revision_never_reaches_app_discovery(workdir
 # ------------------------------------------------------------------ l03-l06
 
 
-def test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership(workdir):
-    waits("l03", "L3", steps="register with an unsupported artifact/schema/runtime, a mutable "
-          "tag instead of a digest, and a model of provider B as DEV_A: each refused, no row "
-          "written; the valid registration is accepted once under its idempotency key")
-    unbound()
+BAD_REGISTRATIONS = {
+    "moving_tag": ("InvalidRequest", lambda r: {"runtime_image_ref": "vllm/vllm-openai:latest"}),
+    "unsupported_runtime": ("InvalidRequest",
+                            lambda r: {"runtime_image_ref": "evil/runner@sha256:" + "ab" * 32}),
+    "unsupported_schema": ("InvalidRequest", lambda r: {"capability": r.capability.model_copy(
+        update={"input_schema_ref": "custom.request.v9"})}),
+    "provider_b_model": ("NotFound", lambda r: {"model_id": lab.MODEL_B}),
+}
+
+
+def test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership(workdir,
+                                                                            record_property):
+    """Oracle: registration writes only a supported runtime pinned by digest, serving the
+    gateway's schemas, for a model of the caller's own provider: a moving tag, another image,
+    a custom schema and provider B's model are each refused with no row written; DEV_A in
+    B's workspace is not_found; the valid registration is written once (the same row again
+    is a no-op, another row under its id a conflict)."""
+    from infrx.contracts import errors
+    with world.composed(workdir, start=()) as trip:
+        lab.seed_lab(trip)
+        ctl = lab.control(trip)
+        good = lab.serving(ctl, "e3l-l03")
+        rows = lambda: trip.one("select count(*) from infrx.serving_versions")[0]  # noqa: E731
+        before, refused = rows(), {}
+        for name, (expected, change) in BAD_REGISTRATIONS.items():
+            refused[name] = lab.refused_as(ctl.register(DEV_A, A, good.model_copy(
+                update=change(good))))
+        refused["other_workspace"] = lab.refused_as(ctl.register(DEV_A, lab.PROVIDER_B, good))
+        record_property("refused", refused)
+        assert refused == {**{n: e for n, (e, _) in BAD_REGISTRATIONS.items()},
+                           "other_workspace": "NotFound"}, refused
+        assert rows() == before, "a refused registration wrote a row"
+        assert lab.call(ctl.register(DEV_A, A, good)) is True
+        assert lab.call(ctl.register(DEV_A, A, good)) is False
+        assert lab.refused_as(ctl.register(DEV_A, A, good.model_copy(
+            update={"precision": "fp8"}))) == "Conflict"
+        assert rows() == before + 1
 
 
 def test_l04_publication_needs_operator_approval_and_snapshots_the_rate(workdir):
