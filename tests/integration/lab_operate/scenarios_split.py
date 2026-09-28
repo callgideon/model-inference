@@ -71,8 +71,11 @@ class LabWeb:
             status = self.answers()
             if status is not None:
                 return status
-            if self.process.poll() is not None:
-                raise AssertionError(f"the Lab web exited {self.process.returncode}")
+            if self.process.poll() is not None:     # the log names a bind collision (harness)
+                log = self.workdir / f"lab-web-{self.starts}.log"
+                raise AssertionError(f"the Lab web exited {self.process.returncode}: "
+                                     + " | ".join(log.read_text(errors="replace")
+                                                  .splitlines()[:2]))
             time.sleep(0.2)
         raise AssertionError(f"the Lab web did not answer within {timeout}s")
 
