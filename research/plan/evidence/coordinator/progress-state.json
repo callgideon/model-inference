@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 243,
- "updated": "2026-09-28T23:22:19Z",
+ "revision": 244,
+ "updated": "2026-09-28T23:25:57Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6408,11 +6408,11 @@
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-28T15:33:53Z",
-   "updated": "2026-09-28T20:59:01Z",
+   "updated": "2026-09-28T23:25:57Z",
    "blocker": null,
-   "next_action": "merge batch #21 after #20 integrates: apply LSQ4-807227f-wiring.patch (WR-LSQ4-1 harness pin 0044, WR-LSQ4-2 tests/l/control PG cases), rulings R194–R196; endpoint_alias multi-alias oracle (m1/LSQ4-R3) → lab-sql-lw5",
+   "next_action": "m1/m2/LSQ4-R4 → lab-sql-lw5 (running)",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -6899,22 +6899,22 @@
   {
    "id": "W5-MERGE-21",
    "task": null,
-   "slice": "merge batch #21: lab-sql-lw4 0a1b1d27 (+R194–R196, LSQ4 wiring patch, root pytest.ini for WR-E7L-5); workflow wf_193cbd2e-fc3",
+   "slice": "merge batch #21: lab-sql-lw4 0a1b1d27 (+R194–R196, LSQ4 wiring patch, root pytest.ini for WR-E7L-5); workflow wf_193cbd2e-fc3; integrated aca38b30 (0044 on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-21",
    "worktree": ".claude/worktrees/codex-w5-merge-21",
    "base": "21ee48de",
-   "head": null,
+   "head": "9e6c01cd",
    "isolation": {
     "ports": "l3 57502, dlab 57500 (lane-owned)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T21:06:01Z",
-   "updated": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-28T23:25:57Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (rulings reordered at integration)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
