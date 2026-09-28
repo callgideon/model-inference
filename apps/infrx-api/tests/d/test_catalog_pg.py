@@ -186,6 +186,20 @@ def test_credit_rate__unpriced_answers_none() -> None:
     assert run(catalog.data_access_policy(str(uuid.uuid4()))) is None
 
 
+def test_credit_rate__listing_version_is_the_newest_listing_naming_the_deployment() -> None:
+    """E3L-F1's PG half: `listing_version` answers the newest `catalog_listings.version`
+    naming a deployment, at the database clock - what `/v1/models` now projects instead of
+    a hardcoded 1 (R195: an alias's listing is the newest one naming its deployment). A
+    republish (a new card at a new listing version, the same deployment) reports 2, and an
+    unlisted deployment answers None, never 0 or an error."""
+    catalog = RigCatalog(fresh())
+    assert run(catalog.listing_version(IDS.prod_deployment)) == 1
+    assert run(catalog.listing_version(str(uuid.uuid4()))) is None
+    catalog.publish(v2fix.BUILDERS["rate_card_marlin.json"]().model_copy(update={
+        "rate_card_version": "rc_d5_republish"}))
+    assert run(catalog.listing_version(IDS.prod_deployment)) == 2
+
+
 def test_usd_price__reads_the_row_admission_would_capture() -> None:
     """G7 WR-3a: `usd_price` answers the effective USD row for the model string (typed,
     exact decimals), None when unpriced or not yet effective at the DATABASE clock."""

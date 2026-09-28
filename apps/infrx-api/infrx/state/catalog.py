@@ -73,6 +73,12 @@ _POLICY = """
   where effective_at <= infrx.now() and exists (select 1 from infrx.deployment_revisions d
                                                  where d.deployment_revision_id = %s)
   order by effective_at desc, policy_version desc limit 1"""
+# G7 E3L-F1: the listing version the alias resolution landed on (R195 - an alias's listing
+# is the newest one naming its deployment), not a hardcoded `1`. A rollback relists an older
+# deployment revision at a new, higher version, so this is `max`, not the row's own version.
+_LISTING_VERSION = """
+  select max(l.version) from infrx.catalog_listings l
+  where l.deployment_revision_id = %(d)s and l.effective_at <= infrx.now()"""
 
 
 class PgCatalogDirectory:
@@ -97,6 +103,14 @@ class PgCatalogDirectory:
     async def active_rate_card(self, deployment_revision_id: str) -> RateCardSnapshot | None:
         row = await self._db.one(_ACTIVE_CARD, {"d": deployment_revision_id})
         return None if row is None else _record(RateCardSnapshot, _CARD_FIELDS, row)
+
+    async def listing_version(self, deployment_revision_id: str) -> int | None:
+        """Not part of the frozen `CatalogDirectory` protocol (like `usd_price`): the
+        gateway reads it through `getattr`. `/v1/models` projects this instead of a
+        constant, so a republished or rolled-back deployment reports the version it
+        actually serves, not always 1 (E3L-F1)."""
+        row = await self._db.one(_LISTING_VERSION, {"d": deployment_revision_id})
+        return None if row is None or row[0] is None else int(row[0])
 
     async def usd_price(self, model_revision: str) -> PriceSnapshot | None:
         row = await self._db.one("select infrx.usd_price(%s)", (model_revision,))

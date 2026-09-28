@@ -57,6 +57,10 @@ class FakeCatalogDirectory:
     policies: dict[str, v2.DataAccessPolicyRef] = dataclasses.field(default_factory=dict)
     # D10's `usd_price` (G7 WR-3a): the legacy regime's USD row, keyed by model revision.
     prices: dict[str, PriceSnapshot] = dataclasses.field(default_factory=dict)
+    # E3L-F1: append-only, like `infrx.catalog_listings` - (alias, version, deployment
+    # revision) for every `move_alias` publication. `listing_version` answers the newest
+    # version naming a given deployment revision, mirroring the real `max(l.version)`.
+    listings: list[tuple[str, int, str]] = dataclasses.field(default_factory=list)
 
     async def resolve(self, requested_model: str, *, audience: v2.CredentialAudience,
                       endpoint_id: str | None) -> v2.DeploymentRevision | None:
@@ -85,12 +89,20 @@ class FakeCatalogDirectory:
     async def usd_price(self, model_revision: str) -> PriceSnapshot | None:
         return self.prices.get(model_revision)
 
+    async def listing_version(self, deployment_revision_id: str) -> int | None:
+        named = [version for _, version, dep in self.listings if dep == deployment_revision_id]
+        return max(named) if named else None
+
     def publish(self, card: v2.RateCardSnapshot) -> None:
         """An operator publishing a new approved card. Future admissions only."""
         self.rate_cards[card.deployment_revision_id] = card
 
     def move_alias(self, requested_model: str, deployment_revision_id: str) -> None:
+        """A new catalog listing: the next version for this alias, naming
+        `deployment_revision_id` (a republish or a rollback both call this)."""
         self.aliases[requested_model] = deployment_revision_id
+        version = 1 + sum(1 for alias, _, _ in self.listings if alias == requested_model)
+        self.listings.append((requested_model, version, deployment_revision_id))
 
 
 @dataclasses.dataclass
