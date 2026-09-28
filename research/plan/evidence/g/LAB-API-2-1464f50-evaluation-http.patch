@@ -1,0 +1,149 @@
+diff --git a/apps/lab/lib/services/evaluation/http.ts b/apps/lab/lib/services/evaluation/http.ts
+new file mode 100644
+index 00000000..92401889
+--- /dev/null
++++ b/apps/lab/lib/services/evaluation/http.ts
+@@ -0,0 +1,37 @@
++// WR-B4-1: the evaluation port over infrx-api's `/lab/v1/evaluations` (LAB_EVALS), as the signed-in
++// user: the credential is the session's own access token and the provider is the actor's, sent as
++// `provider_org_id`; the route re-derives both. Records are the backends' JSON verbatim (snake_case),
++// lists come as `{data}`, and every refusal is the route's status mapped to the port's reason.
++import type { Actor, EvaluationPort, Refusal, Result } from "./port.ts";
++
++const REASONS: Record<number, Refusal> = { 401: "denied", 403: "denied", 404: "not_found", 409: "conflict", 422: "invalid" };
++export type HttpOptions = { baseUrl: string; token: string; fetch?: typeof fetch };
++
++export function httpEvaluation({ baseUrl, token, fetch: send = fetch }: HttpOptions): EvaluationPort {
++  const root = `${baseUrl.replace(/\/+$/, "")}/lab/v1/evaluations`;
++  async function call<T>(actor: Actor, method: "GET" | "POST", path: string, body?: unknown): Promise<Result<T>> {
++    const url = `${root}/${path}?provider_org_id=${encodeURIComponent(actor.providerId)}`;
++    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
++    if (body !== undefined) headers["content-type"] = "application/json";
++    try {
++      const response = await send(url, {
++        method, headers, cache: "no-store",
++        body: body === undefined ? undefined : JSON.stringify(body),
++      });
++      if (!response.ok) return { ok: false, reason: REASONS[response.status] ?? "unavailable" };
++      const payload = await response.json();
++      return { ok: true, value: (method === "GET" ? payload.data : payload) as T }; // a read is a {data} list
++    } catch {
++      return { ok: false, reason: "unavailable" }; // transport or an unreadable answer
++    }
++  }
++  return {
++    catalog: (actor) => call(actor, "GET", "catalog"),
++    runs: (actor) => call(actor, "GET", "runs"),
++    experiments: (actor) => call(actor, "GET", "experiments"),
++    subscriptions: (actor) => call(actor, "GET", "subscriptions"),
++    launch: (actor, launch) => call(actor, "POST", "experiments", launch),
++    cancel: (actor, runId) => call(actor, "POST", `runs/${encodeURIComponent(runId)}/cancel`),
++    subscribe: (actor, request) => call(actor, "POST", "subscriptions", request),
++  };
++}
+diff --git a/apps/lab/tests/b/http.test.ts b/apps/lab/tests/b/http.test.ts
+new file mode 100644
+index 00000000..5eee671b
+--- /dev/null
++++ b/apps/lab/tests/b/http.test.ts
+@@ -0,0 +1,52 @@
++// WR-B4-1: the HTTP adapter speaks lab-api-2's `/lab/v1/evaluations` wire exactly (tests/g/lab_evaluations
++// on the Python side): the session token, the actor's provider, the verbatim records, the fixed refusals.
++import assert from "node:assert/strict";
++import test from "node:test";
++import { httpEvaluation } from "../../lib/services/evaluation/http.ts";
++
++const A = { providerId: "a0000000-0000-4000-8000-00000000000a", role: "developer" as const };
++type Seen = { url: string; method: string; headers: Record<string, string>; body: unknown };
++
++function server(answer: (seen: Seen) => Response | Promise<Response>) {
++  const seen: Seen[] = [];
++  const fetch = (async (url: string, init: RequestInit) => {
++    const s = { url, method: String(init.method), headers: init.headers as Record<string, string>, body: init.body === undefined ? undefined : JSON.parse(String(init.body)) };
++    seen.push(s);
++    return answer(s);
++  }) as unknown as typeof globalThis.fetch;
++  return { seen, port: httpEvaluation({ baseUrl: "https://api.test/", token: "eyJ0.a.b", fetch }) };
++}
++const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
++
++test("B4-H01 every call is the session's token and the actor's provider on its route, reads unwrapped from {data}", async () => {
++  const { seen, port } = server((s) => json(s.method === "GET" ? { data: [{ run_id: "r1" }] } : { run_id: "r1", state: "cancelled" }));
++  assert.deepEqual(await port.runs(A), { ok: true, value: [{ run_id: "r1" }] });
++  assert.deepEqual(await port.cancel(A, "r 1"), { ok: true, value: { run_id: "r1", state: "cancelled" } });
++  const launch = { experiment_id: "e1", protocol: { required_slices: { safety: { margin: 0, min_cases: 2 } } } };
++  await port.launch(A, launch as never);
++  await port.subscribe(A, { subscription_id: "s1" } as never);
++  for (const read of ["catalog", "experiments", "subscriptions"] as const) await port[read](A);
++  const q = `?provider_org_id=${A.providerId}`;
++  assert.deepEqual(seen.map((s) => [s.method, s.url]), [
++    ["GET", `https://api.test/lab/v1/evaluations/runs${q}`], ["POST", `https://api.test/lab/v1/evaluations/runs/r%201/cancel${q}`],
++    ["POST", `https://api.test/lab/v1/evaluations/experiments${q}`], ["POST", `https://api.test/lab/v1/evaluations/subscriptions${q}`],
++    ["GET", `https://api.test/lab/v1/evaluations/catalog${q}`], ["GET", `https://api.test/lab/v1/evaluations/experiments${q}`],
++    ["GET", `https://api.test/lab/v1/evaluations/subscriptions${q}`],
++  ]);
++  assert.ok(seen.every((s) => s.headers.authorization === "Bearer eyJ0.a.b"));
++  assert.equal(seen[1].body, undefined);
++  assert.equal(JSON.stringify(seen[2].body), JSON.stringify(launch));
++  assert.equal(seen[2].headers["content-type"], "application/json");
++});
++
++test("B4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable", async () => {
++  const cases: [number, string][] = [[401, "denied"], [403, "denied"], [404, "not_found"], [409, "conflict"], [422, "invalid"], [410, "unavailable"], [503, "unavailable"], [500, "unavailable"]];
++  for (const [status, reason] of cases) {
++    const { port } = server(() => json({ refusal: "x" }, status));
++    assert.deepEqual(await port.cancel(A, "r1"), { ok: false, reason }, String(status));
++  }
++  const down = server(() => { throw new TypeError("fetch failed"); });
++  assert.deepEqual(await down.port.runs(A), { ok: false, reason: "unavailable" });
++  const garbled = server(() => new Response("<html>", { status: 200 }));
++  assert.deepEqual(await garbled.port.experiments(A), { ok: false, reason: "unavailable" });
++});
+diff --git a/apps/lab/tests/b/run-mutants.mjs b/apps/lab/tests/b/run-mutants.mjs
+index d1f9f26b..6c564a20 100644
+--- a/apps/lab/tests/b/run-mutants.mjs
++++ b/apps/lab/tests/b/run-mutants.mjs
+@@ -3,7 +3,7 @@
+ // Usage: node tests/b/run-mutants.mjs [--only ID,ID]
+ import { m, runMutants } from "../l/shell/harness.mjs";
+ 
+-const SUITE = ["view", "real", "journey", "actions", "pages"].map((f) => `tests/b/${f}.test.ts`);
++const SUITE = ["view", "real", "journey", "actions", "pages", "http"].map((f) => `tests/b/${f}.test.ts`);
+ const PORT = "lib/services/evaluation/port.ts";
+ const FAKE = "lib/services/evaluation/fake.ts";
+ const VIEW = "lib/services/evaluation/view.ts";
+@@ -13,6 +13,7 @@ const EVALS = "app/(provider)/evaluations/page.tsx";
+ const CHECKPOINTS = "app/(provider)/evaluations/checkpoints/page.tsx";
+ const EXPERIMENT = "app/(provider)/experiments/[id]/page.tsx";
+ const RUNS = "app/(provider)/evaluations/runs.tsx";
++const HTTP = "lib/services/evaluation/http.ts";
+ 
+ const C = {
+   v01: "B4-V01 everyone in the workspace reads evaluations; only developer and administrator run or cancel them",
+@@ -42,6 +43,8 @@ const C = {
+   p02: "B4-P02 launch and subscribe forms are shown only to a role that runs evaluations and carry a fresh record id",
+   p03: "B4-P03 an experiment is found only among the workspace's own, compared only through B2's report, exported only once it exists",
+   p04: "B4-P04 the preview stand-in is labelled on every page only when it is on",
++  h01: "B4-H01 every call is the session's token and the actor's provider on its route, reads unwrapped from {data}",
++  h02: "B4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
+ };
+ 
+ const MUTANTS = [
+@@ -170,6 +173,17 @@ const MUTANTS = [
+   m("B4-X111", "a comparison is drawn without B2's report", EXPERIMENT, "const c = e.report === null ? null : comparison(e.report);", "const c = comparison(e.report!);", [C.p03]),
+   m("B4-X112", "the export is offered before the report exists", EXPERIMENT, "      <h2>Runs</h2>", "      <a href={`/experiments/${e.experiment_id}/report`}>Export</a>\n      <h2>Runs</h2>", [C.p03]),
+   m("B4-X113", "the preview label shows when the stand-in is off", EVALS, "{isPreview() && <PreviewNote />}", "{<PreviewNote />}", [C.p04]),
++  // the HTTP adapter (WR-B4-1, lane lab-api-2)
++  m("B4-X115", "the session token is not sent", HTTP, "authorization: `Bearer ${token}`", 'authorization: "Bearer"', [C.h01]),
++  m("B4-X116", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
++  m("B4-X117", "a read is not unwrapped from {data}", HTTP, '(method === "GET" ? payload.data : payload)', "payload", [C.h01]),
++  m("B4-X118", "a cancel is a read", HTTP, 'call(actor, "POST", `runs/', 'call(actor, "GET", `runs/', [C.h01]),
++  m("B4-X119", "the body is dropped", HTTP, "body: body === undefined ? undefined : JSON.stringify(body),", "body: undefined,", [C.h01]),
++  m("B4-X120", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
++  m("B4-X121", "no session reads as unavailable", HTTP, '401: "denied", ', "", [C.h02]),
++  m("B4-X122", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
++  m("B4-X123", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
++  m("B4-X124", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
+ ];
+ 
+ process.exit(await runMutants({ suite: SUITE, prefix: "B4", mutants: MUTANTS }));
