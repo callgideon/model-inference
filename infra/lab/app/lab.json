@@ -25,7 +25,8 @@
     "lab-web": [
       {"name": "NEXT_PUBLIC_LAB_URL", "exposure": "public", "purpose": "the Lab's own https origin, no path (apps/lab/lib/auth/config.ts)"},
       {"name": "NEXT_PUBLIC_SUPABASE_URL", "exposure": "public", "purpose": "the auth/DB project the Lab session door (0030) is served from"},
-      {"name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "exposure": "public", "purpose": "publishable key; the Lab holds no service-role key"}
+      {"name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "exposure": "public", "purpose": "publishable key; the Lab holds no service-role key"},
+      {"name": "LAB_DATASETS_API_URL", "exposure": "server", "purpose": "server-only base URL of the datasets backend (WR-N4-5); unset = the datasets pages are unavailable"}
     ],
     "lab-control": [
       {"name": "INFRX_LAB_IMAGE", "exposure": "unit", "purpose": "the Lab control release: a content-addressed image id, rolled back by itself"},
