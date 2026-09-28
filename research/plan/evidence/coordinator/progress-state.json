@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "cd0a8af2",
+ "integration_head": "81d8a3f4",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 214,
- "updated": "2026-09-28T11:33:37Z",
+ "revision": 215,
+ "updated": "2026-09-28T11:50:26Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5559,18 +5559,18 @@
     "prefix": "infrx-i6-",
     "db": "i6"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T11:33:37Z",
+   "updated": "2026-09-28T11:50:26Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at 31b405bd (I6/I7 units OFF behind the I2L marker + 0600 env file, --pull never, gid 10003, python3 -I preflight; security lens major LW-1 fixed+rechecked; 77 mutants; staging residuals recorded) → merge batch #12 (wf_b886cdd0-6a0) with WR-I6-1 (own line), WR-I6-2, WR-I6-4 + runbook rows, rulings R184/R185; WR-I6-3 + WR-I7-1 entry points → composition batch 2; I5 follow-up (marker/--pull never/gid) → eval-ops minor",
+   "next_action": "DONE (units merged): --no-ff 89ecc1cf + wirings b51551e4 (R184/R185; 91 mutants); WR-I6-3/WR-I7-1 entry points → composition batch 2; real D8/D9/L3 reruns + P-08 staging owed",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "handback: I6 1/2/4 + I7 1/2/4 (staging excluded)",
-    "at": "2026-09-28T11:33:37Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T11:50:26Z"
    },
    "evidence": [
     "research/plan/evidence/i/I6-af0ceaa.md",
@@ -6031,24 +6031,24 @@
    "branch": "codex/w5-merge-12",
    "worktree": ".claude/worktrees/codex-w5-merge-12",
    "base": "19e80bf1",
-   "head": null,
+   "head": "b51551e4",
    "isolation": {
     "ports": null,
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T11:33:37Z",
-   "updated": "2026-09-28T11:33:37Z",
+   "updated": "2026-09-28T11:50:26Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "next_action": "DONE: merged onto claude/consumer-v1 at 2ebd7681 (verify ok); the pre-existing tests/i/lab_eval red (a comment in 72-observe-install.sh naming a Lab unit, from the batch #9 wiring) fixed on the tip",
    "estimate": {
-    "optimistic_h": 0.5,
-    "likely_h": 1,
-    "pessimistic_h": 2,
-    "confidence": "medium",
-    "basis": "one merge, no docker",
-    "at": "2026-09-28T11:33:37Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T11:50:26Z"
    },
    "evidence": [],
    "commands": [],
