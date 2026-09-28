@@ -440,8 +440,68 @@ def test_l10_a_control_service_restart_mid_operation_loses_nothing(workdir):
     unbound()
 
 
-def test_l12_a_consumer_key_is_refused_by_every_control_operation(workdir):
-    waits("l12", "L3", steps="every control-port operation called with alpha's consumer /v1 "
-          "key (header and query) is 401 invalid_audience before any read; with DEV_A's Lab "
-          "session it is judged by LabAccess")
-    unbound()
+CONTROL_OPERATIONS = (("GET", "models"), ("GET", "deployments"), ("GET", "proposals"),
+                      ("GET", "aggregates"), ("POST", "register"),
+                      ("POST", "deployments/{dev}/smoke"), ("POST", "proposals"))
+
+
+def test_l12_a_consumer_key_is_refused_by_every_control_operation(workdir, record_property):
+    """Oracle: on the running control service (R186's factory), every control operation
+    called with alpha's consumer /v1 key - as the bearer, or in the query with no bearer -
+    and with an anon or a service_role token naming alpha is 401 `unauthenticated` and writes nothing;
+    alpha signed in (a consumer with no provider workspace) is 403 `denied`. The premises:
+    the same calls with A's sessions are judged by LabAccess (DEV_A reads A's proposals,
+    finds nothing of B, and ADMIN_A's proposal is 201)."""
+    with world.composed(workdir, start=("gateway",)) as trip:
+        lab.seed_lab(trip)
+        alpha = trip.world.alpha
+        _, dev = lab.ready_dev(lab.control(trip), "l12")
+        bodies = {"register": {"name": "marlin-2b", "artifact_digest": "sha256:" + "0" * 64,
+                               "schema_version": "chat.v1",
+                               "runtime": "vllm/vllm-openai@sha256:" + "0" * 64},
+                  "proposals": {"kind": "publish",
+                                "deployment_revision_id": dev.deployment_revision_id}}
+        rows = lambda: trip.one("select (select count(*) from infrx.deployment_revisions), "  # noqa: E731
+                                "(select count(*) from infrx.serving_versions), "
+                                "(select count(*) from infrx.lab_control_events)")
+        with lab.control_service(trip, workdir) as (service, verifier):
+            service.start()
+            before = rows()
+            answers = {}
+            for method, path in CONTROL_OPERATIONS:
+                target = path.format(dev=dev.deployment_revision_id)
+                body = bodies.get(path) if method == "POST" else None
+                for who, token in (("consumer_key", alpha.secret),
+                                   ("anon", stack.jwt("anon", alpha.user_id)),
+                                   ("service_role", stack.jwt("service_role", alpha.user_id)),
+                                   ("consumer_session", lab.session(alpha.user_id))):
+                    answer = service.call(method, target, token, body=body)
+                    answers[f"{method} {path} {who}"] = (answer.status_code,
+                                                         answer.json().get("refusal"))
+                in_query = service.http.request(
+                    method, f"/lab/v1/control/{target}",
+                    params={"provider_org_id": A, "apikey": alpha.secret,
+                            "access_token": alpha.secret},
+                    **({"json": body} if body is not None else {}))
+                answers[f"{method} {path} consumer_key_in_query"] = (
+                    in_query.status_code, in_query.json().get("refusal"))
+            written = rows()
+            premise = {"dev_a_reads_a": service.call("GET", "proposals",
+                                                     lab.session(DEV_A)).status_code,
+                       "dev_a_reads_b": service.call("GET", "proposals", lab.session(DEV_A),
+                                                     provider=lab.PROVIDER_B).status_code,
+                       "admin_a_proposes": service.call("POST", "proposals",
+                                                        lab.session(ADMIN_A),
+                                                        body=bodies["proposals"]).status_code}
+            asked = verifier.handler.seen
+            record_property("control", {"answers": answers, "premise": premise,
+                                        "verifier_asked": asked})
+        # the three token-shaped bearers reach the verifier (a /v1 key is refused by shape)
+        assert asked >= 3 * len(CONTROL_OPERATIONS), f"premise: the verifier judged ({asked})"
+        refused = {k: v for k, v in answers.items() if not k.endswith("consumer_session")}
+        assert set(refused.values()) == {(401, "unauthenticated")}, refused
+        assert {v for k, v in answers.items() if k.endswith("consumer_session")} == {
+            (403, "denied")}, answers
+        assert written == before, (before, written)
+        assert premise == {"dev_a_reads_a": 200, "dev_a_reads_b": 404,
+                           "admin_a_proposes": 201}, premise

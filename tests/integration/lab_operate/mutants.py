@@ -123,7 +123,9 @@ L04 = "test_l04_publication_needs_operator_approval_and_snapshots_the_rate"
 L05 = "test_l05_app_discovers_and_serves_the_published_revision"
 L06 = "test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins"
 L09 = "test_l09_publish_and_rollback_cas_under_injected_faults"
+L12 = "test_l12_a_consumer_key_is_refused_by_every_control_operation"
 L3 = "infrx/lab/control/__init__.py"
+LAB_AUTH = "infrx/gateway/lab_auth.py"
 M32 = M + "0032_lab_control.sql"
 L11_DOWN = "test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving"
 L11_BAD = "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once"
@@ -203,6 +205,30 @@ STACK_MUTANTS += (
     _m("st_unapproved_card_listed", "discovery lists only the card the runtime approved (R69)",
        MODELS, "    if regime == CREDIT and card.rate_card_version != "
                "settings.pilot.active_rate_card_version:", "    if False:", L05),
+    _m("st_rollback_relists_the_current", "a rollback lists the earlier version's target", M32,
+       "    values (v_alias, cur.version + 1, t.model_id, t.deployment_revision_id,\n"
+       "      t.serving_version_id, t.rate_card_version,",
+       "    values (v_alias, cur.version + 1, cur.model_id, cur.deployment_revision_id,\n"
+       "      cur.serving_version_id, cur.rate_card_version,", L06),
+    _m("st_publish_without_cas", "a publication is a compare-and-set on the listing", M32,
+       "  if cur.version is distinct from (p_args->>'expected_version')::int then\n"
+       "    perform infrx.refuse('state_conflict', v_alias || ' is no longer at version '",
+       "  if false then\n"
+       "    perform infrx.refuse('state_conflict', v_alias || ' is no longer at version '", L09),
+    _m("st_rollback_without_cas", "a rollback is a compare-and-set on the listing", M32,
+       "  if cur.version is distinct from (p_args->>'expected_version')::int then\n"
+       "    perform infrx.refuse('state_conflict', v_alias || ' moved on from version '",
+       "  if false then\n"
+       "    perform infrx.refuse('state_conflict', v_alias || ' moved on from version '", L09),
+    _m("st_any_token_role_is_a_session", "only a signed-in user's token is a Lab session",
+       LAB_AUTH, '        if user.get("aud") != SESSION or user.get("role") != SESSION \\\n',
+       "        if False \\\n", L12),
+    _m("st_unshaped_bearer_passes", "a /v1 key or no bearer is refused before any read",
+       LAB_AUTH, "    if match is None:\n        raise errors.InvalidApiKey(",
+       "    if False:\n        raise errors.InvalidApiKey(", L12),
+    _m("st_consumer_session_not_denied", "a consumer account has no provider workspace",
+       LAB_AUTH, "    if not workspaces:\n        raise errors.Forbidden(",
+       "    if False:\n        raise errors.Forbidden(", L12),
 )
 #: Cases whose FAIL is a recorded cross-lane finding (evidence E3L-BIND): kept out of the
 #: stack list's pristine baseline until the owning lane fixes it (as E8L's KNOWN_FAIL).

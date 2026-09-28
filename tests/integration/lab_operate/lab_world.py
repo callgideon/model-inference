@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import os
 import sys
+import types
 import uuid
 from pathlib import Path
 
@@ -271,3 +272,149 @@ def roll_runtime(trip, card: str, roles=("gateway",)) -> None:
     for role in roles:
         trip.box.stop(role)
         trip.box.start(role, ACTIVE_RATE_CARD_VERSION=card)
+
+
+# ------------------------------------------------------------------ the control service
+CONTROL_PORT = harness.PORT_RANGE.start + 3            # e3l: 57003 (the unit's 127.0.0.1:8003)
+SESSIONS_PORT = harness.PORT_RANGE.start + 4           # e3l: 57004, the session verifier
+
+
+@contextlib.contextmanager
+def sessions():
+    """The session verifier the factory asks (`GoTrueSessions`, GET /auth/v1/user): a stand-in
+    for GoTrue, which this stack does not run. It answers a live HS256 token of this stack's
+    PostgREST secret as that user (`aud`/`role` from the token) and 401 to anything else.
+    Yields its base URL; `.seen` counts the tokens it judged."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    def claims(token: str):
+        try:
+            head, body, sig = token.split(".")
+            mac = hmac.new(stack.JWT_SECRET.encode(), f"{head}.{body}".encode(),
+                           hashlib.sha256).digest()
+            if not hmac.compare_digest(base64.urlsafe_b64encode(mac).rstrip(b"=").decode(),
+                                       sig):
+                return None
+            found = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        except (ValueError, TypeError):
+            return None
+        return found if found.get("exp", 0) > time.time() and found.get("sub") else None
+
+    class Handler(BaseHTTPRequestHandler):
+        seen = 0
+
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):  # noqa: N802
+            Handler.seen += 1
+            token = (self.headers.get("authorization") or "").removeprefix("Bearer ")
+            found = claims(token) if self.path == "/auth/v1/user" else None
+            body = json.dumps({"id": found["sub"], "aud": found["role"],
+                               "role": found["role"]} if found else {"msg": "invalid"}).encode()
+            self.send_response(200 if found else 401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = world.bind_retried(lambda: _serve(ThreadingHTTPServer, Handler))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield types.SimpleNamespace(url=f"http://127.0.0.1:{SESSIONS_PORT}", handler=Handler)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _serve(server_class, handler):
+    try:
+        return server_class(("127.0.0.1", SESSIONS_PORT), handler)
+    except OSError as busy:                             # bind_retried's vocabulary
+        raise RuntimeError(f"address already in use: {busy}") from None
+
+
+class ControlService:
+    """The control service as its own process group (`control_box.py`), over the scenario's
+    clone and the session verifier; logs `control-<n>.log` beside the case's box logs."""
+
+    def __init__(self, trip, workdir: Path, sessions_url: str) -> None:
+        self.workdir, self.starts, self.process = workdir, 0, None
+        self.env = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "/tmp"),
+                    "PYTHONPATH": trip.box.env["PYTHONPATH"],
+                    "INFRX_LAB_DATABASE_URL": harness.pg_dsn(trip.world.database),
+                    "INFRX_LAB_SUPABASE_URL": sessions_url,
+                    "INFRX_LAB_SUPABASE_ANON_KEY": stack.jwt("anon", ttl_s=3600)}
+        import httpx
+        self.http = httpx.Client(base_url=f"http://127.0.0.1:{CONTROL_PORT}", timeout=30.0)
+
+    def start(self, **env: str) -> None:
+        import subprocess
+        self.starts += 1
+        log = open(self.workdir / f"control-{self.starts}.log", "wb")
+        self.process = subprocess.Popen(
+            [sys.executable, str(HERE / "control_box.py"), str(CONTROL_PORT)],
+            env={**self.env, **env}, stdout=log, stderr=subprocess.STDOUT,
+            start_new_session=True, cwd=str(harness.REPO_ROOT))
+        log.close()
+        world.wait_for(self.ready, 60, f"the control service ready ({self.tail()})", every=0.2)
+
+    def ready(self) -> bool:
+        import httpx
+        if self.process.poll() is not None:
+            raise AssertionError(f"the control service exited {self.process.returncode}: "
+                                 f"{self.tail()}")
+        try:
+            return self.http.get("/readyz").status_code == 200
+        except httpx.HTTPError:
+            return False
+
+    def kill(self) -> None:
+        import signal
+        if self.process is not None and self.process.poll() is None:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
+            self.process.wait(timeout=30)
+
+    def answers(self) -> bool:
+        import httpx
+        try:
+            self.http.get("/readyz", timeout=3.0)
+        except httpx.HTTPError:
+            return False
+        return True
+
+    def tail(self) -> str:
+        path = self.workdir / f"control-{self.starts}.log"
+        return " | ".join(path.read_text(errors="replace").splitlines()[-8:]) \
+            if path.exists() else ""
+
+    def call(self, method: str, path: str, token: str, provider: str = PROVIDER_A,
+             body: dict | None = None):
+        return self.http.request(method, f"/lab/v1/control/{path}",
+                                 params={"provider_org_id": provider},
+                                 headers={"Authorization": f"Bearer {token}"},
+                                 **({"json": body} if body is not None else {}))
+
+
+@contextlib.contextmanager
+def control_service(trip, workdir: Path):
+    """The session verifier and the (not yet started) control service; killed at the end."""
+    with sessions() as verifier:
+        service = ControlService(trip, workdir, verifier.url)
+        try:
+            yield service, verifier
+        finally:
+            service.kill()
+            service.http.close()
+
+
+def session(user: str) -> str:
+    """A signed-in user's session token (what the Lab web forwards)."""
+    return stack.jwt("authenticated", user, ttl_s=3600)
