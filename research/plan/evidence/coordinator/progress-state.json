@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "6ab5ee47",
+ "integration_head": "f99a0152",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 230,
- "updated": "2026-09-28T18:52:22Z",
+ "revision": 231,
+ "updated": "2026-09-28T19:41:40Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6498,26 +6498,28 @@
    "branch": "codex/w5-lab-rollout",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout",
    "base": "b2906856",
-   "head": "2334e6af",
+   "head": "5bf71de3",
    "isolation": {
     "ports": "e8l 57400-57499 (PG 57432)",
     "prefix": "infrx-e8l-",
     "db": "e8l"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T15:38:37Z",
-   "updated": "2026-09-28T18:48:37Z",
-   "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (gate runner; accepted run after composition-2 + E5L/E6L)",
+   "updated": "2026-09-28T19:41:40Z",
+   "blocker": "k06 FAIL = E8L-F1 (0043 release_active resolves a candidate by serving_version_id, ignoring the R188 digest) → WR-E8L-2 lab-sql; k09 needs composition-2's rollout entry point; k10 needs lab-ui-swap (merging); k08 needs a GPU target (P-08)",
+   "next_action": "ACCEPT_WITH_FIXES at 5bf71de3 (E8L runner: k01–k05, k07 PASS for real; major RV-1 fixed+rechecked; 16 + 28 mutants) → merge batch #18 (wf_c23e44dc-c8a) with WR-E8L-1 + R191; WR-E8L-2/3/4 → lab-sql-lw5, WR-E8L-5 → composition-2; WR-E8L-6 applied on the tip at f99a0152; LAB-ROLLOUT-LOCAL not accepted until k06 + the binds rerun",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 12,
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
     "confidence": "medium",
-    "basis": "plan 3/6/12",
-    "at": "2026-09-28T15:38:37Z"
+    "basis": "handback: the F1 fix in lab-sql + k09/k10 binds + one verify round",
+    "at": "2026-09-28T19:41:40Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E8L-2334e6a.md"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_rollout/",
@@ -6551,6 +6553,40 @@
     "confidence": "medium",
     "basis": "one Lab-only merge with three real-route stacks",
     "at": "2026-09-28T18:52:22Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-18",
+   "task": null,
+   "slice": "(wave5 merge lane #18, parallel) lab-rollout 5bf71de3 (WR-E8L-1 line + target, R191); workflow wf_c23e44dc-c8a; base 8f39b124",
+   "agent": "opus",
+   "branch": "codex/w5-merge-18",
+   "worktree": ".claude/worktrees/codex-w5-merge-18",
+   "base": "8f39b124",
+   "head": null,
+   "isolation": {
+    "ports": null,
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T19:41:40Z",
+   "updated": "2026-09-28T19:41:40Z",
+   "blocker": null,
+   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "one merge, no docker",
+    "at": "2026-09-28T19:41:40Z"
    },
    "evidence": [],
    "commands": [],
