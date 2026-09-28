@@ -1,0 +1,34 @@
+{
+ "task": "B4",
+ "slice": "B4.a launch (H1 harness selection, predeclared B2 protocol, CREDIT limit), B4.b progress/cancel + B3 subscription decisions, B4.c comparison/slice/uncertainty/cost panels + report export; LAB_EVALS port fake-driven, real D7/B2 shapes on b3",
+ "activity": "review",
+ "head": "76833303",
+ "worktree": ".claude/worktrees/codex-w5-eval-ui",
+ "branch": "codex/w5-eval-ui",
+ "owned_paths": [
+  "apps/lab/app/(provider)/evaluations/",
+  "apps/lab/app/(provider)/experiments/",
+  "apps/lab/lib/services/evaluation/",
+  "apps/lab/tests/b/"
+ ],
+ "commands": [
+  {"cmd": "cd apps/lab && node --test tests/b/*.test.ts (before implementation)", "exit": 1, "summary": "4 files fail ERR_MODULE_NOT_FOUND, 0 pass"},
+  {"cmd": "cd apps/infrx-api && INFRX_D_TASK=b3 uv run --frozen python ../lab/tests/b/real/dump.py", "exit": 0, "summary": "real D7 run status x3 + B2 reports x2 on 0001-0029 (57522); container removed; rerun reproduces counts/states/costs"},
+  {"cmd": "cd apps/lab && node --test tests/b/*.test.ts", "exit": 0, "summary": "27 pass"},
+  {"cmd": "make lab-test", "exit": 0, "summary": "116 tests, 112 pass, 0 fail, 4 skipped"},
+  {"cmd": "make lab-lint", "exit": 0, "summary": "clean"},
+  {"cmd": "make lab-typecheck", "exit": 0, "summary": "clean"},
+  {"cmd": "make lab-build", "exit": 0, "summary": "4 new dynamic routes"},
+  {"cmd": "make lab-mutants", "exit": 0, "summary": "existing runners all killed"},
+  {"cmd": "cd apps/lab && node tests/b/run-mutants.mjs", "exit": 0, "summary": "27 cases all named; 113/113 killed (first run 104/113, test-side fixes)"}
+ ],
+ "estimate": {"optimistic_h": 1.5, "likely_h": 3, "pessimistic_h": 6, "confidence": "medium", "basis": "remaining = http.ts adapter after WR-B4-1 + J01-J03 against it + nav/Makefile wiring + one verify round (47-234 min); WR-L4-1 analogue 1/2/4", "at": "2026-09-28T07:19Z"},
+ "blockers": ["integration needs WR-B4-1 (/lab/v1/evaluations, lab-api) and WR-B4-2 (lab-sql experiments/subscription listing)"],
+ "wiring_requests": [
+  "WR-B4-1 lab-api: /lab/v1/evaluations (catalog, runs, runs/{id}/cancel, experiments, subscriptions) over B1 freeze/D7 run status/B2 compare/B3 subscribe; default-off LAB_EVALS",
+  "WR-B4-2 lab-sql: experiments table + provider-scoped subscription/decision listing + lab_run_json timestamps; lab_cancel_run must refuse terminal runs",
+  "WR-B4-3 layout nav: add <Link href=\"/evaluations\">Evaluations</Link>",
+  "WR-B4-4 Makefile lab-mutants: append cd apps/lab && node tests/b/run-mutants.mjs"
+ ],
+ "evidence": ["research/plan/evidence/b/B4-7683330.md", "research/plan/evidence/coordinator/updates/B4-20260928T0719Z.json"]
+}
