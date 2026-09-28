@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""R32/R40/R83: every invariant the WR-B4-1 evaluations route (`lab_evaluations`) claims is killable by a named case.
+"""R32/R40/R83: every invariant the WR-B4-1 evaluations route (`lab_evaluations`) claims is
+killable by a named case.
 
     uv run --frozen pytest -q tests/g/lab_evaluations/test_mutants.py
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/lab_evaluations/test_mutants.py

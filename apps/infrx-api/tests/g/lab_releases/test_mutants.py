@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""R32/R40/R83: every invariant the WR-P4-1 pipelines route (`lab_pipelines`) claims is
+"""R32/R40/R83: every invariant the WR-R4-1 releases routes (`lab_releases`) claims is
 killable by a named case.
 
-    uv run --frozen pytest -q tests/g/lab_pipelines/test_mutants.py
-    INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/lab_pipelines/test_mutants.py
+    uv run --frozen pytest -q tests/g/lab_releases/test_mutants.py
+    INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/lab_releases/test_mutants.py
 """
 from __future__ import annotations
 
@@ -18,11 +18,11 @@ ALL = mutation_list.MUTANTS
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One pytest process per mutant: the default suite runs one per invariant group (mounting,
-# identity, capabilities, the connector, write-once ids, lineage, gone, the body);
+# identity, capabilities, the records, the fence, the verdict, the body);
 # `INFRX_MUTANTS=all` runs all.
-SUBSET = ("mounted_without_the_switch", "body_before_identity", "viewer_reads_labels",
-          "connector_not_manual", "import_conflict_unchecked", "run_holdout_unpinned",
-          "gone_is_unavailable", "body_bounded_by_the_chat_cap")
+SUBSET = ("mounted_without_the_switch", "body_before_identity", "developer_proposes",
+          "proposals_withheld", "fence_from_the_read_model", "expand_without_an_expand_verdict",
+          "kind_open")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
