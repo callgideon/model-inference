@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 
 import psycopg
 import pytest
@@ -224,27 +225,49 @@ def check_calibration_is_the_providers_own_labels_in_bounded_pages(conn) -> str:
 
 def check_a_concurrent_double_click_queues_one_run(conn) -> str:
     """C3L's double click at the same instant (commits): two sessions of the developer queue
-    one run id together - both are answered the one stored request."""
+    one run id together - both are answered the one stored request. Deterministic (LW4): the
+    first click's insert is held uncommitted until the second click is seen WAITING on it
+    (pg_stat_activity), so the second always meets the unique key mid-flight - never the
+    committed row its own lookup would find."""
     with conn.transaction():
         cfg = configure(conn)[1]["config_id"]
     run = j.uid(0x7e)
-    gate, answers = threading.Barrier(2), [None, None]
+    first_in, commit = threading.Event(), threading.Event()
+    answers, second_pid = [None, None], []
 
-    def one(i: int) -> None:
+    def click(i: int) -> None:
         with psycopg.connect(pgharness.dsn(conn.info.dbname), autocommit=True) as mine:
-            gate.wait()
-            with mine.transaction():
-                answers[i] = request(mine, cfg, run=run)
-    threads = [threading.Thread(target=one, args=(i,)) for i in range(2)]
+            if i == 1:
+                first_in.wait(30)
+                second_pid.append(mine.info.backend_pid)
+            try:
+                with mine.transaction():
+                    answers[i] = request(mine, cfg, run=run)
+                    if i == 0:
+                        first_in.set()
+                        commit.wait(30)
+            except psycopg.Error as failed:
+                answers[i] = str(failed).splitlines()[0]
+    threads = [threading.Thread(target=click, args=(i,)) for i in range(2)]
     for thread in threads:
         thread.start()
+    waited = False
+    for _ in range(300):
+        if second_pid and conn.execute(
+                "select wait_event_type = 'Lock' from pg_stat_activity where pid = %s",
+                (second_pid[0],)).fetchone() == (True,):
+            waited = True
+            break
+        time.sleep(0.05)
+    commit.set()
     for thread in threads:
         thread.join(30)
+    assert waited, "the second click never waited on the first (the race did not happen)"
     assert answers[0] == answers[1] and answers[0][0] is None, answers
     rows = conn.execute("select count(*) from infrx.lab_judge_requests where run_id = %s",
                         (run,)).fetchone()[0]
     assert rows == 1, rows
-    return "two racing clicks: one request, the same answer"
+    return "two racing clicks, the second blocked on the first: one request, the same answer"
 
 
 CHECKS = {c.__name__: c for c in (

@@ -5,7 +5,7 @@
 control-service factory. The route's records are closed (`routes/lab_control.py`); these cases
 check what L3 puts in them and that the actor the route hands over is re-checked, never
 trusted. The reads the adapters need (`ControlReads`) are lab-sql's to add to `PgControlStore`
-(WR-LSQ-9), so the adapter cases run on the fake world; the factory's readiness runs on both.
+(WR-LSQ-9); every case runs on the fake and, marked `pg`, on the real store.
 """
 from __future__ import annotations
 
@@ -49,12 +49,12 @@ def reg(**update) -> Registration:
                            "runtime": RUNTIME, **update})
 
 
-def test_operations__the_route_records_are_l3s_own_rows(fake_world):
+def test_operations__the_route_records_are_l3s_own_rows(world):
     """Oracle: register -> smoke -> propose -> an operator's approval reads back, through the
     route's closed records, exactly what L3 stored: a private dev revision pinned to the
     registered runtime digest and schema, unpriced until approved; smoke passed only after the
     engine ran; the proposal `proposed` until the operator lists it, then `approved`."""
-    w, o = fake_world, ops(fake_world)
+    w, o = world, ops(world)
     dev_a, admin_a = actor(w, w.DEV_A, w.A), actor(w, w.ADMIN_A, w.A, v2.ProviderRole.administrator)
     d = run(o.register(dev_a, reg()))
     assert (d.model_id, d.runtime, d.schema_version, d.environment, d.visibility, d.state,
@@ -91,10 +91,10 @@ def test_operations__the_route_records_are_l3s_own_rows(fake_world):
     assert w.control_store.deployments[p.proposal_id].endpoint_id == prod.endpoint_id
 
 
-def test_operations__another_providers_actor_sees_and_moves_nothing(fake_world):
+def test_operations__another_providers_actor_sees_and_moves_nothing(world):
     """Oracle: provider B's administrator lists none of A's rows and every move on A's ids is
     `not_found`; registering under A's model name is `not_found` too."""
-    w, o = fake_world, ops(fake_world)
+    w, o = world, ops(world)
     d = run(o.register(actor(w, w.DEV_A, w.A), reg()))
     b = actor(w, w.ADMIN_B, w.B, v2.ProviderRole.administrator)
     for listing in (o.models, o.deployments, o.proposals):
@@ -106,10 +106,10 @@ def test_operations__another_providers_actor_sees_and_moves_nothing(fake_world):
             run(move())
 
 
-def test_operations__the_actor_is_rechecked_against_the_current_membership(fake_world):
+def test_operations__the_actor_is_rechecked_against_the_current_membership(world):
     """Oracle: the route's `Actor` is a claim; L3 asks L2 again. A viewer claiming the
     administrator role is `forbidden`; a foreign user claiming A's workspace is `not_found`."""
-    w, o = fake_world, ops(fake_world)
+    w, o = world, ops(world)
     admin = v2.ProviderRole.administrator
     with pytest.raises(errors.Forbidden):
         run(o.register(actor(w, w.VIEWER_A, w.A, admin), reg()))
@@ -124,10 +124,10 @@ def test_operations__the_actor_is_rechecked_against_the_current_membership(fake_
         run(o.propose(actor(w, w.DEV_A, w.A, admin), "publish", d.deployment_revision_id))
 
 
-def test_operations__a_failed_smoke_reads_failed_and_is_never_proposed(fake_world):
+def test_operations__a_failed_smoke_reads_failed_and_is_never_proposed(world):
     """Oracle: a failed engine smoke is `failed`/`retired` (never `passed`), and its proposal
     is a conflict; an unrun revision reads `none`, never `passed`."""
-    w, o = fake_world, ops(fake_world)
+    w, o = world, ops(world)
     dev_a = actor(w, w.DEV_A, w.A)
     admin_a = actor(w, w.ADMIN_A, w.A, v2.ProviderRole.administrator)
     w.engine.passes = False
@@ -145,11 +145,11 @@ def test_operations__a_failed_smoke_reads_failed_and_is_never_proposed(fake_worl
         run(o.propose(admin_a, "publish", fresh.deployment_revision_id))
 
 
-def test_operations__only_a_pinned_supported_registration_is_accepted(fake_world):
+def test_operations__only_a_pinned_supported_registration_is_accepted(world):
     """Oracle: the runtime is a supported image named by repository (the digest pins it), the
     schema one the gateway serves, the model one of the provider's own with pinned weights;
     a provider rollback proposal is refused (rollback is the operator's CAS)."""
-    w, o = fake_world, ops(fake_world)
+    w, o = world, ops(world)
     dev_a = actor(w, w.DEV_A, w.A)
     for bad in (reg(runtime="vllm/vllm-openai:latest"), reg(runtime="vllm/vllm-openai"),
                 reg(runtime="acme/uploaded@sha256:" + "ab" * 32), reg(schema_version="chat.v9"),
@@ -161,7 +161,8 @@ def test_operations__only_a_pinned_supported_registration_is_accepted(fake_world
     dev_b = actor(w, w.DEV_B, w.B)
     with pytest.raises(errors.NotFound):     # B's model has no operator-registered weights
         run(o.register(dev_b, reg(name="model")))
-    weights = serving(w, "b-1", provider=w.B, model=w.MODELS[w.B], public_model_id="other/model")
+    weights = serving(w, "b-1", provider=w.B, model=w.MODELS[w.B], public_model_id="other/model",
+                      model_version_id=w.new_id("b-model-version"))   # B's own (0007's owner key)
     assert run(w.control.register(w.DEV_B, w.B, weights))
     with pytest.raises(errors.InvalidRequest):   # weights, but no deployed limits to copy
         run(o.register(dev_b, reg(name="model")))
@@ -171,13 +172,13 @@ def test_operations__only_a_pinned_supported_registration_is_accepted(fake_world
     assert len(w.control_store.servings) == 2, "a refused registration wrote a row"
 
 
-def test_operations__the_lab_apps_registration_shape_registers(fake_world):
+def test_operations__the_lab_apps_registration_shape_registers(world):
     """Oracle (0-L3I-R1): what the Lab App's form can send is what L3 accepts. The App's own
     test registration (`apps/lab/tests/l/ui/actions.test.ts` REG) is refused as invalid (an
     unsupported runtime, weights A never imported) with no row; the same shape naming A's model
     by its bare name, its imported weights and a supported runtime by digest registers, pinned
     to exactly that runtime and those weights. The slug-qualified name is not the App's."""
-    w, o = fake_world, ops(fake_world)
+    w, o = world, ops(world)
     dev_a = actor(w, w.DEV_A, w.A)
     app_reg = {"name": "acme-7b", "artifact_digest": "sha256:" + "a" * 64,
                "schema_version": "chat.v2", "runtime": "vllm@sha256:bb"}
@@ -195,12 +196,12 @@ def test_operations__the_lab_apps_registration_shape_registers(fake_world):
         ALIAS, RUNTIME, RUNTIME, SHARD_DIGESTS)
 
 
-def test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins(fake_world):
+def test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins(world):
     """Oracle (WR-R2-2): `serving` is the alias's current ref and listing version; a rollback
     at a stale fence is a conflict and moves nothing; at the current fence it adds a version
     naming the earlier revision, audited under the controller; a job pinned before it keeps
     its pins; an unknown or later ref is `not_found`."""
-    w = fake_world
+    w = world
     s = Serving(w.control, w.control_store, OPERATOR)
     first = w.control_store.listings[ALIAS][0]
     endpoint = w.control_store.deployments[first.deployment_revision_id].endpoint_id

@@ -8,6 +8,7 @@ and money, every ACL of an existing relation or function) and are re-runnable.
 """
 from __future__ import annotations
 
+import psycopg
 import pytest
 from infrx.state import migrations
 
@@ -92,12 +93,13 @@ def test_lab_upgrade_preserves_history_money_identity_and_grants() -> None:
     assert after["jobs"] == before["jobs"], "the Lab upgrade changed a job's identity or money"
     # (0043 WR-I2L-4: the one change - the control login appends to A3's registry, select +
     # insert, as its PgRegistry does; nothing else of an existing relation moves)
-    control = ",infrx_lab_control=ar/postgres"
-    registry = {f"infrx.{r}" for r in ("model_versions", "serving_versions",
-                                        "deployment_revisions", "rate_card_versions")}
-    assert all(control in after["acl"][r][0] for r in registry), \
-        {r: after["acl"][r] for r in registry}
-    kept = {k: ((v[0].replace(control, ""), *v[1:]) if k in registry else v)
+    # (0044 WR-LSQ-9: and reads the catalog listings, select only)
+    control = {f"infrx.{r}": ",infrx_lab_control=ar/postgres" for r in (
+        "model_versions", "serving_versions", "deployment_revisions", "rate_card_versions")}
+    control["infrx.catalog_listings"] = ",infrx_lab_control=r/postgres"
+    assert all(g in after["acl"][r][0] for r, g in control.items()), \
+        {r: after["acl"][r] for r in control}
+    kept = {k: ((v[0].replace(control[k], ""), *v[1:]) if k in control else v)
             for k, v in after["acl"].items() if k in before["acl"]}
     assert kept == before["acl"], "the Lab upgrade changed an existing relation's grants"
     assert {k: v for k, v in after["cols"].items() if k in before["cols"]} == before["cols"]
@@ -186,3 +188,33 @@ def test_the_lw3_requests_keep_the_lab_rows_already_written() -> None:
     assert conn.execute("select shadow_limit from infrx.lab_rollouts").fetchall() == [(0,)]
     pgharness.apply(DB, later)
     assert [conn.execute(q).fetchall() for q in rows] == after, "not re-runnable"
+
+
+def test_the_lw4_reads_keep_the_listings_already_written() -> None:
+    """0044 (WR-LSQ-9) over a database already holding a published alias (L3-SQL's world at
+    0043): the listings stay as they were, the control login reads them, and it re-runs."""
+    from . import test_l3sql_control as l3
+    everything = migrations.sql_for(shim=pgharness.NEEDS_SHIM)
+    later = tuple(f for f in everything if f[0][:4].isdigit() and f[0][:4] >= "0044")
+    assert [f for f, _ in later][:1] == ["0044_lab_control_reads.sql"], later
+    pgharness.ensure()
+    pgharness.recreate(DB)
+    pgharness.apply(DB, tuple(f for f in everything if f not in later))
+    conn = pgharness.connect(DB)
+    l3.seed(conn)
+    l3.ok(conn, "lab_control_publish", l3.publish())
+    rows = "select row_to_json(l)::jsonb from infrx.catalog_listings l order by version"
+
+    def as_control() -> str | list:
+        try:
+            with conn.transaction():
+                conn.execute("set local session authorization infrx_lab_control")
+                return conn.execute(rows).fetchall()
+        except psycopg.Error as refused:
+            return refused.sqlstate
+    before = conn.execute(rows).fetchall()
+    assert len(before) == 2 and as_control() == "42501", as_control()
+    pgharness.apply(DB, later)
+    assert conn.execute(rows).fetchall() == before and as_control() == before
+    pgharness.apply(DB, later)
+    assert as_control() == before, "not re-runnable"

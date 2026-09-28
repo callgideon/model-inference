@@ -108,6 +108,55 @@ class FakeWorld(access.FakeWorld):
             .model_copy(update={"state": v2.DeploymentState.retired})
 
 
+class _PgRows:
+    """The PG world's `control_store`: lab-sql's `PgControlStore` itself (its `ControlReads`,
+    WR-LSQ-9, are what `Operations`/`Serving` take) plus the few row views the cases read on
+    the fake (`servings`, `deployments`, `listings`, `endpoints`, `audit`), read back from
+    the stored rows - through the ControlReads where one exists."""
+
+    def __init__(self, store, conn, providers) -> None:
+        self.store, self.conn, self.providers = store, conn, providers
+
+    def __getattr__(self, name):                      # the ControlReads and the rest
+        return getattr(self.store, name)
+
+    def _all(self, read) -> dict:
+        import asyncio
+        return {getattr(r, "serving_version_id" if read == "provider_servings"
+                        else "deployment_revision_id"): r
+                for p in self.providers for r in asyncio.run(getattr(self.store, read)(p))}
+
+    @property
+    def servings(self) -> dict:
+        return self._all("provider_servings")
+
+    @property
+    def deployments(self) -> dict:
+        return self._all("provider_deployments")
+
+    @property
+    def listings(self):
+        import asyncio
+        store = self.store
+
+        class Listings:
+            def __getitem__(self, alias):
+                return asyncio.run(store.listing_versions(alias))
+        return Listings()
+
+    @property
+    def endpoints(self) -> dict:
+        return {e: (p, n, v2.Environment(env)) for e, p, n, env in self.conn.execute(
+            "select endpoint_id::text, provider_org_id::text, name, environment "
+            "from infrx.endpoints")}
+
+    @property
+    def audit(self) -> list:
+        from types import SimpleNamespace
+        return [SimpleNamespace(action=a, actor=b) for a, b in self.conn.execute(
+            "select action, actor from infrx.lab_control_events order by event_id")]
+
+
 class PgWorld(access.PgWorld):
     """The same world in PostgreSQL. Reads go through `LabControl` over `PgControlStore`
     (L3-SQL), A3's `PgRegistry`/`PgCatalogDirectory` and `PgWalletDirectory`."""
@@ -125,7 +174,8 @@ class PgWorld(access.PgWorld):
         connect = connector(dsn)
         self.catalog, self.wallets = PgCatalogDirectory(connect), PgWalletDirectory(connect)
         self.engine = FakeEngine()
-        self.control = LabControl(self.access, PgControlStore(connect), PgRegistry(connect),
+        self.control_store = _PgRows(PgControlStore(connect), conn, (self.A, self.B))
+        self.control = LabControl(self.access, self.control_store.store, PgRegistry(connect),
                                   self.catalog, self.engine)
         self._ids = 0
 

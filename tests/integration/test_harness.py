@@ -229,6 +229,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0040_lab_variant_comparisons.sql",
     # Lab (local-only, R151): lab-sql LW3 (C2-RPC, D8, the LW3 requests)
     "0041_lab_content_refs.sql", "0042_lab_d8_ledgers.sql", "0043_lab_reads_and_proposals.sql",
+    # Lab (local-only, R151): lab-sql LW4 (WR-LSQ-9)
+    "0044_lab_control_reads.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
