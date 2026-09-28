@@ -27,6 +27,11 @@ lacks: W3's probe does not report capabilities and the paired report covers only
 workload, so such a claim is unverified (reported as `capability_unverified:<c>`); otherwise `equivalent`. An optimization is claimed
 only for an equivalent variant with measurements. ponytail: no cost column; attach one when
 a measured $/GPU-hour source (cloud-pricing) is wired to the load records.
+
+**R3.d storage** (`store`, WR-LSQ-6). The comparison rests on its variant and its B2 report:
+the variant record is published (content-addressed), the report stored write-once by its
+digest (0034 `put_eval_report`), and only then the comparison (0040
+`put_variant_comparison`), all as the provider's.
 """
 from __future__ import annotations
 
@@ -153,3 +158,17 @@ def compare(variant: dict[str, Any], base: Identity, candidate: Identity, *,
             "capabilities": {"base": base.capabilities, "variant": candidate.capabilities},
             "report_digest": report["report_digest"], "performance": performance,
             "optimization_claimed": outcome == "equivalent" and performance is not None}
+
+
+async def store(data, variant: dict[str, Any], comparison: dict[str, Any],
+                report: dict[str, Any], *, provider_org_id: str, actor: str) -> str:
+    """Store `comparison` (from `compare`) beside its variant and B2 report, in that order,
+    through D7 (`PgLabDataStore`); its digest. A comparison of another variant or resting on
+    another report is refused before anything is written."""
+    if comparison["variant_ref"] != lab.ref_of(variant) or \
+            comparison["report_digest"] != report.get("report_digest"):
+        raise errors.InvalidRequest("the comparison is not of this variant and report")
+    await data.publish(variant, provider_org_id=provider_org_id, actor=actor)
+    await data.put_eval_report(report, provider_org_id=provider_org_id, actor=actor)
+    return await data.put_variant_comparison(comparison, provider_org_id=provider_org_id,
+                                             actor=actor)
