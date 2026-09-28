@@ -3,7 +3,7 @@
 // Usage: node tests/b/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "../l/shell/harness.mjs";
 
-const SUITE = ["view", "real", "journey", "actions", "pages"].map((f) => `tests/b/${f}.test.ts`);
+const SUITE = ["view", "real", "journey", "actions", "pages", "http"].map((f) => `tests/b/${f}.test.ts`);
 const PORT = "lib/services/evaluation/port.ts";
 const FAKE = "lib/services/evaluation/fake.ts";
 const VIEW = "lib/services/evaluation/view.ts";
@@ -13,6 +13,7 @@ const EVALS = "app/(provider)/evaluations/page.tsx";
 const CHECKPOINTS = "app/(provider)/evaluations/checkpoints/page.tsx";
 const EXPERIMENT = "app/(provider)/experiments/[id]/page.tsx";
 const RUNS = "app/(provider)/evaluations/runs.tsx";
+const HTTP = "lib/services/evaluation/http.ts";
 
 const C = {
   v01: "B4-V01 everyone in the workspace reads evaluations; only developer and administrator run or cancel them",
@@ -42,6 +43,8 @@ const C = {
   p02: "B4-P02 launch and subscribe forms are shown only to a role that runs evaluations and carry a fresh record id",
   p03: "B4-P03 an experiment is found only among the workspace's own, compared only through B2's report, exported only once it exists",
   p04: "B4-P04 the preview stand-in is labelled on every page only when it is on",
+  h01: "B4-H01 every call is the session's token and the actor's provider on its route, reads unwrapped from {data}",
+  h02: "B4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
 };
 
 const MUTANTS = [
@@ -170,6 +173,17 @@ const MUTANTS = [
   m("B4-X111", "a comparison is drawn without B2's report", EXPERIMENT, "const c = e.report === null ? null : comparison(e.report);", "const c = comparison(e.report!);", [C.p03]),
   m("B4-X112", "the export is offered before the report exists", EXPERIMENT, "      <h2>Runs</h2>", "      <a href={`/experiments/${e.experiment_id}/report`}>Export</a>\n      <h2>Runs</h2>", [C.p03]),
   m("B4-X113", "the preview label shows when the stand-in is off", EVALS, "{isPreview() && <PreviewNote />}", "{<PreviewNote />}", [C.p04]),
+  // the HTTP adapter (WR-B4-1, lane lab-api-2)
+  m("B4-X115", "the session token is not sent", HTTP, "authorization: `Bearer ${token}`", 'authorization: "Bearer"', [C.h01]),
+  m("B4-X116", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
+  m("B4-X117", "a read is not unwrapped from {data}", HTTP, '(method === "GET" ? payload.data : payload)', "payload", [C.h01]),
+  m("B4-X118", "a cancel is a read", HTTP, 'call(actor, "POST", `runs/', 'call(actor, "GET", `runs/', [C.h01]),
+  m("B4-X119", "the body is dropped", HTTP, "body: body === undefined ? undefined : JSON.stringify(body),", "body: undefined,", [C.h01]),
+  m("B4-X120", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
+  m("B4-X121", "no session reads as unavailable", HTTP, '401: "denied", ', "", [C.h02]),
+  m("B4-X122", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
+  m("B4-X123", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
+  m("B4-X124", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "B4", mutants: MUTANTS }));

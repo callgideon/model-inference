@@ -246,7 +246,8 @@ def _lab(settings, connect) -> dict:
     operations are not composed until L3 merges (its routes answer 503; health is served).
     `LAB_TRACES` needs T2I's projection and trace bucket, or startup is refused."""
     deployment = settings.deployment
-    if not (deployment.lab_control or deployment.lab_traces):
+    if not (deployment.lab_control or deployment.lab_traces or deployment.lab_evals
+            or deployment.lab_pipelines or deployment.lab_releases):
         return {}
     import httpx
 
@@ -263,7 +264,25 @@ def _lab(settings, connect) -> dict:
     lab = {"lab_control": LabControl(sessions, access)} if deployment.lab_control else {}
     if deployment.lab_traces:
         lab["lab_traces"] = _lab_traces(settings, connect, sessions, access)
-    return lab
+    return {**lab, **_lab_2(deployment, connect, sessions, access)}
+
+
+def _lab_2(deployment, connect, sessions, access) -> dict:
+    """LAB-API-2: the evaluation, pipeline and release surfaces for the switches that are on,
+    over D7 (`PgLabDataStore`, merged). The ports whose tables are not merged (experiments,
+    the B3 ledger listing, the catalog; the label log, run ledger, Lab objects, B3 evals; the
+    release read models, proposals and D9) are absent, so their routes answer 503."""
+    from ..state.lab_data import PgLabDataStore
+    from .routes.lab_evaluations import LabEvaluations
+    from .routes.lab_pipelines import LabPipelines
+    from .routes.lab_releases import LabReleases
+    store = PgLabDataStore(connect)
+    return {**({"lab_evaluations": LabEvaluations(sessions, access, store=store)}
+               if deployment.lab_evals else {}),
+            **({"lab_pipelines": LabPipelines(sessions, access, store=store)}
+               if deployment.lab_pipelines else {}),
+            **({"lab_releases": LabReleases(sessions, access)}
+               if deployment.lab_releases else {})}
 
 
 def _lab_traces(settings, connect, sessions, access):
@@ -348,7 +367,8 @@ def build_info(rt) -> None:
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
                        pool=None, consent_for=None, attachments=None,
                        lifecycle=None, readiness=None, feedback=None, lab_control=None,
-                       lab_traces=None, rollouts=None, trace_export=None) -> IngressDeps:
+                       lab_traces=None, rollouts=None, trace_export=None, lab_evaluations=None,
+                       lab_pipelines=None, lab_releases=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -399,6 +419,9 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     # LAB-API (WR-LAB-API-1): each Lab surface mounts over these, and only when enabled.
     rt.lab_control = lab_control if deployment.lab_control else None
     rt.lab_traces = lab_traces if deployment.lab_traces else None
+    rt.lab_evaluations = lab_evaluations if deployment.lab_evals else None
+    rt.lab_pipelines = lab_pipelines if deployment.lab_pipelines else None
+    rt.lab_releases = lab_releases if deployment.lab_releases else None
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
                            relay=relay)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
