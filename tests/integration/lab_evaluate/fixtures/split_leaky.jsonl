@@ -1,0 +1,4 @@
+{"episode": "k1", "id": "K1", "split": "train", "text": "What is the tallest mountain on Earth?"}
+{"episode": "k2", "id": "K2", "split": "holdout", "text": "what is the TALLEST mountain on earth?"}
+{"episode": "k3", "id": "K3", "split": "train", "text": "Which ocean is the largest?"}
+{"episode": "k3", "id": "K4", "split": "holdout", "text": "Which ocean is the smallest?"}

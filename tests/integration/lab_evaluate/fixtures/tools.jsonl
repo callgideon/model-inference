@@ -1,0 +1,4 @@
+{"answer": "sent", "episode": "tl1", "id": "T1", "q": "Email the report to the team."}
+{"answer": "done", "episode": "tl2", "id": "T2", "q": "Delete the scratch directory."}
+{"answer": "Suva", "episode": "tl3", "id": "T3", "q": "What is the capital of Fiji?"}
+{"answer": "100", "episode": "tl4", "id": "T4", "q": "Look up the boiling point of water in C."}

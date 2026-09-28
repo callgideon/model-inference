@@ -1,0 +1,7 @@
+{"answer": "walk", "clip": "clips/a.mp4", "end": 30, "episode": "va", "id": "V1", "label": {"action": "walk"}, "start": 0}
+{"answer": "run", "clip": "clips/a.mp4", "end": 60, "episode": "vb", "id": "V2", "label": {"action": "run"}, "start": 30}
+{"answer": "sit", "clip": "clips/b.mp4", "end": 82, "episode": "vc", "id": "V3", "label": {"action": "sit"}, "start": 0}
+{"answer": "sit", "clip": "clips/b.mp4", "end": 83, "episode": "vd", "id": "V4", "label": {"action": "sit"}, "start": 0}
+{"answer": "x", "clip": "clips/missing.mp4", "end": 10, "episode": "ve", "id": "V5", "label": {"action": "x"}, "start": 0}
+{"answer": "y", "clip": "clips/notes.txt", "end": 10, "episode": "vf", "id": "V6", "label": {"action": "y"}, "start": 0}
+{"answer": "z", "clip": "../other/c.mp4", "end": 10, "episode": "vg", "id": "V7", "label": {"action": "z"}, "start": 0}

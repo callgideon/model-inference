@@ -1,0 +1,25 @@
+{"answer": "Paris", "episode": "lk01", "id": "L01", "q": "What is the capital of France?", "slice": "lookup"}
+{"answer": "Tokyo", "episode": "lk02", "id": "L02", "q": "What is the capital of Japan?", "slice": "lookup"}
+{"answer": "Nairobi", "episode": "lk03", "id": "L03", "q": "What is the capital of Kenya?", "slice": "lookup"}
+{"answer": "Lima", "episode": "lk04", "id": "L04", "q": "What is the capital of Peru?", "slice": "lookup"}
+{"answer": "Oslo", "episode": "lk05", "id": "L05", "q": "What is the capital of Norway?", "slice": "lookup"}
+{"answer": "Cairo", "episode": "lk06", "id": "L06", "q": "What is the capital of Egypt?", "slice": "lookup"}
+{"answer": "Santiago", "episode": "lk07", "id": "L07", "q": "What is the capital of Chile?", "slice": "lookup"}
+{"answer": "Madrid", "episode": "lk08", "id": "L08", "q": "What is the capital of Spain?", "slice": "lookup"}
+{"answer": "Accra", "episode": "lk09", "id": "L09", "q": "What is the capital of Ghana?", "slice": "lookup"}
+{"answer": "Kathmandu", "episode": "lk10", "id": "L10", "q": "What is the capital of Nepal?", "slice": "lookup"}
+{"answer": "Havana", "episode": "lk11", "id": "L11", "q": "What is the capital of Cuba?", "slice": "lookup"}
+{"answer": "Tehran", "episode": "lk12", "id": "L12", "q": "What is the capital of Iran?", "slice": "lookup"}
+{"answer": "Bamako", "episode": "lk13", "id": "L13", "q": "What is the capital of Mali?", "slice": "lookup"}
+{"answer": "Vientiane", "episode": "lk14", "id": "L14", "q": "What is the capital of Laos?", "slice": "lookup"}
+{"answer": "56", "episode": "mt01", "id": "M01", "q": "What is 7 times 8?", "slice": "math"}
+{"answer": "144", "episode": "mt02", "id": "M02", "q": "What is 12 times 12?", "slice": "math"}
+{"answer": "54", "episode": "mt03", "id": "M03", "q": "What is 9 times 6?", "slice": "math"}
+{"answer": "60", "episode": "mt04", "id": "M04", "q": "What is 15 times 4?", "slice": "math"}
+{"answer": "63", "episode": "mt05", "id": "M05", "q": "What is 21 times 3?", "slice": "math"}
+{"answer": "143", "episode": "mt06", "id": "M06", "q": "What is 11 times 13?", "slice": "math"}
+{"id": "B01", "q": "unterminated
+["an", "array"]
+{"id": "B03", "answer": "x", "slice": "lookup", "episode": "b03"}
+{"id": "L01", "q": "What is the capital of France?", "answer": "Paris", "slice": "lookup", "episode": "lk01"}
+{"id": "B05", "q": "   ", "answer": "x", "slice": "lookup", "episode": "b05"}
