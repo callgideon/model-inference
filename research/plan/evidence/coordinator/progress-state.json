@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "26bd7e6f",
+ "integration_head": "2e238e36",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 222,
- "updated": "2026-09-28T14:42:50Z",
+ "revision": 223,
+ "updated": "2026-09-28T15:09:32Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5710,18 +5710,18 @@
     "prefix": "infrx-b3-",
     "db": "b3"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T07:32:29Z",
-   "updated": "2026-09-28T11:15:54Z",
+   "updated": "2026-09-28T15:09:32Z",
    "blocker": null,
-   "next_action": "ACCEPT at f42d0d83 (evaluations/pipelines/releases routes over D7 + fakes, real halves on b3/p1/r2, two inherited contract bugs fixed: record-before-role 404, catalog refs 422; 46+39+23 mutants; three TS adapter patches) → merge batch #11 (wf_5dd2c16f-b2b): WR-LAB2-1 wiring patch (LAB_EVALS/LAB_PIPELINES/LAB_RELEASES OFF, pilot._lab_2, ROUTERS, 13 G mutants, 08 row) + the three http.ts patches + ruling LAB-REFUSAL-ORDER numbered R183; lab-sql requests (WR-B4-2, WR-LAB2-2/3/4, WR-R4-1 half, WR-R4-2) → lab-sql-lw3 is already carrying most; the LAB_DATASETS_API_URL declaration gap fixed on the tip",
+   "next_action": "DONE (routes merged, OFF): 3f413ecf + 681cbf8f + fix e3a37a8f/2df7b8bb (R183); real tables for experiments/proposals/listings now on 0043 (batch #16) → the lab-sql-integration-2 lane reruns the PG halves and the UI lanes swap their ports",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6.5,
-    "pessimistic_h": 13,
-    "confidence": "medium",
-    "basis": "handback: B4 1/2/4 + P4 1/2/4 + R4 1/2.5/5 (wiring + real tables)",
-    "at": "2026-09-28T11:15:54Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T15:09:32Z"
    },
    "evidence": [
     "research/plan/evidence/g/WR-B4-1-1464f50.md",
@@ -6162,24 +6162,24 @@
    "branch": "codex/w5-merge-11",
    "worktree": ".claude/worktrees/codex-w5-merge-11",
    "base": "3df6f537",
-   "head": "681cbf8f",
+   "head": "2df7b8bb",
    "isolation": {
     "ports": "b3 (checks only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T13:01:11Z",
-   "updated": "2026-09-28T13:51:15Z",
+   "updated": "2026-09-28T15:09:32Z",
    "blocker": null,
-   "next_action": "merge 3f413ecf + wirings 681cbf8f done (ROUTERS/pins/G anchors re-cut against batch #6; R183); verify BLOCKING at the merged tree: an unregistered evaluator launch is 404 not 422 (0034's registered-evaluator check post-dates the lane's base; the PG fixture never registers one) + two checks unfinished → fix round wf_8f9ef0ff-d59 on the merge branch (fixture put_evaluator, 422 per R183, ruff), then the big suite + mutants, then a verify lens",
+   "next_action": "DONE: merged onto claude/consumer-v1 at 2e238e36 after the fix round (verify ok, no findings)",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "one merge with a composition-root patch re-cut against batch #6",
-    "at": "2026-09-28T13:01:11Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T15:09:32Z"
    },
    "evidence": [],
    "commands": [],
