@@ -1,0 +1,49 @@
+{
+  "task": "N3",
+  "lane": "lab-sql-integration-2",
+  "slice": "WR-N3-4 decision (no code): WR-N3-4: lineage.blocked/permitted over PgSampleRestrictions is NOT a plain swap (writers are object-based; reader-only swap resurrects tombstoned samples, scratch seam on n3)",
+  "activity": "review",
+  "at": "2026-09-28T20:30:00Z",
+  "head": "368c87ab",
+  "base": "6ab5ee47",
+  "worktree": ".claude/worktrees/codex-w5-lab-sql-integration-2",
+  "branch": "codex/w5-lab-sql-integration-2",
+  "owned_paths": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-2-368c87a.md"
+  ],
+  "isolation": {
+    "key": "n3"
+  },
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=n3 uv run --frozen pytest -q tests/n/lineage",
+      "exit": 0,
+      "summary": "9 passed (unchanged); scratch seam: PgSampleRestrictions.permitted returned the tombstoned sample, 1 failed as expected"
+    },
+    {
+      "cmd": "INFRX_D_TASK=n3 INFRX_MUTANTS=all uv run --frozen pytest -q tests/n/lineage/test_mutants.py",
+      "exit": 0,
+      "summary": "34 mutants, 36 passed, 0 survivors"
+    },
+    {
+      "cmd": "INFRX_D_TASK=r1 INFRX_D2_VALKEY_CONTAINER=infrx-r1-valkey INFRX_D2_VALKEY_PORT=57533 make api-test",
+      "exit": 2,
+      "summary": "6434 passed, 150 skipped, 9 xfailed, 46 failed: 43 tests/i/test_mutants.py non-default-key baseline, 3 tests/i/lab e3l port race (rerun alone 11 passed + 2 killed); none in content/p/b/j/r/n"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "WR-N3-4 decided (not a plain swap); the port move WR-N3-5 is a separate datasets-lane task est. 3/5/10 h",
+    "at": "2026-09-28T20:30:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-N3-5 (datasets lane, new task) move N3 restrictions to 0041: select->bound, _stone->tombstone, blocked/permitted/status/export_evidence->PG reads, N2 callers, backfill"
+  ],
+  "evidence": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-2-368c87a.md"
+  ]
+}
