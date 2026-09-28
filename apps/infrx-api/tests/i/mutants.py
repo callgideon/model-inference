@@ -1065,7 +1065,8 @@ MUTANTS += (
        "test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones",
        "test_ops_continuous__every_alert_rule_names_a_metric_something_produces"),
     _m("merge_accepts_duplicate_rules", "a rule name defined twice is refused",
-       OBS + "rules.py", '        if rule["name"] in rules:\n', "        if False:\n",
+       OBS + "rules.py", 'if app else []):\n        if rule["name"] in rules:\n',
+       "if app else []):\n        if False:\n",      # the ops/App loop (the Lab loop repeats the line)
        "test_ops_continuous__the_merged_rule_set_is_versioned_and_well_formed"),
     _m("rule_names_a_missing_runbook_section", "every rule links a runbook section that exists",
        OPS_RULES, '"runbook": "infra/runbooks/observe.md#stuck-holds"',
