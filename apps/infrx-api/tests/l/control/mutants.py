@@ -25,6 +25,7 @@ import sys
 
 API_DIR = pathlib.Path(__file__).resolve().parents[3]
 SUITE_FILE = "tests/l/control/test_control.py"
+OPS_FILE = "tests/l/control/test_operations.py"            # WR-LAB-API-2, WR-R2-2, WR-I2L-2
 if str(API_DIR) not in sys.path:        # `python tests/l/control/mutants.py`
     sys.path.insert(0, str(API_DIR))
 
@@ -34,6 +35,8 @@ from tests.l.access import mutants as l2  # noqa: E402
 
 C = "lab/control/__init__.py"
 F = "lab/control/fakes.py"
+OPS = "lab/control/operations.py"
+APP = "lab/control/app.py"
 
 SEAM = "test_lab_control__a_provider_never_mutates_another_providers_registry"
 ROLES = "test_lab_control__roles_bound_every_operation"
@@ -46,6 +49,15 @@ PINS = "test_lab_control__an_alias_switch_while_a_job_is_queued_keeps_its_pins"
 CAS = "test_lab_control__publication_and_rollback_are_compare_and_set"
 ROLLBACK = "test_lab_control__a_rollback_targets_an_earlier_servable_listing_only"
 SHADOW = "test_lab_control__a_newer_unvalidated_revision_is_never_keyed_priced_or_served"
+O_ROWS = "test_operations__the_route_records_are_l3s_own_rows"
+O_FOREIGN = "test_operations__another_providers_actor_sees_and_moves_nothing"
+O_ACTOR = "test_operations__the_actor_is_rechecked_against_the_current_membership"
+O_FAILED = "test_operations__a_failed_smoke_reads_failed_and_is_never_proposed"
+O_PINNED = "test_operations__only_a_pinned_supported_registration_is_accepted"
+O_SERVING = "test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins"
+O_APP = "test_control_app__serves_readiness_and_no_consumer_route"
+READ_GUARD = ("        await self.control.access.require(actor.user_id, actor.provider_org_id,\n"
+              "                                          ProviderCapability.read_aggregate_health)\n")
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- the service: who may ask, and what may be registered -------------------------
@@ -147,6 +159,82 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("private_resolves_unvalidated", "a provider_dev key serves its endpoint's newest "
        "VALIDATED revision (A3 wiring WR-L3-5)",
        F, "d.state is S.ready_private", "d.state is not S.retired", SHADOW),
+    # --- WR-LAB-API-2: the route's port over LabControl (operations.py) -----------------
+    _m("models_unguarded", "the model list is a current member's", OPS,
+       READ_GUARD + "        return [_model(s)", "        return [_model(s)", O_ACTOR),
+    _m("deployments_unguarded", "the deployment list is a current member's", OPS,
+       READ_GUARD + "        return [await self._deployment(d)",
+       "        return [await self._deployment(d)", O_ACTOR),
+    _m("proposals_unguarded", "the proposal list is a current member's", OPS,
+       READ_GUARD + "        events = await", "        events = await", O_ACTOR),
+    _m("register_role_after_lookup", "a role without registration learns no model name", OPS,
+       "        await self.control.access.require(user, provider, ProviderCapability.manage_dev_deployment)\n",
+       "", O_ACTOR),
+    _m("register_any_model_name", "a registration names one of the provider's own models", OPS,
+       "                    if s.public_model_id == registration.name]", "]", O_PINNED),
+    _m("register_keeps_base_runtime", "the registered runtime is the one named, by digest", OPS,
+       '"runtime_image_ref": f"{registration.runtime}@{registration.artifact_digest}",',
+       "", O_ROWS, O_PINNED),
+    _m("register_keeps_base_schema", "the registered schema is the one named", OPS,
+       '"capability": base.capability.model_copy(update={\n'
+       '                "input_schema_ref": REQUEST + registration.schema_version,\n'
+       '                "output_schema_ref": RESPONSE + registration.schema_version}),',
+       '"capability": base.capability,', O_PINNED),
+    _m("register_without_limits", "a revision's limits are the model's deployed ones", OPS,
+       "        if not limits:\n            raise errors.InvalidRequest(\"this model has no "
+       "deployed limits yet: an operator \"\n"
+       "                                        \"deploys its first revision\")\n",
+       "        limits = limits or [DeploymentRevision.model_construct(max_input_tokens=4096, "
+       "max_output_tokens=512, created_at=base.created_at)]\n", O_PINNED),
+    _m("register_limits_invented", "limits are copied, never invented", OPS,
+       "max_input_tokens=latest.max_input_tokens", "max_input_tokens=4096", O_ROWS),
+    _m("register_dev_endpoint_misnamed", "the dev endpoint is the model's own name", OPS,
+       "endpoint_name=registration.name.rpartition(\"/\")[2],", 'endpoint_name="lab",', O_ROWS),
+    _m("smoke_failure_reads_passed", "a failed smoke never reads passed", OPS,
+       'smoke = ("failed" if failed else', 'smoke = ("passed" if failed else', O_FAILED),
+    _m("draft_reads_passed", "an unrun revision reads none", OPS,
+       "d.state in (S.draft, S.validating, S.retired)", "d.state in (S.validating, S.retired)",
+       O_FAILED),
+    _m("retired_reads_active", "a retired revision reads retired", OPS,
+       'state="retired" if d.state is S.retired else "active"', 'state="active"', O_FAILED),
+    _m("rate_card_dropped", "a priced revision shows its card", OPS,
+       "rate_card_version=card.rate_card_version if card else None", "rate_card_version=None",
+       O_ROWS),
+    _m("proposal_reads_approved_early", "a proposal is proposed until an operator lists it", OPS,
+       '            state = ("proposed" if d.state is S.proposed_public',
+       '            state = ("approved" if d.state is S.proposed_public', O_ROWS),
+    _m("approval_unread", "an approved proposal reads approved with its instant", OPS,
+       "        published = {e.after.get(\"deployment_revision_id\"): e.at for e in events\n"
+       "                     if e.action == \"lab_publish\"}",
+       "        published = {}", O_ROWS),
+    _m("proposal_names_the_prod_revision", "a proposal names the dev revision proposed", OPS,
+       'deployment_revision_id=e.after["source"]', "deployment_revision_id=e.subject", O_ROWS),
+    _m("provider_rollback_proposal", "a provider proposes publication only", OPS,
+       '        if kind != "publish":\n', "        if False:\n", O_PINNED),
+    _m("proposal_to_another_endpoint", "a proposal targets the model's prod endpoint", OPS,
+       'endpoint_name=serving.public_model_id.rpartition("/")[2] if serving else "-")',
+       'endpoint_name="preview")', O_ROWS),
+    # --- WR-R2-2: ServingControl -------------------------------------------------------
+    _m("serving_reads_the_first_version", "serving is the alias's CURRENT listing", OPS,
+       "        return await self._ref(versions[-1]), versions[-1].version",
+       "        return await self._ref(versions[0]), versions[0].version", O_SERVING),
+    _m("rollback_ignores_the_digest", "a ref names a revision AND its immutable serving", OPS,
+       "            if await self._ref(listing) == to_serving_ref:",
+       "            if (await self._ref(listing)).split(\"@\")[0] == to_serving_ref.split(\"@\")[0]:",
+       O_SERVING),
+    _m("rollback_unfenced", "the fence R2 read is the fence the CAS compares", OPS,
+       "expected_version=fence,", "expected_version=versions[-1].version,", O_SERVING),
+    # --- WR-I2L-2: the control factory -------------------------------------------------
+    _m("readyz_always_ready", "readiness is the database answering", APP,
+       '            return JSONResponse({"status": "unavailable"}, status_code=503)',
+       '            return {"status": "ready"}', O_APP),
+    _m("control_docs_served", "the control service publishes no schema or docs", APP,
+       "FastAPI(docs_url=None, redoc_url=None, openapi_url=None)", "FastAPI()", O_APP),
+    # --- WR-LSQ-9: the reads the fake states for lab-sql ----------------------------------
+    _m("servings_of_every_provider", "a provider lists its own serving revisions", F,
+       "if s.provider_org_id == provider_org_id]", "]", O_FOREIGN),
+    _m("deployments_of_every_provider", "a provider lists its own deployment revisions", F,
+       "if d.provider_org_id == provider_org_id]", "]", O_FOREIGN),
     _m("allocation_replayed_twice", "a replayed operation id appends nothing",
        F, "        if prior is not None:\n            return prior\n",
        "        if False:\n            return prior\n", WALLET),
@@ -159,15 +247,16 @@ MUTANTS: tuple[Mutant, ...] = (
 PG_EQUIVALENT = frozenset({"dev_revision_of_any_environment"})
 PG_MUTANTS: tuple[Mutant, ...] = tuple(
     dataclasses.replace(m, name=f"pg_{m.name}") for m in MUTANTS
-    if m.file == C and m.name not in PG_EQUIVALENT)
+    if (m.file == C and m.name not in PG_EQUIVALENT) or m.file == APP)
 
 
 def case_names() -> set[str]:
-    return set(re.findall(r"^def (test_\w+)\(", (API_DIR / SUITE_FILE).read_text(), re.M))
+    return {case for suite in (SUITE_FILE, OPS_FILE) for case in re.findall(
+        r"^def (test_\w+)\(", (API_DIR / suite).read_text(), re.M)}
 
 
-RUNNER = Runner(name="l3", targets=(SUITE_FILE,), extra_args=("-m", "not pg"))
-PG_RUNNER = Runner(name="l3-pg", targets=(SUITE_FILE,), extra_args=("-m", "pg"),
+RUNNER = Runner(name="l3", targets=(SUITE_FILE, OPS_FILE), extra_args=("-m", "not pg"))
+PG_RUNNER = Runner(name="l3-pg", targets=(SUITE_FILE, OPS_FILE), extra_args=("-m", "pg"),
                    env=("INFRX_D_TASK",), layout=l2._pg_layout)
 
 

@@ -83,8 +83,8 @@ class FakeControl:
         """`PgCatalogDirectory.resolve`: the highest listing version whose deployment is
         public and active (and serves `@label`); else, for a provider_dev credential, the
         newest VALIDATED (`ready_private`) private revision on ITS endpoint named
-        `<slug>/<name>-<env>` - a later draft never shadows it (WR-L3-5: catalog.py's
-        `_PRIVATE` still says `state <> 'retired'`)."""
+        `<slug>/<name>-<env>` - a later draft never shadows it (WR-L3-5, catalog.py's
+        `_PRIVATE`)."""
         alias, _, label = requested_model.partition("@")
 
         def labelled(d):
@@ -247,6 +247,22 @@ class FakeControl:
 
     async def events(self, provider_org_id: str) -> list[ControlEvent]:
         return [e for e in self.audit if e.provider_org_id == provider_org_id]
+
+    # --- WR-LSQ-9: ControlReads (operations.py) -------------------------------------------
+    async def provider_servings(self, provider_org_id: str) -> list[v2.ServingRevision]:
+        return [s for s in self.servings.values() if s.provider_org_id == provider_org_id]
+
+    async def provider_deployments(self, provider_org_id: str) -> list[v2.DeploymentRevision]:
+        return [d for d in self.deployments.values() if d.provider_org_id == provider_org_id]
+
+    async def endpoint_alias(self, endpoint_id: str) -> str | None:
+        named = [(ls[-1].version, alias) for alias, ls in self.listings.items()
+                 if any(self.deployments[x.deployment_revision_id].endpoint_id == endpoint_id
+                        for x in ls)]
+        return max(named, default=(0, None))[1]
+
+    async def listing_versions(self, public_model_id: str) -> list[Listing]:
+        return list(self.listings.get(public_model_id, ()))
 
 
 @dataclasses.dataclass
