@@ -45,6 +45,7 @@ STORE_CLOCK = "test_lab_access__revocation_and_grants_are_judged_on_the_store_cl
 HISTORY = "test_lab_access__grant_history_keeps_every_version_for_the_recipient_only"
 PG_DOORS = "test_lab_access_pg__a_foreign_member_is_refused_at_both_doors"
 DATASET = "test_lab_access__a_dataset_passes_a_gate_only_under_every_sources_current_grant"
+REQUIRE = "test_lab_access__require_is_the_public_membership_door"
 FAKE_ONLY, PG_ONLY = (REDACTED,), (PG_DOORS,)
 
 AGG_GUARD = ("        await self._member(user_id, provider_org_id, "
@@ -53,6 +54,9 @@ HISTORY_GUARD = ("        await self._member(user_id, provider_org_id, "
                  "ProviderCapability.manage_dev_deployment)\n")
 
 MUTANTS: tuple[Mutant, ...] = (
+    _m("require_waves_through", "WR-R3-1: require refuses whatever _member refuses",
+       A, "        await self._member(user_id, provider_org_id, capability)\n",
+       "        return None\n", REQUIRE),
     _m("revoked_member_served", "a revoked membership is no membership",
        A, "        if membership is None or not membership.permits(",
        "        if membership is None or not membership.model_copy(update={'revoked_at': None})"

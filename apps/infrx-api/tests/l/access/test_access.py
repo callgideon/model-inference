@@ -98,6 +98,20 @@ def test_lab_access__a_viewer_reads_aggregates_and_never_content_or_grants(world
             run(w.access.grant_history(w.VIEWER_A, w.A, grantor))
 
 
+def test_lab_access__require_is_the_public_membership_door(world):
+    """Oracle (WR-R3-1): `require` is the one door other Lab entry points (R3's register) ask:
+    a current member holding the capability passes; another provider's member, a consumer-only
+    user and a forged workspace get `not_found`; a member whose role lacks it, `forbidden`."""
+    w = world
+    dev = v2.ProviderCapability.manage_dev_deployment
+    assert run(w.access.require(w.DEV_A, w.A, dev)) is None
+    for user, provider in ((w.DEV_B, w.A), (w.CONSUMER_ONLY, w.A), (w.DEV_A, w.B)):
+        with pytest.raises(errors.NotFound):
+            run(w.access.require(user, provider, dev))
+    with pytest.raises(errors.Forbidden):
+        run(w.access.require(w.VIEWER_A, w.A, dev))
+
+
 # --- the default read is redacted -------------------------------------------------
 @pytest.mark.parametrize("column", ["user_id", "org_id", "api_key_id", "request_id"])
 def test_lab_access__default_aggregates_carry_no_customer_identity(fake_world, column):

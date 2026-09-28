@@ -1,0 +1,87 @@
+{
+ "task": "L3",
+ "slice": "L3 fix round (fake-driven; PG half skips until PgControlStore exists)",
+ "activity": "fix round done",
+ "head": "227e7806",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-access-lw2",
+ "branch": "codex/w5-lab-access-lw2",
+ "owned_paths": [
+  "apps/infrx-api/infrx/lab/control/",
+  "apps/infrx-api/tests/l/control/"
+ ],
+ "commands": [
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/l/control/test_control.py -k never_mutates (pre-impl)",
+   "exit": 4,
+   "summary": "red: ModuleNotFoundError infrx.lab.control"
+  },
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/l/control/test_control.py",
+   "exit": 0,
+   "summary": "12 passed (fake), 12 skipped (pg: L3-SQL absent)"
+  },
+  {
+   "cmd": "cd apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q tests/l/control/test_mutants.py",
+   "exit": 0,
+   "summary": "35 passed, 19 skipped: 30/30 fake mutants killed; 19 PG mutants skip (L3-SQL absent)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 make api-test",
+   "exit": 1,
+   "summary": "5045 passed, 90 skipped, 9 xfailed, 43 failed - all 43 tests/i/test_mutants.py broken_runner (i8 pooler baseline under a non-default key; known, non-blocking)"
+  },
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/l (ad hoc, no INFRX_D_TASK)",
+   "exit": 0,
+   "summary": "51 passed, 14 skipped; deviation: L2 pg cases ran on d1 55432 under the harness lock, container removed at exit"
+  },
+  {
+   "cmd": "cd apps/infrx-api && INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control/test_control.py -m 'not pg' (fix round, pre-fix)",
+   "exit": 1,
+   "summary": "red: new shadow case, price_dev of a draft did not raise"
+  },
+  {
+   "cmd": "cd apps/infrx-api && INFRX_D_TASK=l3 uv run --frozen pytest -q -rs tests/l/control/test_control.py",
+   "exit": 0,
+   "summary": "13 passed (fake), 13 skipped (pg: L3-SQL absent)"
+  },
+  {
+   "cmd": "cd apps/infrx-api && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q -rs tests/l/control/test_mutants.py",
+   "exit": 0,
+   "summary": "38 passed, 21 skipped: 33/33 fake mutants killed (incl. key_for_draft = review H3); 21 PG mutants skip"
+  },
+  {
+   "cmd": "scratch worktree 227e7806 + merge 5ad2ff59; INFRX_D_TASK=l3 pytest -q tests/l/control/test_control.py",
+   "exit": 0,
+   "summary": "13 passed, 13 skipped (no PgControlStore) - previously 12 errors"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1.5,
+  "likely_h": 3,
+  "pessimistic_h": 7,
+  "confidence": "medium",
+  "basis": "remaining: first PG run against L3-SQL (adapter or signature reconciliation per WR-L3-1 delta) + one verify round; L2 LW1 integration analogue",
+  "at": "2026-09-27T21:30Z"
+ },
+ "blockers": [
+  "L3-SQL committed at 5ad2ff59 ships PgLabControlStore, not the ControlStore seam: WR-L3-1 unreconciled, the PG half and 21 PG mutants skip visibly and are not claimed (1-L3-INT-1)",
+  "WR-L3-5: catalog.py _PRIVATE must require state = 'ready_private' (A3)"
+ ],
+ "wiring_requests": [
+  "WR-L3-1 schema request to lab-sql (L3-SQL): infrx/state/lab_control.py PgControlStore implementing infrx.lab.control.ControlStore (db_now, model_provider, deployment, endpoint, transition CAS, propose, issue_dev_key, publish CAS on listing version, rollback CAS, fund_dev_wallet, events) - see evidence for signatures and the delta vs the lab-sql draft",
+  "WR-L3-2 Makefile api-mutants: own line INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control/test_mutants.py",
+  "WR-L3-3 G/W: SmokeTest adapter over the real engine and an authenticated Lab control route (default OFF)",
+  "WR-L3-4 D: provider_dev admission path (0011 admit_credit refuses non-consumer audiences)",
+  "WR-L3-5 A3: infrx/state/catalog.py _PRIVATE resolves only d.state = 'ready_private' (not <> 'retired'), so a newer draft/validating revision never shadows a validated one on a dev endpoint"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/L3-8e092ae.md",
+  "research/plan/evidence/coordinator/updates/L3-20260927T2140Z.json"
+ ],
+ "findings": {
+  "0-L3-C1": "fixed",
+  "0-L3-C2": "fixed",
+  "1-L3-INT-1": "not fixed: needs lab-sql PgControlStore (SQL, out of lane)"
+ }
+}

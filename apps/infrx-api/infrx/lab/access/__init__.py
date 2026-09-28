@@ -108,6 +108,12 @@ class LabAccess:
         if not membership.permits(capability, now, provider_org_id):
             raise errors.Forbidden(f"this provider role does not hold {capability}")
 
+    async def require(self, user_id: str, provider_org_id: str,
+                      capability: ProviderCapability) -> None:
+        """WR-R3-1: `_member`'s rule as the public door for the Lab's other entry points (L3,
+        R3's register): `not_found` unless a current member, `forbidden` without `capability`."""
+        await self._member(user_id, provider_org_id, capability)
+
     async def workspaces(self, user_id: str) -> tuple[Workspace, ...]:
         """The provider workspaces this user may select (L1), with their names. A
         consumer-only user has none; owning a consumer organization is never a provider
