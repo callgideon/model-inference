@@ -68,8 +68,8 @@ def test_i6_each_role_is_bounded_off_by_default_and_gated_by_the_preflight() -> 
     the preflight fails (or runs it as root), or shares a health port with another Lab role."""
     runbook = RUNBOOK.read_text()
     ports = {shape(role, unit(role), runbook) for role in ROLES}
-    others = {re.search(r"LAB_WORKER_HEALTH_PORT=(\d+)", p.read_text()).group(1)
-              for p in (API / "deploy" / "lab").rglob("*.service") if p.parent != UNITS}
+    others = {port for p in (API / "deploy" / "lab").rglob("*.service") if p.parent != UNITS
+              for port in re.findall(r"LAB_WORKER_HEALTH_PORT=(\d+)", p.read_text())}
     assert len(ports) == len(ROLES) and not ports & others, (ports, others)
 
 

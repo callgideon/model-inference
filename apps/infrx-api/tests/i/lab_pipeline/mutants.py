@@ -140,9 +140,9 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
-def case_names() -> set[str]:
+def case_names(suites=SUITES) -> set[str]:
     names = set()
-    for suite in SUITES:
+    for suite in suites:
         tree = ast.parse((API_DIR / suite).read_text())
         names |= {node.name for node in tree.body
                   if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")}
