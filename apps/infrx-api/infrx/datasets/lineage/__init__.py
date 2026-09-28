@@ -21,14 +21,17 @@ names its source and grant ref; a derived version names its parents and copies i
 ids), and a run or artifact names its dataset. What D7 does not hold is the trace behind a
 sample: `lab/<provider>/lineage/samples/<sample id>.json` (grantor, request, grant, model,
 digest, `content_until` = T3's content bound) and a per-request marker
-`lab/<provider>/lineage/traces/<grantor>/<request>/<sample id>`, all write-once.
+`lab/<provider>/lineage/traces/<grantor>/<request>/<sample id>`, all write-once; the bound
+is also D7's (0041 `lab_sample_bounds`, written before the version is published).
 
 **Denial (N3.c).** `permitted` is the one gate every dataset read, derivation, export, part
 read, queued job and external submission re-checks: D7's samples under a grant current NOW
 for the purpose, minus tombstoned samples, minus trace samples past `content_until` (so
-expiry is denied the instant it passes, with no job in between). A tombstone
-(`lab/<provider>/lineage/tombstones/<sample id>.json`: reason and time, never content) is
-permanent - a later re-grant does not resurrect the sample. `tombstone` is the push (a T3
+expiry is denied the instant it passes, with no job in between) - 0041's
+`lab_permitted_samples` on D7's clock, less the bounds the caller's `now` has passed. A
+tombstone (0041 `lab_sample_tombstones`, WR-N3-5: reason and D7's time, never content;
+`restrictions` is `PgSampleRestrictions`) is permanent - a later re-grant does not resurrect
+the sample. The object tombstones of before WR-N3-5 move once with `backfill`. `tombstone` is the push (a T3
 deletion or an L2 revocation hook, wiring); `reconcile` is the pull that finds the rest
 (grant no longer current, a newer version of it dropping the entry's model or one of its
 categories (`grant_narrowed`), request deleted, content expired) and, only for deletion and
@@ -49,6 +52,7 @@ from ...contracts import errors
 from ...contracts.lab import records as lab
 from ...contracts.v2.records import DataCategory, DataPurpose
 from ...media.fetch import digest_of
+from ...state.lab_content import PgSampleRestrictions
 from ...state.lab_data import grant_ref
 from .. import acting_provider
 from ..imports import sample_id, sample_key, write_once
@@ -91,6 +95,13 @@ def _id(key: str) -> str:
     return key.rsplit("/", 1)[1].removesuffix(".json")
 
 
+def restrictions_of(store):
+    """0041's tombstones and bounds beside D7's rows: a store that carries them (the fakes),
+    else the real store's own connection (WR-DS5-1: `PgLabDataStore.restrictions`)."""
+    found = getattr(store, "restrictions", None)
+    return found if found is not None else PgSampleRestrictions(store._connect)
+
+
 async def select(*, access, retention, content: Content, feedback: Feedback,
                  model_of: ModelOf, store, objects,
                  user_id: str, provider_org_id: str, grantor_org_id: str, model_id: str,
@@ -111,7 +122,7 @@ async def select(*, access, retention, content: Content, feedback: Feedback,
     except errors.Forbidden:
         joined = False
     base, now = _base(provider_org_id), retention.clock()
-    samples, omitted = [], []
+    samples, omitted, bounds = [], [], {}
     for request in sorted(request_ids):
         rows = await retention.find_traces(grantor_org_id, request)
         if not rows:
@@ -146,17 +157,19 @@ async def select(*, access, retention, content: Content, feedback: Feedback,
             "corrections": corrections})
         digest = digest_of(data)
         sid = sample_id(dataset_id, digest)
+        bounds[sid] = started + timedelta(days=retention.content_days)
         await write_once(objects, sample_key(provider_org_id, digest), data)
         await write_once(objects, f"{base}/samples/{sid}.json", lab.canonical({
             "sample_id": sid, "selection_id": selection_id, "grantor_org_id": grantor_org_id,
             "request_id": request, "grant_id": grant.grant_id, "model_id": model_id,
             "categories": ["request_content", "response_content"]
             + (["feedback"] if corrections else []), "content_digest": digest,
-            "content_until": (started + timedelta(days=retention.content_days)).isoformat()}))
+            "content_until": bounds[sid].isoformat()}))
         await write_once(objects, f"{base}/traces/{grantor_org_id}/{request}/{sid}", b"{}")
         samples.append({"sample_id": sid, "content_digest": digest, "group_key": request})
     if not samples:
         raise errors.InvalidRequest("no selected request is permitted: nothing to publish")
+    await restrictions_of(store).bound(bounds, provider_org_id=provider_org_id)
     whole = hashlib.sha256(lab.canonical(sorted(
         [s["group_key"], s["content_digest"]] for s in samples))).hexdigest()
     source_ref = await store.register_source(
@@ -182,58 +195,56 @@ async def trace_of(objects, *, provider_org_id: str, sample_id: str) -> dict | N
 
 
 # --- denial --------------------------------------------------------------------------------
-async def _stone(objects, provider: str, entry: dict, reason: str, at: datetime) -> bool:
-    """Write the tombstone once (the first reason stands); True when this call wrote it."""
-    return await objects.put_if_absent(
-        f"{_base(provider)}/tombstones/{entry['sample_id']}.json", lab.canonical({
-            "sample_id": entry["sample_id"], "grantor_org_id": entry["grantor_org_id"],
-            "request_id": entry["request_id"], "reason": reason, "at": at.isoformat()}),
-        "application/json")
-
-
-async def blocked(objects, *, provider_org_id: str, sample_ids, now: datetime) -> dict:
-    """sample id -> why it is denied now (its tombstone's reason, or `content_expired`).
-    ponytail: lists the provider's tombstones and trace samples per call; a D7 column
-    (tombstoned_at, content_until) when datasets outgrow a listing per read."""
-    base, wanted = _base(provider_org_id), set(sample_ids)
-    stones = {_id(k) for k in await objects.keys(f"{base}/tombstones/")} & wanted
-    traced = {_id(k) for k in await objects.keys(f"{base}/samples/")} & wanted
+async def _expired(objects, provider: str, sample_ids, now: datetime) -> dict:
+    """The trace samples among `sample_ids` whose content bound the caller's `now` passed.
+    ponytail: lists the provider's trace samples per call; a bounds read in 0041 when
+    datasets outgrow a listing per read."""
+    traced = {_id(k) for k in await objects.keys(f"{_base(provider)}/samples/")} & set(sample_ids)
     out = {}
-    for sid in sorted(stones):
-        out[sid] = json.loads(await objects.get(f"{base}/tombstones/{sid}.json"))["reason"]
-    for sid in sorted(traced - stones):
-        entry = await trace_of(objects, provider_org_id=provider_org_id, sample_id=sid)
+    for sid in sorted(traced):
+        entry = await trace_of(objects, provider_org_id=provider, sample_id=sid)
         if now >= datetime.fromisoformat(entry["content_until"]):
             out[sid] = "content_expired"
     return out
 
 
+async def blocked(objects, *, provider_org_id: str, sample_ids, now: datetime, restrictions,
+                  dataset_ref: str) -> dict:
+    """sample id -> why it is denied now: 0041's answer for the dataset (the tombstone's
+    reason, or `content_expired` on D7's clock), else `content_expired` at the caller's `now`."""
+    wanted = set(sample_ids)
+    out = {s: r for s, r in (await restrictions.blocked(
+        dataset_ref, provider_org_id=provider_org_id)).items() if s in wanted}
+    return {**await _expired(objects, provider_org_id, wanted - set(out), now), **out}
+
+
 async def permitted(store, objects, dataset_ref: str, *, provider_org_id: str, purpose: str,
                     now: datetime) -> set[str]:
     """The gate: D7's samples under a grant current now for `purpose`, less the denied."""
-    allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
-                                                 purpose=purpose))
-    return allowed - set(await blocked(objects, provider_org_id=provider_org_id,
-                                       sample_ids=allowed, now=now))
+    allowed = set(await restrictions_of(store).permitted(
+        dataset_ref, provider_org_id=provider_org_id, purpose=purpose))
+    return allowed - set(await _expired(objects, provider_org_id, allowed, now))
 
 
 async def tombstone(objects, *, provider_org_id: str, grantor_org_id: str,
                     request_id: str | None = None, reason: str, at: datetime,
-                    limit: int = PAGE) -> dict:
+                    limit: int = PAGE, restrictions) -> dict:
     """The push: tombstone up to `limit` not-yet-tombstoned samples of the grantor (or of
-    one request); call again while `more`."""
+    one request); call again while `more`. 0041 stamps its own time (R7), so `at` is not
+    stored."""
     base = _base(provider_org_id)
     prefix = f"{base}/traces/{grantor_org_id}/" + (f"{request_id}/" if request_id else "")
-    done = {_id(k) for k in await objects.keys(f"{base}/tombstones/")}
-    todo = [k for k in await objects.keys(prefix) if _id(k) not in done]
-    for key in todo[:limit]:
-        await _stone(objects, provider_org_id, await trace_of(
-            objects, provider_org_id=provider_org_id, sample_id=_id(key)), reason, at)
-    return {"tombstoned": len(todo[:limit]), "more": len(todo) > limit}
+    ids = sorted(_id(k) for k in await objects.keys(prefix))
+    for start in range(0, len(ids), limit):
+        new = await restrictions.tombstone(ids[start:start + limit],
+                                           provider_org_id=provider_org_id, reason=reason)
+        if new:
+            return {"tombstoned": len(new), "more": start + limit < len(ids)}
+    return {"tombstoned": 0, "more": False}
 
 
 async def reconcile(directory, retention, objects, *, provider_org_id: str,
-                    after: str | None = None, limit: int = PAGE) -> dict:
+                    after: str | None = None, limit: int = PAGE, restrictions) -> dict:
     """The pull over `limit` trace samples after the cursor: tombstone a sample whose grant
     is no longer current (L2, on the store clock) or whose grant's current version no longer
     names its model or one of its categories, whose request T3 no longer projects, or
@@ -253,7 +264,8 @@ async def reconcile(directory, retention, objects, *, provider_org_id: str,
                 or not grant.is_current(now)) else "grant_narrowed" if (
                     entry["model_id"] not in grant.model_ids
                     or not set(entry["categories"]) <= set(grant.categories)) else None
-        if reason and await _stone(objects, provider_org_id, entry, reason, clock):
+        if reason and await restrictions.tombstone([entry["sample_id"]],
+                                                   provider_org_id=provider_org_id, reason=reason):
             report["tombstoned"].append({"sample_id": entry["sample_id"], "reason": reason})
         copy = sample_key(provider_org_id, entry["content_digest"])
         if reason in PURGED_BY_RETENTION and await objects.head(copy) is not None:
@@ -273,7 +285,8 @@ async def status(store, objects, dataset_ref: str, *, provider_org_id: str,
     ids = [s.sample_id for s in manifest.samples]
     readable = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
                                                   purpose="provider_sharing"))
-    denied = await blocked(objects, provider_org_id=provider_org_id, sample_ids=ids, now=now)
+    denied = await blocked(objects, provider_org_id=provider_org_id, sample_ids=ids, now=now,
+                           restrictions=restrictions_of(store), dataset_ref=dataset_ref)
     split = {i: n for n in ("train", "validation", "holdout") for i in getattr(manifest.splits, n)}
     samples = []
     for s in manifest.samples:
@@ -289,7 +302,7 @@ async def status(store, objects, dataset_ref: str, *, provider_org_id: str,
 
 
 async def export_evidence(objects, *, provider_org_id: str, export_id: str,
-                          now: datetime) -> dict:
+                          now: datetime, restrictions) -> dict:
     """Reconciliation evidence for an export already made: its items denied now. Sample
     ids and reasons only - never content - and an honest `recalled: False`."""
     record = json.loads(await objects.get(f"lab/{provider_org_id}/exports/{export_id}/"
@@ -301,7 +314,26 @@ async def export_evidence(objects, *, provider_org_id: str, export_id: str,
         shipped += [json.loads(line)["sample_id"]
                     for line in (await objects.get(part["key"]) or b"").splitlines()]
     denied = await blocked(objects, provider_org_id=provider_org_id, sample_ids=shipped,
-                           now=now)
+                           now=now, restrictions=restrictions, dataset_ref=record["dataset_ref"])
     return {"export_id": export_id, "dataset_ref": record["dataset_ref"],
             "delivered_from": record["created_at"], "recalled": False, "note": NOT_RECALLED,
             "affected": [{"sample_id": s, "reason": r} for s, r in sorted(denied.items())]}
+
+
+# --- WR-N3-5 -------------------------------------------------------------------------------
+async def backfill(objects, *, provider_org_id: str, restrictions) -> dict:
+    """The one-shot move of the object-era restrictions into 0041: each
+    `tombstones/<id>.json` (its reason; 0041 stamps the time) and each trace entry's
+    `content_until`. Idempotent: a tombstone keeps its first reason, the same bound replays
+    (another is `IdempotencyConflict`). ponytail: one call per reason and one for every
+    bound; pages when a provider's trace samples outgrow one request."""
+    base, reasons = _base(provider_org_id), {}
+    for key in await objects.keys(f"{base}/tombstones/"):
+        reasons.setdefault(json.loads(await objects.get(key))["reason"], []).append(_id(key))
+    moved = [s for reason, ids in sorted(reasons.items()) for s in await restrictions.tombstone(
+        ids, provider_org_id=provider_org_id, reason=reason)]
+    bounds = {_id(k): datetime.fromisoformat(json.loads(await objects.get(k))["content_until"])
+              for k in await objects.keys(f"{base}/samples/")}
+    await restrictions.bound(bounds, provider_org_id=provider_org_id)
+    return {"stones": sum(map(len, reasons.values())), "tombstoned": len(moved),
+            "bounded": len(bounds)}

@@ -31,6 +31,8 @@ REVOKE = "test_n3_revocation_tombstones_every_derived_version_and_export"
 EXPIRY = "test_n3_deletion_and_expiry_deny_at_once_and_purge_after_retention"
 MODEL_SCOPE = "test_n3_a_trace_of_another_model_is_omitted_before_c2"
 NARROW = "test_n3_a_narrowed_grant_version_tombstones_its_trace_samples"
+CLOCK = "test_n3_a_bound_passed_on_either_clock_denies"
+BACKFILL = "test_n3_backfill_moves_the_object_restrictions_into_d7_once"
 
 
 def m(name, invariant, old, new, *cases, file=P, dies_by=(), occurrences=1):
@@ -78,20 +80,35 @@ MUTANTS: tuple[Mutant, ...] = (
       'f"{base}/samples/{sid}.json", lab.canonical({', 'f"{base}/unindexed/{sid}.json", lab.canonical({',
       SELECT, EXPIRY),
     m("n3_content_bound_wrong", "the lineage keeps T3's content bound",
-      "(started + timedelta(days=retention.content_days))",
-      "(started + timedelta(days=retention.content_days + 1))", SELECT, EXPIRY),
+      "bounds[sid] = started + timedelta(days=retention.content_days)",
+      "bounds[sid] = started + timedelta(days=retention.content_days + 1)", SELECT, EXPIRY),
+    m("n3_bound_unrecorded", "the content bound is D7's (0041, WR-N3-5)",
+      "    await restrictions_of(store).bound(bounds, provider_org_id=provider_org_id)\n", "",
+      SELECT, CLOCK),
     # --- N3.b/c: denial reaches every version and export, bounded
-    m("n3_gate_ignores_tombstones", "a tombstone is permanent at every gate",
-      "    return allowed - set(await blocked(", "    return allowed or set(await blocked(",
-      REVOKE, EXPIRY),
+    m("n3_gate_ignores_tombstones", "the gate reads 0041: a tombstone is permanent there",
+      "    allowed = set(await restrictions_of(store).permitted(",
+      "    allowed = set(await store.accessible_samples(", REVOKE, EXPIRY, CLOCK, BACKFILL),
+    m("n3_gate_ignores_caller_clock", "a caller's `now` past the bound denies at once",
+      "    return allowed - set(await _expired(objects, provider_org_id, allowed, now))",
+      "    return allowed", CLOCK),
     m("n3_expiry_not_immediate", "content past its bound is denied at once",
       '        if now >= datetime.fromisoformat(entry["content_until"]):', "        if False:",
-      EXPIRY),
+      CLOCK),
+    m("n3_status_ignores_caller_clock", "the status view explains a bound the caller passed",
+      "    return {**await _expired(objects, provider_org_id, wanted - set(out), now), **out}",
+      "    return out", CLOCK),
     m("n3_reason_lost", "a restricted sample keeps its tombstone's reason",
-      '["reason"]\n    for sid in sorted(traced - stones):', '["reason"] and "tombstoned"\n'
-      '    for sid in sorted(traced - stones):', EXPIRY),
+      "    out = {s: r for s, r in (await restrictions.blocked(",
+      '    out = {s: "tombstoned" for s, r in (await restrictions.blocked(', EXPIRY),
+    m("n3_evidence_unshipped", "export evidence names only the items that export delivered",
+      "dataset_ref, provider_org_id=provider_org_id)).items() if s in wanted}",
+      "dataset_ref, provider_org_id=provider_org_id)).items()}", REVOKE),
     m("n3_push_unpaged", "a push tombstones at most `limit` samples per call",
-      "    for key in todo[:limit]:", "    for key in todo:", FANOUT),
+      "        new = await restrictions.tombstone(ids[start:start + limit],",
+      "        new = await restrictions.tombstone(ids[start:],", FANOUT),
+    m("n3_push_stops_at_done", "a push skips the pages already tombstoned",
+      "        if new:\n", "        if True:\n", FANOUT),
     m("n3_push_whole_grantor", "a request's push reaches only that request",
       '(f"{request_id}/" if request_id else "")', '""', EXPIRY),
     m("n3_reconcile_grant_unchecked", "reconcile tombstones a grant no longer current",
@@ -105,6 +122,17 @@ MUTANTS: tuple[Mutant, ...] = (
       '+ (["feedback"] if corrections else [])', '+ ["feedback"]', NARROW),
     m("n3_reconcile_deletion_unchecked", "reconcile sees a T3 deletion",
       'reason = "deleted" if not rows else', 'reason = "deleted" if False else', EXPIRY),
+    m("n3_reconcile_stone_unwritten", "reconcile's tombstone is written to 0041",
+      "await restrictions.tombstone([entry[\"sample_id\"]],\n"
+      "                                                   provider_org_id=provider_org_id, reason=reason):",
+      "[entry[\"sample_id\"]]:",
+      REVOKE, NARROW),
+    m("n3_reconcile_reports_old_stones", "reconcile reports only the samples it stoned",
+      "        if reason and await restrictions.tombstone([entry[\"sample_id\"]],\n"
+      "                                                   provider_org_id=provider_org_id, reason=reason):",
+      "        if reason and (await restrictions.tombstone([entry[\"sample_id\"]],\n"
+      "                                                   provider_org_id=provider_org_id, reason=reason) or True):",
+      NARROW),
     m("n3_purge_on_revocation", "a revocation is logical; only retention purges copies",
       "if reason in PURGED_BY_RETENTION and", "if reason and", REVOKE),
     m("n3_no_purge", "deletion and expiry purge the sample copy after the tombstone",
@@ -117,6 +145,15 @@ MUTANTS: tuple[Mutant, ...] = (
       'None if s.sample_id in readable else "grant_not_current")', "None)", REVOKE),
     m("n3_recall_claimed", "evidence never claims a recall",
       '"recalled": False,', '"recalled": True,', REVOKE),
+    # --- WR-N3-5: the one-shot move of the object-era restrictions
+    m("n3_backfill_skips_stones", "backfill moves every object tombstone",
+      "    moved = [s for reason, ids in sorted(reasons.items())",
+      "    moved = [s for reason, ids in sorted({}.items())", BACKFILL),
+    m("n3_backfill_reason_lost", "a moved tombstone keeps its object's reason",
+      "        ids, provider_org_id=provider_org_id, reason=reason)]",
+      '        ids, provider_org_id=provider_org_id, reason="deleted")]', BACKFILL),
+    m("n3_backfill_skips_bounds", "backfill moves every trace entry's bound",
+      "    await restrictions.bound(bounds, provider_org_id=provider_org_id)\n", "", BACKFILL),
     # --- the N2 reads go through the N3 gate
     m("n3_derive_ungated", "derivation omits tombstoned samples",
       "        readable = await lineage.permitted(store, objects, ref, provider_org_id=provider_org_id,\n"
