@@ -30,7 +30,7 @@ from infrx.state.jobstore import connector
 from infrx.state.lab_data import PgLabDataStore
 from infrx.state.lab_pipeline import PgRunLedger
 
-from ...d import pgharness
+from ...d import checks, pgharness
 from ...d import test_d7_lab_data as d7
 from ...n.imports.world import NEMO, chunks, fixture, run
 from ...n.versions.test_versions import uid
@@ -173,6 +173,68 @@ def test_p3_tcp_a_timeout_after_accept_is_one_job(world) -> None:
         assert (resumed["state"], resumed.get("job_id")) == ("submitted", "job-1")
         assert (app.state.posts, len(app.state.jobs)) == (1, 1)
         assert (d8_run(conn, ext), d8_holds(conn, ext)) == ("submitted", [("held", 1)])
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+
+
+def test_p3_pg_an_ambiguous_run_ends_only_on_an_operators_written_confirmation(world) -> None:
+    """R184 on D8's ledger (WR-P3-R184): egress blocked, the run is `ambiguous` with its one
+    PROVIDER_USD hold; resumes only look the key up (404: never seen) and change nothing; the
+    platform's release is refused while the run is ambiguous; a non-operator or an empty
+    confirmation cannot fail it; the operator's confirmed move fails it and releases the hold
+    in the same transaction - one event row per move, the confirmation kept."""
+    conn, store, objects, ref, export = world
+    port = local_services("p3")["protocol"].host_port
+    app = protocol_app()
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.05)
+        assert server.started, f"the protocol server did not start on {port}"
+        ext = uid(3, 0xe1)
+        ledger = prepare(world, ext, "protocol-test")
+
+        class Blocked(p3.HttpConnector):
+            async def submit(self, bundle, *, key):
+                raise httpx.ConnectError("egress blocked")
+
+        async def submit(blocked=False):
+            async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}",
+                                         timeout=2.0) as client:
+                connector = (Blocked if blocked else p3.HttpConnector)(client, "protocol-test")
+                return await p3.submit(store, objects, ledger, connector, members(),
+                                       provider_org_id=NEMO, user_id=DEV, external_run_id=ext,
+                                       advertised=ON)
+        assert run(submit(blocked=True))["state"] == "ambiguous"
+        for _ in range(2):
+            assert run(submit())["state"] == "ambiguous"
+        assert (app.state.posts, d8_run(conn, ext), d8_holds(conn, ext)) == (
+            0, "ambiguous", [("held", 1)])
+        with pytest.raises(errors.StateConflict):
+            run(ledger.release(f"submit:{ext}", provider_org_id=NEMO))
+        fail = dict(provider_org_id=NEMO, expected="ambiguous", target="failed")
+        conn.execute("insert into auth.users (id, email) values (%s, 'operator@example.com') "
+                     "on conflict do nothing", (checks.USER_OPERATOR,))
+        conn.execute("update public.profiles set is_operator = true where id = %s",
+                     (checks.USER_OPERATOR,))
+        with pytest.raises(errors.Forbidden):
+            run(ledger.move(ext, operator=DEV, confirmation_ref="mail:2026-09-28", **fail))
+        with pytest.raises(errors.InvalidRequest):
+            run(ledger.move(ext, operator=checks.USER_OPERATOR, confirmation_ref=" ", **fail))
+        assert (d8_run(conn, ext), d8_holds(conn, ext)) == ("ambiguous", [("held", 1)])
+        run(ledger.move(ext, operator=checks.USER_OPERATOR, confirmation_ref="mail:2026-09-28",
+                        **fail))
+        assert (d8_run(conn, ext), d8_holds(conn, ext)) == ("failed", [("released", 1)])
+        assert conn.execute(
+            "select fields->>'confirmation_ref' from infrx.lab_external_run_events where "
+            "external_run_id = %s and to_state = 'failed'", (ext,)).fetchall() == [
+            ("mail:2026-09-28",)]
+        assert run(submit())["state"] == "failed" and app.state.posts == 0
     finally:
         server.should_exit = True
         thread.join(timeout=10)

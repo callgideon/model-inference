@@ -19,6 +19,7 @@ from ...n.versions.test_versions import uid
 from ..annotations.world import Store
 
 PAYER = f"lab:payer:{NEMO}:{uid(1, 0x9a)}@sha256:{'a' * 64}"
+OPERATOR = uid(1, 0x0e)                      # a platform operator's profile (is_operator)
 
 
 class CheckpointStore(Store):
@@ -52,9 +53,12 @@ class CheckpointStore(Store):
 
 class FakeRunLedger:
     """D8's external-run rows (CAS along F3's machine), D6J's one reservation per key with a
-    single settlement, and append-only notes."""
+    single settlement, and append-only notes. R184 as 0042 answers it: `ambiguous -> failed`
+    only by an operator with the provider's written confirmation, releasing the run's hold in
+    the same move; a hold is never released while its run is ambiguous."""
 
     def __init__(self) -> None:
+        self.operators = {OPERATOR}
         self.runs: dict[tuple[str, str], dict] = {}
         self.reservations: dict[tuple[str, str], dict] = {}
         self.notes: dict[tuple[str, str], dict] = {}
@@ -74,8 +78,16 @@ class FakeRunLedger:
             return dict(row)
         if row is None or row["state"] != expected:
             raise errors.StateConflict(f"expected {expected}, found {row and row['state']}")
+        confirmed = (expected, target) == ("ambiguous", "failed")
+        if confirmed and fields.get("operator") not in self.operators:
+            raise errors.Forbidden("only an operator fails an ambiguous run (R184)")
+        if confirmed and not str(fields.get("confirmation_ref") or "").strip():
+            raise errors.InvalidRequest("only on the provider's written confirmation (R184)")
         self.runs[key] = {**row, **fields, "state": states.transition("external_run", expected,
                                                                       target)}
+        hold = self.reservations.get((provider_org_id, f"submit:{external_run_id}"))
+        if confirmed and hold is not None:
+            hold["state"] = "released"
         return dict(self.runs[key])
 
     async def reserve(self, key, *, provider_org_id, payer_ref, limit):
@@ -96,6 +108,9 @@ class FakeRunLedger:
 
     async def release(self, key, *, provider_org_id):
         row = self.reservations[(provider_org_id, key)]
+        run = self.runs.get((provider_org_id, key.removeprefix("submit:")), {})
+        if run.get("state") == "ambiguous":
+            raise errors.StateConflict("an ambiguous run's hold is released only by an operator")
         if row["state"] == "settled":
             raise errors.StateConflict("a settled reservation is not released")
         row["state"] = "released"
