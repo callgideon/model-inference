@@ -48,11 +48,12 @@ def shipping_enabled(limits: PilotSettings) -> bool:
 
 
 def build_shipper(limits: PilotSettings, spool, *, prefix: str = "infrx/",
-                  endpoint_url: str = "") -> Shipper | None:
+                  endpoint_url: str = "", holds=None) -> Shipper | None:
     """T2I WR-3's factory, for the composition root: None unless `shipping_enabled(limits)`
     (flag OFF); otherwise the shipper over ClickHouse (`CLICKHOUSE_URL`), the trace bucket
     (`S3_TRACE_BUCKET`) and D5's pins on `DATABASE_URL`, consulting T3's retention over the
-    same client and bucket (no resurrection). The root schedules
+    same client and bucket (no resurrection), holding what `holds` holds (C2, WR-C2-2b: the
+    sweep and the replay ask one source). The root schedules
     `await spool.rotate(); await shipper.ship()` and `shipper.retention.expire()` /
     `.sweep()` (wiring requests)."""
     if not shipping_enabled(limits):
@@ -68,7 +69,7 @@ def build_shipper(limits: PilotSettings, spool, *, prefix: str = "infrx/",
     traces = ClickHouseProjection(client)
     objects = S3ObjectStore.connect(limits.s3_trace_bucket, prefix, endpoint_url)
     retention = Retention(ClickHouseRetentionStore(client), traces,
-                          ClickHouseFeedbackProjection(client), objects,
+                          ClickHouseFeedbackProjection(client), objects, holds=holds,
                           content_days=limits.trace_content_max_days,
                           metadata_months=limits.trace_metadata_months)
     return Shipper(spool, traces, objects, pins=PgPins(connector(limits.database_url)),

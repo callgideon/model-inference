@@ -270,15 +270,16 @@ def trace_pumps(settings, mode, connect) -> dict:
                if not value.strip()]
     if missing:
         raise RuntimeMisconfigured(mode, missing)
+    holds = content_holds(mode, connect)                                # WR-C2-2
     try:
         spool = SpoolTraceSink(Wall, limits=limits)
         shipper = ship.build_shipper(limits, spool,
-                                     endpoint_url=settings.deployment.s3_endpoint_url)
+                                     endpoint_url=settings.deployment.s3_endpoint_url,
+                                     holds=holds)                       # WR-C2-2b
     except Exception as failure:          # noqa: BLE001 - every failure refuses startup
         raise RuntimeMisconfigured(mode, detail="TRACE_PUMPS: the spool or CLICKHOUSE_URL "
                                    f"did not answer ({type(failure).__name__})") from None
     retention = shipper.retention
-    retention.holds = content_holds(mode, connect, retention)          # WR-C2-2
     projector = FeedbackProjector(PgFeedbackOutbox(connect), retention.feedback,
                                   retention=retention)
 
@@ -295,7 +296,7 @@ def trace_pumps(settings, mode, connect) -> dict:
                                                  "feedback projection")}
 
 
-def content_holds(mode, connect, retention):
+def content_holds(mode, connect):
     """WR-C2-2: T3's sweep keeps an object a live C2 content ref still holds - C2's
     `ContentAccess.holds` over 0041's refs (lab-sql-lw3) on this pool. Without them in the
     build the pumps refuse by name. ponytail: drop the refusal once #16 is on every base."""
@@ -305,7 +306,7 @@ def content_holds(mode, connect, retention):
     except ImportError:
         raise RuntimeMisconfigured(mode, detail="TRACE_PUMPS needs C2's content refs "
                                                 "(0041)") from None
-    return ContentAccess(PgContentRefs(connect), retention).holds
+    return ContentAccess(PgContentRefs(connect), None).holds       # `holds` reads refs only
 
 
 def lab_eval(mode, connect, objects, evaluators, targets, worker_id) -> dict:
