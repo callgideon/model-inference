@@ -495,10 +495,39 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
         ports = {f: getattr(x, f) for f in x.__dataclass_fields__
                  if f not in ("sessions", "access")}
         d7 = {"store"} if name != "lab_releases" else set()
-        assert {f for f, port in ports.items() if port is not None} == d7, name
+        d8 = {"log", "ledger"} if name == "lab_pipelines" else set()   # WR-P1/P3-D8-C
+        assert {f for f, port in ports.items() if port is not None} == d7 | d8, name
         assert all(isinstance(ports[f], PgLabDataStore) for f in d7)
     every = pilot._lab(settings(**{s: True for s, _, _ in LAB_2.values()}), connect=None)
     assert sorted(every) == sorted(LAB_2)
+
+
+def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
+    """WR-P1-D8-C / WR-P3-D8-C: `LAB_PIPELINES` composes P1's label log (D8's `PgLabelLog`)
+    and P3's run ledger (D8's `PgRunLedger`: the CAS and the named payer's PROVIDER_USD
+    reservation on D6J's budget, `lab_submission`-gated in SQL) on the pool, over the Lab
+    objects (R182). The run and checkpoint listings (SR-P3-1, WR-LAB2-4) and B3's evaluation
+    port are not written yet: a typed 503 each, never an AttributeError read as a bug."""
+    import dataclasses
+
+    from infrx.contracts import errors
+    from infrx.gateway import pilot
+    from infrx.state.lab_pipeline import PgLabelLog, PgRunLedger
+
+    settings = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                               lab_pipelines=True))
+    objects = relay_support.World().objects
+    x = pilot._lab(settings, connect="pool", objects=objects)["lab_pipelines"]
+    assert type(x.log) is PgLabelLog and x.log._connect == "pool"
+    assert x.objects is objects and x.store._connect == "pool"
+    d8 = getattr(x.ledger, "ledger", None)
+    assert type(d8) is PgRunLedger and d8._connect == "pool"
+    assert getattr(x.ledger.reserve, "__func__", None) is PgRunLedger.reserve   # D8's own
+    for listing in (x.ledger.run_rows, x.ledger.checkpoint_rows):
+        died = outcome(lambda: asyncio.run(listing("p")))
+        assert type(died) is errors.DependencyUnavailable, died
+    assert x.evals is None
+    assert outcome(lambda: x.port("evals")).code == "dependency_unavailable"
 
 
 LAB_DATA = {"lab_datasets": ("lab_datasets", lab_datasets.LabDatasets,

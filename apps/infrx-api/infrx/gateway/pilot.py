@@ -296,7 +296,7 @@ def _lab(settings, connect, objects=None) -> dict:
         from ..state.lab_data import PgLabDataStore
         from .routes.lab_datasets import LabDatasets
         lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects)
-    return {**lab, **_lab_2(deployment, connect, sessions, access)}
+    return {**lab, **_lab_2(deployment, connect, sessions, access, objects)}
 
 
 def _lab_checkpoints(settings, connect) -> dict:
@@ -322,19 +322,39 @@ def _lab_checkpoints(settings, connect) -> dict:
                                               PgLabDataStore(connect))}
 
 
-def _lab_2(deployment, connect, sessions, access) -> dict:
+class RunLedger:
+    """P3's `PgRunLedger` (D8, 0042) as the pipeline surface's `ledger`; the run and
+    checkpoint listings WR-LAB2-4 asks of lab-sql (SR-P3-1) are not written yet: 503."""
+
+    def __init__(self, ledger) -> None:
+        self.ledger = ledger
+
+    def __getattr__(self, name):
+        return getattr(self.ledger, name)
+
+    async def run_rows(self, *args):
+        raise errors.DependencyUnavailable("the run listings are not wired (WR-LAB2-4)")
+
+    checkpoint_rows = run_rows
+
+
+def _lab_2(deployment, connect, sessions, access, objects=None) -> dict:
     """LAB-API-2: the evaluation, pipeline and release surfaces for the switches that are on,
-    over D7 (`PgLabDataStore`, merged). The ports whose tables are not merged (experiments,
-    the B3 ledger listing, the catalog; the label log, run ledger, Lab objects, B3 evals; the
-    release read models, proposals and D9) are absent, so their routes answer 503."""
+    over D7 (`PgLabDataStore`, merged); the pipelines over D8's label log and run ledger
+    (WR-P1-D8-C / WR-P3-D8-C) and the Lab objects. The ports whose tables are not merged
+    (experiments, the B3 ledger listing, the catalog; the run listings, B3 evals; the release
+    read models, proposals and D9) are absent, so their routes answer 503."""
     from ..state.lab_data import PgLabDataStore
+    from ..state.lab_pipeline import PgLabelLog, PgRunLedger
     from .routes.lab_evaluations import LabEvaluations
     from .routes.lab_pipelines import LabPipelines
     from .routes.lab_releases import LabReleases
     store = PgLabDataStore(connect)
     return {**({"lab_evaluations": LabEvaluations(sessions, access, store=store)}
                if deployment.lab_evals else {}),
-            **({"lab_pipelines": LabPipelines(sessions, access, store=store)}
+            **({"lab_pipelines": LabPipelines(sessions, access, store=store, objects=objects,
+                                              log=PgLabelLog(connect),
+                                              ledger=RunLedger(PgRunLedger(connect)))}
                if deployment.lab_pipelines else {}),
             **({"lab_releases": LabReleases(sessions, access)}
                if deployment.lab_releases else {})}

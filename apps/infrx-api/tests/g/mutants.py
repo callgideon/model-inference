@@ -36,6 +36,7 @@ C = "gateway/routes/catalog.py"         # G1R: model resolution for a credential
 R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and the SSE relay
 P = "gateway/pilot.py"                  # G2: the pilot composition
 ROLLOUT_CASE = "test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it"
+PIPELINES_D8 = "test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers"
 ROLLOUT_LOGIN = "test_rollout_routing__the_router_is_r1_over_d9_on_the_runtime_login_only_when_on"
 OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
 ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
@@ -1021,6 +1022,24 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "    rt.lab_releases = lab_releases if deployment.lab_releases else None\n",
        "    rt.lab_releases = lab_releases\n",
        "test_lab_api_2__the_lab_surfaces_are_mounted_only_when_the_deployment_enables_them"),
+    # WR-P1-D8-C / WR-P3-D8-C: the pipeline surface over D8's label log and run ledger
+    _m("lab_pipelines_log_absent", "P1's label log is D8's PgLabelLog on the pool",
+       P, "                                              log=PgLabelLog(connect),\n",
+       "                                              log=None,\n", PIPELINES_D8),
+    _m("lab_pipelines_ledger_bare", "P3's listings answer 503, never an AttributeError",
+       P, "ledger=RunLedger(PgRunLedger(connect)))}", "ledger=PgRunLedger(connect))}",
+       PIPELINES_D8),
+    _m("lab_pipelines_ledger_off_the_pool", "P3's run ledger is on the pool",
+       P, "ledger=RunLedger(PgRunLedger(connect)))}", "ledger=RunLedger(PgRunLedger(None)))}",
+       PIPELINES_D8),
+    _m("lab_pipelines_objects_absent", "the pipeline surface reads the Lab objects",
+       P, "store=store, objects=objects,", "store=store, objects=None,", PIPELINES_D8),
+    _m("lab_pipelines_objects_not_passed", "the gateway's Lab objects reach the pipelines",
+       P, "**_lab_2(deployment, connect, sessions, access, objects)}",
+       "**_lab_2(deployment, connect, sessions, access)}", PIPELINES_D8),
+    _m("lab_pipelines_listing_empty", "an unwired run listing is a 503, never an empty list",
+       P, '        raise errors.DependencyUnavailable("the run listings are not wired (WR-LAB2-4)")',
+       "        return []", PIPELINES_D8),
     _m("lab_2_switches_crossed", "each LAB-API-2 surface follows its own switch",
        P, "    rt.lab_releases = lab_releases if deployment.lab_releases else None\n",
        "    rt.lab_releases = lab_releases if deployment.lab_evals else None\n",
@@ -1042,7 +1061,8 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "LabEvaluations(sessions, access, store=store)", "LabEvaluations(sessions, access)",
        "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
     _m("lab_pipelines_without_d7", "the pipeline surface runs over D7 (merged)",
-       P, "LabPipelines(sessions, access, store=store)", "LabPipelines(sessions, access)", "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
+       P, "LabPipelines(sessions, access, store=store, objects=objects,",
+       "LabPipelines(sessions, access, objects=objects,", "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
     # Composition batch 2 (WR-LAB-API-2): LAB_CONTROL over L3's operations on the same pool
     _m("lab_control_without_operations", "the control surface runs over L3's operations",
        P, "LabControl(sessions, access, lab_operations(connect, access))",

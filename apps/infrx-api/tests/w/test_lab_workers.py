@@ -339,7 +339,6 @@ def captured_steps(monkeypatch) -> dict:
     return steps
 
 
-# ------------------------------------------------------------------ datasets (WR-N3-2 pull)
 def test_lab_workers__the_judge_report_job_publishes_each_configuration_on_its_ledger(
         no_trace_stack):
     """WR-J3-D8-C: the judge role's report job is J3's `publish` on the role's own
@@ -374,6 +373,7 @@ def test_lab_workers__the_judge_report_job_publishes_each_configuration_on_its_l
         "state"] == "calibrated"
 
 
+# ------------------------------------------------------------------ datasets (WR-N3-2 pull)
 def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(monkeypatch,
                                                                              no_trace_stack):
     """WR-N3-2's pull half: every provider with a lineage in the Lab objects, every page
