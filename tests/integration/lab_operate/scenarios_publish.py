@@ -274,11 +274,48 @@ def test_l05_discovery_reports_the_listing_version_it_serves(workdir, record_pro
             (published.version, proposal.deployment_revision_id)], entries
 
 
-def test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins(workdir):
-    waits("l06", "L3", steps="alpha's async job is accepted on revision R2 with no worker "
-          "running; the provider rolls the alias back to R1; the worker starts: the queued job "
-          "runs on R2 at R2's admitted card and settles once; a new request routes to R1")
-    unbound()
+def test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins(workdir,
+                                                                            record_property):
+    """Oracle: alpha's async job accepted on the published revision R2 (listing 2) with no
+    worker running keeps R2's deployment, serving revision and card through the operator's
+    rollback to listing 1 (which adds listing 3, audited) and the runtime roll back onto the
+    seed's card: the worker runs it once on R2 and it settles once at R2's admitted card;
+    a new call routes to R1 at R1's card; the CREDIT books are conserved."""
+    with world.composed(workdir, start=()) as trip:
+        lab.seed_lab(trip)
+        alpha, ctl = trip.world.alpha, lab.control(trip)
+        revision, proposal, published = lab.ship(ctl, "l06", expected_version=1)
+        r2 = (proposal.deployment_revision_id, revision.serving_version_id, lab.card_of("l06"))
+        r1 = (stack.SEED_PUBLIC_DEPLOYMENT, stack.SEED_SERVING, stack.SEED_CARD)
+        trip.box.start("gateway", ACTIVE_RATE_CARD_VERSION=r2[2])
+        queued = trip.send(alpha, "async", world.TEXT, "e3l-l06-queued")
+        assert queued.status_code == 202, queued.text[:300]
+        admitted = lab.pins(trip, alpha.org_id, "e3l-l06-queued")
+        rolled = lab.call(ctl.rollback(lab.operator(), stack.CREDIT_ALIAS, to_version=1,
+                                       expected_version=published.version,
+                                       reason="e3l l06 regression"))
+        lab.roll_runtime(trip, stack.SEED_CARD)
+        trip.box.start("worker", ACTIVE_RATE_CARD_VERSION=stack.SEED_CARD)
+        request_id = queued.json()["request_id"]
+        final = world.terminal(trip, request_id, timeout=90.0)
+        fresh = trip.send(alpha, "sync", world.TEXT, "e3l-l06-new")
+        audit = [(e.action, e.actor, e.before and e.before.get("version"), e.after["version"])
+                 for e in lab.call(ctl.events(ADMIN_A, A)) if e.action == "lab_rollback"]
+        record_property("rollback", {"admitted": admitted, "rolled": vars(rolled),
+                                     "final": final, "fresh": fresh.status_code,
+                                     "audit": audit})
+        assert admitted[:3] == r2 and admitted[3] not in world.pilotbox.FINISHED, admitted
+        assert (rolled.version, rolled.deployment_revision_id, rolled.rate_card_version) == (
+            published.version + 1, r1[0], r1[2]), rolled
+        assert lab.listing(trip) == (published.version + 1, r1[0], r1[2])
+        assert audit == [("lab_rollback", lab.OPERATOR, published.version,
+                          published.version + 1)], audit
+        assert final == "succeeded" and world.attempts(trip, request_id) == 1
+        assert lab.pins(trip, alpha.org_id, "e3l-l06-queued") == (*r2, "succeeded")
+        world.settled_once(trip, request_id)
+        assert fresh.status_code == 200, fresh.text[:300]
+        assert lab.pins(trip, alpha.org_id, "e3l-l06-new") == (*r1, "succeeded")
+        trip.conserved(alpha)
 
 
 # ------------------------------------------------------------------ l09, l10, l12
