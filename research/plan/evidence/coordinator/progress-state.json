@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 234,
- "updated": "2026-09-28T20:38:50Z",
+ "revision": 235,
+ "updated": "2026-09-28T20:42:30Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6418,26 +6418,28 @@
    "branch": "codex/w5-lab-sql-integration-2",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-integration-2",
    "base": "6ab5ee47",
-   "head": "368c87ab",
+   "head": "9b04287c",
    "isolation": {
     "ports": "lab-c2 / p1 / p3 / b3 / p2 / j2 / r1 / n3",
     "prefix": "infrx-lab-c2-",
     "db": "lab_c2"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T15:37:12Z",
-   "updated": "2026-09-28T18:48:37Z",
+   "updated": "2026-09-28T20:42:30Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge; then C2, P1, P3, B3, R1, N3 (+ P2/J3 with their judge halves) → implemented",
+   "next_action": "merge batch #19 (wf_9330f386-ace) → flips C2/P1/P3/B3/R1/N3 + P2/J3 halves; composition wirings → composition-2; WR-N3-5 → datasets lane",
    "estimate": {
-    "optimistic_h": 4,
-    "likely_h": 8,
-    "pessimistic_h": 16,
-    "confidence": "medium",
-    "basis": "the first integration lane 6 h for six swaps; eight here",
-    "at": "2026-09-28T15:37:12Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "high",
+    "basis": "ACCEPT_WITH_FIXES 9b04287c; merge batch #19 running",
+    "at": "2026-09-28T20:42:30Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-2-368c87a.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/content/**",
@@ -6453,7 +6455,16 @@
     "infrx/datasets/lineage/**",
     "tests/n/lineage/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-B3-D8-C",
+    "WR-C2-2",
+    "WR-J3-D8-C",
+    "WR-N3-5",
+    "WR-P1-D8-C",
+    "WR-P2-D8-C",
+    "WR-P3-D8-C",
+    "WR-R1-3-C"
+   ]
   },
   {
    "id": "W5-LAB-IMPROVE",
@@ -6738,6 +6749,38 @@
     "research/plan/scripts/test_progress.py",
     "research/plan/consumer-v1/07-post-launch-waves.md"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-19",
+   "task": null,
+   "slice": "merge batch #19: lab-sql-integration-2 9b04287c (+R192); workflow wf_9330f386-ace",
+   "agent": "opus",
+   "branch": "codex/w5-merge-19",
+   "worktree": ".claude/worktrees/codex-w5-merge-19",
+   "base": "ed4ce519",
+   "head": null,
+   "isolation": {
+    "ports": "p2 57528/57529, n3 57518/57519 (lane-owned)",
+    "prefix": "infrx-p2-",
+    "db": "p2"
+   },
+   "activity": "running",
+   "started": "2026-09-28T20:42:30Z",
+   "updated": "2026-09-28T20:42:30Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator ff onto claude/consumer-v1 → flips",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch, like #15/#18",
+    "at": "2026-09-28T20:42:30Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
