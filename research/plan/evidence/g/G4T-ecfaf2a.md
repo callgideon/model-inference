@@ -79,3 +79,26 @@ the bool edits are identical.
 
 optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium - basis: coordinator applies WR-G4T-1 after
 WR-G4F-1 (the G4F fix-round analogue), one ClickHouse proof run, one review round.
+
+## Fix round (2026-09-28; review findings 0-F1, 1-CONTENT-L1-1)
+
+- **0-F1** (cursor past rows T3 dropped): new case `test_trace_export__the_cursor_advances_past_dropped_rows`
+  (4 rows, row 2 deleted through T3, `limit=3`: page 1 is `[0, 1]` with a `next_cursor`, page 2 is `[3]`) and
+  mutant `cursor_counts_exported_rows` (`len(rows) == limit` -> `len(out) == limit` in
+  `infrx/content/__init__.py`) in `tests/g/trace_export/mutants.py`. Commit b59e47d3. No code change: the real
+  code already counted rows read.
+- **1-CONTENT-L1-1** (stale WR-G4T-1): the patch is regenerated on the current `claude/consumer-v1` tip
+  **b4147d5c** (which carries WR-G4F-1). Both switches kept (`FEEDBACK_API`, `TRACE_EXPORT_API`);
+  `ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)`; the duplicate
+  `(str, bool)` hunk is dropped (the tip already has it); the five `tests/g/mutants.py` composition mutants are
+  re-anchored on the G4F-patched `ROUTERS` line, plus the three G4T mutants. It no longer applies to this
+  branch's base eb0734d7 (by design: it targets the tip).
+
+| command (tree: detached b4147d5c + merge of b59e47d3 + the patch, `uv sync --frozen --all-extras`, `INFRX_D_TASK=g4t`) | exit | result |
+|---|---|---|
+| `git apply --check G4T-ecfaf2a-wiring.patch` on b4147d5c + b59e47d3 | 0 | applies cleanly (branch merge also clean) |
+| `pytest tests/contracts/test_config_and_imports.py tests/g/test_startup.py tests/i/test_packaging.py tests/g/trace_export tests/content` | 0 | 394 passed, 22 skipped |
+| `pytest tests/g -k "not pg"` | 0 | 765 passed |
+| `pytest tests/g -k pg` (g4t PG 57508; a stale `infrx-g4t-postgres` from the previous dispatch's scratch tree was removed first: the first run refused it as ForeignContainer, 20 failed + 4 errors, all that refusal) | 0 | 24 passed, 4 skipped |
+| `INFRX_MUTANTS=all pytest tests/g/trace_export/test_mutants.py` (lane worktree) | 0 | 28/28 mutants killed; 32 passed |
+| `python -m tests.g.mutants` (whole G list, tip tree) | 0 | 404/404 killed (includes the 5 re-anchored and 3 new composition mutants) |

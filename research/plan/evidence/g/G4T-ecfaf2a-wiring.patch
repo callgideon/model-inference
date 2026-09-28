@@ -1,11 +1,11 @@
 diff --git a/apps/infrx-api/deploy/preflight.py b/apps/infrx-api/deploy/preflight.py
-index f60427ce..9a91764e 100644
+index 761e4d42..38ee8a1a 100644
 --- a/apps/infrx-api/deploy/preflight.py
 +++ b/apps/infrx-api/deploy/preflight.py
-@@ -231,6 +231,9 @@ NOT_SETTABLE = {
-     "WORKER_HEALTH_PORT": "the worker's loopback port is the unit's and lib.sh's (8002, "
-                           "wait_ready and 60-verify-local.sh): moving it is a deploy change, "
-                           "not a --set",
+@@ -234,6 +234,9 @@ NOT_SETTABLE = {
+     "FEEDBACK_API": "mounts POST /v1/feedback (G4F, off by default): enabling it on the hosted "
+                     "gateway needs the E4 regression rerun and the database feedback flag, a "
+                     "deploy change, not a --set",
 +    "TRACE_EXPORT_API": "mounts GET /v1/traces (G4T, off by default): enabling it on the "
 +                        "hosted gateway needs T3 and C2 live, CLICKHOUSE_URL and the E4 "
 +                        "regression rerun, a deploy change, not a --set",
@@ -13,13 +13,13 @@ index f60427ce..9a91764e 100644
  
  
 diff --git a/apps/infrx-api/infrx/config.py b/apps/infrx-api/infrx/config.py
-index d704eab5..71f70663 100644
+index 975c9d65..6605fc5b 100644
 --- a/apps/infrx-api/infrx/config.py
 +++ b/apps/infrx-api/infrx/config.py
-@@ -351,6 +351,10 @@ class DeploymentSettings:
-     # (`python -m infrx.worker`: /readyz, /livez, /metrics), the one install.sh's
-     # `wait_ready` and 60-verify-local.sh probe. Never public: WorkerService binds loopback.
-     worker_health_port: int = 8002
+@@ -355,6 +355,10 @@ class DeploymentSettings:
+     # store's pool. Off by default, so the launched API is unchanged; the database's own
+     # `feedback` flag gates every write again (off: 503 dependency_unavailable).
+     feedback_api: bool = False
 +    # G4T (WR-G4T-1): mount `GET /v1/traces` over C2's `OwnedExport` on the trace projection
 +    # (`CLICKHOUSE_URL`, which it then requires). Off by default, so the launched API is
 +    # unchanged; it stays off until T3 and C2 are live (wave-5 plan rule 5).
@@ -27,57 +27,49 @@ index d704eab5..71f70663 100644
      # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
      # process that runs it; gateways run none). P-25 (decided 2026-09-25,
      # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):
-@@ -408,7 +412,7 @@ CONSOLE_ONLY_SETTINGS = ("CONSOLE_CURSOR_SECRET",)
- # in PostgreSQL, a zero message cap refuses every request, a zero segment never rotates.
- DEPLOYMENT_MUST_BE_POSITIVE = tuple(
-     f.name for f in dataclasses.fields(DeploymentSettings)
--    if not isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)
-+    if not isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), (str, bool))   # a switch may be off
- )
- 
- 
 diff --git a/apps/infrx-api/infrx/gateway/app.py b/apps/infrx-api/infrx/gateway/app.py
-index a7d7efb2..79d5a934 100644
+index 669acf33..64c45a39 100644
 --- a/apps/infrx-api/infrx/gateway/app.py
 +++ b/apps/infrx-api/infrx/gateway/app.py
 @@ -15,7 +15,7 @@ from ..media.video import Media
  from ..usage import Usage
  from . import pilot
  from ..observe import route as metrics
--from .routes import health, ingress, jobs, models, uploads
-+from .routes import health, ingress, jobs, models, trace_export, uploads
+-from .routes import feedback, health, ingress, jobs, models, uploads
++from .routes import feedback, health, ingress, jobs, models, trace_export, uploads
  
  # The composition root's router list, fixed and documented (r1 R44). A track's router is
  # a module exposing `register(app, rt)`; the coordinator adds it here on an integration
-@@ -25,8 +25,9 @@ from .routes import health, ingress, jobs, models, uploads
- # proxies the public `/health` to it (deploy/Caddyfile), and the edge hides what it echoes.
+@@ -26,8 +26,9 @@ from .routes import feedback, health, ingress, jobs, models, uploads
  # G4U uploads and G3 jobs come after the ingress, over the media store and the relay its
  # composition put on `rt` (G3 request (a), G4U request (a)); I3B's loopback-only /metrics
--# over the composition's registry last (I3B request 1).
--ROUTERS = (health, models, ingress, uploads, jobs, metrics)
-+# over the composition's registry last (I3B request 1). G4T's trace export before it,
-+# mounted only when the deployment enables it (`TRACE_EXPORT_API`, default off; WR-G4T-1).
-+ROUTERS = (health, models, ingress, uploads, jobs, trace_export, metrics)
+ # over the composition's registry last (I3B request 1). G4F feedback before it, mounted only
+-# when the deployment enables it (`FEEDBACK_API`, default off; WR-G4F-1).
+-ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)
++# when the deployment enables it (`FEEDBACK_API`, default off; WR-G4F-1); G4T's trace export
++# after it, likewise (`TRACE_EXPORT_API`, default off; WR-G4T-1).
++ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)
  
  
  def upstream_client(settings):
 diff --git a/apps/infrx-api/infrx/gateway/pilot.py b/apps/infrx-api/infrx/gateway/pilot.py
-index 73272e3c..e265dae2 100644
+index 995a5d41..e6c62824 100644
 --- a/apps/infrx-api/infrx/gateway/pilot.py
 +++ b/apps/infrx-api/infrx/gateway/pilot.py
-@@ -282,7 +282,7 @@ def build_info(rt) -> None:
+@@ -291,7 +291,8 @@ def build_info(rt) -> None:
  
  def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
                         pool=None, consent_for=None, attachments=None,
--                       lifecycle=None, readiness=None) -> IngressDeps:
-+                       lifecycle=None, readiness=None, trace_export=None) -> IngressDeps:
+-                       lifecycle=None, readiness=None, feedback=None) -> IngressDeps:
++                       lifecycle=None, readiness=None, feedback=None,
++                       trace_export=None) -> IngressDeps:
      """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
      other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
      The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
-@@ -318,12 +318,25 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
-     checks = {"price_source": Probe(models.price_check(catalog, settings)),
-               "journal": Probe(journal_check(stream))}
+@@ -329,12 +330,25 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
      rt.relay = relay
+     # G4F (WR-G4F-1): the feedback route mounts over this, and only when enabled.
+     rt.feedback = feedback if deployment.feedback_api else None
 +    # G4T (WR-G4T-1): the trace export mounts over this, and only when enabled.
 +    rt.trace_export = _trace_export(rt, trace_export) if deployment.trace_export_api else None
      rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
@@ -101,125 +93,127 @@ index 73272e3c..e265dae2 100644
      """W5 wiring 4: the relay's `(readiness, expectation)`. `readiness` is the
      `ReadinessStore` every admission writes its execution-ready marker through (D10's
 diff --git a/apps/infrx-api/tests/contracts/test_config_and_imports.py b/apps/infrx-api/tests/contracts/test_config_and_imports.py
-index 15bf64f8..77b8cd72 100644
+index 7de355a1..eb664d8c 100644
 --- a/apps/infrx-api/tests/contracts/test_config_and_imports.py
 +++ b/apps/infrx-api/tests/contracts/test_config_and_imports.py
-@@ -334,7 +334,7 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
+@@ -334,7 +334,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
      half-finished track mount itself on the public gateway."""
      from infrx.gateway import app as composition_root
      assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
--        ["health", "models", "ingress", "uploads", "jobs", "route"]
-+        ["health", "models", "ingress", "uploads", "jobs", "trace_export", "route"]
+-        ["health", "models", "ingress", "uploads", "jobs", "feedback", "route"]
++        ["health", "models", "ingress", "uploads", "jobs", "feedback", "trace_export",
++         "route"]
      for module in composition_root.ROUTERS:
          assert callable(getattr(module, "register"))
  
-@@ -542,11 +542,13 @@ DEPLOYMENT_EXPECTED = {
-     "MONITOR_DATABASE_URL": "",
-     # P-25 (decided 2026-09-25): 50 GiB above, and the content collection grace
+@@ -544,6 +545,8 @@ DEPLOYMENT_EXPECTED = {
      "RETENTION_GRACE_S": 3600.0,
+     # G4F (WR-G4F-1): the switch that mounts POST /v1/feedback, off
+     "FEEDBACK_API": False,
 +    # G4T (WR-G4T-1): the switch that mounts GET /v1/traces, off
 +    "TRACE_EXPORT_API": False,
  }
  
--# Everything except the text values (the secret, the accounting regime).
-+# Everything except the text values (the secret, the accounting regime) and the switch.
- DEPLOYMENT_NUMBERS = tuple(name for name, value in sorted(DEPLOYMENT_EXPECTED.items())
--                           if not isinstance(value, str))
-+                           if not isinstance(value, (str, bool)))
- 
- 
- def test_every_deployment_name_and_default_is_frozen():
-@@ -566,10 +568,10 @@ def test_the_deployment_names_are_nobodys_existing_names():
- 
- @pytest.mark.parametrize("name", sorted(DEPLOYMENT_EXPECTED))
- def test_each_deployment_name_is_read_from_the_environment(name):
--    raw = "s" * 32 if name == "CONSOLE_CURSOR_SECRET" else "7"
--    deployment = config.deployment_from_env({name: raw})
-     field_name = name.lower()
-     kind = type(getattr(config.DEPLOYMENT_DEFAULTS, field_name))
-+    raw = "s" * 32 if name == "CONSOLE_CURSOR_SECRET" else "true" if kind is bool else "7"
-+    deployment = config.deployment_from_env({name: raw})
-     assert getattr(deployment, field_name) == kind(raw)
- 
- 
+ # Everything except the text values (the secret, the accounting regime) and the switch.
 diff --git a/apps/infrx-api/tests/g/mutants.py b/apps/infrx-api/tests/g/mutants.py
-index e078041f..ef8c099f 100644
+index 79e94ce2..5f28d261 100644
 --- a/apps/infrx-api/tests/g/mutants.py
 +++ b/apps/infrx-api/tests/g/mutants.py
-@@ -893,28 +893,39 @@ MUTANTS: tuple[Mutant, ...] = (
+@@ -893,37 +893,56 @@ MUTANTS: tuple[Mutant, ...] = (
      # The cutover itself (G2 item 5), in files G does not own, in the temporary copy only:
      # the retired `unset_mode_refuses` / `composition_root_mounts_the_ingress` inverted.
      _m("composition_root_mounts_the_legacy_route", "chat is served by the ingress only",
--       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
-+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, metrics)",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
++       "gateway/app.py",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)",
         "from .routes import chat as _chat\n"
--       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, metrics)",
-+       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, trace_export, metrics)",
+-       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, metrics)",
++       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, trace_export, metrics)",
         "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
      # === the cutover lane (CUTOVER item 1): the full mount and the adapters from settings ==
      _m("composition_root_drops_uploads", "the composition root mounts G4U's upload routes",
--       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
--       "ROUTERS = (health, models, ingress, jobs, metrics)",
-+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, metrics)",
-+       "ROUTERS = (health, models, ingress, jobs, trace_export, metrics)",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, ingress, jobs, feedback, metrics)",
++       "gateway/app.py",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)",
++       "ROUTERS = (health, models, ingress, jobs, feedback, trace_export, metrics)",
         "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
      _m("composition_root_drops_jobs", "the composition root mounts G3's jobs routes",
--       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
--       "ROUTERS = (health, models, ingress, uploads, metrics)",
-+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, metrics)",
-+       "ROUTERS = (health, models, ingress, uploads, trace_export, metrics)",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, ingress, uploads, feedback, metrics)",
++       "gateway/app.py",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, feedback, trace_export, metrics)",
         "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
      _m("composition_root_jobs_before_ingress", "jobs and uploads mount after the ingress",
--       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
--       "ROUTERS = (health, models, jobs, ingress, uploads, metrics)",
-+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, metrics)",
-+       "ROUTERS = (health, models, jobs, ingress, uploads, trace_export, metrics)",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, jobs, ingress, uploads, feedback, metrics)",
++       "gateway/app.py",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)",
++       "ROUTERS = (health, models, jobs, ingress, uploads, feedback, trace_export, metrics)",
         "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
      # E4B's served-build check (CUTOVER item 7): /metrics mounted, the build gauge from settings
      _m("composition_root_drops_metrics", "the composition root mounts I3B's /metrics",
--       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
--       "ROUTERS = (health, models, ingress, uploads, jobs)", BUILD_CASE,
-+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, metrics)",
-+       "ROUTERS = (health, models, ingress, uploads, jobs, trace_export)", BUILD_CASE,
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback)", BUILD_CASE,
++       "gateway/app.py",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export)", BUILD_CASE,
         "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+     # G4F (WR-G4F-1): the feedback route is mounted only when FEEDBACK_API turns it on
+     _m("composition_root_drops_feedback", "the composition root mounts G4F's feedback route",
+-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
+-       "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
++       "gateway/app.py",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, metrics)",
+        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
+     _m("feedback_switch_ignored", "FEEDBACK_API off mounts no feedback route, even with a service",
+        P, "    rt.feedback = feedback if deployment.feedback_api else None\n",
+        "    rt.feedback = feedback\n",
+        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
 +    # G4T (WR-G4T-1): the trace export is mounted only when TRACE_EXPORT_API turns it on
 +    _m("composition_root_drops_trace_export", "the composition root mounts G4T's export route",
-+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, metrics)",
-+       "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
++       "gateway/app.py",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, metrics)",
++       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, metrics)",
 +       "test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it"),
 +    _m("trace_export_switch_ignored", "TRACE_EXPORT_API off mounts no export, even with one",
 +       P, "if deployment.trace_export_api else None\n", "if True else None\n",
 +       "test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it"),
 +    _m("trace_export_enabled_without_clickhouse", "enabled without ClickHouse refuses to start",
-+       P, "    if export is None:\n        raise RuntimeMisconfigured(", "    if False:\n        raise RuntimeMisconfigured(",
++       P, "    if export is None:\n        raise RuntimeMisconfigured(",
++       "    if False:\n        raise RuntimeMisconfigured(",
 +       "test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it"),
      # E2C (RV-12): the build case scrapes a fixture procfs; this case keeps the real reading
      _m("host_memory_not_read", "the scrape reports this Linux host's memory from /proc/meminfo",
         "observe/host.py", '        if name in ("MemTotal", "MemAvailable"):', "        if False:",
 diff --git a/apps/infrx-api/tests/g/test_startup.py b/apps/infrx-api/tests/g/test_startup.py
-index a8de599e..0f919b34 100644
+index 7d2f648f..cd462ae5 100644
 --- a/apps/infrx-api/tests/g/test_startup.py
 +++ b/apps/infrx-api/tests/g/test_startup.py
-@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
+@@ -18,7 +18,8 @@ from fastapi.testclient import TestClient
  from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
  from infrx.contracts import errors, wire
  from infrx.gateway import app as composition
--from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
-+from infrx.gateway.routes import chat, health, ingress, jobs, models, trace_export, uploads
+-from infrx.gateway.routes import chat, feedback, health, ingress, jobs, models, uploads
++from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, models, trace_export,
++                                  uploads)
  from infrx.observe import host
  from infrx.observe import route as metrics
  from infrx.scheduling.memory import MemoryScheduler
-@@ -157,7 +157,7 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
+@@ -157,7 +158,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
      loopback-only /metrics last - the one chat handler is the ingress's, every upload and jobs
      route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
      slash redirects) is served."""
--    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, metrics)
-+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, trace_export, metrics)
+-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, metrics)
++    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, trace_export,
++                                   metrics)
      app = pilot_app()
      rt = app.state.runtime
      paths = {route.path for route in app.routes if hasattr(route, "path")}
-@@ -175,6 +175,47 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
-     ingress.assert_route_table(app)
+@@ -219,6 +221,47 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
+     ingress.assert_route_table(on)
  
  
 +def test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it():
@@ -286,14 +280,14 @@ index 39fd1dac..e3873b3b 100644
                 for _, path in routes}
      assert {path for path, where in reached.items() if where in ("private", "health")} == set()
 diff --git a/research/plan/08-contracts-v1-encoding.md b/research/plan/08-contracts-v1-encoding.md
-index 783d920c..a9b1e366 100644
+index 59b0f790..b57889e6 100644
 --- a/research/plan/08-contracts-v1-encoding.md
 +++ b/research/plan/08-contracts-v1-encoding.md
-@@ -100,6 +100,7 @@ Names reuse the older spec where the meaning is unchanged. All are read only in
- | `PROCESSING_CACHE_TTL_S` | 604800 | `IDEMPOTENCY_TTL_S` | 86400 (after terminal) |
- | `TRACE_CONTENT_MAX_DAYS` | 90 | `TRACE_METADATA_MONTHS` | 13 |
- | `PREPARATION_CONCURRENCY` | 2 | `MAX_ACTIVE_JOBS` / `_PER_ORG` / `_PER_KEY` | 64 / 16 / 8 |
+@@ -136,6 +136,7 @@ Read by the same rules as the table above with one deliberate difference: an **e
+ | `WORKER_HEALTH_PORT` | 8002 | I2B-R4 (W3 request 6): the loopback port of `python -m infrx.worker` (`/readyz`, `/livez`, `/metrics` with the same `infrx_build_info`); bound only after the pool, the bucket and `PROCESSING_CACHE_DIR` answered. Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`): install.sh's `wait_ready` and `60-verify-local.sh` probe 8002 |
+ | `PREPARATION_CONCURRENCY` | 2 (§5's `PilotSettings` default, not restated) | PREP-WORKER: the number of runners `python -m infrx.worker` runs on `prepare_dispatch` candidates (its preparation pool, beside `WORKER_CONCURRENCY`'s inference pool), and M2's per-process materialization gate; still gates nothing at admission (R1: `MAX_PREPARING_JOBS` does). Settable through the installer (`preflight.TUNABLE`). Its drain bound is `PREPARATION_LEASE_TTL_S`: an attempt still running at a SIGTERM is released and its lapsed lease requeued by the next `recover` (R93) ⚠️ TO BE VERIFIED on the box (no measured preparation latency) |
+ | `FEEDBACK_API` | off (`1`/`true`/`yes`/`on` turn it on; anything else reads as off) | G4F (WR-G4F-1): mounts `POST /v1/feedback` over D6F's `PgFeedbackService` on the job store's pool; off, no feedback route exists (404) and the launched API is unchanged. The database's own `feedback` flag gates every write again (off: 503). Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`): enabling it hosted needs the E4 regression rerun (wave-5 plan rule 5) and that flag row |
 +| `TRACE_EXPORT_API` | off (`1`/`true`/`yes`/`on` turn it on; anything else reads as off) | G4T (WR-G4T-1): mounts `GET /v1/traces` over C2's `OwnedExport` on the trace projection (`CLICKHOUSE_URL`, required when on: without it the gateway refuses to start); off, no export route exists (404) and the launched API is unchanged. Read by the runtime, never written by the installer (`preflight.NOT_SETTABLE`): enabling it hosted needs T3 and C2 live and the E4 regression rerun (wave-5 plan rule 5) |
- | `ENGINE_MAX_NUM_SEQS` | 8 | `WORKER_CONCURRENCY` | 10 |
- | `MAX_OUTPUT_TOKENS` | 2048 | `MAX_CONTEXT_TOKENS` | 32768 |
- | `TRACE_CAPTURE_BYTES` | 268435456 | `TRACE_METADATA_RESERVE_BYTES` | 8388608 |
+ 
+ The four `DATABASE_POOL_*` names spell the prefix in full; `11 §F2R` item 7 wrote them as `DATABASE_POOL_MIN_SIZE/MAX_SIZE/CONNECT_TIMEOUT_S/STATEMENT_TIMEOUT_MS`, which this reads as one shared prefix rather than four different ones. The G1/Q1 constants are **not yet reads of these settings**: `validate.py`, `intake.py` and `scheduling/memory.py` belong to other tracks, so the wiring is an integration request, and `tests/contracts/test_config_and_imports.py::test_the_g1_and_q1_constants_match_the_deployment_defaults` pins the constants against these defaults so the two cannot drift while it is open.
+ 
