@@ -2,7 +2,7 @@
  "task": "D6J",
  "slice": "D6J + SR-J2-1 + SR-C3L-1",
  "activity": "review",
- "head": "be40bda",
+ "head": "a330241b",
  "worktree": ".claude/worktrees/codex-w5-lab-sql-lw2",
  "branch": "codex/w5-lab-sql-lw2",
  "blockers": [],
@@ -30,23 +30,39 @@
    "cmd": "INFRX_D_TASK=dlab make api-test",
    "exit": 1,
    "summary": "5475 passed, 77 skipped, 9 xfailed, 9 failed: 2 = WR-LSQ-3 (the six new door signatures, until EXPECTED_FUNCTION_CALLERS is wired), 7 = test_outbox_relay[valkey] ForeignContainer infrx-d2-valkey (another checkout); rerun alone: same 7"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_d6j_*.py tests/d/test_d7_*.py tests/d/test_upgrade_lab.py (fix round)",
+   "exit": 0,
+   "summary": "70 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_d6j.py tests/d/test_code_mutants_d7.py (fix round)",
+   "exit": 0,
+   "summary": "264 passed, 0 survivors; new: d6jj_release_repeats, c3l_labels_after_revocation, c3l_labels_carry_rationale, c3l_scores_carry_rationale, d7f_results_ignore_revocation, d7f_result_rights_off, d7f_rights_refuse_leases"
   }
  ],
  "estimate": {
-  "optimistic_h": 1,
-  "likely_h": 2.5,
-  "pessimistic_h": 5,
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
   "confidence": "medium",
-  "basis": "one review round (D10-0025 1/2/5) plus the consuming lane's merge-time rerun over this store; code, checks and mutants are complete",
-  "at": "2026-09-28T07:41Z"
+  "basis": "fix round done; one re-review plus the B1 wiring at merge",
+  "at": "2026-09-28T09:40Z"
  },
  "wiring_requests": [
   "WR-LSQ-1 tests/integration/test_harness.py migration pin: 0031-0040 after 0030",
   "WR-LSQ-2 Makefile api-mutants own-process PG line: + tests/d/test_code_mutants_d6j.py tests/d/test_code_mutants_l3sql.py tests/d/test_code_mutants_d9.py",
   "WR-LSQ-3 tests/d/checks.py EXPECTED_FUNCTION_CALLERS: public.lab_judge_configure/set_budget/request_run/calibration (0037), public.submit_feedback/lab_review_feedback (0038) = {authenticated, service_role}",
-  "WR-LSQ-4 judge lane at merge: compose PgJudgeLedger as J2's JudgeLedger, rerun tests/j/submit with the lab_submission flag on"
+  "WR-LSQ-4 judge lane at merge: compose PgJudgeLedger as J2's JudgeLedger, rerun tests/j/submit with the lab_submission flag on",
+  "WR-LSQ-7 eval-runner lane (B1/B3; I5 reruns), same batch as 0034: runner.freeze registers the evaluator via store.put_evaluator; FakeEvalStore.put_evaluator + F4 run end; two all-revoked assertions expect state 'failed' (diff in D7-be40bda.md Fix round)"
  ],
  "evidence": [
   "research/plan/evidence/d/D6J-be40bda.md"
- ]
+ ],
+ "fix_round": {
+  "0-LSQ-C1": "fixed 67b218cb",
+  "0-LSQ-C2": "fixed 67b218cb",
+  "1-LSQ-INT-1": "lane half fixed a330241b (F6 on finishes); B1/B3/I5 half = WR-LSQ-7, verified on the merged tree (D7-be40bda.md Fix round)"
+ }
 }

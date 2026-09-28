@@ -26,3 +26,91 @@ F3 reaper SKIP LOCKED observed; F4 all-failed run fails; F5 a sample without its
 - WR-LSQ-6 (rollout-control lane, at merge): R3 stores its result with `PgLabDataStore.put_variant_comparison(result, provider_org_id=, actor=)` after B2's `put_eval_report`.
 
 ## Estimate (remaining, D7 follow-ups): 0.5/1.5/3 h, confidence medium; one review round.
+
+## Fix round: 1-LSQ-INT-1 (code head `a330241b`)
+Reproduced on the merged tree (`git merge-tree --write-tree claude/consumer-v1 a330241b`, clean; scratch worktree, scratch-only edit so tests/b PG suites accept `INFRX_D_TASK=dlab`): `tests/b/runner/test_runner_pg.py tests/b/checkpoints/test_checkpoints_pg.py` **10 failed** (`not_found: no such evaluator for this provider`; B3 turns it into `skipped`).
+
+Two causes, not one:
+1. **R167 registered evaluators (0034 WR-B-2(b)).** Kept - it is the requested upgrade - and filed as a wiring request below; B1's `evaluator_ref` and `lab_put_evaluator`'s ref are the same RFC 8785 sha256, so registering in `runner.freeze` is one call. `checkpoints.subscribe` and I5's drills go through `runner.freeze`, so the same call covers B3 and I5.
+2. **F6 and F4 vs B1's revoked-data drills.** F6 refused the *lease* once a grant was revoked, so B1's worker never got to end the case `revoked` and the run wedged: fixed in this lane (`a330241b`) - F6 now refuses a `succeeded` finish (results) instead; leases go out, cases end `failed`/revoked. F4 (D7 review minor: a run whose every case failed ends `failed`) contradicts B1's assertion `report["state"] == "succeeded"` for an all-revoked run: kept (reviewed D7 minor), B1's two assertions and its fake follow in the wiring request.
+
+**WR-LSQ-7 (eval-runner lane B1/B3, same merge batch as 0034; I5 reruns):**
+```diff
+diff --git a/apps/infrx-api/infrx/evaluation/runner/__init__.py b/apps/infrx-api/infrx/evaluation/runner/__init__.py
+index 0d8cf88e..e89ab059 100644
+--- a/apps/infrx-api/infrx/evaluation/runner/__init__.py
++++ b/apps/infrx-api/infrx/evaluation/runner/__init__.py
+@@ -157,6 +157,8 @@ async def freeze(store, payload: dict[str, Any], *, evaluator: dict[str, Any],
+     run = lab.parse(payload)
+     limit = _checked(run, evaluator)
+     await may_schedule(access, user_id=user_id, provider_org_id=provider_org_id)
++    await store.put_evaluator(evaluator, provider_org_id=provider_org_id, actor=user_id,
++                              evaluator_id=lab.REF_RE.fullmatch(run.evaluator_ref).group(3))
+     run_ref = await store.publish(payload, provider_org_id=provider_org_id, actor=user_id)
+     await store.create_run(run_ref, provider_org_id=provider_org_id)
+     return await _pinned(store, run, run_ref, evaluator, limit)
+diff --git a/apps/infrx-api/tests/b/runner/test_runner.py b/apps/infrx-api/tests/b/runner/test_runner.py
+index f94b54b7..3a7024d7 100644
+--- a/apps/infrx-api/tests/b/runner/test_runner.py
++++ b/apps/infrx-api/tests/b/runner/test_runner.py
+@@ -364,7 +364,7 @@ def test_b1_a_created_run_resumes_after_a_revocation_and_ends_revoked() -> None:
+     assert again == frozen
+     report = run(w.runner(worker="w2").run(again))
+     assert report["failures"] == {i: "revoked" for i in w.ids} and len(w.wallet.calls) == 1
+-    assert report["cases"] == {"failed": 3} and report["state"] == "succeeded"
++    assert report["cases"] == {"failed": 3} and report["state"] == "failed"
+     with pytest.raises(errors.NotFound):
+         resume(provider=OTHER)
+     with pytest.raises(errors.InvalidRequest, match="evaluator"):
+diff --git a/apps/infrx-api/tests/b/runner/test_runner_pg.py b/apps/infrx-api/tests/b/runner/test_runner_pg.py
+index 431aec72..7c318808 100644
+--- a/apps/infrx-api/tests/b/runner/test_runner_pg.py
++++ b/apps/infrx-api/tests/b/runner/test_runner_pg.py
+@@ -292,7 +292,7 @@ def test_b1_pg_a_created_run_resumes_after_a_revocation_and_ends_revoked(world,
+             c.frozen.run_ref, c.frozen.cases, c.frozen.limit)
+         report = run(c.runner("w2").run(again))
+         assert report["failures"] == {i: "revoked" for i in c.ids}
+-        assert report["cases"] == {"failed": N} and report["state"] == "succeeded"
++        assert report["cases"] == {"failed": N} and report["state"] == "failed"
+         assert len(c.wallet.calls) == 1 and c.results() == []
+     finally:
+         restore(c.conn)
+diff --git a/apps/infrx-api/tests/b/runner/world.py b/apps/infrx-api/tests/b/runner/world.py
+index 1b100083..cc56dfe9 100644
+--- a/apps/infrx-api/tests/b/runner/world.py
++++ b/apps/infrx-api/tests/b/runner/world.py
+@@ -136,6 +136,9 @@ class FakeEvalStore(FakeLabStore):
+             raise errors.NotFound("no such run for this provider")
+         return run
+ 
++    async def put_evaluator(self, spec, *, provider_org_id, evaluator_id, actor) -> None:
++        """D7's lab_put_evaluator (0034, R167): content-addressed, so the fake keeps nothing."""
++
+     async def create_run(self, run_ref, *, provider_org_id):
+         record = self.catalog.resolve(run_ref, provider_org_id=provider_org_id)
+         dataset = self.catalog.resolve(record.dataset_ref, provider_org_id=provider_org_id)
+@@ -220,9 +223,9 @@ class FakeEvalStore(FakeLabStore):
+         a.update(state=outcome, digest=digest, cost=cost)
+         self.cases[key[:2]]["state"] = "done" if outcome == "succeeded" else "failed"
+         run = self.runs[key[0]]
+-        if not any(c["state"] in ("pending", "leased") for k, c in self.cases.items()
+-                   if k[0] == key[0]):
+-            run["state"] = "succeeded"
++        mine = [c["state"] for k, c in self.cases.items() if k[0] == key[0]]
++        if not any(s in ("pending", "leased") for s in mine):
++            run["state"] = "succeeded" if "done" in mine else "failed"   # 0034 F4
+         return lease
+ 
+     async def release(self, lease):
+```
+
+| command (merged scratch tree, `apps/infrx-api`, `INFRX_D_TASK=dlab`) | exit | result |
+|---|---|---|
+| `pytest -q tests/b/runner/test_runner_pg.py tests/b/checkpoints/test_checkpoints_pg.py` (no WR-LSQ-7) | 1 | 10 failed |
+| same, with `runner.freeze` registering only | 1 | 9 passed, 1 failed (`...resumes_after_a_revocation_and_ends_revoked`: state `failed` - F4) |
+| same, with all of WR-LSQ-7 | 0 | **10 passed** (incl. the WR-B-2(d) 402 case, no longer xfail: `PgLabDataStore.release` exists) |
+| `pytest -q tests/b` (with WR-LSQ-7) | 0 | 65 passed, 10 skipped |
+| `INFRX_MUTANTS=all pytest -q tests/b/runner/test_mutants.py tests/b/checkpoints/test_mutants.py tests/b/reports/test_mutants.py tests/i/lab_eval/test_mutants.py` (with WR-LSQ-7) | 0 | 200 passed |
+| lane: `INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_d7.py` (+ d6j) at `a330241b` | 0 | 264 passed; fix-round mutants `d7f_results_ignore_revocation`, `d7f_result_rights_off`, `d7f_rights_refuse_leases` killed |
+
+Not run: `tests/i/lab_eval/test_drills_pg.py` (needs I5's S3); it calls `runner.freeze`, so WR-LSQ-7 covers it - I5 reruns it at merge.

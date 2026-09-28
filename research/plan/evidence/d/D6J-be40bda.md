@@ -66,3 +66,14 @@ SR-C3L-1 doors (`public`, SECURITY DEFINER, identity only `auth.uid()`, clock `i
 | mutant lists (above, per task) | 0 | l3sql 49, d6j 111, d9 71, d7 148 + d6f 66 (one 214 run): every SQL and Python mutant killed, every case named |
 | `ruff check` (24 changed Python files) | 0 | all checks passed |
 | `git status` | - | clean apart from this evidence; the L3 probe copies were removed; `infrx/state/catalog.py` untouched (`git diff` empty) |
+
+## Fix round (code head `a330241b`; review of handback `a0f7ff54`)
+| finding | fix | commit |
+|---|---|---|
+| 0-LSQ-C1 `lab_judge_release` not idempotent (a repeat freed the hold again, from other runs) | 0036: `if r.state = v_to then return` before any money moves or audit row (0031's `lab_submission_transition` pattern); any other disallowed source state is still refused by 0031's guard trigger, which rolls the budget update back with it. Check: `check_an_ambiguous_submit_is_quarantined_never_resubmitted` repeats the release while another run holds 40 and asserts `held()` and the audit are unchanged. Mutant `d6jj_release_repeats` | `67b218cb` |
+| 0-LSQ-C2 calibration door returned the whole judge result, no grant check | 0037 `lab_judge_calibration`: projects `label_id, run_id, sample_id, rubric_version, accepted, overall_pass, limited, scores[{name, score}]` only (no rationale, notes, `Rejected.detail`), and only rows whose run's grant is `lab_grant_current(grant_id, 'external_judging')`. Check `check_calibration_is_the_providers_own_labels_in_bounded_pages` stores `SECRET-` rationale/notes, asserts the exact key set and no `SECRET`, then revokes and asserts `[]`. Mutants `c3l_labels_after_revocation`, `c3l_labels_carry_rationale`, `c3l_scores_carry_rationale` | `67b218cb` |
+
+| command (`apps/infrx-api`, `INFRX_D_TASK=dlab`) | head | exit | result |
+|---|---|---|---|
+| `pytest -q tests/d/test_d6j_*.py tests/d/test_d7_*.py tests/d/test_upgrade_lab.py` | `a330241b` | 0 | 70 passed |
+| `INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_d6j.py tests/d/test_code_mutants_d7.py` | `a330241b` | 0 | 264 passed (all four new D6J mutants and the three D7 fix-round mutants collected and killed), 0 survivors |
