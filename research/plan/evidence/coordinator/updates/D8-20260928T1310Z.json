@@ -1,0 +1,84 @@
+{
+ "task": "D8",
+ "slice": "D8 = SR-P1-1 + SR-P3-1 + SR-P2-1 + WR-B3-1 (0042); WR-N4-2, WR-B4-2, WR-R4-2, SR-J3-1, SR-R1-1, WR-I2L-4, WR-COMP-1 (0043); lane lab-sql-lw3",
+ "activity": "review",
+ "head": "1079c328",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw3",
+ "branch": "codex/w5-lab-sql-lw3",
+ "blockers": [],
+ "owned_paths": [
+  "apps/app/supabase/migrations/0042_lab_d8_ledgers.sql",
+  "apps/app/supabase/migrations/0043_lab_reads_and_proposals.sql",
+  "apps/infrx-api/infrx/state/lab_pipeline.py",
+  "apps/infrx-api/infrx/state/lab_consent.py",
+  "apps/infrx-api/infrx/state/lab_data.py",
+  "apps/infrx-api/infrx/state/lab_rollout.py",
+  "apps/infrx-api/tests/d/test_d8_*.py",
+  "apps/infrx-api/tests/d/code_mutants_d8.py",
+  "apps/infrx-api/tests/d/test_code_mutants_d8.py",
+  "apps/infrx-api/tests/d/code_mutants_d6j.py",
+  "apps/infrx-api/tests/d/test_upgrade_lab.py",
+  "apps/infrx-api/tests/d/test_l2sql_access.py"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_d8_ledgers.py (0042-0043 aside: seam first)",
+   "exit": 1,
+   "summary": "12 failed (functions absent); test_d8_requests red proven by its 44 killed mutants (its first red run errored on a world bug)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_d8_ledgers.py tests/d/test_d8_requests.py tests/d/test_c2rpc_content.py tests/d/test_d6j_judge.py tests/d/test_d6j_doors.py",
+   "exit": 0,
+   "summary": "52 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_upgrade_lab.py tests/d/test_d8_units.py",
+   "exit": 0,
+   "summary": "4 + 6 passed"
+  },
+  {
+   "cmd": "merged scratch tree (tip+content+judge-lw4+rollout-routing+lab-sql-lw2+lane): P1 test_annotations_pg on PgLabelLog, B3 test_checkpoints_pg on PgCheckpointLedger, P3 test_training_services PG case on PgRunLedger",
+   "exit": 0,
+   "summary": "5 passed (scratch swaps in D8-1079c32-merged-swap.patch)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab make api-test",
+   "exit": 2,
+   "summary": "5719 passed, 77 skipped, 9 xfailed, 12 failed: 7 test_outbox_relay[valkey] ForeignContainer infrx-d2-valkey (another checkout; rerun alone same 7), 5 = WR-LSQ3-3/4 wiring (verified 5 passed with D8-1079c32-wiring.patch)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_{d6j,d7,d9,l2sql,c2rpc,d8}.py",
+   "exit": 0,
+   "summary": "565 passed, 0 survivors; D8 61 + 44 SQL + 28 Python, C2 50 SQL + 9 Python"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2.5,
+  "pessimistic_h": 6,
+  "confidence": "medium",
+  "basis": "one review round on two migrations and five adapters (LW2 D6J/D9 fix round ~1.5 h) plus consuming lanes' merge reruns (P1/P3/B3 already green on the merged tree)",
+  "at": "2026-09-28T13:10Z"
+ },
+ "wiring_requests": [
+  "WR-LSQ3-1 tests/integration/test_harness.py migration pin: 0041, 0042, 0043 after 0040",
+  "WR-LSQ3-2 Makefile api-mutants own-process PG line: + tests/d/test_code_mutants_c2rpc.py tests/d/test_code_mutants_d8.py",
+  "WR-LSQ3-3 tests/d/checks.py EXPECTED_FUNCTION_CALLERS: public.lab_content_ref_issue(text,uuid,text,uuid,text), public.lab_judge_runs(uuid,uuid) = {authenticated, service_role} (+ WR-LSQ-3's six if not yet in) - D8-1079c32-wiring.patch",
+  "WR-LSQ3-4 tests/d/checks_reads.py RUNTIME_FUNCTIONS += record_rollout_assignment(jsonb), release_active(text), release_eligible(uuid,uuid); checks_operator.py:478 41 -> 44 - D8-1079c32-wiring.patch",
+  "WR-P1-D8 pipelines: test_annotations_pg uses PgLabelLog(connect)",
+  "WR-P3-D8 pipelines: test_training_services uses PgRunLedger + lab_submission flag + payer budget; compose PgRunLedger",
+  "WR-B3-D8 eval-ops: test_checkpoints_pg on PgCheckpointLedger (DB clock at NOW, per-world subscription ids) + WR-LSQ-7",
+  "WR-P2-D8 judge lane: TeacherWiring.ledger = PgTeacherLedger(connect); collect failures -> record_failures",
+  "WR-J3-D8 judge lane: J3 report job -> PgJudgeLedger.put_calibration; WR-J3-2 port now has lab_judge_runs",
+  "WR-R1-3 (amended) composition: Router(PgRoutingReleases(<infrx_runtime login>), ShadowRunner) behind ROLLOUT_ROUTING",
+  "WR-R4-1/WR-B4-1/WR-N4-1 lab-api: routes over PgReleaseProposals, PgLabReads, PgCheckpointLedger.listing",
+  "WR-I2L-4 operator: password for infrx_lab_control out of band; INFRX_LAB_DATABASE_URL names it",
+  "WR-COMP-1 worker: evaluators = lambda ref: store.evaluator(ref, provider_org_id=ref.split(':')[2]) (0034 already provides the read)"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/D8-1079c32.md",
+  "research/plan/evidence/d/D8-1079c32-wiring.patch",
+  "research/plan/evidence/d/D8-1079c32-merged-swap.patch",
+  "research/plan/evidence/d/C2-dd08e1e.md"
+ ]
+}

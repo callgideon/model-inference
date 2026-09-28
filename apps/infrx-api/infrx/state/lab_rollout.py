@@ -103,3 +103,72 @@ class PgReleaseStore:
         return (await self._call("lab_release_transition", {
             "policy_ref": policy_ref, "fence": fence, "to": to, "decision": decision,
             "reasons": list(reasons)}))["fence"]
+
+
+# --- WR-R4-2: release proposals (`0043_lab_reads_and_proposals.sql`) ------------------------
+class PgReleaseProposals:
+    """The Lab's proposals (R4 / WR-R4-1's route): one pending per release revision, filed at
+    the fence the page showed; an operator's approval is 0039's CAS at that fence."""
+
+    _call = PgLabDataStore._call
+
+    def __init__(self, connect: Connect) -> None:
+        self._connect = connect
+
+    async def propose(self, policy_ref: str, *, provider_org_id: str, proposal_id: str,
+                      kind: str, fence: int, proposed_by: str) -> dict[str, Any]:
+        return await self._call("lab_propose_release", {
+            "provider_org_id": provider_org_id, "proposal_id": proposal_id,
+            "policy_ref": policy_ref, "kind": kind, "fence": fence, "proposed_by": proposed_by})
+
+    async def decide(self, proposal_id: str, *, approve: bool, decided_by: str,
+                     decision: dict[str, Any] | None = None,
+                     reasons: tuple[str, ...] = ()) -> dict[str, Any]:
+        if approve:
+            records.parse(decision)             # the contract refuses first (LabRejected)
+        return await self._call("lab_decide_release_proposal", {
+            "proposal_id": proposal_id, "approve": approve, "decided_by": decided_by,
+            "decision": decision, "reasons": list(reasons)})
+
+    async def proposals(self, *, provider_org_id: str) -> list[dict[str, Any]]:
+        return await self._call("lab_release_proposals", {"provider_org_id": provider_org_id})
+
+
+# --- SR-R1-1: R1's routing ReleaseStore (0043, infrx_runtime only) ---------------------------
+class PgRoutingReleases:
+    """R1's `ReleaseStore` (`infrx.rollouts.routing`) over D9: the running head of an alias
+    with its candidates' R62 pins, eligibility read now, and one assignment per admitted
+    request. `connect` is the runtime's own login (infrx_runtime); nothing else may call it."""
+
+    def __init__(self, connect: Connect) -> None:
+        self._connect = connect
+
+    async def _row(self, sql: str, params: tuple):
+        from psycopg import Error
+
+        from .jobstore import domain_error
+        conn = await self._connect()
+        try:
+            return await (await conn.execute(sql, params)).fetchone()
+        except Error as failed:
+            raise domain_error(failed) from None
+        finally:
+            await conn.close()
+
+    async def active(self, requested_model: str):
+        row = await self._row("select record, policy_ref, revisions, shadow_limit from "
+                              "infrx.release_active(%s)", (requested_model,))
+        if row is None:
+            return None
+        from ..rollouts.routing import Release           # R1's (merged beside this)
+        return Release(policy=records.parse(row[0]), policy_ref=row[1], revisions=row[2],
+                       shadow_limit=row[3])
+
+    async def eligible(self, policy_id: str, auth: Any) -> bool:
+        return (await self._row("select infrx.release_eligible(%s, %s)",
+                                (policy_id, auth.org_id)))[0]
+
+    async def record(self, assignment) -> None:
+        from psycopg.types.json import Jsonb
+        await self._row("select infrx.record_rollout_assignment(%s)",
+                        (Jsonb(assignment.model_dump(mode="json", by_alias=True)),))

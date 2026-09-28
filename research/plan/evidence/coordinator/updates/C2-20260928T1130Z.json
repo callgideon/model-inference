@@ -1,0 +1,57 @@
+{
+ "activity": "review",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw3",
+ "branch": "codex/w5-lab-sql-lw3",
+ "blockers": [],
+ "task": "C2",
+ "slice": "C2-RPC (lab-sql, WR-C2-1 / WR-C2-SQL-1)",
+ "head": "dd08e1ec",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0041_lab_content_refs.sql",
+  "apps/infrx-api/infrx/state/lab_content.py",
+  "apps/infrx-api/tests/d/test_c2rpc_*.py",
+  "apps/infrx-api/tests/d/code_mutants_c2rpc.py",
+  "apps/infrx-api/tests/d/test_code_mutants_c2rpc.py"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_c2rpc_content.py (0041-0043 moved aside: seam first)",
+   "exit": 1,
+   "summary": "10 failed: function infrx.lab_content_ref_issue(jsonb) does not exist"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_c2rpc_content.py tests/d/test_c2rpc_units.py",
+   "exit": 0,
+   "summary": "10 + 2 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_c2rpc.py",
+   "exit": 0,
+   "summary": "62 passed: 50 SQL + 9 Python mutants killed, every case named"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab make api-test",
+   "exit": null,
+   "summary": "see D8 update"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "one review round (D10-0025 1/2/5) plus the content lane's merge-time pg world (WR-C2-5)",
+  "at": "2026-09-28T11:30Z"
+ },
+ "wiring_requests": [
+  "WR-LSQ3-1 test_harness pin 0041-0043 after 0040",
+  "WR-LSQ3-2 Makefile api-mutants own-process PG line + tests/d/test_code_mutants_c2rpc.py",
+  "WR-LSQ3-3 checks.py EXPECTED_FUNCTION_CALLERS: public.lab_content_ref_issue(text, uuid, text, uuid, text)",
+  "WR-C2-5 content lane at merge: tests/content pg world over PgContentRefs + PgAccessStore",
+  "WR-C2-2 (unchanged) Retention(holds=ContentAccess(PgContentRefs(connect), retention).holds)",
+  "WR-N3-4 datasets lane (optional): lineage.blocked/permitted over PgSampleRestrictions"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/C2-dd08e1e.md"
+ ]
+}
