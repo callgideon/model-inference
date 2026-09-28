@@ -3,7 +3,7 @@ Lab rows the scenarios judge - on the same fresh clone, through the merged Lab c
 
 Two providers: A is the seed's NemoStation (it owns the served Marlin model and the private dev
 deployment); B is added here with a model of its own. Users: DEV_A and DEV_B (developers),
-VIEWER_A (viewer), ADMIN_A (A's administrator), and the two consumer tenants E3C provisions (alpha, beta), who hold no
+VIEWER_A (viewer), ADMIN_A and ADMIN_B (administrators), and the two consumer tenants E3C provisions (alpha, beta), who hold no
 provider membership. Grants: alpha's organization -> A for provider_sharing (A's model,
 request content); beta's organization grants nobody. Writes go through the L2-SQL RPCs as the
 granting owner; reads go through `LabAccess` over `PgAccessStore` (service_role) and through
@@ -40,6 +40,7 @@ MODEL_A, MODEL_B = stack.SEED_MODEL, "d0000009-0000-4000-8000-000000000009"
 DEV_A, DEV_B = "d1000000-0000-4000-8000-00000000000a", "d1000000-0000-4000-8000-00000000000b"
 VIEWER_A = "e1000000-0000-4000-8000-00000000000a"
 ADMIN_A = "a1000000-0000-4000-8000-00000000000a"      # A's administrator: proposes publication
+ADMIN_B = "a1000000-0000-4000-8000-00000000000b"      # B's administrator
 OPERATOR = "operator:e3l"                             # the operator session's audited principal
 #: the seed's private dev endpoint as a credential names it (E3C s16's PRIVATE_MODEL)
 PRIVATE_MODEL = "nemostation/marlin-2b-dev"
@@ -77,13 +78,16 @@ def seed_lab(trip) -> None:
     sql(trip, "insert into auth.users (id, email, email_confirmed_at) values "
             "(%s, 'dev-a@e3l.invalid', infrx.now()), (%s, 'dev-b@e3l.invalid', infrx.now()), "
             "(%s, 'viewer-a@e3l.invalid', infrx.now()), (%s, 'admin-a@e3l.invalid', "
-            "infrx.now())", DEV_A, DEV_B, VIEWER_A, ADMIN_A)
+            "infrx.now()), (%s, 'admin-b@e3l.invalid', infrx.now())",
+            DEV_A, DEV_B, VIEWER_A, ADMIN_A, ADMIN_B)
     sql(trip, "insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by, "
             "granted_at) values (%s, %s, 'developer', 'e3l', infrx.now() - interval '1 day'), "
             "(%s, %s, 'developer', 'e3l', infrx.now() - interval '1 day'), "
             "(%s, %s, 'viewer', 'e3l', infrx.now() - interval '1 day'), "
+            "(%s, %s, 'administrator', 'e3l', infrx.now() - interval '1 day'), "
             "(%s, %s, 'administrator', 'e3l', infrx.now() - interval '1 day')",
-            PROVIDER_A, DEV_A, PROVIDER_B, DEV_B, PROVIDER_A, VIEWER_A, PROVIDER_A, ADMIN_A)
+            PROVIDER_A, DEV_A, PROVIDER_B, DEV_B, PROVIDER_A, VIEWER_A, PROVIDER_A, ADMIN_A,
+            PROVIDER_B, ADMIN_B)
     grant(trip, alpha, PROVIDER_A, MODEL_A, "provider_sharing")
 
 

@@ -163,11 +163,57 @@ def test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership(wor
         assert rows() == before + 1
 
 
-def test_l04_publication_needs_operator_approval_and_snapshots_the_rate(workdir):
-    waits("l04", "L3", "L4", steps="DEV_A proposes publication; the proposal alone changes no "
-          "listing; the operator approves with a rate card; the audit row names both actors and "
-          "the rate snapshot; DEV_B cannot propose or approve for A")
-    unbound()
+def test_l04_publication_needs_operator_approval_and_snapshots_the_rate(workdir,
+                                                                       record_property):
+    """Oracle: only A's administrator proposes (a developer is forbidden; B's administrator
+    finds nothing, in A's workspace or naming A's revision in its own); the proposal alone moves no listing; the operator's approval adds listing
+    version 2 on the proposal at a NEW card - the rate snapshot the operator approved, under
+    the operator's name - and the audit names both actors with the before/after listing.
+    The seed's card is untouched."""
+    with world.composed(workdir, start=()) as trip:
+        lab.seed_lab(trip)
+        ctl = lab.control(trip)
+        revision, dev = lab.ready_dev(ctl, "l04")
+        source = dev.deployment_revision_id
+        refused = {who: lab.refused_as(ctl.propose(user, provider, source,
+                                                   endpoint_name="marlin-2b"))
+                   for who, user, provider in (("developer", DEV_A, A),
+                                               ("other_provider", lab.ADMIN_B, A),
+                                               ("other_workspace", lab.ADMIN_B, lab.PROVIDER_B))}
+        seed = lab.listing(trip)
+        proposal = lab.call(ctl.propose(ADMIN_A, A, source, endpoint_name="marlin-2b"))
+        assert lab.listing(trip) == seed, "a proposal alone moved the listing"
+        published = lab.call(ctl.approve(lab.operator(), proposal.deployment_revision_id,
+                                          rate_card_version="rc_e3l_l04", input_rate="300",
+                                          output_rate="900", expected_version=seed[0],
+                                          reason="e3l l04"))
+        card = trip.one("select deployment_revision_id::text, serving_version_id::text, "
+                        "input_rate_per_million::text, output_rate_per_million::text, "
+                        "approved_by, provisional from infrx.rate_card_versions where "
+                        "rate_card_version = 'rc_e3l_l04'")
+        events = [(e.action, e.actor, e.subject, e.before and e.before.get("version"),
+                   e.after.get("version"), e.after.get("rate_card_version"))
+                  for e in lab.call(ctl.events(ADMIN_A, A))
+                  if e.action in ("lab_propose", "lab_publish")]
+        seed_card = trip.one("select input_rate_per_million::text, output_rate_per_million::text"
+                             " from infrx.rate_card_versions where rate_card_version = %s",
+                             stack.SEED_CARD)
+        record_property("publication", {"refused": refused, "seed": seed, "card": card,
+                                        "events": events})
+        assert refused == {"developer": "Forbidden", "other_provider": "NotFound",
+                           "other_workspace": "NotFound"}, refused
+        assert (published.version, published.deployment_revision_id,
+                published.rate_card_version) == (seed[0] + 1, proposal.deployment_revision_id,
+                                                 "rc_e3l_l04")
+        assert lab.listing(trip) == (seed[0] + 1, proposal.deployment_revision_id, "rc_e3l_l04")
+        assert card[:2] == (proposal.deployment_revision_id, revision.serving_version_id), card
+        assert [float(r) for r in card[2:4]] == [300, 900] and card[4:] == (lab.OPERATOR,
+                                                                              False), card
+        assert events == [
+            ("lab_propose", ADMIN_A, proposal.deployment_revision_id, None, None, None),
+            ("lab_publish", lab.OPERATOR, stack.CREDIT_ALIAS, seed[0], seed[0] + 1,
+             "rc_e3l_l04")], events
+        assert [float(r) for r in seed_card] == [400, 1200], seed_card
 
 
 def test_l05_app_discovers_and_serves_the_published_revision(workdir):

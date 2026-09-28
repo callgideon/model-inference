@@ -119,7 +119,9 @@ L08_GRANT = "test_l08_no_grant_no_content"
 L08_PURPOSE = "test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call"
 L08_DIRECT = "test_l08_a_provider_session_reads_no_consumer_rows_directly"
 L03 = "test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership"
+L04 = "test_l04_publication_needs_operator_approval_and_snapshots_the_rate"
 L3 = "infrx/lab/control/__init__.py"
+M32 = M + "0032_lab_control.sql"
 L11_DOWN = "test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving"
 L11_BAD = "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once"
 
@@ -180,6 +182,17 @@ STACK_MUTANTS += (
     _m("st_foreign_model_registers", "a provider registers only its own models", L3,
        "        if await self.store.model_provider(serving.model_id) != provider_org_id:",
        "        if False:", L03),
+    _m("st_developer_proposes", "only an administrator proposes publication", L3,
+       "        source = await self._dev(user_id, provider_org_id, deployment_revision_id,\n"
+       "                                 ProviderCapability.propose_publication)",
+       "        source = await self._dev(user_id, provider_org_id, deployment_revision_id,\n"
+       "                                 ProviderCapability.manage_dev_deployment)", L04),
+    _m("st_card_unattributed", "the rate snapshot names the approving operator", L3,
+       "effective_at=await self.store.db_now(), approved_by=operator.principal)",
+       "effective_at=await self.store.db_now(), approved_by=\"operator\")", L04),
+    _m("st_publish_audit_actor", "the publish audit names its actor", M32,
+       "perform infrx.lab_control_audit(d.provider_org_id, 'lab_publish', p_args->>'actor',",
+       "perform infrx.lab_control_audit(d.provider_org_id, 'lab_publish', 'operator',", L04),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 
