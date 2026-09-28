@@ -13,6 +13,7 @@ Each `check_*` is the check a mutant in `code_mutants_d6j.py` (`DOORS`) must bre
 """
 from __future__ import annotations
 
+import json
 import threading
 
 import psycopg
@@ -182,10 +183,15 @@ def check_a_run_request_is_idempotent_and_foreign_ids_are_unknown(conn) -> str:
 @rolled_back
 def check_calibration_is_the_providers_own_labels_in_bounded_pages(conn) -> str:
     """LAB-ACCESS / C3L paging: the calibration read is this provider's runs' labels only,
-    keyset on label_id, never more than 50 rows."""
+    keyset on label_id, never more than 50 rows; only the label fields (never the judge's
+    rationale, notes or a rejection's detail about the grantor's content); nothing once the
+    grantor revoked the run's external_judging grant."""
     j.submitted(conn, j.uid(0x60))
+    scored = {"scores": [{"name": "grounded", "score": 4, "rationale": "SECRET-RATIONALE"}],
+              "overall_pass": True, "notes": "SECRET-NOTES", "limited": False,
+              "media_required": True}
     ok(conn, "lab_judge_record_results", {"run_id": j.uid(0x60), "results": [
-        {"sample_id": s, "rubric_version": v, "accepted": True, "result": {"s": v}}
+        {"sample_id": s, "rubric_version": v, "accepted": True, "result": scored}
         for s in j.SAMPLES for v in (1, 2)]})
     other = ok(conn, "lab_judge_reserve", j.reserve(j.uid(0x61), provider=OTHER,
                                                     payer=j.OTHER_PAYER,
@@ -201,11 +207,19 @@ def check_calibration_is_the_providers_own_labels_in_bounded_pages(conn) -> str:
     assert (len(page), len(rest), labels == sorted(labels)) == (4, 2, True), (page, rest)
     assert {r["run_id"] for r in page + rest} == {j.uid(0x60)}, "another provider's labels"
     assert len(door(conn, DEV, "lab_judge_calibration", NEMO, None, 999)[1]) == 6
+    label = page[0]
+    assert "SECRET" not in json.dumps(page + rest), "the judge's text about the content leaked"
+    assert (set(label), label["scores"], label["overall_pass"]) == (
+        {"label_id", "run_id", "sample_id", "rubric_version", "accepted", "overall_pass",
+         "limited", "scores"}, [{"name": "grounded", "score": 4}], True), label
     conn.execute("insert into infrx.lab_judge_results (run_id, sample_id, rubric_version, "
                  "accepted, result) select %s, %s, v, true, '{}' from "
                  "generate_series(3, 60) v", (j.uid(0x60), j.SAMPLES[0]))
     assert len(door(conn, DEV, "lab_judge_calibration", NEMO, None, 999)[1]) == 50
-    return "own labels only; keyset pages; clamped to 50"
+    revoke(conn)
+    assert door(conn, DEV, "lab_judge_calibration", NEMO, None, 50) == (None, []), \
+        "labels about a revoked grantor's content are still read"
+    return "own labels only, label fields only; keyset pages; clamped to 50; gone on revoke"
 
 
 def check_a_concurrent_double_click_queues_one_run(conn) -> str:

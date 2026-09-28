@@ -27,7 +27,10 @@
 --       provider gets the stored request; another provider's run id is P0002).
 --   public.lab_judge_calibration(p_provider_org_id, p_after, p_limit): developer+; the
 --       provider's own runs' judge labels (0036 `lab_judge_results`), keyset on label_id,
---       at most min(p_limit, 50) rows. Only the label, never the grantor's content.
+--       at most min(p_limit, 50) rows, and only while the run's grant is still current
+--       for external_judging. Only the label (accepted, overall_pass, limited, each
+--       criterion's name and score) - never a rationale, notes or Rejected.detail, which are
+--       judge text about the grantor's content.
 --
 -- ROLLBACK (this file alone; nothing earlier references it): drop function
 --   public.lab_judge_calibration(uuid, uuid, int),
@@ -206,10 +209,16 @@ begin
   perform infrx.lab_judge_door(p_provider_org_id, 'developer');
   return (select coalesce(jsonb_agg(jsonb_build_object('label_id', x.label_id,
             'run_id', x.run_id, 'sample_id', x.sample_id, 'rubric_version', x.rubric_version,
-            'accepted', x.accepted, 'result', x.result) order by x.label_id), '[]')
+            'accepted', x.accepted, 'overall_pass', x.result->'overall_pass',
+            'limited', x.result->'limited',
+            'scores', (select coalesce(jsonb_agg(jsonb_build_object('name', s->'name',
+                                                                    'score', s->'score')), '[]')
+                         from jsonb_array_elements(coalesce(x.result->'scores', '[]')) s))
+            order by x.label_id), '[]')
     from (select l.* from infrx.lab_judge_results l
             join infrx.lab_judge_runs r on r.run_id = l.run_id
            where r.provider_org_id = p_provider_org_id
+             and infrx.lab_grant_current(r.grant_id, 'external_judging')
              and (p_after is null or l.label_id > p_after)
            order by l.label_id
            limit least(greatest(coalesce(p_limit, 50), 0), 50)) x);

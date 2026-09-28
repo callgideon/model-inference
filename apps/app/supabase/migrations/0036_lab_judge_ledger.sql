@@ -325,6 +325,9 @@ begin
   if v_to is null or v_to not in ('failed', 'cancelled') then
     perform infrx.refuse('state_conflict', 'a release ends a run failed or cancelled');
   end if;
+  if r.state = v_to then
+    return infrx.lab_judge_json(r);  -- a repeated release: its hold was freed once already
+  end if;
   update infrx.lab_budgets set reserved = reserved - r.reserved, updated_at = infrx.now()
    where (provider_org_id, payer_ref) = (r.provider_org_id, r.payer_ref);
   update infrx.lab_judge_runs set state = v_to where run_id = r.run_id returning * into r;

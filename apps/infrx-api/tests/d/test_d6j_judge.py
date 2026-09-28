@@ -283,7 +283,11 @@ def check_an_ambiguous_submit_is_quarantined_never_resubmitted(conn) -> str:
                                               "reason": "operator cancelled"})
     assert (released["state"], held(conn)[0], audit(conn, uid(10))) == \
         ("cancelled", "40.00000000", ["cancelled"])
-    return "quarantined with its hold; reconciled by lookup; declared releases only"
+    again = ok(conn, "lab_judge_release", {"run_id": uid(10), "state": "cancelled",
+                                           "reason": "a retried release"})
+    assert (again["state"], held(conn)[0], audit(conn, uid(10))) == \
+        ("cancelled", "40.00000000", ["cancelled"]), "a repeated release freed another run's hold"
+    return "quarantined with its hold; reconciled by lookup; declared releases only, once"
 
 
 @rolled_back

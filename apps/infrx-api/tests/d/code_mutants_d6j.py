@@ -325,6 +325,9 @@ JUDGE = (
        "(r.provider_org_id, r.payer_ref);\n  update infrx.lab_judge_runs set state = v_to",
        "  update infrx.lab_judge_runs set state = v_to", J_AMBIGUOUS,
        "a failed run keeps its hold forever"),
+    _j("d6jj_release_repeats", "  if r.state = v_to then\n    return infrx.lab_judge_json(r);",
+       "  if false then\n    return infrx.lab_judge_json(r);", J_AMBIGUOUS,
+       "a retried release frees the hold a second time, taking it from other runs"),
     _j("d6jj_results_unsent", "  if exists (select 1 from jsonb_array_elements("
        "p_args->'results') x\n              where not", "  if false and exists (select 1 from "
        "jsonb_array_elements(p_args->'results') x\n              where not", J_RESULTS,
@@ -446,6 +449,17 @@ DOORS = (
     _k("c3l_labels_unbounded", "           limit least(greatest(coalesce(p_limit, 50), 0), 50)) "
        "x);", "           limit greatest(coalesce(p_limit, 50), 0)) x);", D_LABELS,
        "one call reads every label"),
+    _k("c3l_labels_after_revocation", "             and infrx.lab_grant_current(r.grant_id, "
+       "'external_judging')\n", "", D_LABELS,
+       "a provider keeps reading labels about a revoked grantor's content"),
+    _k("c3l_labels_carry_rationale", "            'accepted', x.accepted, 'overall_pass', "
+       "x.result->'overall_pass',", "            'accepted', x.accepted, 'result', x.result, "
+       "'overall_pass', x.result->'overall_pass',", D_LABELS,
+       "the judge's rationale and notes about the grantor's content reach the provider"),
+    _k("c3l_scores_carry_rationale", "            'scores', (select coalesce(jsonb_agg("
+       "jsonb_build_object('name', s->'name',\n", "            'scores', (select coalesce("
+       "jsonb_agg(s || jsonb_build_object('name', s->'name',\n", D_LABELS,
+       "each criterion's rationale reaches the provider"),
 )
 DOORS_NAMES = tuple(m.name for m in DOORS)
 
