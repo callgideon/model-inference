@@ -132,6 +132,7 @@ I01_LABELS = "test_i01_labels_keep_their_method_evidence_and_review"
 I01_TEACHER = "test_i01_the_teacher_never_sees_the_holdout_and_its_labels_stay_synthetic"
 I02_BUNDLE = "test_i02_the_bundle_trains_on_the_train_export_and_pins_the_holdout"
 I02_ELIGIBLE = "test_i02_a_candidate_is_eligible_only_after_its_holdout_evaluation"
+I02_OTHER_HOLDOUT = "test_i02_an_evaluation_on_another_holdout_never_makes_a_candidate_eligible"
 I02_BAD = "test_i02_the_bad_checkpoint_with_the_better_training_loss_is_rejected"
 I02_REJECTED = "test_i02_missing_and_late_checkpoints_are_rejected_and_never_evaluated"
 I03_TRACES = "test_i03_permitted_traces_become_a_derived_version_over_the_frozen_holdout"
@@ -175,6 +176,11 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        'result.get("holdout_sha256")) != ("succeeded", bundle["dataset_ref"], "holdout",',
        'result.get("holdout_sha256")) != (result.get("state"), bundle["dataset_ref"], '
        '"holdout",', I02_ELIGIBLE),
+    _m("st_eligible_on_another_holdout", "eligibility needs the evaluation on exactly the "
+       "bundle's frozen holdout (holdout leakage)", P3,
+       '"holdout",\n                                              bundle["holdout"]["sha256"]):',
+       '"holdout",\n                                              result.get("holdout_sha256")):',
+       I02_OTHER_HOLDOUT),
     _m("st_submit_ignores_revocation", "submit re-reads every bundled sample's training "
        "grant", P3, '    if set(bundle["train"] + bundle["dev"]) - allowed:', "    if False:",
        I04_REVOKED),

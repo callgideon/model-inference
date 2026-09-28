@@ -236,6 +236,25 @@ def test_i02_a_candidate_is_eligible_only_after_its_holdout_evaluation(lab, work
     lw.save(workdir, "report-base-cand1.json", first.cand1)
 
 
+def test_i02_an_evaluation_on_another_holdout_never_makes_a_candidate_eligible(lab):
+    """TRAIN-RECOVER (holdout leakage): a validated checkpoint whose succeeded evaluation ran
+    on a holdout other than the bundle's frozen one - another pin, or another dataset
+    version's - is never eligible; the same answer on the frozen holdout is."""
+    from infrx.contracts import errors
+    first = training1(lab)
+    cid = first.good["checkpoint_id"]
+    kept = lab.evals.done[cid]
+    try:
+        for other in ({"holdout_sha256": "sha256:" + "0" * 64},
+                      {"dataset_ref": lw.uid(9, 0xda8), "holdout_sha256": "sha256:" + "1" * 64}):
+            lab.evals.done[cid] = {**kept, **other}
+            with pytest.raises(errors.StateConflict):
+                lab.approve(first.ext, 1)
+    finally:
+        lab.evals.done[cid] = kept
+    assert lab.approve(first.ext, 1)["evaluation"] == first.eligible["evaluation"]
+
+
 def test_i02_the_bad_checkpoint_with_the_better_training_loss_is_rejected(lab, workdir):
     """TRAIN-RECOVER: the seeded bad checkpoint reports the lower training loss and scores
     better than the baseline on the train cases, yet B2 over the frozen holdout rejects it:
