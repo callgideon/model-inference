@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "d36d18bb",
+ "integration_head": "3df6f537",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 217,
- "updated": "2026-09-28T12:21:53Z",
+ "revision": 218,
+ "updated": "2026-09-28T13:01:11Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4890,18 +4890,18 @@
     "prefix": "infrx-lab-c2-",
     "db": "lab_c2"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T13:01:11Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at cf0b1df9 (C2 ContentAccess over a fake C2-RPC: tc_ handles, sha256 stored, bound to grant/recipient/user, re-checked on every read, T3 wins; Lab refs adapter; G4T GET /v1/traces unmounted with OwnedExport; major F1 export-cursor truncation fixed+rechecked) → merge batch #6 (wf_5b0a97ab-f86) with rollout-routing (both carry composition-root patches: apply after batch #4's LAB-API patch and the composition lane) + WR-C2-3/WR-G4T-2; WR-C2-1 → lab-sql; WR-C2-2, WR-G4T-3 → integration",
+   "next_action": "DONE (code): merged --no-ff at 97fe2cd5 + WR-G4T-1/C2-3/G4T-2 7d535702 (TRACE_EXPORT_API OFF); C2 real half after C2-RPC (lab-sql-lw3); WR-C2-2/G4T-3 → composition batch 2",
    "estimate": {
-    "optimistic_h": 1.5,
-    "likely_h": 3,
-    "pessimistic_h": 7,
-    "confidence": "medium",
-    "basis": "handback: C2 1/2/4 after C2-RPC + G4T 0.5/1/3",
-    "at": "2026-09-28T06:59:31Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T13:01:11Z"
    },
    "evidence": [
     "research/plan/evidence/c/C2-ae7375e.md",
@@ -4928,18 +4928,18 @@
     "prefix": "infrx-r1-",
     "db": "r1"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T13:01:11Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at 19290b7f (R1 Router/hook over a D9-shaped ReleaseStore fake; explicit pins, stable cohorts, eligibility at request time, shadow never settles — proven through G2's real Relay; major RR-1 refused/replayed admissions recorded, fixed+rechecked) → merge batch #6 (wf_5b0a97ab-f86) (after #4 and the composition lane, with content) with WR-R1-1 (the tip-rebased wiring patch, ROLLOUT_ROUTING OFF; Q6 answered by rule 5: merge behind the OFF flag, hosted enable needs the E4 rerun) + WR-R1-2 (api-mutants) + rulings P-R1-a/b/c numbered R179–R181; SR-R1-1 → lab-sql D9 (release_active/release_eligible/record_rollout_assignment); WR-R1-3 → after D9+L3; WR-R1-4 → I3B optional",
+   "next_action": "DONE (code): merged --no-ff at 22ae31dc + WR-R1-1/2 6707f107 + R179–R181 (ROLLOUT_ROUTING OFF; G2/G3 unchanged; 986 mutants); real half on D9 after SR-R1-1 (lab-sql-lw3)",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 3,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "handback: wiring apply + real-PG rerun after D9",
-    "at": "2026-09-28T06:28:37Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T13:01:11Z"
    },
    "evidence": [
     "research/plan/evidence/r/R1-8d2e636.md",
@@ -5229,18 +5229,18 @@
     "prefix": "infrx-t2f-",
     "db": "t2f"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-27T21:02:36Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T13:01:11Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at c241ca81 (worker-only: TRACE_PUMPS = shipper/retention/feedback-projection loops, t2f proof; LAB_EVAL_WORKER = OutboxRelay(PgLabDataStore, EvalRuns) resume-never-freeze + lab_recover, b1 proof, refuses to start until evaluator (WR-COMP-1) and dev-target (WR-COMP-2) sources exist; E4 regression green, App gate 17/17; WR-N-3 NOT mounted — needs a ruling on the Lab provider identity at the gateway + a route owner; minor R1/R2 fixed+rechecked) → merge batch #6 (wf_5b0a97ab-f86) first (its given_stores_replaced re-anchor and DEPLOYMENT_EXPECTED edits conflict with the tip's 37859776 re-cut and lab-api's patch: resolve keeping both), rulings proposal numbered R182; WR-COMP-1 → lab-sql (WR-B-2(b)), WR-COMP-2 → L3 integration, WR-COMP-3 (PgPins role rule on the dedicated runtime login) + WR-COMP-4 (ship step moves to the gateway when capture is wired) → before any hosted TRACE_PUMPS",
+   "next_action": "DONE: merged --no-ff at 468421aa + R182 b19ee105 (TRACE_PUMPS, LAB_EVAL_WORKER OFF; regression 2599 + App gate 17/17); WR-N-3 unmounted (ruling needed); WR-COMP-1..4 → composition batch 2 / before hosted enable",
    "estimate": {
-    "optimistic_h": 0.5,
-    "likely_h": 1.5,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "handback: one merge with conflict resolution; WR-N-3 needs a ruling first",
-    "at": "2026-09-28T07:00:40Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T13:01:11Z"
    },
    "evidence": [
     "research/plan/evidence/coordinator/COMPOSITION-feaf4ab.md"
@@ -5401,18 +5401,18 @@
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T13:01:11Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at ad2cddc2 (J3 calibration report, P2 teacher batches through J2's single egress, WR-C3L-2 judge page, WR-V3-1 adapter; minor F1 carried) → merge batch #6 (wf_5b0a97ab-f86) with WR-J3-3/WR-P2-3/WR-C3L-2-NAV/WR-J3-2; SR-J3-1 + SR-P2-1 → lab-sql-lw3; WR-P2-2 → lab-sql-integration",
+   "next_action": "DONE (code): merged --no-ff at 6b228a7f + wirings 8aca7ae4 (/judge nav, judgePort over the lazy session adapter, mutant lists); SR-J3-1/SR-P2-1 → lab-sql-lw3; WR-P2-2 → composition batch 2",
    "estimate": {
-    "optimistic_h": 2.75,
-    "likely_h": 5.5,
-    "pessimistic_h": 11.5,
-    "confidence": "medium",
-    "basis": "handback: J3 1/2/4 + P2 1.5/3/6 + page 0.25/0.5/1.5 after the lab-sql RPCs",
-    "at": "2026-09-28T09:15:45Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T13:01:11Z"
    },
    "evidence": [
     "research/plan/evidence/j/J3-e4836fa.md",
@@ -5714,7 +5714,7 @@
    "started": "2026-09-28T07:32:29Z",
    "updated": "2026-09-28T11:15:54Z",
    "blocker": null,
-   "next_action": "ACCEPT at f42d0d83 (evaluations/pipelines/releases routes over D7 + fakes, real halves on b3/p1/r2, two inherited contract bugs fixed: record-before-role 404, catalog refs 422; 46+39+23 mutants; three TS adapter patches) → merge batch #11 after #6 lands: WR-LAB2-1 wiring patch (LAB_EVALS/LAB_PIPELINES/LAB_RELEASES OFF, pilot._lab_2, ROUTERS, 13 G mutants, 08 row) + the three http.ts patches + ruling LAB-REFUSAL-ORDER numbered R183; lab-sql requests (WR-B4-2, WR-LAB2-2/3/4, WR-R4-1 half, WR-R4-2) → lab-sql-lw3 is already carrying most; the LAB_DATASETS_API_URL declaration gap fixed on the tip",
+   "next_action": "ACCEPT at f42d0d83 (evaluations/pipelines/releases routes over D7 + fakes, real halves on b3/p1/r2, two inherited contract bugs fixed: record-before-role 404, catalog refs 422; 46+39+23 mutants; three TS adapter patches) → merge batch #11 (wf_5dd2c16f-b2b): WR-LAB2-1 wiring patch (LAB_EVALS/LAB_PIPELINES/LAB_RELEASES OFF, pilot._lab_2, ROUTERS, 13 G mutants, 08 row) + the three http.ts patches + ruling LAB-REFUSAL-ORDER numbered R183; lab-sql requests (WR-B4-2, WR-LAB2-2/3/4, WR-R4-1 half, WR-R4-2) → lab-sql-lw3 is already carrying most; the LAB_DATASETS_API_URL declaration gap fixed on the tip",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 6.5,
@@ -5744,24 +5744,24 @@
    "branch": "codex/w5-merge-6",
    "worktree": ".claude/worktrees/codex-w5-merge-6",
    "base": "608d7e6c",
-   "head": null,
+   "head": "8aca7ae4",
    "isolation": {
     "ports": "t2f/b1/r1/lab-c2/p2 (checks only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T09:15:45Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T13:01:11Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "DONE: merged onto claude/consumer-v1 at 3df6f537 (08 §10 docs conflict resolved: R179–R182 between R178 and R184; verify otherwise ok)",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "four merges with three composition-root patches",
-    "at": "2026-09-28T09:15:45Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T13:01:11Z"
    },
    "evidence": [],
    "commands": [],
@@ -5955,26 +5955,29 @@
    "branch": "codex/w5-lab-sql-integration",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-integration",
    "base": "8ae65fa8",
-   "head": null,
+   "head": "8064bb4d",
    "isolation": {
     "ports": "j2 57511/57512; r2 57534; r1 57532/57533; b3 57522; b1 57520/57521",
     "prefix": "infrx-j2-",
     "db": "j2"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T10:45:41Z",
-   "updated": "2026-09-28T10:45:41Z",
+   "updated": "2026-09-28T13:01:11Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "REJECT-with-the-required-wiring at 8064bb4d (J2 on PgJudgeLedger; B1/B2/B3 on real D7 rows, 402 give-back proven, H1 media fields, reports.case_records; R2 on PgReleaseStore; R3 optimization.store; J2 content via Retention = E5L-F1 fixed; open 0-LSQI-1 = WR-LSQ-INT-1 outside its paths, delivered as a patch) → merge batch #14 (wf_df02b635-a26) with WR-LSQ-INT-1/2 + the null-cost oracle; then J2, B1, B2, R2, R3 → implemented; R1 real half after SR-R1-1; E5L o06 blocked by foreign e5l volumes (user)",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 12,
+    "optimistic_h": 1,
+    "likely_h": 2.5,
+    "pessimistic_h": 5,
     "confidence": "medium",
-    "basis": "six adapter swaps with real-PG reruns + two carried defects",
-    "at": "2026-09-28T10:45:41Z"
+    "basis": "handback: one review round + o06/R1 reruns when unblocked",
+    "at": "2026-09-28T13:01:11Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md",
+    "research/plan/evidence/coordinator/WR-LSQ-INT-1.patch"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/judge/**",
@@ -6141,6 +6144,74 @@
    ],
    "blocker": "packages/shared C0 QueryPort + trace contract copy (LW0 item 7 / LW2 gate) not on base; no provider trace read path from the Lab (no DB client, anon key only); needs WR-V1M-2 ruling + Python owner",
    "updated": "2026-09-27T19:53:00Z"
+  },
+  {
+   "id": "W5-MERGE-11",
+   "task": null,
+   "slice": "(wave5 merge lane #11) lab-api-2 f42d0d83 (WR-LAB2-1 patch: LAB_EVALS/LAB_PIPELINES/LAB_RELEASES OFF; three http.ts adapter patches; R183); workflow wf_5dd2c16f-b2b; base 3df6f537",
+   "agent": "opus",
+   "branch": "codex/w5-merge-11",
+   "worktree": ".claude/worktrees/codex-w5-merge-11",
+   "base": "3df6f537",
+   "head": null,
+   "isolation": {
+    "ports": "b3 (checks only)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T13:01:11Z",
+   "updated": "2026-09-28T13:01:11Z",
+   "blocker": null,
+   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "one merge with a composition-root patch re-cut against batch #6",
+    "at": "2026-09-28T13:01:11Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-14",
+   "task": null,
+   "slice": "(wave5 merge lane #14, parallel to #11) lab-sql-integration 8064bb4d (WR-LSQ-INT-1 patch, WR-LSQ-INT-2, the null-cost oracle); workflow wf_df02b635-a26; base 3df6f537",
+   "agent": "opus",
+   "branch": "codex/w5-merge-14",
+   "worktree": ".claude/worktrees/codex-w5-merge-14",
+   "base": "3df6f537",
+   "head": null,
+   "isolation": {
+    "ports": "j2 / b3 / r2 (checks only)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T13:01:11Z",
+   "updated": "2026-09-28T13:01:11Z",
+   "blocker": null,
+   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "one merge with three PG-keyed suites",
+    "at": "2026-09-28T13:01:11Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
   }
  ],
  "review_queue": [],
