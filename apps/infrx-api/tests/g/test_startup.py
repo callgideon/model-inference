@@ -391,6 +391,45 @@ def test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_i
     assert store.asked == [support.PUBLIC_MODEL] and world.jobs.jobs == {}
 
 
+def test_rollout_routing__the_router_is_r1_over_d9_on_the_runtime_login_only_when_on():
+    """WR-R1-3-C: off (the default), the composition builds no router; on, R1's `Router` over
+    D9's `PgRoutingReleases` on the gateway's own pool - only when `DATABASE_URL` logs in as
+    `infrx_runtime` (bare or Supavisor's `<role>.<ref>`: SR-R1-1's functions are EXECUTE
+    infrx_runtime only), never the broad/service_role login or the monitor's (refused by
+    name, no credential echoed). No provider-funded shadow runner exists yet: a shadow
+    duplicate is a typed 503 inside R1 (counted, never run, never charged)."""
+    import dataclasses
+
+    from infrx.contracts import errors
+    from infrx.gateway import pilot
+    from infrx.rollouts import routing
+    from infrx.state.lab_rollout import PgRoutingReleases
+
+    runtime = "postgresql://infrx_runtime.proj:pw-do-not-print@db.invalid:6543/postgres"
+
+    def settings(on, dsn=runtime):
+        return support.settings(database_url=dsn, deployment=dataclasses.replace(
+            support.BUILD, rollout_routing=on))
+
+    objects = relay_support.World().objects
+    assert "rollouts" not in pilot.adapters_from_env(settings(False), objects=objects)
+    built = pilot.adapters_from_env(settings(True), objects=objects)
+    assert "rollouts" in built
+    router = built["rollouts"]
+    assert type(router) is routing.Router and type(router.releases) is PgRoutingReleases
+    assert router.releases._connect is built["jobs"]._connect
+    assert pilot._rollouts(settings(True, "postgresql://infrx_runtime@db/x"), "c")[
+        "rollouts"].releases._connect == "c"
+    with pytest.raises(errors.DependencyUnavailable):
+        asyncio.run(router.shadows.run(None, "lab:serving:x", None))
+    for login in ("postgres", "infrx_monitor", "service_role", ""):
+        dsn = f"postgresql://{login}:pw-do-not-print@db.invalid:5432/postgres" if login \
+            else "postgresql://db.invalid:5432/postgres"
+        refused = outcome(lambda: pilot._rollouts(settings(True, dsn), "c"))
+        assert type(refused) is RuntimeMisconfigured, (login, refused)
+        assert "DATABASE_URL" in str(refused) and "do-not-print" not in str(refused)
+
+
 LAB_2 = {"lab_evaluations": ("lab_evals", lab_evaluations.LabEvaluations,
                              lab_evaluations.EVALS_PREFIX + "/runs"),
          "lab_pipelines": ("lab_pipelines", lab_pipelines.LabPipelines,

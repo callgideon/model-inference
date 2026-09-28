@@ -234,11 +234,37 @@ def adapters_from_env(settings, **injected):
                     # (kept above G4F: its last two lines anchor given_stores_replaced)
                     **_lab(settings, connect, adapters["objects"]),
                     **_lab_checkpoints(settings, connect),
+                    # R1 (WR-R1-3-C): only when the deployment enables ROLLOUT_ROUTING
+                    **_rollouts(settings, connect),
                     # G4F (WR-G4F-1): only when the deployment enables the feedback route
                     **({"feedback": _pg_feedback(connect)}
                        if settings.deployment.feedback_api else {}),
                     **adapters}
     return adapters
+
+
+class NoShadows:
+    """R1's `ShadowRunner` until provider-funded shadow execution exists (WR-R1-3-Cb): a
+    duplicate is refused inside R1 (counted `shadow_failed`), never run, never charged."""
+
+    async def run(self, release, serving_ref, request):
+        raise errors.DependencyUnavailable("provider-funded shadow execution is not wired")
+
+
+def _rollouts(settings, connect) -> dict:
+    """WR-R1-3-C: R1's router over D9 (`PgRoutingReleases`) on this pool, only when
+    `ROLLOUT_ROUTING` is on, and only on the `infrx_runtime` login (SR-R1-1's functions are
+    EXECUTE infrx_runtime only; never service_role)."""
+    if not settings.deployment.rollout_routing:
+        return {}
+    from psycopg.conninfo import conninfo_to_dict
+    if (conninfo_to_dict(settings.pilot.database_url).get("user")
+            or "").split(".")[0] != "infrx_runtime":
+        raise RuntimeMisconfigured(runtime_mode(settings), detail="ROLLOUT_ROUTING needs "
+                                   "DATABASE_URL to log in as infrx_runtime")
+    from ..rollouts.routing import Router
+    from ..state.lab_rollout import PgRoutingReleases
+    return {"rollouts": Router(PgRoutingReleases(connect), NoShadows())}
 
 
 def _lab(settings, connect, objects=None) -> dict:

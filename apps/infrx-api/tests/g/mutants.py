@@ -36,6 +36,7 @@ C = "gateway/routes/catalog.py"         # G1R: model resolution for a credential
 R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and the SSE relay
 P = "gateway/pilot.py"                  # G2: the pilot composition
 ROLLOUT_CASE = "test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it"
+ROLLOUT_LOGIN = "test_rollout_routing__the_router_is_r1_over_d9_on_the_runtime_login_only_when_on"
 OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
 ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
 M = "gateway/routes/models.py"          # G7: public discovery, one projection
@@ -947,6 +948,21 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("rollout_store_optional", "ROLLOUT_ROUTING on without a router refuses to start",
        P, "        if rollouts is None:\n            raise RuntimeMisconfigured",
        "        if False:\n            raise RuntimeMisconfigured", ROLLOUT_CASE),
+    # R1 (WR-R1-3-C): the router is composed over D9 on the runtime login, only when on
+    _m("rollout_router_composed_when_off", "ROLLOUT_ROUTING off builds no router",
+       P, "    if not settings.deployment.rollout_routing:\n        return {}\n",
+       "    if False:\n        return {}\n", ROLLOUT_LOGIN),
+    _m("rollout_router_not_composed", "the composition root builds the router when on",
+       P, "                    **_rollouts(settings, connect),\n", "", ROLLOUT_LOGIN),
+    _m("rollout_router_any_login", "the router runs on the infrx_runtime login only",
+       P, "            or \"\").split(\".\")[0] != \"infrx_runtime\":",
+       "            or \"\").split(\".\")[0] == \"\":", ROLLOUT_LOGIN),
+    _m("rollout_router_off_the_pool", "D9's releases are read on the gateway's pool",
+       P, "    return {\"rollouts\": Router(PgRoutingReleases(connect), NoShadows())}",
+       "    return {\"rollouts\": Router(PgRoutingReleases(None), NoShadows())}", ROLLOUT_LOGIN),
+    _m("rollout_shadow_runs_unfunded", "no shadow duplicate runs without a provider-funded runner",
+       P, "        raise errors.DependencyUnavailable(\"provider-funded shadow execution is not "
+          "wired\")", "        return None", ROLLOUT_LOGIN),
     # LAB-API (WR-LAB-API-1): each Lab surface is mounted only when its switch turns it on
     _m("composition_root_drops_lab_control", "the composition root mounts WR-L4-1's control",
        "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
