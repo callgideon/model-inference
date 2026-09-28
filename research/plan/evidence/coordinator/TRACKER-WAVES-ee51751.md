@@ -73,3 +73,26 @@ Observations for the coordinator (tracker readings, not changed here): the task-
 ## Estimate (remaining)
 
 Optimistic 0.25 h / likely 0.5 h / pessimistic 1.25 h, confidence medium. Basis: the TRACKER lane's original 2/4/8 h at a third (0.7/1.3/2.7 h total); implementation, tests, mutants and evidence are done; what remains is one review round, the WR-TW-3 overlay lane and the coordinator's merge + render.
+
+## Fix round (2026-09-28, code head 765eb5da on handback cd53ad91)
+
+| Finding | Fixed | Change |
+|---|---|---|
+| 0-TW-1 (major) wave ETA dated open work with no live lane | yes | `wave_eta` (progress.py) now finds, for each **gating** map lane that still has open manifest IDs, a live overlay lane serving it: its slice names `lane <name>` (same bounded match as the gate lanes) or it is keyed to one of that lane's **open** tasks. Any uncovered open ID gives `unknown: no live lane for <ids>` (after the "blocked pending" input check). Only serving lanes enter the arithmetic, so a lane for finished work (blocked V1M after V1M is implemented) produces no date. Waves with no open gating work (LW0, or all tasks implemented but the gate lane still open) keep the previous behaviour. 07 §"What the tracker shows" states the rule. |
+| 0-TW-2 (major) activated branch of "deferred task in no wave" untested | yes | `test_a_task_missing_repeated_unknown_or_in_launch_scope_is_an_error` sets `activated = ["D6F", "L2"]` and drops D6F (activated) and D7 (deferred); both errors asserted. Mutant `activated_task_not_flagged` added. |
+
+New ETA cases (in `test_wave_eta_uses_the_live_lanes_and_eta_params`, kept in the same case so the mutant runner's case index is unchanged): no lanes gives `no live lane for E7L, E8L`; lab-improve running with an estimate and no lab-rollout lane gives `unknown` / `no live lane for E8L` and no finish; E7L implemented plus a blocked lane keyed to E7L with an estimate still gives `no live lane for E8L`; adding lab-rollout gives a forecast over lab-rollout only (effort 3.1/5.7/10.9 h, so W5-DONE is excluded); LW2 with V1M implemented and a lane keyed to V1M names L4; a complete lane and a similarly named `lab-rollout-x` lane add nothing.
+
+New mutants (36 total, all killed): `activated_task_not_flagged`, `open_lane_coverage_ignored`, `finished_work_lane_is_counted`, `coverage_by_any_task_of_the_lane`, `similar_map_lane_name_serves`. Two anchors were widened because the new code repeats their text: `similar_lane_name_counts` (now anchored on `re.escape(g['lane'])}(?![\w-])`) and `finished_lane_is_live` (now ending at `need`).
+
+| Command | Result |
+|---|---|
+| new tests against the handback progress.py (cd53ad91) | fails-before: 1 failure, `'no live lane for the open work' != 'no live lane for E7L, E8L'` (the 0-TW-2 case passes there, as the code was right; its mutant is what is new) |
+| `python3 -m unittest test_progress` | 42 OK |
+| `python3 -m unittest test_mutants` | 4 OK, 36/36 mutants killed |
+| `python3 -m unittest test_progress test_validate_plan test_mutants` | 53 run, 1 error = pre-existing `test_app_cannot_dispatch_early` KeyError (fails at cd53ad91 and base, not owned) |
+| live-overlay repro from the finding (now 21:00Z) | LW0/LW1 exit met; LW2 `no live lane for L4`; LW3 `no live lane for I2L, E3L, C3L, C2, G4T, R1`; LW4 `no live lane for B3, I5, V2, V3, J3, P2, N3, N4, P1, P3`; LW5 `no live lane for I6, I7`; LW6 forecast (lab-improve and lab-rollout live); C1–C3 unknown |
+| `progress.py check` | PASS, 0 errors, 32 warnings (as base) |
+| `progress.py render` | OK (outputs restored, not committed) |
+| `validate_plan.py` | PASS, 949 links / 372 documents |
+| `ruff check` (the three scripts) | same 4 pre-existing E731, no new finding |
