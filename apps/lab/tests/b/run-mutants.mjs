@@ -103,6 +103,7 @@ const MUTANTS = [
     '    if (!holds(actor.role, "run_evaluation")) return no("denied");\n    if (r === undefined) return no("not_found");', [C.j02]),
   m("B4-X50", "cancel without the capability", FAKE, '    if (!holds(actor.role, "run_evaluation")) return no("denied");\n    if (r.row.state', "    if (r.row.state", [C.j02]),
   m("B4-X51", "an ended run is cancelled again", FAKE, '    if (r.row.state !== "queued" && r.row.state !== "running") return no("conflict");\n', "", [C.j01, C.a04]),
+  m("B4-X114", "a finished run can be cancelled (H5: only cancelled is refused)", FAKE, 'if (r.row.state !== "queued" && r.row.state !== "running") return no("conflict");', 'if (r.row.state === "cancelled") return no("conflict");', [C.j01, C.j02]),
   m("B4-X52", "launch without the capability", FAKE, '    this.calls.push(["launch", actor, launch]);\n    if (!holds(actor.role, "run_evaluation")) return no("denied");\n', '    this.calls.push(["launch", actor, launch]);\n', [C.j02]),
   m("B4-X53", "a resubmitted launch queues new runs", FAKE, "    if (seen !== null) return seen;\n    const c = ", "    const c = ", [C.j01, C.j02]),
   m("B4-X54", "one id with another body is accepted", FAKE, 'return seen.body === body ? ok(copy(seen.row)) : no("conflict");', "return ok(copy(seen.row));", [C.j02, C.j03]),

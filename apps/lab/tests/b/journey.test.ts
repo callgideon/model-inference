@@ -46,6 +46,9 @@ test("B4-J01 launch → queued baseline and candidate runs → progress → canc
   const cancelled = await f.cancel(dev, e.candidate.run_id);
   assert.ok(cancelled.ok && cancelled.value.state === "cancelled");
   assert.deepEqual(await f.cancel(dev, e.candidate.run_id), { ok: false, reason: "conflict" });
+  f.progress(e.baseline.run_id, { state: "succeeded" });
+  assert.deepEqual(await f.cancel(dev, e.baseline.run_id), { ok: false, reason: "conflict" }, "a succeeded run is never cancelled (WR-B4-1: 409)");
+  assert.equal((await f.runs(dev) as { value: { run_id: string; state: string }[] }).value.find((r) => r.run_id === e.baseline.run_id)!.state, "succeeded");
   f.settle(e.experiment_id, REPORTS.inconclusive);
   const done = await f.experiments(dev);
   assert.ok(done.ok && done.value[0].report !== null);
@@ -56,6 +59,8 @@ test("B4-J02 foreign, viewer and malformed variants: nothing leaks, nothing is q
   const f = world();
   const launched = await f.launch(dev, LAUNCH);
   assert.ok(launched.ok);
+  f.progress(launched.value.baseline.run_id, { state: "failed" });
+  assert.deepEqual(await f.cancel(dev, launched.value.baseline.run_id), { ok: false, reason: "conflict" }, "a failed run is never cancelled (WR-B4-1: 409)");
   for (const read of [f.runs(other), f.experiments(other), f.subscriptions(other)]) assert.deepEqual(await read, { ok: true, value: [] });
   assert.deepEqual(await f.catalog(other), { ok: true, value: { datasets: [], harnesses: [], servings: [], evaluators: [] } });
   assert.deepEqual(await f.cancel(other, launched.value.baseline.run_id), { ok: false, reason: "not_found" });
