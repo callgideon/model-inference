@@ -21,7 +21,7 @@ from infrx.judge.calibration import MIN_PAIRS, report, spearman
 from tests.j import fakes
 
 RUN = fakes.uuid(900)
-C, P, I, U = (CalibrationLabel.correct, CalibrationLabel.partially_correct,
+C, P, BAD, U = (CalibrationLabel.correct, CalibrationLabel.partially_correct,
               CalibrationLabel.incorrect, CalibrationLabel.unusable)
 
 
@@ -45,7 +45,7 @@ def labelled(pairs):
 
 
 def agreeing(count: int, start: int = 0):
-    return [(start + n, n % 2 == 0, C if n % 2 == 0 else I) for n in range(count)]
+    return [(start + n, n % 2 == 0, C if n % 2 == 0 else BAD) for n in range(count)]
 
 
 def run(results, labels, **kw):
@@ -68,7 +68,7 @@ def test_j3__customer_judge_and_operator_comments_are_never_calibration_truth():
 
 def test_j3__another_orgs_or_rubric_versions_labels_are_excluded_and_never_exemplars():
     results, labels = labelled(agreeing(4))
-    foreign = [fakes.label(sid(0), org_id=fakes.ORG_B, verdict=I),
+    foreign = [fakes.label(sid(0), org_id=fakes.ORG_B, verdict=BAD),
                fakes.label(sid(1), rubric_version=2, verdict=C)]
     v2 = judged(7, rubric=dataclasses.replace(MARLIN_VIDEO_V1, version=2))   # a v2 result
     out = run([*results, v2], [*foreign, *labels[2:], fakes.label(sid(7), verdict=C)])
@@ -88,8 +88,8 @@ def test_j3__too_few_samples_are_insufficient_even_in_perfect_agreement():
 def test_j3__kappa_and_its_interval_match_the_hand_computation():
     # 18 pass/correct, 2 pass/incorrect, 2 fail/correct, 18 fail/incorrect:
     # po = 0.9, pe = 0.5, kappa = 0.8, se = sqrt(.9*.1 / (40*.25)) = sqrt(0.009)
-    pairs = ([(n, True, C) for n in range(18)] + [(n, True, I) for n in range(18, 20)]
-             + [(n, False, C) for n in range(20, 22)] + [(n, False, I) for n in range(22, 40)])
+    pairs = ([(n, True, C) for n in range(18)] + [(n, True, BAD) for n in range(18, 20)]
+             + [(n, False, C) for n in range(20, 22)] + [(n, False, BAD) for n in range(22, 40)])
     out = run(*labelled(pairs))
     half = 1.959963984540054 * math.sqrt(0.009)
     assert out.kappa.n == 40 and math.isclose(out.kappa.value, 0.8)
@@ -101,9 +101,9 @@ def test_j3__kappa_and_its_interval_match_the_hand_computation():
 
 def test_j3__the_kappa_interval_is_clamped_to_its_range():
     # kappa = +-0.95 with a half-width of ~0.097: the interval stops at +-1
-    high = run(*labelled([(n, True, C) for n in range(20)] + [(20, True, I)]
-                         + [(n, False, I) for n in range(21, 40)]))
-    low = run(*labelled([(n, True, I) for n in range(20)] + [(20, True, C)]
+    high = run(*labelled([(n, True, C) for n in range(20)] + [(20, True, BAD)]
+                         + [(n, False, BAD) for n in range(21, 40)]))
+    low = run(*labelled([(n, True, BAD) for n in range(20)] + [(20, True, C)]
                         + [(n, False, C) for n in range(21, 40)]))
     assert math.isclose(high.kappa.value, 0.95) and high.kappa.interval[1] == 1.0
     assert math.isclose(low.kappa.value, -0.95) and low.kappa.interval[0] == -1.0
@@ -120,7 +120,7 @@ def test_j3__spearman_averages_tied_ranks():
 
 
 def test_j3__rho_uses_partial_verdicts_kappa_does_not():
-    pairs = [(0, True, C), (1, False, I), (2, False, P), (3, True, P)]
+    pairs = [(0, True, C), (1, False, BAD), (2, False, P), (3, True, P)]
     out = run(*labelled(pairs))
     assert out.kappa.n == 2 and out.excluded["partial_not_binary"] == 2
     assert out.rho["relevance"].n == 4
@@ -143,7 +143,7 @@ def test_j3__constant_scores_are_not_computed_and_never_calibrated():
 def test_j3__a_limited_no_media_result_never_counts_toward_calibration():
     results, labels = labelled(agreeing(MIN_PAIRS))
     blind = [judged(100 + n, passed=False, media=False) for n in range(20)]
-    out = run([*results, *blind], [*labels, *(fakes.label(sid(100 + n), verdict=I)
+    out = run([*results, *blind], [*labels, *(fakes.label(sid(100 + n), verdict=BAD)
                                              for n in range(20))])
     assert out.excluded["limited_result"] == 20 and out.excluded["no_judge_result"] == 20
     assert out.kappa.n == MIN_PAIRS and out.rho["groundedness"].n == MIN_PAIRS
@@ -155,7 +155,7 @@ def test_j3__rejected_duplicate_and_unusable_rows_are_counted_not_paired():
                           media_available=True)
     twice = judged(0, passed=False)                       # a second result for sample 0
     unusable = fakes.label(sid(6), verdict=U)
-    clash = fakes.label(sid(1), verdict=C)                # sample 1 is also labelled I
+    clash = fakes.label(sid(1), verdict=C)                # sample 1 is also labelled BAD
     out = run([*results, bad, twice], [*labels, unusable, clash])
     assert out.excluded["rejected_result"] == 1 and out.excluded["duplicate_result"] == 1
     assert out.excluded["unusable_label"] == 1 and out.excluded["conflicting_labels"] == 2
@@ -165,18 +165,18 @@ def test_j3__rejected_duplicate_and_unusable_rows_are_counted_not_paired():
 
 def test_j3__an_interval_crossing_the_target_is_inconclusive():
     # 40 pairs, 34 agree: po = .85, pe = .5, kappa = .7, se = sqrt(.85*.15/10) ~ .113
-    pairs = ([(n, True, C) for n in range(17)] + [(n, True, I) for n in range(17, 20)]
-             + [(n, False, C) for n in range(20, 23)] + [(n, False, I) for n in range(23, 40)])
+    pairs = ([(n, True, C) for n in range(17)] + [(n, True, BAD) for n in range(17, 20)]
+             + [(n, False, C) for n in range(20, 23)] + [(n, False, BAD) for n in range(23, 40)])
     out = run(*labelled(pairs))
     assert math.isclose(out.kappa.value, 0.7)
     assert out.kappa.interval[0] < 0.6 < out.kappa.interval[1]
     assert out.kappa.verdict == "inconclusive" and out.state == "insufficient"
     # 30 of 40 agree: kappa = .5 below the target, yet its upper bound (~.77) is above it
-    half = run(*labelled([(n, True, C) for n in range(15)] + [(n, True, I) for n in range(15, 20)]
+    half = run(*labelled([(n, True, C) for n in range(15)] + [(n, True, BAD) for n in range(15, 20)]
                          + [(n, False, C) for n in range(20, 25)]
-                         + [(n, False, I) for n in range(25, 40)]))
+                         + [(n, False, BAD) for n in range(25, 40)]))
     assert math.isclose(half.kappa.value, 0.5) and half.kappa.verdict == "inconclusive"
-    worse = run(*labelled([(n, n % 2 == 0, C if n % 4 < 2 else I) for n in range(40)]))
+    worse = run(*labelled([(n, n % 2 == 0, C if n % 4 < 2 else BAD) for n in range(40)]))
     assert worse.kappa.verdict == "not_met"
 
 
@@ -186,7 +186,7 @@ def test_j3__kappa_alone_never_calibrates_a_configuration():
     results = [validate_output(MARLIN_VIDEO_V1, fakes.result(relevance=4 if n % 2 == 0 else 2),
                                run_id=RUN, sample_id=sid(n), media_available=True)
                for n in range(MIN_PAIRS)]
-    out = run(results, [fakes.label(sid(n), verdict=C if n % 2 == 0 else I)
+    out = run(results, [fakes.label(sid(n), verdict=C if n % 2 == 0 else BAD)
                         for n in range(MIN_PAIRS)])
     assert out.kappa.verdict == "met" and out.rho["relevance"].verdict == "met"
     assert out.rho["groundedness"].verdict == "not_computed" and out.state == "insufficient"

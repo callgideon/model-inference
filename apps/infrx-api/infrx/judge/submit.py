@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Protocol, Sequence
+from typing import Any, Awaitable, Callable, Protocol, Sequence
 from urllib.parse import urlsplit
 
 import httpx
@@ -141,6 +141,13 @@ class JudgeJob:
     ceilings: TokenCeilings = field(default=DEFAULT_CEILINGS)
 
 
+def require_own_payer(provider_org_id: str, payer_ref: object) -> None:
+    """PROVIDER_USD work (a judge run, a teacher batch) is paid by this provider's named payer."""
+    payer = REF_RE.fullmatch(payer_ref) if isinstance(payer_ref, str) else None
+    if payer is None or payer.group(1) != "payer" or payer.group(2) != provider_org_id:
+        raise errors.Forbidden("PROVIDER_USD work names this provider's own payer")
+
+
 async def _permitted(job: JudgeJob, user_id: str, wiring: JudgeWiring) -> ConsentRef:
     for category in CATEGORIES:
         grant = await wiring.access.authorize_content(
@@ -153,9 +160,7 @@ async def _permitted(job: JudgeJob, user_id: str, wiring: JudgeWiring) -> Consen
 async def submit(job: JudgeJob, *, user_id: str, wiring: JudgeWiring) -> LedgerRun:
     if wiring.settings.judge_mode != JUDGE_MODE_LIVE:
         raise errors.BudgetExceeded("the judge is not in live mode: nothing is submitted")
-    payer = REF_RE.fullmatch(job.payer_ref) if isinstance(job.payer_ref, str) else None
-    if payer is None or payer.group(1) != "payer" or payer.group(2) != job.provider_org_id:
-        raise errors.Forbidden("PROVIDER_USD work names this provider's own payer")
+    require_own_payer(job.provider_org_id, job.payer_ref)
     consent = await _permitted(job, user_id, wiring)
     ledger = wiring.ledger
     rate = wiring.rates.rate_for(job.judge_model, await ledger.db_now())
@@ -175,16 +180,25 @@ async def submit(job: JudgeJob, *, user_id: str, wiring: JudgeWiring) -> LedgerR
                                   request_id)
         if body is not None:
             items.append({"sample_id": request_id, "content": body.decode()})
+    return await send(ledger, wiring.provider, run, items,
+                      lambda: _permitted(job, user_id, wiring))
+
+
+async def send(ledger: JudgeLedger, provider: JudgeProvider, run: LedgerRun,
+               items: list[dict[str, Any]], recheck: Callable[[], Awaitable[Any]]) -> LedgerRun:
+    """Steps 5-7 for a run whose submit intent this call holds: the **one** egress path, shared
+    by J2's judge runs and P2's teacher batches. `recheck` is the caller's current-permission
+    check, awaited immediately before egress; `items` carry a `sample_id` each."""
     if not items:
         return await ledger.release(run.run_id, "failed", "no stored content left to judge")
     try:
-        await _permitted(job, user_id, wiring)
+        await recheck()
     except errors.DomainError:
         await ledger.release(run.run_id, "failed", "permission withdrawn before egress")
         raise
     run = await ledger.record_sent(run.run_id, [item["sample_id"] for item in items])
     try:
-        external_id = await wiring.provider.submit(run.submit_key, items)
+        external_id = await provider.submit(run.submit_key, items)
     except SubmitRejected as exc:
         return await ledger.release(run.run_id, "failed", f"provider rejected: {exc}"[:200])
     except Exception as exc:     # noqa: BLE001 - an unknown outcome is ambiguous, never retried
