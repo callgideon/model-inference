@@ -91,3 +91,5 @@ Finding: the patch put `**_lab(settings, connect),` between the two lines coordi
 | F2 | same merged tree: `INFRX_D_TASK=l4 INFRX_MUTANTS=all pytest -q tests/g/test_mutants.py` | 0 | 416 passed (22:19): every G mutant killed, incl. the lab/feedback/ROUTERS ones |
 | F3 | `--shared` clone at `6487d36a` + fixed patch (`git apply --check` then apply): `INFRX_D_TASK=l4 pytest -q tests/contracts tests/i/test_packaging.py tests/g tests/w` | 0 | 2581 passed, 15 skipped (18:40) |
 | F4 | same clone: `run_mutant(given_stores_replaced)` | - | `misdeclared`: pre-existing at `f4bceeba` (the anchor `37859776` fixed is not on this base); killed once merged (F1) |
+
+Rulings: LAB-TRACES numbered R176 in `research/plan/08-contracts-v1-encoding.md` §10 at the lab-api merge (2026-09-28).

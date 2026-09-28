@@ -58,3 +58,5 @@ optimistic 1 h / likely 2 h / pessimistic 4 h, confidence medium. Basis: G4F 1/2
 ## Audit log
 
 - 2026-09-27: written for `f36a6ab4` (lane lab-api, LW2).
+
+Rulings: LAB-AUTH numbered R175 in `research/plan/08-contracts-v1-encoding.md` §10 at the lab-api merge (2026-09-28).

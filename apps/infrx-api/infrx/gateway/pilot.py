@@ -230,11 +230,67 @@ def adapters_from_env(settings, **injected):
                     # only beside the job store it was built with (one database)
                     **({} if "jobs" in adapters else {"readiness": lifecycle}),
                     "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
+                    # LAB-API (WR-LAB-API-1): only the Lab surfaces the deployment enables
+                    # (kept above G4F: its last two lines anchor given_stores_replaced)
+                    **_lab(settings, connect),
                     # G4F (WR-G4F-1): only when the deployment enables the feedback route
                     **({"feedback": _pg_feedback(connect)}
                        if settings.deployment.feedback_api else {}),
                     **adapters}
     return adapters
+
+
+def _lab(settings, connect) -> dict:
+    """LAB-API: `lab_control` / `lab_traces` for the switches that are on, over one session
+    verifier (the project's auth server) and L2's `LabAccess` on this pool. L3's control
+    operations are not composed until L3 merges (its routes answer 503; health is served).
+    `LAB_TRACES` needs T2I's projection and trace bucket, or startup is refused."""
+    deployment = settings.deployment
+    if not (deployment.lab_control or deployment.lab_traces):
+        return {}
+    import httpx
+
+    from ..lab.access import LabAccess
+    from ..state.lab_access import PgAccessStore
+    from .lab_auth import GoTrueSessions
+    from .routes.lab_control import LabControl
+    # ponytail: this client lives as long as the process; close it in `lifespan` if an app is
+    # ever rebuilt inside one process outside tests.
+    sessions = GoTrueSessions(httpx.AsyncClient(base_url=settings.supabase_url,
+                                                timeout=httpx.Timeout(5, connect=2)),
+                              settings.supabase_key)
+    access = LabAccess(PgAccessStore(connect))
+    lab = {"lab_control": LabControl(sessions, access)} if deployment.lab_control else {}
+    if deployment.lab_traces:
+        lab["lab_traces"] = _lab_traces(settings, connect, sessions, access)
+    return lab
+
+
+def _lab_traces(settings, connect, sessions, access):
+    """WR-V1M-2 over T2I's projection and T3's retention on `CLICKHOUSE_URL`, and the trace
+    bucket at the shipper's prefix (`build_shipper`'s `infrx/`)."""
+    limits = settings.pilot
+    missing = tuple(name for name, value in (("CLICKHOUSE_URL", limits.clickhouse_url),
+                                             ("S3_TRACE_BUCKET", limits.s3_trace_bucket))
+                    if not value.strip())
+    if missing:
+        raise RuntimeMisconfigured(runtime_mode(settings), missing)
+    import clickhouse_connect
+
+    from ..media.s3 import S3ObjectStore
+    from ..traces.feedback import ClickHouseFeedbackProjection
+    from ..traces.retention import ClickHouseRetentionStore, Retention
+    from ..traces.ship import ClickHouseProjection
+    from .routes.lab_traces import ClickHouseTraceRows, LabTraces, PgServing
+    client = clickhouse_connect.get_client(dsn=limits.clickhouse_url)
+    objects = S3ObjectStore.connect(limits.s3_trace_bucket, "infrx/",
+                                    settings.deployment.s3_endpoint_url)
+    retention = Retention(ClickHouseRetentionStore(client), ClickHouseProjection(client),
+                          ClickHouseFeedbackProjection(client), objects,
+                          content_days=limits.trace_content_max_days,
+                          metadata_months=limits.trace_metadata_months)
+    return LabTraces(sessions, access, PgServing(connect), ClickHouseTraceRows(client),
+                     retention)
 
 
 def _pg_feedback(connect):
@@ -291,7 +347,8 @@ def build_info(rt) -> None:
 
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
                        pool=None, consent_for=None, attachments=None,
-                       lifecycle=None, readiness=None, feedback=None) -> IngressDeps:
+                       lifecycle=None, readiness=None, feedback=None, lab_control=None,
+                       lab_traces=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -329,6 +386,9 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     rt.relay = relay
     # G4F (WR-G4F-1): the feedback route mounts over this, and only when enabled.
     rt.feedback = feedback if deployment.feedback_api else None
+    # LAB-API (WR-LAB-API-1): each Lab surface mounts over these, and only when enabled.
+    rt.lab_control = lab_control if deployment.lab_control else None
+    rt.lab_traces = lab_traces if deployment.lab_traces else None
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
                            relay=relay)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
