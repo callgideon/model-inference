@@ -1358,7 +1358,7 @@ class LabStore:
         return type("Run", (), {"evaluator_ref": "eval-ref", "serving_ref": "serving-ref"})()
 
 
-def eval_handler(monkeypatch, stopped=None):
+def eval_handler(monkeypatch, stopped=None, state="succeeded"):
     """The handler over `LabStore`, with `runner.resume`/`Runner` recorded and `freeze`
     fatal."""
     from infrx.evaluation import runner
@@ -1377,7 +1377,7 @@ def eval_handler(monkeypatch, stopped=None):
 
         async def run(self, frozen):
             seen.append(("run", frozen))
-            return {"stopped": stopped}
+            return {"state": state, "stopped": stopped}
 
     async def evaluators(ref):
         return {"spec-for": ref}
@@ -1425,5 +1425,20 @@ def test_worker_main__a_delivery_the_handler_cannot_finish_stays_pending(stopped
     with pytest.raises(errors.DomainError):
         asyncio.run(handler.enqueue(event))
     assert (seen == []) is (stopped == "other_kind")
-    handler, _, _ = eval_handler(monkeypatch, stopped="budget_exhausted")
+    handler, _, _ = eval_handler(monkeypatch, stopped="budget_exhausted", state="running")
     assert asyncio.run(handler.enqueue(delivery())) is True
+
+
+@pytest.mark.parametrize("state", ["queued", "running"])
+def test_worker_main__a_run_left_unfinished_is_not_acknowledged(state, monkeypatch):
+    """Runner returns once nothing is `pending`, but cases a dead attempt still holds are
+    `leased` until `lab_recover` reaps them, and recover emits no new event: acknowledging
+    that delivery would orphan the run. It raises (the relay records it and redelivers after
+    its window); a finished, cancelled or budget-stopped run is acknowledged."""
+    from infrx.contracts import errors
+    handler, _, _ = eval_handler(monkeypatch, stopped=None, state=state)
+    with pytest.raises(errors.DomainError):
+        asyncio.run(handler.enqueue(delivery()))
+    for final in ("succeeded", "failed", "cancelled"):
+        handler, _, _ = eval_handler(monkeypatch, stopped=None, state=final)
+        assert asyncio.run(handler.enqueue(delivery())) is True

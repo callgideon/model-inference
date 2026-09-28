@@ -68,6 +68,7 @@ LAB_REFUSE = "test_worker_main__the_lab_eval_worker_refuses_to_start_without_its
 LAB_ON = "test_worker_main__the_lab_eval_worker_pumps_d7s_outbox_and_recovers"
 RESUME = "test_worker_main__an_eval_run_delivery_resumes_the_created_run_never_freezes"
 PENDING = "test_worker_main__a_delivery_the_handler_cannot_finish_stays_pending"
+UNFINISHED = "test_worker_main__a_run_left_unfinished_is_not_acknowledged"
 
 MUTANTS = (
     _m("main_validate_runtime_skipped", "the worker refuses what the gateway refuses (R44)",
@@ -303,6 +304,12 @@ MUTANTS = (
     _m("main_every_stop_pending", "a budget stop is final and acknowledged",
        MAIN, '        if report["stopped"] == "wallet_exhausted":\n',
        '        if report["stopped"] is not None:\n', PENDING),
+    _m("main_unfinished_run_acknowledged", "a run still unfinished stays pending (1-F1)",
+       MAIN, '        if report["stopped"] == "budget_exhausted" or report["state"] in RUN_FINAL:\n',
+       "        if True:\n", UNFINISHED),
+    _m("main_budget_stop_pending", "a budget stop is final and acknowledged",
+       MAIN, '        if report["stopped"] == "budget_exhausted" or report["state"] in RUN_FINAL:\n',
+       '        if report["state"] in RUN_FINAL:\n', PENDING),
     _m("main_other_kinds_taken", "another kind's Lab event is not the eval handler's",
        MAIN, '        if event.kind != "eval_run":\n', "        if False:\n", PENDING),
 )

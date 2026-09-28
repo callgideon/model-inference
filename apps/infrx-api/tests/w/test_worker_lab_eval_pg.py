@@ -105,3 +105,30 @@ def test_worker_lab_eval_pg__a_redelivery_after_a_revocation_resumes_and_ends_re
         assert len(c.wallet.calls) == 1                         # only the killed attempt paid
     finally:
         restore(c.conn)
+
+
+def test_worker_lab_eval_pg__a_redelivery_before_recover_is_not_acknowledged(
+        tmp_path, monkeypatch, world, endpoint) -> None:
+    """1-F1: the outbox claim lapses (claimed_at + 30 s) before the dead attempt's case
+    leases are reaped, so the redelivery can arrive before `lab recover`. It works what is
+    pending, finds the dead attempt's cases still `leased` and must NOT acknowledge (recover
+    emits no event, so the run would be orphaned); after recover the next redelivery ends it."""
+    from infrx.contracts import errors
+    c = Case(world, 33)
+    endpoint(c.wallet)
+    dying = [Dying(f"http://127.0.0.1:{PORT}", api_key=KEY, model="m", rate_card=RATE_CARD)]
+    steps, _ = composed(tmp_path, monkeypatch, c, lambda: dying.pop() if dying else c.endpoint())
+    with pytest.raises(Crash):
+        run(steps["lab eval"]())                                # the worker dies mid-run
+    d7.advance(c.conn, 31)                                      # claim and lease both lapse
+    with pytest.raises(errors.ResultPending):
+        run(steps["lab eval"]())                                # redelivered, no recover yet
+    states = dict(c.rows("select state, count(*)::int from infrx.lab_eval_cases "
+                         "where run_id = %s group by state"))
+    assert states.get("leased", 0) >= 1 and "pending" not in states, states
+    assert pending(c) == 1                                      # still owed a delivery
+    assert run(steps["lab recover"]()) >= 1
+    d7.advance(c.conn, 31)                                      # the relay's window again
+    report = run(steps["lab eval"]())
+    assert report["acknowledged"] >= 1 and pending(c) == 0, report
+    assert [row[0] for row in c.results()] == c.ids

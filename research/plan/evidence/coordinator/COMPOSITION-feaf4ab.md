@@ -90,3 +90,25 @@
 ## Estimate (remaining for this lane to merge)
 
 optimistic 0.5 h / likely 1.5 h / pessimistic 4 h, confidence medium. Basis: implementation and all checks took ~3.5 h of lane time; what remains is one verify round (G4F's took one fix round) and, if the reviewer wants WR-N-3 forced, a ruling first.
+
+## Fix round (handback 3549edd0, finding 1-F1)
+
+**1-F1 (major): `EvalRuns` acknowledged a delivery whose run was still running.** Fixed in `infrx/worker/__main__.py`: `enqueue` returns `True` only when the report's `state` is final (`RUN_FINAL = succeeded/failed/cancelled`) or `stopped == "budget_exhausted"`; a wallet stop still raises `InsufficientCredit`, and any other outcome (nothing pending but a dead attempt's cases still `leased`, since `lab_recover` has not reaped them yet and emits no event) raises `errors.ResultPending`. The relay records the error on the row and hands it out again after its window, by which time `lab_recover` has returned the leases to `pending`. The settings row (`LAB_EVAL_WORKER`, 08) now states the same rule; it matches the ruling proposal above ("acknowledges only a finished, cancelled or budget-stopped run").
+
+Tests first (red before the fix: 2 failed, `[queued]`/`[running]`):
+- `tests/w/test_worker_main.py::…a_run_left_unfinished_is_not_acknowledged[queued|running]`: Runner returning `{'state': <unfinished>, 'stopped': None}` raises; `succeeded/failed/cancelled` are acknowledged. The fake Runner now reports a `state`; the budget-stop case of `…cannot_finish_stays_pending` runs with `state='running'` so it proves the budget clause on its own.
+- Mutants (`tests/w/worker_main_mutants.py`): `main_unfinished_run_acknowledged` (guard → `if True:`, killed by the new case) and `main_budget_stop_pending` (budget clause dropped, killed by `PENDING`).
+- b1 proof `tests/w/test_worker_lab_eval_pg.py::…a_redelivery_before_recover_is_not_acknowledged`: the finding's ordering: crash the first pump (`Dying`), clock +31 s, pump again WITHOUT `lab recover` → `ResultPending`, cases still `leased` and none `pending`, the event still pending; then `lab recover` ≥ 1, clock +31 s, pump → acknowledged, event pending 0, every case scored.
+
+| # | Command | Head | Exit | Result |
+|---|---|---|---|---|
+| F1 | `pytest tests/w/test_worker_main.py -k "eval_run or unfinished or cannot_finish"` (before the fix) | 3549edd0 + tests | 1 | 2 failed (the new cases), 3 passed |
+| F2 | `pytest tests/w/test_worker_main.py` | fix | 0 | 53 passed, 4 skipped |
+| F3 | `ruff check` on the four touched files | fix | 0 | clean |
+| F4 | `INFRX_D_TASK=n2 INFRX_MUTANTS=all pytest -q -rs tests/w/test_worker_main_mutants.py` | fix | 0 | **76 passed, 7 skipped** (3m17s): 83 collected incl. the 2 new mutants, both killed; the 7 skipped are the PostgreSQL list (`no local S3 endpoint`), which this fix does not touch (81 passed at feaf4ab with the t2f S3) |
+| F5 | `INFRX_D_TASK=t2f INFRX_T2F_STACK=1 INFRX_M_S3_ENDPOINT=http://127.0.0.1:57545 INFRX_M_S3_LOCAL_CREDS=1 pytest -q -rs tests/g tests/w tests/contracts tests/i/test_packaging.py` | fix | 1 | **2489 passed, 6 skipped, 32 failed, 14 errors** (15m44s); all 46 = `ForeignContainer` (pgharness.py:209): `infrx-t2f-postgres` and `infrx-d2-valkey` are held by a reviewer checkout (`scratchpad/rvcomp-cmo-2774177`), `infrx-b1-postgres` by `scratchpad/rv-comp`; no product failure. The service-free set is green |
+| F6 | `INFRX_D_TASK=b1 pytest -q tests/w/test_worker_lab_eval_pg.py` | fix | 1 | **not run**: 3 errors, `ForeignContainer: refusing to use infrx-b1-postgres: another checkout's run (…/scratchpad/rv-comp)`. The b1 proof (incl. the new ordering case) has to be rerun once that reviewer container is gone |
+
+Harness note: one earlier attempt at F5 ran without `INFRX_D_TASK` and created `infrx-d1-postgres` labelled with this checkout; it was stopped at once. Removing that container was not permitted from this session, so it is still there (ours by label, d1 default ports) for the coordinator to remove.
+
+Not rerun in this round: `make app-e2e` (the fix is inside the `LAB_EVAL_WORKER`-on path only, which the App gate never composes; last run PASS 17/17 at feaf4ab), and `tests/g`/`tests/contracts` mutants (no gateway or contract file changed).

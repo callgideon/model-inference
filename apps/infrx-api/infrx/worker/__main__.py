@@ -310,12 +310,16 @@ def lab_eval(mode, connect, objects, evaluators, targets, worker_id) -> dict:
             "lab_recover": lambda: every(LAB_RECOVER_S, store.recover, "lab recover")}
 
 
+RUN_FINAL = ("succeeded", "failed", "cancelled")
+
+
 class EvalRuns:
     """The Lab outbox's `eval_run` handler (`OutboxRelay`'s scheduler). The event names a
     run D7 already created (`lab_create_run` wrote it), so a delivery - first or again -
     rebuilds it with `resume`, never `freeze`: after a revocation `freeze` is refused and the
-    run would never end (B1's recheck). A wallet stop is not acknowledged (the relay hands
-    it out again after its window); any other kind is not this handler's."""
+    run would never end (B1's recheck). Only a finished, cancelled or budget-stopped run is
+    acknowledged; a wallet stop or a run still unfinished raises (the relay hands it out
+    again after its window); any other kind is not this handler's."""
 
     def __init__(self, store, objects, evaluators, targets, *, worker_id: str) -> None:
         self.store, self.objects, self.worker_id = store, objects, worker_id
@@ -336,7 +340,11 @@ class EvalRuns:
                                          limits=LAB_EVAL_LIMITS).run(frozen)
         if report["stopped"] == "wallet_exhausted":
             raise errors.InsufficientCredit(f"eval run {run_id}: the provider_dev wallet")
-        return True
+        if report["stopped"] == "budget_exhausted" or report["state"] in RUN_FINAL:
+            return True
+        # Nothing pending, but a dead attempt's cases stay `leased` until `lab_recover`
+        # reaps them and recover emits no event: acknowledging now would orphan the run.
+        raise errors.ResultPending(f"eval run {run_id} is still {report['state']}")
 # --- end WR-T-4 / WR-B-5 ------------------------------------------------------------------
 
 

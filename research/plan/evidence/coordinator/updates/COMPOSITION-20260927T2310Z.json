@@ -2,8 +2,8 @@
  "task": "COMPOSITION",
  "lane": "composition",
  "slice": "LW2 composition batch: WR-T-4 (done), WR-N-3 (blocked), WR-B-5 (done; sources blocked on WR-B-2(b)/WR-B-3), E4 regression (switches off)",
- "activity": "review",
- "at": "2026-09-27T23:10:00Z",
+ "activity": "fix-round",
+ "at": "2026-09-28T07:00:00Z",
  "head": "feaf4ab",
  "base": "2252e5a0",
  "worktree": ".claude/worktrees/codex-w5-composition",
@@ -61,19 +61,40 @@
    "cmd": "make app-e2e (e4b)",
    "exit": 0,
    "summary": "PASS; journey 20/20; APP-LOCAL 17/17 (4 delegated) = last accepted"
+  },
+  {
+   "cmd": "pytest tests/w/test_worker_main.py (1-F1 tests first, then fix)",
+   "exit": 0,
+   "summary": "red 2 failed before the fix; 53 passed, 4 skipped after"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n2 INFRX_MUTANTS=all pytest tests/w/test_worker_main_mutants.py",
+   "exit": 0,
+   "summary": "76 passed, 7 skipped (PG list, no S3 on n2); 2 new mutants killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=t2f ... pytest tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 1,
+   "summary": "2489 passed; 46 ForeignContainer (t2f/d2/b1 held by reviewer checkouts), no product failure"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b1 pytest tests/w/test_worker_lab_eval_pg.py",
+   "exit": 1,
+   "summary": "not run: infrx-b1-postgres held by reviewer checkout rv-comp; rerun needed for the new ordering proof"
   }
  ],
  "estimate": {
-  "optimistic_h": 0.5,
-  "likely_h": 1.5,
-  "pessimistic_h": 4,
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 2,
   "confidence": "medium",
-  "basis": "implementation + checks ~3.5 h lane time; remaining one verify round (G4F took one fix round); WR-N-3 needs a ruling on Lab provider identity at the gateway first",
-  "at": "2026-09-27T23:10:00Z"
+  "basis": "1-F1 fixed; remaining: the b1 proof once its container is free (~2 min run) and the coordinator's verify",
+  "at": "2026-09-28T07:00:00Z"
  },
  "blockers": [
   "WR-N-3: no bundle route exists and no gateway credential satisfies WR-N-2 (L2 membership of an individual); needs a route owner (G/L, N4) and a ruling",
-  "LAB_EVAL_WORKER cannot start in a deployment until WR-B-2(b) evaluator source and WR-B-3 target source exist"
+  "LAB_EVAL_WORKER cannot start in a deployment until WR-B-2(b) evaluator source and WR-B-3 target source exist",
+  "b1 PG proof (incl. 1-F1 ordering case) unrun: infrx-b1-postgres owned by scratchpad/rv-comp; also a stray infrx-d1-postgres labelled with this checkout to remove"
  ],
  "wiring_requests": [
   "WR-COMP-1 lab-sql: evaluator table/read RPC (WR-B-2(b))",
