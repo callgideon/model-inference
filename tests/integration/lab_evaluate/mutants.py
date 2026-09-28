@@ -96,8 +96,8 @@ MUTANTS: tuple[Mutant, ...] = (
        NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
-    _m("unbound_case_runs", "a case waiting on composition/B4 is never a pass", P,
-       "    lw.not_run(sid, lane, why=why)", "    return", *UNBOUND),
+    _m("unbound_case_runs", "a case waiting on composition/B4/lab-api-2 is never a pass", P,
+       "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )
 
 # ------------------------------------------------------------------ the stack list

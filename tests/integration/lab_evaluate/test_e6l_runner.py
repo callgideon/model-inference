@@ -59,7 +59,7 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 11
     assert runner.SCENARIOS["j09"]["lanes"] == ["composition"]
-    assert runner.SCENARIOS["j10"]["lanes"] == ["B4"]
+    assert runner.SCENARIOS["j10"]["lanes"] == ["B4", "lab-api-2"]
 
 
 def test_e6l_the_required_cases_are_exactly_what_the_scenario_modules_define():

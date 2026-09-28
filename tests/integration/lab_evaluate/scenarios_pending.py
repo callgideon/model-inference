@@ -9,9 +9,12 @@ naming its lane and the exact rerun. Each case states the steps it will run once
   lets it lease j05's run, SIGKILLs it mid-attempt, restarts it and requires every case
   scored once; and drains the `checkpoint_received` outbox twice (a relay redelivery) with
   one run queued.
-* j10 (B4): the provider UI (`apps/lab/app/(provider)/{evaluations,experiments}/`), driven
-  against this stack's comparison: launch, progress, cancel, and the j07 report shown with
-  its slices, uncertainty and missing cases (`apps/lab/tests/e2e/evaluate/`).
+* j10 (B4 + lab-api-2): the provider UI (`apps/lab/app/(provider)/{evaluations,experiments}/`,
+  B4, merged on the tip in batch #7) over the gateway's `/lab/v1/evaluations` route
+  (`infrx/gateway/routes/lab_evaluations.py`, lab-api-2, codex/w5-lab-api-2), driven against
+  this stack's comparison: launch, progress, cancel, and the j07 report shown with its
+  slices, uncertainty and missing cases (`apps/lab/tests/e2e/evaluate/`). NOT RUN names
+  whichever of the two is absent.
 """
 from __future__ import annotations
 
@@ -23,9 +26,9 @@ def bound(setting: str) -> bool:
     return setting in (lw.API / "infrx" / "worker" / "__main__.py").read_text()
 
 
-def waits(sid: str, lane: str, why: str) -> None:
-    """NOT RUN while `lane` is unmerged, naming the rerun."""
-    lw.not_run(sid, lane, why=why)
+def waits(sid: str, *lanes: str, why: str) -> None:
+    """NOT RUN while `lanes` are unmerged, naming the rerun."""
+    lw.not_run(sid, *lanes, why=why)
 
 
 def unbound():
@@ -38,7 +41,8 @@ def test_j09_the_eval_worker_process_killed_mid_run_loses_nothing():
     steps = ("start the eval worker entry point on DATABASE; SIGKILL it mid-attempt; restart; "
              "every case of the run scored once, the killed attempt expired")
     assert not bound("LAB_EVAL_WORKER"), "the entry point landed: bind this case"
-    waits("j09", "composition", f"no I5 eval worker entry point on this base. Steps: {steps}")
+    waits("j09", "composition",
+          why=f"no I5 eval worker entry point on this base. Steps: {steps}")
     unbound()
 
 
@@ -46,15 +50,17 @@ def test_j09_the_checkpoint_worker_drains_the_outbox_once():
     steps = ("start the checkpoints worker; deliver one checkpoint_received event twice "
              "(release, redeliver); one receipt, one run, one eval_run event")
     assert not bound("checkpoint_received"), "the entry point landed: bind this case"
-    waits("j09", "composition", f"no I5 checkpoint worker entry point on this base. "
+    waits("j09", "composition", why=f"no I5 checkpoint worker entry point on this base. "
                                 f"Steps: {steps}")
     unbound()
 
 
 def test_j10_the_provider_ui_launches_compares_and_cancels():
-    evaluations = lw.REPO / "apps" / "lab" / "app" / "(provider)" / "evaluations"
-    assert not evaluations.exists(), "B4 landed: bind apps/lab/tests/e2e/evaluate/"
-    waits("j10", "B4", "the provider evaluation UI is not on this base. Steps: launch, "
-                       "progress, cancel and the j07 comparison through "
-                       "apps/lab/tests/e2e/evaluate/")
+    parts = {"B4": lw.REPO / "apps" / "lab" / "app" / "(provider)" / "evaluations",
+             "lab-api-2": lw.API / "infrx" / "gateway" / "routes" / "lab_evaluations.py"}
+    absent = [lane for lane, path in parts.items() if not path.exists()]
+    assert absent, "B4 and lab-api-2 landed: bind apps/lab/tests/e2e/evaluate/"
+    waits("j10", *absent, why="the provider evaluation UI or its /lab/v1/evaluations route "
+                              "is not on this base. Steps: launch, progress, cancel and the "
+                              "j07 comparison through apps/lab/tests/e2e/evaluate/")
     unbound()
