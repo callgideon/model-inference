@@ -17,7 +17,7 @@ Two entry points, one composition (E6L-O5): the eval role IS `infrx.worker`'s `l
 the consumer worker's `LAB_EVAL_WORKER` stays a seam that refuses without them, so Lab work
 never runs in a consumer process.
 
-* `eval`       LAB_S3_BUCKET (+ LAB_S3_ENDPOINT), LAB_EVAL_ENDPOINT_URL (the gateway that
+* `eval`       LAB_S3_BUCKET (+ LAB_S3_ENDPOINT, LAB_S3_PREFIX), LAB_EVAL_ENDPOINT_URL (the gateway that
                meters provider_dev), LAB_EVAL_ENDPOINT_KEY (the dev endpoint's credential).
                Evaluators: D7's `lab_evaluator` for the provider the ref names (WR-COMP-1,
                0034). Targets: `DevTargets` over L3's rows (WR-COMP-2; no ControlReads needed).
@@ -73,7 +73,7 @@ NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
          "annotation": (BUCKET,), "training": (BUCKET,), "rollout": (),
          "datasets": (BUCKET, *TRACES)}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
-#: store's default prefix. ponytail: a constant; a setting if a deployment ever moves it.
+#: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
 LAB_PREFIX = "infrx/"
 # ponytail: fixed cadences, as the consumer worker's Lab pumps.
 JUDGE_PASS_S = 60.0
@@ -116,7 +116,8 @@ def lab_objects(mode: str, env):
     """The Lab objects, answering HeadBucket before anything is served."""
     from ...media.s3 import S3ObjectStore, reason
     try:
-        objects = S3ObjectStore.connect(env[BUCKET], LAB_PREFIX, env.get("LAB_S3_ENDPOINT", ""))
+        objects = S3ObjectStore.connect(env[BUCKET], env.get("LAB_S3_PREFIX") or LAB_PREFIX,
+                                        env.get("LAB_S3_ENDPOINT", ""))
         objects.probe()
     except Exception as failure:          # noqa: BLE001 - every failure refuses startup
         raise RuntimeMisconfigured(mode, detail=f"{BUCKET} did not answer HeadBucket "

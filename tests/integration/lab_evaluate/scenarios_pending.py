@@ -1,14 +1,12 @@
 """E6L j09-j10: the journey's legs that wait on unmerged lanes - NOT RUN, never a pass, each
 naming its lane and the exact rerun. Each case states the steps it will run once bound.
 
-* j09 (composition): the I5 eval/checkpoint worker processes. The entry point the units run
-  (`deploy/lab/eval/*.service`, WR-B-5) is the composition lane's (`infrx/worker/__main__.py`,
-  `LAB_EVAL_WORKER`, codex/w5-composition c241ca81), not on this base; that branch has no
-  `checkpoint_received` role yet. Bound, it starts the eval worker against this stack's Lab
-  database with `LAB_EVAL_WORKER` on,
-  lets it lease j05's run, SIGKILLs it mid-attempt, restarts it and requires every case
-  scored once; and drains the `checkpoint_received` outbox twice (a relay redelivery) with
-  one run queued.
+* j09's checkpoint half (L3, WR-B3-3): the eval worker process is bound
+  (`scenarios_workers.py`, composition batch 2); the checkpoints role of
+  `python -m infrx.lab.workers` refuses to start until L3's dev deployer and a registry
+  adapter exist (without them B3 would reject every checkpoint). Bound, it starts the
+  checkpoints worker and drains the `checkpoint_received` outbox twice (a relay redelivery)
+  with one run queued. The tripwire: the role composing.
 * j10 (B4 + lab-api-2): the provider UI (`apps/lab/app/(provider)/{evaluations,experiments}/`,
   B4, merged on the tip in batch #7) over the gateway's `/lab/v1/evaluations` route
   (`infrx/gateway/routes/lab_evaluations.py`, lab-api-2, codex/w5-lab-api-2), driven against
@@ -21,9 +19,15 @@ from __future__ import annotations
 import lab_world as lw
 
 
-def bound(setting: str) -> bool:
-    """The worker main composes the Lab role named by `setting`."""
-    return setting in (lw.API / "infrx" / "worker" / "__main__.py").read_text()
+def checkpoints_bound() -> bool:
+    """The checkpoints role composes: it refuses by name until WR-B3-3's sources exist."""
+    from infrx.lab.workers import __main__ as workers
+    try:
+        workers.compose("checkpoints", {"LAB_DATABASE_URL": "postgresql://x@127.0.0.1:9/x",
+                                        "LAB_WORKER_HEALTH_PORT": "9"})
+    except ValueError as refused:
+        return "WR-B3-3" not in str(refused)
+    return True
 
 
 def waits(sid: str, *lanes: str, why: str) -> None:
@@ -37,21 +41,12 @@ def unbound():
     pytest.fail("E6L-BIND: this case is not bound to the merged lane yet")
 
 
-def test_j09_the_eval_worker_process_killed_mid_run_loses_nothing():
-    steps = ("start the eval worker entry point on DATABASE; SIGKILL it mid-attempt; restart; "
-             "every case of the run scored once, the killed attempt expired")
-    assert not bound("LAB_EVAL_WORKER"), "the entry point landed: bind this case"
-    waits("j09", "composition",
-          why=f"no I5 eval worker entry point on this base. Steps: {steps}")
-    unbound()
-
-
 def test_j09_the_checkpoint_worker_drains_the_outbox_once():
     steps = ("start the checkpoints worker; deliver one checkpoint_received event twice "
              "(release, redeliver); one receipt, one run, one eval_run event")
-    assert not bound("checkpoint_received"), "the entry point landed: bind this case"
-    waits("j09", "composition", why=f"no I5 checkpoint worker entry point on this base. "
-                                f"Steps: {steps}")
+    assert not checkpoints_bound(), "the checkpoints role composes: bind this case"
+    waits("j09", "L3", why=f"the checkpoints role refuses until L3's dev deployer and a "
+                           f"registry adapter exist (WR-B3-3). Steps: {steps}")
     unbound()
 
 
