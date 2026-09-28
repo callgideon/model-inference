@@ -74,4 +74,4 @@ Detail and commands: `E5L-3da696a.md` § Fix round. I2L-OBS changes: judge healt
 lab-workers' annotation/training/rollout); `alerts.json` gains the Lab-only `TraceGaugesDown` (`infrx_trace_gauges_up < 1`,
 page) so an exporter failure pages; README §4 adds the pin step (WR-OBS-5) and §6 the `TraceGaugesDown` runbook;
 WR-OBS-2 revised (Lab rules merged only when pinned) and WR-OBS-5 filed (`E5L-wiring/`). test_i2l_obs: 13 cases (3 new),
-41/41 layer-1 mutants killed.
+42/42 layer-1 mutants killed (corrected at merge 9 from 41/41 — 1-LO-EVID-2; 38 at 3da696a0).

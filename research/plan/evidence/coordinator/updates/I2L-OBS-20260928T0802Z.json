@@ -9,7 +9,7 @@
   "tests/integration/lab_observe/",
   "research/plan/evidence/e/E5L-*"
  ],
- "task": "I2L",
+ "task": "I2L-OBS",
  "slice": "I2L-OBS: trace/judge units, storage grants, egress budgets, T3 alarms (off by default)",
  "commands": [
   {

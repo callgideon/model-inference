@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 
-def merge(directory: Path) -> dict:
+def merge(directory: Path, extra: tuple[Path, ...] = ()) -> dict:
     alerts = json.loads((directory / "alerts.json").read_text())
     ops = json.loads((directory / "operations.json").read_text())
     rules = {rule["name"]: dict(rule) for rule in alerts["rules"]}
@@ -30,9 +30,18 @@ def merge(directory: Path) -> dict:
         if rule["name"] in rules:
             raise SystemExit(f"rule defined twice: {rule['name']}")
         rules[rule["name"]] = rule
-    version = f"a{alerts['version']}+o{ops['version']}" + (f"+p{app['version']}" if app else "")
+    # I2L-OBS (WR-OBS-2): an enabled Lab role's rules (infra/lab/observe/alerts.json), same
+    # shape, same duplicate refusal; observe.sh passes it only when the role's env file exists.
+    lab = [json.loads(path.read_text()) for path in extra]
+    for rule in (rule for doc in lab for rule in doc["rules"]):
+        if rule["name"] in rules:
+            raise SystemExit(f"rule defined twice: {rule['name']}")
+        rules[rule["name"]] = rule
+    version = f"a{alerts['version']}+o{ops['version']}" + (f"+p{app['version']}" if app else "") \
+        + "".join(f"+l{doc['version']}" for doc in lab)
     return {"version": version, "rules": list(rules.values())}
 
 
 if __name__ == "__main__":
-    print(json.dumps(merge(Path(sys.argv[1] if len(sys.argv) > 1 else "infra/alerts"))))
+    print(json.dumps(merge(Path(sys.argv[1] if len(sys.argv) > 1 else "infra/alerts"),
+                           tuple(Path(p) for p in sys.argv[2:]))))
