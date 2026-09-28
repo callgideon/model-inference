@@ -2,7 +2,7 @@
   "task": "E3L",
   "slice": "E3L-BIND: l02-l06, l09, l10, l12 bound to the real L3 (LabControl/PgControlStore/PgRegistry/PgCatalogDirectory; R186 factory process for l10/l12) + full make lab-operate at bab9b180: 20/22 cases PASS; gate FAIL on E3L-F1 (l05b /v1/models listing_version constant) and E3L-F2 (l10b retried proposal opens a second one); J01/J02 NOT RUN (composition-2 not on base)",
   "activity": "review",
-  "head": null,
+  "head": "9b19864d",
   "worktree": ".claude/worktrees/codex-w5-e3l-bind",
   "branch": "codex/w5-e3l-bind",
   "owned_paths": [
