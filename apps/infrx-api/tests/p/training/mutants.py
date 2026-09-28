@@ -24,6 +24,7 @@ P = "pipelines/training/__init__.py"
 
 BUNDLE = "test_p3_a_bundle_names_train_and_dev_and_pins_the_holdout_without_shipping_it"
 REFUSE = "test_p3_a_bundle_refuses_bad_config_other_exports_and_untrainable_data"
+PIN = "test_p3_a_bundle_pins_only_a_stored_current_export_of_trainable_samples"
 MANUAL = "test_p3_the_manual_workflow_round_trips_to_an_eligible_candidate"
 HIDDEN = "test_p3_automatic_connectors_stay_hidden_until_p11"
 AMBIG = "test_p3_an_ambiguous_submit_is_reconciled_without_a_second_paid_job"
@@ -57,7 +58,30 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p3_config_open", "a config names only known keys", 'extra="forbid", strict=True)',
       'extra="ignore", strict=True)', REFUSE),
     m("p3_export_of_any_dataset", "the bundled export is of this dataset",
-      'if export.get("dataset_ref") != dataset_ref:', "if False:", REFUSE),
+      'if (record["format"], record["dataset_ref"]) != (export["format"], dataset_ref):',
+      "if False:", REFUSE),
+    m("p3_export_kind_open", "the export is N2's or P1's (0-P3-EXPORT-PIN-UNVERIFIED)",
+      "if kind is None or not isinstance(export_id, str)", "if not isinstance(export_id, str)",
+      PIN),
+    m("p3_export_expiry_unchecked", "an expired export is not pinned",
+      'now >= datetime.fromisoformat(record["expires_at"])', "False", PIN),
+    m("p3_export_cancel_unchecked", "a cancelled export is not pinned",
+      'if await objects.head(f"{base}/cancelled") is not None or', "if False or", PIN),
+    m("p3_export_bytes_unchecked", "the export's bytes are what it recorded",
+      "if hashlib.sha256(data).hexdigest() != digest:", "if False:", PIN),
+    m("p3_export_parts_unpinned", "an N2 export's content digest is of its recorded parts",
+      'if kind == "exports" and sha256 != hashlib.sha256(', "if False and sha256 != hashlib.sha256(",
+      PIN),
+    m("p3_export_ids_unchecked", "an export carries only samples under a current training grant",
+      "if carried - set(train + dev):", "if False:", PIN),
+    m("p3_label_export_ids_unread", "a P1 export's samples are its lineage",
+      'ids = {x["sample_id"] for x in record.get("lineage", ())}', "ids = set()", PIN),
+    m("p3_dataset_export_ids_unread", "an N2 export's samples are its items",
+      'ids |= {json.loads(line)["sample_id"] for line in data.splitlines()}', "ids |= set()", PIN),
+    m("p3_pin_from_caller", "the pin is the stored export's digest",
+      'return {"format": record["format"], "export_id": export_id, "sha256": sha256}, ids',
+      'return {"format": record["format"], "export_id": export_id, '
+      '"sha256": export.get("sha256")}, ids', PIN),
     m("p3_bundle_gate_is_access", "the bundle reads the training gate",
       'purpose="training"))\n    train = ', 'purpose="provider_sharing"))\n    train = ', REFUSE),
     m("p3_revoked_train_bundled", "train ids are under a current training grant",
@@ -105,13 +129,28 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p3_consent_gate_is_access", "the submission gate is training",
       'purpose="training"))\n    if set(bundle', 'purpose="provider_sharing"))\n    if set(bundle',
       CONSENT),
-    m("p3_budget_unreserved", "a submission reserves its budget first",
-      '    await ledger.reserve(key, provider_org_id=provider_org_id, payer_ref=run["payer_ref"],'
-      '\n                         limit=run["limit"])\n', "", MANUAL, AMBIG),
+    m("p3_budget_unreserved", "an automatic submission reserves its budget first",
+      '        await ledger.reserve(key, provider_org_id=provider_org_id, payer_ref=run["payer_ref"],'
+      '\n                             limit=run["limit"])\n', "        pass\n", AMBIG),
+    m("p3_manual_reserves", "the manual bundle holds no reservation (1-PIPE-R1)",
+      "paid = connector.name != MANUAL", "paid = True", MANUAL),
+    m("p3_manual_cancel_settles", "cancelling a manual run settles nothing",
+      'if run["connector"] != MANUAL:                 # the manual bundle reserved nothing',
+      "if True:", LATE, dies_by=("KeyError",)),
+    m("p3_finish_role_unchecked", "only a current developer finishes a manual run",
+      "    await _member(members, provider_org_id, user_id)\n    run = await _run(",
+      "    run = await _run(", MANUAL),
+    m("p3_finish_automatic", "an automatic run is never finished by hand",
+      'if run["connector"] != MANUAL:\n        raise errors.StateConflict', "if False:\n        raise errors.StateConflict",
+      MANUAL),
+    m("p3_finish_replay_conflicts", "finishing a finished manual run is a replay",
+      '    if run["state"] == "completed":\n        return run\n', "", MANUAL,
+      dies_by=("StateConflict",)),
     m("p3_rejection_ambiguous", "a definite refusal is failed", "except Rejected as refused:",
       "except KeyError as refused:", REJECT),
     m("p3_rejection_keeps_budget", "a refused submission releases its reservation",
-      "        await ledger.release(key, provider_org_id=provider_org_id)\n", "", REJECT),
+      "            await ledger.release(key, provider_org_id=provider_org_id)\n",
+      "            pass\n", REJECT),
     m("p3_unknown_is_failed", "an unknown outcome is ambiguous",
       'return await ledger.move(external_run_id, provider_org_id=provider_org_id,\n'
       '                                 expected="submitting", target="ambiguous")',

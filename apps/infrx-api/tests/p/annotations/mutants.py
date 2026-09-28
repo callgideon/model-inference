@@ -34,6 +34,9 @@ SEL = "test_p1_select_keeps_splits_and_only_authorized_samples"
 EXP = "test_p1_a_training_export_is_train_only_and_byte_identical"
 PREF = "test_p1_preference_pairs_map_or_are_reported"
 DESC = "test_p1_holdout_descendants_never_reach_a_training_export"
+SUP = "test_p1_only_an_adjudication_supersedes"
+XVER = "test_p1_a_disagreement_across_versions_is_adjudicated"
+READ = "test_p1_a_label_export_expires_and_rereads_the_training_gate"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -109,6 +112,8 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p1_replay_redecides", "a replayed review is not a second move",
       'if not any(e["key"] == key for e in events):', "if True:", ONCE,
       dies_by=("StateConflict",)),
+    m("p1_review_supersedes", "only an adjudication supersedes (0-P1-SUPERSEDE-BYPASS)",
+      'if decision not in ("accepted", "rejected"):', "if False:", SUP),
     m("p1_supersede_reuses_review_key", "a supersession is its own event",
       "f\"{'supersede' if decision == 'superseded' else 'review'}:{ref}\"", 'f"review:{ref}"',
       ADJ, dies_by=("IdempotencyConflict",)),
@@ -140,12 +145,12 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p1_nothing_to_adjudicate", "an agreed sample cannot be adjudicated",
       "        if not disputed:\n", "        if False:\n", ADJ, dies_by=("TypeError",)),
     m("p1_accepted_rejected", "an accepted disputed label is superseded",
-      '"superseded" if state[r] == "accepted" else "rejected"',
-      '"rejected" if state[r] == "accepted" else "rejected"', ADJ,
+      '"superseded" if labels[r][2] == "accepted" else "rejected"',
+      '"rejected" if labels[r][2] == "accepted" else "rejected"', ADJ,
       dies_by=("StateConflict",)),
     m("p1_submitted_superseded", "a submitted disputed label is rejected",
-      '"superseded" if state[r] == "accepted" else "rejected"',
-      '"superseded" if state[r] == "accepted" else "superseded"', ADJREJ,
+      '"superseded" if labels[r][2] == "accepted" else "rejected"',
+      '"superseded" if labels[r][2] == "accepted" else "superseded"', ADJREJ,
       dies_by=("StateConflict",)),
     m("p1_adjudication_recomputed", "a replayed adjudication settles what it first settled",
       "    if prior is None:\n", "    if True:\n", ADJ, dies_by=("StateConflict",)),
@@ -154,6 +159,13 @@ MUTANTS: tuple[Mutant, ...] = (
       dies_by=("StateConflict",)),
     m("p1_adjudication_provenance_dropped", "an adjudication cites the disputed labels",
       'provenance={"adjudicates": disputed}', "provenance={}", ADJ),
+    m("p1_ancestor_move_logged_here", "a move is logged under its label's own version",
+      "version = labels[old][0]", "version = dataset_ref", XVER, dies_by=("KeyError",)),
+    m("p1_ancestor_review_unseen", "an adjudicator reviewed no disputed label on any version",
+      'and e["annotation_ref"] in disputed for e in everything):',
+      'and e["annotation_ref"] in disputed for e in events):', XVER),
+    m("p1_ancestor_only_samples_disagree", "a disagreement is of a sample of this version",
+      "if sample[ref] in here:", "if True:", XVER),
     # --- P1.b select (DATA-SPLIT, DATA-RIGHTS)
     m("p1_select_ignores_rights", "a selection reads the access gate now",
       "keep = set(sample_ids) & readable", "keep = set(sample_ids)", SEL),
@@ -179,12 +191,12 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p1_ancestors_unwalked", "every ancestor's holdout binds",
       "queue.extend(manifest.parent_refs)", "pass", DESC),
     m("p1_ancestor_labels_ignored", "labels of an ancestor version carry to its samples",
-      "for ref in versions:", "for ref in versions[:1]:", DESC),
+      "for version in versions:", "for version in versions[:1]:", DESC, XVER),
     m("p1_export_rights_unchecked", "an export reads the training gate now",
       "elif sample.sample_id not in allowed:", "elif False:", EXP, GATES),
     m("p1_export_gate_is_access", "the export gate is training",
-      'purpose="training"))\n    versions, holdout', 'purpose="provider_sharing"))\n'
-      "    versions, holdout", GATES),
+      'purpose="training"))\n    _, holdout', 'purpose="provider_sharing"))\n'
+      "    _, holdout", GATES),
     m("p1_unaccepted_exported", "only accepted labels are examples",
       'if state == "accepted":', "if state in LIVE:", EXP),
     m("p1_disagreement_exported", "differing accepted labels are not an example",
@@ -194,8 +206,8 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p1_adapter_unchecked", "an unknown adapter is refused",
       "if adapter not in ADAPTERS:", "if False:", EXP),
     m("p1_export_id_unchecked", "an export id is a UUID, never a path",
-      "if not isinstance(export_id, str) or not UUID_RE.fullmatch(export_id):", "if False:",
-      EXP),
+      '{ADAPTERS}")\n    if not isinstance(export_id, str) or not UUID_RE.fullmatch(export_id):',
+      '{ADAPTERS}")\n    if False:', EXP),
     m("p1_preference_shape_loose", "a preference label is exactly chosen and rejected",
       'set(value) == {"chosen", "rejected"}', '"chosen" in value', PREF, dies_by=("KeyError",)),
     m("p1_sft_schema_wrong", "the SFT line is {prompt, completion}",
@@ -204,6 +216,15 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p1_export_rewritable", "an export's bytes are write-once",
       'await write_once(objects, f"{base}/examples.jsonl", data, "application/x-ndjson")',
       'await objects.put_if_absent(f"{base}/examples.jsonl", data, "application/x-ndjson")', EXP),
+    m("p1_export_ttl_unbounded", "a label export lives 1 s..7 days (1-PIPE-R2)",
+      "if not 1 <= ttl_s <= MAX_EXPORT_TTL_S:", "if False:", READ),
+    m("p1_export_expiry_unrecorded", "a label export records its expiry",
+      '"expires_at": (now + timedelta(seconds=ttl_s)).isoformat()}',
+      '"expires_at": "9999-12-31T00:00:00+00:00"}', READ),
+    m("p1_export_never_expires", "an expired label export is Gone",
+      'if now >= datetime.fromisoformat(record["expires_at"]):', "if False:", READ),
+    m("p1_export_read_ungated", "a read re-reads the training gate",
+      'if x["sample_id"] in allowed)', "if True)", READ),
     m("p1_methods_dropped", "the lineage names each example's methods",
       '"methods": sorted({r.method for r in records.values()})', '"methods": []', EXP),
 )

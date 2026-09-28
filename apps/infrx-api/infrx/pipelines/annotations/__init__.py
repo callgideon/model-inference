@@ -22,11 +22,18 @@ by F3's annotation machine once (a replay is the same event, another decision a 
 per sample. Rights are read at every call: import and select through the access gate
 (`provider_sharing`), export through the training gate.
 
+**Supersession is adjudication's alone.** A review accepts or rejects; only `adjudicate`
+supersedes. Disagreements and adjudication read the same lineage the export reads: every
+live label of a sample of this version, logged under this version or an ancestor; a move
+on an ancestor's label is logged under that ancestor.
+
 **Exports are train-only.** An example is a train sample of the dataset whose accepted
 labels agree, that the training gate allows now, and that is not a holdout sample (by id,
 content digest or group key) of any ancestor version. Everything left out is listed with
 its reason. The bytes are write-once, so a rerun is byte-identical and a changed rerun a
-`Conflict`; lineage (label refs and methods per sample) is in the export record.
+`Conflict`; lineage (label refs and methods per sample) is in the export record, with
+`expires_at` (TTL 1 s..7 days, N2's bound). `read_export` is the only read: `Gone` once
+expired, and only the lines whose sample the training gate allows NOW.
 """
 from __future__ import annotations
 
@@ -35,6 +42,7 @@ import json
 import math
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 from ...contracts import errors
@@ -43,6 +51,7 @@ from ...contracts.lab import records as lab
 from ...contracts.lab import states
 from ...contracts.v2.records import ProviderCapability
 from ...datasets.imports import sample_key, write_once
+from ...datasets.versions import MAX_EXPORT_TTL_S
 
 METHODS = {"human": "imported", "model": "synthetic"}      # pipeline word -> lab method
 PROVENANCE = ("annotator", "model", "prompt", "confidence", "spans")
@@ -221,6 +230,8 @@ async def review(store, log: LabelLog, members: Members, *, provider_org_id: str
     if annotation_ref not in _states(events):
         raise errors.NotFound("no such label in this dataset")
     _assigned(events, record.sample_id, user_id, rubric_ref)
+    if decision not in ("accepted", "rejected"):
+        raise errors.InvalidRequest("a review accepts or rejects; only an adjudication supersedes")
     if correction is not None and decision != "rejected":
         raise errors.InvalidRequest("a correction rejects the label it corrects")
     await _move(log, provider_org_id, events, dataset_ref, annotation_ref, record.sample_id,
@@ -238,14 +249,31 @@ async def _values(store, provider: str, refs) -> dict[str, Any]:
             for ref in refs}
 
 
+async def _labels(store, log: LabelLog, provider: str, dataset_ref: str
+                  ) -> tuple[list[dict], dict[str, tuple[str, str, str]]]:
+    """(every event of this version and its ancestors, annotation ref -> (the version it is
+    logged under, its sample, its state)) for the labels of this version's samples."""
+    versions, _ = await _lineage(store, provider, dataset_ref)
+    here = {s.sample_id for s in (await store.resolve(dataset_ref, provider_org_id=provider)
+                                  ).samples}
+    everything, labels = [], {}
+    for version in versions:
+        events = await log.events(version, provider_org_id=provider)
+        everything += events
+        sample = {e["annotation_ref"]: e["sample_id"] for e in events if "annotation_ref" in e}
+        for ref, state in _states(events).items():
+            if sample[ref] in here:
+                labels[ref] = (version, sample[ref], state)
+    return everything, labels
+
+
 async def disagreements(store, log: LabelLog, *, provider_org_id: str,
                         dataset_ref: str) -> dict[str, list[str]]:
     """sample id -> its live (submitted or accepted) labels, where their values differ."""
-    events = await log.events(dataset_ref, provider_org_id=provider_org_id)
+    _, labels = await _labels(store, log, provider_org_id, dataset_ref)
     live: dict[str, list[str]] = {}
-    for ref, state in _states(events).items():
+    for ref, (_, sample, state) in labels.items():
         if state in LIVE:
-            sample = next(e["sample_id"] for e in events if e.get("annotation_ref") == ref)
             live.setdefault(sample, []).append(ref)
     out = {}
     for sample, refs in live.items():
@@ -265,6 +293,7 @@ async def adjudicate(store, log: LabelLog, members: Members, *, provider_org_id:
     _assigned(events, sample_id, user_id, rubric_ref)
     key = f"adjudicate:{dataset_ref}:{sample_id}"
     prior = next((e for e in events if e["key"] == key), None)
+    everything, labels = await _labels(store, log, provider_org_id, dataset_ref)
     if prior is None:
         disputed = (await disagreements(store, log, provider_org_id=provider_org_id,
                                         dataset_ref=dataset_ref)).get(sample_id)
@@ -273,10 +302,10 @@ async def adjudicate(store, log: LabelLog, members: Members, *, provider_org_id:
         authors = {(await store.resolve(r, provider_org_id=provider_org_id)).reviewer_id
                    for r in disputed}
         if user_id in authors or any(e["kind"] == "review" and e["actor"] == user_id
-                                     and e["annotation_ref"] in disputed for e in events):
+                                     and e["annotation_ref"] in disputed for e in everything):
             raise errors.Forbidden("an adjudicator wrote or reviewed none of the disputed labels")
-        state = _states(events)
-        moves = {r: "superseded" if state[r] == "accepted" else "rejected" for r in disputed}
+        moves = {r: "superseded" if labels[r][2] == "accepted" else "rejected"
+                 for r in disputed}
     else:
         disputed, moves = prior["disputed"], prior["moves"]
     await log.append({"key": key, "kind": "adjudicate", "dataset_ref": dataset_ref,
@@ -287,10 +316,10 @@ async def adjudicate(store, log: LabelLog, members: Members, *, provider_org_id:
                        annotation_id=_uuid("adjudicate", key), value=value,
                        provenance={"adjudicates": disputed}, user_id=user_id,
                        rubric_ref=rubric_ref)
-    for old in disputed:
-        events = await log.events(dataset_ref, provider_org_id=provider_org_id)
-        await _move(log, provider_org_id, events, dataset_ref, old, sample_id, moves[old],
-                    user_id)
+    for old in disputed:                       # logged under the version the label lives on
+        version = labels[old][0]
+        events = await log.events(version, provider_org_id=provider_org_id)
+        await _move(log, provider_org_id, events, version, old, sample_id, moves[old], user_id)
     return ref
 
 
@@ -340,8 +369,10 @@ def _line(adapter: str, prompt: Any, value: Any) -> dict | None:
 
 
 async def export(store, log: LabelLog, objects, *, provider_org_id: str, dataset_ref: str,
-                 export_id: str, adapter: str) -> dict:
+                 export_id: str, adapter: str, now: datetime, ttl_s: int) -> dict:
     """The export record; its examples at `examples_key`, one JSONL line per sample."""
+    if not 1 <= ttl_s <= MAX_EXPORT_TTL_S:
+        raise errors.InvalidRequest(f"an export lives 1..{MAX_EXPORT_TTL_S} s")
     if adapter not in ADAPTERS:
         raise errors.InvalidRequest(f"adapter is one of {ADAPTERS}")
     if not isinstance(export_id, str) or not UUID_RE.fullmatch(export_id):
@@ -349,14 +380,12 @@ async def export(store, log: LabelLog, objects, *, provider_org_id: str, dataset
     manifest = await store.resolve(dataset_ref, provider_org_id=provider_org_id)
     allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
                                                  purpose="training"))
-    versions, holdout = await _lineage(store, provider_org_id, dataset_ref)
+    _, holdout = await _lineage(store, provider_org_id, dataset_ref)
+    _, labels = await _labels(store, log, provider_org_id, dataset_ref)
     accepted: dict[str, list[str]] = {}
-    for ref in versions:
-        events = await log.events(ref, provider_org_id=provider_org_id)
-        for label, state in _states(events).items():
-            if state == "accepted":
-                sample = next(e["sample_id"] for e in events if e.get("annotation_ref") == label)
-                accepted.setdefault(sample, []).append(label)
+    for label, (_, sample, state) in labels.items():
+        if state == "accepted":
+            accepted.setdefault(sample, []).append(label)
     where = {i: n for n in ("train", "validation", "holdout") for i in getattr(manifest.splits, n)}
     lines, lineage, omitted = [], [], []
     for sample in sorted(manifest.samples, key=lambda s: s.sample_id):
@@ -393,6 +422,26 @@ async def export(store, log: LabelLog, objects, *, provider_org_id: str, dataset
               "dataset_ref": dataset_ref, "adapter": adapter, "split": "train",
               "examples_key": f"{base}/examples.jsonl",
               "sha256": hashlib.sha256(data).hexdigest(), "items": len(lines),
-              "lineage": lineage, "omitted": omitted}
+              "lineage": lineage, "omitted": omitted, "created_at": now.isoformat(),
+              "expires_at": (now + timedelta(seconds=ttl_s)).isoformat()}
     await write_once(objects, f"{base}/export.json", lab.canonical(record))
     return record
+
+
+async def read_export(store, objects, *, provider_org_id: str, export_id: str,
+                      now: datetime) -> bytes:
+    """The export's lines whose sample the training gate allows NOW; `Gone` once expired."""
+    if not isinstance(export_id, str) or not UUID_RE.fullmatch(export_id):
+        raise errors.InvalidRequest("an export id is a lowercase UUID")
+    done = await objects.get(f"lab/{provider_org_id}/label-exports/{export_id}/export.json")
+    if done is None:
+        raise errors.NotFound(f"no label export {export_id}")
+    record = json.loads(done)
+    if now >= datetime.fromisoformat(record["expires_at"]):
+        raise errors.Gone(f"label export {export_id} expired")
+    allowed = set(await store.accessible_samples(record["dataset_ref"],
+                                                 provider_org_id=provider_org_id,
+                                                 purpose="training"))
+    data = await objects.get(record["examples_key"]) or b""
+    return b"".join(line + b"\n" for line, x in zip(data.splitlines(), record["lineage"])
+                    if x["sample_id"] in allowed)

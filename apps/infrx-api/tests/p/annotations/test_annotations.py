@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import timedelta
 
 import pytest
 from infrx.contracts import errors
@@ -62,9 +63,10 @@ def record(store, ref):
     return run(store.resolve(ref, provider_org_id=NEMO))
 
 
-def export(store, log, objects, ref, adapter="sft.1", export_id=None):
+def export(store, log, objects, ref, adapter="sft.1", export_id=None, ttl_s=3600):
     return run(p1.export(store, log, objects, provider_org_id=NEMO, dataset_ref=ref,
-                         export_id=export_id or uid(1, 0xe7), adapter=adapter))
+                         export_id=export_id or uid(1, 0xe7), adapter=adapter, now=NOW,
+                         ttl_s=ttl_s))
 
 
 def lines(objects, rec) -> list[dict]:
@@ -218,6 +220,65 @@ def test_p1_a_human_correction_round_trips_with_provenance() -> None:
     assert lines(objects, rec)[0]["completion"] == {"answer": "fixed"}
 
 
+def test_p1_only_an_adjudication_supersedes() -> None:
+    """Oracle (0-P1-SUPERSEDE-BYPASS): a review accepts or rejects and nothing else - another
+    assigned reviewer cannot retire a human ground-truth correction by reviewing it
+    `superseded` (or back to `submitted`); the log is unchanged and the correction still
+    exports."""
+    store, log, objects, access, ref = world()
+    train = split_ids(store, ref)["train"][0]
+    (label,) = load(store, log, ref, label_rows([train])).accepted
+    assign(log, access, ref, train, DEV)
+    fixed = review(store, log, access, ref, label, "rejected", correction={"answer": "fixed"})
+    assign(log, access, ref, train, DEV2)
+    before = list(log.rows)
+    for decision in ("superseded", "submitted"):
+        with pytest.raises(errors.InvalidRequest):
+            review(store, log, access, ref, fixed, decision, user=DEV2)
+    assert log.rows == before and state(log, ref)[fixed] == "accepted"
+    assert export(store, log, objects, ref)["lineage"] == [
+        {"sample_id": train, "label_refs": [fixed], "methods": ["human"]}]
+
+
+def test_p1_a_disagreement_across_versions_is_adjudicated() -> None:
+    """Oracle (0-P1-CROSS-VERSION-DISAGREEMENT-STUCK): a label accepted on the parent and a
+    differing one accepted on a child that keeps the sample in train are one disagreement of
+    the child - the export omits it and `disagreements` and `adjudicate` see it; the
+    adjudication supersedes the parent's label under the parent's log and the child's under
+    the child's, and the child then exports the adjudicated label alone; the adjudicator
+    reviewed neither label, on either version; a parent-only sample is not the child's."""
+    store, log, objects, access, parent = world()
+    t = next(s for s in manifest(store, parent).samples
+             if s.sample_id == split_ids(store, parent)["train"][0])
+    child = run(store.publish({
+        "schema": "lab.dataset_manifest.1", "provider_org_id": NEMO,
+        "dataset_id": uid(9, 0xda), "version": 1, "created_at": "2026-09-27T15:00:00Z",
+        "derivation": "derive", "parent_refs": [parent], "samples": [t.model_dump()],
+        "splits": {"train": [t.sample_id], "validation": [], "holdout": []}},
+        provider_org_id=NEMO, actor="dev@nemo"))
+    (old,) = load(store, log, parent, label_rows([t.sample_id])).accepted
+    (new,) = load(store, log, child, [{**label_rows([t.sample_id])[0],
+                                       "label": {"answer": "other"}}]).accepted
+    elsewhere = split_ids(store, parent)["train"][1]     # the parent's own disagreement
+    load(store, log, parent, [label_rows([elsewhere])[0],
+                              {**label_rows([elsewhere])[0], "label": 2}])
+    accept_all(store, log, access, parent, [old], user=DEV2)
+    accept_all(store, log, access, child, [new])
+    assert export(store, log, objects, child)["omitted"] == [
+        {"sample_id": t.sample_id, "reason": "disagreement"}]
+    assert run(p1.disagreements(store, log, provider_org_id=NEMO, dataset_ref=child)) == {
+        t.sample_id: sorted([old, new])}
+    assign(log, access, child, t.sample_id, DEV2)
+    with pytest.raises(errors.Forbidden):             # DEV2 reviewed the parent's label
+        adjudicate(store, log, access, child, t.sample_id, {"answer": "x"})
+    assign(log, access, child, t.sample_id, ADMIN)
+    final = adjudicate(store, log, access, child, t.sample_id, {"answer": "x"}, user=ADMIN)
+    assert (state(log, parent)[old], state(log, child)[new]) == ("superseded", "superseded")
+    rec = export(store, log, objects, child, export_id=uid(2, 0xe7))
+    assert rec["lineage"] == [{"sample_id": t.sample_id, "label_refs": [final],
+                               "methods": ["human"]}] and rec["omitted"] == []
+
+
 def test_p1_a_disagreement_is_adjudicated_by_an_independent_reviewer() -> None:
     """Oracle: two accepted labels that differ are a disagreement the export refuses; the
     reviewer who accepted them cannot adjudicate; an independent assigned reviewer writes one
@@ -329,6 +390,29 @@ def test_p1_a_training_export_is_train_only_and_byte_identical() -> None:
     for adapter, eid in (("rlhf.1", uid(4, 0xe7)), ("sft.1", "../x")):
         with pytest.raises(errors.InvalidRequest):
             export(store, log, objects, ref, adapter=adapter, export_id=eid)
+
+
+def test_p1_a_label_export_expires_and_rereads_the_training_gate() -> None:
+    """Oracle (1-PIPE-R2, DATA-RIGHTS): a label export lives 1 s..7 days (N2's bound) and
+    records its expiry; `read_export` serves its lines while the training grant stands, drops
+    a sample's line once the grant is revoked, and is `Gone` at expiry."""
+    store, log, objects, access, ref = world()
+    labels = load(store, log, ref, label_rows(split_ids(store, ref)["train"])).accepted
+    accept_all(store, log, access, ref, labels)
+    for ttl in (0, 7 * 86_400 + 1):
+        with pytest.raises(errors.InvalidRequest):
+            export(store, log, objects, ref, ttl_s=ttl)
+    rec = export(store, log, objects, ref)
+    assert rec["expires_at"] == (NOW + timedelta(seconds=3600)).isoformat()
+
+    def read(now=NOW):
+        return run(p1.read_export(store, objects, provider_org_id=NEMO,
+                                  export_id=rec["export_id"], now=now))
+    assert read() == run(objects.get(rec["examples_key"])) and rec["items"] > 0
+    with pytest.raises(errors.Gone):
+        read(NOW + timedelta(seconds=3600))
+    store.revoke(grant_ref())
+    assert read() == b""
 
 
 def test_p1_preference_pairs_map_or_are_reported() -> None:

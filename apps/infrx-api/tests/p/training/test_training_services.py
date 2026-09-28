@@ -70,7 +70,7 @@ def prepare(w, ext, connector_name=p3.MANUAL, ledger=None):
     ledger = ledger or FakeRunLedger()
     run(p3.prepare(store, objects, ledger, provider_org_id=NEMO, actor="dev@nemo",
                    external_run_id=ext, dataset_ref=ref, config=CONFIG, export=export,
-                   payer_ref=PAYER, limit="25.00000000", connector=connector_name))
+                   payer_ref=PAYER, limit="25.00000000", now=NOW, connector=connector_name))
     return ledger
 
 

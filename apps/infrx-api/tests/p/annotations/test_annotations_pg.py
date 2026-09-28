@@ -30,7 +30,7 @@ from ...d import test_l2sql_access as l2
 from ...n.imports.world import NEMO, chunks, fixture, run
 from ...n.versions.test_versions import uid
 from .test_annotations import label_rows
-from .world import RUBRIC, FakeLabelLog, rows
+from .world import NOW, RUBRIC, FakeLabelLog, rows
 
 _reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") else \
     "PostgreSQL only on an explicit task-local key (INFRX_D_TASK=p1)"
@@ -93,7 +93,8 @@ def test_p1_pg_labels_are_d7_records_reviewed_on_the_l2_clock(world) -> None:
     human = run(store.resolve(fixed, provider_org_id=NEMO))
     assert (human.method, human.reviewer_id, human.ground_truth) == ("human", DEV, True)
     rec = run(p1.export(store, log, objects, provider_org_id=NEMO, dataset_ref=ref,
-                        export_id=uid(1, 0xe8), adapter="sft.1"))
+                        export_id=uid(1, 0xe8), adapter="sft.1",
+                        now=NOW, ttl_s=3600))
     assert sorted(x["sample_id"] for x in rec["lineage"]) == sorted(train)
     assert {"human"} in [set(x["methods"]) for x in rec["lineage"]]
     assert {o["reason"] for o in rec["omitted"]} == {"holdout", "validation"}
@@ -112,5 +113,6 @@ def test_p1_pg_a_revoked_grant_stops_labels_and_exports(world) -> None:
                                rows=label_rows([m.samples[0].sample_id], method="human")))
     assert got.rejected == [{"row": 1, "reason": "grant_not_current"}]
     rec = run(p1.export(store, log, objects, provider_org_id=NEMO, dataset_ref=ref,
-                        export_id=uid(2, 0xe8), adapter="sft.1"))
+                        export_id=uid(2, 0xe8), adapter="sft.1",
+                        now=NOW, ttl_s=3600))
     assert rec["items"] == 0 and "grant_not_current" in {o["reason"] for o in rec["omitted"]}

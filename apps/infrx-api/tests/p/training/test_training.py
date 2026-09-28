@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -19,11 +20,14 @@ from infrx.contracts import errors
 from infrx.contracts.lab import records
 from infrx.datasets import versions
 from infrx.media.store import InMemoryObjectStore
+from infrx.pipelines import annotations as p1
 from infrx.pipelines import training as p3
 
 from ...n.imports.world import GRANT_ID, NEMO, grant_ref, run
 from ...n.versions.test_versions import derive, imported, uid
-from ..annotations.world import DEV, GRANT_2, GRANT_3, NOW, VIEWER, members, rows
+from ..annotations.test_annotations import accept_all, label_rows, load
+from ..annotations.world import (ADMIN, DEV, GRANT_2, GRANT_3, NOW, VIEWER, FakeLabelLog,
+                                 members, rows)
 from .world import (PAYER, CheckpointStore, FakeEvaluations, FakeRunLedger, client,
                     descriptor, digest, protocol_app)
 
@@ -57,12 +61,26 @@ class World:
                               actor="dev@nemo", external_run_id=ext, dataset_ref=ref,
                               config=over.pop("config", CONFIG),
                               export=over.pop("export", None) or self.export(ref),
-                              payer_ref=PAYER, limit="25.00000000", connector=connector))
+                              payer_ref=PAYER, limit="25.00000000",
+                              now=over.pop("now", NOW), connector=connector))
 
     def submit(self, connector=None, ext=EXT, user=DEV, **kw):
         return run(p3.submit(self.store, self.objects, self.ledger,
                              connector or p3.ManualConnector(), self.access,
                              provider_org_id=NEMO, user_id=user, external_run_id=ext, **kw))
+
+    def finish(self, ext=EXT, user=DEV):
+        return run(p3.finish(self.ledger, self.access, provider_org_id=NEMO, user_id=user,
+                             external_run_id=ext))
+
+    def label_export(self, ref=None, n=1):
+        """A P1 export of accepted labels on every train sample of `ref`."""
+        ref, log = ref or self.ref, FakeLabelLog()
+        labels = load(self.store, log, ref, label_rows(self.manifest(ref).splits.train)).accepted
+        accept_all(self.store, log, self.access, ref, labels)
+        return run(p1.export(self.store, log, self.objects, provider_org_id=NEMO,
+                             dataset_ref=ref, export_id=uid(n, 0xe7), adapter="sft.1", now=NOW,
+                             ttl_s=3600))
 
     def run_state(self, ext=EXT):
         return run(self.ledger.get(ext, provider_org_id=NEMO))
@@ -145,16 +163,66 @@ def test_p3_a_bundle_refuses_bad_config_other_exports_and_untrainable_data() -> 
                                 "dataset_ref": sharing.ref})
 
 
+def test_p3_a_bundle_pins_only_a_stored_current_export_of_trainable_samples() -> None:
+    """Oracle (0-P3-EXPORT-PIN-UNVERIFIED, DATA-RIGHTS): the bundle's export is read back
+    from the store, never taken from the caller: a fabricated one is refused, an unknown id
+    is not found, an expired or cancelled export is gone, bytes or a record that are not
+    what the export recorded are a conflict, and an export (N2's or P1's) taken before a
+    grant was revoked - so it still carries the revoked samples - is refused; a current P1
+    label export pins its stored format, id and digest."""
+    w = World()
+    with pytest.raises(errors.InvalidRequest):
+        w.prepare(export={"format": "anything", "export_id": "not-an-export", "sha256": "0" * 64,
+                          "dataset_ref": w.ref})
+    with pytest.raises(errors.InvalidRequest):
+        w.prepare(export={"format": "anything", "export_id": uid(9, 0xee)})
+    with pytest.raises(errors.NotFound):
+        w.prepare(export={"format": "infrx.dataset_export.1", "export_id": uid(9, 0xee)})
+    rec = w.export()
+    with pytest.raises(errors.Gone):
+        w.prepare(export=rec, now=NOW + timedelta(seconds=3600))
+    labelled = w.label_export()
+    bundle = w.prepare(export={"format": labelled["format"], "export_id": labelled["export_id"]})
+    assert bundle["export"] == {"format": "infrx.label_export.1",
+                                "export_id": labelled["export_id"], "sha256": labelled["sha256"]}
+    part, record = rec["parts"][0]["key"], f"lab/{NEMO}/exports/{rec['export_id']}/export.json"
+    for n, (key, data) in enumerate(((labelled["examples_key"], b"other\n"), (part, b"other\n"),
+                                     (record, records.canonical({**rec,
+                                                                 "content_sha256": "0" * 64}))),
+                                    2):
+        saved = run(w.objects.get(key))
+        w.objects.seed(key, data)
+        with pytest.raises(errors.Conflict):
+            w.prepare(ext=uid(n, 0xe0), export=rec if key != labelled["examples_key"]
+                      else labelled)
+        w.objects.seed(key, saved)
+    run(versions.cancel(w.objects, provider_org_id=NEMO, export_id=rec["export_id"]))
+    with pytest.raises(errors.Gone):
+        w.prepare(ext=uid(5, 0xe0), export=rec)
+    b = imported(w.store, w.objects, rows(4, "b", splits=("train",)), 2, grant=GRANT_2,
+                 split=True)
+    both = derive(w.store, w.objects, add=[w.ref, b]).dataset_ref
+    stale = (w.export(both, n=6), w.label_export(both, n=7))
+    w.store.revoke(grant_ref(GRANT_2))
+    for n, old in enumerate(stale, 6):
+        with pytest.raises(errors.Forbidden):
+            w.prepare(ext=uid(n, 0xe0), ref=both, export=old)
+    assert w.prepare(ext=uid(8, 0xe0), ref=both, export=w.export(both, n=8))["train"]
+
+
 # --- P3.b: submission, reconciliation, recovery --------------------------------------------
 def test_p3_the_manual_workflow_round_trips_to_an_eligible_candidate() -> None:
-    """Oracle (TRAIN-RECOVER acceptance): bundle -> the provider trains -> a checkpoint is
-    imported, validated and queued on the frozen holdout -> eligible only after that
-    evaluation succeeds; a viewer can neither submit nor approve; one reservation."""
+    """Oracle (TRAIN-RECOVER acceptance; 0-P3-MANUAL-RESERVATION-HELD, 1-PIPE-R1): bundle ->
+    the provider trains -> a checkpoint is imported, validated and queued on the frozen
+    holdout -> eligible only after that evaluation succeeds; a viewer can neither submit,
+    approve nor finish; the manual bundle is no platform-paid job, so it never holds a
+    reservation - the provider declares it done (`completed`, once) and nothing is held; an
+    automatic run is never finished by hand."""
     w = World()
     bundle = w.prepare()
     with pytest.raises(errors.Forbidden):
         w.submit(user=VIEWER)
-    assert w.submit()["state"] == "submitted" and w.reservation().get("state") == "held"
+    assert w.submit()["state"] == "submitted" and w.reservation() == {}
     got = w.checkpoint()
     assert got["state"] == "validated" and w.evals.calls == 1
     queued = w.evals.runs[uid(1, 0xc9)]
@@ -168,6 +236,17 @@ def test_p3_the_manual_workflow_round_trips_to_an_eligible_candidate() -> None:
     eligible = w.approve()
     assert eligible["evaluation"] == queued["run_ref"] and eligible["approved_by"] == DEV
     assert w.approve() == eligible and w.submit()["state"] == "submitted"
+    with pytest.raises(errors.Forbidden):
+        w.finish(user=VIEWER)
+    assert w.finish()["state"] == w.finish()["state"] == "completed"
+    assert w.reservation() == {} and w.approve() == eligible
+    ext = uid(2, 0xe0)
+    _, http = automatic(w)
+    w.prepare(ext=ext, connector="protocol-test")
+    w.submit(http, ext=ext, advertised=ON)
+    with pytest.raises(errors.StateConflict):
+        w.finish(ext, user=ADMIN)
+    assert w.reservation(ext)["state"] == "held"
 
 
 def test_p3_automatic_connectors_stay_hidden_until_p11() -> None:
@@ -338,6 +417,7 @@ def test_p3_a_late_checkpoint_after_cancel_is_rejected() -> None:
     w.prepare(ext=uid(2, 0xe0))
     w.submit()
     run(p3.cancel(w.ledger, p3.ManualConnector(), provider_org_id=NEMO, external_run_id=EXT))
+    assert w.reservation() == {}                     # the manual bundle reserved nothing
     assert w.checkpoint().get("reason") == "run_cancelled"
     assert w.checkpoint(2, ext=uid(2, 0xe0)).get("reason") == "run_prepared"
     assert w.evals.calls == 0

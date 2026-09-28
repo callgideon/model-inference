@@ -6,7 +6,10 @@ write-once bundle: the dataset ref, the config (objective `sft`/`preference`; ad
 `full`/`lora` - LoRA is how the weights adapt, not a competing objective), the environment,
 the train and dev ids the training gate allows NOW, the export that carries their content
 (N2's or P1's, of this dataset), and a pin of the frozen holdout (its size and the digest of
-its ids) - never the holdout itself. The provider trains on its own compute.
+its ids) - never the holdout itself. The provider trains on its own compute. The export is
+read back from the object store, never taken from the caller: its stored record must be of
+this dataset, unexpired and not cancelled, its bytes must match its recorded digests, and it
+may carry no sample outside the train and dev ids the gate allows now.
 
 **Connectors.** `ManualConnector` is always advertised; an automatic one (`HttpConnector`,
 the submit/lookup/status/cancel protocol a test server speaks) is used only when named in
@@ -15,7 +18,9 @@ until P-11 records real integration evidence.
 
 **One paid job per run** (F3's `external_run` machine, R161). `submit` re-reads the rights
 (a current developer-or-above; every bundled id still under a training grant), reserves the
-budget once per `submit_key`, moves prepared -> submitting, then calls the connector with
+budget once per `submit_key` (an automatic connector's job only: the manual bundle is no
+platform-paid job, so it reserves, settles and holds nothing, and the provider declares it
+done with `finish`), moves prepared -> submitting, then calls the connector with
 the key. A definite refusal is `failed` (the reservation released); any other outcome
 (a timeout, a 5xx, a crash) is `ambiguous` and holds the reservation. An ambiguous or stale
 `submitting` run is only ever reconciled by `lookup(submit_key)` - found is `submitted`,
@@ -34,12 +39,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from typing import Any, Literal, Protocol
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ...contracts import errors
+from ...contracts.ids import UUID_RE
 from ...contracts.lab import records as lab
 from ...contracts.v2.records import ProviderCapability
 from ...datasets.imports import write_once
@@ -49,6 +56,7 @@ ADVERTISED = frozenset({MANUAL})
 BUNDLE = "infrx.training_bundle.1"
 DESCRIPTOR = "infrx.checkpoint.1"
 ACTIVE = ("submitted", "completed")                # states a checkpoint may arrive in
+EXPORTS = {"infrx.dataset_export.1": "exports", "infrx.label_export.1": "label-exports"}
 
 
 class TrainingConfig(BaseModel):
@@ -160,16 +168,49 @@ def _key(provider: str, external_run_id: str) -> str:
     return f"lab/{provider}/training/{external_run_id}/bundle.json"
 
 
+async def _pinned(objects, provider: str, export: dict, dataset_ref: str,
+                  now: datetime) -> tuple[dict, set[str]]:
+    """The stored export `export` names (N2's or P1's), checked against its own bytes: its
+    pin and the sample ids it carries."""
+    kind, export_id = EXPORTS.get(export.get("format")), export.get("export_id")
+    if kind is None or not isinstance(export_id, str) or not UUID_RE.fullmatch(export_id):
+        raise errors.InvalidRequest(f"the export is one of {sorted(EXPORTS)} by its id")
+    base = f"lab/{provider}/{kind}/{export_id}"
+    done = await objects.get(f"{base}/export.json")
+    if done is None:
+        raise errors.NotFound(f"no finished export {export_id}")
+    record = json.loads(done)
+    if (record["format"], record["dataset_ref"]) != (export["format"], dataset_ref):
+        raise errors.InvalidRequest("the export is of another dataset")
+    if await objects.head(f"{base}/cancelled") is not None or \
+            now >= datetime.fromisoformat(record["expires_at"]):
+        raise errors.Gone(f"export {export_id} expired or was cancelled")
+    if kind == "exports":
+        parts, sha256 = [(p["key"], p["sha256"]) for p in record["parts"]], \
+            record["content_sha256"]
+    else:
+        parts, sha256 = [(record["examples_key"], record["sha256"])], record["sha256"]
+    ids = {x["sample_id"] for x in record.get("lineage", ())}
+    if kind == "exports" and sha256 != hashlib.sha256(
+            lab.canonical([digest for _, digest in parts])).hexdigest():
+        raise errors.Conflict(f"export {export_id} is not the parts it recorded")
+    for key, digest in parts:
+        data = await objects.get(key) or b""
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise errors.Conflict(f"export {export_id} is not the bytes it recorded")
+        if kind == "exports":
+            ids |= {json.loads(line)["sample_id"] for line in data.splitlines()}
+    return {"format": record["format"], "export_id": export_id, "sha256": sha256}, ids
+
+
 async def prepare(store, objects, ledger: RunLedger, *, provider_org_id: str, actor: str,
                   external_run_id: str, dataset_ref: str, config: dict, export: dict,
-                  payer_ref: str, limit: str, connector: str = MANUAL) -> dict:
+                  payer_ref: str, limit: str, now: datetime, connector: str = MANUAL) -> dict:
     """The bundle (write-once; a replay is the same bytes, changed inputs a `Conflict`)."""
     try:
         config = TrainingConfig.model_validate(config).model_dump()
     except ValidationError as refused:
         raise errors.InvalidRequest(f"training config: {refused}") from None
-    if export.get("dataset_ref") != dataset_ref:
-        raise errors.InvalidRequest("the export is of another dataset")
     manifest = await store.resolve(dataset_ref, provider_org_id=provider_org_id)
     allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
                                                  purpose="training"))
@@ -177,6 +218,9 @@ async def prepare(store, objects, ledger: RunLedger, *, provider_org_id: str, ac
     dev = [i for i in manifest.splits.validation if i in allowed]
     if not train:
         raise errors.Forbidden("no train sample is under a current training grant")
+    pin, carried = await _pinned(objects, provider_org_id, export, dataset_ref, now)
+    if carried - set(train + dev):
+        raise errors.Forbidden("the export carries a sample outside a current training grant")
     run_ref = await store.publish({
         "schema": "lab.external_run.1", "provider_org_id": provider_org_id,
         "external_run_id": external_run_id, "purpose": "training", "connector": connector,
@@ -190,8 +234,7 @@ async def prepare(store, objects, ledger: RunLedger, *, provider_org_id: str, ac
         "format": BUNDLE, "external_run_ref": run_ref, "dataset_ref": dataset_ref,
         "config": config, "train": train, "dev": dev,
         "omitted": sorted(set(manifest.splits.train + manifest.splits.validation) - allowed),
-        "export": {"format": export["format"], "export_id": export["export_id"],
-                   "sha256": export.get("sha256") or export["content_sha256"]},
+        "export": pin,
         "holdout": {"size": len(holdout),
                     "sha256": hashlib.sha256(lab.canonical(holdout)).hexdigest()}}
     await write_once(objects, _key(provider_org_id, external_run_id), lab.canonical(bundle))
@@ -244,14 +287,17 @@ async def submit(store, objects, ledger: RunLedger, connector: Connector, member
                                                  purpose="training"))
     if set(bundle["train"] + bundle["dev"]) - allowed:
         raise errors.Forbidden("a bundled sample's training grant is no longer current")
-    await ledger.reserve(key, provider_org_id=provider_org_id, payer_ref=run["payer_ref"],
-                         limit=run["limit"])
+    paid = connector.name != MANUAL             # the manual bundle trains on provider compute
+    if paid:
+        await ledger.reserve(key, provider_org_id=provider_org_id, payer_ref=run["payer_ref"],
+                             limit=run["limit"])
     await ledger.move(external_run_id, provider_org_id=provider_org_id, expected="prepared",
                       target="submitting")
     try:
         job_id = await connector.submit(bundle, key=key)
     except Rejected as refused:
-        await ledger.release(key, provider_org_id=provider_org_id)
+        if paid:
+            await ledger.release(key, provider_org_id=provider_org_id)
         return await ledger.move(external_run_id, provider_org_id=provider_org_id,
                                  expected="submitting", target="failed", reason=str(refused))
     except Exception:                                   # noqa: BLE001 - the outcome is unknown
@@ -300,6 +346,20 @@ async def poll(ledger: RunLedger, connector: Connector, *, provider_org_id: str,
                              expected="submitted", target=status["state"], cost=cost)
 
 
+async def finish(ledger: RunLedger, members, *, provider_org_id: str, user_id: str,
+                 external_run_id: str) -> dict:
+    """A current developer declares a manual run's training done (submitted -> completed):
+    nothing was reserved, so nothing settles. An automatic run finishes by its status."""
+    await _member(members, provider_org_id, user_id)
+    run = await _run(ledger, provider_org_id, external_run_id)
+    if run["connector"] != MANUAL:
+        raise errors.StateConflict("an automatic run finishes by its connector's status")
+    if run["state"] == "completed":
+        return run
+    return await ledger.move(external_run_id, provider_org_id=provider_org_id,
+                             expected="submitted", target="completed")
+
+
 async def cancel(ledger: RunLedger, connector: Connector, *, provider_org_id: str,
                  external_run_id: str) -> dict:
     run = await _run(ledger, provider_org_id, external_run_id)
@@ -309,8 +369,9 @@ async def cancel(ledger: RunLedger, connector: Connector, *, provider_org_id: st
     if run["state"] != "submitted":
         raise errors.StateConflict(f"a {run['state']} run cannot be cancelled")
     cost = _cost((await connector.cancel(run["job_id"])).get("cost"))
-    await ledger.settle(lab.submit_key(external_run_id), provider_org_id=provider_org_id,
-                        cost=cost)
+    if run["connector"] != MANUAL:                 # the manual bundle reserved nothing
+        await ledger.settle(lab.submit_key(external_run_id), provider_org_id=provider_org_id,
+                            cost=cost)
     return await ledger.move(external_run_id, provider_org_id=provider_org_id,
                              expected="submitted", target="cancelled", cost=cost)
 
