@@ -176,3 +176,16 @@ def test_lab_datasets__a_body_is_a_bounded_json_object_of_the_operation():
             answer = call(client, w.DEV_A, "POST", path, raw=raw)
             assert answer.status_code == 400, (raw, answer.text)
         assert w.store.published == []
+
+
+def test_lab_datasets__an_import_job_is_read_only_by_its_own_provider():
+    """The in-memory job table is this read's only tenant boundary (D7 is not asked): a
+    developer of B polling A's import id under B's path gets a 404, never A's report."""
+    w = World()
+    with TestClient(w.app(), raise_server_exceptions=False) as client:
+        _, job = imported(w, client, w.DEV_A)
+        assert job.json()["state"] == "published", job.text
+        import_id = w.spec()["import_id"]
+        foreign = call(client, w.DEV_B, "GET", base(w.B) + f"/imports/{import_id}")
+        assert foreign.status_code == 404, foreign.text
+        assert "dataset_ref" not in foreign.text

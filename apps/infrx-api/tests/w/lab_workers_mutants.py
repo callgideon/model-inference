@@ -35,6 +35,7 @@ NO_PASS = C + "annotation_and_training_have_no_pass_and_refuse"
 HEALTH = C + "readyz_is_the_database_and_every_pass_alive"
 DEAD = C + "a_dead_pass_is_not_live_and_exits_non_zero"
 EVERY = C + "the_pumps_are_every_step_forever"
+RETENTION = C + "trace_retention_is_t3s_over_the_shippers_bucket_and_bounds"
 
 
 def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
@@ -167,6 +168,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "from ...worker.__main__ import every\n",
        "\n\nasync def every(interval_s, step, what, *, sleep=asyncio.sleep):\n"
        "    while True:\n        await step()\n        await sleep(interval_s)\n", EVERY),
+    # --- the judge/datasets roles' trace retention ------------------------------------------
+    _m("lw_trace_prefix_lost", "the trace bucket is read at the shipper's prefix",
+       'limits.s3_trace_bucket, "infrx/", endpoint_url)', 'limits.s3_trace_bucket, "", '
+       'endpoint_url)', RETENTION),
+    _m("lw_trace_content_days_lost", "content is kept for the pilot's content bound",
+       "content_days=limits.trace_content_max_days,", "content_days=30,", RETENTION),
+    _m("lw_trace_metadata_months_lost", "metadata is kept for the pilot's metadata bound",
+       "metadata_months=limits.trace_metadata_months)", "metadata_months=12)", RETENTION),
 )
 
 

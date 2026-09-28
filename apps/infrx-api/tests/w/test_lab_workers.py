@@ -488,3 +488,30 @@ def test_lab_workers__the_pumps_are_every_step_forever():
     """The Lab passes use the consumer worker's `every` (a failed step is logged and
     retried) - one loop helper, not two."""
     assert lab_workers.every is worker_main.every
+
+
+def test_lab_workers__trace_retention_is_t3s_over_the_shippers_bucket_and_bounds(monkeypatch):
+    """The judge and datasets roles read content through T3's `Retention` over the ClickHouse
+    client, the trace bucket at `build_shipper`'s prefix (else `read_content` finds nothing)
+    and the pilot's content/metadata bounds. Service-free: both connections are recorded."""
+    import inspect
+
+    import clickhouse_connect
+
+    from infrx.media.s3 import S3ObjectStore
+    from infrx.traces.ship.shipper import build_shipper
+    seen = {}
+    monkeypatch.setattr(clickhouse_connect, "get_client",
+                        lambda **kw: seen.setdefault("client", kw) and "ch-client")
+    monkeypatch.setattr(S3ObjectStore, "connect", classmethod(
+        lambda cls, *a: seen.setdefault("bucket", a) and InMemoryObjectStore()))
+    limits = types.SimpleNamespace(clickhouse_url=TRACES["CLICKHOUSE_URL"],
+                                   s3_trace_bucket=TRACES["S3_TRACE_BUCKET"],
+                                   trace_content_max_days=13, trace_metadata_months=7)
+    built = lab_workers.trace_retention(limits, "http://minio.invalid:9000")
+    shipper_prefix = inspect.signature(build_shipper).parameters["prefix"].default
+    assert seen["client"] == {"dsn": TRACES["CLICKHOUSE_URL"]}
+    assert seen["bucket"] == (TRACES["S3_TRACE_BUCKET"], shipper_prefix,
+                              "http://minio.invalid:9000") and shipper_prefix == "infrx/"
+    assert (built.content_days, built.metadata_months) == (13, 7)
+    assert isinstance(built.objects, InMemoryObjectStore)

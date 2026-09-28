@@ -21,6 +21,7 @@ IDENTITY = C + "the_upload_identity_is_the_verified_lab_session_only"
 ORDER = C + "the_body_is_read_only_after_the_acting_provider"
 ACCESS = C + "a_viewer_and_another_providers_member_cannot_import"
 BODY = C + "a_body_is_a_bounded_json_object_of_the_operation"
+JOBS = C + "an_import_job_is_read_only_by_its_own_provider"
 READ = "            body = await read(request)\n"
 
 
@@ -58,6 +59,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "max_bytes=MAX_BODY_BYTES,", "max_bytes=MAX_BODY_BYTES * 2,", BODY),
     _m("too_large_is_a_400", "a body past the bound is a 413",
        "(errors.RequestTooLarge, 413), ", "", BODY),
+    _m("import_job_any_provider", "an import job is read only under its own provider",
+       "found = jobs.get((provider, import_id))",
+       "found = next((j for (_, i), j in jobs.items() if i == import_id), None)", JOBS),
 )
 
 
