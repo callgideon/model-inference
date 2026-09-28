@@ -1,0 +1,226 @@
+............FFF...F..F                                                                                                                                                                                                                                                                                                                                                                                   [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+_____________________________________________________________________________________________________________________________________________________________________ test_l04_publication_needs_operator_approval_and_snapshots_the_rate ______________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/cases/test_l04_publication_needs_operator_approval_and_snapshots_the_rate'), record_property = <function record_property.<locals>.append_property at 0x7890508ffb00>
+
+    def test_l04_publication_needs_operator_approval_and_snapshots_the_rate(workdir,
+                                                                           record_property):
+        """Oracle: only A's administrator proposes (a developer is forbidden; B's administrator
+        finds nothing, in A's workspace or naming A's revision in its own); the proposal alone moves no listing; the operator's approval adds listing
+        version 2 on the proposal at a NEW card - the rate snapshot the operator approved, under
+        the operator's name - and the audit names both actors with the before/after listing.
+        The seed's card is untouched."""
+>       with world.composed(workdir, start=()) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_operate/scenarios_publish.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:476: in composed
+    bind_retried(engine.start)
+tests/integration/backend/e3c/world.py:430: in bind_retried
+    return start()
+           ^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <fake_vllm.FakeVllmServer object at 0x7890509b52b0>, timeout = 30.0
+
+    def start(self, timeout: float = 30.0) -> "FakeVllmServer":
+        # `--host` explicitly, never the CLI default: a change to that default would otherwise
+        # take every server in the suite down at `setup_module` (17 collection errors, measured
+        # against the reviewer's V7 mutant) instead of failing the one case that guards it.
+        argv = [sys.executable, str(Path(__file__).resolve()), "--port", str(self.port),
+                "--host", "127.0.0.1",
+                "--fault", self.fault, "--stall-real-s", str(self.stall_real_s)]
+        self._drop_log()        # a restart after a kill would otherwise orphan the old one
+        # The child's stderr goes to a temporary file, not to DEVNULL: a server that dies on
+        # startup (a busy port is the obvious one) otherwise reports only its exit status, and
+        # "exited 3" with no reason costs whoever reads it an afternoon. The file is UNLINKED
+        # the moment it is created (`TemporaryFile`), so it cannot be leaked even when this
+        # process is killed outright - which is exactly what the SIGTERM drill does to itself
+        # under the mutant that removes the handler (measured: 28 leaked logs in $TMPDIR).
+        self._log = tempfile.TemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log")
+        # r1 review, same pass: its OWN process group, so a signal handler can take the whole
+        # server down with one `killpg` and a SIGTERM to run.py cannot leave it orphaned on a
+        # task-local port for the next run to trip over.
+        self.process = subprocess.Popen(argv, stdout=self._log, stderr=subprocess.STDOUT,
+                                        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                                        start_new_session=True)
+        import httpx
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if self.process.poll() is not None:
+                # r1 review B3 side effect: a raise here used to leak the log file, because
+                # only `stop()` dropped it and a caller that never started has nothing to stop.
+                reason = self._tail()
+                self._drop_log()
+>               raise RuntimeError(f"fake vLLM exited {self.process.returncode} during startup "
+                                   f"on port {self.port}: {reason}")
+E               RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+
+tests/integration/fake_vllm.py:484: RuntimeError
+___________________________________________________________________________________________________________________________________________________________________________ test_l05_app_discovers_and_serves_the_published_revision ___________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/cases/test_l05_app_discovers_and_serves_the_published_revision'), record_property = <function record_property.<locals>.append_property at 0x7890508fe5c0>
+
+    def test_l05_app_discovers_and_serves_the_published_revision(workdir, record_property):
+        """Oracle: after the operator's approval the App never serves the new listing at a card
+        its runtime did not approve (R69: the alias is unlisted and a call is 400 invalid_request,
+        nothing admitted or charged); once the runtime is rolled onto the approved card,
+        /v1/models lists the alias on the published deployment, serving revision and card at the
+        snapshot rates, and alpha's call is admitted on exactly those pins and settled once at the
+        snapshot rate (CREDIT books conserved)."""
+>       with world.composed(workdir) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_operate/scenarios_publish.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:476: in composed
+    bind_retried(engine.start)
+tests/integration/backend/e3c/world.py:430: in bind_retried
+    return start()
+           ^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <fake_vllm.FakeVllmServer object at 0x789050a4f680>, timeout = 30.0
+
+    def start(self, timeout: float = 30.0) -> "FakeVllmServer":
+        # `--host` explicitly, never the CLI default: a change to that default would otherwise
+        # take every server in the suite down at `setup_module` (17 collection errors, measured
+        # against the reviewer's V7 mutant) instead of failing the one case that guards it.
+        argv = [sys.executable, str(Path(__file__).resolve()), "--port", str(self.port),
+                "--host", "127.0.0.1",
+                "--fault", self.fault, "--stall-real-s", str(self.stall_real_s)]
+        self._drop_log()        # a restart after a kill would otherwise orphan the old one
+        # The child's stderr goes to a temporary file, not to DEVNULL: a server that dies on
+        # startup (a busy port is the obvious one) otherwise reports only its exit status, and
+        # "exited 3" with no reason costs whoever reads it an afternoon. The file is UNLINKED
+        # the moment it is created (`TemporaryFile`), so it cannot be leaked even when this
+        # process is killed outright - which is exactly what the SIGTERM drill does to itself
+        # under the mutant that removes the handler (measured: 28 leaked logs in $TMPDIR).
+        self._log = tempfile.TemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log")
+        # r1 review, same pass: its OWN process group, so a signal handler can take the whole
+        # server down with one `killpg` and a SIGTERM to run.py cannot leave it orphaned on a
+        # task-local port for the next run to trip over.
+        self.process = subprocess.Popen(argv, stdout=self._log, stderr=subprocess.STDOUT,
+                                        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                                        start_new_session=True)
+        import httpx
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if self.process.poll() is not None:
+                # r1 review B3 side effect: a raise here used to leak the log file, because
+                # only `stop()` dropped it and a caller that never started has nothing to stop.
+                reason = self._tail()
+                self._drop_log()
+>               raise RuntimeError(f"fake vLLM exited {self.process.returncode} during startup "
+                                   f"on port {self.port}: {reason}")
+E               RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+
+tests/integration/fake_vllm.py:484: RuntimeError
+___________________________________________________________________________________________________________________________________________________________________________ test_l05_discovery_reports_the_listing_version_it_serves ___________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/cases/test_l05_discovery_reports_the_listing_version_it_serves'), record_property = <function record_property.<locals>.append_property at 0x7890508fe700>
+
+    def test_l05_discovery_reports_the_listing_version_it_serves(workdir, record_property):
+        """Oracle: /v1/models' `listing_version` is the catalog listing the entry serves - after
+        the publication, listing 2 (the published deployment), never a constant."""
+        with world.composed(workdir, start=()) as trip:
+            alpha, _, proposal, published, card = published_l05(trip)
+            trip.box.start("gateway", ACTIVE_RATE_CARD_VERSION=card)
+            entries = discovery(trip, alpha)
+            record_property("listed", [(e["listing_version"], e["deployment_revision_id"])
+                                       for e in entries])
+>           assert [(e["listing_version"], e["deployment_revision_id"]) for e in entries] == [
+                (published.version, proposal.deployment_revision_id)], entries
+E           AssertionError: [{'schema_version': 2, 'object': 'model', 'id': 'nemostation/marlin-2b', 'created': 1788220800, ...}]
+E           assert [(1, '3e15c03...4c3894b25d2')] == [(2, '3e15c03...4c3894b25d2')]
+E             
+E             At index 0 diff: (1, '3e15c034-77a5-493e-8a8b-a4c3894b25d2') != (2, '3e15c034-77a5-493e-8a8b-a4c3894b25d2')
+E             Use -v to get more diff
+
+tests/integration/lab_operate/scenarios_publish.py:257: AssertionError
+______________________________________________________________________________________________________________________________________________________________________________ test_l10_a_retry_after_a_lost_answer_proposes_once ______________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/cases/test_l10_a_retry_after_a_lost_answer_proposes_once'), record_property = <function record_property.<locals>.append_property at 0x7890506c91c0>
+
+    def test_l10_a_retry_after_a_lost_answer_proposes_once(workdir, record_property):
+        """Oracle: the Lab's retry of a proposal whose answer was lost to the crash, after the
+        restart, never leaves a second open proposal of the same dev revision (it answers the
+        recorded proposal or is refused) - one operation, one proposal."""
+        with world.composed(workdir, start=("gateway",)) as trip:
+            lab.seed_lab(trip)
+            _, dev = lab.ready_dev(lab.control(trip), "l10r")
+            source = dev.deployment_revision_id
+            with lab.control_service(trip, workdir) as (service, _):
+                lost = crash_mid_proposal(trip, service, workdir, source)
+                service.start()
+                retried = service.call("POST", "proposals", lab.session(ADMIN_A), body={
+                    "kind": "publish", "deployment_revision_id": source})
+                made = proposals_of(trip, source)
+            record_property("retry", {"lost": lost, "retried": [retried.status_code,
+                                                                 retried.json()], "made": made})
+            assert lost and isinstance(lost[0], str), f"premise: the answer was lost: {lost}"
+>           assert [state for _, state in made].count("proposed_public") == 1, made
+E           AssertionError: [('46ed5f21-fae9-41ab-8893-59d60018940e', 'proposed_public'), ('5b3976bd-9f2d-4595-b696-dcefa24ed980', 'proposed_public')]
+E           assert 2 == 1
+E            +  where 2 = <built-in method count of list object at 0x7890506244c0>('proposed_public')
+E            +    where <built-in method count of list object at 0x7890506244c0> = ['proposed_public', 'proposed_public'].count
+
+tests/integration/lab_operate/scenarios_publish.py:511: AssertionError
+______________________________________________________________________________________________________________________________________________________________ test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once ______________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/cases/test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once'), tmp_path = PosixPath('/tmp/pytest-of-rey/pytest-7454/test_l11_a_bad_lab_release_and0')
+record_property = <function record_property.<locals>.append_property at 0x789050b92b60>
+
+    def test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once(
+            workdir, tmp_path, record_property):
+        bad = tmp_path / "bad-release"                       # no production build: cannot start
+        bad.mkdir()
+        (bad / "package.json").write_text('{"name": "infrx-lab", "private": true}\n')
+        with world.composed(workdir, start=("gateway",)) as trip, lab_web(workdir) as web:
+            alpha = trip.world.alpha
+            web.start(LAB_DIR)
+            web.up()
+            queued = trip.send(alpha, "async", world.TEXT, "e3l-l11-queued")
+            assert queued.status_code == 202, queued.text[:200]
+            web.kill()
+            exits = []
+            for _ in range(3):                                # the unit's restart loop, by hand
+                exits.append(web.start(bad).wait(timeout=60))
+            assert all(code != 0 for code in exits) and web.answers() is None, exits
+            trip.box.start("worker")
+            during = app_serves(trip, alpha, "bad-release")
+            web.start(LAB_DIR)                                # rollback: the previous release
+>           record_property("lab", {"crash_loop_exits": exits, "after_rollback": web.up()})
+                                                                                 ^^^^^^^^
+
+tests/integration/lab_operate/scenarios_split.py:148: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scenarios_split.LabWeb object at 0x7890508f13a0>, timeout = 90.0
+
+    def up(self, timeout: float = 90.0) -> int:
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            status = self.answers()
+            if status is not None:
+                return status
+            if self.process.poll() is not None:
+>               raise AssertionError(f"the Lab web exited {self.process.returncode}")
+E               AssertionError: the Lab web exited 1
+
+tests/integration/lab_operate/scenarios_split.py:75: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_operate/scenarios_publish.py::test_l04_publication_needs_operator_approval_and_snapshots_the_rate - RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+FAILED tests/integration/lab_operate/scenarios_publish.py::test_l05_app_discovers_and_serves_the_published_revision - RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+FAILED tests/integration/lab_operate/scenarios_publish.py::test_l05_discovery_reports_the_listing_version_it_serves - AssertionError: [{'schema_version': 2, 'object': 'model', 'id': 'nemostation/marlin-2b', 'created': 1788220800, ...}]
+FAILED tests/integration/lab_operate/scenarios_publish.py::test_l10_a_retry_after_a_lost_answer_proposes_once - AssertionError: [('46ed5f21-fae9-41ab-8893-59d60018940e', 'proposed_public'), ('5b3976bd-9f2d-4595-b696-dcefa24ed980', 'proposed_public')]
+FAILED tests/integration/lab_operate/scenarios_split.py::test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once - AssertionError: the Lab web exited 1
+5 failed, 17 passed in 182.68s (0:03:02)
