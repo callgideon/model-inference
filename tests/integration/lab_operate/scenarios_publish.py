@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lab_world as lab                                 # noqa: E402
 
 world, stack, harness = lab.world, lab.stack, lab.harness
+A, DEV_A, ADMIN_A = lab.PROVIDER_A, lab.DEV_A, lab.ADMIN_A
 
 
 def control_merged() -> bool:
@@ -31,6 +32,17 @@ def waits(sid: str, *lanes: str, steps: str):
     why = ("infrx.lab.control is absent on this tree" if not control_merged()
            else "L3 merged; the case is not yet bound to its control port (E3L-BIND)")
     lab.not_run(sid, *lanes, why=f"{why}. Steps: {steps}")
+
+
+def discovery(trip, tenant) -> list[dict]:
+    answer = trip.http.get("/v1/models", headers=trip.headers(tenant))
+    assert answer.status_code == 200, answer.text[:300]
+    return answer.json()["data"]
+
+
+def listed(entries) -> list[dict]:
+    """/v1/models without its clock (`availability_as_of` moves on every read)."""
+    return [{k: v for k, v in entry.items() if k != "availability_as_of"} for entry in entries]
 
 
 def unbound():
@@ -69,11 +81,44 @@ def test_l02_the_seeded_private_dev_deployment_is_not_discoverable_or_admissible
         assert found["consumer"] is None, found["consumer"]
 
 
-def test_l02_a_provider_created_dev_revision_never_reaches_app_discovery(workdir):
-    waits("l02", "L3", "L4", steps="DEV_A registers a model version and creates a private dev "
-          "revision through the control port; its endpoint credential serves it; /v1/models with "
-          "alpha's key lists no id of it and admission by alpha's key is 404 not_found")
-    unbound()
+def test_l02_a_provider_created_dev_revision_never_reaches_app_discovery(workdir,
+                                                                         record_property):
+    """Oracle: DEV_A's registered, validated, internally priced dev revision with its
+    provider_dev key is served to that key's endpoint only; alpha's /v1/models is unchanged
+    and names none of it, and alpha's key is 404 on its dev name and on the alias pinned to
+    its label; the catalog port never resolves it for a consumer, even naming its endpoint."""
+    with world.composed(workdir, start=("gateway",)) as trip:
+        lab.seed_lab(trip)
+        alpha, ctl = trip.world.alpha, lab.control(trip)
+        before = discovery(trip, alpha)
+        revision, dev = lab.ready_dev(ctl, "e3l-l02")
+        lab.call(ctl.price_dev(lab.operator(), dev.deployment_revision_id,
+                               rate_card_version="rc_e3l_l02_internal", input_rate="400",
+                               output_rate="1200"))
+        key = lab.call(ctl.issue_dev_key(DEV_A, A, dev.deployment_revision_id))
+        scope = trip.one("select audience, provider_org_id::text, endpoint_id::text from "
+                         "public.api_keys where id = %s", key.key_id)
+        assert scope == ("provider_dev", A, dev.endpoint_id), scope
+        after = discovery(trip, alpha)
+        names = ("nemostation/e3l-l02-dev", f"{stack.CREDIT_ALIAS}@{revision.revision_label}")
+        answers = {name: trip.send(alpha, "async", world.TEXT, f"e3l-l02-{i}", model=name)
+                   for i, name in enumerate(names)}
+        record_property("discovery", {"before": [m["id"] for m in before],
+                                      "after": [m["id"] for m in after],
+                                      "refused": {n: [a.status_code, world.code(a)]
+                                                  for n, a in answers.items()}})
+        assert listed(after) == listed(before), (before, after)
+        for name, answer in answers.items():
+            assert (answer.status_code, world.code(answer)) == (404, "not_found"), \
+                (name, answer.text[:300])
+        assert trip.db("select 1 from infrx.jobs where org_id = %s", alpha.org_id) == []
+        from infrx.contracts.v2.records import CredentialAudience as Aud
+        found = {aud.value: lab.call(ctl.catalog.resolve(names[0], audience=aud,
+                                                         endpoint_id=dev.endpoint_id))
+                 for aud in (Aud.consumer, Aud.provider_dev)}
+        assert found["provider_dev"] is not None, "premise: its own dev key resolves it"
+        assert found["provider_dev"].deployment_revision_id == dev.deployment_revision_id
+        assert found["consumer"] is None, found["consumer"]
 
 
 # ------------------------------------------------------------------ l03-l06

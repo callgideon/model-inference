@@ -57,8 +57,10 @@ GATE = "test_e3l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_doe
 NO_STACK = "test_e3l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e3l_the_namespace_is_the_reserved_block"
 RERUN = "test_e3l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
-UNBOUND = tuple(name for name in re.findall(r"^def (test_l\d\d_\w+)\(", (REPO / P).read_text(), re.M)
-                if not name.startswith("test_l02_the_seeded"))
+#: the L3/L4 cases still waiting on a lane (their body calls `waits`); E3L-BIND binds the rest
+UNBOUND = tuple(name for name, body in re.findall(r"^def (test_l\d\d_\w+)\((.*?)(?=^def |\Z)",
+                                                  (REPO / P).read_text(), re.M | re.S)
+                if "waits(" in body)
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("xfail_is_a_pass", "an xfail is never a pass", R,
@@ -109,6 +111,7 @@ L01_SESSION = "test_l01_each_provider_session_sees_only_its_own_workspace"
 L01_OTHER = "test_l01_a_member_of_one_provider_is_refused_every_operation_on_the_other"
 L01_REVOKED = "test_l01_a_revoked_membership_is_refused_on_its_next_call"
 L02 = "test_l02_the_seeded_private_dev_deployment_is_not_discoverable_or_admissible"
+L02_BOUND = "test_l02_a_provider_created_dev_revision_never_reaches_app_discovery"
 L07_GATEWAY = "test_l07_a_consumer_key_reaches_no_provider_control_on_the_gateway"
 L07_SESSION = "test_l07_a_consumer_key_is_no_lab_session"
 L07_OWNER = "test_l07_a_consumer_owner_has_no_provider_workspace"
@@ -132,7 +135,7 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_private_resolves_for_consumers", "a private dev revision never resolves for a "
        "consumer credential", CATALOG,
        "if row is None and audience is CredentialAudience.provider_dev and endpoint_id:",
-       "if row is None and endpoint_id:", L02),
+       "if row is None and endpoint_id:", L02, L02_BOUND),
     _m("st_control_path_on_the_consumer_origin", "the consumer origin mounts no provider-"
        "control path", MODELS, 'MODELS_PATH = "/v1/models"', 'MODELS_PATH = "/v1/providers"',
        L07_GATEWAY),
