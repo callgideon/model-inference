@@ -33,7 +33,10 @@
 --                      connector, payer and limit (checked against the record), and the
 --                      `external_run` state as a compare-and-set on the expected state (the
 --                      machine is a DAG, so a state CAS is the fence); `lab_external_run_events`
---                      keeps every move (append-only).
+--                      keeps every move (append-only). R184: `ambiguous -> failed` is an
+--                      operator's move only, carrying the provider's written confirmation
+--                      (`operator`, `confirmation_ref`), and it releases the run's hold;
+--                      `lab_run_release` refuses a hold while its run is ambiguous.
 --   lab_run_reservations  one PROVIDER_USD reservation per (provider, submit key) on the
 --                      payer's D6J budget: held -> settled once (a cost, or unknown: then the
 --                      whole reservation counts as spent - never an estimate of the cost) |
@@ -430,6 +433,18 @@ begin
     perform infrx.refuse('invalid_request', 'a move never rewrites the record''s own fields');
   end if;
   v_from := o.state;
+  if v_from = 'ambiguous' and v_target = 'failed' then
+    -- R184: the platform never fails an ambiguous run; an operator does, on the provider's
+    -- written confirmation that the key was never received (both kept in the event).
+    if not exists (select 1 from public.profiles pr
+                    where pr.id::text = v_fields->>'operator' and pr.is_operator) then
+      perform infrx.refuse('forbidden', 'only an operator fails an ambiguous run (R184)');
+    end if;
+    if length(btrim(coalesce(v_fields->>'confirmation_ref', ''))) = 0 then
+      perform infrx.refuse('invalid_request', 'an ambiguous run fails only on the '
+                           'provider''s written confirmation (R184)');
+    end if;
+  end if;
   begin
     update infrx.lab_external_runs set state = v_target,
            doc = doc || v_fields || jsonb_build_object('state', v_target)
@@ -442,6 +457,13 @@ begin
   insert into infrx.lab_external_run_events (provider_org_id, external_run_id, from_state,
                                              to_state, fields)
   values (v_provider, v_id, v_from, v_target, v_fields);
+  -- (the confirmed failure releases the run's hold with it; the key is records.submit_key)
+  if v_from = 'ambiguous' and v_target = 'failed' and exists (
+       select 1 from infrx.lab_run_reservations x
+        where x.provider_org_id = v_provider and x.key = 'submit:' || v_id) then
+    perform infrx.lab_run_release(jsonb_build_object('provider_org_id', v_provider,
+                                                     'key', 'submit:' || v_id));
+  end if;
   return o.doc;
 end $$;
 
@@ -545,6 +567,12 @@ begin
   end if;
   if r.state = 'settled' then
     perform infrx.refuse('state_conflict', 'a settled reservation is not released');
+  end if;
+  if exists (select 1 from infrx.lab_external_runs o
+              where o.provider_org_id = r.provider_org_id
+                and 'submit:' || o.external_run_id = r.key and o.state = 'ambiguous') then
+    perform infrx.refuse('state_conflict', 'an ambiguous run''s hold is released only by '
+                         'its confirmed failure (R184)');
   end if;
   if r.state = 'held' then
     update infrx.lab_budgets set reserved = reserved - r.amount, updated_at = infrx.now()

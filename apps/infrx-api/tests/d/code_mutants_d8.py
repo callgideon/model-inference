@@ -29,6 +29,7 @@ FAILURES = "check_teacher_failures_are_an_append_only_log"
 EVENTS = "check_checkpoint_events_are_signed_once_per_provider"
 SUBS = "check_subscriptions_and_decisions_are_first_write"
 RACE = "check_racing_reservations_hold_once"
+AMBIGUOUS = "check_an_ambiguous_run_fails_only_on_the_providers_confirmation"
 STORE = "check_the_adapters_compose"
 
 
@@ -154,6 +155,19 @@ SQL_MUTANTS = (
        "(r.provider_org_id, r.payer_ref);\n    update infrx.lab_run_reservations set state = "
        "'released'", "    update infrx.lab_run_reservations set state = 'released'", MONEY,
        "a released hold never returns to the payer"),
+    # --- R184 ambiguous runs
+    _s("d8_ambiguous_any_actor", "    if not exists (select 1 from public.profiles pr\n"
+       "                    where pr.id::text = v_fields->>'operator' and pr.is_operator) then",
+       "    if false then", AMBIGUOUS, "a worker (or any caller) fails an ambiguous run"),
+    _s("d8_ambiguous_unconfirmed", "    if length(btrim(coalesce(v_fields->>'confirmation_ref', "
+       "''))) = 0 then", "    if false then", AMBIGUOUS,
+       "an ambiguous run is failed with no written confirmation from the provider"),
+    _s("d8_ambiguous_released", "                and 'submit:' || o.external_run_id = r.key and "
+       "o.state = 'ambiguous') then", "                and false) then", AMBIGUOUS,
+       "the platform releases an ambiguous run's hold (R184)"),
+    _s("d8_ambiguous_fail_keeps_hold", "  if v_from = 'ambiguous' and v_target = 'failed' and "
+       "exists (", "  if false and exists (", AMBIGUOUS,
+       "a confirmed failure leaves its hold reserved for ever"),
     # --- notes
     _s("d8_note_rewritten", "    if n.body <> p_args->'body' then", "    if false then", NOTES,
        "a checkpoint's first outcome is overwritten by a redelivery"),
@@ -419,6 +433,9 @@ REQUESTS = (
     _q("q_eligible_revoked", "                          and (g.revoked_at is null or "
        "infrx.now() < g.revoked_at)\n", "", Q_ELIGIBLE,
        "a subject who revoked consent stays in the experiment"),
+    _q("q_eligible_expired", "                          and (g.expires_at is null or "
+       "infrx.now() < g.expires_at)\n", "", Q_ELIGIBLE,
+       "an expired provider_sharing grant keeps routing a subject into a candidate"),
     _q("q_eligible_any_purpose", "                          and 'provider_sharing' = "
        "any(g.purposes)\n", "", Q_ELIGIBLE, "a capture-only grant enrols a subject"),
     _q("q_eligible_suspended", "  select coalesce((select not coalesce(org.suspended, false)\n",
@@ -439,14 +456,52 @@ REQUESTS = (
     _q("q_role_unbounded", "nobypassrls connection limit 10';", "nobypassrls connection limit "
        "-1';",
        Q_ROLE, "a crash-looping Lab release exhausts the App's connections"),
-    _q("q_role_everything", "p.proname like 'lab\\_%'\n              and p.prokind", "true\n"
-       "              and p.prokind", Q_ROLE,
-       "the Lab's login executes the App's admission and settlement RPCs"),
-    _q("q_role_no_lab", "  for f in select p.oid::regprocedure from pg_proc p\n            where "
-       "p.pronamespace = 'infrx'::regnamespace and p.proname like 'lab\\_%'",
-       "  for f in select p.oid::regprocedure from pg_proc p\n            where false and "
-       "p.pronamespace = 'infrx'::regnamespace and p.proname like 'lab\\_%'", Q_ROLE,
-       "the control service cannot reach its own RPCs"),
+    _q("q_role_consent_writes", "  infrx.lab_deployment_aggregates(jsonb) to "
+       "infrx_lab_control;", "  infrx.lab_deployment_aggregates(jsonb), "
+       "infrx.lab_put_access_grant(jsonb), infrx.lab_revoke_access_grant(jsonb) to "
+       "infrx_lab_control;", Q_ROLE, "a Lab credential mints or revokes a consumer's P-09 grant"),
+    _q("q_role_content_refs", "  infrx.lab_deployment_aggregates(jsonb) to "
+       "infrx_lab_control;", "  infrx.lab_deployment_aggregates(jsonb), "
+       "infrx.lab_content_ref_redeem(jsonb) to infrx_lab_control;", Q_ROLE,
+       "the Lab redeems content refs meant for the content service only"),
+    _q("q_role_other_lab", "  infrx.lab_deployment_aggregates(jsonb) to "
+       "infrx_lab_control;", "  infrx.lab_deployment_aggregates(jsonb), "
+       "infrx.lab_list_datasets(jsonb) to infrx_lab_control;", Q_ROLE,
+       "the control login reaches Lab RPCs its factory never calls"),
+    _q("q_role_service_member", "grant usage on schema infrx to infrx_lab_control;",
+       "grant usage on schema infrx to infrx_lab_control;\ngrant service_role to "
+       "infrx_lab_control;", Q_ROLE, "the bounded login sets role service_role and holds all"),
+    _q("q_role_no_clock", "grant execute on function infrx.now(), infrx.usd_price(text),",
+       "grant execute on function infrx.usd_price(text),", Q_ROLE,
+       "/readyz answers 503 for ever on the control login"),
+    _q("q_role_no_price", "grant execute on function infrx.now(), infrx.usd_price(text),",
+       "grant execute on function infrx.now(),", Q_ROLE,
+       "the catalog's price read fails on the control login"),
+    _q("q_role_no_control_rpcs", "  infrx.lab_control_fund(jsonb), infrx.lab_control_events(jsonb),",
+       "  infrx.lab_control_fund(jsonb),", Q_ROLE, "the control events page fails on its login"),
+    _q("q_role_no_memberships", "  infrx.lab_provider_memberships(jsonb), "
+       "infrx.lab_access_grants(jsonb),", "  infrx.lab_access_grants(jsonb),", Q_ROLE,
+       "every Lab session is refused on the control login"),
+    _q("q_role_no_models", "create policy lab_control_reads_models on public.models for select "
+       "to infrx_lab_control\n  using (true);", "create policy lab_control_reads_models on "
+       "public.models for select to infrx_lab_control\n  using (false);", Q_ROLE,
+       "a serving registration never finds its model's provider"),
+    _q("q_role_no_registry_rows", "    execute format('create policy lab_control_registry on "
+       "infrx.%I to infrx_lab_control '\n                   'using (true) with check (true)', "
+       "r);", "    execute format('create policy lab_control_registry on infrx.%I to "
+       "infrx_lab_control '\n                   'using (false) with check (true)', r);",
+       Q_ROLE, "the catalog reads no serving revision on the control login"),
+    _q("q_role_no_registry_writes", "    execute format('grant select, insert on infrx.%I to "
+       "infrx_lab_control', r);", "    execute format('grant select on infrx.%I to "
+       "infrx_lab_control', r);", Q_ROLE, "PgRegistry.put fails on the control login"),
+    _q("q_role_registry_update", "    execute format('grant select, insert on infrx.%I to "
+       "infrx_lab_control', r);", "    execute format('grant select, insert, update on "
+       "infrx.%I to infrx_lab_control', r);", Q_ROLE,
+       "the Lab edits registry rows instead of appending them"),
+    _q("q_role_api_keys", "grant select (model_uuid, id, provider_org_id) on public.models to "
+       "infrx_lab_control;", "grant select (model_uuid, id, provider_org_id) on public.models to "
+       "infrx_lab_control;\ngrant select on public.api_keys to infrx_lab_control;", Q_ROLE,
+       "the Lab login reads the App's key hashes"),
 )
 REQUEST_NAMES = tuple(m.name for m in REQUESTS)
 

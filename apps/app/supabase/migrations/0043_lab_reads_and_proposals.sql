@@ -15,7 +15,8 @@
 --   SR-R1-1  (rollout-routing R1, R1-8d2e636.md) the router's port over D9: release_active,
 --            release_eligible, record_rollout_assignment, for `infrx_runtime` only.
 --   WR-I2L-4 (lab-operate I2L, I2L-d1b0f21.md) the control service's own login role
---            `infrx_lab_control` with a CONNECTION LIMIT, reaching the Lab RPCs only.
+--            `infrx_lab_control` with a CONNECTION LIMIT, holding exactly the control
+--            factory's calls (named below; no consent writes, no content refs).
 --   WR-COMP-1 needs nothing new: 0034's `lab_evaluators` + `lab_evaluator` is the evaluator
 --            read (`PgLabDataStore.evaluator(ref, provider_org_id=<the ref's provider>)`).
 --   WR-LAB-API-4 (optional) is not done: `infrx.serving_versions` stays readable by
@@ -66,9 +67,11 @@
 --   infrx.record_rollout_assignment(record): a `lab.rollout_assignment.1` of a rollout's
 --       policy revision (serving ref its baseline or a candidate) -> once per request.
 --
--- ROLLBACK (this file alone; nothing earlier references it): revoke all on schema infrx
---   from infrx_lab_control; revoke execute on every function from it; drop role
---   infrx_lab_control; drop function infrx.record_rollout_assignment(jsonb),
+-- ROLLBACK (this file alone; nothing earlier references it): drop policy
+--   lab_control_reads_models on public.models and lab_control_registry on the four
+--   registry tables; revoke all on public.models, the four
+--   registry tables and schema infrx from infrx_lab_control; revoke execute on every
+--   function from it; drop role infrx_lab_control; drop function infrx.record_rollout_assignment(jsonb),
 --   infrx.release_eligible(uuid, uuid), infrx.release_active(text),
 --   public.lab_judge_runs(uuid, uuid), infrx.lab_put_judge_calibration(jsonb),
 --   infrx.lab_release_proposals(jsonb), infrx.lab_decide_release_proposal(jsonb),
@@ -544,21 +547,47 @@ grant execute on function infrx.release_active(text), infrx.release_eligible(uui
 -- ================================================================= WR-I2L-4 ===
 -- The Lab control service's own login (INFRX_LAB_DATABASE_URL): no password here (the
 -- operator sets one out of band), at most 10 connections (the operator may retune it with
--- `alter role infrx_lab_control connection limit N`), and only the Lab's named RPCs - never
--- an App table or the App's RPCs. A later Lab migration re-runs the grant loop below.
+-- `alter role infrx_lab_control connection limit N`), and exactly what the control factory
+-- (`infrx.lab.control.app`) calls on it, composed with `set_role=False` (WR-I2L-4b) - never
+-- service_role, the consumer's consent writes, the content service's refs or the App's RPCs:
+--   PgControlStore   infrx.now() (/readyz), public.models' provider, deployment_revisions,
+--                    the lab_control_* RPCs (0032)
+--   PgAccessStore    the L2 reads only (memberships, grant history, aggregates)
+--   PgCatalogDirectory / PgRegistry (A3's registry): read the serving/model/deployment/card
+--                    rows, append new ones (insert only), infrx.usd_price
+--   PgServing (lab_traces)  serving_versions
+-- A later Lab migration that gives the control service another RPC names it here.
 do $$
-declare
-  f regprocedure;
 begin
   if not exists (select 1 from pg_roles where rolname = 'infrx_lab_control') then
     create role infrx_lab_control login noinherit nobypassrls;
   end if;
   -- (a role is the cluster's: set its bounds on every run, not only at creation)
   execute 'alter role infrx_lab_control login noinherit nobypassrls connection limit 10';
-  execute 'grant usage on schema infrx to infrx_lab_control';
-  for f in select p.oid::regprocedure from pg_proc p
-            where p.pronamespace = 'infrx'::regnamespace and p.proname like 'lab\_%'
-              and p.prokind = 'f' and p.prosecdef loop
-    execute format('grant execute on function %s to infrx_lab_control', f);
+end $$;
+grant usage on schema infrx to infrx_lab_control;
+grant execute on function infrx.now(), infrx.usd_price(text),
+  infrx.lab_control_endpoint(jsonb), infrx.lab_control_transition(jsonb),
+  infrx.lab_control_propose(jsonb), infrx.lab_control_dev_key(jsonb),
+  infrx.lab_control_publish(jsonb), infrx.lab_control_rollback(jsonb),
+  infrx.lab_control_fund(jsonb), infrx.lab_control_events(jsonb),
+  infrx.lab_provider_memberships(jsonb), infrx.lab_access_grants(jsonb),
+  infrx.lab_deployment_aggregates(jsonb) to infrx_lab_control;
+-- (0007 keeps row security on the registry; its triggers keep history immutable, and the
+-- grants below are select + insert only, so the policies admit exactly those)
+do $$
+declare
+  r text;
+begin
+  foreach r in array array['model_versions', 'serving_versions', 'deployment_revisions',
+                           'rate_card_versions'] loop
+    execute format('grant select, insert on infrx.%I to infrx_lab_control', r);
+    execute format('drop policy if exists lab_control_registry on infrx.%I', r);
+    execute format('create policy lab_control_registry on infrx.%I to infrx_lab_control '
+                   'using (true) with check (true)', r);
   end loop;
 end $$;
+grant select (model_uuid, id, provider_org_id) on public.models to infrx_lab_control;
+drop policy if exists lab_control_reads_models on public.models;
+create policy lab_control_reads_models on public.models for select to infrx_lab_control
+  using (true);

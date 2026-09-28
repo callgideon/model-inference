@@ -90,11 +90,24 @@ def test_lab_upgrade_preserves_history_money_identity_and_grants() -> None:
         before["counts"], "the Lab upgrade changed a row count"
     assert after["sums"] == before["sums"], (before["sums"], after["sums"])
     assert after["jobs"] == before["jobs"], "the Lab upgrade changed a job's identity or money"
-    assert {k: v for k, v in after["acl"].items() if k in before["acl"]} == before["acl"], \
-        "the Lab upgrade changed an existing relation's grants"
+    # (0043 WR-I2L-4: the one change - the control login appends to A3's registry, select +
+    # insert, as its PgRegistry does; nothing else of an existing relation moves)
+    control = ",infrx_lab_control=ar/postgres"
+    registry = {f"infrx.{r}" for r in ("model_versions", "serving_versions",
+                                        "deployment_revisions", "rate_card_versions")}
+    assert all(control in after["acl"][r][0] for r in registry), \
+        {r: after["acl"][r] for r in registry}
+    kept = {k: ((v[0].replace(control, ""), *v[1:]) if k in registry else v)
+            for k, v in after["acl"].items() if k in before["acl"]}
+    assert kept == before["acl"], "the Lab upgrade changed an existing relation's grants"
     assert {k: v for k, v in after["cols"].items() if k in before["cols"]} == before["cols"]
     changed = {k for k in before["fns"] if after["fns"].get(k) != before["fns"][k]}
-    assert changed == set(), f"an existing function's grants changed: {changed}"
+    # (and executes the clock /readyz reads and the price PgCatalogDirectory reads)
+    assert changed == {"infrx.now()", "infrx.usd_price(text)"}, \
+        f"an existing function's grants changed: {changed}"
+    assert all(after["fns"][k] == (before["fns"][k][0][:-1] + ",infrx_lab_control=X/postgres}",
+                                   before["fns"][k][1]) for k in changed), \
+        {k: (before["fns"][k], after["fns"][k]) for k in changed}
     assert conn.execute("select entry_seq from infrx.feedback where feedback_id = 'fb_pre_lab'"
                         ).fetchone()[0] is not None                              # 0028
     pgharness.apply(DB, lab)

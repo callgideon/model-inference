@@ -539,7 +539,7 @@ def check_release_active_answers_the_running_head_with_pins(conn) -> str:
 def check_release_eligibility_is_current_and_default_deny(conn) -> str:
     """SR-R1-1: a subject is eligible only while its organization holds a CURRENT
     provider_sharing grant to the policy's provider and is not suspended - revocation,
-    a narrowed grant, suspension or no grant at all deny, read now."""
+    a narrowed grant, expiry, suspension or no grant at all deny, read now."""
     launch(conn, 7)
     pid, c1org = uid(7, 0xb0), l2.org(conn, C1)
     assert eligible(conn, pid, c1org) is True
@@ -552,6 +552,14 @@ def check_release_eligibility_is_current_and_default_deny(conn) -> str:
         conn.execute("update public.organizations set suspended = true, suspended_at = "
                      "infrx.now(), suspension_reason = 'abuse' where id = %s", (c1org,))
         assert eligible(conn, pid, c1org) is False, "a suspended organization"
+    with conn.transaction(force_rollback=True):
+        ok(conn, "lab_put_access_grant", l2.scope(
+            conn, purposes=["provider_sharing"],
+            expires_at=conn.execute("select infrx.now() + interval '60 seconds'"
+                                    ).fetchone()[0].isoformat()))
+        assert eligible(conn, pid, c1org) is True, "a grant not yet expired"
+        t.advance(conn, 61)
+        assert eligible(conn, pid, c1org) is False, "an expired grant"
     ok(conn, "lab_revoke_access_grant", {"actor_user_id": C1, "grantor_org_id": c1org,
                                          "recipient_provider_org_id": NEMO})
     assert eligible(conn, pid, c1org) is False, "a revoked grant"
@@ -583,31 +591,88 @@ def check_assignments_are_recorded_once_for_the_runtime(conn) -> str:
     return "once per request; offered servings only; provider's own"
 
 
+def as_control_login(dbname: str):
+    """The control service's `Connect` on its own login (the factory's
+    `connector(INFRX_LAB_DATABASE_URL, set_role=False)`, WR-I2L-4b): no `set role
+    service_role`, only what the login itself holds."""
+    async def connect():
+        c = await psycopg.AsyncConnection.connect(pgharness.dsn(dbname), autocommit=True,
+                                                  prepare_threshold=None)
+        await c.execute("set session authorization infrx_lab_control")
+        return c
+    return connect
+
+
 @rolled_back
 def check_the_control_login_is_bounded_and_lab_only(conn) -> str:
     """WR-I2L-4 / OPS-RECOVER: the control service's login exists with a connection limit,
-    no bypass of row security, and reaches the Lab's RPCs but neither the App's RPCs nor
-    its tables."""
+    no bypass of row security; the factory's own calls (the /readyz clock, the model's
+    provider, the serving revision, the price, memberships, the control events) answer on
+    it, and it reaches neither service_role, the consumer's consent writes, the content
+    service's refs, another Lab RPC, nor the App's RPCs and tables."""
+    import asyncio
+
+    from infrx.state.catalog import PgCatalogDirectory
+    from infrx.state.lab_access import PgAccessStore
+    from infrx.state.lab_control import PgControlStore
     row = conn.execute("select rolcanlogin, rolconnlimit, rolbypassrls, rolsuper from pg_roles "
                        "where rolname = 'infrx_lab_control'").fetchone()
     assert row is not None and row[0] and 0 < row[1] <= 10 and not row[2] and not row[3], row
+    model, provider, serving = conn.execute(
+        "select m.model_uuid::text, m.provider_org_id::text, s.serving_version_id::text "
+        "from infrx.serving_versions s join public.models m on m.model_uuid = s.model_id "
+        "limit 1").fetchone()
+    login = as_control_login(conn.info.dbname)
+    store, catalog, access = PgControlStore(login), PgCatalogDirectory(login), PgAccessStore(login)
+
+    async def attempt(coro, answer=lambda got: got):
+        try:
+            return answer(await coro)
+        except Exception as failed:                     # noqa: BLE001 - the answer is its type
+            return type(failed).__name__
+
+    async def factory_calls():
+        return (await attempt(store.db_now(), lambda at: at is not None),
+                await attempt(store.model_provider(model)),
+                await attempt(catalog.serving_revision(serving),
+                              lambda got: getattr(got, "serving_version_id", None)),
+                await attempt(catalog.usd_price("no-such-model")),
+                await attempt(access.memberships_for_user(DEV),
+                              lambda got: [m.provider_org_id for m in got]),
+                await attempt(store.events(NEMO), lambda got: isinstance(got, list)))
+    got = asyncio.run(factory_calls())
+    assert got == (True, provider, serving, None, [NEMO], True), got
+    writes = conn.execute(
+        "select bool_and(has_table_privilege('infrx_lab_control', t, 'INSERT')) from "
+        "unnest(array['infrx.model_versions', 'infrx.serving_versions', "
+        "'infrx.deployment_revisions', 'infrx.rate_card_versions']) t").fetchone()[0]
+    assert writes, "PgRegistry.put cannot write the registry on the control login"
 
     def as_control(sql: str) -> str | None:
         try:
             with conn.transaction():
-                conn.execute("set local role infrx_lab_control")
+                conn.execute("set local session authorization infrx_lab_control")
                 conn.execute(sql)
                 raise psycopg.Rollback()
         except psycopg.Error as refused:
             return refused.sqlstate
         return None
-    assert as_control(f"select infrx.lab_list_datasets('{{\"provider_org_id\": \"{NEMO}\"}}')") \
-        is None, "the control login cannot reach the Lab"
-    app = {"admit": "select infrx.admit('{}'::jsonb)", "jobs": "select count(*) from infrx.jobs",
-           "wallets": "select count(*) from infrx.credit_wallets"}
-    got = {k: as_control(v) for k, v in app.items()}
-    assert got == dict.fromkeys(app, "42501"), got
-    return f"login, limit {row[1]}, Lab RPCs only"
+    lab = "'{}'::jsonb"
+    refused = {"service_role": "set role service_role",
+               "put_grant": f"select infrx.lab_put_access_grant({lab})",
+               "revoke_grant": f"select infrx.lab_revoke_access_grant({lab})",
+               "ref_issue": f"select infrx.lab_content_ref_issue({lab})",
+               "ref_redeem": f"select infrx.lab_content_ref_redeem({lab})",
+               "ref_held": f"select infrx.lab_content_ref_held({lab})",
+               "other_lab": f"select infrx.lab_list_datasets({lab})",
+               "admit": "select infrx.admit('{}'::jsonb)",
+               "jobs": "select count(*) from infrx.jobs",
+               "wallets": "select count(*) from infrx.credit_wallets",
+               "api_keys": "select count(*) from public.api_keys",
+               "registry_update": "update infrx.serving_versions set revision_label = 'x'"}
+    got = {k: as_control(v) for k, v in refused.items()}
+    assert got == dict.fromkeys(refused, "42501"), got
+    return f"login, limit {row[1]}; the factory's calls answer; nothing else"
 
 
 CHECKS = {c.__name__: c for c in (

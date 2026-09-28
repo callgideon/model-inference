@@ -22,6 +22,7 @@ import threading
 import psycopg
 import pytest
 from infrx.contracts import errors
+from infrx.contracts.lab import records
 from infrx.contracts.v2.money_units import ProviderUsd
 from infrx.state import migrations
 from infrx.state.jobstore import connector
@@ -347,6 +348,54 @@ def check_one_reservation_per_key_settled_once(conn) -> str:
 
 
 @rolled_back
+def check_an_ambiguous_run_fails_only_on_the_providers_confirmation(conn) -> str:
+    """R184: an ambiguous run is never released by the platform - its hold stays while the
+    run is ambiguous; only an operator's move backed by the provider's written confirmation
+    fails it, and that move releases the hold with it (both kept in the run's history); a
+    lookup may still settle it as submitted, and a rejected submit still fails."""
+    run_id, ref = external(conn, 0x86)
+    key = records.submit_key(run_id)
+    operator = uid(5, 0x86)
+    conn.execute("insert into auth.users (id, email) values (%s, 'ops-d8@example.com')",
+                 (operator,))
+    conn.execute("update public.profiles set is_operator = true where id = %s", (operator,))
+    ok(conn, "lab_external_run_move", create(run_id, ref))
+    ok(conn, "lab_run_reserve", reserve(key))
+    ok(conn, "lab_external_run_move", move(run_id, "prepared", "submitting"))
+    ok(conn, "lab_external_run_move", move(run_id, "submitting", "ambiguous"))
+    assert refusal(conn, "lab_run_release", {"provider_org_id": NEMO, "key": key}) == \
+        "state_conflict", "the platform released an ambiguous run's hold"
+    assert budget(conn) == ("25.00000000", "0.00000000")
+    confirmed = {"operator": operator, "confirmation_ref": "ticket:4411 key never received"}
+    assert refusal(conn, "lab_external_run_move", move(run_id, "ambiguous", "failed")) == \
+        "forbidden", "a worker failed an ambiguous run"
+    assert refusal(conn, "lab_external_run_move", move(run_id, "ambiguous", "failed", **{
+        **confirmed, "operator": DEV})) == "forbidden", "a non-operator failed it"
+    assert refusal(conn, "lab_external_run_move", move(run_id, "ambiguous", "failed",
+                                                       operator=operator)) == \
+        "invalid_request", "an operator failed it with no confirmation"
+    failed = ok(conn, "lab_external_run_move", move(run_id, "ambiguous", "failed", **confirmed))
+    assert failed["state"] == "failed", failed
+    assert budget(conn) == ("0.00000000", "0.00000000"), "the confirmed failure kept the hold"
+    assert ok(conn, "lab_run_release", {"provider_org_id": NEMO, "key": key})["state"] == \
+        "released"
+    last = conn.execute("select from_state, fields from infrx.lab_external_run_events where "
+                        "external_run_id = %s order by event_id desc limit 1",
+                        (run_id,)).fetchone()
+    assert last == ("ambiguous", confirmed), last
+    other, other_ref = external(conn, 0x8f)
+    ok(conn, "lab_external_run_move", create(other, other_ref))
+    ok(conn, "lab_run_reserve", reserve(records.submit_key(other)))
+    ok(conn, "lab_external_run_move", move(other, "prepared", "submitting"))
+    assert ok(conn, "lab_run_release", {"provider_org_id": NEMO,
+                                        "key": records.submit_key(other)})["state"] == \
+        "released", "a rejected submit's hold"
+    assert ok(conn, "lab_external_run_move", move(other, "submitting", "failed",
+                                                  reason="422"))["state"] == "failed"
+    return "ambiguous holds; operator + written confirmation fails and releases"
+
+
+@rolled_back
 def check_notes_are_write_once(conn) -> str:
     """SR-P3-1: a note is one body per (provider, key) for ever - a replay is the body,
     another body `idempotency_conflict`; `noted` is provider-scoped and None when absent."""
@@ -632,6 +681,7 @@ CHECKS = {c.__name__: c for c in (
     check_ground_truth_and_synthetic_stay_distinct,
     check_an_external_run_is_its_record_and_moves_by_cas,
     check_one_reservation_per_key_settled_once,
+    check_an_ambiguous_run_fails_only_on_the_providers_confirmation,
     check_notes_are_write_once,
     check_a_teacher_run_is_consented_per_sample,
     check_teacher_failures_are_an_append_only_log,
