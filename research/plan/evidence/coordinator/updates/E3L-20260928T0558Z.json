@@ -1,0 +1,52 @@
+{
+  "task": "E3L",
+  "slice": "E3L runner + real run at d1b0f21f (clean): l01/l07/l08/l11 PASS, l02 base PASS; l02 L3 half, l03-l06, l09, l10, l12 NOT RUN[L3/L4] with rerun command; E3L-BIND after LW2 merges",
+  "activity": "review",
+  "head": "d1b0f21f",
+  "worktree": ".claude/worktrees/codex-w5-lab-operate",
+  "branch": "codex/w5-lab-operate",
+  "blockers": [],
+  "owned_paths": [
+    "tests/integration/lab_operate/",
+    "research/plan/evidence/e/E3L-*"
+  ],
+  "commands": [
+    {
+      "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --keep",
+      "exit": 3,
+      "summary": "l01/l07/l08/l11 PASS; 12 passed 8 skipped; L3/L4 cells NOT RUN; dirty false"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l python -m pytest -q tests/integration/lab_operate/test_mutants.py",
+      "exit": 0,
+      "summary": "29 passed: 13 layer-1 + 12 stack mutants killed"
+    },
+    {
+      "cmd": "python -m pytest -q tests/integration/lab_operate/test_e3l_runner.py",
+      "exit": 0,
+      "summary": "11 passed"
+    },
+    {
+      "cmd": "python -m pytest -q tests/integration --co",
+      "exit": 0,
+      "summary": "559 collected"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium-low",
+    "basis": "E3A-PREP 3/6/12 with a REJECT round; E3L-BIND of 8 specified cells to L3's control API + one real run",
+    "at": "2026-09-28T05:58Z"
+  },
+  "wiring_requests": [
+    "WR-E3L-1 Makefile: lab-operate gate target + E3L mutant list line",
+    "WR-E3L-2 P-21 extension: reserve 57000-57599"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E3L-d1b0f21.md",
+    "research/plan/evidence/e/E3L-raw-d1b0f21/",
+    "research/plan/evidence/e/E3L-raw-04a0485/"
+  ]
+}

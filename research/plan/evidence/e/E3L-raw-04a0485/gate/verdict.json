@@ -1,0 +1,297 @@
+{
+  "task": "E3L",
+  "gate": "LAB-OPERATE (local half; I2L staging needs P-08)",
+  "verdict": "INVALID",
+  "exit": 4,
+  "cells": {
+    "LAB-ACCESS": "INVALID",
+    "LAB-PUBLISH": "NOT RUN",
+    "SPLIT-CONTRACT": "NOT RUN"
+  },
+  "label": "real PostgreSQL/PostgREST/Valkey/S3-compatible services, the merged L1/L2 code, a controlled protocol engine and a local Lab build; not Marlin quality, not GPU capacity, not hosted behaviour",
+  "pins": {
+    "base": "eb0734d7",
+    "head": "04a0485a3bcaa5c1d921a4ddd2371d6d7c8797ba",
+    "dirty": false,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    }
+  },
+  "namespace": "e3l",
+  "ports": {
+    "postgres": 57032,
+    "valkey": 57079,
+    "clickhouse_http": 57023,
+    "clickhouse_native": 57090,
+    "s3": 57000,
+    "fake_vllm": 57080
+  },
+  "started": "2026-09-27T20:42:06+00:00",
+  "seconds": 178.1,
+  "stack": {
+    "usable": true,
+    "why_not": null,
+    "stages": [
+      {
+        "stage": "preflight",
+        "status": "PASS",
+        "seconds": 2.0
+      },
+      {
+        "stage": "services",
+        "status": "PASS",
+        "seconds": 15.2
+      },
+      {
+        "stage": "migrate",
+        "status": "PASS",
+        "seconds": 1.6
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "l01",
+      "title": "two providers: own workspace only; every cross-provider operation refused; revoked membership refused next call",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "INVALID",
+      "cases": {
+        "test_l01_each_provider_session_sees_only_its_own_workspace": "INVALID",
+        "test_l01_a_member_of_one_provider_is_refused_every_operation_on_the_other": "PASS",
+        "test_l01_a_revoked_membership_is_refused_on_its_next_call": "PASS"
+      },
+      "reasons": [
+        "test_l01_each_provider_session_sees_only_its_own_workspace: INVALID[harness] RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l01"
+    },
+    {
+      "id": "l02",
+      "title": "private dev revisions excluded from App discovery and admission",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3",
+        "L4"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_l02_the_seeded_private_dev_deployment_is_not_discoverable_or_admissible": "PASS",
+        "test_l02_a_provider_created_dev_revision_never_reaches_app_discovery": "NOT RUN"
+      },
+      "reasons": [
+        "test_l02_a_provider_created_dev_revision_never_reaches_app_discovery: NOT RUN[L3,L4] infrx.lab.control is absent on this tree. Steps: DEV_A registers a model version and creates a private dev revision through the control port; its endpoint credential serves it; /v1/models with alpha's key lists no id of it and admission by alpha's key is 404 not_found; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l02"
+    },
+    {
+      "id": "l03",
+      "title": "registry validation: artifact, schema, runtime, digest, ownership",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership": "NOT RUN"
+      },
+      "reasons": [
+        "test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership: NOT RUN[L3] infrx.lab.control is absent on this tree. Steps: register with an unsupported artifact/schema/runtime, a mutable tag instead of a digest, and a model of provider B as DEV_A: each refused, no row written; the valid registration is accepted once under its idempotency key; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l03"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l03"
+    },
+    {
+      "id": "l04",
+      "title": "production publication: operator approval, audit, rate snapshot",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3",
+        "L4"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_l04_publication_needs_operator_approval_and_snapshots_the_rate": "NOT RUN"
+      },
+      "reasons": [
+        "test_l04_publication_needs_operator_approval_and_snapshots_the_rate: NOT RUN[L3,L4] infrx.lab.control is absent on this tree. Steps: DEV_A proposes publication; the proposal alone changes no listing; the operator approves with a rate card; the audit row names both actors and the rate snapshot; DEV_B cannot propose or approve for A; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l04 /home/rey/workspa"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l04"
+    },
+    {
+      "id": "l05",
+      "title": "App discovery and a metered call on the published revision",
+      "test_ids": [
+        "LAB-PUBLISH",
+        "SPLIT-CONTRACT"
+      ],
+      "lanes": [
+        "L3",
+        "L4"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_l05_app_discovers_and_serves_the_published_revision": "NOT RUN"
+      },
+      "reasons": [
+        "test_l05_app_discovers_and_serves_the_published_revision: NOT RUN[L3,L4] infrx.lab.control is absent on this tree. Steps: after l04's approval /v1/models lists the revision with its rate; alpha's request is admitted on its pins and settles once at the snapshot rate; the App runs unchanged with the Lab control service stopped; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l05 /home/rey/wo"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l05"
+    },
+    {
+      "id": "l06",
+      "title": "rollback during a queued request keeps its serving and rate pins",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins": "NOT RUN"
+      },
+      "reasons": [
+        "test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins: NOT RUN[L3] infrx.lab.control is absent on this tree. Steps: alpha's async job is accepted on revision R2 with no worker running; the provider rolls the alias back to R1; the worker starts: the queued job runs on R2 at R2's admitted card and settles once; a new request routes to R1; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l0"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l06"
+    },
+    {
+      "id": "l07",
+      "title": "consumer keys reach no provider control and are no Lab session",
+      "test_ids": [
+        "LAB-ACCESS",
+        "SPLIT-CONTRACT"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_l07_a_consumer_key_reaches_no_provider_control_on_the_gateway": "PASS",
+        "test_l07_a_consumer_key_is_no_lab_session": "PASS",
+        "test_l07_a_consumer_owner_has_no_provider_workspace": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l07"
+    },
+    {
+      "id": "l08",
+      "title": "consumer data denied without a current, purpose-matching grant",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_l08_no_grant_no_content": "PASS",
+        "test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call": "PASS",
+        "test_l08_a_provider_session_reads_no_consumer_rows_directly": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l08"
+    },
+    {
+      "id": "l09",
+      "title": "fault injection on the publish/rollback CAS",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_l09_publish_and_rollback_cas_under_injected_faults": "NOT RUN"
+      },
+      "reasons": [
+        "test_l09_publish_and_rollback_cas_under_injected_faults: NOT RUN[L3] infrx.lab.control is absent on this tree. Steps: two concurrent publish/rollback transitions on one alias with a stale expected version: exactly one wins, the other is a typed conflict; a crash between the CAS and the audit write leaves no transition without its audit; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l09 "
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l09"
+    },
+    {
+      "id": "l10",
+      "title": "control-service restart mid-operation",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_l10_a_control_service_restart_mid_operation_loses_nothing": "NOT RUN"
+      },
+      "reasons": [
+        "test_l10_a_control_service_restart_mid_operation_loses_nothing: NOT RUN[L3] infrx.lab.control is absent on this tree. Steps: SIGKILL the control process between accepting a publication and answering; on restart the operation is either applied once or absent, the retry under the same key answers the recorded result, App inference serves throughout; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only "
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l10"
+    },
+    {
+      "id": "l11",
+      "title": "App inference with the Lab down, crash-looping and rolled back",
+      "test_ids": [
+        "SPLIT-CONTRACT"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving": "PASS",
+        "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l11"
+    },
+    {
+      "id": "l12",
+      "title": "consumer keys refused by every control-service operation",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_l12_a_consumer_key_is_refused_by_every_control_operation": "NOT RUN"
+      },
+      "reasons": [
+        "test_l12_a_consumer_key_is_refused_by_every_control_operation: NOT RUN[L3] infrx.lab.control is absent on this tree. Steps: every control-port operation called with alpha's consumer /v1 key (header and query) is 401 invalid_audience before any read; with DEV_A's Lab session it is judged by LabAccess; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l12 /home/rey/workspace/rey/code/model-inferenc"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l12"
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e3l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "lab_build": {
+      "exit": 0,
+      "seconds": 5.3,
+      "log": "<out>/e3l-gate-2/lab-build.log",
+      "build_id": "8OodFzpglSvjJLapj-qJ1"
+    },
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-operate/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs -o junit_family=xunit1 --junitxml=<out>/e3l-gate-2/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-operate/tests/integration/lab_operate/scenarios_access.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-operate/tests/integration/lab_operate/scenarios_publish.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-operate/tests/integration/lab_operate/scenarios_split.py",
+      "exit": 1,
+      "seconds": 153.9,
+      "summary": "1 failed, 11 passed, 8 skipped in 146.49s (0:02:26)",
+      "log": "<out>/e3l-gate-2/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "<out>/e3l-gate-2/scenarios.xml",
+    "log": "<out>/e3l-gate-2/scenarios.log",
+    "box_logs": "<out>/e3l-gate-2/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir>"
+}

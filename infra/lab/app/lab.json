@@ -1,0 +1,41 @@
+{
+  "comment": "I2L: the Lab's deployment inputs, NAMES only (values live in the operator's stores, never here). Origins are P-08 placeholders (TO BE VERIFIED). Read by apps/infrx-api/tests/i/lab and infra/lab/app/README.md.",
+  "enabled": false,
+  "enable_marker": "/etc/infrx-lab/enabled",
+  "origins": {
+    "app": "https://app.callbill.ai",
+    "lab": "https://lab.callbill.ai",
+    "control": "https://lab-control.callbill.ai"
+  },
+  "auth": {
+    "site_url": "unchanged",
+    "redirect_allowlist": {
+      "staging": ["https://infrx-lab-*-humanbit.vercel.app/auth/callback**", "http://localhost:3100/auth/callback**"],
+      "production": ["https://lab.callbill.ai/auth/callback**"]
+    }
+  },
+  "control": {
+    "unit": "infrx-lab-control.service",
+    "factory": "infrx.lab.control.app:create_app",
+    "port": 8003,
+    "env_file": "/etc/infrx-lab-control.env",
+    "site": "lab-control.caddy"
+  },
+  "env": {
+    "lab-web": [
+      {"name": "NEXT_PUBLIC_LAB_URL", "exposure": "public", "purpose": "the Lab's own https origin, no path (apps/lab/lib/auth/config.ts)"},
+      {"name": "NEXT_PUBLIC_SUPABASE_URL", "exposure": "public", "purpose": "the auth/DB project the Lab session door (0030) is served from"},
+      {"name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "exposure": "public", "purpose": "publishable key; the Lab holds no service-role key"}
+    ],
+    "lab-control": [
+      {"name": "INFRX_LAB_IMAGE", "exposure": "unit", "purpose": "the Lab control release: a content-addressed image id, rolled back by itself"},
+      {"name": "INFRX_LAB_DATABASE_URL", "exposure": "secret", "purpose": "the control service's own database login (L3-SQL names the role); never the runtime's DATABASE_URL"},
+      {"name": "INFRX_LAB_SUPABASE_URL", "exposure": "server", "purpose": "where the control service verifies a Lab session token"},
+      {"name": "INFRX_LAB_ORIGIN", "exposure": "server", "purpose": "the one browser origin whose Lab sessions it accepts"}
+    ],
+    "lab-edge": [
+      {"name": "INFRX_LAB_CONTROL_SITE", "exposure": "server", "purpose": "the control origin's address in the App edge (default the placeholder above)"},
+      {"name": "INFRX_LAB_CONTROL_UPSTREAM", "exposure": "server", "purpose": "local drill only; the box leaves it unset (127.0.0.1:8003)"}
+    ]
+  }
+}
