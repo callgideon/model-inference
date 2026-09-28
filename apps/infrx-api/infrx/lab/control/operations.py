@@ -22,70 +22,18 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime
-from typing import Literal, Protocol, Sequence
-
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Protocol, Sequence
 
 from ...contracts import errors
 from ...contracts.lab.records import canonical
 from ...contracts.v2.records import (DeploymentRevision, DeploymentState, ProviderCapability,
-                                     ProviderRole, ServingRevision)
+                                     ServingRevision)
+# WR-LAB-API-2b: the route's own closed records, not copies
+from ...gateway.routes.lab_control import Actor, Deployment, Model, Proposal, Registration
 from ...operations.service import OperatorSession
 from . import RUNTIME, LabControl, Listing
 
 S = DeploymentState
-
-
-# --- the route's records (routes/lab_control.py at f9892c30; identical, WR-LAB-API-2b) ---
-class Record(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-
-class Registration(Record):
-    name: str = Field(min_length=1, max_length=200)
-    artifact_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    schema_version: str = Field(min_length=1, max_length=50)
-    runtime: str = Field(min_length=1, max_length=300)
-
-
-class Model(Record):
-    model_id: str
-    revision_label: str
-    artifact_digest: str
-    schema_version: str
-    runtime: str
-    registered_at: datetime
-
-
-class Deployment(Record):
-    deployment_revision_id: str
-    model_id: str
-    serving_version_id: str
-    revision_label: str
-    runtime: str
-    schema_version: str
-    rate_card_version: str | None
-    environment: Literal["dev", "prod"]
-    visibility: Literal["private", "public"]
-    state: Literal["active", "retired"]
-    smoke: Literal["none", "passed", "failed"]
-    created_at: datetime
-
-
-class Proposal(Record):
-    proposal_id: str
-    kind: Literal["publish", "rollback"]
-    deployment_revision_id: str
-    state: Literal["proposed", "approved", "rejected"]
-    proposed_at: datetime
-    decided_at: datetime | None
-
-
-class Actor(Record):
-    provider_org_id: str
-    user_id: str
-    role: ProviderRole
 
 
 class ControlOperations(Protocol):

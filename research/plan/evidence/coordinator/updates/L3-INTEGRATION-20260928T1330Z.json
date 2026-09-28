@@ -1,7 +1,7 @@
 {
  "task": "L3",
  "slice": "L3-INTEGRATION (wave5 LW2 lane l3-integration): L3 08a353e7 merged onto lab-sql 0bfaa6ed and run on the real PgControlStore + WR-L3-5 + WR-LSQ-8 + WR-LAB-API-2 Operations + WR-I2L-2 control factory + WR-R2-2 Serving + WR-R3-1 LabAccess.require",
- "activity": "review",
+ "activity": "implemented",
  "head": "d068a483",
  "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-l3-integration",
  "branch": "codex/w5-l3-integration",

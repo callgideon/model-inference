@@ -57,6 +57,7 @@ O_PINNED = "test_operations__only_a_pinned_supported_registration_is_accepted"
 O_APP_REG = "test_operations__the_lab_apps_registration_shape_registers"
 O_SERVING = "test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins"
 O_APP = "test_control_app__serves_readiness_and_no_consumer_route"
+O_MOUNT = "test_control_app__mounts_only_the_lab_routers_on_its_own_settings"
 READ_GUARD = ("        await self.control.access.require(actor.user_id, actor.provider_org_id,\n"
               "                                          ProviderCapability.read_aggregate_health)\n")
 
@@ -247,6 +248,11 @@ MUTANTS: tuple[Mutant, ...] = (
        '            return {"status": "ready"}', O_APP),
     _m("control_docs_served", "the control service publishes no schema or docs", APP,
        "FastAPI(docs_url=None, redoc_url=None, openapi_url=None)", "FastAPI()", O_APP),
+    _m("control_routes_unmounted", "the unit serves L3's routes (WR-I2L-2b)", APP,
+       "    lab_control.register(app, rt, control)\n", "", O_MOUNT),
+    _m("lab_setting_waved_through", "a missing INFRX_LAB_* setting refuses startup", APP,
+       "    if missing:\n        raise RuntimeMisconfigured", "    if False:\n        raise RuntimeMisconfigured",
+       O_MOUNT),
     # --- WR-LSQ-9: the reads the fake states for lab-sql ----------------------------------
     _m("servings_of_every_provider", "a provider lists its own serving revisions", F,
        "if s.provider_org_id == provider_org_id]", "]", O_FOREIGN),

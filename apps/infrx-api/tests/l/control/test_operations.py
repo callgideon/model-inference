@@ -14,6 +14,7 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
+from infrx.config import RuntimeMisconfigured
 from infrx.contracts import errors
 from infrx.contracts.v2 import records as v2
 from infrx.lab.control import app as control_app
@@ -230,11 +231,23 @@ def test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins(fake_wo
         run(s.serving("a5000000-0000-4000-8000-00000000ffff"))
 
 
-def test_control_app__serves_readiness_and_no_consumer_route(world, monkeypatch):
+@pytest.fixture
+def lab_env(monkeypatch):
+    """The unit's `INFRX_LAB_*` settings (never dialled here: `_store` is the world's), and
+    no trace backend, so `lab_traces` is not mounted."""
+    for name in control_app.REQUIRED:
+        monkeypatch.setenv(name, {control_app.DATABASE_URL: "postgresql://lab@127.0.0.1:1/lab",
+                                  control_app.SUPABASE_URL: "http://127.0.0.1:1"}.get(name, "anon"))
+    for name in ("CLICKHOUSE_URL", "S3_TRACE_BUCKET"):
+        monkeypatch.delenv(name, raising=False)
+    return monkeypatch
+
+
+def test_control_app__serves_readiness_and_no_consumer_route(world, lab_env):
     """Oracle (WR-I2L-2): the control factory answers `/readyz` 200 only while its database
     answers `infrx.now()` (503 otherwise, the reason not echoed), and mounts no consumer
     route and no docs: it is a separate, Lab-only process."""
-    w = world
+    w, monkeypatch = world, lab_env
     monkeypatch.setattr(control_app, "_store", lambda: w.control.store)
     client = TestClient(control_app.create_app())
     assert client.get("/readyz").status_code == 200
@@ -247,3 +260,25 @@ def test_control_app__serves_readiness_and_no_consumer_route(world, monkeypatch)
     monkeypatch.setattr(control_app, "_store", lambda: Down())
     down = TestClient(control_app.create_app()).get("/readyz")
     assert down.status_code == 503 and "secret" not in down.text
+
+
+def test_control_app__mounts_only_the_lab_routers_on_its_own_settings(world, lab_env):
+    """Oracle (WR-I2L-2b): the factory mounts `/lab/v1/control` over L3 (a consumer `sk-` key
+    is refused there as 401 `unauthenticated`, never tried as a session), no consumer route,
+    no traces without a trace backend, `/readyz` over the store's `db_now`; and it refuses to
+    start, naming the setting, when any `INFRX_LAB_*` setting is missing."""
+    w, monkeypatch = world, lab_env
+    monkeypatch.setattr(control_app, "_store", lambda: w.control.store)
+    client = TestClient(control_app.create_app())
+    assert client.get("/readyz").json() == {"status": "ready"}
+    key = client.get("/lab/v1/control/models", params={"provider_org_id": w.A},
+                     headers={"authorization": "Bearer sk-infrx-" + "a" * 40})
+    assert (key.status_code, key.json()) == (401, {"refusal": "unauthenticated"})
+    for path in ("/v1/models", "/v1/jobs", "/lab/v1/traces"):
+        assert client.get(path).status_code == 404, path
+    for name in control_app.REQUIRED:
+        with monkeypatch.context() as m:
+            m.setenv(name, " ")
+            with pytest.raises(RuntimeMisconfigured) as refused:
+                control_app.create_app()
+        assert refused.value.missing == (name,)

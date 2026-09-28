@@ -165,3 +165,5 @@ New mutants, all killed: `register_slug_qualified_name`, `register_any_weights`,
 | `uv run --frozen ruff check` on the three changed files | clean |
 
 Earlier mutant runs are recorded rather than hidden. A first run without `INFRX_D_TASK` failed 22 PG mutants on the default key. A first run on `l3` killed 8 PG mutants, and every later one was then `broken_runner`: a mutant copy's `infrx-l3-postgres` had been left in state `Created` (owner label `/tmp/l3-pg-mutant-pg_smoke_skipped-*`, a temp tree that no longer existed) and blocked the harness (`ForeignContainer`). That container was on this lane's own key. I removed it (`docker rm infrx-l3-postgres`), and the full rerun above is the result of record. `make api-test` was not rerun: the change is confined to `infrx/lab/control/operations.py` and the `tests/l/control` suite and mutant list, and those are rerun above.
+
+Rulings: the four proposed rulings are numbered R186 (I2L control service), R187 (Lab registration, with the 0-L3I-R1 amendment), R188 (R2 serving ref) and R189 (route record coarseness) in `research/plan/08-contracts-v1-encoding.md` §10 at the merge on `codex/w5-merge-13`.
