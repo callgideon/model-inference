@@ -232,7 +232,8 @@ def adapters_from_env(settings, **injected):
                     "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
                     # LAB-API (WR-LAB-API-1): only the Lab surfaces the deployment enables
                     # (kept above G4F: its last two lines anchor given_stores_replaced)
-                    **_lab(settings, connect),
+                    **_lab(settings, connect, adapters["objects"]),
+                    **_lab_checkpoints(settings, connect),
                     # G4F (WR-G4F-1): only when the deployment enables the feedback route
                     **({"feedback": _pg_feedback(connect)}
                        if settings.deployment.feedback_api else {}),
@@ -240,14 +241,14 @@ def adapters_from_env(settings, **injected):
     return adapters
 
 
-def _lab(settings, connect) -> dict:
+def _lab(settings, connect, objects=None) -> dict:
     """LAB-API: `lab_control` / `lab_traces` for the switches that are on, over one session
     verifier (the project's auth server) and L2's `LabAccess` on this pool. L3's control
     operations are not composed until L3 merges (its routes answer 503; health is served).
     `LAB_TRACES` needs T2I's projection and trace bucket, or startup is refused."""
     deployment = settings.deployment
     if not (deployment.lab_control or deployment.lab_traces or deployment.lab_evals
-            or deployment.lab_pipelines or deployment.lab_releases):
+            or deployment.lab_pipelines or deployment.lab_releases or deployment.lab_datasets):
         return {}
     import httpx
 
@@ -261,10 +262,38 @@ def _lab(settings, connect) -> dict:
                                                 timeout=httpx.Timeout(5, connect=2)),
                               settings.supabase_key)
     access = LabAccess(PgAccessStore(connect))
-    lab = {"lab_control": LabControl(sessions, access)} if deployment.lab_control else {}
+    lab = {"lab_control": LabControl(sessions, access, lab_operations(connect, access))} \
+        if deployment.lab_control else {}
     if deployment.lab_traces:
         lab["lab_traces"] = _lab_traces(settings, connect, sessions, access)
+    if deployment.lab_datasets:           # WR-N4-1 over D7, L2 and the Lab objects (R182)
+        from ..state.lab_data import PgLabDataStore
+        from .routes.lab_datasets import LabDatasets
+        lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects)
     return {**lab, **_lab_2(deployment, connect, sessions, access)}
+
+
+def _lab_checkpoints(settings, connect) -> dict:
+    """WR-B3-2: B3's receiver over D8's checkpoint ledger (0042) and D7, with the key
+    directory `LAB_CHECKPOINT_KEYS` names; on without a valid directory refuses to start."""
+    deployment = settings.deployment
+    if not deployment.lab_checkpoints:
+        return {}
+    from ..state.lab_data import PgLabDataStore
+    from .routes.lab_checkpoints import LabCheckpoints, key_directory
+    mode = runtime_mode(settings)
+    try:
+        keys = key_directory(deployment.lab_checkpoint_keys)
+    except ValueError as refused:         # names the setting, never its value
+        raise RuntimeMisconfigured(mode, ("LAB_CHECKPOINT_KEYS",), detail=str(refused)) \
+            from None
+    try:
+        from ..state.lab_pipeline import PgCheckpointLedger
+    except ImportError:                   # ponytail: until lab-sql-lw3 (#16) is on the base
+        raise RuntimeMisconfigured(mode, detail="LAB_CHECKPOINTS needs D8's checkpoint "
+                                                "ledger (0042)") from None
+    return {"lab_checkpoints": LabCheckpoints(keys, PgCheckpointLedger(connect),
+                                              PgLabDataStore(connect))}
 
 
 def _lab_2(deployment, connect, sessions, access) -> dict:
@@ -283,6 +312,46 @@ def _lab_2(deployment, connect, sessions, access) -> dict:
                if deployment.lab_pipelines else {}),
             **({"lab_releases": LabReleases(sessions, access)}
                if deployment.lab_releases else {})}
+
+
+class NoControlReads:
+    """L3's `ControlReads` until lab-sql writes them (WR-LSQ-9, not in 0041-0043): each read
+    is a typed 503, so a listing or an alias read waits instead of failing as a bug."""
+
+    async def _pending(self, *args):
+        raise errors.DependencyUnavailable("L3's control reads are not wired (WR-LSQ-9)")
+
+    provider_servings = provider_deployments = endpoint_alias = listing_versions = _pending
+
+
+def lab_control(connect, access):
+    """L3's `LabControl` on this pool: the control store, A3's registry and catalog, and the
+    control service's engine stand-in (a smoke is 503 until WR-L3-2)."""
+    from ..lab.control import LabControl
+    from ..lab.control.app import NoEngine
+    from ..state.lab_control import PgControlStore
+    from ..state.operations import PgRegistry
+    return LabControl(access, PgControlStore(connect), PgRegistry(connect),
+                      PgCatalogDirectory(connect), engine=NoEngine())
+
+
+def lab_operations(connect, access):
+    """WR-LAB-API-2: L3's `Operations` for `/lab/v1/control` - the gateway's and the I2L
+    control service's one composition (`infrx.lab.control.app`, WR-LAB-API-2c). Its
+    listings and registration read `ControlReads` and answer 503 until WR-LSQ-9."""
+    from ..lab.control.operations import Operations
+    return Operations(lab_control(connect, access), NoControlReads())
+
+
+def control_serving(connect, principal: str):
+    """WR-R2-2's composition: R2's `ServingControl` as L3's `Serving`, acting as
+    `principal` (the audited actor of every alias CAS)."""
+    from ..lab.access import LabAccess
+    from ..lab.control.operations import Serving
+    from ..operations.service import OperatorSession
+    from ..state.lab_access import PgAccessStore
+    return Serving(lab_control(connect, LabAccess(PgAccessStore(connect))), NoControlReads(),
+                   OperatorSession(ops=None, principal=principal))
 
 
 def _lab_traces(settings, connect, sessions, access):
@@ -368,7 +437,8 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                        pool=None, consent_for=None, attachments=None,
                        lifecycle=None, readiness=None, feedback=None, lab_control=None,
                        lab_traces=None, rollouts=None, trace_export=None, lab_evaluations=None,
-                       lab_pipelines=None, lab_releases=None) -> IngressDeps:
+                       lab_pipelines=None, lab_releases=None, lab_checkpoints=None,
+                       lab_datasets=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -422,6 +492,8 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     rt.lab_evaluations = lab_evaluations if deployment.lab_evals else None
     rt.lab_pipelines = lab_pipelines if deployment.lab_pipelines else None
     rt.lab_releases = lab_releases if deployment.lab_releases else None
+    rt.lab_checkpoints = lab_checkpoints if deployment.lab_checkpoints else None
+    rt.lab_datasets = lab_datasets if deployment.lab_datasets else None
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
                            relay=relay)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,

@@ -1277,6 +1277,7 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
         built.update(limits=limits, spool=spool, **kw)
         return Shipper()
     monkeypatch.setattr(ship, "build_shipper", build)
+    content_refs(monkeypatch)
     steps = captured_steps(monkeypatch)
     service, pool = composed(environment(tmp_path, TRACE_SPOOL_DIR=str(tmp_path / "spool"),
                                          S3_ENDPOINT_URL="http://127.0.0.1:9", **TRACE_ENV))
@@ -1306,7 +1307,43 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
     assert projector.outbox.connect is service.jobs._connect
     assert projector.projection is Shipper.retention.feedback
     assert projector.retention is Shipper.retention
+    from infrx.content import ContentAccess
+    holds = getattr(Shipper.retention, "holds", None)    # WR-C2-2: C2's holds on the sweep
+    assert getattr(holds, "__func__", None) is ContentAccess.holds
+    assert holds.__self__.retention is Shipper.retention
+    assert holds.__self__.refs.connect is service.jobs._connect
     asyncio.run(spool.close())
+
+
+class ContentRefs:
+    """0041's `PgContentRefs` (lab-sql-lw3) as the worker composes it."""
+
+    def __init__(self, connect) -> None:
+        self.connect = connect
+
+
+def content_refs(monkeypatch, module=True) -> None:
+    """C2's content refs in the build (a module), or not yet (None: the import fails)."""
+    import types
+    fake = None
+    if module:
+        fake = types.ModuleType("infrx.state.lab_content")
+        fake.PgContentRefs = ContentRefs
+    monkeypatch.setitem(sys.modules, "infrx.state.lab_content", fake)
+
+
+def test_worker_main__trace_pumps_refuse_without_c2s_content_refs(tmp_path, monkeypatch):
+    """WR-C2-2: the sweep deletes content only when no live ref holds it; without C2's refs
+    (0041) in the build the pumps refuse to start by name rather than sweep unheld."""
+    from infrx.traces import ship
+
+    class Shipper:
+        retention = type("Retention", (), {"feedback": None})()
+    monkeypatch.setattr(ship, "build_shipper", lambda *a, **kw: Shipper())
+    content_refs(monkeypatch, module=False)
+    with pytest.raises(Exception) as refused:
+        composed(environment(tmp_path, TRACE_SPOOL_DIR=str(tmp_path / "spool"), **TRACE_ENV))
+    assert type(refused.value) is RuntimeMisconfigured and "0041" in str(refused.value)
 
 
 def test_worker_main__the_lab_eval_worker_refuses_to_start_without_its_sources(tmp_path):
@@ -1346,6 +1383,8 @@ def test_worker_main__the_lab_eval_worker_pumps_d7s_outbox_and_recovers(tmp_path
 class LabStore:
     """D7's reads the handler makes, over one created run."""
 
+    evaluator_ref, serving_ref = "lab:evaluator:p:e", "lab:serving:p:s"
+
     def __init__(self) -> None:
         self.reads = []
 
@@ -1355,7 +1394,8 @@ class LabStore:
 
     async def resolve(self, ref, *, provider_org_id):
         self.reads.append(("resolve", ref, provider_org_id))
-        return type("Run", (), {"evaluator_ref": "eval-ref", "serving_ref": "serving-ref"})()
+        return type("Run", (), {"evaluator_ref": self.evaluator_ref,
+                                "serving_ref": self.serving_ref})()
 
 
 def eval_handler(monkeypatch, stopped=None, state="succeeded"):
@@ -1407,10 +1447,31 @@ def test_worker_main__an_eval_run_delivery_resumes_the_created_run_never_freezes
     assert asyncio.run(handler.enqueue(delivery())) is True
     assert store.reads[0] == ("run_status", "r1", "p")
     assert store.reads[1][0] == "resolve" and store.reads[1][2] == "p"
-    assert seen == [("resume", "r1", {"spec-for": "eval-ref"}, "p"),
-                    ("runner", "objects", "endpoint-for-serving-ref",
-                     "deployment-for-serving-ref", "w-lab", worker_main.LAB_EVAL_LIMITS),
+    assert seen == [("resume", "r1", {"spec-for": "lab:evaluator:p:e"}, "p"),
+                    ("runner", "objects", "endpoint-for-lab:serving:p:s",
+                     "deployment-for-lab:serving:p:s", "w-lab", worker_main.LAB_EVAL_LIMITS),
                     ("run", "frozen")]
+
+
+@pytest.mark.parametrize("field", ["evaluator_ref", "serving_ref"])
+def test_worker_main__a_run_naming_another_providers_ref_is_not_found_before_any_source(
+        field, monkeypatch):
+    """R167 at the worker: the run's evaluator and serving refs resolve for the EVENT's
+    provider only; a foreign provider segment is not_found before either source is asked
+    (the Lab sources read with the ref's own provider, so this is the one place the run's
+    provider meets them) and nothing runs."""
+    from infrx.contracts import errors
+    handler, store, seen = eval_handler(monkeypatch)
+    asked = []
+
+    async def source(ref):
+        asked.append(ref)
+        return ref, ref
+    handler.evaluators = handler.targets = source
+    setattr(store, field, getattr(store, field).replace(":p:", ":q:"))
+    with pytest.raises(errors.NotFound):
+        asyncio.run(handler.enqueue(delivery()))
+    assert asked == [] and seen == []
 
 
 @pytest.mark.parametrize("stopped", ["wallet_exhausted", "other_kind"])

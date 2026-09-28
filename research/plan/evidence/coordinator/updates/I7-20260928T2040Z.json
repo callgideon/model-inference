@@ -1,0 +1,74 @@
+{
+ "task": "I7",
+ "slice": "I7 rollout unit's entry point: `python -m infrx.lab.workers rollout emergency-rollback --policy-ref --reason` composes R2's Controller over D9 + L3 (alias converge needs WR-LSQ-9); the pass loop refuses until WR-R2-3; exercise through the entry point filed WR-I7-1b",
+ "owned_paths": [
+  "apps/infrx-api/infrx/worker/",
+  "apps/infrx-api/infrx/lab/workers/"
+ ],
+ "commands": [
+  {
+   "cmd": "FAIL-FIRST pytest tests/w/test_worker_main.py -k another_provider (R167 at EvalRuns)",
+   "exit": 1,
+   "summary": "2 failed before the guard; 3 passed after"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b1 (valkey 57534, MinIO 57522) pytest -q -rs tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "2806 passed, 8 skipped, 0 failed (run 1 exit 1: 3 lab_eval_pg port collisions with my own Valkey on b1's model-fake 57521)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 INFRX_MUTANTS=all pytest tests/g/test_mutants.py tests/w/test_worker_main_mutants.py tests/contracts/test_mutants.py tests/g/lab_datasets/test_mutants.py tests/g/lab_checkpoints/test_mutants.py tests/w/test_lab_workers_mutants.py",
+   "exit": 0,
+   "summary": "1152 passed, 0 skipped: 0 survivors"
+  },
+  {
+   "cmd": "tests/integration/lab_evaluate/runner.py --only j09 (x2, keep then teardown) + stack mutants st_worker",
+   "exit": 3,
+   "summary": "j09 eval case PASS x2 (real python -m infrx.lab.workers eval); checkpoint case NOT RUN[L3]; stack mutants 4 passed"
+  },
+  {
+   "cmd": "lab_evaluate layer-1 mutants -k 'not stack' + test_e6l_runner/scenarios_pending",
+   "exit": 1,
+   "summary": "19 passed; cases 11 passed 1 skipped 1 failed = j10 B4 tripwire (red on base, not this lane's)"
+  },
+  {
+   "cmd": "make app-e2e (e4b)",
+   "exit": 0,
+   "summary": "PASS, APP-LOCAL 17/17 = accepted"
+  }
+ ],
+ "blockers": [],
+ "wiring_requests": [
+  "WR-CB2-MK",
+  "WR-LAB-API-2c",
+  "WR-LSQ-9",
+  "WR-R2-3",
+  "WR-B3-3",
+  "WR-LSQ-C2A",
+  "WR-LSQ-C2B",
+  "WR-N4-3",
+  "WR-N4-1b",
+  "WR-N3-2a",
+  "WR-N3-2b",
+  "WR-C2-2b",
+  "WR-P2-D8b/WR-P2-4/P-11",
+  "WR-I6-3b/WR-I7-1b"
+ ],
+ "activity": "review",
+ "at": "2026-09-28T20:40:00Z",
+ "head": "b790f17b",
+ "base": "900729e0",
+ "worktree": ".claude/worktrees/codex-w5-composition-2",
+ "branch": "codex/w5-composition-2",
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 2,
+  "pessimistic_h": 6,
+  "confidence": "medium",
+  "basis": "all items implemented and item 6 green at b790f17b (E4 2806/0, mutants 1152/0, j09 eval PASS x2, App 17/17); one verify round (first composition lane: one ~2 h fix round) + the t2f proof after #16",
+  "at": "2026-09-28T20:40:00Z"
+ },
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-2-b790f17.md"
+ ]
+}

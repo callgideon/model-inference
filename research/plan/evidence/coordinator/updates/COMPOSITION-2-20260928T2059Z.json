@@ -1,0 +1,97 @@
+{
+ "task": "COMPOSITION-2",
+ "lane": "composition-2",
+ "slice": "LW5 composition batch 2: Lab worker entry point (E6L-O5; eval/judge/datasets run, rollout emergency-rollback, checkpoints/annotation/training/rollout-loop refuse by name), LAB_DATASETS (WR-N4-1, WR-N-3) + LAB_CHECKPOINTS (WR-B3-2) OFF, WR-C2-2, WR-LAB-API-2, E6L j09 eval bind, R167 guard at EvalRuns, E4 regression all switches OFF",
+ "owned_paths": [
+  "apps/infrx-api/infrx/worker/",
+  "apps/infrx-api/infrx/lab/workers/",
+  "apps/infrx-api/infrx/gateway/app.py",
+  "apps/infrx-api/infrx/gateway/pilot.py",
+  "apps/infrx-api/infrx/gateway/routes/lab_datasets.py",
+  "apps/infrx-api/infrx/gateway/routes/lab_checkpoints.py",
+  "apps/infrx-api/infrx/config.py",
+  "apps/infrx-api/deploy/preflight.py",
+  "apps/infrx-api/tests/contracts/test_config_and_imports.py",
+  "apps/infrx-api/tests/g/test_startup.py",
+  "apps/infrx-api/tests/g/mutants.py",
+  "apps/infrx-api/tests/g/lab_datasets/",
+  "apps/infrx-api/tests/g/lab_checkpoints/",
+  "apps/infrx-api/tests/w/",
+  "tests/integration/lab_evaluate/ (j09 bind)",
+  "research/plan/08-contracts-v1-encoding.md"
+ ],
+ "commands": [
+  {
+   "cmd": "FAIL-FIRST pytest tests/w/test_worker_main.py -k another_provider (R167 at EvalRuns)",
+   "exit": 1,
+   "summary": "2 failed before the guard; 3 passed after"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b1 (valkey 57534, MinIO 57522) pytest -q -rs tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "2806 passed, 8 skipped, 0 failed (run 1 exit 1: 3 lab_eval_pg port collisions with my own Valkey on b1's model-fake 57521)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 INFRX_MUTANTS=all pytest tests/g/test_mutants.py tests/w/test_worker_main_mutants.py tests/contracts/test_mutants.py tests/g/lab_datasets/test_mutants.py tests/g/lab_checkpoints/test_mutants.py tests/w/test_lab_workers_mutants.py",
+   "exit": 0,
+   "summary": "1152 passed, 0 skipped: 0 survivors"
+  },
+  {
+   "cmd": "tests/integration/lab_evaluate/runner.py --only j09 (x2, keep then teardown) + stack mutants st_worker",
+   "exit": 3,
+   "summary": "j09 eval case PASS x2 (real python -m infrx.lab.workers eval); checkpoint case NOT RUN[L3]; stack mutants 4 passed"
+  },
+  {
+   "cmd": "lab_evaluate layer-1 mutants -k 'not stack' + test_e6l_runner/scenarios_pending",
+   "exit": 1,
+   "summary": "19 passed; cases 11 passed 1 skipped 1 failed = j10 B4 tripwire (red on base, not this lane's)"
+  },
+  {
+   "cmd": "make app-e2e (e4b)",
+   "exit": 0,
+   "summary": "PASS, APP-LOCAL 17/17 = accepted"
+  },
+  {
+   "cmd": "fix round: INFRX_D_TASK=b1 pytest -q tests/g/lab_datasets tests/w/test_lab_workers.py + INFRX_MUTANTS=all lab_datasets (15) and lab_workers (49) mutant lists",
+   "exit": 0,
+   "summary": "0-F1 and 0-F2 fixed as tests + 4 mutants (import_job_any_provider, lw_trace_prefix_lost, lw_trace_content_days_lost, lw_trace_metadata_months_lost); 0 survivors"
+  }
+ ],
+ "blockers": [
+  "j09 checkpoint half NOT RUN[L3] until WR-B3-3",
+  "m17 checkout's infrx-b3-postgres blocked by my MinIO on 57522 (needs its rerun)"
+ ],
+ "wiring_requests": [
+  "WR-CB2-MK",
+  "WR-LAB-API-2c",
+  "WR-LSQ-9",
+  "WR-R2-3",
+  "WR-B3-3",
+  "WR-LSQ-C2A",
+  "WR-LSQ-C2B",
+  "WR-N4-3",
+  "WR-N4-1b",
+  "WR-N3-2a",
+  "WR-N3-2b",
+  "WR-C2-2b",
+  "WR-P2-D8b/WR-P2-4/P-11",
+  "WR-I6-3b/WR-I7-1b"
+ ],
+ "activity": "review",
+ "at": "2026-09-28T20:59:00Z",
+ "head": "b44f3287",
+ "base": "900729e0",
+ "worktree": ".claude/worktrees/codex-w5-composition-2",
+ "branch": "codex/w5-composition-2",
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 2,
+  "pessimistic_h": 6,
+  "confidence": "medium",
+  "basis": "all items implemented and item 6 green at b790f17b (E4 2806/0, mutants 1152/0, j09 eval PASS x2, App 17/17); one verify round (first composition lane: one ~2 h fix round) + the t2f proof after #16",
+  "at": "2026-09-28T20:40:00Z"
+ },
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-2-b790f17.md"
+ ]
+}

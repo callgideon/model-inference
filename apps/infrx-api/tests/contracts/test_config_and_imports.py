@@ -336,7 +336,7 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
         ["health", "models", "ingress", "uploads", "jobs", "feedback", "trace_export",
          "lab_control", "lab_traces", "lab_evaluations", "lab_pipelines", "lab_releases",
-         "route"]
+         "lab_datasets", "lab_checkpoints", "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -560,6 +560,11 @@ DEPLOYMENT_EXPECTED = {
     "LAB_EVALS": False,
     "LAB_PIPELINES": False,
     "LAB_RELEASES": False,
+    # Composition batch 2 (WR-N4-1, WR-B3-2): the datasets and checkpoint receiver switches,
+    # off, and the receiver's key directory (a credential, unset)
+    "LAB_CHECKPOINTS": False,
+    "LAB_DATASETS": False,
+    "LAB_CHECKPOINT_KEYS": "",
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

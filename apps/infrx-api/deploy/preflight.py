@@ -263,6 +263,14 @@ NOT_SETTABLE = {
                     "default): enabling it on the hosted gateway needs D9 and the proposal "
                     "store (WR-R4-2), the Lab migrations applied hosted and the E4 regression "
                     "rerun, a deploy change, not a --set",
+    "LAB_DATASETS": "mounts /lab/v1/providers/{p}/datasets (WR-N4-1, off by default): enabling "
+                    "it on the hosted gateway needs the Lab migrations applied hosted (plan "
+                    "rule 4) and the E4 regression rerun, a deploy change, not a --set",
+    "LAB_CHECKPOINTS": "mounts POST /lab/v1/checkpoints (WR-B3-2, off by default, Lab-only): "
+                       "enabling it needs D8's ledger (0042) applied hosted, the key directory "
+                       "and the E4 regression rerun, a deploy change, not a --set",
+    "LAB_CHECKPOINT_KEYS": "the checkpoint receiver's signing keys, a credential: a secret "
+                           "belongs in the secret store (by name), never in an argument",
 }
 
 

@@ -96,8 +96,11 @@ MUTANTS: tuple[Mutant, ...] = (
        NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
-    _m("unbound_case_runs", "a case waiting on composition/B4/lab-api-2 is never a pass", P,
+    _m("unbound_case_runs", "a case waiting on L3/B4/lab-api-2 is never a pass", P,
        "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
+    _m("checkpoint_tripwire_blind", "the checkpoint half binds when the role composes", P,
+       '        return "WR-B3-3" not in str(refused)', "        return True",
+       "test_j09_the_checkpoint_worker_drains_the_outbox_once"),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -227,8 +230,20 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_improving_claims_nothing", "a clean win is claimed improved", B2,
        '            "improved": low > 0}', '            "improved": False}', J07_ACCEPT),
 )
+J09_EVAL = "test_j09_the_eval_worker_process_killed_mid_run_loses_nothing"
+WORKER = "infrx/worker/__main__.py"
+LAB_WORKERS = "infrx/lab/workers/__main__.py"
+# composition batch 2: the real eval worker process (j09's bound half)
+STACK_MUTANTS += (
+    _m("st_worker_never_recovers", "the eval worker process recovers expired leases", WORKER,
+       ',\n            "lab_recover": lambda: every(LAB_RECOVER_S, store.recover, '
+       '"lab recover")}\n', "}\n", J09_EVAL),
+    _m("st_worker_other_objects", "the eval role reads the Lab objects where they are",
+       LAB_WORKERS, 'env.get("LAB_S3_PREFIX") or LAB_PREFIX,', "LAB_PREFIX,", J09_EVAL),
+)
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
-SCENARIO_FILES = ("scenarios_data.py", "scenarios_eval.py", "scenarios_checkpoint.py")
+SCENARIO_FILES = ("scenarios_data.py", "scenarios_eval.py", "scenarios_checkpoint.py",
+                  "scenarios_workers.py")
 
 
 def case_names() -> set[str]:
