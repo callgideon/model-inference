@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 239,
- "updated": "2026-09-28T21:09:05Z",
+ "revision": 240,
+ "updated": "2026-09-28T21:30:17Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4390,7 +4390,7 @@
   {
    "id": "D7",
    "task": "D7",
-   "activity": "blocked",
+   "activity": "complete",
    "evidence": [],
    "commands": [],
    "slice": "not started",
@@ -4407,8 +4407,9 @@
     "at": "2026-09-27T11:00Z"
    },
    "wiring_requests": [],
-   "blocker": "F3's reviewed commit is not on claude/consumer-v1 (no infrx/contracts/lab at 56566aab); brief: stop after D6F",
-   "updated": "2026-09-27T11:00:00Z"
+   "blocker": null,
+   "updated": "2026-09-28T21:30:17Z",
+   "next_action": "superseded: D7 delivered by the wave-5 lane W5-LAB-SQL-LW2 and merged; manifest implemented"
   },
   {
    "id": "W5-LAB-SQL-D7",
@@ -6108,7 +6109,7 @@
   {
    "id": "V1M",
    "task": "V1M",
-   "activity": "blocked",
+   "activity": "complete",
    "evidence": [
     "research/plan/evidence/v/V1M-a140093.md"
    ],
@@ -6151,8 +6152,9 @@
     "WR-V1M-2 /lab/v1/traces provider read route (ruling + owner)",
     "WR-V1M-3 App-side removal list (after both builds pass)"
    ],
-   "blocker": "packages/shared C0 QueryPort + trace contract copy (LW0 item 7 / LW2 gate) not on base; no provider trace read path from the Lab (no DB client, anon key only); needs WR-V1M-2 ruling + Python owner",
-   "updated": "2026-09-27T19:53:00Z"
+   "blocker": null,
+   "updated": "2026-09-28T21:30:17Z",
+   "next_action": "superseded: V1M delivered by the wave-5 lane W5-V1M and merged; manifest implemented"
   },
   {
    "id": "W5-MERGE-11",
