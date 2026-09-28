@@ -15,7 +15,8 @@ host processes inside the e7l block - nothing else.
   checkpoint's reported training loss, the traces and the decisions. The expectations are
   the fixture's, never the implementation's.
 * **Stand-ins** (said so in the verdict): D8's `LabelLog`/`RunLedger` and J2/D6J's judge
-  ledger are the P lanes' fakes (`FakeLabelLog`, `FakeRunLedger`, `FakeJudgeLedger`): the
+  ledger are the P lanes' fakes (`FakeLabelLog`, `FakeRunLedger`, P2's `TeacherLedger` = J2's
+  `FakeJudgeLedger` + D8's per-item failure log, which P2's collect writes since d91cce76): the
   lab-sql-integration-2 lane swaps them for `infrx.state.lab_pipeline`'s adapters. P3's
   `Evaluations` port (B3's, not on the base: WR-E7L-1) is `Evaluations` below over the real
   B1 runner. N3's content port is N3's `FakeContent` over the real L2 directory and T3's
@@ -125,8 +126,8 @@ class Lab:
         from tests.d import test_d7_lab_data as d7
         from tests.d import test_l2sql_access as l2
         from tests.j import fakes as j1
-        from tests.j.submit import fakes as j2
         from tests.p.annotations.world import FakeLabelLog
+        from tests.p.teachers.fakes import TeacherLedger
         from tests.p.training.world import FakeRunLedger
         self.cc, self.d7, self.l2, self.j1, self.errors = cc, d7, l2, j1, errors
         self.NEMO, self.DEV, self.ADMIN = cc.NEMO, cc.PROVIDER_DEV_USER, cc.PROVIDER_ADMIN_USER
@@ -163,8 +164,7 @@ class Lab:
         self.payer = f"lab:payer:{self.NEMO}:{uid(1, 0x9a7)}@sha256:{'a' * 64}"
         self.rubric = f"lab:rubric:{self.NEMO}:{uid(1, 0xcb7)}@sha256:{'c' * 64}"
         self.teacher_budget = ProviderUsd("50.00000000")
-        self.judge = j2.FakeJudgeLedger({self.payer: self.teacher_budget},
-                                        now=self.db_now())
+        self.judge = TeacherLedger({self.payer: self.teacher_budget}, now=self.db_now())
         self.teacher = self.teacher_fake()
         self.evals = Evaluations(self)
         self.frozen: dict[tuple[str, str], object] = {}

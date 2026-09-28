@@ -3,7 +3,7 @@
 submit through J2's path to the local teacher fake, and the automatic training connector's
 timeout after accept and lost poll against P3's protocol server over TCP.
 
-The i05 batches take ledgers of their own (J2's `FakeJudgeLedger`, the D6J stand-in) so the
+The i05 batches take ledgers of their own (P2's `TeacherLedger`, the D6J/D8 stand-in) so the
 session ledger i03 reconciles stays exact; the teacher fake is the session's.
 """
 from __future__ import annotations
@@ -145,8 +145,8 @@ def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdi
 
 # ------------------------------------------------------------------------------------ i05
 def own_ledger(lab, budget):
-    from tests.j.submit import fakes as j2
-    return j2.FakeJudgeLedger({lab.payer: budget}, now=lab.judge.now)
+    from tests.p.teachers.fakes import TeacherLedger
+    return TeacherLedger({lab.payer: budget}, now=lab.judge.now)
 
 
 def posts_for(lab, runs) -> list[dict]:
