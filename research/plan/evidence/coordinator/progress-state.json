@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "3df6f537",
+ "integration_head": "26bd7e6f",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 220,
- "updated": "2026-09-28T13:51:15Z",
+ "revision": 221,
+ "updated": "2026-09-28T14:03:31Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5961,18 +5961,18 @@
     "prefix": "infrx-j2-",
     "db": "j2"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T10:45:41Z",
-   "updated": "2026-09-28T13:01:11Z",
+   "updated": "2026-09-28T14:03:31Z",
    "blocker": null,
-   "next_action": "REJECT-with-the-required-wiring at 8064bb4d (J2 on PgJudgeLedger; B1/B2/B3 on real D7 rows, 402 give-back proven, H1 media fields, reports.case_records; R2 on PgReleaseStore; R3 optimization.store; J2 content via Retention = E5L-F1 fixed; open 0-LSQI-1 = WR-LSQ-INT-1 outside its paths, delivered as a patch) → merge batch #14 (wf_df02b635-a26) with WR-LSQ-INT-1/2 + the null-cost oracle; then J2, B1, B2, R2, R3 → implemented; R1 real half after SR-R1-1; E5L o06 blocked by foreign e5l volumes (user)",
+   "next_action": "DONE: merged --no-ff at 7769a48a + WR-LSQ-INT-1/2 806e8205; J2, B1, B2, R2, R3 → implemented; B3 keeps its fake until PgCheckpointLedger (0041+); R1 real half after SR-R1-1; E5L o06 after the foreign e5l volumes are removed; WR-LSQ-INT-3 → composition batch 2",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2.5,
-    "pessimistic_h": 5,
-    "confidence": "medium",
-    "basis": "handback: one review round + o06/R1 reruns when unblocked",
-    "at": "2026-09-28T13:01:11Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T14:03:31Z"
    },
    "evidence": [
     "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md",
@@ -6192,24 +6192,24 @@
    "branch": "codex/w5-merge-14",
    "worktree": ".claude/worktrees/codex-w5-merge-14",
    "base": "3df6f537",
-   "head": null,
+   "head": "806e8205",
    "isolation": {
     "ports": "j2 / b3 / r2 (checks only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T13:01:11Z",
-   "updated": "2026-09-28T13:01:11Z",
+   "updated": "2026-09-28T14:03:31Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "next_action": "DONE: merged onto claude/consumer-v1 at 5b79ef5c; follow-ups at 26bd7e6f (WR-OBS-5.diff context, lab_observe anchor); lab_evaluate layer-1 red = the j09 bind tripwire → composition batch 2",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "one merge with three PG-keyed suites",
-    "at": "2026-09-28T13:01:11Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T14:03:31Z"
    },
    "evidence": [],
    "commands": [],
