@@ -38,7 +38,7 @@ API = REPO / "apps" / "infrx-api"
 FIXTURES = HERE / "fixtures"
 sys.path[:0] = [p for p in (str(INTEGRATION), str(INTEGRATION / "backend"), str(API))
                 if p not in sys.path]
-import harness                                          # noqa: E402  E2's, namespace e6l
+import harness  # noqa: E402 - E2's harness, namespace e6l
 
 import stack                                            # noqa: E402
 
