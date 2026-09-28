@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "608d7e6c",
+ "integration_head": "0643073b",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 208,
- "updated": "2026-09-28T09:58:10Z",
+ "revision": 209,
+ "updated": "2026-09-28T10:01:03Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5637,9 +5637,9 @@
    },
    "activity": "review",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T09:58:10Z",
+   "updated": "2026-09-28T10:01:03Z",
    "blocker": "j11 FAIL = E6L-O1 (B1 passes the wrong video fields to H1: media_ref + duration_ms from span_ms) → integration lane; j09 needs composition batch 2's LAB_EVAL_WORKER + a checkpoint_received role; j10 needs lab-api-2's route",
-   "next_action": "ACCEPT_WITH_FIXES at efaee3c4 (E6L runner j01–j08 PASS at 457d7141 with pinned digests; j09/j10 NOT RUN; j11 FAIL E6L-O1; majors RV-1/RV-2 fixed+rechecked; 15/15 + 25/25 mutants) → merge batch #10 (wf_ef5e9e05-efd) with WR-E6L-1 + a lab-evaluate target; E6L-O1/O2 → integration lane (B1/H1), E6L-O5 (I5 units vs infrx.worker entry point) → composition batch 2 ruling, E6L-O6 (vkstore keying) → track D harness minor; LAB-EVALUATE-LOCAL not accepted until the gate reruns green",
+   "next_action": "DONE (runner merged): --no-ff 52de239e + WR-E6L-1/target fa2e46d5; j01–j08 PASS; LAB-EVALUATE-LOCAL not accepted until E6L-O1 (integration lane), composition batch 2 (j09) and lab-api-2 (j10) land, then `make lab-evaluate`",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -5911,24 +5911,24 @@
    "branch": "codex/w5-merge-10",
    "worktree": ".claude/worktrees/codex-w5-merge-10",
    "base": "608d7e6c",
-   "head": null,
+   "head": "fa2e46d5",
    "isolation": {
     "ports": null,
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T09:58:10Z",
-   "updated": "2026-09-28T09:58:10Z",
+   "updated": "2026-09-28T10:01:03Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch after #6/#8/#9",
+   "next_action": "DONE: merged onto claude/consumer-v1 (verify ok; minor: 28 stack mutants, not 25)",
    "estimate": {
-    "optimistic_h": 0.5,
-    "likely_h": 1,
-    "pessimistic_h": 2,
-    "confidence": "medium",
-    "basis": "one merge, no docker",
-    "at": "2026-09-28T09:58:10Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T10:01:03Z"
    },
    "evidence": [],
    "commands": [],
