@@ -558,12 +558,19 @@ grant execute on function infrx.release_active(text), infrx.release_eligible(uui
 --   PgServing (lab_traces)  serving_versions
 -- A later Lab migration that gives the control service another RPC names it here.
 do $$
+declare
+  m regrole;
 begin
   if not exists (select 1 from pg_roles where rolname = 'infrx_lab_control') then
     create role infrx_lab_control login noinherit nobypassrls;
   end if;
-  -- (a role is the cluster's: set its bounds on every run, not only at creation)
+  -- (a role is the cluster's: set its bounds on every run, not only at creation - and it is
+  -- a member of no role, so it can never `set role service_role`)
   execute 'alter role infrx_lab_control login noinherit nobypassrls connection limit 10';
+  for m in select a.roleid::regrole from pg_auth_members a
+            where a.member = 'infrx_lab_control'::regrole loop
+    execute format('revoke %s from infrx_lab_control', m);
+  end loop;
 end $$;
 grant usage on schema infrx to infrx_lab_control;
 grant execute on function infrx.now(), infrx.usd_price(text),
