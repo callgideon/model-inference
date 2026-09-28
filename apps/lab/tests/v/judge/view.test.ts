@@ -66,13 +66,14 @@ test("V3-J05 calibration is claimed only with the statistics and enough operator
   assert.equal(judgeRows([run({})])[0].calibration, JUDGE_COPY.uncalibrated);
 });
 
-test("V3-J06 the judge read is the provider's own, developer+, and unavailable until the real adapter is wired", async () => {
+test("V3-J06 the judge read is the provider's own, developer+, and the wired adapter fails closed without lab_judge_runs", async () => {
   const fake = new FakeJudge();
   fake.add(A, REQ, run({}));
   assert.deepEqual(await fake.runs({ providerId: A, role: "developer" }, REQ), { ok: true, value: [run({})] });
   assert.deepEqual(await fake.runs({ providerId: "b0000001-0000-4000-8000-000000000001", role: "developer" }, REQ), { ok: true, value: [] });
   assert.deepEqual(await fake.runs({ providerId: A, role: "developer" }, "5c000000-0000-4000-8000-0000000000f2"), { ok: true, value: [] });
   assert.deepEqual(await fake.runs({ providerId: A, role: "viewer" }, REQ), { ok: false, reason: "denied" });
+  assert.deepEqual(await judgePort().runs({ providerId: A, role: "viewer" }, REQ), { ok: false, reason: "denied" }); // the adapter, not a stub
   assert.deepEqual(await judgePort().runs({ providerId: A, role: "administrator" }, REQ), { ok: false, reason: "unavailable" });
   assert.ok(JUDGE_COPY.denied && JUDGE_COPY.unavailable && JUDGE_COPY.empty);
 });
