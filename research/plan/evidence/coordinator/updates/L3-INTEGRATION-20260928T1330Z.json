@@ -2,7 +2,7 @@
  "task": "L3",
  "slice": "L3-INTEGRATION (wave5 LW2 lane l3-integration): L3 08a353e7 merged onto lab-sql 0bfaa6ed and run on the real PgControlStore + WR-L3-5 + WR-LSQ-8 + WR-LAB-API-2 Operations + WR-I2L-2 control factory + WR-R2-2 Serving + WR-R3-1 LabAccess.require",
  "activity": "review",
- "head": "6a5f3dfb",
+ "head": "d068a483",
  "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-l3-integration",
  "branch": "codex/w5-l3-integration",
  "owned_paths": [
@@ -14,16 +14,85 @@
   "apps/infrx-api/tests/d/code_mutants_d5.py + test_operations_units.py (WR-L3-5 re-anchor, identical to batch #8)"
  ],
  "commands": [
-  {"cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control (before WR-L3-5)", "exit": 1, "summary": "31 passed, 1 failed (shadow case [pg]), 1 skipped"},
-  {"cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control (after all tasks)", "exit": 0, "summary": "40 passed, 1 skipped; 13/13 L3 pg cases + readiness pg on the real PgControlStore"},
-  {"cmd": "INFRX_D_TASK=l3 pytest tests/d -k 'catalog or operations_units'; pytest tests/contracts -k 'catalog or private or dev'", "exit": 0, "summary": "49 passed 1 xfailed; 43 passed"},
-  {"cmd": "INFRX_D_TASK=l3 INFRX_MUTANTS=all pytest tests/l/control/test_mutants.py", "exit": 0, "summary": "86 passed: 59 fake + 22 PG mutants killed, 0 survivors (pg_dev_revision_of_any_environment dropped as PG-equivalent, WR-LSQ-8)"},
-  {"cmd": "INFRX_D_TASK=l3 INFRX_MUTANTS=all pytest tests/l/access/test_mutants.py -k 'require or well_formed or every_case'", "exit": 0, "summary": "4 passed (require_waves_through killed fake+pg)"},
-  {"cmd": "INFRX_D_TASK=l3 make api-test", "exit": 2, "summary": "5522 passed, 9 failed, 78 skipped, 9 xfailed: 7 outbox[valkey] shared container (infrx-d2-valkey foreign), 2 base EXECUTE-surface failures fixed by batch #8 WR-LSQ-3; solo rerun identical"},
-  {"cmd": "cd apps/lab && pnpm test tests/l/ui/journey.test.ts (key l4)", "exit": null, "summary": "NOT RUN: L4 journey not on this base"}
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control (before WR-L3-5)",
+   "exit": 1,
+   "summary": "31 passed, 1 failed (shadow case [pg]), 1 skipped"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control (after all tasks)",
+   "exit": 0,
+   "summary": "40 passed, 1 skipped; 13/13 L3 pg cases + readiness pg on the real PgControlStore"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 pytest tests/d -k 'catalog or operations_units'; pytest tests/contracts -k 'catalog or private or dev'",
+   "exit": 0,
+   "summary": "49 passed 1 xfailed; 43 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 INFRX_MUTANTS=all pytest tests/l/control/test_mutants.py",
+   "exit": 0,
+   "summary": "86 passed: 59 fake + 22 PG mutants killed, 0 survivors (pg_dev_revision_of_any_environment dropped as PG-equivalent, WR-LSQ-8)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 INFRX_MUTANTS=all pytest tests/l/access/test_mutants.py -k 'require or well_formed or every_case'",
+   "exit": 0,
+   "summary": "4 passed (require_waves_through killed fake+pg)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 make api-test",
+   "exit": 2,
+   "summary": "5522 passed, 9 failed, 78 skipped, 9 xfailed: 7 outbox[valkey] shared container (infrx-d2-valkey foreign), 2 base EXECUTE-surface failures fixed by batch #8 WR-LSQ-3; solo rerun identical"
+  },
+  {
+   "cmd": "cd apps/lab && pnpm test tests/l/ui/journey.test.ts (key l4)",
+   "exit": null,
+   "summary": "NOT RUN: L4 journey not on this base"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/l/control tests/l/access -m 'not pg' (no mutant files), fix round",
+   "exit": 0,
+   "summary": "36 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control -m pg, fix round",
+   "exit": 0,
+   "summary": "14 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control/test_mutants.py, fix round",
+   "exit": 0,
+   "summary": "91 passed: 64 fake + 22 PG mutants killed, 0 survivors (after removing this lane's own stale infrx-l3-postgres left Created by a mutant copy; the prior broken_runner run is recorded in the evidence)"
+  }
  ],
- "estimate": {"optimistic_h": 1, "likely_h": 2.5, "pessimistic_h": 5, "confidence": "medium", "basis": "remaining = WR-LSQ-9 four SELECTs (lab-sql ~1 h) + adapters' pg cases on l3 (~0.5 h) + WR-LAB-API-2b/I2L-2b merged-tree follow-ups + one verify round (47-234 min, session-03); this lane ~3 h vs L3's 3/6/12", "at": "2026-09-28T13:30Z"},
- "blockers": ["adapters' PG half needs WR-LSQ-9 (PgControlStore reads)", "real smoke needs the G/W engine adapter (WR-L3-2)"],
- "wiring_requests": ["WR-LSQ-9", "WR-LAB-API-2", "WR-LAB-API-2b", "WR-I2L-2b", "WR-R2-2 composition", "WR-L3-MK"],
- "evidence": ["research/plan/evidence/l/L3-INTEGRATION-6a5f3df.md"]
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2.5,
+  "pessimistic_h": 5,
+  "confidence": "medium",
+  "basis": "remaining = WR-LSQ-9 four SELECTs (lab-sql ~1 h) + adapters' pg cases on l3 (~0.5 h) + WR-LAB-API-2b/I2L-2b merged-tree follow-ups + one verify round (47-234 min, session-03); this lane ~3 h vs L3's 3/6/12",
+  "at": "2026-09-28T13:30Z"
+ },
+ "blockers": [
+  "adapters' PG half needs WR-LSQ-9 (PgControlStore reads)",
+  "real smoke needs the G/W engine adapter (WR-L3-2)"
+ ],
+ "wiring_requests": [
+  "WR-LSQ-9",
+  "WR-LAB-API-2",
+  "WR-LAB-API-2b",
+  "WR-I2L-2b",
+  "WR-R2-2 composition",
+  "WR-L3-MK"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/L3-INTEGRATION-6a5f3df.md"
+ ],
+ "fix_round": {
+  "finding": "0-L3I-R1",
+  "fixed": true,
+  "code_head": "d068a483",
+  "summary": "register takes the Lab App's shape: bare workspace name (provider-scoped), runtime <repo>@sha256:<hex> stored verbatim, artifact_digest = one of the model's imported weight shard digests (checked, never written into the image); App-shape case + 5 new mutants"
+ },
+ "at": "2026-09-28T15:00Z"
 }

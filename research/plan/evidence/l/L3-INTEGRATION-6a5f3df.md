@@ -142,3 +142,26 @@
 - Optimistic 1 h / likely 2.5 h / pessimistic 5 h. Confidence medium.
 - Basis: WR-LSQ-9 is four SELECTs (lab-sql about 1 h). Switching the operations cases to `world` and running them on l3 takes about 0.5 h. Then there are the WR-LAB-API-2b/I2L-2b merged-tree follow-ups and a verify round (47–234 min per session-03).
 - This lane took about 3 h against its 3/6/12 L3 analogue.
+
+## Fix round (0-L3I-R1) — code head d068a483
+
+Finding: `Operations.register` could not accept anything the Lab App's form sends, and it stored the submitted artifact digest as the runtime image digest. The side chosen is the App's. The App's form is left unchanged.
+
+- **`name`** is the model's bare name in the workspace. The App's pattern is `[a-z0-9][a-z0-9-]{0,62}` and allows no `/`. The name is resolved only among the actor's provider's own serving revisions, by the last segment of `public_model_id`, so it stays provider-scoped. The dev endpoint is that name. A slug-qualified name (`nemostation/marlin-2b`) is now `not_found`.
+- **`runtime`** is the image by digest (`<repo>@sha256:<hex>`) and is stored verbatim as `runtime_image_ref`. `runtime_image_digest` is that ref's own digest. A bare repo, a tag or an unsupported repo is refused by `LabControl.register` (`unsupported`) as `invalid_request`, with no row written.
+- **`artifact_digest`** is the model's weights. It must be one of the shard digests the model was imported with (`weight_shard_digests`), otherwise `invalid_request` ("a Lab registration declares none"). The new revision keeps those weights and never writes the digest into the image. `Model.artifact_digest` reads `weight_shard_digests[0]`, and `Model.runtime` and `Deployment.runtime` read the full runtime ref, so the App's list shows back what it submits.
+- Proposed ruling amended: *a Lab registration names the model by its bare workspace name, the runtime by `<repo>@sha256:<hex>`, and the weights by one of the model's imported shard digests (checked, never declared)*.
+- Note for the App lane: the App's own fake-test REG (`vllm@sha256:bb`, `chat.v2`) is not a shape L3 accepts, because the digest is short, `vllm` is unsupported and only `chat.v1` is served. It is kept as a refusal case here. J01/J02 on the merged tree need a supported runtime by full digest, `chat.v1`, and the model's weights digest.
+
+Tests first: the new case `test_operations__the_lab_apps_registration_shape_registers` covers four things. The App's exact REG is refused, both with its own name and with ours. The slug name is `not_found`. The App's shape with valid values registers, pinned to that runtime and those weights. The existing cases moved to the App shape. Before the fix: 6 failed, 2 passed. After: 8 passed.
+
+New mutants, all killed: `register_slug_qualified_name`, `register_any_weights`, `register_runtime_repinned_to_artifact`, `register_image_digest_dropped`, `model_shows_the_runtime_digest`. `register_any_model_name`, `register_keeps_base_runtime` and `register_dev_endpoint_misnamed` were re-anchored.
+
+| command (apps/infrx-api) | result |
+|---|---|
+| `uv run --frozen pytest -q tests/l/control tests/l/access -m "not pg"` (without the mutant files) | 36 passed |
+| `INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control -m pg` (without the mutant file) | 14 passed |
+| `INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l/control/test_mutants.py` | **91 passed**: 64 fake mutants and 22 PG mutants killed, 0 survivors |
+| `uv run --frozen ruff check` on the three changed files | clean |
+
+Earlier mutant runs are recorded rather than hidden. A first run without `INFRX_D_TASK` failed 22 PG mutants on the default key. A first run on `l3` killed 8 PG mutants, and every later one was then `broken_runner`: a mutant copy's `infrx-l3-postgres` had been left in state `Created` (owner label `/tmp/l3-pg-mutant-pg_smoke_skipped-*`, a temp tree that no longer existed) and blocked the harness (`ForeignContainer`). That container was on this lane's own key. I removed it (`docker rm infrx-l3-postgres`), and the full rerun above is the result of record. `make api-test` was not rerun: the change is confined to `infrx/lab/control/operations.py` and the `tests/l/control` suite and mutant list, and those are rerun above.
