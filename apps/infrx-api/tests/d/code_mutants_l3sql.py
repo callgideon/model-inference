@@ -3,9 +3,16 @@ of `test_l3sql_control.py` on a database built from the mutated set, needs Docke
 `infrx/state/lab_control.py` (killed by the named case of `test_l3sql_units.py` through the
 shared runner, no Docker). The SQL runner is D7's (`code_mutants_d7.kill`).
 
+WR-LSQ-9 (LW4): `0044_lab_control_reads.sql` and 0043's router grant (`READS_SQL`, killed by
+`test_l3sql_reads.py`'s checks the same way) and the four `ControlReads` selects of
+`lab_control.py` (`READS_PY`: the module constant edited in this process - the store reads it
+at call time - and the named check run on a fresh database; `kill_read`).
+
     INFRX_D_TASK=dlab uv run --frozen pytest -q tests/d/test_code_mutants_l3sql.py
 """
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Runner
@@ -13,6 +20,7 @@ from . import code_mutants_d7 as d7
 from . import migration_mutants as _d
 from . import pgharness
 from . import test_l3sql_control as t
+from . import test_l3sql_reads as r
 
 FILE = "0032_lab_control.sql"
 DB = f"{pgharness.DATABASE}_l3mut"
@@ -222,7 +230,113 @@ CODE_MUTANTS = (
     _p("l3_py_malformed_id_queried", "a malformed id never reaches a uuid column",
        "        if not _uuid(deployment_revision_id):\n            return None",
        "        if False:\n            return None", READS),
+    _p("l3_py_malformed_endpoint_queried", "a malformed endpoint id has no alias, unqueried",
+       "        if not _uuid(endpoint_id):\n            return None",
+       "        if False:\n            return None", READS),
 )
+
+# --- WR-LSQ-9 (LW4) -----------------------------------------------------------------------
+DB_R = f"{pgharness.DATABASE}_l3rmut"
+R_ROWS = "check_the_control_reads_are_the_registrys_rows"
+R_LOGIN = "check_the_control_login_holds_what_operations_reads"
+R_ROUTER = "check_the_router_functions_are_the_runtime_logins_alone"
+
+
+def _r(name, old, new, check, why, file="0044_lab_control_reads.sql", **kw):
+    return _d.Mutant(name, file, old, new, "lab", check, why, **kw)
+
+
+READS_SQL = (
+    _r("l3r_login_no_listings", "grant select on infrx.catalog_listings to infrx_lab_control;",
+       "", R_LOGIN, "the control service's deployments list and R2's serving read fail on "
+       "the Lab's own login"),
+    _r("l3r_login_no_policy", "create policy lab_control_reads_listings on "
+       "infrx.catalog_listings for select\n  to infrx_lab_control using (true);", "", R_LOGIN,
+       "row security hides every listing: deployments read unpriced, R2 sees no alias"),
+    _r("l3r_login_writes_listings", "grant select on infrx.catalog_listings to "
+       "infrx_lab_control;", "grant select, insert on infrx.catalog_listings to "
+       "infrx_lab_control;", R_LOGIN, "the Lab login lists a revision around the "
+       "publication CAS"),
+    _r("l3r_router_for_the_lab_login", "grant execute on function infrx.release_active(text), "
+       "infrx.release_eligible(uuid, uuid),\n  infrx.record_rollout_assignment(jsonb) to "
+       "infrx_runtime;", "grant execute on function infrx.release_active(text), "
+       "infrx.release_eligible(uuid, uuid),\n  infrx.record_rollout_assignment(jsonb) to "
+       "infrx_runtime, infrx_lab_control;", R_ROUTER, "the Lab's login records routing "
+       "assignments for consumer traffic", file="0043_lab_reads_and_proposals.sql"),
+    _r("l3r_router_not_the_runtimes", "grant execute on function infrx.release_active(text), "
+       "infrx.release_eligible(uuid, uuid),\n  infrx.record_rollout_assignment(jsonb) to "
+       "infrx_runtime;", "grant execute on function infrx.release_active(text),\n  "
+       "infrx.record_rollout_assignment(jsonb) to infrx_runtime;", R_ROUTER,
+       "the router cannot read eligibility on its own login and fails every candidate",
+       file="0043_lab_reads_and_proposals.sql"),
+)
+
+
+@dataclass(frozen=True)
+class ReadMutant:
+    """One edit of a `lab_control.py` select constant; `old` is anchored in the source too."""
+
+    name: str
+    constant: str
+    old: str
+    new: str
+    check: str
+    why: str
+
+
+READS_PY = (
+    ReadMutant("l3r_servings_any_provider", "_PROVIDER_SERVINGS",
+               '"where s.provider_org_id = %s "', "where %s::uuid is not null ", R_ROWS,
+               "a provider's model list shows another provider's serving revisions"),
+    ReadMutant("l3r_servings_newest_first", "_PROVIDER_SERVINGS",
+               '"order by s.created_at, s.serving_version_id"',
+               "order by s.created_at desc, s.serving_version_id", R_ROWS,
+               "the model list is not oldest first (the fake's order)"),
+    ReadMutant("l3r_deployments_any_provider", "_PROVIDER_DEPLOYMENTS",
+               '"where provider_org_id = %s "', "where %s::uuid is not null ", R_ROWS,
+               "a provider's deployments list shows another provider's revisions"),
+    ReadMutant("l3r_deployments_newest_first", "_PROVIDER_DEPLOYMENTS",
+               '"order by created_at, deployment_revision_id"',
+               "order by created_at desc, deployment_revision_id", R_ROWS,
+               "the deployments list is not oldest first"),
+    ReadMutant("l3r_alias_any_endpoint", "_ENDPOINT_ALIAS",
+               '"where d.endpoint_id = %s order by l.version desc limit 1"',
+               "where %s::uuid is not null order by l.version desc limit 1", R_ROWS,
+               "R2 rolls back an alias its endpoint does not serve"),
+    ReadMutant("l3r_listings_any_alias", "_LISTINGS",
+               '"from infrx.catalog_listings where public_model_id = %s order by version"',
+               "from infrx.catalog_listings where %s::text is not null order by version",
+               R_ROWS, "R2 picks a rollback target from another alias's history"),
+    ReadMutant("l3r_listings_newest_first", "_LISTINGS",
+               '"from infrx.catalog_listings where public_model_id = %s order by version"',
+               "from infrx.catalog_listings where public_model_id = %s order by version desc",
+               R_ROWS, "listing versions are not oldest first: R2's newest match is the oldest"),
+)
+READS_NAMES = tuple(m.name for m in READS_SQL) + tuple(m.name for m in READS_PY)
+
+
+def kill_reads_sql(mutant) -> tuple[str, str]:
+    return d7.kill(mutant, DB_R, r)
+
+
+def kill_read(mutant: ReadMutant) -> tuple[str, str]:
+    """The constant edited (the anchor minus its source quotes) for one check on a fresh
+    database, then restored."""
+    from infrx.state import lab_control, migrations
+    old = mutant.old.strip('"')
+    source = getattr(lab_control, mutant.constant)
+    if source.count(old) != 1:
+        return _d.MISDECLARED, f"{mutant.constant} holds {source.count(old)} anchors"
+    setattr(lab_control, mutant.constant, source.replace(old, mutant.new))
+    try:
+        pgharness.ensure()
+        pgharness.recreate(DB_R)
+        pgharness.apply(DB_R, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+        with pgharness.connect(DB_R) as conn:
+            r.seed(conn)
+            return _d._run(r.CHECKS[mutant.check], conn)
+    finally:
+        setattr(lab_control, mutant.constant, source)
 
 
 def kill(mutant) -> tuple[str, str]:

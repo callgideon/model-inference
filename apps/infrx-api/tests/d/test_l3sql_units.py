@@ -81,4 +81,5 @@ def test_reads__a_malformed_id_is_absent_without_a_query() -> None:
     store, conn = _store()
     assert _ok(store.deployment("nope")) is None
     assert _ok(store.model_provider("nope")) is None
+    assert _ok(store.endpoint_alias("nope")) is None
     assert conn.sent == [], conn.sent

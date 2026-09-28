@@ -9,6 +9,10 @@ same transaction; refusals are typed (`not_found` for another provider's or an u
 the server's (the L2 membership, the operator session), never request fields. `Listing` and
 `ControlEvent` carry the fields of L3's models of the same names. Nothing composes this store
 yet (L3 does).
+
+WR-LSQ-9: the `ControlReads` of L3's `Operations`/`Serving` are plain selects of 0007's rows
+(`provider_servings`, `provider_deployments`, `endpoint_alias`, `listing_versions`), readable
+by the control service's own login `infrx_lab_control` (0043; the listings since 0044).
 """
 from __future__ import annotations
 
@@ -19,10 +23,22 @@ from typing import Any
 
 from ..contracts.v2.money_units import Credit
 from ..contracts.v2.records import (CreditLedgerEntry, DeploymentRevision, DeploymentState,
-                                    Environment, RateCardSnapshot)
+                                    Environment, RateCardSnapshot, ServingRevision)
 from .jobstore import Connect
 from .lab_data import PgLabDataStore
-from .operations import _DEPLOYMENT, _DEPLOYMENT_FIELDS, _Db, _entry, _record
+from .operations import (_DEPLOYMENT, _DEPLOYMENT_FIELDS, _SERVING, _SERVING_FIELDS, _Db,
+                         _entry, _record)
+
+# A3's selects, keyed by provider instead of id (ties in one transaction: by id)
+_PROVIDER_SERVINGS = (_SERVING.rpartition("where")[0] + "where s.provider_org_id = %s "
+                      "order by s.created_at, s.serving_version_id")
+_PROVIDER_DEPLOYMENTS = (_DEPLOYMENT.rpartition("where")[0] + "where provider_org_id = %s "
+                         "order by created_at, deployment_revision_id")
+_ENDPOINT_ALIAS = ("select l.public_model_id from infrx.catalog_listings l "
+                   "join infrx.deployment_revisions d using (deployment_revision_id) "
+                   "where d.endpoint_id = %s order by l.version desc limit 1")
+_LISTINGS = ("select public_model_id, version, deployment_revision_id::text, rate_card_version "
+             "from infrx.catalog_listings where public_model_id = %s order by version")
 
 
 @dataclass(frozen=True)
@@ -143,3 +159,21 @@ class PgControlStore:
                                 "at": datetime.fromisoformat(e["at"])})
                 for e in await self._call("lab_control_events",
                                           {"provider_org_id": provider_org_id})]
+
+    # --- WR-LSQ-9: L3's ControlReads (infrx.lab.control.operations) ------------------------
+    async def provider_servings(self, provider_org_id: str) -> list[ServingRevision]:
+        return [_record(ServingRevision, _SERVING_FIELDS, row)
+                for row in await self._db.rows(_PROVIDER_SERVINGS, (provider_org_id,))]
+
+    async def provider_deployments(self, provider_org_id: str) -> list[DeploymentRevision]:
+        return [_record(DeploymentRevision, _DEPLOYMENT_FIELDS, row)
+                for row in await self._db.rows(_PROVIDER_DEPLOYMENTS, (provider_org_id,))]
+
+    async def endpoint_alias(self, endpoint_id: str) -> str | None:
+        if not _uuid(endpoint_id):
+            return None
+        row = await self._db.one(_ENDPOINT_ALIAS, (endpoint_id,))
+        return row[0] if row else None
+
+    async def listing_versions(self, public_model_id: str) -> list[Listing]:
+        return [Listing(*row) for row in await self._db.rows(_LISTINGS, (public_model_id,))]
