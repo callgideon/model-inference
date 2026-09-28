@@ -43,7 +43,6 @@ console-typecheck:
 # The contracts runner covers both entries (v1 conformance and the v2 suites, F2P wire-in item 11).
 console-mutants:
 	cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants
-	cd apps/app && node tests/v/run-mutants.mjs
 	cd apps/app && node tests/u/run-mutants.mjs
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
 	cd apps/app && node tests/a/run-mutants.mjs
@@ -123,7 +122,7 @@ lab-build:
 lab-mutants:
 	cd apps/lab && node tests/l/shell/run-mutants.mjs && node tests/l/ui/run-mutants.mjs
 	cd apps/lab && node tests/c/review/run-mutants.mjs
-	cd apps/lab && node tests/v/detail/run-mutants.mjs && node tests/v/judge/run-mutants.mjs
+	cd apps/lab && node tests/v/detail/run-mutants.mjs && node tests/v/judge/run-mutants.mjs && node tests/v/list/run-mutants.mjs
 	cd apps/lab && node tests/c/judge/run-mutants.mjs
 	cd apps/lab && node tests/r/run-mutants.mjs
 	cd apps/lab && node tests/p/run-mutants.mjs

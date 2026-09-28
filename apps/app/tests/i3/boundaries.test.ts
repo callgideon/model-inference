@@ -77,11 +77,11 @@ const KEY = "sk-infrx-AbCdEfGh0123456789AbCdEfGh0123456789AbCd";
 const EMAIL = "someone.person@example.com";
 
 test("I3-BOUND-01 every error boundary under app/ reports once through the report client, with only digest, route and name", async () => {
-  // Catches (review I3R-6): a segment boundary (usage, billing, traces) that renders its copy and
+  // Catches (review I3R-6): a segment boundary (usage, billing) that renders its copy and
   // never reports, so browser throws on its route produce no app_error line; and a boundary that
   // reports anything more than the sanitised fields (the message, the raw path).
   const files = boundaries();
-  assert.ok(files.length >= 5, `found only ${files.map((f) => relative(appRoot, f)).join(", ")}`);
+  assert.ok(files.length >= 4, `found only ${files.map((f) => relative(appRoot, f)).join(", ")}`);
   const sent: { url: unknown; init: RequestInit }[] = [];
   const realFetch = globalThis.fetch;
   const hadWindow = "window" in globalThis;

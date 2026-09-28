@@ -6,6 +6,7 @@
 //   content read through it; any refusal fails closed. Filed as WR-V2-2.
 // Until the real adapters are wired both ports are "unavailable" (fail closed); tests drive fake.ts.
 import type { Role } from "../../../lib/auth/access.ts";
+import { labTraces } from "../../../lib/services/traces/server.ts";
 
 /** Always the session's workspace (lib/auth/guard.ts), never a form or URL value. */
 export type Actor = { providerId: string; role: Role };
@@ -48,5 +49,5 @@ const UNAVAILABLE = { traces: { detail: down }, content: { read: down } };
 
 /** The wiring seam for WR-V2-1/2: the real adapters replace UNAVAILABLE here, never a fake. */
 export function tracePorts(): { traces: TraceReadPort; content: ContentPort } {
-  return UNAVAILABLE;
+  return { traces: labTraces(), content: UNAVAILABLE.content };
 }

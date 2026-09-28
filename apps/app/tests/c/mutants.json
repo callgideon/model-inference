@@ -1839,16 +1839,6 @@
       ]
     },
     {
-      "id": "PROV-04",
-      "note": "/traces drops its notFound guard (served to a consumer)",
-      "file": "app/(console)/traces/page.tsx",
-      "find": "  providerRoute(await getSession(), notFound);\n",
-      "replace": "",
-      "cases": [
-        "C-PROV-02 each provider page runs the guard first, before any read"
-      ]
-    },
-    {
       "id": "PROV-05",
       "note": "/dedicated drops its notFound guard",
       "file": "app/(console)/dedicated/page.tsx",
@@ -1864,16 +1854,6 @@
       "file": "app/(console)/teams/page.tsx",
       "find": "  providerRoute(session, notFound);\n",
       "replace": "",
-      "cases": [
-        "C-PROV-02 each provider page runs the guard first, before any read"
-      ]
-    },
-    {
-      "id": "PROV-07",
-      "note": "/traces reads (consoleContext) before the guard",
-      "file": "app/(console)/traces/page.tsx",
-      "find": "  providerRoute(await getSession(), notFound);\n  const params = await searchParams;\n",
-      "replace": "  const params = await searchParams;\n  providerRoute(await getSession(), notFound);\n",
       "cases": [
         "C-PROV-02 each provider page runs the guard first, before any read"
       ]

@@ -1,0 +1,109 @@
+diff --git a/apps/infrx-api/infrx/gateway/routes/lab_traces.py b/apps/infrx-api/infrx/gateway/routes/lab_traces.py
+index b323c0bd..cfd59a29 100644
+--- a/apps/infrx-api/infrx/gateway/routes/lab_traces.py
++++ b/apps/infrx-api/infrx/gateway/routes/lab_traces.py
+@@ -37,6 +37,7 @@ from ...contracts import errors
+ from ...contracts.v2.records import DataCategory, DataPurpose
+ from ...contracts.v2.records import ProviderCapability as Cap
+ from ...traces.retention import CONTENT, REQUEST
++from ...state.lab_data import grant_ref
+ from ...traces.ship.shipper import COLUMNS, TABLE, TraceRow, _row
+ from .. import lab_auth
+ 
+@@ -46,8 +47,9 @@ CATEGORIES = (DataCategory.request_content, DataCategory.response_content)
+ #: What any member developer sees of a request on its deployment.
+ METADATA = ("request_id", "started_at", "completed_at", "mode", "loss_reason",
+             "serving_version_id", "model_revision", "rate_card_version", "policy_version")
+-#: What a current grant from the request's organization adds.
+-GRANTED = ("grantor_org_id", "content_complete", "content_bytes", "content_available")
++#: What a current grant from the request's organization adds; `grant_ref` names the grant version
++#: the row was read under (`lab_data.grant_ref`), so a C2 content ref can be bound to it (WR-V2-1).
++GRANTED = ("grantor_org_id", "grant_ref", "content_complete", "content_bytes", "content_available")
+ 
+ 
+ class ProviderServing(Protocol):
+@@ -162,21 +164,22 @@ def register(app, rt, traces: LabTraces | None = None):
+         await lab_auth.member(traces.access, user_id, provider, Cap.manage_dev_deployment)
+         return user_id, provider, await traces.serving.serving(provider)
+ 
+-    async def granted(user_id, provider, org_id, model_id) -> bool:
++    async def granted(user_id, provider, org_id, model_id) -> str | None:
++        """The ref of the current grant allowing both categories, or None."""
+         try:
+             for category in CATEGORIES:
+-                await traces.access.authorize_content(
++                grant = await traces.access.authorize_content(
+                     user_id=user_id, provider_org_id=provider, grantor_org_id=org_id,
+                     model_id=model_id, category=category, purpose=DataPurpose.provider_sharing)
+         except errors.Forbidden:
+-            return False
+-        return True
++            return None
++        return grant_ref(grant)
+ 
+     async def visible(user_id, provider, serving, rows) -> list[tuple[TraceRow, dict]]:
+         t3 = traces.retention
+         stones = await t3.store.get({(r.org_id, r.request_id) for r in rows})
+         now = t3.clock()
+-        grants: dict[tuple[str, str], bool] = {}
++        grants: dict[tuple[str, str], str | None] = {}
+         out = []
+         for row in rows:
+             scopes = stones.get((row.org_id, row.request_id), {})
+@@ -188,8 +191,8 @@ def register(app, rt, traces: LabTraces | None = None):
+                 grants[key] = await granted(user_id, provider, row.org_id, model_id)
+             item = {name: getattr(row, name) for name in METADATA}
+             item |= {"model_id": model_id, "access": "metadata"}
+-            if grants[key]:
+-                item |= {"access": "content", "grantor_org_id": row.org_id,
++            if grants[key] is not None:
++                item |= {"access": "content", "grantor_org_id": row.org_id, "grant_ref": grants[key],
+                          "content_complete": row.content_complete,
+                          "content_bytes": row.content_bytes,
+                          "content_available": row.content_stored and CONTENT not in scopes
+diff --git a/apps/infrx-api/tests/g/lab_traces/mutants.py b/apps/infrx-api/tests/g/lab_traces/mutants.py
+index 97d354d9..085b7e74 100644
+--- a/apps/infrx-api/tests/g/lab_traces/mutants.py
++++ b/apps/infrx-api/tests/g/lab_traces/mutants.py
+@@ -82,11 +82,14 @@ MUTANTS: tuple[Mutant, ...] = (
+     _m("grantor_is_the_provider", "the grant is the request's organization's",
+        "grantor_org_id=org_id,", "grantor_org_id=provider,",
+        T + "a_current_grant_releases_content_per_grantor"),
++    _m("grant_ref_not_the_read_grant", "a granted row names the grant version it was read under",
++       '"grant_ref": grants[key],', '"grant_ref": "",',
++       T + "a_current_grant_releases_content_per_grantor"),
+     _m("grant_shared_across_grantors", "each grantor organization is judged on its own grant",
+        "            key = (row.org_id, model_id)\n", "            key = model_id\n",
+        T + "a_current_grant_releases_content_per_grantor"),
+     _m("grants_cached_across_calls", "nothing is cached: a revocation holds on the next call",
+-       "        grants: dict[tuple[str, str], bool] = {}\n",
++       "        grants: dict[tuple[str, str], str | None] = {}\n",
+        "        grants = visible.__dict__.setdefault('grants', {})\n",
+        T + "a_revoked_grant_is_metadata_only_on_the_next_call"),
+     # --- T3 on content ---------------------------------------------------------------------------
+diff --git a/apps/infrx-api/tests/g/lab_traces/test_lab_traces.py b/apps/infrx-api/tests/g/lab_traces/test_lab_traces.py
+index 444dd95f..407b205a 100644
+--- a/apps/infrx-api/tests/g/lab_traces/test_lab_traces.py
++++ b/apps/infrx-api/tests/g/lab_traces/test_lab_traces.py
+@@ -278,6 +278,8 @@ def test_lab_traces__a_current_grant_releases_content_per_grantor(world):
+     assert set(items["ungranted"]) == METADATA
+     detail = get(c, w.DEV_A, w.A, "/" + t.ids["granted"]).json()
+     assert (detail["access"], detail["content"]) == ("content", '{"prompt":"c1"}')
++    assert detail["grant_ref"] == items["granted"]["grant_ref"]
++    assert detail["grant_ref"].startswith(f"lab:grant:{w.A}:")
+     assert "content" not in get(c, w.DEV_A, w.A, "/" + t.ids["ungranted"]).json()
+     assert get(c, w.BOTH, w.A, "/" + t.ids["granted"]).json()["grantor_org_id"] == w.C1
+ 
+diff --git a/apps/lab/tests/v/list/stack.test.ts b/apps/lab/tests/v/list/stack.test.ts
+index b6dd1c06..70594444 100644
+--- a/apps/lab/tests/v/list/stack.test.ts
++++ b/apps/lab/tests/v/list/stack.test.ts
+@@ -57,6 +57,8 @@ test("V1M-S01..S06 the six L2 cases on the real route: own requests, another pro
+     assert.ok(view.kind === "rows" && view.rows.every((r) => r.href === `/requests/${r.requestId}`));
+     const one = await as("dev_a").detail(A, w.ids.ungranted);
+     assert.ok(one.ok && one.value.request_id === w.ids.ungranted);
++    const shared = await as("dev_a").detail(A, w.ids.granted);
++    assert.ok(shared.ok && shared.value.access === "content" && shared.value.grant_ref.startsWith(`lab:grant:${w.A}:`), JSON.stringify(shared));
+   });
+ 
+   await t.test("S02 provider B learns nothing: A's request is not_found as B and as A, and B's own list is empty", async () => {
