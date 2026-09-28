@@ -12,10 +12,11 @@ import { fileURLToPath } from "node:url";
 const lab = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const args = process.argv.slice(2);
 const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
-const SUITE = ["tests/c/judge/judge.test.ts", "tests/l/shell/boundary.test.ts"];
+const SUITE = ["tests/c/judge/judge.test.ts", "tests/c/judge/runs.test.ts", "tests/l/shell/boundary.test.ts"];
 
 const CORE = "lib/services/judge/core.ts";
 const ACTIONS = "lib/services/judge/actions.ts";
+const RUNS = "lib/services/judge/runs.ts";
 
 const C = {
   a01: "C3L-A01 the provider comes from the guarded workspace, never from the form",
@@ -30,6 +31,11 @@ const C = {
   p02: "C3L-P02 a full page carries the next cursor, a short page ends, an over-long page is refused",
   s01: "C3L-S01 the calls ride the user's own Lab session; a misconfigured Lab builds no client",
   guard: "L1-B01 every page, route, provider layout and server action calls the provider guard",
+  r01: "J3L-R01 the read names the session's provider and the request, and returns the rows",
+  r02: "J3L-R02 a viewer or a malformed request id makes no call",
+  r03: "J3L-R03 the server's refusal is denied; any other failure is unavailable",
+  r04: "J3L-R04 one malformed row fails the whole read closed",
+  r05: "J3L-R05 a no-media pass or an unsupported 'calibrated' is never passed through",
 };
 const FORGED = "(input.provider_org_id as string) ?? w.providerId";
 
@@ -71,6 +77,30 @@ const MUTANTS = [
   m("C3L-X34", "the session client adds an identity to every call", CORE, "return (name, args) => client.rpc(name, args);", 'return (name, args) => client.rpc(name, { ...args, p_user_id: "" });', [C.s01]),
   m("C3L-X35", "a judge action skips the provider guard", ACTIONS, "export async function configureJudge(formData: FormData): Promise<Outcome> {\n  const workspace = await requireProviderWorkspace();",
     'export async function configureJudge(formData: FormData): Promise<Outcome> {\n  const workspace = { providerId: "", providerName: "", role: "administrator" as const };', [C.guard]),
+  // --- J3 / WR-V3-1: the per-request judge read (runs.ts) ---------------------------------------
+  m("J3L-X01", "the read takes the provider from the request", RUNS, "{ p_provider_org_id: actor.providerId,", "{ p_provider_org_id: requestId,", [C.r01]),
+  m("J3L-X02", "the request id is not sent", RUNS, "p_request_id: requestId }", "p_request_id: null }", [C.r01]),
+  m("J3L-X03", "a viewer reads judge runs", RUNS, '      if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.r02]),
+  m("J3L-X04", "a malformed request id is sent", RUNS, 'if (typeof requestId !== "string" || !ID.test(requestId))', 'if (typeof requestId !== "string")', [C.r02]),
+  m("J3L-X05", "ids match case-insensitively", RUNS, "[0-9a-f]{12}$/;", "[0-9a-f]{12}$/i;", [C.r02]),
+  m("J3L-X06", "P0002 (a foreign or unknown row) is unavailable", RUNS, 'code === "42501" || code === "P0002" ?', 'code === "42501" ?', [C.r03]),
+  m("J3L-X07", "any error reads as denied", RUNS, '? "denied" : "unavailable" };', '? "denied" : "denied" };', [C.r03]),
+  m("J3L-X08", "a thrown call reads as denied", RUNS, '      } catch {\n        return { ok: false, reason: "unavailable" };', '      } catch {\n        return { ok: false, reason: "denied" };', [C.r03]),
+  m("J3L-X09", "any mode is read", RUNS, "&& MODES.includes(r.mode as string)", "", [C.r04]),
+  m("J3L-X10", "any state is read", RUNS, "    && STATES.includes(r.state as string) ", "    ", [C.r04]),
+  m("J3L-X11", "an inexact USD hold is read", RUNS, 'typeof r.reservedUsd === "string" && USD.test(r.reservedUsd)', 'typeof r.reservedUsd === "string"', [C.r04]),
+  m("J3L-X12", "a numeric actual USD is read", RUNS, '(r.actualUsd === null || (typeof r.actualUsd === "string" && USD.test(r.actualUsd)))', "true", [C.r04]),
+  m("J3L-X13", "a fractional rubric version is read", RUNS, "int(r.rubricVersion, 1)", "typeof r.rubricVersion === \"number\"", [C.r04]),
+  m("J3L-X14", "a non-boolean media flag is read", RUNS, '&& typeof r.media === "boolean" ', "", [C.r04]),
+  m("J3L-X15", "a textual score is read", RUNS, "(x.score === null || int(x.score, 0))", "true", [C.r04]),
+  m("J3L-X16", "a textual verdict is read", RUNS, '(r.overallPass === null || typeof r.overallPass === "boolean")', "true", [C.r04]),
+  m("J3L-X17", "a negative label count is read", RUNS, "int(c.labels, 0)", "typeof c.labels === \"number\"", [C.r04]),
+  m("J3L-X18", "an inverted interval is read", RUNS, " && (interval[0] as number) <= (interval[1] as number)", "", [C.r04]),
+  m("J3L-X19", "a no-media pass is passed through (R56)", RUNS, "const blindPass = !run.media", "const blindPass = false && !run.media", [C.r05]),
+  m("J3L-X20", "any no-media pass is refused, even a text-only rubric's", RUNS, "run.scores.some((s) => s.requiresMedia)", "true", [C.r05]),
+  m("J3L-X21", "'calibrated' on too few labels is passed through", RUNS, "(cal.labels < cal.required || ", "(", [C.r05]),
+  m("J3L-X22", "'calibrated' without an agreement is passed through", RUNS, "cal.agreement === null || cal.interval", "cal.interval", [C.r05]),
+  m("J3L-X23", "'calibrated' without an interval is passed through", RUNS, "|| cal.interval === null)", ")", [C.r05]),
 ];
 
 function copy() {
@@ -122,7 +152,7 @@ async function judge(mutant) {
 // Every case in the suite is named by at least one mutant, and every named case exists.
 const declared = new Set(MUTANTS.flatMap((x) => x.cases));
 const baseline = await run(lab);
-const cases = [...baseline.out.matchAll(/^ *ok \d+ - ((?:C3L|L1-B01)\S* .*)$/gm)].map((x) => x[1].trim());
+const cases = [...baseline.out.matchAll(/^ *ok \d+ - ((?:C3L|J3L|L1-B01)\S* .*)$/gm)].map((x) => x[1].trim());
 const problems = [
   ...(baseline.code === 0 ? [] : ["the unmutated suite does not pass"]),
   ...cases.filter((name) => !declared.has(name)).map((name) => `no mutant names "${name}"`),
