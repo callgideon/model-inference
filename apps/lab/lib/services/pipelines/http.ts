@@ -5,7 +5,7 @@
 // route's JSON as text. Lists come as `{data}`; every refusal is the route's status mapped to the port's
 // reason (410: gone); an answer holding one record the pages cannot read is unavailable (fails closed).
 import { bool, list as many, nul, num, obj, oneOf, str, type Check } from "../evaluation/shape.ts";
-import { ADAPTERS, IMPORT_REFUSALS, type Actor, type PipelinesPort, type Refusal, type Result } from "./port.ts";
+import { ADAPTERS, IMPORT_REFUSALS, TEACHER_CHUNK_STATES, type Actor, type PipelinesPort, type Refusal, type Result } from "./port.ts";
 
 const REASONS: Record<number, Refusal> = { 401: "denied", 403: "denied", 404: "not_found", 409: "conflict", 410: "gone", 422: "invalid" };
 export type HttpOptions = { baseUrl: string; token: () => Promise<string | null>; fetch?: typeof fetch };
@@ -36,6 +36,15 @@ const RUN = obj({
 const CHECKPOINT = obj({
   checkpointId: str, externalRunId: str, artifactDigest: str, state: oneOf("rejected", "validated"), reason: nul(str), eligible: bool,
   evaluation: nul(obj({ runRef: str, state: oneOf("queued", "running", "succeeded", "failed"), split: str, holdoutSha256: str })),
+});
+const TEACHER = obj({
+  batchId: str, datasetRef: str, rubricRef: str, teacherModel: str, promptVersion: str, payerRef: str, budgetUsd: str, chunkSize: num,
+  requestedBy: str, priceVersion: nul(str), ceilingUsd: nul(str), withinBudget: bool, holdout: num, notPermitted: num,
+  approval: nul(obj({ approvedBy: str, approvedAt: str })),
+  chunks: many(obj({
+    runId: str, samples: num, ceilingUsd: nul(str), state: among(() => TEACHER_CHUNK_STATES), reservedUsd: nul(str), costUsd: nul(str), sent: num,
+    failures: many(obj({ sampleId: str, reason: str })),
+  })),
 });
 
 const rename = (to: (key: string) => string) => {
@@ -93,5 +102,8 @@ export function httpPipelines({ baseUrl, token, fetch: send = fetch }: HttpOptio
     importCheckpoint: (actor, input) => post(actor, "checkpoints", CHECKPOINT, snake(input)),
     approve: (actor, { externalRunId, checkpointId }) =>
       post(actor, `checkpoints/${encodeURIComponent(checkpointId)}/approve`, CHECKPOINT, { external_run_id: externalRunId }),
+    teacherBatches: (actor) => get(actor, "teacher-batches", many(TEACHER)),
+    planTeachers: (actor, input) => post(actor, "teacher-batches", TEACHER, snake(input)),
+    approveTeachers: (actor, id) => post(actor, `teacher-batches/${encodeURIComponent(id)}/approve`, TEACHER),
   };
 }

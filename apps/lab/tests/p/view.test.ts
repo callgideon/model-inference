@@ -3,10 +3,10 @@
 // row shows its USD budget and payer; nothing offers a resubmit or an approval the records do not allow.
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Checkpoint, Label, TrainingRun } from "../../lib/services/pipelines/port.ts";
+import type { Checkpoint, Label, TeacherBatch, TrainingRun } from "../../lib/services/pipelines/port.ts";
 import { holds, pipelinesPort } from "../../lib/services/pipelines/port.ts";
 import {
-  checkpointRows, exportRows, importRows, labelRows, refusalCopy, REFUSAL_COPY, runRows,
+  checkpointRows, exportRows, importRows, labelRows, refusalCopy, REFUSAL_COPY, runRows, teacherRows,
 } from "../../lib/services/pipelines/view.ts";
 
 const P = "11111111-1111-4111-8111-111111111111";
@@ -161,4 +161,57 @@ test("P4-V14 the pipelines port fails closed: unavailable until the real adapter
   for (const env of [{}, { LAB_PIPELINES_PREVIEW: "1", NODE_ENV: "production" }, { LAB_PIPELINES_PREVIEW: "true" }])
     assert.deepEqual(await pipelinesPort(env).runs(actor), { ok: false, reason: "unavailable" }, JSON.stringify(env));
   assert.deepEqual(await pipelinesPort({ LAB_PIPELINES_PREVIEW: "1" }).runs(actor), { ok: true, value: [] });
+});
+
+const BATCH = "abababab-abab-4bab-8bab-abababababab";
+const chunk = (over: Partial<TeacherBatch["chunks"][number]>): TeacherBatch["chunks"][number] => ({
+  runId: "r1", samples: 4, ceilingUsd: "0.45416000", state: "unreserved", reservedUsd: null, costUsd: null, sent: 0, failures: [], ...over,
+});
+const batch = (over: Partial<TeacherBatch>): TeacherBatch => ({
+  batchId: BATCH, datasetRef: DATASET, rubricRef: ref("rubric", "12121212-1212-4212-8212-121212121212"), teacherModel: "claude-opus-5",
+  promptVersion: "teach-v1", payerRef: ref("payer", "77777777-7777-4777-8777-777777777777"), budgetUsd: "1.00000000", chunkSize: 4,
+  requestedBy: "u-dev", priceVersion: "rates-v1", ceilingUsd: "0.68124000", withinBudget: true, holdout: 2, notPermitted: 1, approval: null,
+  chunks: [chunk({}), chunk({ runId: "r2", samples: 2, ceilingUsd: "0.22708000" })], ...over,
+});
+
+test("P4-V15 a teacher dry run shows its USD budget, named payer, cost ceiling and each chunk's reservation; nothing is reserved or sent", () => {
+  const [row] = teacherRows("developer", [batch({})]);
+  assert.equal(row.budget, `budget 1.00000000 USD · payer ${batch({}).payerRef}`);
+  assert.equal(row.ceiling, "ceiling 0.68124000 USD at rates-v1");
+  assert.equal(row.plan, "2 chunks · 2 held-out samples left out · 1 not permitted to leave now (skipped)");
+  assert.equal(row.status, "Dry run: nothing reserved or sent.");
+  assert.deepEqual(row.chunks, ["4 samples · reservation 0.45416000 USD · not reserved, nothing sent", "2 samples · reservation 0.22708000 USD · not reserved, nothing sent"]);
+  assert.match(row.labels, /synthetic \(model-generated\), never ground truth/);
+  assert.match(teacherRows("developer", [batch({ ceilingUsd: null, withinBudget: false, priceVersion: null })])[0].ceiling, /^Unpriced: .*cannot be approved/);
+  assert.match(teacherRows("developer", [batch({ withinBudget: false })])[0].ceiling, /^ceiling 0\.68124000 USD at rates-v1 · over the budget: it cannot be approved$/);
+});
+
+test("P4-V16 only an administrator approves, only a dry run within its budget, and never twice", () => {
+  const approvable = (over: Partial<TeacherBatch>, role: "administrator" | "developer" | "viewer" = "administrator") => teacherRows(role, [batch(over)])[0].approvable;
+  assert.equal(approvable({}), true);
+  assert.equal(approvable({}, "developer"), false);
+  assert.equal(approvable({}, "viewer"), false);
+  assert.equal(approvable({ withinBudget: false }), false);
+  assert.equal(approvable({ approval: { approvedBy: "u-admin", approvedAt: "2026-09-28T10:00:00Z" } }), false);
+  assert.equal(teacherRows("developer", [batch({ approval: { approvedBy: "u-admin", approvedAt: "2026-09-28T10:00:00Z" } })])[0].status, "Approved by u-admin at 2026-09-28T10:00:00Z.");
+});
+
+test("P4-V17 each chunk reads as its ledger records it: held, ambiguous (never resent), settled or unknown cost, stopped, failures counted", () => {
+  const approved = { approvedBy: "u-admin", approvedAt: "2026-09-28T10:00:00Z" };
+  const [row] = teacherRows("administrator", [batch({ approval: approved, chunks: [
+    chunk({ state: "submitted", reservedUsd: "0.45416000", sent: 3, failures: [{ sampleId: "a", reason: "malformed_label" }, { sampleId: "b", reason: "malformed_label" }, { sampleId: "c", reason: "odd" }] }),
+    chunk({ state: "ambiguous", reservedUsd: "0.45416000", sent: 4 }),
+    chunk({ state: "completed", reservedUsd: "0.45416000", costUsd: "0.01000000", sent: 4 }),
+    chunk({ state: "completed", reservedUsd: "0.45416000", costUsd: null, sent: 4 }),
+    chunk({ state: "failed", reservedUsd: "0.45416000" }),
+    chunk({}),
+  ] })]);
+  assert.deepEqual(row.chunks, [
+    "4 samples · 3 sent · 0.45416000 USD held · 3 not imported (malformed label ×2, reason not recognised ×1)",
+    "4 samples · outcome unknown: 0.45416000 USD held; it is never resent, only looked up",
+    "4 samples · 4 sent · cost 0.01000000 USD, as reported",
+    "4 samples · 4 sent · cost unknown: the teacher reported none (never estimated)",
+    "4 samples · failed: the hold is released",
+    "4 samples · not reserved: the batch stopped before this chunk (payer budget or a withdrawn permission); nothing sent",
+  ]);
 });

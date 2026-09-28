@@ -10,6 +10,11 @@ reads D7's real `lab_checkpoint_receipts`. Objects are in memory. Test-only: the
 bearer-token-per-user stand-in for `GoTrueSessions`, and `/_test/*` doors standing in for the
 provider (an uploaded artifact), B3 (an evaluation result), a connector that lost its answer
 (ambiguous), the grantor (a real revocation RPC) and the database clock (an export expiring).
+P4.b (J06): the teacher batches run P2 over the REAL D8 `PgTeacherLedger` (0042, on the same
+database: `lab_submission` on, a 100 PROVIDER_USD budget for the world's payer, C1's grant naming
+external_judging) and J2's `HttpJudgeProvider` to the local teacher fake on p2's port (57529);
+`/_test/teacher-mode` (the fake drops an answer: ambiguous) and `/_test/teacher-failures` (P2's
+collect logging per-item failures) stand in for the teacher and the collector.
 
     INFRX_D_TASK=p1 uv run --frozen --project apps/infrx-api python apps/lab/tests/p/backend.py
     # prints one line: READY <port> <world json>
@@ -34,18 +39,27 @@ def main() -> None:
 
     from infrx.datasets import imports
     from infrx.gateway import lab_auth
+    from infrx.contracts.tasklocal import local_services
     from infrx.gateway.routes import lab_pipelines as lp
+    from infrx.judge.submit import HttpJudgeProvider
     from infrx.lab.access import LabAccess
     from infrx.media.store import InMemoryObjectStore
     from infrx.state import migrations
     from infrx.state.jobstore import connector
     from infrx.state.lab_access import PgAccessStore
+    from infrx.pipelines import annotations as p1
+    from infrx.pipelines.teachers import TeacherWiring
     from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_pipeline import PgTeacherLedger
     from tests.d import pgharness
     from tests.d import test_d7_lab_data as d7
+    from tests.d import test_d8_ledgers as d8
     from tests.d import test_l2sql_access as l2
     from tests.g import support
-    from tests.g.lab_pipelines.test_lab_pipelines import Ledger, Sessions, token
+    from tests.g.lab_pipelines.test_lab_pipelines import LIVE, Ledger, Sessions, token
+    from tests.j import fakes as j1
+    from tests.j.submit.judge_fake import JudgeFake
+    from tests.p.teachers import fakes as p2f
     from tests.n.imports.world import NEMO, chunks, fixture, run
     from tests.n.versions.test_versions import uid
     from tests.p.annotations.world import RUBRIC, FakeLabelLog, rows
@@ -58,7 +72,9 @@ def main() -> None:
     pgharness.recreate(db)
     pgharness.apply(db, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
     conn = pgharness.connect(db)
-    d7.seed(conn)
+    d8.seed(conn)                   # D7's world + lab_submission on + C1's grant naming external_judging
+    d7.ok(conn, "lab_put_budget", {"provider_org_id": NEMO, "payer_ref": p3w.PAYER,
+                                   "limit": "100.00000000", "actor": "ops", "reason": "p4b"})
     connect = connector(pgharness.dsn(db))
     store, objects = PgLabDataStore(connect), InMemoryObjectStore()
     spec, _ = fixture("benchmark")
@@ -89,8 +105,14 @@ def main() -> None:
     ledger, evals = Receipts(store), p3w.FakeEvaluations()
     users = {"dev": l2.DEV, "admin": l2.ADMIN, "viewer": l2.VIEWER, "other_dev": l2.BOTH,
              "consumer": l2.C1}
+    log, teacher_ledger = FakeLabelLog(), PgTeacherLedger(connect)
+    fake = JudgeFake(port=local_services("p2")["teacher-fake"].host_port)
+    teachers = TeacherWiring(members=PgAccessStore(connect), ledger=teacher_ledger,
+                             provider=HttpJudgeProvider(fake.url), store=store, objects=objects,
+                             labels=p1.import_labels, log=log, rates=j1.TEST_RATES,
+                             settings=LIVE, redact=p2f.redact)
     x = lp.LabPipelines(Sessions(users.values()), LabAccess(PgAccessStore(connect)), store=store,
-                        objects=objects, log=FakeLabelLog(), ledger=ledger, evals=evals)
+                        objects=objects, log=log, ledger=ledger, evals=evals, teachers=teachers)
     app = FastAPI()
     lp.register(app, support.runtime(), x)
     refusal = lab_auth.refusal
@@ -136,10 +158,24 @@ def main() -> None:
             "recipient_provider_org_id": NEMO}),))
         return {"revoked": True}
 
+    @app.post("/_test/teacher-mode")
+    async def teacher_mode(request: Request):
+        """The local teacher fake answers `ok`, or `drop`s (a 504: the outcome is unknown)."""
+        fake.mode = (await request.json())["mode"]
+        return {"mode": fake.mode, "posts": len(fake.posts)}
+
+    @app.post("/_test/teacher-failures")
+    async def teacher_failures(request: Request):
+        """P2's collect logs per-item failures for a chunk (D8's append-only log)."""
+        body = await request.json()
+        return {"inserted": await teacher_ledger.record_failures(
+            body["run_id"], [(f["sample_id"], f["reason"]) for f in body["failures"]])}
+
     world = {"A": NEMO, "B": l2.OTHER, "dataset": ref, "rubric": RUBRIC, "payer": p3w.PAYER,
              "train": sorted(splits.train), "holdout": sorted(splits.holdout),
              "validation": sorted(splits.validation),
-             "users": users, "tokens": {name: token(user) for name, user in users.items()}}
+             "users": users, "tokens": {name: token(user) for name, user in users.items()},
+             "teacher": j1.JUDGE_MODEL}
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
 
     async def serve():
@@ -152,6 +188,7 @@ def main() -> None:
     try:
         asyncio.run(serve())
     finally:
+        fake.close()
         conn.close()
 
 

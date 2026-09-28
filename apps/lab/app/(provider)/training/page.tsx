@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { requireProviderWorkspace } from "@/lib/auth/guard";
-import { approveCheckpoint, importCheckpoint, prepareTraining, runAction } from "@/lib/services/pipelines/actions";
+import { approveCheckpoint, approveTeachers, importCheckpoint, planTeachers, prepareTraining, runAction } from "@/lib/services/pipelines/actions";
 import { EXPORT_FORMATS, holds, isPreview, pipelinesPort } from "@/lib/services/pipelines/port";
-import { checkpointRows, refusalCopy, REFUSAL_COPY, runRows, type RunAction } from "@/lib/services/pipelines/view";
+import { checkpointRows, refusalCopy, REFUSAL_COPY, runRows, teacherRows, type RunAction } from "@/lib/services/pipelines/view";
 
 export const metadata = { title: "Training · infrx Lab" };
 
 const LABEL: Record<RunAction, string> = { submit: "Submit bundle", finish: "Mark training finished", cancel: "Cancel run" };
+const TEACHER_UNAVAILABLE = "Teacher batches are not available here: live teacher labelling is not enabled for this workspace.";
 
 // P4: external training over P3's records: the manual bundle, its run, returned checkpoints and their
 // held-out evaluation. Every outcome shown is whatever the records say after the redirect back here.
@@ -17,7 +18,7 @@ export default async function Training({ searchParams }: PageProps<"/training">)
   const refused = refusalCopy(query.refused);
   const actor = { providerId: workspace.providerId, role: workspace.role };
   const port = pipelinesPort();
-  const [runs, checkpoints] = await Promise.all([port.runs(actor), port.checkpoints(actor)]);
+  const [runs, checkpoints, batches] = await Promise.all([port.runs(actor), port.checkpoints(actor), port.teacherBatches(actor)]);
   if (!runs.ok || !checkpoints.ok) return <p role="alert">{REFUSAL_COPY[!runs.ok ? runs.reason : checkpoints.ok ? "unavailable" : checkpoints.reason]}</p>;
   const bundles = await Promise.all(runs.value.map((r) => port.bundle(actor, r.externalRunId)));
   const rows = runRows(workspace.role, runs.value);
@@ -88,8 +89,50 @@ export default async function Training({ searchParams }: PageProps<"/training">)
           </tbody>
         </table>
       )}
+      <h2>Teacher labelling</h2>
+      <p>A teacher model labels a dataset version&apos;s train and validation samples in chunks; the holdout is never sent. A batch is a dry run until an administrator approves it within its USD budget.</p>
+      {!batches.ok ? <p role="note">{TEACHER_UNAVAILABLE}</p> : batches.value.length === 0 ? <p>No teacher batches yet.</p> : (
+        <table>
+          <thead>
+            <tr><th>Batch</th><th>Teacher</th><th>Budget and ceiling</th><th>Plan</th><th>Chunks</th><th>Status</th><th /></tr>
+          </thead>
+          <tbody>
+            {teacherRows(workspace.role, batches.value).map((b) => (
+              <tr key={b.id}>
+                <td>{b.id} · {b.dataset}</td><td>{b.teacher}</td><td>{b.budget} · {b.ceiling}</td><td>{b.plan}. {b.labels}</td>
+                <td><ul>{b.chunks.map((c, i) => <li key={i}>{c}</li>)}</ul></td><td>{b.status}</td>
+                <td>
+                  {b.approvable && (
+                    <form action={approveTeachers}>
+                      <input type="hidden" name="batchId" value={b.id} />
+                      <button type="submit">Approve the live batch within its budget</button>
+                    </form>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {writer && (
         <>
+          {batches.ok && (
+            <form action={planTeachers}>
+              <h2>Plan a teacher batch</h2>
+              <input type="hidden" name="batchId" value={randomUUID()} />
+              <label>Dataset version <input name="datasetRef" required placeholder="lab:dataset:…@sha256:…" /></label>
+              <label>Rubric <input name="rubricRef" required placeholder="lab:rubric:…" /></label>
+              <label>Teacher model <input name="teacherModel" required /></label>
+              <label>Prompt version <input name="promptVersion" required /></label>
+              <label>Samples per chunk <input name="chunkSize" required type="number" min={1} max={200} defaultValue={50} /></label>
+              <fieldset>
+                <legend>Teacher budget (USD)</legend>
+                <label>Payer <input name="payerRef" required placeholder="lab:payer:… (pays the teacher)" /></label>
+                <label>Budget, USD <input name="budgetUsd" required placeholder="10.00000000" pattern="(0|[1-9][0-9]{0,11})\.[0-9]{8}" /></label>
+              </fieldset>
+              <button type="submit">Plan a dry run (nothing is sent)</button>
+            </form>
+          )}
           <form action={prepareTraining}>
             <h2>Prepare a training bundle</h2>
             <input type="hidden" name="externalRunId" value={randomUUID()} />

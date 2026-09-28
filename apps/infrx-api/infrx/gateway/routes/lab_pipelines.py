@@ -3,9 +3,10 @@
 `apps/lab/lib/services/pipelines/port.ts` in snake_case; lists are `{"data": [...]}`.
 
     GET  labels?dataset_ref=  disagreements?dataset_ref=  label-imports  label-exports
-         training-runs  training-runs/{id}/bundle  checkpoints
+         training-runs  training-runs/{id}/bundle  checkpoints  teacher-batches
     POST label-imports  assignments  reviews  adjudications  label-exports  training-runs
          training-runs/{id}/{submit|finish|cancel}  checkpoints  checkpoints/{id}/approve
+         teacher-batches  teacher-batches/{id}/approve
 
 (all under `/lab/v1/pipelines`, `?provider_org_id=`). As `/lab/v1/control` (`lab_auth`): the
 actor is re-derived per call from the forwarded session and the current membership before a
@@ -19,6 +20,15 @@ and adjudicator against the session user; the provider and user never come from 
   returns one but stores none), and a label export answers the export already made under its
   `export_id` - the same inputs again are the stored record, others a 409. A run's
   `external_run_id` and a checkpoint's id are P3's own write-once keys.
+* **A teacher batch (P2) is a dry run until an administrator approves it**: `POST
+  teacher-batches` stores the form's batch (write-once per `batch_id`) and answers the plan -
+  each chunk's reservation at the rate in force, the cost ceiling against the batch's USD budget
+  and its named payer - with nothing reserved or sent. `approve` is addressed to the batch
+  (R183: 404, then `manage_members`), refuses an unpriced or over-budget ceiling (409) and
+  live submission off (503), records the approval, then runs P2's `run_batch` (J2's egress to
+  the local teacher fake until P-10); a second approval resumes and sends nothing twice. Each
+  chunk's state (an ambiguous one included), hold, cost and per-item failures are read back
+  from P2's ledger (D8's `PgTeacherLedger`); `unreserved` is a chunk never reserved.
 * An expired export is `410 gone`. Nothing here settles, estimates or converts a cost: a
   run's cost is the provider-reported PROVIDER_USD or null (unknown).
 
@@ -42,11 +52,16 @@ from ...contracts import errors
 from ...contracts.lab import records as lab
 from ...contracts.v2.records import ProviderCapability as Cap
 from ...datasets.imports import write_once
+from ...contracts.v2.money_units import ProviderUsd
 from ...datasets.versions import MAX_EXPORT_TTL_S
+from ...judge.cost import JUDGE_MODE_LIVE, worst_case
+from ...judge.dryrun import MAX_CANDIDATES
+from ...judge.submit import require_own_payer
 from ...pipelines import annotations as p1
+from ...pipelines import teachers as p2
 from ...pipelines import training as p3
 from .. import lab_auth
-from .lab_evaluations import lab_actor, lab_body
+from .lab_evaluations import held, lab_actor, lab_body, require
 
 PIPELINES_PREFIX = "/lab/v1/pipelines"
 MAX_BODY_BYTES = 4 * 2**20                  # a label import's rows (the Lab caps them at 1 MB)
@@ -127,6 +142,19 @@ class ApproveBody(Body):
     external_run_id: lab.Uuid
 
 
+class TeacherBody(Body):
+    """A P2 batch's dry run. The batch id is the form's (write-once); nothing is sent."""
+
+    batch_id: lab.Uuid
+    dataset_ref: lab.RefOf("dataset")
+    rubric_ref: lab.RefOf("rubric")
+    teacher_model: str = Field(min_length=1, max_length=128)
+    prompt_version: str = Field(min_length=1, max_length=128)
+    payer_ref: lab.RefOf("payer")
+    budget_usd: str = Field(pattern=USD)
+    chunk_size: int = Field(ge=1, le=MAX_CANDIDATES)
+
+
 class RunListing(Protocol):
     """P3's `RunLedger` plus the listings WR-LAB2-4 asks of lab-sql (SR-P3-1)."""
 
@@ -147,6 +175,7 @@ class LabPipelines:
     log: object | None = None               # D8: P1's LabelLog
     ledger: object | None = None            # D8/D6J: P3's RunLedger + RunListing
     evals: object | None = None             # B3: P3's Evaluations
+    teachers: object | None = None          # P2's TeacherWiring (ledger: D8 PgTeacherLedger)
 
     def port(self, name: str):
         value = getattr(self, name)
@@ -399,6 +428,99 @@ async def approve(x: LabPipelines, who, checkpoint_id: str, body: ApproveBody) -
     return await _one_checkpoint(x, who.provider_org_id, checkpoint_id)
 
 
+# --- P2: teacher batches -------------------------------------------------------------------
+def _batch_key(provider: str, batch_id: str, name: str = "batch.json") -> str:
+    return f"lab/{provider}/teacher-batches/{batch_id}/{name}"
+
+
+def _teacher(stored: dict[str, Any], provider: str, user_id: str) -> p2.TeacherBatch:
+    return p2.TeacherBatch(
+        batch_id=stored["batch_id"], provider_org_id=provider, requested_by=user_id,
+        dataset_ref=stored["dataset_ref"], rubric_ref=stored["rubric_ref"],
+        teacher_model=stored["teacher_model"], prompt_version=stored["prompt_version"],
+        payer_ref=stored["payer_ref"], chunk_size=stored["chunk_size"])
+
+
+def _usd(amount) -> str | None:
+    return None if amount is None else str(amount)
+
+
+async def _teacher_batch(x: LabPipelines, provider: str, stored: dict) -> dict[str, Any]:
+    """The stored batch, its plan as of now and each chunk as P2's ledger records it."""
+    wiring, batch = x.port("teachers"), _teacher(stored, provider, stored["requested_by"])
+    now = await wiring.ledger.db_now()
+    planned = await p2.plan(batch, store=wiring.store, rates=wiring.rates, now=now)
+    rate = wiring.rates.rate_for(batch.teacher_model, now)
+    chunks = []
+    for run_id, ids in planned.chunks:
+        run = await wiring.ledger.run(run_id)
+        chunks.append({
+            "run_id": run_id, "samples": len(ids),
+            "ceiling_usd": rate and str(ProviderUsd(worst_case(rate, batch.ceilings, len(ids)))),
+            "state": "unreserved" if run is None else run.state,
+            "reserved_usd": run and str(run.reserved), "cost_usd": run and _usd(run.actual),
+            "sent": 0 if run is None else len(run.sent_ids),
+            "failures": [] if run is None else [{"sample_id": s, "reason": r}
+                                                for s, r in await wiring.ledger.failures(run_id)]})
+    approval = await x.port("objects").get(_batch_key(provider, batch.batch_id, "approval.json"))
+    ceiling = planned.worst_case
+    return {**_receipt(stored), "price_version": planned.price_version,
+            "ceiling_usd": _usd(ceiling),
+            "within_budget": ceiling is not None and ceiling <= ProviderUsd(stored["budget_usd"]),
+            "holdout": len(planned.omitted), "not_permitted": len(planned.not_permitted),
+            "approval": approval and json.loads(approval), "chunks": chunks}
+
+
+async def teacher_batches(x: LabPipelines, who) -> list[dict[str, Any]]:
+    objects, provider = x.port("objects"), who.provider_org_id
+    x.port("teachers")
+    keys = await objects.keys(f"lab/{provider}/teacher-batches/")
+    return [await _teacher_batch(x, provider, json.loads(await objects.get(key)))
+            for key in sorted(keys) if key.endswith("/batch.json")]
+
+
+async def plan_teachers(x: LabPipelines, who, body: TeacherBody) -> dict[str, Any]:
+    """The dry run: stored once per batch id, planned, nothing reserved or sent."""
+    objects, wiring, provider = x.port("objects"), x.port("teachers"), who.provider_org_id
+    try:
+        require_own_payer(provider, body.payer_ref)
+    except errors.Forbidden:
+        raise errors.InvalidRequest("the payer is not this provider's") from None
+    key, asked = _batch_key(provider, body.batch_id), _digest(body.model_dump(mode="json"))
+    if await objects.get(key) is None:
+        await held(wiring.store.resolve(body.dataset_ref, provider_org_id=provider))
+        await write_once(objects, key, lab.canonical({
+            **body.model_dump(mode="json"), "requested_by": who.user_id,
+            "request_sha256": asked}))
+    stored = json.loads(await objects.get(key))
+    if stored["request_sha256"] != asked:
+        raise errors.IdempotencyConflict("the batch id names another batch")
+    return await _teacher_batch(x, provider, stored)
+
+
+async def approve_teachers(x: LabPipelines, who, batch_id: str) -> dict[str, Any]:
+    """The administrator's live submit, within the batch's budget; a resume sends nothing
+    twice (P2's run ids and J2's one submit intent per run)."""
+    objects, provider = x.port("objects"), who.provider_org_id
+    found = await objects.get(_batch_key(provider, batch_id))
+    if found is None:
+        raise errors.NotFound("no such teacher batch")
+    require(who, Cap.manage_members)
+    wiring, stored = x.port("teachers"), json.loads(found)
+    batch = _teacher(stored, provider, who.user_id)
+    now = await wiring.ledger.db_now()
+    ceiling = (await p2.plan(batch, store=wiring.store, rates=wiring.rates, now=now)).worst_case
+    if ceiling is None or ceiling > ProviderUsd(stored["budget_usd"]):
+        raise errors.StateConflict("the batch's cost ceiling is unpriced or over its budget")
+    if wiring.settings.judge_mode != JUDGE_MODE_LIVE:
+        raise errors.DependencyUnavailable("live teacher submission is off")
+    await objects.put_if_absent(_batch_key(provider, batch_id, "approval.json"), lab.canonical({
+        "approved_by": who.user_id, "approved_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")}),
+        "application/json")
+    await p2.run_batch(batch, wiring=wiring)
+    return await _teacher_batch(x, provider, stored)
+
+
 # --- the routes -----------------------------------------------------------------------------
 def _guarded(handler):
     """`lab_auth.guarded`, plus P1/P3's `Gone` (an expired export) as the port's `gone`."""
@@ -438,7 +560,8 @@ def register(app, rt, pipelines: LabPipelines | None = None):
     for path, read in (("/labels", labels), ("/disagreements", disagreements)):
         route("GET", path, read, listing=True, query=("dataset_ref",))
     for path, read in (("/label-imports", imports), ("/label-exports", exports),
-                       ("/training-runs", training_runs), ("/checkpoints", checkpoints)):
+                       ("/training-runs", training_runs), ("/checkpoints", checkpoints),
+                       ("/teacher-batches", teacher_batches)):
         route("GET", path, read, listing=True)
     route("GET", "/training-runs/{external_run_id}/bundle", bundle)
     route("POST", "/label-imports", import_labels, model=ImportBody, status=201)
@@ -452,4 +575,7 @@ def register(app, rt, pipelines: LabPipelines | None = None):
               lambda x, who, rid, op=op: move(x, who, rid, op))
     route("POST", "/checkpoints", import_checkpoint, model=CheckpointBody, status=201)
     route("POST", "/checkpoints/{checkpoint_id}/approve", approve, model=ApproveBody)
+    route("POST", "/teacher-batches", plan_teachers, model=TeacherBody, status=201)
+    route("POST", "/teacher-batches/{batch_id}/approve", approve_teachers,
+          capability=Cap.read_aggregate_health)       # R183: the batch first, then the role
     return x
