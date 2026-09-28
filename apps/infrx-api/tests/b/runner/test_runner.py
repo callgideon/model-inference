@@ -364,7 +364,7 @@ def test_b1_a_created_run_resumes_after_a_revocation_and_ends_revoked() -> None:
     assert again == frozen
     report = run(w.runner(worker="w2").run(again))
     assert report["failures"] == {i: "revoked" for i in w.ids} and len(w.wallet.calls) == 1
-    assert report["cases"] == {"failed": 3} and report["state"] == "succeeded"
+    assert report["cases"] == {"failed": 3} and report["state"] == "failed"
     with pytest.raises(errors.NotFound):
         resume(provider=OTHER)
     with pytest.raises(errors.InvalidRequest, match="evaluator"):

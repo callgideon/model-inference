@@ -238,7 +238,8 @@ def case_names() -> set[str]:
 
 
 def stack_case_names() -> set[str]:
-    """Every running scenario case, except j11 (a FAIL on this base: open issue E6L-O1)."""
+    """Every running scenario case, except j11 (NOT RUN[L3]: H1 now gets the clip's media
+    (E6L-O1 fixed), and HttpDevEndpoint refuses media until L3's dev target merges)."""
     return {name for file in SCENARIO_FILES
             for name in re.findall(r"^def (test_j\d\d_\w+)\(", (HERE / file).read_text(), re.M)} \
         - {"test_j11_a_finite_video_case_reaches_the_dev_endpoint"}

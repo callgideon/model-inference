@@ -243,3 +243,44 @@ def test_r3_unmeasured_or_inconclusive_claims_nothing():
     out = compare(rep=report("inconclusive", reasons=["coverage 3/100"]))
     assert out["outcome"] == "inconclusive" and out["reasons"] == ["coverage 3/100"]
     assert not out["optimization_claimed"]
+
+
+# --- R3.d storage (WR-LSQ-6) ---------------------------------------------------------------
+class Data:
+    """D7's three writes R3 makes, in memory, in call order."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def publish(self, payload, *, provider_org_id, actor):
+        self.calls.append(("publish", payload["schema"], provider_org_id, actor))
+        return lab.ref_of(payload)
+
+    async def put_eval_report(self, report_, *, provider_org_id, actor):
+        self.calls.append(("put_eval_report", report_["report_digest"], provider_org_id, actor))
+        return report_["report_digest"]
+
+    async def put_variant_comparison(self, comparison, *, provider_org_id, actor):
+        self.calls.append(("put_variant_comparison", comparison["report_digest"],
+                           provider_org_id, actor))
+        return digest(comparison)
+
+
+def test_r3_a_comparison_is_stored_after_its_variant_and_report():
+    """0040 rests a comparison on the provider's published variant and stored B2 report: R3
+    writes them first, in that order; a comparison of another variant or report writes
+    nothing."""
+    rep = report()
+    result = compare(rep=rep)
+    data = Data()
+    got = asyncio.run(r3.store(data, VARIANT, result, rep, provider_org_id=P, actor="dev@p"))
+    assert got == digest(result)
+    assert data.calls == [("publish", "lab.optimization_variant.1", P, "dev@p"),
+                          ("put_eval_report", rep["report_digest"], P, "dev@p"),
+                          ("put_variant_comparison", rep["report_digest"], P, "dev@p")]
+    other = register(variant=ident(quantization="fp8"))
+    untouched = Data()
+    for bad in ((other, result, rep), (VARIANT, result, report("inconclusive"))):
+        with pytest.raises(errors.InvalidRequest, match="not of this variant"):
+            asyncio.run(r3.store(untouched, *bad, provider_org_id=P, actor="dev@p"))
+    assert untouched.calls == []

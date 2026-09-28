@@ -4,9 +4,10 @@
 evaluator refs, seed, `max_cases` and budgets, published through D7 (content-addressed, so
 the same record is the same `run_ref`) and created there (`lab_create_run`: the scheduling
 gate refuses a sample whose grant is not current, and the cases are the first `max_cases`
-sample ids, R168). The evaluator has no D7 table yet (R167), so its ref's digest is the
-sha256 of its spec's canonical JSON (`evaluator_ref`): a spec that is not the one the run
-names is refused. The spec holds the metric, the reference path into the case and H1's
+sample ids, R168). The evaluator's ref digest is the sha256 of its spec's canonical JSON
+(`evaluator_ref`): a spec that is not the one the run names is refused, and the spec is
+registered in D7 (`put_evaluator`, 0034 R167) before the run is published, since D7 refuses
+a run or a result under an unregistered evaluator. The spec holds the metric, the reference path into the case and H1's
 per-case replay bounds. A run spends provider_dev CREDIT, so it must carry a CREDIT budget.
 `Frozen` also carries the dataset's `split_digest` and its holdout cases (WR-N-4: D7 has
 just refused scheduling unless every sample's grant is current for provider_sharing, so at
@@ -64,7 +65,7 @@ from ...contracts.lab import records as lab
 from ...contracts.v2 import records as v2
 from ...contracts.v2.money_units import Credit
 from ...contracts.v2.records import ProviderCapability
-from ...datasets.imports import sample_key
+from ...datasets.imports import media_key, sample_key
 from ...datasets.versions import split_digest
 from ...harnesses.replay import Bounds, Replayer, ReplayBoundExceeded
 from ...lab.access import LabAccess
@@ -92,6 +93,17 @@ class EvaluatorSpec(lab.LabModel):
 def evaluator_ref(spec: dict[str, Any], *, provider_org_id: str, evaluator_id: str) -> str:
     digest = hashlib.sha256(lab.canonical(spec)).hexdigest()
     return f"lab:evaluator:{provider_org_id}:{evaluator_id}@sha256:{digest}"
+
+
+def case_of(provider_org_id: str, content: dict[str, Any]) -> dict[str, Any]:
+    """The case H1 replays from N1's content object. A finite-video clip (N1 stores
+    `media_digest` and `span_ms`) also carries what H1's `finite_video` adapter reads:
+    `sample.media_ref`, the clip's media key, and `sample.duration_ms`, the span (E6L-O1)."""
+    if "media_digest" in content:
+        start, end = content["span_ms"]
+        content = {**content, "media_ref": media_key(provider_org_id, content["media_digest"]),
+                   "duration_ms": end - start}
+    return {"sample": content}
 
 
 @dataclass(frozen=True)
@@ -157,6 +169,8 @@ async def freeze(store, payload: dict[str, Any], *, evaluator: dict[str, Any],
     run = lab.parse(payload)
     limit = _checked(run, evaluator)
     await may_schedule(access, user_id=user_id, provider_org_id=provider_org_id)
+    await store.put_evaluator(evaluator, provider_org_id=provider_org_id, actor=user_id,
+                              evaluator_id=lab.REF_RE.fullmatch(run.evaluator_ref).group(3))
     run_ref = await store.publish(payload, provider_org_id=provider_org_id, actor=user_id)
     await store.create_run(run_ref, provider_org_id=provider_org_id)
     return await _pinned(store, run, run_ref, evaluator, limit)
@@ -264,7 +278,7 @@ class Runner:
                                                      sample.content_digest))
             if raw is None:
                 return await self._finish(lease, "failed", reason="missing_content")
-            case = {"sample": json.loads(raw)}
+            case = case_of(f.run.provider_org_id, json.loads(raw))
             replayer = Replayer(f.harness, self._deployment, self._bridge(lease, bill, loop),
                                 self._recordings, Bounds(spec["max_requests"],
                                                          spec["max_bytes"], spec["max_seconds"]))
@@ -342,14 +356,10 @@ class Runner:
 
     async def _release(self, lease, bill: _Bill) -> None:
         """Give a 402's attempt back: the case is pending with the attempt uncounted."""
-        # ponytail: 0029 has no lab_release_attempt yet (WR-B-2(d)); on PgLabDataStore the
-        # lease expires and counts toward max_attempts until it does.
-        release = getattr(self._store, "release", None)
-        if release is not None:
-            try:
-                await release(lease)
-            except errors.StaleLease:
-                pass
+        try:
+            await self._store.release(lease)            # 0034 lab_release_attempt (B-R1)
+        except errors.StaleLease:
+            pass
         self._abandon(lease["case_id"], bill)
 
     def _abandon(self, case_id: str, bill: _Bill | None) -> None:

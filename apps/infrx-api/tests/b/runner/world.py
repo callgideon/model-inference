@@ -121,13 +121,17 @@ class FakeEvalStore(FakeLabStore):
         self.cases: dict[tuple[str, str], dict] = {}
         self.attempts: dict[tuple[str, str, int], dict] = {}
         self.results: dict[tuple[str, str, str], dict] = {}
+        self.evaluators: set[str] = set()
 
     async def publish(self, payload, *, provider_org_id, actor) -> str:
         """N's fake publishes manifests; a harness or run record is only content-addressed."""
         if payload.get("schema") == "lab.dataset_manifest.1":
             return await super().publish(payload, provider_org_id=provider_org_id, actor=actor)
-        if records.parse(payload).provider_org_id != provider_org_id:
+        record = records.parse(payload)
+        if record.provider_org_id != provider_org_id:
             raise errors.Forbidden("a provider publishes only its own records")
+        if isinstance(record, records.EvalRun) and record.evaluator_ref not in self.evaluators:
+            raise errors.NotFound("no such evaluator for this provider")    # 0034 R167
         return self.catalog.publish(payload)
 
     def _run(self, run_id, provider) -> dict:
@@ -135,6 +139,12 @@ class FakeEvalStore(FakeLabStore):
         if run is None or run["provider"] != provider:
             raise errors.NotFound("no such run for this provider")
         return run
+
+    async def put_evaluator(self, spec, *, provider_org_id, evaluator_id, actor) -> str:
+        """D7's lab_put_evaluator (0034, R167): content-addressed, idempotent."""
+        ref = evaluator_ref(spec, provider_org_id=provider_org_id, evaluator_id=evaluator_id)
+        self.evaluators.add(ref)
+        return ref
 
     async def create_run(self, run_ref, *, provider_org_id):
         record = self.catalog.resolve(run_ref, provider_org_id=provider_org_id)
@@ -219,10 +229,9 @@ class FakeEvalStore(FakeLabStore):
                                                                   "body": r["body"]}
         a.update(state=outcome, digest=digest, cost=cost)
         self.cases[key[:2]]["state"] = "done" if outcome == "succeeded" else "failed"
-        run = self.runs[key[0]]
-        if not any(c["state"] in ("pending", "leased") for k, c in self.cases.items()
-                   if k[0] == key[0]):
-            run["state"] = "succeeded"
+        mine = [c["state"] for k, c in self.cases.items() if k[0] == key[0]]
+        if not any(s in ("pending", "leased") for s in mine):
+            self.runs[key[0]]["state"] = "succeeded" if "done" in mine else "failed"  # 0034 F4
         return lease
 
     async def release(self, lease):

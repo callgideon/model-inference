@@ -13,9 +13,9 @@ H1/B1/B2/B3 code, and synthetic dev endpoints over HTTP - nothing else.
   allocation, a debit per admitted request, 402 when empty, a replay per Idempotency-Key)
   served as `/v1/chat/completions` on `runner.ENDPOINT_PORTS`, reached through B1's
   `HttpDevEndpoint`. Each answers by the benchmark's question id.
-* **B2's input**: `case_records` assembles B2's case records from D7's rows (results,
-  attempts' costs, case states) and the manifest (cluster = group key, slices from the row):
-  no product function does that yet (open issue E6L-O2).
+* **B2's input**: `case_records` is B2's `reports.case_records` over D7's `run_results`
+  (results, attempts' costs, case states) and the manifest (cluster = group key, slices at
+  `sample.original.slice`) - E6L-O2, WR-LSQ-INT-2.
 
 `NOT_RUN` is the one vocabulary for a case that waits on an unmerged lane: the runner maps
 it to NOT RUN, never a pass, and the reason carries the exact rerun command.
@@ -259,32 +259,12 @@ class Lab:
             run_id)}
 
     def case_records(self, frozen) -> list[dict]:
-        """B2's input from D7: a result is its score; a failed case an error (scored 0); a
-        case with neither is missing (no record)."""
-        from infrx.datasets.imports import sample_key
-        run_id = frozen.run.run_id
-        results = self.results(run_id)
-        costs: dict[str, list] = {}
-        for case, unit, value in self.sql(
-                "select case_id::text, cost_unit, cost_value::text from infrx.lab_eval_attempts "
-                "where run_id = %s and cost_value is not null order by attempt", run_id):
-            costs.setdefault(case, []).append({"unit": unit, "value": value})
-        states = dict(self.sql("select case_id::text, state from infrx.lab_eval_cases "
-                               "where run_id = %s", run_id))
-        samples = {s.sample_id: s for s in frozen.manifest.samples}
-        records = []
-        for case in frozen.cases:
-            body = json.loads(run(self.objects.get(sample_key(
-                self.NEMO, samples[case].content_digest))))
-            base = {"case_id": case, "cluster": samples[case].group_key,
-                    "slices": [body["original"]["slice"]] if "slice" in body["original"] else [],
-                    "costs": costs.get(case, [])}
-            if case in results:
-                records.append({**base, "score": results[case]["score"],
-                                "latency_ms": results[case]["latency_ms"]})
-            elif states.get(case) == "failed":
-                records.append({**base, "score": None, "error": "failed"})
-        return records
+        """B2's input from D7 through B2's own `reports.case_records` (E6L-O2): a result is its
+        score; a failed case an error (scored 0); a case with neither is missing (no record)."""
+        from infrx.evaluation import reports
+        return run(reports.case_records(
+            frozen, run(self.store.run_results(frozen.run.run_id, provider_org_id=self.NEMO)),
+            self.objects, slice_path="sample.original.slice"))
 
 
 # ------------------------------------------------------------------ evaluator and endpoints

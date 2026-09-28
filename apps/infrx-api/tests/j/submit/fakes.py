@@ -169,6 +169,27 @@ class Projection:
         return [r for r in self.rows if r.org_id == org_id and r.request_id == request_id]
 
 
+class Tombstones:
+    """T3's `trace_deletions` in memory: what `Retention` reads (`get`) and writes (`put`)."""
+
+    def __init__(self) -> None:
+        self.stones: dict[tuple[str, str], dict] = {}
+
+    async def get(self, pairs) -> dict:
+        return {pair: dict(self.stones[pair]) for pair in pairs if pair in self.stones}
+
+    async def put(self, stones) -> None:
+        for stone in stones:
+            self.stones.setdefault((stone.org_id, stone.request_id), {})[stone.scope] = stone
+
+
+def retention(projection: Projection, objects: InMemoryObjectStore, *, now: datetime = T0,
+              tombstones: Tombstones | None = None):
+    """T3's real `Retention` over the projection and objects in memory, its clock at `now`."""
+    from infrx.traces.retention import Retention
+    return Retention(tombstones or Tombstones(), projection, None, objects, clock=lambda: now)
+
+
 def rid(n: int) -> str:
     return str(uuid.UUID(int=n, version=4))
 

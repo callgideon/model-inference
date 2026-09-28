@@ -225,3 +225,54 @@ def test_b2_the_t_quantile_is_close_to_students() -> None:
     assert reports.t_quantile(0.975, 3) == pytest.approx(3.182, abs=0.03)
     assert reports.t_quantile(0.975, 9) == pytest.approx(2.262, abs=0.005)
     assert reports.t_quantile(0.975, 10_000) == pytest.approx(1.960, abs=0.001)
+
+
+def test_b2_case_records_are_built_from_d7_rows_and_the_manifest() -> None:
+    """E6L-O2 (WR-B-8): one function turns D7's `run_results` read into B2's records - a
+    result only under the run's own evaluator, a failed case without one an error, a pending
+    case missing; every attempt's cost; the sample's group key as its cluster; the slices at
+    the declared path (a name or a list), none without one."""
+    import asyncio
+    import json
+    from types import SimpleNamespace as NS
+
+    from infrx.datasets.imports import sample_key
+    from infrx.media.store import InMemoryObjectStore
+    ev = f"lab:evaluator:{NEMO}:{uid(1, 0xe0)}@sha256:" + "3" * 64
+    other = ev[:-64] + "4" * 64
+    ids = [uid(i, 0xcb) for i in range(1, 5)]
+    objects = InMemoryObjectStore()
+    slices = ["math", ["a", "b"], None, "x"]
+    for i, cid in enumerate(ids):
+        original = {} if slices[i] is None else {"slice": slices[i]}
+        asyncio.run(objects.put_if_absent(sample_key(NEMO, f"sha256:{i}"),
+                                          json.dumps({"original": original}).encode(),
+                                          "application/json"))
+    frozen = NS(run=NS(provider_org_id=NEMO, evaluator_ref=ev), cases=tuple(ids),
+                manifest=NS(samples=[NS(sample_id=cid, group_key=f"g{i % 2}",
+                                        content_digest=f"sha256:{i}")
+                                     for i, cid in enumerate(ids)]))
+    cost = {"unit": "CREDIT", "value": "0.50000000"}
+    body = json.dumps({"score": 1.0, "latency_ms": 12})
+    rows = {"case_states": [{"case_id": ids[0], "state": "done"},
+                            {"case_id": ids[1], "state": "failed"},
+                            {"case_id": ids[2], "state": "pending"},
+                            {"case_id": ids[3], "state": "done"}],
+            "attempt_rows": [{"case_id": ids[0], "cost": cost}, {"case_id": ids[0], "cost": cost},
+                             {"case_id": ids[1], "cost": cost}, {"case_id": ids[2], "cost": None},
+                             {"case_id": ids[3], "cost": None}],   # a done case's null cost
+            "results": [{"case_id": ids[0], "evaluator_ref": ev, "body": body},
+                        {"case_id": ids[1], "evaluator_ref": other, "body": body},
+                        {"case_id": ids[3], "evaluator_ref": ev,
+                         "body": json.dumps({"score": None, "latency_ms": 7})}]}
+    got = asyncio.run(reports.case_records(frozen, rows, objects,
+                                           slice_path="sample.original.slice"))
+    assert got == [
+        {"case_id": ids[0], "cluster": "g0", "costs": [cost, cost], "slices": ["math"],
+         "score": 1.0, "latency_ms": 12},
+        {"case_id": ids[1], "cluster": "g1", "costs": [cost], "slices": ["a", "b"],
+         "score": None, "error": "failed"},
+        {"case_id": ids[3], "cluster": "g1", "costs": [], "slices": ["x"], "score": None,
+         "latency_ms": 7}]
+    bare = asyncio.run(reports.case_records(frozen, rows, objects))
+    assert [r["slices"] for r in bare] == [[], [], []]

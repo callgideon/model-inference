@@ -24,10 +24,14 @@ reported beside the estimates, apart from the observed facts. A verdict is `non_
 insufficient verdict is `inconclusive`; otherwise `accept`. `improved` is claimed only when
 the overall lower bound is above 0. The report binds both run refs, the universe and the
 protocol by digest and carries its own digest; storing it is lab-sql's (a schema request).
+
+**B2.d `case_records`** (E6L-O2, WR-B-8) builds one B1 run's records from D7's
+`run_results` read (0034) and the run's frozen manifest, so no caller assembles them by hand.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from statistics import NormalDist
 from typing import Any, Literal
@@ -36,7 +40,9 @@ from pydantic import Field, ValidationError
 
 from ...contracts import errors
 from ...contracts.lab import records as lab
+from ...datasets.imports import sample_key
 from ...harnesses.replay import compare as pair_runs
+from ..runner import _MISSING, _at, case_of
 
 
 class SliceRule(lab.LabModel):
@@ -180,3 +186,39 @@ def compare(baseline_run: dict[str, Any], baseline: list[dict[str, Any]],
               "estimates": {"basis": rules.metric_source, "overall": overall, "slices": slices},
               "decision": decision}
     return {**report, "report_digest": _digest(report)}
+
+
+async def case_records(frozen, rows: dict[str, Any], objects, *,
+                       slice_path: str | None = None) -> list[dict[str, Any]]:
+    """B2's case records of one B1 run (`frozen`: `runner.Frozen`) from D7's `run_results`
+    (`case_states`, `attempt_rows`, `results`). A case with a result under the run's own
+    evaluator is its score and latency; a failed case without one is an error (scored 0); any
+    other case is missing (no record). Each record carries every attempt's cost, its sample's
+    `group_key` as the source cluster, and the slice name(s) at `slice_path` into the case H1
+    replayed (none without a path)."""
+    run = frozen.run
+    results = {r["case_id"]: json.loads(r["body"]) for r in rows["results"]
+               if r["evaluator_ref"] == run.evaluator_ref}
+    costs: dict[str, list[dict[str, str]]] = {}
+    for attempt in rows["attempt_rows"]:
+        if attempt["cost"]:
+            costs.setdefault(attempt["case_id"], []).append(attempt["cost"])
+    states = {c["case_id"]: c["state"] for c in rows["case_states"]}
+    samples = {s.sample_id: s for s in frozen.manifest.samples}
+    records = []
+    for cid in frozen.cases:
+        sample = samples[cid]
+        found = _MISSING
+        if slice_path:
+            raw = await objects.get(sample_key(run.provider_org_id, sample.content_digest))
+            if raw is not None:
+                found = _at(case_of(run.provider_org_id, json.loads(raw)), slice_path)
+        base = {"case_id": cid, "cluster": sample.group_key, "costs": costs.get(cid, []),
+                "slices": [] if found is _MISSING else [found] if isinstance(found, str)
+                else list(found)}
+        if cid in results:
+            records.append({**base, "score": results[cid]["score"],
+                            "latency_ms": results[cid]["latency_ms"]})
+        elif states.get(cid) == "failed":
+            records.append({**base, "score": None, "error": "failed"})
+    return records
