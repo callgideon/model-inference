@@ -1,0 +1,34 @@
+{
+ "a_policy_naming_l3s_ref_routes": "DependencyUnavailable",
+ "alias_serving_ref_when_promoted": [
+  "lab:serving:b0000001-0000-4000-8000-000000000001:00000de8-0000-4000-8000-000000000001@sha256:39ddd03cf0fd0e38f3fb7ddd3dd39de9115984892e4bbb083f930e4836124b01",
+  2
+ ],
+ "decisions": [
+  [
+   "expand",
+   "approved",
+   "00000091-0000-4000-8000-0000000000e8",
+   []
+  ],
+  [
+   "rollback",
+   "rolled_back",
+   "00000091-0000-4000-8000-0000000000e8",
+   [
+    "operator:e8l drill"
+   ]
+  ]
+ ],
+ "listing_after": [
+  2,
+  "00000de8-0000-4000-8000-000000000001"
+ ],
+ "listing_before": [
+  1,
+  "c0000004-0000-4000-8000-000000000004"
+ ],
+ "policy_candidates": [
+  "lab:serving:b0000001-0000-4000-8000-000000000001:0000005e-0000-4000-8000-000000000002@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+ ]
+}

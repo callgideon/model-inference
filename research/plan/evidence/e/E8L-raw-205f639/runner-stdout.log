@@ -1,0 +1,15 @@
+[ok  ] preflight: {"docker": "29.6.2", "images": {"postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb678…
+[ok  ] services: {"containers": ["infrx-e8l-clickhouse", "infrx-e8l-postgres", "infrx-e8l-s3", "infrx-e8l-valkey"], "versions": {"postgres": "PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit", "valkey": "8.1.1…
+[ok  ] migrate: {"applied": [["0001_init.sql", "b31ab5ad6117a88005cfa9dfbb878b15bcefba135b5d3151eaf2d8171831d2bc"], ["0002_seed_models.sql", "9f186e47ad8c88a1b7a97555f5ad0d6a49c3c3d5b8a66b78247e823fca629d38"], ["0003_pilot_durable_schem…
+    PASS  k01  R1 off: a live 100% canary on D9 changes nothing - the composed gateway keeps the relay's own accept, D9 is never asked, no assignment row
+    PASS  k02  shadow on D9 through G2's relay: the user's answer, job, hold and settlement are today's; the candidate duplicate runs bounded on the provider-funded endpoint and is dropped
+    PASS  k03  canary and A/B on D9: stable arms across retries, bounded by weight, a raised weight keeps promised subjects (R179), pins, ineligible and session subjects never routed (R180), a store outage is 503 (R181)
+    PASS  k04  a guardrail breach rolls back exactly once through D9's CAS under two controllers; future admissions only; a controller killed before L3's alias CAS converges on restart with no second decision
+    PASS  k05  non-inferiority and cost (B2): an accepting report is approved once; inconclusive blocks promotion; stale metrics or missing evidence hold; a slice regression under an aggregate gain rolls back; overspend rolls back and units never mix
+    FAIL  k06  a promoted candidate's alias rolls back through L3's CAS: the policy R1 routes is the one R2 converges
+    PASS  k07  R3: a variant registered through W3's probe over HTTP, compared on a B2 report, stored through D7; incompatible variants and unmeasured load claims refused
+ NOT RUN  k08  R3 parity measured on an allocated supported GPU target
+ NOT RUN  k09  the I7 controller process killed and restarted mid-rollout
+ NOT RUN  k10  the Lab releases UI: verdict, proposal, approval and emergency rollback
+cells {'ROLLOUT-PIN': 'NOT RUN', 'ROLLOUT-RECOVER': 'FAIL', 'OPT-PARITY': 'NOT RUN'}
+gate FAIL -> /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e8l-fix/run/verdict.json
