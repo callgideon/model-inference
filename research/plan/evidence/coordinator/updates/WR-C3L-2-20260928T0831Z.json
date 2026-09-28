@@ -1,0 +1,45 @@
+{
+ "task": "WR-C3L-2",
+ "slice": "LW4 judge-lw4 task 3: the Lab judge page app/(provider)/judge posting C3L's four actions; run id minted once per render",
+ "activity": "review",
+ "head": "e4836faf",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-judge-lw4",
+ "branch": "codex/w5-judge-lw4",
+ "owned_paths": [
+  "apps/lab/app/(provider)/judge/",
+  "apps/lab/lib/services/judge/",
+  "apps/lab/tests/c/judge/"
+ ],
+ "commands": [
+  {
+   "cmd": "node --test tests/c/judge/page.test.ts (red, before copy.ts/page)",
+   "exit": 1,
+   "summary": "ERR_MODULE_NOT_FOUND copy.ts"
+  },
+  {
+   "cmd": "node --test tests/c/judge/*.test.ts",
+   "exit": 0,
+   "summary": "20/20"
+  },
+  {
+   "cmd": "make lab-test lab-lint lab-typecheck lab-build lab-mutants",
+   "exit": 0,
+   "summary": "98 tests 94 pass 4 skipped; lint/typecheck/build clean (/judge built); runners 69/47/20/42/36/72 killed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1.5,
+  "confidence": "medium",
+  "basis": "nav wiring + PostgREST rerun once SR-C3L-1 merges",
+  "at": "2026-09-28T08:31:53Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-C3L-2-NAV (coordinator): apps/lab/app/(provider)/layout.tsx nav gains <Link href=\"/judge\">Judge</Link>"
+ ],
+ "evidence": [
+  "research/plan/evidence/c/WR-C3L-2-e4836fa.md"
+ ]
+}
