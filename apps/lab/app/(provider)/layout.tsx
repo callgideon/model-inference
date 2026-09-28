@@ -44,7 +44,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
           {access.workspaces.length > 1 && <Workspaces workspaces={access.workspaces} />}
           <SignOut />
           <nav>
-            <Link href="/overview">Overview</Link> · <Link href="/models">Models</Link> · <Link href="/deployments">Deployments</Link> ·{" "}
+            <Link href="/overview">Overview</Link> · <Link href="/models">Models</Link> · <Link href="/deployments">Deployments</Link> · <Link href="/datasets">Datasets</Link> ·{" "}
             <Link href="/settings">Settings</Link>
           </nav>
           {isPreview() && <p role="note">Preview: control records come from an in-memory stand-in, not the control service.</p>}
