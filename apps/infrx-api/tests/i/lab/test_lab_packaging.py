@@ -230,6 +230,88 @@ def test_i2l__a_broken_or_hijacking_lab_site_never_validates_so_the_app_edge_is_
     assert hijack.returncode != 0 and "ambiguous" in (hijack.stderr + hijack.stdout).lower()
 
 
+# WR-I2L-1's lib.sh half: edge_install validates each App site with the installed Lab sites
+# mounted where the running edge sees them (it mounts $CADDY_DIR whole), so the import resolves
+# during validation exactly as it will after the reload or the new container.
+LIB_ANCHOR = ('local src=$1 site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"}) f\n',
+              '"${site[@]}" -v "$src/$f:/etc/caddy/Caddyfile:ro"')
+LIB_WIRED = ('local src=$1 site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"}) f lab=()\n'
+             '  [ -d "$CADDY_DIR/lab" ] && lab=(-v "$CADDY_DIR/lab:/etc/caddy/lab:ro")\n',
+             '"${site[@]}" "${lab[@]}" -v "$src/$f:/etc/caddy/Caddyfile:ro"')
+
+
+def lib_as_wr_leaves_it() -> str:
+    """deploy/lib.sh as WR-I2L-1 leaves it (the change applied until the coordinator lands it)."""
+    lib = (DEPLOY / "lib.sh").read_text()
+    if LIB_WIRED[1] in lib:
+        return lib
+    for old, new in zip(LIB_ANCHOR, LIB_WIRED):
+        assert lib.count(old) == 1, f"lib.sh moved; re-anchor WR-I2L-1: {old!r}"
+        lib = lib.replace(old, new)
+    return lib
+
+
+DOCKER_SHIM = """#!/bin/bash
+# `docker run --rm` (the validation) is the real docker; the edge's other calls are recorded.
+echo "docker $*" >> "$SHIM_LOG"
+case "$1" in
+  run) [ "$2" = --rm ] && exec "$REAL_DOCKER" "$@" ;;
+  inspect) echo "$SHIM_RUNNING_IMAGE" ;;
+esac
+exit 0
+"""
+
+
+def edge_install(tmp_path: Path, app_site: str, running_image: str):
+    """lib.sh edge_install of an App release on a box whose edge already has the Lab site
+    installed (runbook section 5), with the pinned Caddy validating for real."""
+    real = shutil.which("docker")
+    caddy(tmp_path / "probe", {"Caddyfile": composed_main()})   # skips without docker/image
+    root, src, shim = tmp_path / "root", tmp_path / "release", tmp_path / "bin"
+    for d in (root / "etc/caddy/lab", root / "etc/caddy/infrx", src, shim):
+        d.mkdir(parents=True)
+    (root / "etc/caddy/lab" / SITE).write_text(site())
+    for rel in ("Caddyfile", "infrx/Caddyfile", "infrx/Caddyfile.maintenance"):
+        (root / "etc/caddy" / rel).write_text("# the running release\n")
+    (src / "Caddyfile").write_text(app_site)
+    (src / "Caddyfile.maintenance").write_text((DEPLOY / "Caddyfile.maintenance").read_text())
+    (shim / "docker").write_text(DOCKER_SHIM)
+    (shim / "docker").chmod(0o755)
+    lib = tmp_path / "lib.sh"
+    lib.write_text(lib_as_wr_leaves_it())
+    log = tmp_path / "docker.log"
+    done = subprocess.run(
+        ["bash", "-c", 'set -euo pipefail; . "$0"; edge_install "$1"', str(lib), str(src)],
+        capture_output=True, text=True, env={
+            "PATH": f"{shim}:/usr/bin:/bin", "INFRX_ROOT": str(root), "REAL_DOCKER": real,
+            "SHIM_LOG": str(log), "SHIM_RUNNING_IMAGE": running_image})
+    calls = log.read_text().splitlines() if log.exists() else []
+    return done, calls, root
+
+
+def test_i2l__an_app_release_that_conflicts_with_the_installed_lab_site_never_replaces_the_edge(tmp_path):
+    """Once the Lab site is installed, an App release (or a Caddy bump) is validated against it
+    before the edge is touched: a release claiming the Lab site's address is exit 4 with no
+    reload, no `docker rm -f caddy`, no new container and the running edge files unchanged, on a
+    reload (same image) and on a replacement (new image) alike; a release that composes with it
+    is installed. Oracle: lib.sh validating the App file alone would let an installed Lab file
+    fail the reload or keep a new edge container from starting, leaving App inference unrouted."""
+    address = re.search(r"^\{\$INFRX_LAB_CONTROL_SITE:([^}]+)\}", site(), re.M).group(1)
+    conflicting = composed_main() + f"\n{address} {{\n\trespond 200\n}}\n"
+    for n, running in enumerate((CADDY_IMAGE, "caddy:2.10")):
+        done, calls, root = edge_install(tmp_path / f"bad{n}", conflicting, running)
+        assert done.returncode == 4 and "does not validate" in done.stderr, (done.stderr, calls)
+        assert [c for c in calls if " validate " in c] and all(
+            "/etc/caddy/lab:ro" in c for c in calls if " validate " in c), calls
+        assert not [c for c in calls if c.startswith(("docker rm", "docker exec", "docker run -d"))]
+        assert (root / "etc/caddy/Caddyfile").read_text() == "# the running release\n"
+        assert (root / "etc/caddy/infrx/Caddyfile").read_text() == "# the running release\n"
+    done, calls, root = edge_install(tmp_path / "good", composed_main(), CADDY_IMAGE)
+    assert done.returncode == 0, (done.stderr, calls)
+    assert any(c.startswith("docker exec caddy caddy reload") for c in calls), calls
+    assert (root / "etc/caddy/Caddyfile").read_text() == composed_main()
+
+
 class _Upstream(http.server.BaseHTTPRequestHandler):
     def _answer(self):
         self.send_response(200)

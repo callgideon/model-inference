@@ -59,6 +59,9 @@ ORIGINS = "test_i2l__the_lab_has_its_own_origin_and_its_callbacks_are_the_only_a
 SITE = "test_i2l__the_lab_site_is_the_control_origin_and_nothing_else"
 VALIDATE = "test_i2l__a_broken_or_hijacking_lab_site_never_validates_so_the_app_edge_is_unchanged"
 LIVE = "test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down"
+APP_RELEASE = ("test_i2l__an_app_release_that_conflicts_with_the_installed_lab_site_never_"
+               "replaces_the_edge")
+LIB = "deploy/lib.sh"
 ROLLBACK = "test_i2l__lab_rollback_restarts_only_the_lab_on_its_previous_release"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -105,6 +108,10 @@ MUTANTS: tuple[Mutant, ...] = (
        S, r"(?i)^Bearer\s+sk-", r"(?i)^Bearer\s+sk_", LIVE),
     _m("control_down_is_a_bare_502", "the control service down is 'Lab unavailable'",
        S, "handle_errors 502 503 504 {", "handle_errors 404 {", LIVE),
+    _m("app_release_installed_unvalidated", "an App release that does not compose with the "
+       "installed Lab site never replaces the edge", LIB,
+       '|| die "$f does not validate with the pinned Caddy', '|| echo "$f does not validate with the pinned Caddy',
+       APP_RELEASE),
     _m("rollback_restarts_the_worker", "a Lab rollback restarts only the Lab",
        R, "sudo systemctl restart infrx-lab-control\n",
        "sudo systemctl restart infrx-lab-control infrx-worker\n", ROLLBACK),

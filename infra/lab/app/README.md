@@ -73,7 +73,10 @@ curl -fsS http://127.0.0.1:8003/readyz          # the L3 factory's readiness (WR
 
 ## 5. Install the site [OP]
 
-Needs WR-I2L-1 (the App edge's `import /etc/caddy/lab/*.caddy` line) in the running release.
+Needs WR-I2L-1 in the running release: the App edge's `import /etc/caddy/lab/*.caddy` line, and
+`lib.sh edge_install` validating every later App release with `/etc/caddy/lab` mounted, so an App
+release or a Caddy bump that conflicts with an installed Lab site stops at exit 4 before the edge
+is reloaded or replaced (remove the Lab site, section Disable, to ship such a release).
 Validate the App's site **with** the Lab's, then rename into place and reload; a file the pinned
 Caddy refuses never reaches the edge (the App keeps its current configuration).
 
