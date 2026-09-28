@@ -67,3 +67,11 @@ default-deny); the evaluator firing on a seeded `lab-traces.prom`; a stopped Cli
 
 Remaining for I2L-OBS: optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium; basis: one verify round
 (I2L took one fix round, 1-LO-1) on 5 small files.
+
+## Fix round (2026-09-28, code head 8e3e8e21)
+
+Detail and commands: `E5L-3da696a.md` § Fix round. I2L-OBS changes: judge health port 8014 → **8017** (8014-8016 are
+lab-workers' annotation/training/rollout); `alerts.json` gains the Lab-only `TraceGaugesDown` (`infrx_trace_gauges_up < 1`,
+page) so an exporter failure pages; README §4 adds the pin step (WR-OBS-5) and §6 the `TraceGaugesDown` runbook;
+WR-OBS-2 revised (Lab rules merged only when pinned) and WR-OBS-5 filed (`E5L-wiring/`). test_i2l_obs: 13 cases (3 new),
+41/41 layer-1 mutants killed.

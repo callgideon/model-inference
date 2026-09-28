@@ -1,0 +1,6 @@
+2026-09-28 09:11:59,356 INFO botocore.credentials Found credentials in environment variables.
+2026-09-28 09:11:59,514 INFO infrx.worker reconciliation gauges disabled: no monitor login
+2026-09-28 09:11:59,533 INFO infrx.media.retention retention sweep: 0 deleted, 0 retained, 0 delete failures, 0 lost acks, batch 0, in flight 0, oldest pending delete 0 s
+2026-09-28 09:12:00,709 INFO infrx.worker prepared 313a88dc-dbdb-43c6-b3b8-3771fc50642e: 1337 prompt tokens (engine /tokenize, 2 ms)
+2026-09-28 09:12:00,942 WARNING infrx.worker drained: 10 finished, 0 released [], ended []
+2026-09-28 09:12:00,942 WARNING infrx.worker drained preparation: 2 finished, 0 released [], ended []
