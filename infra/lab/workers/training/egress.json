@@ -1,0 +1,5 @@
+{
+  "comment": "I6: the external endpoints a Lab role may reach, one entry per approved adapter: {adapter, host, approval, payer_ref, budget_usd}. annotation = the live teacher (P-10), training = an automatic training connector (P-11). EMPTY until the operator records the approval (15-pending-inputs.md:20-21): the teacher stays dry-run, training stays the manual bundle. Read by preflight.py from the deployed checkout; a change is a reviewed commit, never an edit on the box. The rollout role never has an entry.",
+  "annotation": [],
+  "training": []
+}

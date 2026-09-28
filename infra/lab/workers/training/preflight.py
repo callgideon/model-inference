@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""I6/I7: a Lab annotation, training or rollout role's env file, checked before its unit starts.
+
+    /usr/bin/python3 infra/lab/workers/training/preflight.py --role training \
+        --env-file /etc/infrx-lab/training.env
+
+`ExecStartPre` of `infrx-lab-{annotation,training,rollout}.service`: exit 1 (the unit does not
+start) naming each refusal by setting and never printing a value. Stdlib only (the host's
+python3 runs it from the deployed checkout, so the approvals are the deployed commit's).
+
+* **Names.** Every setting is on the role's own list: `INFRX_IMAGE`, the database, object store,
+  egress allowlist and concurrency, plus - for the annotation (teacher, P-10) and training
+  (connector, P-11) roles only - that role's adapter, endpoint, token, USD budget and payer.
+  Anything else (a consumer secret, another purpose's token, cloud credentials, a proxy
+  override in any letter case) is refused. A bare `NAME` line is refused: docker's
+  `--env-file` would copy it unchecked from the calling environment.
+* **Adapters.** The default (`dry-run` teacher, `manual-bundle` training; rollout has none)
+  needs no approval and carries no endpoint, token, budget or payer (a stray one is refused,
+  so nothing turns on by editing one line). Any other adapter needs its role's entry in
+  `egress.json` (P-10 or P-11, empty until approved), an `https://<approved host>` endpoint,
+  a non-empty token (a failed secret lookup refuses; it never falls back to another
+  adapter), a finite USD budget above 0 and within the approval's, and exactly the
+  approval's named payer.
+* **Egress.** The unit sends every HTTP client through a dead proxy except `NO_PROXY` =
+  `LAB_EGRESS_ALLOW`; each of its entries must be exactly the object store's host
+  (`LAB_S3_ENDPOINT`) or the enabled adapter's approved host (no `*`, suffix, port or scheme).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from urllib.parse import urlsplit
+
+APPROVALS = Path(__file__).resolve().with_name("egress.json")
+COMMON = ("INFRX_IMAGE", "LAB_DATABASE_URL", "LAB_S3_BUCKET", "LAB_S3_ENDPOINT",
+          "LAB_EGRESS_ALLOW")
+# role -> (adapter setting, its default, endpoint/token prefix, approval id)
+ADAPTERS = {"annotation": ("LAB_ANNOTATION_TEACHER", "dry-run", "LAB_ANNOTATION_TEACHER", "P-10"),
+            "training": ("LAB_TRAINING_CONNECTOR", "manual-bundle", "LAB_TRAINING_CONNECTOR",
+                         "P-11")}
+ROLES = (*ADAPTERS, "rollout")
+
+
+def paid_names(role: str) -> tuple[str, ...]:
+    _, _, prefix, _ = ADAPTERS[role]
+    up = role.upper()
+    return (f"LAB_{up}_BUDGET_USD", f"{prefix}_URL", f"{prefix}_TOKEN", f"LAB_{up}_PAYER_REF")
+
+
+def allowed_names(role: str) -> set[str]:
+    names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY"}
+    if role in ADAPTERS:
+        names |= {ADAPTERS[role][0], *paid_names(role)}
+    return names
+
+
+def parse(text: str) -> tuple[dict[str, str], list[str]]:
+    """docker's --env-file: `NAME=VALUE` taken literally; `#` comments and blank lines."""
+    env, refusals = {}, []
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        name, eq, value = line.partition("=")
+        if not eq:
+            refusals.append(f"line {n}: a bare name copies the caller's environment")
+            continue
+        env[name] = value
+    return env, refusals
+
+
+def load_approvals(path: Path) -> dict[str, list[dict]]:
+    data = json.loads(path.read_text())
+    return {role: list(data.get(role, [])) for role in ADAPTERS}
+
+
+def _host(url: str) -> str | None:
+    parts = urlsplit(url)
+    return parts.hostname if parts.scheme == "https" else None
+
+
+def check(role: str, env: dict[str, str], approvals: dict[str, list[dict]]) -> list[str]:
+    """Every refusal, by setting name; [] = the unit may start. Pure."""
+    if role not in ROLES:
+        raise ValueError(f"unknown role {role!r}")
+    names = allowed_names(role)
+    refusals = [f"{name}: not a {role} setting" for name in sorted(env) if name not in names]
+    hosts = {_host(env["LAB_S3_ENDPOINT"])} if env.get("LAB_S3_ENDPOINT") else set()
+    if role in ADAPTERS:
+        setting, default, prefix, approval_id = ADAPTERS[role]
+        budget, url, token, payer = paid_names(role)
+        adapter = env.get(setting, default)
+        if adapter == default:
+            refusals += [f"{name}: set while {setting} is {default}"
+                         for name in paid_names(role) if name in env]
+        else:
+            approved = [a for a in approvals.get(role, []) if a["adapter"] == adapter]
+            if not approved:
+                refusals.append(f"{setting}: {adapter} has no {approval_id} approval")
+            else:
+                (approval,) = approved
+                hosts.add(approval["host"])
+                if _host(env.get(url, "")) != approval["host"]:
+                    refusals.append(f"{url}: not https://{approval['host']}")
+                if not env.get(token):
+                    refusals.append(f"{token}: the secret lookup failed (absent or empty)")
+                try:
+                    # NaN compares as InvalidOperation; Infinity is above any approval.
+                    cap = Decimal(approval["budget_usd"])
+                    ok = Decimal(0) < Decimal(env.get(budget, "")) <= cap
+                except InvalidOperation:
+                    ok = False
+                if not ok:
+                    refusals.append(f"{budget}: a USD amount above 0 and within the "
+                                    f"approval's {approval['budget_usd']}")
+                if not approval["payer_ref"] or env.get(payer) != approval["payer_ref"]:
+                    refusals.append(f"{payer}: not the approval's named payer")
+    entries = [e.strip() for e in env.get("LAB_EGRESS_ALLOW", "").split(",")]
+    refusals += [f"LAB_EGRESS_ALLOW: entry {n} is neither the object store nor an approved "
+                 f"endpoint" for n, entry in enumerate(entries, 1)
+                 if entry and entry not in hosts]
+    return refusals
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--role", required=True, choices=ROLES)
+    ap.add_argument("--env-file", required=True)
+    ap.add_argument("--approvals", default=str(APPROVALS))
+    a = ap.parse_args(argv)
+    env, refusals = parse(Path(a.env_file).read_text())
+    refusals += check(a.role, env, load_approvals(Path(a.approvals)))
+    for refusal in refusals:
+        print(f"FAIL {a.role}: {refusal}")
+    if not refusals:
+        print(f"PASS {a.role}")
+    return 1 if refusals else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
