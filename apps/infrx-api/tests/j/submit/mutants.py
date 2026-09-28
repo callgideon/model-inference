@@ -43,6 +43,12 @@ SENDING = "test_j2__a_run_still_submitting_is_not_reconciled_under_its_sender"
 ONCE = "test_j2__duplicate_and_late_results_settle_and_project_once"
 SCORES = "test_j2__malformed_foreign_and_no_media_results_are_never_a_pass"
 SKIPPED = "test_j2__a_result_for_a_sample_skipped_before_egress_is_stored_nowhere"
+L_ONE = "test_j2_ledger__one_intent_one_batch_and_the_worst_case_held"
+L_RACE = "test_j2_ledger__concurrent_runs_stay_under_the_payers_budget"
+L_REVOKED = "test_j2_ledger__a_revocation_before_egress_releases_the_hold"
+L_UNKNOWN = "test_j2_ledger__an_unknown_outcome_is_held_then_reconciled_from_evidence"
+L_RESULTS = "test_j2_ledger__results_of_the_sent_samples_are_stored_and_settled_once"
+L_GRANT = "test_j2_ledger__a_developer_without_a_judging_grant_reserves_nothing"
 H_HOST = "test_j2_http__egress_is_refused_to_anything_but_the_local_fake"
 H_TRIP = "test_j2_http__submit_and_collect_round_trip_through_the_fake"
 H_REJECT = "test_j2_http__a_rejection_releases_the_hold"
@@ -60,23 +66,23 @@ MUTANTS: tuple[Mutant, ...] = (
        J, ' or payer.group(1) != "payer" or', " or", PAYER),
     _m("permission_not_checked_first", "no reservation or read without a current grant (L2)",
        J, "    consent = await _permitted(job, user_id, wiring)",
-       '    consent = ConsentRef("unchecked", 1)', GRANT, WORLD, EXPIRED),
+       '    consent = ConsentRef("unchecked", 1)', GRANT, WORLD, EXPIRED, L_GRANT),
     _m("any_purpose_judges", "provider_sharing is not external_judging",
        J, "PURPOSE = DataPurpose.external_judging", "PURPOSE = DataPurpose.provider_sharing",
        GRANT),
     _m("questions_alone_send_answers", "a judge needs both content categories granted",
        J, "CATEGORIES = (DataCategory.request_content, DataCategory.response_content)",
-       "CATEGORIES = (DataCategory.request_content,)", GRANT),
+       "CATEGORIES = (DataCategory.request_content,)", GRANT, L_GRANT),
     _m("unpriced_model_reserves", "no approved rate, no reservation (typed refusal)",
        J, "    if rate is None:\n        raise", "    if False:\n        raise", UNPRICED,
        dies_by=("AttributeError",)),
     _m("reservation_is_one_sample", "the hold is the worst case over every sample",
        J, "worst_case(rate, job.ceilings, len(job.request_ids))",
-       "worst_case(rate, job.ceilings, 1)", WORST, RACE),
+       "worst_case(rate, job.ceilings, 1)", WORST, RACE, L_ONE, L_RACE),
     # --- the one submission ------------------------------------------------------------------
     _m("any_caller_egresses", "only the call that created the intent sends",
        J, "    if not mine:\n        return run", "    if False:\n        return run",
-       DOUBLE, UNKNOWN),
+       DOUBLE, UNKNOWN, L_ONE),
     _m("content_read_as_the_provider", "content is read with the grantor's organization bound",
        J, "wiring.objects, job.grantor_org_id,", "wiring.objects, job.provider_org_id,",
        CONTENT),
@@ -87,22 +93,22 @@ MUTANTS: tuple[Mutant, ...] = (
        J, "    if not items:\n", "    if False:\n", EMPTY),
     _m("no_recheck_before_egress", "the permission is checked again immediately before egress",
        J, "        await _permitted(job, user_id, wiring)\n    except errors.DomainError:",
-       "        pass\n    except errors.DomainError:", REVOKED),
+       "        pass\n    except errors.DomainError:", REVOKED, L_REVOKED),
     _m("revoked_run_keeps_its_hold", "a refusal before egress releases the hold",
        J, '        await ledger.release(run.run_id, "failed", "permission withdrawn before egress")',
-       "        pass", REVOKED),
+       "        pass", REVOKED, L_REVOKED),
     _m("rejection_is_ambiguous", "a definite rejection releases, it does not quarantine",
        J, "    except SubmitRejected as exc:", "    except ZeroDivisionError as exc:", REJECT),
     _m("unknown_outcome_released", "an unknown outcome keeps its hold (ambiguous)",
        J, "        return await ledger.quarantine(run.run_id,",
-       '        return await ledger.release(run.run_id, "failed",', UNKNOWN),
+       '        return await ledger.release(run.run_id, "failed",', UNKNOWN, L_UNKNOWN),
     # --- reconciliation and collection -------------------------------------------------------
     _m("evidence_ignored", "provider evidence of the batch is adopted",
        J, "    if external_id is None:\n        return await wiring.ledger.release",
-       "    if True:\n        return await wiring.ledger.release", ADOPT),
+       "    if True:\n        return await wiring.ledger.release", ADOPT, L_UNKNOWN),
     _m("no_record_keeps_the_hold", "no provider record releases the hold",
        J, '        return await wiring.ledger.release(run_id, "failed", "the provider has no such batch")',
-       "        return run", NONE),
+       "        return run", NONE, L_UNKNOWN),
     _m("submitting_run_reconciled", "only an ambiguous run is reconciled",
        J, '    run = await _run(wiring.ledger, run_id, "ambiguous")',
        "    run = await wiring.ledger.run(run_id)", SENDING),
@@ -111,10 +117,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "ScoreLedger(run.run_id, rubric.version, [s for s, _ in polled.items])", SCORES),
     _m("skipped_sample_projected", "a result for a sample skipped before egress is stored nowhere",
        J, "ScoreLedger(run.run_id, rubric.version, run.sent_ids)",
-       "ScoreLedger(run.run_id, rubric.version, run.sample_ids)", SKIPPED),
+       "ScoreLedger(run.run_id, rubric.version, run.sample_ids)", SKIPPED, L_RESULTS),
     _m("requested_ids_recorded_as_sent", "only the ids that leave are recorded as sent",
        J, 'record_sent(run.run_id, [item["sample_id"] for item in items])',
-       "record_sent(run.run_id, run.sample_ids)", SKIPPED),
+       "record_sent(run.run_id, run.sample_ids)", SKIPPED, L_RESULTS),
     _m("every_sample_has_media", "a sample sent without media is limited, never a pass",
        J, "media_available=sample_id in run.media_ids", "media_available=True", SCORES),
     _m("no_sample_has_media", "a sample sent with media is not limited",
@@ -124,7 +130,7 @@ MUTANTS: tuple[Mutant, ...] = (
        dies_by=("TypeError",)),
     _m("completed_run_collected_again", "collecting a completed run is a no-op",
        J, '    if run is not None and run.state == "completed":\n        return run',
-       '    if False:\n        return run', ONCE),
+       '    if False:\n        return run', ONCE, L_RESULTS),
     # --- egress --------------------------------------------------------------------------------
     _m("any_host_egresses", "egress only to the local fake until P-10",
        J, 'parts.scheme != "http" or parts.hostname not in LOCAL_HOSTS',

@@ -87,7 +87,8 @@ class ProviderResults:
 
 
 class JudgeLedger(Protocol):
-    """D6J (lab-sql): schema request SR-J2-1 in the J2 evidence names the RPCs."""
+    """D6J (lab-sql, SR-J2-1): on PostgreSQL `infrx.state.lab_consent.PgJudgeLedger` (0036,
+    WR-LSQ-4), gated by the `lab_submission` flag; `fakes.FakeJudgeLedger` in the unit cases."""
 
     async def db_now(self) -> datetime: ...
 
