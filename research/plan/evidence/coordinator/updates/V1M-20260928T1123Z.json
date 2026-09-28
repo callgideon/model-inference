@@ -1,0 +1,134 @@
+{
+ "task": "V1M",
+ "slice": "move + provider read (+ WR-LAB-API-5, WR-V2-1, WR-V2-5)",
+ "activity": "review (fix round 0-V1M-R1/1-V1M-R1)",
+ "head": "007f1c2d",
+ "worktree": ".claude/worktrees/codex-w5-v1m",
+ "branch": "codex/w5-v1m",
+ "owned_paths": [
+  "apps/lab/app/(provider)/requests/page.tsx",
+  "apps/lab/app/(provider)/requests/error.tsx",
+  "apps/lab/lib/services/traces/",
+  "apps/lab/components/traces/list/",
+  "apps/lab/tests/v/list/",
+  "apps/app/app/(console)/traces (git mv out)",
+  "apps/app/tests/v (git mv out)",
+  "apps/lab/components/traces/detail/port.ts (WR-V2-1 one line)",
+  "apps/lab/tests/v/detail/run-mutants.mjs (V2-X26 re-anchor)"
+ ],
+ "commands": [
+  {
+   "cmd": "node --test tests/v/list/adapter.test.ts (before port.ts)",
+   "exit": 1,
+   "summary": "ERR_MODULE_NOT_FOUND lib/services/traces/port.ts (red first)"
+  },
+  {
+   "cmd": "node tests/v/list/run-mutants.mjs",
+   "exit": 0,
+   "summary": "16 cases all named; 71/71 killed"
+  },
+  {
+   "cmd": "LAB_V1M_REAL=1 INFRX_D_TASK=lab-v1m node --test apps/lab/tests/v/list/stack.test.ts",
+   "exit": 0,
+   "summary": "6 pass: real route + PgAccessStore (57513) + ClickHouse (57540), the six L2 cases"
+  },
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "203 tests, 197 pass, 0 fail, 6 skipped"
+  },
+  {
+   "cmd": "make lab-lint",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-typecheck",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-build",
+   "exit": 0,
+   "summary": "/requests and /requests/[id] built"
+  },
+  {
+   "cmd": "make lab-mutants",
+   "exit": 0,
+   "summary": "all runners 0 survivors (V2 detail 42/42 re-anchored)"
+  },
+  {
+   "cmd": "make console-test (after git mv)",
+   "exit": 2,
+   "summary": "650/589/2 fail: C-PROV-02, I3-BOUND-01 (fixed by WR-V1M-3)"
+  },
+  {
+   "cmd": "make console-typecheck (after git mv)",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make console-mutants (after git mv)",
+   "exit": 2,
+   "summary": "tests/v/run-mutants.mjs missing; u (I3-M03) and c (PROV-04/07) ENOENT (fixed by WR-V1M-3)"
+  },
+  {
+   "cmd": "cd apps/app && pnpm build (after git mv)",
+   "exit": 0,
+   "summary": "builds"
+  },
+  {
+   "cmd": "WR-V1M-3 clone: console-test/typecheck/lint/mutants/pnpm build",
+   "exit": 0,
+   "summary": "650/591/0 fail; all mutant runners 0 survivors; build ok"
+  },
+  {
+   "cmd": "WR-LAB-API-6 clone: pytest tests/g/lab_traces (lab-v1m) + INFRX_MUTANTS=all stack",
+   "exit": 0,
+   "summary": "16 passed; 30/30 killed + 3 meta; Lab stack with granted detail 6/6"
+  },
+  {
+   "cmd": "tip 5e7c47b4 + merge c62b754d + old WR-V1M-4: pytest tests/i/lab/test_lab_packaging.py -k secret_names",
+   "exit": 1,
+   "summary": "AssertionError ['LAB_TRACES_API_URL'] (red first)"
+  },
+  {
+   "cmd": "same + regenerated WR-V1M-4 (lab.json lab-web + I2L runbook row): pytest tests/i/lab/",
+   "exit": 0,
+   "summary": "17 passed"
+  },
+  {
+   "cmd": "git apply --check WR-V1M-4-82db4a9.patch on claude/consumer-v1 5e7c47b4",
+   "exit": 0,
+   "summary": "applies (tip-based; needs 52e1d73f/19e80bf1 context)"
+  },
+  {
+   "cmd": "pytest tests/i/lab_eval on pristine 5e7c47b4",
+   "exit": 1,
+   "summary": "6 failed on the tip itself (72-observe-install.sh x I5), not this patch"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "lab-app lane's 4/8/16 for V1M, ~1.5 h spent; remaining = apply three proven patches, rerun App/Lab targets + the stack, one verify round",
+  "at": "2026-09-28T12:40Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-V1M-3 App-side removal: research/plan/evidence/v/WR-V1M-3-82db4a9.patch (Makefile console-mutants/lab-mutants, tests/c, tests/u, tests/i3, console.ts comment)",
+  "WR-V1M-4 Lab nav Requests link + .env.example LAB_TRACES_API_URL + its I2L declaration (infra/lab/app/lab.json lab-web, infra/lab/app/README.md): research/plan/evidence/v/WR-V1M-4-82db4a9.patch (apply on the tip)",
+  "WR-LAB-API-6 grant_ref on lab_traces GRANTED (+ G mutant, test, Lab stack assertion): research/plan/evidence/v/WR-LAB-API-6-82db4a9.patch"
+ ],
+ "evidence": [
+  "research/plan/evidence/v/V1M-82db4a9.md",
+  "research/plan/evidence/v/WR-LAB-API-5-82db4a9.md",
+  "research/plan/evidence/v/WR-V2-1-82db4a9.md",
+  "research/plan/evidence/v/WR-V2-5-82db4a9.md",
+  "research/plan/evidence/v/WR-V1M-3-82db4a9.patch",
+  "research/plan/evidence/v/WR-V1M-4-82db4a9.patch",
+  "research/plan/evidence/v/WR-LAB-API-6-82db4a9.patch"
+ ]
+}

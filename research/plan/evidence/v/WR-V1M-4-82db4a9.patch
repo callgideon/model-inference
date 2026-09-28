@@ -1,0 +1,50 @@
+diff --git a/apps/lab/.env.example b/apps/lab/.env.example
+index 1e9bcbf4..917c0cf4 100644
+--- a/apps/lab/.env.example
++++ b/apps/lab/.env.example
+@@ -11,3 +11,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
+ # LAB_PIPELINES_PREVIEW=1  # dev only: in-memory pipelines stand-in; ignored in production
+ # Server-only (never NEXT_PUBLIC_): the datasets backend base URL; unset = datasets pages are unavailable.
+ LAB_DATASETS_API_URL=
++# Server-only: lab-api's base URL for the provider trace read (GET /lab/v1/traces, LAB_TRACES on the API);
++# unset = the request list and request pages read nothing and say so.
++LAB_TRACES_API_URL=
+diff --git a/apps/lab/app/(provider)/layout.tsx b/apps/lab/app/(provider)/layout.tsx
+index 94407357..80a26933 100644
+--- a/apps/lab/app/(provider)/layout.tsx
++++ b/apps/lab/app/(provider)/layout.tsx
+@@ -44,7 +44,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
+           {access.workspaces.length > 1 && <Workspaces workspaces={access.workspaces} />}
+           <SignOut />
+           <nav>
+-            <Link href="/overview">Overview</Link> · <Link href="/models">Models</Link> · <Link href="/deployments">Deployments</Link> · <Link href="/evaluations">Evaluations</Link> ·{" "}
++            <Link href="/overview">Overview</Link> · <Link href="/models">Models</Link> · <Link href="/deployments">Deployments</Link> · <Link href="/requests">Requests</Link> · <Link href="/evaluations">Evaluations</Link> ·{" "}
+             <Link href="/releases">Releases</Link> · <Link href="/optimizations">Optimizations</Link> ·{" "}
+             <Link href="/annotations">Annotations</Link> · <Link href="/training">Training</Link> ·{" "}
+             <Link href="/datasets">Datasets</Link> ·{" "}
+diff --git a/infra/lab/app/README.md b/infra/lab/app/README.md
+index c7cb9c00..c3197809 100644
+--- a/infra/lab/app/README.md
++++ b/infra/lab/app/README.md
+@@ -35,6 +35,7 @@ Lab web (Vercel project `infrx-lab`, per environment; `apps/lab/.env.example`) [
+ | `NEXT_PUBLIC_SUPABASE_URL` | public | staging: the staging project; production: the App's project |
+ | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | that project's publishable key. **Never** `SUPABASE_SERVICE_ROLE_KEY` |
+ | `LAB_DATASETS_API_URL` | server | server-only base URL of the datasets backend (WR-N4-5, `apps/lab/lib/services/datasets/server.ts`); unset = the datasets pages answer "unavailable" |
++| `LAB_TRACES_API_URL` | server | server-only lab-api base URL for the provider trace read (V1M/WR-LAB-API-5, `apps/lab/lib/services/traces/`, `GET /lab/v1/traces` behind `LAB_TRACES`); unset = the request pages read nothing and say so |
+ 
+ Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
+ 
+diff --git a/infra/lab/app/lab.json b/infra/lab/app/lab.json
+index 0b9764ef..b25d67f7 100644
+--- a/infra/lab/app/lab.json
++++ b/infra/lab/app/lab.json
+@@ -26,7 +26,8 @@
+       {"name": "NEXT_PUBLIC_LAB_URL", "exposure": "public", "purpose": "the Lab's own https origin, no path (apps/lab/lib/auth/config.ts)"},
+       {"name": "NEXT_PUBLIC_SUPABASE_URL", "exposure": "public", "purpose": "the auth/DB project the Lab session door (0030) is served from"},
+       {"name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "exposure": "public", "purpose": "publishable key; the Lab holds no service-role key"},
+-      {"name": "LAB_DATASETS_API_URL", "exposure": "server", "purpose": "server-only base URL of the datasets backend (WR-N4-5); unset = the datasets pages are unavailable"}
++      {"name": "LAB_DATASETS_API_URL", "exposure": "server", "purpose": "server-only base URL of the datasets backend (WR-N4-5); unset = the datasets pages are unavailable"},
++      {"name": "LAB_TRACES_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for the provider trace read (V1M/WR-LAB-API-5); unset = the request pages read nothing and say so"}
+     ],
+     "lab-control": [
+       {"name": "INFRX_LAB_IMAGE", "exposure": "unit", "purpose": "the Lab control release: a content-addressed image id, rolled back by itself"},
