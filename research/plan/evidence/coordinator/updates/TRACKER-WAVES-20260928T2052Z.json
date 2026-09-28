@@ -1,0 +1,72 @@
+{
+  "task": "TRACKER-WAVES",
+  "slice": "(wave5 LW0 lane tracker-waves) WR-LW0-3 post-launch waves in the tracker + LW0 minors C3/C4; fix round 0-TW-1/0-TW-2",
+  "activity": "review",
+  "at": "2026-09-28T21:10:00Z",
+  "head": "765eb5da",
+  "base": "49393c56",
+  "worktree": ".claude/worktrees/codex-w5-tracker-waves",
+  "branch": "codex/w5-tracker-waves",
+  "owned_paths": [
+    "research/plan/scripts/progress.py",
+    "research/plan/scripts/test_progress.py",
+    "research/plan/scripts/test_mutants.py",
+    "research/plan/consumer-v1/07-post-launch-waves.md",
+    "research/plan/consumer-v1/README.md"
+  ],
+  "commands": [
+    {
+      "cmd": "python3 -m unittest test_progress (new tests vs cd53ad91 progress.py)",
+      "exit": 1,
+      "summary": "fails-before: 1 failure (ETA 'no live lane for E7L, E8L')"
+    },
+    {
+      "cmd": "python3 -m unittest test_progress",
+      "exit": 0,
+      "summary": "42 OK"
+    },
+    {
+      "cmd": "python3 -m unittest test_mutants",
+      "exit": 0,
+      "summary": "4 OK; 36/36 mutants killed"
+    },
+    {
+      "cmd": "python3 -m unittest test_progress test_validate_plan test_mutants",
+      "exit": 1,
+      "summary": "53 run, 1 error = pre-existing test_app_cannot_dispatch_early (fails at base)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/progress.py check",
+      "exit": 0,
+      "summary": "PASS, 0 errors, 32 warnings (as base)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/progress.py render",
+      "exit": 0,
+      "summary": "waves section renders; LW2-LW5 and C1-C3 ETA now 'no live lane for <ids>' (outputs not committed)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS, 949 links / 372 documents"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.1,
+    "likely_h": 0.25,
+    "pessimistic_h": 0.75,
+    "confidence": "medium",
+    "basis": "TRACKER lane 2/4/8 at a third; fix round done, re-review + merge remain",
+    "at": "2026-09-28T21:10:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-TW-1 move the D10 split case to a Docker-free tests/d/test_upgrade_split.py (0-LW0-C3)",
+    "WR-TW-2 proposed ruling amending R151: any hosted apply past 0026 incl. the R147 follow-up needs the three conditions (0-LW0-C4)",
+    "WR-TW-3 add task-less lane TRACKER-WAVES to progress-state so this update ingests",
+    "WR-TW-4 optional: link 07-post-launch-waves.md from 06/program 22"
+  ],
+  "evidence": [
+    "research/plan/evidence/coordinator/TRACKER-WAVES-ee51751.md"
+  ]
+}

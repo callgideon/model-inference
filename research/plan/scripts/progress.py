@@ -25,6 +25,7 @@ ROOT = PLAN.parents[1]
 EVID = PLAN / "evidence" / "coordinator"
 STATE = EVID / "progress-state.json"
 UPDATES = EVID / "updates"
+WAVES = PLAN / "consumer-v1" / "07-post-launch-waves.md"
 sys.path.insert(0, str(PLAN / "scripts"))
 from validate_plan import closure  # noqa: E402
 
@@ -111,11 +112,29 @@ def owned_overlap(a, b):
     return a.startswith(b) or b.startswith(a)
 
 
+def load_waves(path=WAVES):
+    """The post-launch wave map: the rows of the table in consumer-v1/07-post-launch-waves.md, by the grammar that doc states."""
+    waves = []
+    for line in Path(path).read_text().splitlines():
+        m = re.match(r"\|\s*\*\*((?:LW|C)\d)\b", line)
+        if not m:
+            continue
+        name, lanes, gate, start, exit_ = (c.strip().replace("**", "").replace("`", "") for c in line.strip().strip("|").split("|"))
+        waves.append({"id": m[1], "name": name[len(m[1]):].strip(), "start": start, "exit": exit_,
+                      "lanes": [{"name": n, "gating": not star, "ids": [i.strip() for i in re.sub(r"\([^)]*\)", "", ids).split(",") if i.strip()]}
+                                for star, n, ids in re.findall(r"(\*?)([\w-]+)\*? \[([^\]]*)\]", lanes)],
+                      "gate_lanes": [{"task": t or None, "lane": n} for t, n in re.findall(r"(?:([A-Z][\w-]*) )?\(([\w-]+)\)", gate)]})
+    if not waves:
+        raise ValueError(f"{path}: no wave rows")
+    return waves
+
+
 class Model:
     """Everything the views and checks need, derived from the manifest + overlay at instant `now`."""
 
-    def __init__(self, manifest, state, now, updates_dir=UPDATES):
+    def __init__(self, manifest, state, now, updates_dir=UPDATES, waves=None):
         self.m, self.s, self.now = manifest, state, now
+        self.waves = load_waves() if waves is None else waves
         self.tasks = {t["id"]: t for t in manifest["tasks"]}
         self.rg = manifest["release_gates"]
         self.lanes = state.get("lanes", [])
@@ -231,6 +250,21 @@ class Model:
         for i in s.get("activated", []):
             if i in ids and self.cat[i] != "activated":
                 err(f"activated task {i} is {self.cat[i]}, not deferred")
+        listed = [i for w in self.waves for x in w["lanes"] for i in x["ids"] if i in ids]
+        for i in sorted(i for i, c in self.cat.items() if c in ("deferred", "activated") and i not in listed) if self.waves else []:
+            err(f"wave map: deferred task {i} is in no wave")
+        for i in sorted({i for i in listed if listed.count(i) > 1}):
+            err(f"wave map: {i} is in more than one wave")
+        for i in sorted({i for i in listed if self.cat[i] not in ("deferred", "activated")}):
+            err(f"wave map: {i} is {self.cat[i]}, not post-launch")
+        for w in self.waves:
+            mine = {i for x in w["lanes"] for i in x["ids"]}
+            for i in sorted(mine - ids):
+                if i.split("-")[0] not in ids:  # a slice (L2-SQL) names its manifest task before the first hyphen
+                    err(f"wave map: unknown ID {i!r} in {w['id']}")
+            for g in w["gate_lanes"]:
+                if g["task"] and g["task"] not in mine:
+                    err(f"wave map: gate task {g['task']} is not in {w['id']}")
         for q in ("review_queue", "integration_queue"):
             for x in s.get(q, []):
                 if x.get("lane") not in lane_ids:
@@ -581,7 +615,7 @@ def write_state(path, state, expected_revision):
 
 
 # ---- rendering helpers ------------------------------------------------------------------------
-TONES = {"PASS": "ok", "ACCEPTED": "ok", "complete": "ok", "done": "ok", "forecast": "ok", "resolved": "ok", "applied": "ok",
+TONES = {"PASS": "ok", "ACCEPTED": "ok", "EXIT MET": "ok", "complete": "ok", "done": "ok", "forecast": "ok", "resolved": "ok", "applied": "ok",
          "FAIL": "bad", "INVALID": "bad", "REJECTED": "bad", "BLOCKED": "bad", "blocked": "bad", "changes-requested": "bad", "rejected": "bad",
          "PENDING": "warn", "open": "warn", "unknown": "warn", "NOT RUN": "warn",
          "RUNNING": "info", "running": "info", "review": "info", "integration": "info", "ready": "info", "active": "info"}
@@ -653,6 +687,60 @@ def summaries(M):
                     "active": sorted(i for i in ids if any(x["activity"] in ACTIVE for x in M.by_task.get(i, []))),
                     "lanes_complete": sorted(i for i in ids if M.finished(i) and M.tasks[i]["status"] not in DONE),
                     "cells": [(g, M.gates[g]["passed"], len(M.gates[g]["cells"])) for g in gates if g in M.gates]})
+    return out
+
+
+def wave_eta(M, v):
+    """The milestone forecast's eta_params arithmetic over a wave's live lanes (lanes are task-less, so lanes are the unit)."""
+    if v["state"] == "EXIT MET":
+        return {"status": "done", "text": "exit met"}
+    live = [x for x in v["overlay"] if x["activity"] not in ("complete", "deferred")]
+    need = [x for x in v["lanes"] if x["gating"] and set(x["ids"]) & set(v["open"])]  # map lanes with open gating work
+
+    def serves(y, x):  # an overlay lane working map lane x: its slice names the lane, or it is keyed to one of x's open tasks
+        return y.get("task") in set(x["ids"]) & set(v["open"]) or re.search(rf"\blane {re.escape(x['name'])}(?![\w-])", str(y.get("slice") or ""))
+    uncovered = [i for x in need if not any(serves(y, x) for y in live) for i in x["ids"] if i in v["open"]]
+    if need:  # a lane for finished work (e.g. a blocked lane whose task is implemented) says nothing about the open work
+        live = [y for y in live if any(serves(y, x) for x in need)]
+    inputs = sorted(p["id"] for p in M.s.get("inputs", []) if p.get("status") != "resolved" and set(v["open"]) & set(p.get("blocks", [])))
+    unknown = [x["id"] for x in live if estimate_problem(x.get("estimate")) or None in [(x.get("estimate") or {}).get(k) for k in HOURS]]
+    if inputs:
+        return {"status": "blocked", "text": "blocked pending " + ", ".join(inputs)}
+    if uncovered:
+        return {"status": "unknown", "text": "no live lane for " + ", ".join(uncovered)}
+    if unknown or not live:
+        return {"status": "unknown", "text": ("no remaining-effort estimate for " + ", ".join(unknown) if unknown else "no live lane for the open work")}
+    p, slots = M.s.get("eta_params", {}), M.s.get("agent_slots", {})
+    rework, integ = p.get("review_rework_fraction", 0.3), p.get("integration_h_per_task", 0.5)
+    cap = max(1, slots.get("total", 1) - slots.get("reserved", 0))
+    scen = []
+    for k in HOURS:
+        dur = {x["id"]: x["estimate"][k] * (1 + rework) + integ for x in live}
+        eff, top = sum(dur.values()), max(dur, key=dur.get)
+        scen.append((round(eff, 1), *max([(dur[top], f"longest lane {top}"), (len(live) * integ, f"serial integration queue: {len(live)} merges × {integ:g} h"),
+                                          (eff / cap, f"capacity: {eff:.1f} effort-h over {cap} implementation slots")], key=lambda b: b[0])))
+    wall = [round(x[1], 1) for x in scen]
+    fin = [iso(M.now + dt.timedelta(hours=h)) for h in wall]
+    conf = min(((x.get("estimate") or {}).get("confidence") or "unknown" for x in live), key=lambda c: CONFIDENCE.index(c) if c in CONFIDENCE else 0)
+    return {"status": "forecast", "text": f"{hm(fin[0])} – {hm(fin[2])} (likely {hm(fin[1])})", "effort_h": [x[0] for x in scen], "wall_h": wall,
+            "finish": fin, "constraint": scen[1][2], "confidence": conf}
+
+
+def wave_views(M):
+    """Per wave: manifest IDs, implemented ones, overlay lanes, the exit state (tracker reading, not a release-gate decision) and ETA."""
+    out = []
+    for w in M.waves:
+        ids = [i for x in w["lanes"] for i in x["ids"] if i in M.tasks]
+        gating = [i for x in w["lanes"] if x["gating"] for i in x["ids"] if i in M.tasks]
+        lanes = [x for x in M.lanes if x["id"] == w["id"] or x.get("task") in ids or re.search(rf"\(wave5 {w['id']}\b", str(x.get("slice") or ""))]
+        done = [i for i in ids if M.tasks[i]["status"] in DONE]
+        why = ["not implemented: " + ", ".join(i for i in gating if i not in done)] if set(gating) - set(done) else []
+        for g in w["gate_lanes"]:
+            xs = [x for x in lanes if x["id"] == g["lane"] or re.search(rf"\blane {re.escape(g['lane'])}(?![\w-])", str(x.get("slice") or ""))]
+            if not xs or any(x["activity"] != "complete" for x in xs):
+                why.append(f"gate lane {g['lane']} is {'not complete' if xs else 'not in the overlay'}")
+        v = {**w, "ids": ids, "done": done, "open": [i for i in ids if i not in done], "overlay": lanes, "why": why, "state": "PENDING" if why else "EXIT MET"}
+        out.append({**v, "eta": wave_eta(M, v)})
     return out
 
 
@@ -864,7 +952,7 @@ def render_html(M):
 <p class="meta">Generated <time datetime="{gen}">{e(hm(gen))}</time> UTC · overlay revision {e(s.get('revision'))}, updated {e(hm(s.get('updated')))} UTC ·
 manifest v{e(M.m['schema_version'])} · {link(s.get('program_doc', ''))} · generated file, never hand-edited</p>
 <nav aria-label="Views"><a href="#launch">v1 launch scope</a><a href="#overview">Overview</a><a href="#progress">Progress</a><a href="#tasks">Tasks</a><a href="#board">Agents &amp; worktrees</a>
-<a href="#milestones">Milestones &amp; ETA</a><a href="#verification">Verification</a><a href="#timeline">ETA, inputs &amp; timeline</a><a href="#later">Later</a></nav></div></header>
+<a href="#milestones">Milestones &amp; ETA</a>{'<a href="#waves">Post-launch waves</a>' if M.waves else ''}<a href="#verification">Verification</a><a href="#timeline">ETA, inputs &amp; timeline</a><a href="#later">Later</a></nav></div></header>
 <div id="stale" class="banner" role="alert" hidden></div>
 <noscript><div class="banner">JavaScript is off: filters and the view-time stale check are unavailable. Check the generated time above.</div></noscript>
 <main class="wrap">"""]
@@ -953,6 +1041,20 @@ manifest v{e(M.m['schema_version'])} · {link(s.get('program_doc', ''))} · gene
              '<div class="grid wide">' + "".join(milestone_card(M, f) for f in M.eta.values()) + "</div>")
     H.append('<h3 style="margin-top:16px">Delivery bands (dependency bands, not barriers)</h3>' + table(["Band", "Name", "Tasks"], [
         [e(b["id"]), e(b["name"]), " ".join(f"<code>{e(i)}</code> {pill(M.activity(i))}" for i in b["tasks"])] for b in s.get("bands", [])]) + "</section>")
+    def chip(i):
+        return f"<code>{e(i)}</code> " + (pill(M.tasks[i]["status"]) if i in M.tasks else '<span class="pill">slice</span>')
+    if M.waves:  # 5b. post-launch waves
+        H.append('<section id="waves"><h2>Post-launch waves</h2><p class="note">Wave map: ' + link("research/plan/consumer-v1/07-post-launch-waves.md")
+                 + '. Implemented = manifest implemented/integrated over the wave\'s manifest IDs (slices are shown, not counted). The exit state is EXIT MET only '
+                 'when every gating task is implemented and every gate lane is complete in the overlay; it is a tracker reading, not a release-gate decision. '
+                 'ETA: the milestone eta_params over the wave\'s live lanes.</p>' + table(["Wave", "Implemented", "Tasks by lane (in order)", "Lanes", "Exit", "ETA"], [
+                     [f"<strong>{e(v['id'])}</strong> {e(v['name'])}", f"{len(v['done'])} / {len(v['ids'])}",
+                      ul([f"{e(x['name'])}{'' if x['gating'] else ' (does not gate)'}: " + " → ".join(chip(i) for i in x["ids"]) for x in v["lanes"]]),
+                      ul([f"{e(x['id'])} {pill(x['activity'])}" for x in v["overlay"]]),
+                      f"{pill(v['state'])} {e('; '.join(v['why']))}<br>{e(v['exit'])}",
+                      f"{pill(v['eta']['status'])} {e(v['eta']['text'])}" + (f"<br>effort {e(hrange(v['eta']['effort_h']))}, wall-clock {e(hrange(v['eta']['wall_h']))}; "
+                                                                           f"{e(v['eta']['constraint'])}; confidence {e(v['eta']['confidence'])}" if v["eta"].get("wall_h") else "")]
+                     for v in wave_views(M)]) + "</section>")
     # 6. verification
     H.append('<section id="verification"><h2>Verification</h2>' + table(["Gate", "Roots", "Candidate", "Cells PASS", "Not PASS", "Decision", "Note"], [
         [f"{e(g)} {pill(v['label'])}", ", ".join(f"<code>{e(r)}</code> {e(M.tasks[r]['status'])}" for r in v["roots"]),
@@ -1040,6 +1142,18 @@ def render_md(M):
     L += mdt(["Milestone", "Gate", "Status", "Forecast", "Controlling constraint", "Effort o/l/p", "Wall-clock o/l/p", "Confidence"], [
         [f"`{f['milestone']}`", f"{f['gate']} ({M.gates[f['gate']]['label']})", f["status"], f["text"], f.get("constraint"), hrange(f.get("effort_h")),
          hrange(f.get("wall_h")), f.get("confidence", "unknown")] for f in M.eta.values()])
+    if M.waves:
+        L += ["## Post-launch waves", "", "Wave map: " + mdlink("research/plan/consumer-v1/07-post-launch-waves.md") + ". Implemented = manifest implemented/integrated "
+              "over the wave's manifest IDs (slices shown, not counted); EXIT MET only when every gating task is implemented and every gate lane is complete "
+              "(a tracker reading, not a release-gate decision); ETA = the milestone eta_params over the wave's live lanes.", ""]
+        L += mdt(["Wave", "Implemented", "Tasks by lane (in order)", "Lanes", "Exit", "ETA"], [
+            [f"**{v['id']}** {v['name']}", f"{len(v['done'])} / {len(v['ids'])}",
+             "; ".join(f"{x['name']}{'' if x['gating'] else ' (does not gate)'}: " + " → ".join(f"{i} ({M.tasks[i]['status'] if i in M.tasks else 'slice'})" for i in x["ids"])
+                       for x in v["lanes"]) or "none",
+             ", ".join(f"{x['id']} ({x['activity']})" for x in v["overlay"]) or "none",
+             f"{v['state']}" + (f" ({'; '.join(v['why'])})" if v["why"] else "") + f": {v['exit']}",
+             f"{v['eta']['status']}: {v['eta']['text']}" + (f"; effort {hrange(v['eta']['effort_h'])}, wall-clock {hrange(v['eta']['wall_h'])}, {v['eta']['constraint']}, "
+                                                            f"confidence {v['eta']['confidence']}" if v["eta"].get("wall_h") else "")] for v in wave_views(M)])
     L += ["## Gates", ""] + mdt(["Gate", "Roots", "Cells PASS", "Not PASS", "Decision", "Note"], [
         [f"{g} **{v['label']}**", ", ".join(f"{r} ({M.tasks[r]['status']})" for r in v["roots"]), f"{v['passed']} / {len(v['cells'])}",
          ", ".join(f"{c['id']} {c['verdict']}" for c in v["cells"] if c.get("verdict") != "PASS"), v.get("decision") or "none", v.get("note")] for g, v in M.gates.items()])

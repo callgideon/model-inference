@@ -217,6 +217,156 @@ class Activation(Base):
         self.assertIn("unknown task ID 'NOPE' in activated", errors)
 
 
+class Waves(Base):
+    """WR-LW0-3 (plan §3 item 9): the checked-in wave map (consumer-v1/07-post-launch-waves.md) renders LW0–LW6 + C1–C3."""
+
+    def wave(self, m, i):
+        return next(v for v in P.wave_views(m) if v["id"] == i)
+
+    def lane(self, i, wave, activity, h=None, confidence="medium"):
+        est = {"optimistic_h": h[0], "likely_h": h[1], "pessimistic_h": h[2], "confidence": confidence, "at": hours_ago(1)} if h else None
+        self.state["lanes"].append({"id": i, "task": None, "activity": activity, "slice": f"(wave5 {wave}; fixture)", "updated": hours_ago(1), "estimate": est})
+
+    def implement(self, *ids):
+        for t in self.manifest["tasks"]:
+            if t["id"] in ids:
+                t["status"] = "implemented"
+
+    def test_the_map_places_every_deferred_task_in_exactly_one_wave(self):
+        # Oracle: a parser that drops a row, an italic lane or a note-bearing ID, keeps a note as an ID, or counts a slice
+        # (L2-SQL) as a manifest task; and a map that loses or repeats a deferred task.
+        waves, m = P.load_waves(), self.model()
+        self.assertEqual([w["id"] for w in waves], ["LW0", "LW1", "LW2", "LW3", "LW4", "LW5", "LW6", "C1", "C2", "C3"])
+        lw1 = {x["name"]: x for x in waves[1]["lanes"]}
+        self.assertEqual(lw1["lab-sql"]["ids"], ["L2-SQL", "D6F", "D7"])
+        self.assertEqual((lw1["discovery"]["ids"], lw1["discovery"]["gating"], lw1["lab-sql"]["gating"]), (["X1", "X3", "X5"], False, True))
+        self.assertEqual(waves[5]["gate_lanes"], [{"task": "E5L", "lane": "lab-observe"}, {"task": "E6L", "lane": "lab-evaluate"}])
+        self.assertEqual(waves[0]["gate_lanes"], [{"task": None, "lane": "LW0"}])
+        ids = [i for w in waves for x in w["lanes"] for i in x["ids"] if i in m.tasks]
+        self.assertEqual(sorted(ids), sorted(i for i, c in m.cat.items() if c == "deferred"))
+        self.assertEqual(len(ids), 57)
+        self.assertEqual([len(v["ids"]) for v in P.wave_views(m)], [0, 10, 11, 10, 12, 7, 2, 1, 1, 3])
+        self.assertEqual(m.errors, [])
+        empty = self.dir / "empty.md"
+        empty.write_text("# no table\n")
+        self.assertRaises(ValueError, P.load_waves, empty)  # a mangled map never passes as "no waves"
+
+    def test_a_task_missing_repeated_unknown_or_in_launch_scope_is_an_error(self):
+        # Oracle: `check` passing a map that drops D6F, lists L1 twice, invents ZZ9 or a slice of an unknown task,
+        # schedules launch-scope E4C, or names a gate task outside its wave.
+        waves = P.load_waves()
+        self.state["activated"] = ["D6F", "L2"]  # activated tasks are post-launch too: dropping one is the same error
+        waves[1]["lanes"][0]["ids"].remove("D6F")
+        waves[1]["lanes"][0]["ids"].remove("D7")
+        waves[2]["lanes"][0]["ids"] += ["L1", "ZZ9", "Q9-SQL", "E4C", "L3-SQL"]
+        waves[3]["gate_lanes"].append({"task": "B4", "lane": "eval-ui"})
+        errors = P.Model(self.manifest, self.state, NOW, self.dir, waves).errors
+        for want in ("wave map: deferred task D6F is in no wave", "wave map: deferred task D7 is in no wave", "wave map: L1 is in more than one wave", "wave map: unknown ID 'ZZ9' in LW2",
+                     "wave map: unknown ID 'Q9-SQL' in LW2", "wave map: E4C is backend, not post-launch", "wave map: gate task B4 is not in LW3"):
+            self.assertIn(want, errors)
+        self.assertFalse(any("L3-SQL" in x for x in errors))  # a slice of a manifest task is fine
+
+    def test_a_wave_exit_is_met_only_with_its_tasks_implemented_and_its_gate_lane_complete(self):
+        # Oracle: EXIT MET while a gating task is planned, while the gate lane is missing, in review or only a
+        # similarly named lane (lab-operate-x) is complete; or a non-gating discovery task holding its wave back.
+        m = self.model()
+        self.assertEqual((self.wave(m, "LW3")["state"], self.wave(m, "LW0")["state"]), ("PENDING", "PENDING"))
+        self.state["lanes"].append({"id": "LW0", "task": None, "activity": "complete", "slice": "(post-launch Lab pre-wave)", "updated": hours_ago(1)})
+        self.state["lanes"].append({"id": "L1-LANE", "task": "L1", "activity": "complete", "updated": hours_ago(1)})  # a task-keyed lane
+        m = self.model()
+        self.assertEqual((self.wave(m, "LW0")["state"], self.wave(m, "LW0")["eta"]["status"]), ("EXIT MET", "done"))
+        self.assertEqual([x["id"] for x in self.wave(m, "LW1")["overlay"]], ["L1-LANE"])
+        lw1 = [i for x in P.load_waves()[1]["lanes"] if x["gating"] for i in x["ids"]]
+        self.implement(*lw1)
+        v = self.wave(self.model(), "LW1")
+        self.assertEqual((v["state"], len(v["done"]), len(v["ids"])), ("EXIT MET", 7, 10))  # X1/X3/X5 planned, do not gate
+        lw3 = self.wave(self.model(), "LW3")["ids"]
+        self.implement(*lw3[:-1])
+        v = self.wave(self.model(), "LW3")
+        self.assertEqual(v["state"], "PENDING")
+        self.assertIn(f"not implemented: {lw3[-1]}", v["why"])
+        self.implement(*lw3)
+        self.assertIn("gate lane lab-operate is not in the overlay", self.wave(self.model(), "LW3")["why"])
+        self.state["lanes"].append({"id": "W5-X", "task": None, "activity": "complete", "slice": "(wave5 LW3 lane lab-operate-x)", "updated": hours_ago(1)})
+        self.assertEqual(self.wave(self.model(), "LW3")["why"], ["gate lane lab-operate is not in the overlay"])  # a similar name is not the lane
+        self.state["lanes"].append({"id": "W5-LAB-OPERATE", "task": None, "activity": "review", "slice": "(wave5 LW3 lane lab-operate)", "updated": hours_ago(1)})
+        v = self.wave(self.model(), "LW3")
+        self.assertEqual((v["state"], v["why"]), ("PENDING", ["gate lane lab-operate is not complete"]))
+        self.assertEqual([x["id"] for x in v["overlay"]], ["W5-X", "W5-LAB-OPERATE"])
+        self.state["lanes"][-1]["activity"] = "complete"
+        self.assertEqual(self.wave(self.model(), "LW3")["state"], "EXIT MET")
+
+    def test_wave_eta_uses_the_live_lanes_and_eta_params(self):
+        # Oracle: the milestone arithmetic (1 + rework, + one merge per lane, capacity over free slots) not applied; a date
+        # while a live lane has no estimate, while open work has no live lane (even if another lane of the wave is live), from
+        # a lane whose task is already implemented, or while an open input blocks an open task.
+        self.assertEqual(self.wave(self.model(), "LW6")["eta"]["text"], "no live lane for E7L, E8L")  # open work, no lane
+        self.lane("W5-LAB-IMPROVE", "LW6 lane lab-improve", "running", (3, 6, 12))
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["status"], f["text"], "finish" in f), ("unknown", "no live lane for E8L", False))  # E8L open, no lab-rollout lane
+        self.state["lanes"].pop()
+        self.implement("E7L")
+        self.state["lanes"].append({"id": "W5-DONE", "task": "E7L", "activity": "blocked", "slice": None, "updated": hours_ago(1),
+                                    "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 3, "confidence": "high", "at": hours_ago(1)}})
+        self.assertEqual(self.wave(self.model(), "LW6")["eta"]["text"], "no live lane for E8L")  # a lane for finished work covers nothing
+        self.lane("W5-LAB-ROLLOUT", "LW6 lane lab-rollout", "review", (2, 4, 8), "low")
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["status"], f["effort_h"], f["confidence"]), ("forecast", [3.1, 5.7, 10.9], "low"))  # W5-DONE not counted
+        self.state["lanes"][-2:] = []
+        for t in self.manifest["tasks"]:
+            if t["id"] == "E7L":
+                t["status"] = "planned"
+        self.implement("V1M")  # lab-app [L4, V1M]: a lane keyed to the finished V1M does not cover the open L4
+        self.state["lanes"].append({"id": "V1M-LANE", "task": "V1M", "activity": "blocked", "updated": hours_ago(1)})
+        self.assertIn("L4", self.wave(self.model(), "LW2")["eta"]["text"])
+        self.state["lanes"].pop()
+        self.lane("W5-X", "LW6 lane lab-rollout-x", "running")  # nor does a similarly named lane
+        self.lane("W5-LAB-IMPROVE", "LW6 lane lab-improve", "running", (3, 6, 12))
+        self.lane("W5-LAB-ROLLOUT", "LW6 lane lab-rollout", "review", (2, 4, 8), "low")
+        self.lane("W5-OLD", "LW6 lane lab-improve", "complete")  # a finished lane adds nothing
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["status"], f["effort_h"], f["wall_h"], f["confidence"]), ("forecast", [7.5, 14.0, 27.0], [4.4, 8.3, 16.1], "low"))
+        self.assertEqual(f["finish"][1], P.iso(NOW + dt.timedelta(hours=8.3)))
+        self.assertIn("longest lane W5-LAB-IMPROVE", f["constraint"])
+        self.state["agent_slots"] = {"total": 1, "reserved": 0}
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["wall_h"], f["constraint"][:9]), ([7.5, 14.0, 27.0], "capacity:"))
+        self.state["agent_slots"] = {"total": 14, "reserved": 2}
+        saved = [copy.deepcopy(x["estimate"]) for x in self.state["lanes"][-3:-1]]
+        for x in self.state["lanes"][-3:-1]:
+            x["estimate"].update(optimistic_h=0, likely_h=0, pessimistic_h=0)
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["wall_h"], f["constraint"]), ([1.0, 1.0, 1.0], "serial integration queue: 2 merges × 0.5 h"))
+        for x, est in zip(self.state["lanes"][-3:-1], saved):
+            x["estimate"] = est
+        self.lane("W5-NOEST", "LW6 lane lab-improve", "running")
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["status"], "finish" in f), ("unknown", False))
+        self.assertIn("W5-NOEST", f["text"])
+        self.state["lanes"].pop()
+        self.by_id("inputs", "P-01")["blocks"].append("E8L")
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["status"], f["text"], "finish" in f), ("blocked", "blocked pending P-01", False))
+
+    def test_the_section_renders_and_everything_else_is_unchanged(self):
+        # Oracle: no waves section in either output, a wave row missing, or any existing summary, category, section or
+        # link changed by adding it.
+        m, m0 = self.model(), P.Model(self.manifest, self.state, NOW, self.dir, [])
+        page, md = P.render_html(m), P.render_md(m)
+        sec = page[page.index('<section id="waves">'):]
+        sec = sec[:sec.index("</section>")]
+        self.assertIn('<a href="#waves">Post-launch waves</a>', page)
+        self.assertIn("## Post-launch waves", md)
+        for w in P.load_waves():
+            self.assertIn(f"<strong>{w['id']}</strong>", sec)
+            self.assertIn(f"| **{w['id']}** ", md)
+        self.assertIn("0 / 12", sec)
+        self.assertIn("<code>L2-SQL</code> <span class=\"pill\">slice</span>", sec)
+        self.assertEqual(re.sub(r'\n<section id="waves">.*?</section>|<a href="#waves">Post-launch waves</a>', "", page, flags=re.S), P.render_html(m0))
+        self.assertEqual(re.sub(r"## Post-launch waves\n.*?(?=## Gates)", "", md, flags=re.S), P.render_md(m0))
+        self.assertEqual((P.summaries(m), m.cat), (P.summaries(m0), m0.cat))
+
+
 class Gates(Base):
     def pass_all(self, gate):
         g = self.state["gates"][gate]
