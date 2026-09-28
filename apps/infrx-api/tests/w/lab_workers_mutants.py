@@ -36,6 +36,7 @@ HEALTH = C + "readyz_is_the_database_and_every_pass_alive"
 DEAD = C + "a_dead_pass_is_not_live_and_exits_non_zero"
 EVERY = C + "the_pumps_are_every_step_forever"
 RETENTION = C + "trace_retention_is_t3s_over_the_shippers_bucket_and_bounds"
+TEACHER = C + "the_teacher_wiring_is_p2_on_d8s_teacher_ledger"
 
 
 def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
@@ -153,6 +154,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_connector_unapproved", "an automatic connector is refused without P-11",
        '    if env.get("LAB_TRAINING_CONNECTOR", MANUAL) != MANUAL:\n', "    if False:\n",
        NO_PASS),
+    # --- WR-P2-D8-C: the teacher wiring ------------------------------------------------------
+    _m("lw_teacher_plain_judge_ledger", "P2's ledger is D8's PgTeacherLedger (record_failures)",
+       "ledger=PgTeacherLedger(connect),", "ledger=PgTeacherLedger.__mro__[1](connect),",
+       TEACHER),
+    _m("lw_teacher_log_off_the_pool", "P1's label log is on the role's database",
+       "log=PgLabelLog(connect),", 'log=PgLabelLog(connector("")),', TEACHER),
+    _m("lw_teacher_redaction_dropped", "the teacher sees content only through N2's redaction",
+       "                         redact=redact)", "                         redact=str)",
+       TEACHER),
+    _m("lw_teacher_rates_unapproved", "a live teacher is priced by the approved rates only",
+       "rates=APPROVED_RATES if rates is None else rates,", "rates=rates,", TEACHER),
     # --- the process: health and the drain ---------------------------------------------------------
     _m("lw_ready_without_the_database", "/readyz is down while the database is",
        '            up = live and (path == "/livez" or await _answers(worker.ready))\n',

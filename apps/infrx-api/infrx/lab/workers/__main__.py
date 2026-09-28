@@ -333,6 +333,28 @@ def _training(mode, env, connect, objects, worker_id, **_):
                                "run is prepared, submitted and finished through the Lab route")
 
 
+def teacher_wiring(connect, objects, *, provider_url: str, settings, redact, rates=None):
+    """WR-P2-D8-C: P2's `TeacherWiring` on the Lab database - D8's `PgTeacherLedger` (J2's
+    ledger + `record_failures`, which `collect` calls; a plain `PgJudgeLedger` dies at the
+    first per-item failure), P1's import over D8's label log, D7 and L2 on the same
+    connection; J2's provider refuses any host but the local teacher fake (P-10). `redact` is
+    N2's (WR-P2-4): the annotation role refuses until it exists, so no process builds this
+    yet."""
+    from ...judge.cost import APPROVED_RATES
+    from ...judge.submit import HttpJudgeProvider
+    from ...pipelines import annotations as p1
+    from ...pipelines.teachers import TeacherWiring
+    from ...state.lab_access import PgAccessStore
+    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_pipeline import PgLabelLog, PgTeacherLedger
+    return TeacherWiring(members=PgAccessStore(connect), ledger=PgTeacherLedger(connect),
+                         provider=HttpJudgeProvider(provider_url),
+                         store=PgLabDataStore(connect), objects=objects,
+                         labels=p1.import_labels, log=PgLabelLog(connect),
+                         rates=APPROVED_RATES if rates is None else rates, settings=settings,
+                         redact=redact)
+
+
 BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
          "annotation": _annotation, "training": _training, "rollout": _rollout,
          "datasets": _datasets}

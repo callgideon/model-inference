@@ -436,6 +436,40 @@ def test_lab_workers__annotation_and_training_have_no_pass_and_refuse(monkeypatc
         composed("training", {**ENV["training"], "LAB_TRAINING_CONNECTOR": "http"})
 
 
+def test_lab_workers__the_teacher_wiring_is_p2_on_d8s_teacher_ledger():
+    """WR-P2-D8-C (1-LSI2-2): P2's `collect` records per-item failures with
+    `ledger.record_failures`, which only D8's `PgTeacherLedger` has (a plain `PgJudgeLedger`
+    dies with AttributeError at the first failure). The composition puts it, P1's import over
+    D8's label log, D7 and L2 on the role's one database, J2's provider to the local teacher
+    fake only (P-10), and N2's `redact` as given (the role refuses without it, WR-P2-4)."""
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.judge.cost import APPROVED_RATES
+    from infrx.judge.submit import HttpJudgeProvider
+    from infrx.pipelines import annotations as p1
+    from infrx.state.jobstore import connector
+    from infrx.state.lab_access import PgAccessStore
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_pipeline import PgLabelLog, PgTeacherLedger
+    connect, objects = connector(DSN), InMemoryObjectStore()
+
+    def redact(text):
+        return text
+    wiring = lab_workers.teacher_wiring(connect, objects, provider_url="http://127.0.0.1:9",
+                                        settings=DEFAULTS, redact=redact)
+    assert type(wiring.ledger) is PgTeacherLedger and callable(wiring.ledger.record_failures)
+    assert (type(wiring.members), type(wiring.store), type(wiring.log)) == (
+        PgAccessStore, PgLabDataStore, PgLabelLog)
+    assert {id(port._connect) for port in (wiring.members, wiring.ledger, wiring.store,
+                                           wiring.log)} == {id(connect)}
+    assert wiring.labels is p1.import_labels and wiring.objects is objects
+    assert (wiring.redact, wiring.rates, wiring.settings) == (redact, APPROVED_RATES, DEFAULTS)
+    assert type(wiring.provider) is HttpJudgeProvider
+    remote = outcome(lambda: lab_workers.teacher_wiring(
+        connect, objects, provider_url="https://teacher.example", settings=DEFAULTS,
+        redact=redact))
+    assert isinstance(remote, errors.DomainError), remote
+
+
 # ----------------------------------------------------------------------- health and the drain
 def test_lab_workers__readyz_is_the_database_and_every_pass_alive():
     """`/livez` 200 while every pass runs; `/readyz` 200 only while the database answers too;
