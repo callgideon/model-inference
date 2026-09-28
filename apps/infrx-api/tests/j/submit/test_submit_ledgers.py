@@ -56,8 +56,9 @@ class Judging:
             asyncio.run(fakes.trace(self.projection, self.objects, world.C1, request_id,
                                     body=b'{"n":%d}' % n))
         self.wiring = JudgeWiring(access=world.access, ledger=self.ledger,
-                                  provider=self.provider, projection=self.projection,
-                                  objects=self.objects, rates=j1.TEST_RATES, settings=LIVE)
+                                  provider=self.provider,
+                                  retention=fakes.retention(self.projection, self.objects),
+                                  rates=j1.TEST_RATES, settings=LIVE)
 
     def job(self, n: int = 1, **kw) -> JudgeJob:
         fields = dict(run_id=fakes.rid(100 + n), provider_org_id=self.w.A,

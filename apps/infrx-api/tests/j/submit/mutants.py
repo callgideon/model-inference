@@ -35,6 +35,7 @@ RACE = "test_j2__concurrent_runs_stay_under_the_payers_budget"
 DOUBLE = "test_j2__a_double_submit_is_one_intent_and_one_provider_batch"
 CONTENT = "test_j2__only_stored_content_of_the_grantor_leaves_by_durable_request_id"
 EMPTY = "test_j2__a_run_with_no_content_left_is_cancelled_without_egress"
+RETAINED = "test_j2__deleted_or_expired_content_never_reaches_the_judge"
 REJECT = "test_j2__a_definite_rejection_releases_the_reservation"
 UNKNOWN = "test_j2__an_unknown_submit_outcome_is_quarantined_and_never_retried"
 ADOPT = "test_j2__reconciliation_adopts_the_providers_evidence_without_resubmitting"
@@ -84,8 +85,14 @@ MUTANTS: tuple[Mutant, ...] = (
        J, "    if not mine:\n        return run", "    if False:\n        return run",
        DOUBLE, UNKNOWN, L_ONE),
     _m("content_read_as_the_provider", "content is read with the grantor's organization bound",
-       J, "wiring.objects, job.grantor_org_id,", "wiring.objects, job.provider_org_id,",
-       CONTENT),
+       J, "wiring.retention.read_content(job.grantor_org_id, request_id)",
+       "wiring.retention.read_content(job.provider_org_id, request_id)", CONTENT),
+    _m("content_read_from_the_raw_projection", "content is read through T3's Retention, so "
+       "a deleted request or content past its bound never leaves (WR-OBS-3)",
+       J, "        body = await wiring.retention.read_content(job.grantor_org_id, request_id)",
+       '        body = await __import__("infrx.traces.ship.shipper", fromlist=["x"]).read_content('
+       "\n            wiring.retention.traces, wiring.retention.objects, job.grantor_org_id,"
+       " request_id)", RETAINED),
     _m("missing_content_sent", "a request with no stored content is skipped before egress",
        J, "        if body is not None:\n", "        if True:\n", CONTENT,
        dies_by=("AttributeError",)),
