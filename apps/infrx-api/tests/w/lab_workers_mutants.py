@@ -18,7 +18,8 @@ API_DIR = shared.API_DIR
 SUITE_FILE = "tests/w/test_lab_workers.py"
 F = "lab/workers/__main__.py"
 P = "gateway/pilot.py"
-FILES = (F, P)
+T3 = "traces/retention/policy.py"
+FILES = (F, P, T3)
 C = "test_lab_workers__"
 SETTINGS = C + "each_role_refuses_to_start_naming_a_missing_setting"
 PROCESS = C + "the_process_refuses_an_unknown_role_and_a_missing_setting"
@@ -37,6 +38,7 @@ DEAD = C + "a_dead_pass_is_not_live_and_exits_non_zero"
 EVERY = C + "the_pumps_are_every_step_forever"
 RETENTION = C + "trace_retention_is_t3s_over_the_shippers_bucket_and_bounds"
 TEACHER = C + "the_teacher_wiring_is_p2_on_d8s_teacher_ledger"
+PUSH = C + "a_trace_deletion_tombstones_every_providers_lineage_copies"
 REPORT = C + "the_judge_report_job_publishes_each_configuration_on_its_ledger"
 
 
@@ -137,6 +139,31 @@ MUTANTS: tuple[Mutant, ...] = (
        "                    if True:\n                        break\n", DATASETS),
     _m("lw_lineage_one_failure_stops_all", "one provider's failure does not skip the others",
        '                report["failed"] += 1\n', "                raise\n", DATASETS),
+    # --- WR-N3-2a: a trace deletion pushes N3's tombstones ---------------------------------
+    _m("lw_push_not_composed", "the Lab's retention pushes tombstones on a deletion",
+       "                     deleted=None if objects is None else lineage_push(objects))",
+       "                     deleted=None)", PUSH),
+    _m("lw_push_datasets_without_objects", "the datasets role's retention has the Lab objects",
+       "    _, retention = _traces(mode, env, objects)\n",
+       "    _, retention = _traces(mode, env)\n", DATASETS),
+    _m("lw_push_first_page_only", "every page of a provider's copies is tombstoned",
+       'at=stone.deleted_at))["more"]:', 'at=stone.deleted_at))["more"] and False:', PUSH),
+    _m("lw_push_whole_grantor", "only the deleted request's copies are tombstoned",
+       "                    request_id=stone.request_id, reason=",
+       "                    request_id=None, reason=", PUSH),
+    _m("lw_push_reason_wrong", "a deletion's tombstone says deleted",
+       'reason="deleted", at=stone.deleted_at))', 'reason="grant_not_current", '
+       'at=stone.deleted_at))', PUSH),
+    _m("t3_hook_skipped", "T3 runs the deletion hook after a new tombstone",
+       "        if self.deleted is not None:\n            try:\n",
+       "        if False:\n            try:\n", PUSH, file=T3),
+    _m("t3_hook_failure_loses_receipt", "a failed push never loses the receipt",
+       '                log.exception("the deletion hook failed; the receipt stands")',
+       "                raise", PUSH, file=T3),
+    _m("t3_hook_on_repeat", "a repeated deletion is the first receipt and pushes nothing",
+       "        if existing is not None:\n            return existing\n",
+       "        if existing is not None:\n            await self.deleted(existing)\n"
+       "            return existing\n", PUSH, file=T3),
     # --- rollout ------------------------------------------------------------------------------------
     _m("lw_rollout_pass_idle", "the rollout pass refuses rather than idle",
        '    raise RuntimeMisconfigured(mode, detail="the rollout pass needs every running or "',
@@ -200,7 +227,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_trace_content_days_lost", "content is kept for the pilot's content bound",
        "content_days=limits.trace_content_max_days,", "content_days=30,", RETENTION),
     _m("lw_trace_metadata_months_lost", "metadata is kept for the pilot's metadata bound",
-       "metadata_months=limits.trace_metadata_months)", "metadata_months=12)", RETENTION),
+       "metadata_months=limits.trace_metadata_months,", "metadata_months=12,", RETENTION),
 )
 
 

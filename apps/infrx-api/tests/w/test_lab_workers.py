@@ -89,8 +89,8 @@ def no_trace_stack(monkeypatch):
     """ClickHouse and the trace bucket are never reached: the retention is recorded."""
     built = {}
 
-    def trace_retention(limits, endpoint_url):
-        built.update(limits=limits, endpoint_url=endpoint_url)
+    def trace_retention(limits, endpoint_url, objects=None):
+        built.update(limits=limits, endpoint_url=endpoint_url, objects=objects)
         return Retention()
     monkeypatch.setattr(lab_workers, "trace_retention", trace_retention)
     return built
@@ -403,6 +403,7 @@ def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(mo
     report = outcome(lambda: asyncio.run(step()))
     assert calls == [("p1", None), ("p1", "k1"), ("p2", None), ("p3", None)]
     assert report == {"providers": 3, "failed": 1}
+    assert no_trace_stack["objects"] is objects      # WR-N3-2a: its deletions push tombstones
 
 
 # ------------------------------------------------------------------ rollout (WR-I7-1)
@@ -583,3 +584,54 @@ def test_lab_workers__trace_retention_is_t3s_over_the_shippers_bucket_and_bounds
                               "http://minio.invalid:9000") and shipper_prefix == "infrx/"
     assert (built.content_days, built.metadata_months) == (13, 7)
     assert isinstance(built.objects, InMemoryObjectStore)
+
+
+def test_lab_workers__a_trace_deletion_tombstones_every_providers_lineage_copies(monkeypatch):
+    """WR-N3-2a (the push half): T3's deletion on the Lab's retention calls N3's
+    `lineage.tombstone` (signature frozen) for the deleted request, for every provider with a
+    lineage, page by page while `more`, reason `deleted` at the tombstone's instant; a repeat
+    deletion is the first receipt and pushes nothing; a push that fails never loses the
+    receipt (the hourly pull tombstones it). The judge role's retention, with no Lab objects,
+    pushes nothing."""
+    import clickhouse_connect
+
+    from infrx.datasets import lineage
+    from infrx.media.s3 import S3ObjectStore
+    monkeypatch.setattr(clickhouse_connect, "get_client", lambda **kw: "ch-client")
+    monkeypatch.setattr(S3ObjectStore, "connect",
+                        classmethod(lambda cls, *a: InMemoryObjectStore()))
+    calls, broken = [], []
+
+    async def tombstone(objects, **kw):
+        if broken:
+            raise ConnectionError("the Lab bucket did not answer")
+        calls.append(kw)
+        return {"tombstoned": 1, "more": sum(c["provider_org_id"] == kw["provider_org_id"]
+                                             for c in calls) < 2}
+    monkeypatch.setattr(lineage, "tombstone", tombstone)
+
+    class Store:
+        stones: dict = {}
+
+        async def get(self, keys):
+            return {k: {"request": self.stones[k]} for k in keys if k in self.stones}
+
+        async def put(self, stones):
+            self.stones.update({(s.org_id, s.request_id): s for s in stones})
+    objects = InMemoryObjectStore()
+    for key in ("lab/p1/lineage/samples/a.json", "lab/p2/lineage/traces/g/r/b",
+                "lab/p3/exports/e/export.json"):
+        objects.seed(key, b"{}")
+    limits = types.SimpleNamespace(clickhouse_url="http://ch", s3_trace_bucket="t",
+                                   trace_content_max_days=13, trace_metadata_months=7)
+    retention = lab_workers.trace_retention(limits, "", objects)
+    retention.store = Store()
+    stone = asyncio.run(retention.delete("g", "r", "user_request"))
+    one = {"grantor_org_id": "g", "request_id": "r", "reason": "deleted",
+           "at": stone.deleted_at}
+    assert calls == [{"provider_org_id": p, **one} for p in ("p1", "p1", "p2", "p2")]
+    assert asyncio.run(retention.delete("g", "r", "again")) == stone and len(calls) == 4
+    broken.append(True)
+    kept = outcome(lambda: asyncio.run(retention.delete("g", "r2", "user_request")))
+    assert getattr(kept, "request_id", kept) == "r2"
+    assert lab_workers.trace_retention(limits, "").deleted is None

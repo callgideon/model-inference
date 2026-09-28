@@ -127,8 +127,9 @@ def lab_objects(mode: str, env):
     return objects
 
 
-def trace_retention(limits, endpoint_url: str):
-    """T3's `Retention` over the trace projection and bucket, as `pilot._lab_traces`."""
+def trace_retention(limits, endpoint_url: str, objects=None):
+    """T3's `Retention` over the trace projection and bucket, as `pilot._lab_traces`; with
+    the Lab objects, a deletion pushes N3's tombstones (WR-N3-2a)."""
     import clickhouse_connect
 
     from ...media.s3 import S3ObjectStore
@@ -140,10 +141,26 @@ def trace_retention(limits, endpoint_url: str):
                      ClickHouseFeedbackProjection(client),
                      S3ObjectStore.connect(limits.s3_trace_bucket, "infrx/", endpoint_url),
                      content_days=limits.trace_content_max_days,
-                     metadata_months=limits.trace_metadata_months)
+                     metadata_months=limits.trace_metadata_months,
+                     deleted=None if objects is None else lineage_push(objects))
 
 
-def _traces(mode: str, env):
+def lineage_push(objects):
+    """WR-N3-2a: T3's deletion hook on the Lab's retention - N3's `lineage.tombstone` of the
+    deleted request for every provider with a lineage, page by page, reason `deleted`
+    (the datasets role's hourly `reconcile` is the backstop)."""
+    from ...datasets import lineage
+
+    async def push(stone) -> None:
+        for provider in await lineage_providers(objects):
+            while (await lineage.tombstone(
+                    objects, provider_org_id=provider, grantor_org_id=stone.org_id,
+                    request_id=stone.request_id, reason="deleted", at=stone.deleted_at))["more"]:
+                pass
+    return push
+
+
+def _traces(mode: str, env, objects=None):
     """The role's `PilotSettings` (JUDGE_*, CLICKHOUSE_URL, S3_TRACE_BUCKET, the trace bounds)
     and T3's retention over them."""
     try:
@@ -151,7 +168,7 @@ def _traces(mode: str, env):
     except ValueError as refused:
         raise RuntimeMisconfigured(mode, detail=str(refused)) from None
     try:
-        return limits, trace_retention(limits, env.get("LAB_S3_ENDPOINT", ""))
+        return limits, trace_retention(limits, env.get("LAB_S3_ENDPOINT", ""), objects)
     except Exception as failure:          # noqa: BLE001 - every failure refuses startup
         raise RuntimeMisconfigured(mode, detail="CLICKHOUSE_URL or S3_TRACE_BUCKET did not "
                                                 f"answer ({type(failure).__name__})") from None
@@ -311,7 +328,7 @@ async def lineage_providers(objects) -> list[str]:
 def _datasets(mode, env, connect, objects, worker_id, **_):
     from ...datasets import lineage
     from ...state.lab_access import PgAccessStore
-    _, retention = _traces(mode, env)
+    _, retention = _traces(mode, env, objects)
     directory = PgAccessStore(connect)
 
     async def reconcile_all() -> dict[str, int]:
