@@ -23,15 +23,16 @@ body names a provider, user or role. Nothing executes in a request:
   `created_at`, so a resubmit - even after a crash between the two freezes - is the same two
   D7 runs, never a second paid pair. B1's workers run them; B2's `compare`, once both are
   terminal, is a worker's (WR-B-5) and its stored report is served verbatim.
-* **Cancel**: D7's `lab_cancel_run` sets `cancelled` whatever the state, so the run is read
-  first and a finished one is a 409.
+* **Cancel**: D7's `lab_cancel_run` updates whatever the state (its state trigger refuses
+  succeeded/failed -> cancelled, but a cancelled run cancels again), so the run is read first
+  and every finished one is a 409.
 * **Runs** are those of the provider's experiments and subscription decisions (D7 lists no
   runs); an experiment whose freeze was refused (no D7 run) is not listed.
 * **Subscribe** is B3's `subscribe` with the evaluator spec the catalog holds for the ref;
   the same id under another body is a conflict.
 
 A port without its table yet answers 503: experiments (WR-B4-2), the B3 ledger and its
-provider listing (WR-B3-1), the catalog and evaluator specs (R167; WR-LAB-API-2-1). Mounted
+provider listing (WR-B3-1), the catalog and evaluator specs (R167; WR-LAB2-2). Mounted
 only when the composition put a `LabEvaluations` on `rt.lab_evaluations` (LAB_EVALS, off).
 """
 from __future__ import annotations
@@ -101,7 +102,7 @@ class ExperimentStore(Protocol):
 
 
 class Catalog(Protocol):
-    """What the provider can launch with (WR-LAB-API-2-1: D7 listings; R167 evaluators)."""
+    """What the provider can launch with (WR-LAB2-2: D7 listings; R167 evaluators)."""
 
     async def catalog(self, provider_org_id: str) -> dict[str, Any]:
         """`{datasets, harnesses, servings, evaluators}` of the provider's own records."""
@@ -224,7 +225,7 @@ async def cancel(x: LabEvaluations, who: Actor, rid: str) -> dict[str, Any]:
     if status["state"] not in LIVE:
         raise errors.StateConflict("the run already finished")
     # ponytail: read-then-cancel races a run finishing in between; lab-sql closes it by
-    # refusing a terminal run in lab_cancel_run itself (WR-LAB-API-2-2).
+    # refusing a terminal run in lab_cancel_run itself (WR-LAB2-3).
     return await store.cancel_run(rid, provider_org_id=who.provider_org_id)
 
 

@@ -23,7 +23,7 @@ and adjudicator against the session user; the provider and user never come from 
   run's cost is the provider-reported PROVIDER_USD or null (unknown).
 
 A port without its table yet answers 503: the label log (D8, SR-P1-1), the run ledger and its
-listings (SR-P3-1; WR-LAB-API-2-3), the B3 evaluation port P3 uses for checkpoints. Mounted
+listings (SR-P3-1; WR-LAB2-4), the B3 evaluation port P3 uses for checkpoints. Mounted
 only when the composition put a `LabPipelines` on `rt.lab_pipelines` (LAB_PIPELINES, off).
 """
 from __future__ import annotations
@@ -128,7 +128,7 @@ class ApproveBody(Body):
 
 
 class RunListing(Protocol):
-    """P3's `RunLedger` plus the listings WR-LAB-API-2-3 asks of lab-sql (SR-P3-1)."""
+    """P3's `RunLedger` plus the listings WR-LAB2-4 asks of lab-sql (SR-P3-1)."""
 
     async def run_rows(self, provider_org_id: str) -> Sequence[tuple[str, dict[str, Any]]]:
         """(external_run_id, the ledger row) of every run of the provider."""

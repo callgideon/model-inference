@@ -5,9 +5,10 @@
 
 The backends are the merged Python over B3's fake world (`tests/b/checkpoints/world.py`: D7's
 evaluation store, the checkpoint ledger, the L2 port): B1's `freeze` and B3's `subscribe` run
-for real. D7 here cancels whatever the state, as `0029_lab_data.sql:lab_cancel_run` does. The
+for real. D7 here cancels whatever the state, as `0029_lab_data.sql:lab_cancel_run`'s update does
+without its state trigger, so the route's guard is proven alone (the real D7: `_pg.py`). The
 tables not merged yet - experiments (WR-B4-2), the ledger's provider listing (WR-B3-1), the
-catalog and evaluator specs (WR-LAB-API-2-1) - are the small fakes below. The session verifier
+catalog and evaluator specs (WR-LAB2-2) - are the small fakes below. The session verifier
 is a minimal fake of `lab_auth.Sessions` (lab-api, batch #4).
 """
 from __future__ import annotations
@@ -309,7 +310,7 @@ def test_lab_evaluations__a_launch_is_checked_before_anything_is_written():
 # --- cancel ---------------------------------------------------------------------------------
 def test_lab_evaluations__cancel_stops_a_live_run_and_a_finished_run_is_a_conflict():
     """Oracle: cancelling a queued or running run is D7's `cancelled`; a succeeded, failed or
-    already cancelled run is a 409 and keeps its state (D7 alone would flip it); another
+    already cancelled run is a 409 and keeps its state (this D7 alone would flip it); another
     provider's run is a 404."""
     w = World()
     c = w.client()

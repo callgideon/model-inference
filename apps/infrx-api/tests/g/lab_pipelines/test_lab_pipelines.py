@@ -6,7 +6,7 @@
 P1 and P3 run for real over their own fake world (`tests/p/training/world.py`: D7's store with
 checkpoint receipts, the object store, the D8/D6J run ledger, B3's evaluation port, the L2
 members) and P1's label log (`tests/p/annotations/world.py`, D8 not merged). The run ledger's
-provider listings WR-LAB-API-2-3 asks of lab-sql are the small subclass below. The session
+provider listings WR-LAB2-4 asks of lab-sql are the small subclass below. The session
 verifier is a minimal fake of `lab_auth.Sessions` (lab-api, batch #4).
 """
 from __future__ import annotations
@@ -58,7 +58,7 @@ class Sessions:
 
 
 class Ledger(p3w.FakeRunLedger):
-    """P3's run ledger plus WR-LAB-API-2-3's listings: the provider's runs, and its D7
+    """P3's run ledger plus WR-LAB2-4's listings: the provider's runs, and its D7
     checkpoint receipts joined with P3's outcome notes."""
 
     def __init__(self, store) -> None:
