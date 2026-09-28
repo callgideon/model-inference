@@ -15,7 +15,8 @@ and the user's current membership before a body is read; every role reads
 (`read_aggregate_health`), launch, cancel and subscribe need `run_evaluation` - a cancel's
 checked once its run is found, so an unknown run is a 404 whatever the role (the Lab fake's
 order, B4-J02); nothing in a body names a provider, user or role. A ref in a form the
-provider does not hold (not in its catalog; another provider's external run) is a 422.
+provider does not hold (not in its catalog; no spec or D7 record behind it; another
+provider's external run) is a 422 (R183); a 404 is only a record addressed by id.
 Nothing executes in a request:
 
 * **Launch** writes the experiment once (`ExperimentStore.put`, keyed by the form's
@@ -214,21 +215,22 @@ def _public(row: dict[str, Any]) -> dict[str, Any]:
 
 
 async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any]:
-    offered = await x.port("catalog").catalog(who.provider_org_id)
+    catalog = x.port("catalog")
+    offered = await catalog.catalog(who.provider_org_id)
     if any(getattr(wanted, field) not in {o["ref"] for o in offered[kind]}
            for kind, field in OFFERED):
         raise errors.InvalidRequest("the launch names what the provider's catalog lacks")
-    spec = await x.port("catalog").evaluator(who.provider_org_id, wanted.evaluator_ref)
+    spec = await held(catalog.evaluator(who.provider_org_id, wanted.evaluator_ref))
     store = x.port("store")
     now = await x.access.store.db_now()
     row = await x.port("experiments").put(who.provider_org_id, {
         "experiment_id": wanted.experiment_id, "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "launch": wanted.model_dump(mode="json", exclude_unset=True), "report": None})
-    for arm in ARMS:
-        await runner.freeze(store, _run_payload(who.provider_org_id, wanted, arm,
-                                                row["created_at"]),
-                            evaluator=spec, access=x.access, user_id=who.user_id,
-                            provider_org_id=who.provider_org_id)
+    for arm in ARMS:                    # R183: a ref D7 cannot resolve is the form's (422)
+        await held(runner.freeze(store, _run_payload(who.provider_org_id, wanted, arm,
+                                                     row["created_at"]),
+                                 evaluator=spec, access=x.access, user_id=who.user_id,
+                                 provider_org_id=who.provider_org_id))
     return await _experiment(store, who.provider_org_id, row)
 
 

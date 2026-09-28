@@ -31,6 +31,7 @@ RUNS, REPORT = C + "runs_are_the_providers_experiment_and_subscription_runs_verb
 SUBSCRIBE = C + "subscribe_is_b3s_with_the_catalogs_evaluator_and_the_session_owner"
 UNKNOWN_RUN = C + "a_run_the_provider_does_not_have_is_not_found_whatever_the_role"
 NOT_HELD = C + "a_subscription_naming_what_the_provider_does_not_hold_is_invalid"
+LAUNCH_NOT_HELD = C + "a_launch_naming_what_the_provider_does_not_hold_is_invalid"
 LOOKUP = "    status = await store.run_status(rid, provider_org_id=who.provider_org_id)\n"
 REQUIRE = "    require(who, Cap.run_evaluation)\n"
 UNWIRED, BODY = C + "an_unwired_port_is_unavailable_after_the_access_checks", \
@@ -88,8 +89,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("one_serving_for_both_arms", "each arm runs its own serving",
        'getattr(launch, f"{arm}_serving_ref")', "launch.baseline_serving_ref", LAUNCH),
     _m("candidate_not_frozen", "a launch creates both runs",
-       "    for arm in ARMS:\n        await runner.freeze(",
-       "    for arm in ARMS[:1]:\n        await runner.freeze(", LAUNCH),
+       "    for arm in ARMS:                    # R183: a ref D7 cannot resolve is the form's",
+       "    for arm in ARMS[:1]:                # R183: a ref D7 cannot resolve is the form's",
+       LAUNCH),
     _m("launch_answered_200", "a launch is accepted (202), not done",
        "await lab_body(request, rt, Launch)), 202)", "await lab_body(request, rt, Launch)))",
        LAUNCH),
@@ -97,8 +99,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "evaluator=spec, access=x.access, user_id=who.user_id,",
        "evaluator=spec, access=x.access, user_id=who.provider_org_id,", LAUNCH),
     _m("created_at_not_the_experiments", "both runs carry the experiment's first created_at",
-       "                                                row[\"created_at\"]),",
-       "                                                now.strftime(\"%Y-%m-%dT%H:%M:%SZ\")),",
+       "                                                     row[\"created_at\"]),",
+       "                                                     now.strftime(\"%Y-%m-%dT%H:%M:%SZ\")),",
        RESUME),
     _m("half_launch_listed", "an experiment without both D7 runs is not listed",
        "    if None in runs:\n        return None", "    if False:\n        return None", RESUME),
@@ -117,6 +119,11 @@ MUTANTS: tuple[Mutant, ...] = (
        '           ("servings", "baseline_serving_ref"),\n', "", CHECKED),
     _m("candidate_unchecked", "a launch's candidate serving is in the provider's catalog",
        '           ("servings", "candidate_serving_ref"))\n', "           )\n", CHECKED),
+    _m("launch_evaluator_not_held", "an evaluator with no spec behind it is a 422 (R183)",
+       "    spec = await held(catalog.evaluator(", "    spec = await (catalog.evaluator(",
+       LAUNCH_NOT_HELD),
+    _m("launch_freeze_not_held", "a ref D7's publish cannot resolve is a 422, never a 404",
+       "        await held(runner.freeze(", "        await (runner.freeze(", LAUNCH_NOT_HELD),
     _m("usd_run_limit", "a launch spends CREDIT: another unit is refused before any write",
        '    unit: Literal["CREDIT"]', "    unit: str", CHECKED),
     # --- cancel ------------------------------------------------------------------------------

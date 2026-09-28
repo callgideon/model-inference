@@ -21,8 +21,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from infrx.contracts import errors
-from infrx.contracts.lab import records
-from infrx.contracts.v2 import records as v2
 from infrx.evaluation import reports
 from infrx.gateway.routes import lab_evaluations as le
 
@@ -319,6 +317,25 @@ def test_lab_evaluations__a_launch_is_checked_before_anything_is_written():
         answer = call(c, DEV, "POST", "experiments", body)
         assert (answer.status_code, answer.json()) == (status, {"refusal": reason}), body
     assert (w.store.runs, w.experiments.rows) == ({}, {})
+
+
+def test_lab_evaluations__a_launch_naming_what_the_provider_does_not_hold_is_invalid():
+    """Oracle (R183, B4-J02): a launch form naming a ref the provider does not hold is a 422,
+    never a 404 - an evaluator the catalog lists but holds no spec for, or a ref D7's publish
+    cannot resolve (0034: an unregistered evaluator) - and no run exists after either."""
+    w = World()
+    c = w.client()
+    unknown = le.runner.evaluator_ref(SPEC, provider_org_id=NEMO, evaluator_id=uid(9, 0xee))
+    w.catalog.offered[NEMO]["evaluators"].append({"ref": unknown, "label": "gone"})
+    answer = call(c, DEV, "POST", "experiments", w.launch(evaluator_ref=unknown))
+    assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"})
+
+    async def unresolved(payload, *, provider_org_id, actor):
+        raise errors.NotFound("no such evaluator for this provider")
+    w.store.publish = unresolved
+    answer = call(c, DEV, "POST", "experiments", w.launch(experiment_id=uid(2, 0xe0)))
+    assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"})
+    assert w.store.runs == {} and call(c, DEV, "GET", "experiments").json() == {"data": []}
 
 
 # --- cancel ---------------------------------------------------------------------------------

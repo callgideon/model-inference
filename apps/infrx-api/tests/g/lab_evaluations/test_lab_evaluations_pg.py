@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """WR-B4-1's real half: `/lab/v1/evaluations` over the real D7 store (`PgLabDataStore`, 0029, D7's
-seeded world: C1's grant to NEMO and one source) on the task-local PostgreSQL of key b3. The
+seeded world: C1's grant to NEMO and one source, plus B1's evaluator registered through 0034's
+`put_evaluator`) on the task-local PostgreSQL of key b3. The
 experiments, catalog and ledger ports stay this suite's fakes (no table yet: WR-B4-2, WR-B3-1,
 WR-LAB2-2); the membership is B1's fake L2 port.
 
@@ -28,7 +29,8 @@ from infrx.state.jobstore import connector
 from infrx.state.lab_data import PgLabDataStore
 
 from .. import support
-from ...b.runner.world import DEV, NEMO, OTHER, SPEC, access, harness, manifest, uid
+from ...b.runner.world import (DEV, EVALUATOR_ID, NEMO, OTHER, SPEC, access, harness, manifest,
+                               uid)
 from ...d import pgharness
 from ...d import test_d7_lab_data as d7
 from .test_lab_evaluations import (CANDIDATE, EVALUATOR, EXPERIMENT, PROTOCOL, SERVING,
@@ -68,6 +70,10 @@ def world():
                                             provider_org_id=NEMO, actor="dev@nemo"))
         harness_ref = asyncio.run(store.publish(harness(harness_id=uid(7, 0xa7)),
                                                 provider_org_id=NEMO, actor="dev@nemo"))
+        registered = asyncio.run(store.put_evaluator(SPEC, provider_org_id=NEMO,
+                                                     evaluator_id=EVALUATOR_ID,
+                                                     actor="dev@nemo"))
+        assert registered == EVALUATOR     # 0034: publish refuses an unregistered evaluator
         lab = access()
         lab.store.provider_names = {NEMO: "Nemo", OTHER: "Other"}
         x = le.LabEvaluations(Sessions((DEV,)), lab, store=store, experiments=Experiments(),
