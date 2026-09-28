@@ -45,7 +45,7 @@ _PRIVATE = f"""
   join infrx.endpoints e on e.endpoint_id = d.endpoint_id
   join infrx.provider_orgs p on p.provider_org_id = d.provider_org_id
   join infrx.serving_versions s on s.serving_version_id = d.serving_version_id
-  where d.endpoint_id = %(endpoint)s and d.visibility = 'private' and d.state <> 'retired'
+  where d.endpoint_id = %(endpoint)s and d.visibility = 'private' and d.state = 'ready_private'
     and p.slug || '/' || e.name || '-' || e.environment = %(alias)s
     and (%(label)s::text is null or s.revision_label = %(label)s)
   order by d.created_at desc, d.deployment_revision_id desc limit 1"""

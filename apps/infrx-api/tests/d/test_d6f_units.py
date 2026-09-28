@@ -135,3 +135,31 @@ def test_refusals__the_disabled_flag_and_sql_codes_are_typed() -> None:
                         errors.IdempotencyConflict)):
         service, _ = _service(error)
         _refused(cls, service.accept(b.auth(), REQUEST.request_id, b.feedback(), IDEM))
+
+
+def test_accept_with_replay__a_stored_row_of_another_id_is_a_replay() -> None:
+    """WR-G4F-2: the answer's id is the one this call generated on a first acceptance, and
+    the earlier row's on a replay - the only thing that tells them apart."""
+    class Echo(_Conn):
+        async def execute(self, sql, params=()):
+            self.answers = [_row(feedback_id=params[0].obj["feedback_id"])]
+            return await super().execute(sql, params)
+    conn = Echo([])
+
+    async def connect():
+        return conn
+    fresh = asyncio.run(PgFeedbackService(connect).accept_with_replay(
+        b.auth(), REQUEST.request_id, b.feedback(FeedbackName.rating, 4), IDEM))
+    service, _ = _service(_row())
+    replay = asyncio.run(service.accept_with_replay(
+        b.auth(), REQUEST.request_id, b.feedback(FeedbackName.rating, 4), IDEM))
+    assert (fresh[1], replay[1]) == (False, True), (fresh, replay)
+    assert replay[0].feedback_id == "fb_" + "a" * 26
+
+
+def test_scrub__sends_the_org_request_and_receipt_fields_and_answers_the_count() -> None:
+    service, conn = _service({"scrubbed": 3})
+    assert asyncio.run(service.scrub(b.ORG_A, "r", actor="t3", reason="deleted")) == 3
+    assert "infrx.scrub_feedback" in conn.sent[0][0]
+    assert _args(conn) == {"org_id": b.ORG_A, "request_id": "r", "actor": "t3",
+                           "reason": "deleted"}

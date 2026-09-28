@@ -25,7 +25,18 @@ NEW_TABLES = {"infrx.lab_access_grants",                                    # 00
                                        "lab_dataset_samples", "lab_eval_runs",
                                        "lab_eval_cases", "lab_eval_attempts",
                                        "lab_eval_results", "lab_checkpoint_receipts",
-                                       "lab_outbox"))}
+                                       "lab_outbox")),
+              *(f"infrx.{t}" for t in ("lab_budgets", "lab_budget_limits",    # 0031
+                                       "lab_submissions", "lab_submission_consents")),
+              "infrx.lab_control_events",                                   # 0032
+              *(f"infrx.{t}" for t in ("lab_rollouts", "lab_rollout_events",  # 0033
+                                       "lab_rollout_assignments")),
+              "infrx.lab_evaluators", "infrx.lab_eval_reports",             # 0034
+              "infrx.feedback_scrubs",                                      # 0035
+              *(f"infrx.{t}" for t in ("lab_judge_runs", "lab_judge_results", # 0036
+                                       "lab_judge_audit")),
+              "infrx.lab_judge_configs", "infrx.lab_judge_requests",        # 0037
+              "infrx.lab_variant_comparisons"}                              # 0040
 SEEDED: dict[str, int] = {}                                                 # none yet
 
 
@@ -79,3 +90,32 @@ def test_lab_upgrade_preserves_history_money_identity_and_grants() -> None:
     assert d10.snapshot(conn) == after, "the Lab set is not re-runnable"
     print(f"Lab upgrade over {len(made)} seeded job states: {len(before['counts'])} tables "
           f"unchanged, +{sorted(NEW_TABLES)}; sums {after['sums']}; re-run no-op")
+
+
+def test_the_lw2_requests_keep_the_lab_rows_already_written() -> None:
+    """0036-0040 (the LW2 schema requests) over a database already holding Lab rows written
+    by 0027-0035 - a running rollout, a budget with a hold - leave those rows as they were
+    (the new columns empty) and are re-runnable."""
+    from . import test_d9_rollout as d9
+    everything = migrations.sql_for(shim=pgharness.NEEDS_SHIM)
+    later = tuple(f for f in everything if f[0][:4].isdigit() and f[0][:4] >= "0036")
+    assert [f for f, _ in later][:1] == ["0036_lab_judge_ledger.sql"], later
+    pgharness.ensure()
+    pgharness.recreate(DB)
+    pgharness.apply(DB, tuple(f for f in everything if f not in later))
+    conn = pgharness.connect(DB)
+    d9.seed(conn)
+    ref = d9.t.publish(conn, d9.policy(d9.uid(1, 0xa0)))
+    d9.start(conn, ref)
+    d9.ok(conn, "lab_put_budget", {"provider_org_id": d9.NEMO, "payer_ref": d9.t.PAYER,
+                                   "limit": "10.00000000", "actor": "ops", "reason": "q4"})
+    rows = ("select row_to_json(o)::jsonb - 'plan_digest' from infrx.lab_rollouts o",
+            "select row_to_json(e)::jsonb - 'decision_doc' - 'reasons' "
+            "from infrx.lab_rollout_events e",
+            "select row_to_json(b)::jsonb from infrx.lab_budgets b")
+    before = [conn.execute(q).fetchall() for q in rows]
+    pgharness.apply(DB, later)
+    assert [conn.execute(q).fetchall() for q in rows] == before
+    assert conn.execute("select plan_digest from infrx.lab_rollouts").fetchall() == [(None,)]
+    pgharness.apply(DB, later)
+    assert [conn.execute(q).fetchall() for q in rows] == before, "not re-runnable"

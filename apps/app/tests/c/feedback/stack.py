@@ -61,7 +61,9 @@ LABEL = "ai.infrx.app-c3f.checkout"
 JWT_SECRET = "infrx-app-c3f-local-jwt-secret-not-a-real-one"
 AUTHN_PASSWORD = "infrx-app-c3f-authenticator-local"
 DB = f"{pgharness.DATABASE}_c3f"
-DOORS = Path(__file__).with_name("proposed_doors.sql")
+# WR-LSQ-7: once a 0038_* migration exists the doors are the migration's (body byte-identical to
+# proposed_doors.sql), so build() applies nothing and --mutants mutates the real migration.
+DOORS = next(migrations.DIR.glob("0038_*.sql"), Path(__file__).with_name("proposed_doors.sql"))
 C1, C2, DEV, ADMIN, VIEWER, BOTH = t.C1, t.BOTH, t.DEV, t.ADMIN, t.VIEWER, t.BOTH
 NEMO, OTHER, MODEL = t.NEMO, t.OTHER, t.MODEL
 UNKNOWN = "9f000000-0000-4000-8000-00000000009f"
@@ -126,12 +128,17 @@ def doors_sql() -> str:
 def build(sql: str | None = None) -> dict:
     """A fresh database: every migration, the doors (unless a migration has them), the world."""
     pgharness.recreate(DB)
-    pgharness.apply(DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+    # A mutant of the migration's doors REPLACES the migration (a re-run over it would keep its
+    # grants), so the mutated file is what the world is built from.
+    real = DOORS.parent == migrations.DIR
+    pgharness.apply(DB, tuple((name, sql if real and sql is not None and name == DOORS.name
+                                     else body)
+                              for name, body in migrations.sql_for(shim=pgharness.NEEDS_SHIM)))
     with pgharness.connect(DB) as conn:
         have = conn.execute("select to_regprocedure('public.submit_feedback(jsonb)') is not null "
                             "and to_regprocedure('public.lab_review_feedback(jsonb)') is not null"
                             ).fetchone()[0]
-        if sql is not None or not have:
+        if (sql is not None and not real) or not have:
             conn.execute(sql if sql is not None else doors_sql())
         return seed(conn)
 

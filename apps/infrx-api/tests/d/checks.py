@@ -1726,6 +1726,13 @@ EXPECTED_FUNCTION_CALLERS = {
     "public.consumer_credit_ledger(text,integer)": {"authenticated", "service_role"},
     "public.consumer_may_create_key()": {"authenticated", "service_role"},
 "public.lab_provider_memberships()": {"authenticated", "service_role"},   # 0030 (Lab, local-only): the R156 session door
+    # 0037 (Lab, local-only): SR-C3L-1's judge doors; 0038: WR-C3F-1's feedback session doors
+    "public.lab_judge_configure(uuid,uuid,uuid,text,integer,integer)": {"authenticated", "service_role"},
+    "public.lab_judge_set_budget(uuid,text,jsonb)": {"authenticated", "service_role"},
+    "public.lab_judge_request_run(uuid,uuid,uuid,text)": {"authenticated", "service_role"},
+    "public.lab_judge_calibration(uuid,uuid,integer)": {"authenticated", "service_role"},
+    "public.submit_feedback(jsonb)": {"authenticated", "service_role"},
+    "public.lab_review_feedback(jsonb)": {"authenticated", "service_role"},
     # D10-0025 (U3 WR-U3-1, R143): the operator console's writes, with the operator's own
     # JWT (is_operator() inside); never the platform key - service_role holds no EXECUTE.
     "public.operator_adjust_credit(uuid,text,text,text)": {"authenticated"},

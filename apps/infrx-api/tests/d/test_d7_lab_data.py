@@ -13,6 +13,7 @@ leave nothing behind, the race and kill drills commit their own objects.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import threading
 
@@ -44,7 +45,13 @@ RPCS = ("lab_register_source", "lab_publish", "lab_resolve", "lab_accessible_sam
         "lab_recover", "lab_cancel_run", "lab_run_status", "lab_receive_checkpoint",
         "lab_checkpoint_transition", "lab_outbox_pending", "lab_outbox_ack",
         "lab_outbox_release", "lab_outbox_error")
-EVALUATOR = f"lab:evaluator:{NEMO}:00000032-0000-4000-8000-000000000032@sha256:{'a' * 64}"
+#: B1's exact-match evaluator spec; its ref is the sha256 of its RFC 8785 bytes (0034's
+#: `lab_evaluators`, R167's upgrade), registered for NEMO and OTHER by `seed`.
+EVALUATOR_ID = "00000032-0000-4000-8000-000000000032"
+EVALUATOR_SPEC = {"metric": "exact_match", "reference": "sample.original.answer",
+                  "max_requests": 4, "max_bytes": 65536, "max_seconds": 30}
+EVALUATOR = (f"lab:evaluator:{NEMO}:{EVALUATOR_ID}@sha256:"
+             f"{hashlib.sha256(records.canonical(EVALUATOR_SPEC)).hexdigest()}")
 SERVING = f"lab:serving:{NEMO}:00000028-0000-4000-8000-000000000028@sha256:{'f' * 64}"
 PAYER = f"lab:payer:{NEMO}:0000003c-0000-4000-8000-00000000003c@sha256:{'a' * 64}"
 W: dict[str, str] = {}          # the seeded world: grant and source refs
@@ -94,7 +101,9 @@ def eval_run(run_id: str, dataset_ref: str, harness_ref: str, max_cases: int = 1
             "created_at": "2026-09-27T10:00:00Z", "dataset_ref": dataset_ref,
             "harness_ref": harness_ref, "serving_ref": SERVING, "evaluator_ref": EVALUATOR,
             "seed": 7, "environment": "dev", "max_cases": max_cases, "state": "queued",
-            "idempotency_key": records.run_key(run_id), "budgets": []}
+            "idempotency_key": records.run_key(run_id),
+            "budgets": [{"limit": {"unit": "CREDIT", "value": "100.00000000"},
+                         "reserved": {"unit": "CREDIT", "value": "0.00000000"}}]}
 
 
 def external_run(external_run_id: str, dataset_ref: str) -> dict:
@@ -155,6 +164,10 @@ def seed(conn) -> None:
     W["other_source"] = call(conn, "lab_register_source", {
         "provider_org_id": OTHER, "source_id": uid(2, 0x5c), "actor": "dev@other",
         "content_digest": f"sha256:{'2' * 64}", "grant_ref": W["other_grant"]})["ref"]
+    for provider in (NEMO, OTHER):
+        call(conn, "lab_put_evaluator", {"provider_org_id": provider, "actor": "dev",
+                                         "evaluator_id": EVALUATOR_ID,
+                                         "body": body(EVALUATOR_SPEC)})
 
 
 # ----------------------------------------------------------------------------- checks

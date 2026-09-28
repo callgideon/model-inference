@@ -8,6 +8,7 @@ with this lane's database and seed.
 """
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -18,6 +19,7 @@ from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Runner
 from . import migration_mutants as _d
 from . import pgharness
+from . import test_d7_followup as followup
 from . import test_d7_lab_data as t
 
 FILE = "0029_lab_data.sql"
@@ -75,8 +77,9 @@ SQL_MUTANTS = (
        "check_violation or not_null_violation or invalid_text_representation then\n    perform "
        "infrx.refuse('invalid_request', 'not a referable", RACE,
        "the losing publisher of a version gets a raw constraint error, not state_conflict"),
-    _s("d7_finish_digest_unstable", "'results', v_results, 'cost', p_args->'cost')::text",
-       "'results', v_results, 'cost', p_args->'cost', 'at', clock_timestamp())::text", KILL,
+    _s("d7_finish_digest_unstable", "'results', v_results, 'cost', p_args->'cost')\n    || "
+       "jsonb_strip_nulls", "'results', v_results, 'cost', p_args->'cost', 'at', "
+       "clock_timestamp())\n    || jsonb_strip_nulls", KILL,
        "a finish retried after a lost answer is refused as a different outcome"),
     # --- DATA-RIGHTS: foreign ids
     _s("d7_resolve_any_provider", "   where ref = p_args->>'ref' and provider_org_id = "
@@ -100,8 +103,8 @@ SQL_MUTANTS = (
        "           then true", REFS, "a run names another provider's serving revision"),
     _s("d7_sample_not_bound_to_its_source", "  constraint lab_dataset_samples_source_grant foreign "
        "key (source_id, grant_id)\n    references infrx.lab_sources (source_id, grant_id) on "
-       "delete restrict\n", "  foreign key (source_id) references infrx.lab_sources on delete "
-       "restrict\n", REFS, "a sample claims a grant its content was not captured under"),
+       "delete restrict\n", "  check (true)\n", REFS,
+       "a sample claims a grant its content was not captured under"),
     _s("d7_source_id_redefinable", "  if (s.provider_org_id, s.content_digest, s.grant_id, "
        "s.grant_version)", "  if (s.provider_org_id, p_args->>'content_digest', s.grant_id, "
        "s.grant_version)", REFS, "one source id silently names other content"),
@@ -184,10 +187,12 @@ SQL_MUTANTS = (
        ";\n  if a.finish_digest", LEASES,
        "another provider presenting a finished lease reads this provider's attempt"),
     _s("d7_failed_with_results", "\n     or (v_outcome = 'failed' and jsonb_array_length("
-       "v_results) > 0) then", " then", LEASES, "a failed attempt records a scored result"),
-    _s("d7_evaluator_of_any_provider", "\n                 or (infrx.lab_ref_parts(x->>"
-       "'evaluator_ref'))[2]\n                    is distinct from v_lease->>'provider_org_id') "
-       "then", ") then", LEASES, "a result is attributed to another provider's evaluator"),
+       "v_results) > 0)\n", "\n", LEASES, "a failed attempt records a scored result"),
+    _s("d7_evaluator_of_any_provider", "                                 where e.ref = "
+       "x->>'evaluator_ref'\n                                   and e.provider_org_id = "
+       "(v_lease->>'provider_org_id')::uuid))", "                                 where e.ref = "
+       "x->>'evaluator_ref'))", LEASES,
+       "a result is attributed to another provider's evaluator"),
     _s("d7_results_per_attempt", "  primary key (run_id, case_id, evaluator_ref),\n", "", LEASES,
        "one case holds two results from one evaluator"),
     _s("d7_results_editable", "'lab_dataset_samples',\n                           "
@@ -202,9 +207,9 @@ SQL_MUTANTS = (
        "a finished run is cancelled and its evidence withdrawn"),
     _s("d7_runs_unguarded", "  foreach t in array array['lab_eval_runs:run', ",
        "  foreach t in array array[", STATES, "a run moves between any two states"),
-    _s("d7_run_never_succeeds", "    update infrx.lab_eval_runs set state = 'succeeded', "
-       "updated_at = infrx.now()", "    update infrx.lab_eval_runs set state = state, "
-       "updated_at = infrx.now()", STATES, "a run whose cases all finished stays running"),
+    _s("d7_run_never_succeeds", "      state = case when exists (select 1 from "
+       "infrx.lab_eval_cases c", "      state = case when false and exists (select 1 from "
+       "infrx.lab_eval_cases c", STATES, "a run whose cases were evaluated ends failed"),
     _s("d7_cancelled_run_leases", "    perform infrx.refuse('already_terminal', 'run ' || "
        "r.run_id || ' is ' || r.state);", "    null;", STATES,
        "a cancelled run keeps handing out cases"),
@@ -257,7 +262,160 @@ SQL_MUTANTS = (
        "infrx.lab_outbox (available_at) where acknowledged_at is null;\n", "", PLANS,
        "every pump scans every event ever written"),
 )
+#: 0034 redefines these three 0029 bodies (F7 register_source/receive_checkpoint; F4,
+#: RSI-3 and WR-B-2 finish_attempt), so their mutants live in 0034 (D5 item 10b).
+FOLLOWUP_FILE = "0034_lab_eval_followup.sql"
+MOVED = {"d7_finish_digest_unstable", "d7_source_id_redefinable", "d7_unknown_grant_is_forbidden",
+         "d7_malformed_source_raw_error", "d7_source_under_revoked_grant",
+         "d7_replay_ignores_the_outcome", "d7_no_finish_replay", "d7_replay_any_worker",
+         "d7_replay_any_provider", "d7_failed_with_results", "d7_evaluator_of_any_provider",
+         "d7_cost_dropped", "d7_run_never_succeeds", "d7_redelivery_queues_again",
+         "d7_redelivery_other_artifact", "d7_checkpoint_foreign_run",
+         "d7_malformed_checkpoint_raw_error"}
+SQL_MUTANTS = tuple(dataclasses.replace(m, file=FOLLOWUP_FILE) if m.name in MOVED else m
+                    for m in SQL_MUTANTS)
 SQL_NAMES = tuple(m.name for m in SQL_MUTANTS)
+
+# ------------------------------------------------------------------- the 0034 follow-up
+DB_F = f"{pgharness.DATABASE}_d7fmut"
+ROLES_F = "check_browser_roles_reach_nothing"
+REAPER = "check_the_reaper_skips_a_locked_attempt"
+ALL_FAILED = "check_a_run_whose_every_case_failed_fails"
+SOURCELESS = "check_a_sample_without_its_source_is_refused"
+MID_RUN = "check_a_revocation_stops_leasing_mid_run"
+IDS = "check_source_and_checkpoint_ids_are_per_provider"
+UNITS = "check_costs_are_in_a_unit_of_the_runs_budgets"
+ERRORS = "check_a_failed_attempt_keeps_its_error_code"
+EVALUATORS = "check_evaluators_are_registered_specs_of_their_provider"
+RESULTS = "check_the_results_read_is_the_runs_own"
+RELEASE = "check_a_released_lease_consumes_no_attempt"
+REPORTS = "check_reports_are_write_once_by_digest"
+USES = "check_dataset_uses_are_the_captured_grant_scope"
+STORE = "check_the_store_composes"
+
+
+def _f(name, old, new, check, why, file=FOLLOWUP_FILE, **kw):
+    return _d.Mutant(name, file, old, new, "lab", check, why, **kw)
+
+
+FOLLOWUP = (
+    _f("d7f_service_writes", "execute format('grant select on infrx.%I to service_role', t);",
+       "execute format('grant select, delete on infrx.%I to service_role', t);", ROLES_F,
+       "the platform role deletes evaluators and reports around the RPCs"),
+    _f("d7f_row_security_off", "execute format('alter table infrx.%I enable row level security'",
+       "execute format('alter table infrx.%I disable row level security'", ROLES_F,
+       "a future browser grant exposes every provider's reports"),
+    _f("d7f_evaluators_editable", "'create or replace trigger %I before update or delete on "
+       "infrx.%I '", "'create or replace trigger %I before delete on infrx.%I '", ROLES_F,
+       "a registered evaluator spec is edited under its ref"),
+    _f("d7f_reaper_waits", "              for update skip locked)", "              for update)",
+       REAPER, "the reaper blocks behind an in-flight finish while holding cases",
+       file=FILE),
+    _f("d7f_all_failed_succeeds", "and c.state = 'done')", "and c.state in ('done', 'failed'))",
+       ALL_FAILED, "a run in which nothing was evaluated reports success"),
+    _f("d7f_sourceless_sample_published", "        where jsonb_typeof(s->'source_ref') is "
+       "distinct from 'string') then", "        where s->'source_ref' is null) then", SOURCELESS,
+       "a manifest is published short of a sample whose source is not a string"),
+    _f("d7f_no_shape_trigger", "create or replace trigger lab_records_shape before insert on "
+       "infrx.lab_records\n  for each row execute function infrx.lab_records_shape();\n", "",
+       SOURCELESS, "a manifest is published short of its sourceless samples"),
+    _f("d7f_results_ignore_revocation", "                    and infrx.lab_grant_current("
+       "s.grant_id, 'provider_sharing')) then", "                    ) then", MID_RUN,
+       "revoked content keeps producing results until the run ends"),
+    _f("d7f_result_rights_off", "  for each row when (new.state = 'succeeded') execute function "
+       "infrx.lab_result_rights();", "  for each row when (false) execute function "
+       "infrx.lab_result_rights();", MID_RUN, "a revocation mid-run changes nothing"),
+    _f("d7f_rights_refuse_leases", "create or replace trigger lab_eval_attempts_rights before "
+       "update on infrx.lab_eval_attempts\n  for each row when (new.state = 'succeeded')",
+       "create or replace trigger lab_eval_attempts_rights before insert or update on "
+       "infrx.lab_eval_attempts\n  for each row when (new.state in ('leased', 'succeeded'))",
+       MID_RUN, "a revoked case can never be leased to end it, so the run never finishes"),
+    _f("d7f_source_replay_any_provider", "  select * into s from infrx.lab_sources where "
+       "provider_org_id = v_provider\n     and source_id = v_source;", "  select * into s from "
+       "infrx.lab_sources where source_id = v_source limit 1;", IDS,
+       "a provider's source id collides with (and reveals) another provider's source"),
+    _f("d7f_checkpoint_ids_global", "         and conrelid = 'infrx.lab_checkpoint_receipts'"
+       "::regclass) = 1 then", "         and conrelid = 'infrx.lab_checkpoint_receipts'"
+       "::regclass) = 2 then", IDS, "checkpoint ids stay global: the first provider blocks "
+       "every other"),
+    _f("d7f_cost_any_unit", "        where r.run_id = a.run_id and b->'limit'->>'unit' = "
+       "p_args->'cost'->>'unit') then", "        where r.run_id = a.run_id) then", UNITS,
+       "a PROVIDER_USD cost is summed into a CREDIT-budgeted run"),
+    _f("d7f_error_dropped", "      finish_digest = v_digest, error_code = p_args->>'error'",
+       "      finish_digest = v_digest, error_code = null", ERRORS,
+       "why an attempt failed is lost"),
+    _f("d7f_error_on_success", "\n     or (v_outcome = 'succeeded' and p_args->>'error' is not "
+       "null) then", " then", ERRORS, "a successful attempt records a failure code"),
+    _f("d7f_error_not_in_digest", "\n    || jsonb_strip_nulls(jsonb_build_object('error', "
+       "p_args->'error'))", "", ERRORS, "a retried finish silently keeps another error"),
+    _f("d7f_error_unchecked", "  check (error_code ~ '^[a-z][a-z0-9_:.-]{0,99}$');",
+       "  check (true);", ERRORS, "free text (a prompt, a secret) is stored as an error code"),
+    _f("d7f_evaluator_not_content_addressed", "  constraint lab_evaluators_content_addressed "
+       "check (ref = 'lab:evaluator:'", "  constraint lab_evaluators_content_addressed check "
+       "(true or ref = 'lab:evaluator:'", EVALUATORS,
+       "a stored evaluator ref names bytes other than its spec"),
+    _f("d7f_run_evaluator_unchecked", "  if new.kind = 'run' and not exists (",
+       "  if false and not exists (", EVALUATORS, "a run names an evaluator nobody registered"),
+    _f("d7f_result_evaluator_unregistered", "  if exists (select 1 from "
+       "jsonb_array_elements(v_results) x\n              where not exists (select 1 from "
+       "infrx.lab_evaluators e", "  if false and exists (select 1 from "
+       "jsonb_array_elements(v_results) x\n              where not exists (select 1 from "
+       "infrx.lab_evaluators e", EVALUATORS, "a result is filed under an unregistered evaluator"),
+    _f("d7f_evaluator_read_any_provider", "\n     and provider_org_id = (p_args->>"
+       "'provider_org_id')::uuid;\n  if not found then\n    perform infrx.refuse('not_found', "
+       "'no such evaluator", ";\n  if not found then\n    perform infrx.refuse('not_found', "
+       "'no such evaluator", EVALUATORS, "a provider reads another provider's evaluator spec"),
+    _f("d7f_evaluator_not_json", "    perform (p_args->>'body')::jsonb;\n", "", EVALUATORS,
+       "a spec a worker cannot parse is registered"),
+    _f("d7f_results_any_provider", "  if not exists (select 1 from infrx.lab_eval_runs where "
+       "run_id = v_run\n                 and provider_org_id", "  if not exists (select 1 from "
+       "infrx.lab_eval_runs where run_id = v_run\n                 or provider_org_id", RESULTS,
+       "a provider reads another provider's results"),
+    _f("d7f_results_cost_dropped", "          jsonb_build_object('unit', a.cost_unit, 'value', "
+       "a.cost_value::text) end)", "          null end)", RESULTS,
+       "B2 compares runs without their costs"),
+    _f("d7f_results_no_error", "        'error', a.error_code, 'cost',", "        'error', null, "
+       "'cost',", RESULTS, "B2 cannot tell errors from misses"),
+    _f("d7f_release_consumes", "  update infrx.lab_eval_cases set state = 'pending', attempts = "
+       "attempts - 1", "  update infrx.lab_eval_cases set state = 'pending', attempts = attempts",
+       RELEASE, "a 402 counts toward max_attempts"),
+    _f("d7f_release_unfenced", "  a infrx.lab_eval_attempts%rowtype := infrx.lab_fence("
+       "p_args->'lease');", "  a infrx.lab_eval_attempts%rowtype := (select x from "
+       "infrx.lab_eval_attempts x where x.run_id = (p_args->'lease'->>'run_id')::uuid and "
+       "x.case_id = (p_args->'lease'->>'case_id')::uuid and x.attempt = (p_args->'lease'->>"
+       "'attempt')::int);", RELEASE, "another worker's lease is given back under it"),
+    _f("d7f_release_keeps_row", "  delete from infrx.lab_eval_attempts\n   where (run_id, "
+       "case_id, attempt) = (a.run_id, a.case_id, a.attempt);\n", "", RELEASE,
+       "a released case can never be leased again"),
+    _f("d7f_report_digest_not_content", "  v_digest text := 'sha256:' || encode(sha256("
+       "convert_to(p_args->>'body', 'UTF8')), 'hex');", "  v_digest text := 'sha256:' || "
+       "encode(sha256(convert_to(p_args->>'body' || ' ', 'UTF8')), 'hex');", REPORTS,
+       "a report is stored under a digest that is not its content's"),
+    _f("d7f_report_not_content_addressed", "  constraint lab_eval_reports_content_addressed\n"
+       "    check (report_digest =", "  constraint lab_eval_reports_content_addressed\n    check "
+       "(true or report_digest =", REPORTS, "a report row is forged under any digest"),
+    _f("d7f_report_any_provider_runs", "       and r.provider_org_id = v_provider\n       and "
+       "r.ref in", "\n       and r.ref in", REPORTS,
+       "a provider files a decision about another provider's runs"),
+    _f("d7f_report_any_schema", "  if v_doc->>'schema' is distinct from 'infrx.eval_report.1' "
+       "then", "  if false then", REPORTS, "any JSON is stored as an evaluation decision"),
+    _f("d7f_report_read_any_provider", "  select * into e from infrx.lab_eval_reports where "
+       "report_digest = p_args->>'report_digest'\n     and provider_org_id = (p_args->>"
+       "'provider_org_id')::uuid;", "  select * into e from infrx.lab_eval_reports where "
+       "report_digest = p_args->>'report_digest';", REPORTS,
+       "a provider reads another provider's decision"),
+    _f("d7f_report_replay_fails", "    on conflict (report_digest) do nothing;", "    ;",
+       REPORTS, "storing a report again (a retry) fails"),
+    _f("d7f_uses_any_provider", "\n             and r.provider_org_id = (p_args->>"
+       "'provider_org_id')::uuid) x", ") x", USES, "a provider learns another's data sources"),
+    _f("d7f_uses_current_version", "              on (g.grant_id, g.version) = (s.grant_id, "
+       "s.grant_version)", "              on g.grant_id = s.grant_id", USES,
+       "a dataset claims categories its data was never captured under"),
+    _f("d7f_uses_wrong_category", "'model_id', m, 'category', c) u",
+       "'model_id', m, 'category', 'feedback') u", STORE,
+       "H1's gate checks a category the data does not have"),
+)
+FOLLOWUP_NAMES = tuple(m.name for m in FOLLOWUP)
 
 RUNNER = Runner(name="d7", targets=("tests/d/test_d7_units.py",))
 F = "state/lab_data.py"
@@ -266,6 +424,8 @@ PUB = "test_publish__sends_the_canonical_bytes_of_the_callers_own_record"
 RESOLVE = "test_resolve__is_the_parsed_record_and_a_refusal_is_typed"
 CALLS = "test_calls__carry_the_callers_provider_the_lease_and_the_cost"
 OUTBOX = "test_outbox__is_the_relays_store_half_with_the_claimant_on_every_ack"
+FOLLOW = "test_followup__error_release_results_evaluators_reports_and_uses"
+VARIANT_UNITS = "test_variant__a_comparison_is_sent_as_its_canonical_bytes_and_read_back_whole"
 
 
 def _p(name, invariant, old, new, *cases, **kw) -> Mutant:
@@ -302,7 +462,7 @@ CODE_MUTANTS = (
        '"provider_org_id": provider_org_id, "run_id": run_id, "worker_id": worker_id,',
        '"run_id": run_id, "worker_id": worker_id,', CALLS),
     _p("d7_py_finish_drops_cost", "an attempt's cost is recorded",
-       '"results": results, "cost": cost})', '"results": results})', CALLS),
+       '"results": results, "cost": cost}', '"results": results}', CALLS),
     _p("d7_py_recover_raw", "recover answers the count",
        '        return (await self._call("lab_recover", {}))["expired"]',
        '        return await self._call("lab_recover", {})', CALLS),
@@ -317,11 +477,51 @@ CODE_MUTANTS = (
        '"worker_id": worker_id}', '{"event_ids": list(event_ids)}', OUTBOX),
     _p("d7_py_events_as_dicts", "the relay reads event.event_id",
        "        return [LabEvent(**row) for row in", "        return [row for row in", OUTBOX),
+    # --- the 0034 follow-up
+    _p("d7_py_error_dropped", "a failed attempt's error is sent",
+       '            args["error"] = error', "            pass", FOLLOW),
+    _p("d7_py_error_always_sent", "no error key without an error (a stable finish digest)",
+       "        if error is not None:", "        if True:", FOLLOW),
+    _p("d7_py_release_without_lease", "a release names its lease",
+       '"lab_release_attempt", {"lease": lease})', '"lab_release_attempt", {})', FOLLOW),
+    _p("d7_py_results_unscoped", "a results read is the caller's provider's",
+       '"lab_run_results", {"provider_org_id": provider_org_id,\n'
+       '                                                    "run_id": run_id})',
+       '"lab_run_results", {"run_id": run_id})', FOLLOW),
+    _p("d7_py_evaluator_python_json", "an evaluator is its RFC 8785 bytes",
+       '"body": records.canonical(spec).decode()}', '"body": json.dumps(spec)}', FOLLOW),
+    _p("d7_py_evaluator_raw_row", "an evaluator reads back as its spec",
+       "        return json.loads(row[\"body\"])\n", "        return row\n", FOLLOW),
+    _p("d7_py_report_digest_unchecked", "a forged report digest never reaches the database",
+       '        if report.get("report_digest", digest) != digest:', "        if False:", FOLLOW),
+    _p("d7_py_report_digest_in_body", "the digest is of the report without itself",
+       '{k: v for k, v in report.items() if k != "report_digest"}', "dict(report)", FOLLOW),
+    _p("d7_py_report_read_drops_digest", "a report reads back with its digest",
+       '        return {**json.loads(row["body"]), "report_digest": row["report_digest"]}',
+       '        return json.loads(row["body"])', FOLLOW),
+    _p("d7_py_uses_raw", "uses are the port's DatasetUse records",
+       "        return tuple(DatasetUse.model_validate(row) for row in",
+       "        return tuple(row for row in", FOLLOW),
+    _p("d7_py_uses_unscoped", "uses are of the caller's own dataset",
+       '"lab_dataset_uses", {"provider_org_id": provider_org_id, "dataset_ref": dataset_ref}',
+       '"lab_dataset_uses", {"dataset_ref": dataset_ref}', FOLLOW),
+    _p("d7_py_variant_python_json", "a comparison is stored as its RFC 8785 bytes",
+       '"body": records.canonical(comparison).decode()}))["comparison_digest"]',
+       '"body": json.dumps(comparison)}))["comparison_digest"]', VARIANT_UNITS),
+    _p("d7_py_variant_read_raw", "comparisons read back as their documents",
+       '        return [json.loads(row["body"]) for row in await self._call(',
+       '        return [row for row in await self._call(', VARIANT_UNITS),
+    _p("d7_py_variant_read_unscoped", "comparisons are the caller's provider's",
+       '            "lab_variant_comparisons", {"provider_org_id": provider_org_id,\n'
+       '                                        "report_digest": report_digest})]',
+       '            "lab_variant_comparisons", {"report_digest": report_digest})]',
+       VARIANT_UNITS),
 )
 
 
-def kill(mutant) -> tuple[str, str]:
-    """migration_mutants.kill's classification on this lane's database and seed."""
+def kill(mutant, db: str = DB, world=t) -> tuple[str, str]:
+    """migration_mutants.kill's classification on this lane's database and a world module's
+    seed and CHECKS (D7's by default; the later lab-sql lists pass their own)."""
     pgharness.ensure()
     with TemporaryDirectory(prefix=f"infrx-dlab-{mutant.name}-") as tmp:
         directory = Path(tmp)
@@ -329,18 +529,78 @@ def kill(mutant) -> tuple[str, str]:
         if refused is not None:
             return _d.MISDECLARED, refused
         try:
-            pgharness.recreate(DB)
-            pgharness.apply(DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM,
+            pgharness.recreate(db)
+            pgharness.apply(db, migrations.sql_for(shim=pgharness.NEEDS_SHIM,
                                                    directory=directory))
         except (AssertionError, psycopg.Error) as broken:
             return _d.APPLY_ERROR, _d._first_line(broken)
         try:
-            with pgharness.connect(DB) as conn:
-                t.seed(conn)
-                return _d._run(t.CHECKS[mutant.check], conn)
+            with pgharness.connect(db) as conn:
+                world.seed(conn)
+                return _d._run(world.CHECKS[mutant.check], conn)
         except (AssertionError, psycopg.Error) as during_setup:
             return _d.SETUP_ERROR, _d._first_line(during_setup)
 
 
+def kill_followup(mutant) -> tuple[str, str]:
+    return kill(mutant, DB_F, followup)
+
+
 def run_code_mutant(mutant):
     return shared.run_mutant(mutant, RUNNER)
+
+
+# --- WR-R3-2: variant comparisons, `0040_lab_variant_comparisons.sql` (test_d7_variant) ----
+VARIANT_FILE = "0040_lab_variant_comparisons.sql"
+DB_V = f"{pgharness.DATABASE}_d7vmut"
+V_ROLES = "check_browser_roles_reach_nothing"
+V_STORED = "check_a_comparison_is_stored_once_beside_its_report"
+V_LINEAGE = "check_a_comparison_rests_on_the_providers_variant_and_report"
+V_STORE = "check_the_store_composes"
+
+
+def _v(name, old, new, check, why, **kw):
+    return _d.Mutant(name, VARIANT_FILE, old, new, "lab", check, why, **kw)
+
+
+VARIANT = (
+    _v("r3_service_edits", "grant select on infrx.lab_variant_comparisons to service_role;",
+       "grant select, delete on infrx.lab_variant_comparisons to service_role;", V_ROLES,
+       "the platform role deletes the evidence an optimization claim rests on"),
+    _v("r3_rows_mutable", "create or replace trigger lab_variant_comparisons_immutable before "
+       "update or delete", "create or replace trigger lab_variant_comparisons_immutable before "
+       "delete", V_STORED, "a stored comparison is rewritten after the fact"),
+    _v("r3_not_content_addressed", "  constraint lab_variant_comparisons_content_addressed\n"
+       "    check (comparison_digest = 'sha256:' || encode(sha256(convert_to(body, 'UTF8')), "
+       "'hex')),\n", "", V_STORED, "a row claims a digest its bytes do not have"),
+    _v("r3_replay_second_row", "    on conflict (comparison_digest) do nothing;", ";", V_STORED,
+       "storing the same comparison again is a 500"),
+    _v("r3_read_any_provider", "     and c.provider_org_id = (p_args->>'provider_org_id')::uuid",
+       "", V_STORED, "a provider reads another's comparisons"),
+    _v("r3_any_variant", "  if not exists (select 1 from infrx.lab_records r where r.ref = "
+       "v_doc->>'variant_ref'\n                  and r.kind = 'variant' and r.provider_org_id = "
+       "v_provider)\n     or", "  if false\n     or", V_LINEAGE,
+       "a comparison names another provider's (or no) variant"),
+    _v("r3_any_record_is_a_variant", "                  and r.kind = 'variant' and "
+       "r.provider_org_id = v_provider)", "                  and r.provider_org_id = "
+       "v_provider)", V_LINEAGE, "a run record is taken for the variant"),
+    _v("r3_any_report", "     or not exists (select 1 from infrx.lab_eval_reports e\n"
+       "                     where e.report_digest = v_doc->>'report_digest'\n"
+       "                       and e.provider_org_id = v_provider) then", " then", V_LINEAGE,
+       "a comparison rests on another provider's report (or a raw FK error)"),
+    _v("r3_claim_unproven", "  constraint lab_variant_comparisons_claim_is_equivalence\n"
+       "    check (not optimization_claimed or outcome = 'equivalent')\n", "  constraint "
+       "lab_variant_comparisons_claim_is_equivalence check (true)\n", V_LINEAGE,
+       "an inconclusive comparison claims an optimization"),
+    _v("r3_any_schema", "  if v_doc->>'schema' is distinct from 'infrx.variant_comparison.1' "
+       "then", "  if false then", V_LINEAGE, "any JSON is stored as a comparison"),
+    _v("r3_read_empty", "   where c.report_digest = p_args->>'report_digest'\n",
+       "   where false and c.report_digest = p_args->>'report_digest'\n", V_STORE,
+       "the stored comparison never reads back"),
+)
+VARIANT_NAMES = tuple(m.name for m in VARIANT)
+
+
+def kill_variant(mutant) -> tuple[str, str]:
+    from . import test_d7_variant as variant_world
+    return kill(mutant, DB_V, variant_world)
