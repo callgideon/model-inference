@@ -54,6 +54,7 @@ O_FOREIGN = "test_operations__another_providers_actor_sees_and_moves_nothing"
 O_ACTOR = "test_operations__the_actor_is_rechecked_against_the_current_membership"
 O_FAILED = "test_operations__a_failed_smoke_reads_failed_and_is_never_proposed"
 O_PINNED = "test_operations__only_a_pinned_supported_registration_is_accepted"
+O_APP_REG = "test_operations__the_lab_apps_registration_shape_registers"
 O_SERVING = "test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins"
 O_APP = "test_control_app__serves_readiness_and_no_consumer_route"
 READ_GUARD = ("        await self.control.access.require(actor.user_id, actor.provider_org_id,\n"
@@ -171,10 +172,26 @@ MUTANTS: tuple[Mutant, ...] = (
        "        await self.control.access.require(user, provider, ProviderCapability.manage_dev_deployment)\n",
        "", O_ACTOR),
     _m("register_any_model_name", "a registration names one of the provider's own models", OPS,
-       "                    if s.public_model_id == registration.name]", "]", O_PINNED),
+       '                    if s.public_model_id.rpartition("/")[2] == registration.name]', "]",
+       O_PINNED),
+    _m("register_slug_qualified_name", "the name is the App's bare name (0-L3I-R1)", OPS,
+       'if s.public_model_id.rpartition("/")[2] == registration.name]',
+       "if s.public_model_id == registration.name]", O_APP_REG),
+    _m("register_any_weights", "the artifact digest is one of the model's imported weights",
+       OPS, "                    if registration.artifact_digest in s.weight_shard_digests]",
+       "]", O_PINNED, O_APP_REG),
     _m("register_keeps_base_runtime", "the registered runtime is the one named, by digest", OPS,
-       '"runtime_image_ref": f"{registration.runtime}@{registration.artifact_digest}",',
-       "", O_ROWS, O_PINNED),
+       '"runtime_image_ref": registration.runtime,', "", O_ROWS, O_PINNED),
+    _m("register_runtime_repinned_to_artifact", "the artifact digest never pins the image "
+       "(0-L3I-R1)", OPS, '"runtime_image_ref": registration.runtime,',
+       '"runtime_image_ref": registration.runtime.partition("@")[0] + "@" '
+       '+ registration.artifact_digest,', O_ROWS, O_APP_REG),
+    _m("register_image_digest_dropped", "the image digest is the runtime's own", OPS,
+       '"runtime_image_digest": (registration.runtime.partition("@")[2]',
+       '"runtime_image_digest": (None', O_ROWS),
+    _m("model_shows_the_runtime_digest", "a model's artifact is its weights", OPS,
+       "artifact_digest=serving.weight_shard_digests[0],",
+       'artifact_digest=serving.runtime_image_ref.partition("@")[2],', O_ROWS),
     _m("register_keeps_base_schema", "the registered schema is the one named", OPS,
        '"capability": base.capability.model_copy(update={\n'
        '                "input_schema_ref": REQUEST + registration.schema_version,\n'
@@ -189,7 +206,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("register_limits_invented", "limits are copied, never invented", OPS,
        "max_input_tokens=latest.max_input_tokens", "max_input_tokens=4096", O_ROWS),
     _m("register_dev_endpoint_misnamed", "the dev endpoint is the model's own name", OPS,
-       "endpoint_name=registration.name.rpartition(\"/\")[2],", 'endpoint_name="lab",', O_ROWS),
+       "endpoint_name=registration.name,", 'endpoint_name="lab",', O_ROWS),
     _m("smoke_failure_reads_passed", "a failed smoke never reads passed", OPS,
        'smoke = ("failed" if failed else', 'smoke = ("passed" if failed else', O_FAILED),
     _m("draft_reads_passed", "an unrun revision reads none", OPS,

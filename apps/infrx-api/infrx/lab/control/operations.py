@@ -9,10 +9,11 @@
                  listing CAS (`LabControl.rollback`): admitted jobs keep their pins (R62/R69).
 
 The route's records are closed and coarser than L3's (`state` is liveness only; `smoke`
-carries validation): see `_deployment`. A registration from the Lab names a model the provider
-already has pinned weights for and a new runtime image (by digest) and schema over those same
-weights - a new serving revision, the weights never re-declared (a model's first weights are
-an operator's import). A provider `rollback` proposal is refused: rollback is an operator's
+carries validation): see `_deployment`. A registration is the Lab App's form (0-L3I-R1): `name`
+is the model's bare name in the workspace (the App allows no slug), `artifact_digest` the
+model's weights - one of the shard digests an operator imported it with, checked, never
+re-declared - and `runtime` the image by digest (`<repo>@sha256:<hex>`). It makes a new serving
+revision over those same weights (a model's first weights are an operator's import). A provider `rollback` proposal is refused: rollback is an operator's
 (or R2's) listing CAS.
 
 The listings need reads `ControlStore` lacks (`ControlReads`, lab-sql's WR-LSQ-9).
@@ -31,7 +32,7 @@ from ...contracts.lab.records import canonical
 from ...contracts.v2.records import (DeploymentRevision, DeploymentState, ProviderCapability,
                                      ProviderRole, ServingRevision)
 from ...operations.service import OperatorSession
-from . import LabControl, Listing
+from . import RUNTIME, LabControl, Listing
 
 S = DeploymentState
 
@@ -112,15 +113,10 @@ class ControlReads(Protocol):
 REQUEST, RESPONSE = "infrx.request.", "infrx.response."
 
 
-def _runtime(serving: ServingRevision) -> tuple[str, str]:
-    repo, _, digest = serving.runtime_image_ref.partition("@")
-    return repo, digest or serving.runtime_image_digest or ""
-
-
 def _model(serving: ServingRevision) -> Model:
-    runtime, digest = _runtime(serving)
     return Model(model_id=serving.public_model_id, revision_label=serving.revision_label,
-                 artifact_digest=digest, runtime=runtime, registered_at=serving.created_at,
+                 artifact_digest=serving.weight_shard_digests[0],
+                 runtime=serving.runtime_image_ref, registered_at=serving.created_at,
                  schema_version=serving.capability.input_schema_ref.removeprefix(REQUEST))
 
 
@@ -139,7 +135,7 @@ class Operations:
         return Deployment(
             deployment_revision_id=d.deployment_revision_id, model_id=serving.public_model_id,
             serving_version_id=d.serving_version_id, revision_label=serving.revision_label,
-            runtime=_runtime(serving)[0], created_at=d.created_at,
+            runtime=serving.runtime_image_ref, created_at=d.created_at,
             schema_version=serving.capability.input_schema_ref.removeprefix(REQUEST),
             rate_card_version=card.rate_card_version if card else None,
             environment=d.environment.value, visibility=d.visibility.value,
@@ -179,11 +175,16 @@ class Operations:
         user, provider = actor.user_id, actor.provider_org_id
         await self.control.access.require(user, provider, ProviderCapability.manage_dev_deployment)
         servings = [s for s in await self.reads.provider_servings(provider)
-                    if s.public_model_id == registration.name]
+                    if s.public_model_id.rpartition("/")[2] == registration.name]
         if not servings:
             raise errors.NotFound("no model with registered weights of this name in this "
                                   "provider workspace")
-        base = max(servings, key=lambda s: s.created_at)
+        weighted = [s for s in servings
+                    if registration.artifact_digest in s.weight_shard_digests]
+        if not weighted:
+            raise errors.InvalidRequest("the artifact digest is not one of this model's "
+                                        "imported weights: a Lab registration declares none")
+        base = max(weighted, key=lambda s: s.created_at)
         limits = [d for d in await self.reads.provider_deployments(provider)
                   if d.serving_version_id in {s.serving_version_id for s in servings}]
         if not limits:
@@ -195,8 +196,10 @@ class Operations:
             # ponytail: labels by count; two concurrent registrations share one and the second
             # is refused by the registry, never merged.
             "revision_label": f"lab-{len(servings) + 1}",
-            "runtime_image_ref": f"{registration.runtime}@{registration.artifact_digest}",
-            "runtime_image_digest": registration.artifact_digest,
+            "runtime_image_ref": registration.runtime,
+            # a malformed ref is left for `LabControl.register` to refuse (`unsupported`)
+            "runtime_image_digest": (registration.runtime.partition("@")[2]
+                                     if RUNTIME.match(registration.runtime) else None),
             "capability": base.capability.model_copy(update={
                 "input_schema_ref": REQUEST + registration.schema_version,
                 "output_schema_ref": RESPONSE + registration.schema_version}),
@@ -205,7 +208,7 @@ class Operations:
             serving.model_dump()))
         dev = await self.control.create_dev(
             user, provider, serving_version_id=serving.serving_version_id,
-            endpoint_name=registration.name.rpartition("/")[2],
+            endpoint_name=registration.name,
             max_input_tokens=latest.max_input_tokens, max_output_tokens=latest.max_output_tokens)
         return await self._deployment(dev)
 

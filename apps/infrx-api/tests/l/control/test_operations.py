@@ -22,8 +22,13 @@ from infrx.lab.control.operations import Actor, Operations, Registration, Servin
 from .test_control import ship
 from .worlds import ALIAS, OPERATOR, pin, serving
 
-DIGEST = "sha256:" + "ab" * 32
-RUNTIME = "vllm/vllm-openai"
+from infrx.contracts.v2.fixtures import SHARD_DIGESTS
+
+# The Lab App's registration form (`apps/lab/app/(provider)/models/page.tsx`): `name` is the
+# model's bare name in the workspace (`[a-z0-9][a-z0-9-]{0,62}`, no slug), `artifact_digest` the
+# model's weights (one of its imported shard digests), `runtime` the image by digest.
+NAME, WEIGHTS = ALIAS.rpartition("/")[2], SHARD_DIGESTS[0]
+RUNTIME = "vllm/vllm-openai@sha256:" + "ab" * 32
 
 
 def run(coro):
@@ -39,7 +44,7 @@ def actor(w, user, provider, role=v2.ProviderRole.developer) -> Actor:
 
 
 def reg(**update) -> Registration:
-    return Registration(**{"name": ALIAS, "artifact_digest": DIGEST, "schema_version": "chat.v1",
+    return Registration(**{"name": NAME, "artifact_digest": WEIGHTS, "schema_version": "chat.v1",
                            "runtime": RUNTIME, **update})
 
 
@@ -55,14 +60,16 @@ def test_operations__the_route_records_are_l3s_own_rows(fake_world):
             d.smoke, d.rate_card_version) == (ALIAS, RUNTIME, "chat.v1", "dev", "private",
                                               "active", "none", None)
     stored = w.control_store.servings[d.serving_version_id]
-    assert stored.runtime_image_ref == f"{RUNTIME}@{DIGEST}" and stored.provider_org_id == w.A
+    assert (stored.runtime_image_ref, stored.runtime_image_digest, stored.provider_org_id) == (
+        RUNTIME, RUNTIME.partition("@")[2], w.A)
+    assert stored.weight_shard_digests == SHARD_DIGESTS, "a Lab registration re-pins no weights"
     prod = w.control_store.deployments[w.control_store.listings[ALIAS][0].deployment_revision_id]
     row = w.control_store.deployments[d.deployment_revision_id]
     assert (row.max_input_tokens, row.max_output_tokens) == (prod.max_input_tokens,
                                                              prod.max_output_tokens)
     assert w.control_store.endpoints[row.endpoint_id] == (w.A, "marlin-2b", v2.Environment.dev)
     model = next(m for m in run(o.models(dev_a)) if m.revision_label == d.revision_label)
-    assert (model.model_id, model.artifact_digest, model.runtime) == (ALIAS, DIGEST, RUNTIME)
+    assert (model.model_id, model.artifact_digest, model.runtime) == (ALIAS, WEIGHTS, RUNTIME)
     assert w.engine.calls == []
     tested = run(o.smoke(dev_a, d.deployment_revision_id))
     assert tested.smoke == "passed" and w.engine.calls == [d.deployment_revision_id]
@@ -109,7 +116,7 @@ def test_operations__the_actor_is_rechecked_against_the_current_membership(fake_
         with pytest.raises(errors.NotFound):
             run(listing(actor(w, w.DEV_B, w.A, admin)))
     with pytest.raises(errors.Forbidden):      # the role is refused before the name is read
-        run(o.register(actor(w, w.VIEWER_A, w.A, admin), reg(name="nemostation/unknown")))
+        run(o.register(actor(w, w.VIEWER_A, w.A, admin), reg(name="unknown")))
     d = run(o.register(actor(w, w.DEV_A, w.A), reg()))
     run(o.smoke(actor(w, w.DEV_A, w.A), d.deployment_revision_id))
     with pytest.raises(errors.Forbidden):
@@ -131,7 +138,7 @@ def test_operations__a_failed_smoke_reads_failed_and_is_never_proposed(fake_worl
     assert (listed.smoke, listed.state) == ("failed", "retired")
     with pytest.raises(errors.Conflict):
         run(o.propose(admin_a, "publish", d.deployment_revision_id))
-    fresh = run(o.register(dev_a, reg(artifact_digest="sha256:" + "cd" * 32)))
+    fresh = run(o.register(dev_a, reg(runtime="vllm/vllm-openai@sha256:" + "cd" * 32)))
     assert fresh.smoke == "none"
     with pytest.raises(errors.Conflict):
         run(o.propose(admin_a, "publish", fresh.deployment_revision_id))
@@ -143,23 +150,48 @@ def test_operations__only_a_pinned_supported_registration_is_accepted(fake_world
     a provider rollback proposal is refused (rollback is the operator's CAS)."""
     w, o = fake_world, ops(fake_world)
     dev_a = actor(w, w.DEV_A, w.A)
-    for bad in (reg(runtime="vllm/vllm-openai:latest"), reg(runtime="acme/uploaded"),
-                reg(schema_version="chat.v9")):
+    for bad in (reg(runtime="vllm/vllm-openai:latest"), reg(runtime="vllm/vllm-openai"),
+                reg(runtime="acme/uploaded@sha256:" + "ab" * 32), reg(schema_version="chat.v9"),
+                reg(artifact_digest="sha256:" + "ee" * 32)):   # weights it was never imported with
         with pytest.raises(errors.InvalidRequest):
             run(o.register(dev_a, bad))
     with pytest.raises(errors.NotFound):
-        run(o.register(dev_a, reg(name="nemostation/unknown")))
+        run(o.register(dev_a, reg(name="unknown")))
     dev_b = actor(w, w.DEV_B, w.B)
     with pytest.raises(errors.NotFound):     # B's model has no operator-registered weights
-        run(o.register(dev_b, reg(name="other/model")))
+        run(o.register(dev_b, reg(name="model")))
     weights = serving(w, "b-1", provider=w.B, model=w.MODELS[w.B], public_model_id="other/model")
     assert run(w.control.register(w.DEV_B, w.B, weights))
     with pytest.raises(errors.InvalidRequest):   # weights, but no deployed limits to copy
-        run(o.register(dev_b, reg(name="other/model")))
+        run(o.register(dev_b, reg(name="model")))
     with pytest.raises(errors.InvalidRequest):
         run(o.propose(actor(w, w.ADMIN_A, w.A, v2.ProviderRole.administrator), "rollback",
                       w.control_store.listings[ALIAS][0].deployment_revision_id))
     assert len(w.control_store.servings) == 2, "a refused registration wrote a row"
+
+
+def test_operations__the_lab_apps_registration_shape_registers(fake_world):
+    """Oracle (0-L3I-R1): what the Lab App's form can send is what L3 accepts. The App's own
+    test registration (`apps/lab/tests/l/ui/actions.test.ts` REG) is refused as invalid (an
+    unsupported runtime, weights A never imported) with no row; the same shape naming A's model
+    by its bare name, its imported weights and a supported runtime by digest registers, pinned
+    to exactly that runtime and those weights. The slug-qualified name is not the App's."""
+    w, o = fake_world, ops(fake_world)
+    dev_a = actor(w, w.DEV_A, w.A)
+    app_reg = {"name": "acme-7b", "artifact_digest": "sha256:" + "a" * 64,
+               "schema_version": "chat.v2", "runtime": "vllm@sha256:bb"}
+    with pytest.raises(errors.NotFound):
+        run(o.register(dev_a, Registration(**app_reg)))
+    with pytest.raises(errors.InvalidRequest):
+        run(o.register(dev_a, Registration(**{**app_reg, "name": NAME})))
+    with pytest.raises(errors.NotFound):
+        run(o.register(dev_a, reg(name=ALIAS)))
+    assert len(w.control_store.servings) == 1, "a refused registration wrote a row"
+    d = run(o.register(dev_a, Registration(**{**app_reg, "name": NAME, "artifact_digest": WEIGHTS,
+                                              "schema_version": "chat.v1", "runtime": RUNTIME})))
+    stored = w.control_store.servings[d.serving_version_id]
+    assert (d.model_id, d.runtime, stored.runtime_image_ref, stored.weight_shard_digests) == (
+        ALIAS, RUNTIME, RUNTIME, SHARD_DIGESTS)
 
 
 def test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins(fake_world):
