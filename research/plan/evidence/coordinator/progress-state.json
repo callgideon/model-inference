@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 242,
- "updated": "2026-09-28T22:15:23Z",
+ "revision": 243,
+ "updated": "2026-09-28T23:22:19Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7064,6 +7064,41 @@
     "infrx/traces/**",
     "tests/w/**",
     "tests/i/lab"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-SQL-LW5",
+   "task": "L3",
+   "slice": "(wave5 LW5 lane lab-sql-lw5, Sonnet) E8L-F1 release_active identity (R188/R191) → endpoint_alias oracle (m1/m2/LSQ4-R4) → WR-E8L-3/4 → WR-R4-1 → SQL halves of WR-LSQ-C2A/C2B, WR-N4-3, WR-R2-3, WR-B3-3; migrations 0045+; workflow wf_651d23e0-d9f; base 9e6c01cd (merge #21 head)",
+   "agent": "sonnet",
+   "branch": "codex/w5-lab-sql-lw5",
+   "worktree": ".claude/worktrees/codex-w5-lab-sql-lw5",
+   "base": "9e6c01cd",
+   "head": null,
+   "isolation": {
+    "ports": "dlab 57500; l3 57502; e8l 57400-57499",
+    "prefix": "infrx-dlab-",
+    "db": "dlab"
+   },
+   "activity": "running",
+   "started": "2026-09-28T23:22:19Z",
+   "updated": "2026-09-28T23:22:19Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge after #21 integrates → E8L k06 rerun",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "lab-sql-lw3/lw4 sizes; six SQL items"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0045+_*.sql",
+    "infrx/state/lab_*.py",
+    "tests/d/**"
    ],
    "wiring_requests": []
   }
