@@ -254,3 +254,58 @@ def kill(mutant) -> tuple[str, str]:
 
 def run_code_mutant(mutant):
     return shared.run_mutant(mutant, RUNNER)
+
+
+# --- WR-C3F-1: the session doors, `0038_feedback_doors.sql` (test_d6f_doors' world) --------
+DOORS_FILE = "0038_feedback_doors.sql"
+DB_D = f"{pgharness.DATABASE}_d6fdmut"
+SUBMIT = "check_submit_takes_the_signal_and_derives_the_rest"
+REVIEW = "check_review_is_l2s_rule_on_the_database_clock"
+
+
+def _o(name, old, new, check, why, **kw):
+    return _d.Mutant(name, DOORS_FILE, old, new, "lab", check, why, **kw)
+
+
+DOORS = (
+    _o("c3f_submit_any_org", "   where j.request_id = v_job and public.is_org_member(j.org_id);",
+       "   where j.request_id = v_job;", SUBMIT,
+       "anyone signed in leaves feedback on another org's request"),
+    _o("c3f_submit_forged_author", "    'org_id', v_org, 'principal', auth.uid()::text,",
+       "    'org_id', v_org, 'principal', v_org::text,",
+       SUBMIT, "the stored author is not the session's user"),
+    _o("c3f_submit_extra_keys", "                where k not in ('request_id', 'name', 'value', "
+       "'comment', 'idempotency_key'))", "                where false)", SUBMIT,
+       "a provenance field in the body is silently accepted"),
+    _o("c3f_submit_api_channel", "    'channel', 'console', 'request_id', v_job,",
+       "    'channel', 'api', 'request_id', v_job,", SUBMIT,
+       "console feedback is recorded as an API call"),
+    _o("c3f_submit_anon", "grant execute on function public.submit_feedback(jsonb) to "
+       "authenticated;", "grant execute on function public.submit_feedback(jsonb) to "
+       "authenticated, anon;", SUBMIT, "an anonymous caller reaches the door"),
+    _o("c3f_review_any_role", "                    and m.role in ('developer', "
+       "'administrator')) then", "                    ) then", REVIEW,
+       "a viewer reads customer feedback"),
+    _o("c3f_review_any_category", "                 and 'feedback' = any(g.categories) and "
+       "'provider_sharing' = any(g.purposes)", "                 and 'provider_sharing' = "
+       "any(g.purposes)", REVIEW, "feedback is read under a grant that never shared it"),
+    _o("c3f_review_expiry_ignored", "                 and (g.expires_at is null or infrx.now() "
+       "< g.expires_at)\n", "", REVIEW, "an expired grant still shows feedback"),
+    _o("c3f_review_revocation_ignored", "                 and (g.revoked_at is null or "
+       "infrx.now() < g.revoked_at)\n", "", REVIEW, "a revoked grant still shows feedback"),
+    _o("c3f_review_first_version", "           order by g.version desc limit 1);",
+       "           order by g.version asc limit 1);", REVIEW,
+       "the first grant version decides forever"),
+    _o("c3f_review_any_recipient", "           where g.grantor_org_id = j.org_id and "
+       "g.recipient_provider_org_id = v_provider", "           where g.grantor_org_id = "
+       "j.org_id", REVIEW, "one provider reads feedback shared with another"),
+    _o("c3f_review_labels", "           'request_id', v_job, 'org_id', v_org))) with ordinality",
+       "           'request_id', v_job, 'org_id', v_org, 'calibration', true))) with "
+       "ordinality", REVIEW, "a provider reads the operator's calibration labels"),
+)
+DOORS_NAMES = tuple(m.name for m in DOORS)
+
+
+def kill_doors(mutant) -> tuple[str, str]:
+    from . import test_d6f_doors as doors_world
+    return d7.kill(mutant, DB_D, doors_world)
