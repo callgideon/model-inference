@@ -1,0 +1,38 @@
+..................................                                       [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__the_control_service_starts_only_once_the_operator_enables_the_lab
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__no_app_runtime_unit_depends_on_a_lab_unit_or_the_reverse
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__the_control_service_is_loopback_least_privilege_bounded_and_its_own
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__the_control_service_drains_accepted_operations_before_it_is_killed
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__secret_names_only_and_every_name_the_files_read_is_declared
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__the_lab_has_its_own_origin_and_its_callbacks_are_the_only_allowlist_change
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__the_lab_site_is_the_control_origin_and_nothing_else
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__a_broken_or_hijacking_lab_site_never_validates_so_the_app_edge_is_unchanged
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__an_app_release_that_conflicts_with_the_installed_lab_site_never_replaces_the_edge
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down
+PASSED tests/i/lab/test_lab_packaging.py::test_i2l__lab_rollback_restarts_only_the_lab_on_its_previous_release
+PASSED tests/i/lab/test_mutants.py::test_the_list_is_well_formed
+PASSED tests/i/lab/test_mutants.py::test_every_case_is_covered_by_a_mutant
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[starts_without_the_marker]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[lab_unit_part_of_the_gateway]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[gateway_wants_the_lab]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[control_public_bind]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[control_in_the_runtime_group]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[control_reads_the_app_env]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[control_unbounded]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[grace_outlives_the_stop]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[a_secret_value_in_the_manifest]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[an_undeclared_setting]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[lab_web_holds_the_service_role_key]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[site_url_moved_to_the_lab]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[lab_callback_on_the_app_origin]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[site_serves_the_lab_web_origin]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[site_address_not_the_operators]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[consumer_keys_reach_controls]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[control_down_is_a_bare_502]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[app_release_installed_unvalidated]
+PASSED tests/i/lab/test_mutants.py::test_mutant_is_killed[rollback_restarts_the_worker]
+PASSED tests/i/lab/test_mutants.py::test_the_runner_cannot_report_a_false_kill[self_no_op]
+PASSED tests/i/lab/test_mutants.py::test_the_runner_cannot_report_a_false_kill[self_missing_anchor]
+34 passed in 38.75s
