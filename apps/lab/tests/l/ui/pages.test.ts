@@ -23,6 +23,6 @@ test("L4-P01 each page reads the control records as the session's workspace and 
 
 test("L4-P02 the provider layout links the L4 pages and labels the preview stand-in only when it is on", () => {
   const layout = read("app/(provider)/layout.tsx");
-  for (const href of ["/overview", "/models", "/deployments", "/settings"]) assert.ok(layout.includes(`href="${href}"`), href);
+  for (const href of ["/overview", "/models", "/deployments", "/evaluations", "/releases", "/optimizations", "/annotations", "/training", "/settings"]) assert.ok(layout.includes(`href="${href}"`), href);
   assert.match(layout, /\{isPreview\(\) && <p role="note">Preview: /);
 });

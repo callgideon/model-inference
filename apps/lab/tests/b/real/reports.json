@@ -1,0 +1,194 @@
+{
+  "inconclusive": {
+    "baseline_run": "lab:run:b0000001-0000-4000-8000-000000000001:0000007e-0000-4000-8000-000000000001@sha256:fd92ec5a69f34c2714ad03bd593ef8d8ecc5ed3887b4c77acfc932fa5949b657",
+    "candidate_run": "lab:run:b0000001-0000-4000-8000-000000000001:0000007e-0000-4000-8000-000000000002@sha256:0f23bd192249ba3a087bd7f60c651b01e51669bbdd66f272f0ee845e4c790342",
+    "decision": {
+      "outcome": "inconclusive",
+      "reasons": [
+        "coverage 38/40",
+        "overall uncertain"
+      ]
+    },
+    "estimates": {
+      "basis": "deterministic_metric",
+      "overall": {
+        "clusters": 38,
+        "diff": -0.02631578947368421,
+        "high": 0.02700504221272701,
+        "improved": false,
+        "low": -0.07963662116009543,
+        "n": 38,
+        "verdict": "uncertain"
+      },
+      "slices": {
+        "safety": {
+          "clusters": 5,
+          "diff": 0.0,
+          "high": 0.0,
+          "improved": false,
+          "low": 0.0,
+          "n": 5,
+          "verdict": "non_inferior"
+        }
+      }
+    },
+    "observed": {
+      "baseline": {
+        "costs": {
+          "CREDIT": "40.00000000"
+        },
+        "errors": 0,
+        "latency_ms": {
+          "max": 139,
+          "n": 40,
+          "p50": 119,
+          "p90": 135,
+          "p99": 139
+        },
+        "mean": 1.0,
+        "missing": 0,
+        "not_comparable": 0
+      },
+      "candidate": {
+        "costs": {
+          "CREDIT": "39.00000000",
+          "PROVIDER_USD": "0.25000000"
+        },
+        "errors": 1,
+        "latency_ms": {
+          "max": 138,
+          "n": 39,
+          "p50": 119,
+          "p90": 135,
+          "p99": 138
+        },
+        "mean": 0.925,
+        "missing": 1,
+        "not_comparable": 1
+      },
+      "cost_delta": {
+        "CREDIT": "-1.00000000"
+      },
+      "paired": 38,
+      "universe": 40
+    },
+    "pairing": {
+      "factors": [
+        "serving_ref"
+      ],
+      "kind": "single_factor",
+      "tag": null
+    },
+    "protocol": {
+      "confidence": 0.95,
+      "margin": 0.05,
+      "metric_source": "deterministic_metric",
+      "min_cases": 10,
+      "required_slices": {
+        "safety": {
+          "margin": 0.0,
+          "min_cases": 5
+        }
+      }
+    },
+    "protocol_digest": "sha256:9248aa09d6cf779bdaaf41f2eb72db51b4777b9cca616b547b0659b2abbdace5",
+    "report_digest": "sha256:7ec259142aaae69297f12324952c9a0a4a874c51bfbf3fe1c979fd51e8bd7da1",
+    "schema": "infrx.eval_report.1",
+    "universe_digest": "sha256:b37cd8a79c8c833654cbf7d9327cdb75ec324426996ed1e76c80864194a30fb7"
+  },
+  "reject": {
+    "baseline_run": "lab:run:b0000001-0000-4000-8000-000000000001:0000007e-0000-4000-8000-000000000001@sha256:fd92ec5a69f34c2714ad03bd593ef8d8ecc5ed3887b4c77acfc932fa5949b657",
+    "candidate_run": "lab:run:b0000001-0000-4000-8000-000000000001:0000007e-0000-4000-8000-000000000002@sha256:0f23bd192249ba3a087bd7f60c651b01e51669bbdd66f272f0ee845e4c790342",
+    "decision": {
+      "outcome": "reject",
+      "reasons": [
+        "slice safety inferior"
+      ]
+    },
+    "estimates": {
+      "basis": "deterministic_metric",
+      "overall": {
+        "clusters": 40,
+        "diff": 0.65,
+        "high": 0.8617703388917916,
+        "improved": true,
+        "low": 0.4382296611082085,
+        "n": 40,
+        "verdict": "non_inferior"
+      },
+      "slices": {
+        "safety": {
+          "clusters": 5,
+          "diff": -0.8,
+          "high": -0.24612537863185446,
+          "improved": false,
+          "low": -1.3538746213681456,
+          "n": 5,
+          "verdict": "inferior"
+        }
+      }
+    },
+    "observed": {
+      "baseline": {
+        "costs": {
+          "CREDIT": "40.00000000"
+        },
+        "errors": 0,
+        "latency_ms": {
+          "max": 139,
+          "n": 40,
+          "p50": 119,
+          "p90": 135,
+          "p99": 139
+        },
+        "mean": 0.25,
+        "missing": 0,
+        "not_comparable": 0
+      },
+      "candidate": {
+        "costs": {
+          "CREDIT": "40.00000000"
+        },
+        "errors": 0,
+        "latency_ms": {
+          "max": 139,
+          "n": 40,
+          "p50": 119,
+          "p90": 135,
+          "p99": 139
+        },
+        "mean": 0.9,
+        "missing": 0,
+        "not_comparable": 0
+      },
+      "cost_delta": {
+        "CREDIT": "0.00000000"
+      },
+      "paired": 40,
+      "universe": 40
+    },
+    "pairing": {
+      "factors": [
+        "serving_ref"
+      ],
+      "kind": "single_factor",
+      "tag": null
+    },
+    "protocol": {
+      "confidence": 0.95,
+      "margin": 0.05,
+      "metric_source": "deterministic_metric",
+      "min_cases": 10,
+      "required_slices": {
+        "safety": {
+          "margin": 0.0,
+          "min_cases": 5
+        }
+      }
+    },
+    "protocol_digest": "sha256:9248aa09d6cf779bdaaf41f2eb72db51b4777b9cca616b547b0659b2abbdace5",
+    "report_digest": "sha256:0b83594a1b440cd7ce8570af3cab598c310746afe9b6bfd1a136e1f023ebdb3f",
+    "schema": "infrx.eval_report.1",
+    "universe_digest": "sha256:b37cd8a79c8c833654cbf7d9327cdb75ec324426996ed1e76c80864194a30fb7"
+  }
+}

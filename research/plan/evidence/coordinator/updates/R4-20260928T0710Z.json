@@ -1,0 +1,23 @@
+{
+  "task": "R4",
+  "slice": "R4.a+R4.b+R4.c (fake-driven; real integration via WR-R4-1)",
+  "activity": "review",
+  "head": "b9b84b7f",
+  "worktree": ".claude/worktrees/codex-w5-release-ui",
+  "branch": "codex/w5-release-ui",
+  "owned_paths": ["apps/lab/app/(provider)/releases/", "apps/lab/app/(provider)/optimizations/", "apps/lab/lib/services/rollouts/", "apps/lab/tests/r/"],
+  "commands": [
+    {"cmd": "cd apps/lab && node --test tests/r/*.test.ts (red, before implementation)", "exit": 1, "summary": "5 files fail: 3 ERR_MODULE_NOT_FOUND, 2 ENOENT page"},
+    {"cmd": "cd apps/lab && node --test tests/r/*.test.ts", "exit": 0, "summary": "22 pass"},
+    {"cmd": "make lab-test", "exit": 0, "summary": "111 tests, 107 pass, 0 fail, 4 skipped (pre-existing real-PG)"},
+    {"cmd": "make lab-lint", "exit": 0, "summary": "clean"},
+    {"cmd": "make lab-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "make lab-build", "exit": 0, "summary": "/releases, /optimizations built"},
+    {"cmd": "make lab-mutants", "exit": 0, "summary": "existing lists all killed"},
+    {"cmd": "cd apps/lab && node tests/r/run-mutants.mjs", "exit": 0, "summary": "22 cases all named; 77/77 killed"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium", "basis": "L4 adapter swap after WR-L4-1 analogue; remaining = HTTP adapter once WR-R4-1 lands + one verify round", "at": "2026-09-28T07:10Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-R4-1 /lab/v1/releases route (lab-api)", "WR-R4-2 proposal storage schema (lab-sql)", "WR-R4-3 layout nav links", "WR-R4-4 Makefile lab-mutants line"],
+  "evidence": ["research/plan/evidence/r/R4-b9b84b7.md"]
+}
