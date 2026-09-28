@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 207,
- "updated": "2026-09-28T09:42:17Z",
+ "revision": 208,
+ "updated": "2026-09-28T09:58:10Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5629,26 +5629,28 @@
    "branch": "codex/w5-lab-evaluate",
    "worktree": ".claude/worktrees/codex-w5-lab-evaluate",
    "base": "9a48300c",
-   "head": null,
+   "head": "efaee3c4",
    "isolation": {
     "ports": "e6l 57200-57299 (PG 57232)",
     "prefix": "infrx-e6l-",
     "db": "e6l"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T08:39:49Z",
-   "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real halves rerun at merge)",
+   "updated": "2026-09-28T09:58:10Z",
+   "blocker": "j11 FAIL = E6L-O1 (B1 passes the wrong video fields to H1: media_ref + duration_ms from span_ms) → integration lane; j09 needs composition batch 2's LAB_EVAL_WORKER + a checkpoint_received role; j10 needs lab-api-2's route",
+   "next_action": "ACCEPT_WITH_FIXES at efaee3c4 (E6L runner j01–j08 PASS at 457d7141 with pinned digests; j09/j10 NOT RUN; j11 FAIL E6L-O1; majors RV-1/RV-2 fixed+rechecked; 15/15 + 25/25 mutants) → merge batch #10 (wf_ef5e9e05-efd) with WR-E6L-1 + a lab-evaluate target; E6L-O1/O2 → integration lane (B1/H1), E6L-O5 (I5 units vs infrx.worker entry point) → composition batch 2 ruling, E6L-O6 (vkstore keying) → track D harness minor; LAB-EVALUATE-LOCAL not accepted until the gate reruns green",
    "estimate": {
-    "optimistic_h": 0,
-    "likely_h": 0,
-    "pessimistic_h": 0,
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
     "confidence": "medium",
-    "basis": "plan 4/8/16 (critical path)",
-    "at": "2026-09-28T06:59:31Z"
+    "basis": "handback: j09/j10 binds + E6L-O1 fix + one verify round",
+    "at": "2026-09-28T09:58:10Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E6L-457d714.md"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_evaluate/",
@@ -5893,6 +5895,40 @@
     "confidence": "medium",
     "basis": "one merge, no docker",
     "at": "2026-09-28T09:42:17Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-10",
+   "task": null,
+   "slice": "(wave5 merge lane #10, parallel to #6/#8/#9 on its own line) lab-evaluate efaee3c4 (WR-E6L-1 + lab-evaluate target); workflow wf_ef5e9e05-efd; base 608d7e6c",
+   "agent": "opus",
+   "branch": "codex/w5-merge-10",
+   "worktree": ".claude/worktrees/codex-w5-merge-10",
+   "base": "608d7e6c",
+   "head": null,
+   "isolation": {
+    "ports": null,
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T09:58:10Z",
+   "updated": "2026-09-28T09:58:10Z",
+   "blocker": null,
+   "next_action": "merge agent → verify lens → coordinator merges the branch after #6/#8/#9",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "one merge, no docker",
+    "at": "2026-09-28T09:58:10Z"
    },
    "evidence": [],
    "commands": [],
