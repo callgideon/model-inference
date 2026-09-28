@@ -26,7 +26,8 @@ never runs in a consumer process.
                refuses until they exist (otherwise every checkpoint would be rejected).
 * `judge`      JUDGE_PROVIDER_URL, CLICKHOUSE_URL, S3_TRACE_BUCKET (+ JUDGE_MODE, default
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
-               and T3's retention; its pass moves silent `submitting` runs to `ambiguous`.
+               and T3's retention; its pass moves silent `submitting` runs to `ambiguous`;
+               `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
                every provider with a lineage, every page (WR-N3-2's pull half).
 * `rollout`    `emergency-rollback` (LAB_OPERATOR_ID of the invoking shell): R2's operator
@@ -88,6 +89,7 @@ class Worker:
     tasks: dict[str, Callable[[], Awaitable[Any]]]
     ready: Callable[[], Awaitable[bool]]
     wiring: Any = field(default=None)
+    jobs: dict[str, Callable[..., Awaitable[Any]]] = field(default_factory=dict)
 
 
 def settings(mode: str, env, names) -> dict[str, str]:
@@ -274,6 +276,31 @@ def _judge(mode, env, connect, objects, worker_id, **_):
                                          "judge sweep")}, wiring
 
 
+class JudgeReport:
+    """WR-J3-D8-C: J3's report job on the judge role's `PgJudgeLedger` - `publish` once per
+    configuration, each `{provider_org_id, org_id (the grantor), judge_model, rubric_version,
+    results, feedback}`; one configuration's failure is counted and the next still runs.
+    ponytail: called with its configurations; a timed pass needs lab-sql's listing of stored
+    results and operator labels per configuration (WR-J3-D8-Cb)."""
+
+    def __init__(self, ledger) -> None:
+        self.ledger = ledger
+
+    async def __call__(self, configurations) -> dict[str, int]:
+        from ...judge.calibration import publish
+        done = {"published": 0, "failed": 0}
+        for c in configurations:
+            try:
+                await publish(self.ledger, c["results"], c["feedback"],
+                              provider_org_id=c["provider_org_id"], org_id=c["org_id"],
+                              judge_model=c["judge_model"], rubric_version=c["rubric_version"])
+                done["published"] += 1
+            except Exception:                 # noqa: BLE001 - the next configuration runs
+                log.exception("judge report failed for one configuration")
+                done["failed"] += 1
+        return done
+
+
 async def lineage_providers(objects) -> list[str]:
     """Every provider with a lineage under `lab/<provider>/lineage/`.
     ponytail: lists the Lab objects; a provider listing when that is too many keys."""
@@ -374,7 +401,10 @@ def compose(role: str, env, *, objects=None, **sources) -> Worker:
     worker_id = f"lab-{role}-{uuid.uuid4().hex[:8]}"
     tasks, wiring = BUILD[role](mode, {**env, **values}, connect, objects, worker_id,
                                 **sources)
-    return Worker(role=role, tasks=tasks, ready=database(connect), wiring=wiring)
+    worker = Worker(role=role, tasks=tasks, ready=database(connect), wiring=wiring)
+    if role == "judge":                       # WR-J3-D8-C: the sweep's ledger
+        worker.jobs["judge_report"] = JudgeReport(wiring.ledger)
+    return worker
 
 
 # --- the operator's stop (WR-I7-1) --------------------------------------------------------

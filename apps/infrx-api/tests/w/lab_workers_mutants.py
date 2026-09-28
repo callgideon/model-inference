@@ -37,6 +37,7 @@ DEAD = C + "a_dead_pass_is_not_live_and_exits_non_zero"
 EVERY = C + "the_pumps_are_every_step_forever"
 RETENTION = C + "trace_retention_is_t3s_over_the_shippers_bucket_and_bounds"
 TEACHER = C + "the_teacher_wiring_is_p2_on_d8s_teacher_ledger"
+REPORT = C + "the_judge_report_job_publishes_each_configuration_on_its_ledger"
 
 
 def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
@@ -115,6 +116,18 @@ MUTANTS: tuple[Mutant, ...] = (
        JUDGE),
     _m("lw_judge_sweep_threshold", "only a silent submission is made ambiguous",
        "lambda: ledger.sweep(JUDGE_SILENT_S)", "lambda: ledger.sweep(0)", SWEEP),
+    # --- WR-J3-D8-C: the judge report job ----------------------------------------------------
+    _m("lw_report_not_composed", "the judge role carries J3's report job",
+       '    if role == "judge":                       # WR-J3-D8-C: the sweep\'s ledger\n',
+       "    if False:\n", REPORT),
+    _m("lw_report_other_ledger", "the report job stores on the sweep's PgJudgeLedger",
+       'worker.jobs["judge_report"] = JudgeReport(wiring.ledger)',
+       'worker.jobs["judge_report"] = JudgeReport(None)', REPORT),
+    _m("lw_report_grantor_is_the_provider", "the report is the grantor's, stored under it",
+       'provider_org_id=c["provider_org_id"], org_id=c["org_id"],',
+       'provider_org_id=c["provider_org_id"], org_id=c["provider_org_id"],', REPORT),
+    _m("lw_report_one_failure_stops_all", "one configuration's failure does not skip the next",
+       '                done["failed"] += 1\n', "                raise\n", REPORT),
     # --- datasets ----------------------------------------------------------------------------------
     _m("lw_lineage_every_prefix", "only providers with a lineage are reconciled",
        '                   if key.split("/")[2:3] == ["lineage"]})',

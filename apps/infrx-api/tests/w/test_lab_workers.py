@@ -340,6 +340,40 @@ def captured_steps(monkeypatch) -> dict:
 
 
 # ------------------------------------------------------------------ datasets (WR-N3-2 pull)
+def test_lab_workers__the_judge_report_job_publishes_each_configuration_on_its_ledger(
+        no_trace_stack):
+    """WR-J3-D8-C: the judge role's report job is J3's `publish` on the role's own
+    `PgJudgeLedger` (the sweep's), once per configuration, the grantor's report stored under
+    (provider, grantor, judge model, rubric version); one configuration's failure does not
+    skip the next (it is counted)."""
+    from infrx.judge.calibration import MIN_PAIRS, report
+
+    from tests.j import fakes as j1
+    from tests.j.calibration.test_calibration import agreeing, labelled
+    worker = composed("judge")
+    assert set(worker.jobs) == {"judge_report"}
+    job = worker.jobs["judge_report"]
+    assert job.ledger is worker.wiring.ledger
+    stored = []
+
+    class Ledger:
+        async def put_calibration(self, calibration, **key):
+            if key["judge_model"] == "broken":
+                raise ConnectionError("the ledger did not answer")
+            stored.append(key)
+    job.ledger = Ledger()
+    results, labels = labelled(agreeing(MIN_PAIRS))
+    base = {"results": results, "feedback": labels, "provider_org_id": j1.ORG_B,
+            "org_id": j1.ORG_A, "rubric_version": 1}
+    done = outcome(lambda: asyncio.run(job([{**base, "judge_model": "broken"},
+                                            {**base, "judge_model": "j-1"}])))
+    assert done == {"published": 1, "failed": 1}
+    assert stored == [{"provider_org_id": j1.ORG_B, "grantor_org_id": j1.ORG_A,
+                       "judge_model": "j-1", "rubric_version": 1}]
+    assert report(results, labels, org_id=j1.ORG_A, rubric_version=1).calibration()[
+        "state"] == "calibrated"
+
+
 def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(monkeypatch,
                                                                              no_trace_stack):
     """WR-N3-2's pull half: every provider with a lineage in the Lab objects, every page
