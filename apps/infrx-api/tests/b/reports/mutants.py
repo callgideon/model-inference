@@ -32,6 +32,7 @@ THRESH = "test_b2_thresholds_are_workload_inputs"
 COSTS = "test_b2_costs_are_per_unit_and_a_foreign_unit_is_refused"
 LAT = "test_b2_latency_is_a_nearest_rank_distribution"
 TQ = "test_b2_the_t_quantile_is_close_to_students"
+ROWS = "test_b2_case_records_are_built_from_d7_rows_and_the_manifest"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -174,6 +175,24 @@ MUTANTS: tuple[Mutant, ...] = (
       "seen[math.ceil(p / 100 * len(seen)) - 1]", "seen[int(p / 100 * len(seen))]", LAT),
     m("b2_latency_empty", "no latency is n=0",
       "    if not seen:\n", "    if False:\n", LAT, dies_by=("IndexError",)),
+    # B2.d case records from D7 rows (E6L-O2)
+    m("b2r_any_evaluators_result", "a result counts only under the run's own evaluator",
+      '               if r["evaluator_ref"] == run.evaluator_ref}', "               if True}", ROWS),
+    m("b2r_last_cost_only", "every attempt's cost is kept",
+      'costs.setdefault(attempt["case_id"], []).append(attempt["cost"])',
+      'costs[attempt["case_id"]] = [attempt["cost"]]', ROWS),
+    m("b2r_failed_case_missing", "a failed case without a result is an error, not missing",
+      '        elif states.get(cid) == "failed":', "        elif False:", ROWS),
+    m("b2r_pending_case_is_an_error", "a case neither scored nor failed is missing",
+      '        elif states.get(cid) == "failed":', "        elif True:", ROWS),
+    m("b2r_cluster_is_the_case", "the source cluster is the sample's group key",
+      '"cluster": sample.group_key,', '"cluster": cid,', ROWS),
+    m("b2r_slice_name_split", "a slice name is one slice, not its letters",
+      "[found] if isinstance(found, str)", "list(found) if isinstance(found, str)", ROWS),
+    m("b2r_unsliced_case_in_a_slice", "a case with no slice value (or no path) is in none",
+      '"slices": [] if found is _MISSING', '"slices": [""] if found is _MISSING', ROWS),
+    m("b2r_latency_dropped", "a scored case keeps its latency",
+      '"latency_ms": results[cid]["latency_ms"]})', '"latency_ms": None})', ROWS),
 )
 
 

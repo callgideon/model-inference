@@ -254,6 +254,23 @@ def test_h1_adapters_are_built_in_and_bounded():
     assert missing.status == "unsupported" and missing.reasons == ("missing_input:sample.text",)
 
 
+def test_h1_an_imported_clip_reaches_the_finite_video_adapter():
+    """E6L-O1: B1's case from N1's content object (`media_digest`, `span_ms`) carries H1's
+    finite_video inputs: the clip's media key and the span's length, capped at 82 s."""
+    from infrx.datasets.imports import media_key
+    from infrx.evaluation.runner import case_of
+    digest = "sha256:" + "d" * 64
+    content = {"modality": "finite_video", "content": "label it", "original": {},
+               "annotation": {}, "media_digest": digest, "span_ms": [1_000, 83_000]}
+    video = harness(adapter="finite_video", tools=[], input_mapping={"input": "sample.content"})
+    model = Model({"text": "a clip", "tool_calls": []})
+    outcome = replayer(model, video).replay(case_of(A, content))
+    assert outcome.status == "complete" and model.calls[0][1] == [media_key(A, digest)]
+    over = case_of(A, {**content, "span_ms": [0, 82_001]})
+    assert replayer(Model(DONE), video).replay(over).reasons == ("video_over_cap",)
+    assert case_of(A, {"content": "text"}) == {"sample": {"content": "text"}}
+
+
 def test_h1_coverage_reports_every_unsupported_case():
     outcomes = [h.Outcome("complete", 1, ()), h.Outcome("failed", None, ()),
                 h.Outcome("unsupported", None, ("missing_recording:a",)),
