@@ -1,0 +1,13 @@
+{"episode": "f1", "family": "moons", "id": "F1a", "text": "How many moons does Mars have?"}
+{"episode": "f2", "family": "moons", "id": "F1b", "text": "how many MOONS does  mars have?"}
+{"episode": "f3", "family": "moons", "id": "F1c", "text": "How many moons does Mars have? "}
+{"episode": "f4", "family": "episode-f4", "id": "F2a", "text": "Name a prime number above 90."}
+{"episode": "f4", "family": "episode-f4", "id": "F2b", "text": "Name an even number above 90."}
+{"episode": "s1", "family": "single-1", "id": "S1", "text": "Standalone question number 1."}
+{"episode": "s2", "family": "single-2", "id": "S2", "text": "Standalone question number 2."}
+{"episode": "s3", "family": "single-3", "id": "S3", "text": "Standalone question number 3."}
+{"episode": "s4", "family": "single-4", "id": "S4", "text": "Standalone question number 4."}
+{"episode": "s5", "family": "single-5", "id": "S5", "text": "Standalone question number 5."}
+{"episode": "s6", "family": "single-6", "id": "S6", "text": "Standalone question number 6."}
+{"episode": "s7", "family": "single-7", "id": "S7", "text": "Standalone question number 7."}
+{"episode": "s8", "family": "single-8", "id": "S8", "text": "Standalone question number 8."}

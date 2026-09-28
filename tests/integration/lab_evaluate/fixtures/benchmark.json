@@ -1,0 +1,211 @@
+{
+ "common": {
+  "license": "CC0-1.0 (written for E6L by the infrx team)",
+  "ownership": "provider_owned",
+  "use_restrictions": [
+   "evaluation",
+   "no-redistribution-outside-infrx-tests"
+  ]
+ },
+ "endpoints": {
+  "baseline": [
+   "M01",
+   "M02",
+   "M03",
+   "M04",
+   "M05",
+   "M06",
+   "L01",
+   "L02",
+   "L03",
+   "L04"
+  ],
+  "baseline_v2": [
+   "M01",
+   "M02",
+   "M03",
+   "M04",
+   "M05",
+   "M06",
+   "L01",
+   "L02",
+   "L03",
+   "L04"
+  ],
+  "checkpoint": [
+   "L01",
+   "L02",
+   "L03",
+   "L04",
+   "L05",
+   "L06",
+   "L07",
+   "L08",
+   "L09",
+   "L10",
+   "L11",
+   "L12",
+   "L13",
+   "L14",
+   "M01",
+   "M02",
+   "M03",
+   "M04",
+   "M05",
+   "M06"
+  ],
+  "improving": [
+   "L01",
+   "L02",
+   "L03",
+   "L04",
+   "L05",
+   "L06",
+   "L07",
+   "L08",
+   "L09",
+   "L10",
+   "L11",
+   "L12",
+   "L13",
+   "L14",
+   "M01",
+   "M02",
+   "M03",
+   "M04",
+   "M05",
+   "M06"
+  ],
+  "missing": [
+   "L01",
+   "L02",
+   "L03",
+   "L04",
+   "L05",
+   "L06",
+   "L07",
+   "L08",
+   "L09",
+   "L10",
+   "L11",
+   "L12",
+   "L13",
+   "L14",
+   "M02",
+   "M03",
+   "M04",
+   "M05",
+   "M06"
+  ],
+  "regressing": [
+   "L01",
+   "L02",
+   "L03",
+   "L04",
+   "L05",
+   "L06",
+   "L07",
+   "L08",
+   "L09",
+   "L10",
+   "L11",
+   "L12",
+   "L13",
+   "L14"
+  ]
+ },
+ "refuses": {
+  "missing": [
+   "M01"
+  ]
+ },
+ "specs": {
+  "families": {
+   "annotation": {
+    "method": "synthetic",
+    "method_version": "e6l-1",
+    "tool": "hand-written"
+   },
+   "fields": {
+    "content": "text",
+    "group": "episode"
+   },
+   "modality": "text"
+  },
+  "split_additions": {
+   "annotation": {
+    "method": "synthetic",
+    "method_version": "e6l-1",
+    "tool": "hand-written"
+   },
+   "fields": {
+    "content": "text",
+    "group": "episode"
+   },
+   "modality": "text"
+  },
+  "split_base": {
+   "annotation": {
+    "method": "synthetic",
+    "method_version": "e6l-1",
+    "tool": "hand-written"
+   },
+   "fields": {
+    "content": "text",
+    "group": "episode",
+    "split": "split"
+   },
+   "modality": "text"
+  },
+  "split_leaky": {
+   "annotation": {
+    "method": "synthetic",
+    "method_version": "e6l-1",
+    "tool": "hand-written"
+   },
+   "fields": {
+    "content": "text",
+    "group": "episode",
+    "split": "split"
+   },
+   "modality": "text"
+  },
+  "text": {
+   "annotation": {
+    "method": "human",
+    "method_version": "e6l-1"
+   },
+   "fields": {
+    "content": "q",
+    "group": "episode"
+   },
+   "modality": "text"
+  },
+  "tools": {
+   "annotation": {
+    "method": "human",
+    "method_version": "e6l-1"
+   },
+   "fields": {
+    "content": "q",
+    "group": "episode"
+   },
+   "modality": "text"
+  },
+  "video": {
+   "annotation": {
+    "method": "human",
+    "method_version": "e6l-1"
+   },
+   "clock_unit": "s",
+   "fields": {
+    "content": "label",
+    "end": "end",
+    "group": "episode",
+    "media": "clip",
+    "start": "start"
+   },
+   "modality": "finite_video"
+  }
+ }
+}

@@ -1,0 +1,94 @@
+..................FF.F...FF................                              [100%]
+=================================== FAILURES ===================================
+___________ test_stack_mutant_is_killed[st_changed_upload_redefines] ___________
+
+mutant = Mutant(name='st_changed_upload_redefines', invariant='changed bytes under one import id are a conflict', file='infrx/d...se:', cases=('test_j01_a_replayed_upload_is_the_same_dataset_and_a_changed_one_conflicts',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e6l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_changed_upload_redefines is survived: 1 passed, 17 deselected in 4.49s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.survived: 'survived'>, detail='1 passed, 17 deselected in 4.49s').killed
+
+tests/integration/lab_evaluate/test_mutants.py:76: AssertionError
+______________ test_stack_mutant_is_killed[st_video_over_the_cap] ______________
+
+mutant = Mutant(name='st_video_over_the_cap', invariant='a finite-video span is at most 82 s', file='infrx/datasets/imports/__i..._VIDEO_MS + 1000:', cases=('test_j02_finite_video_imports_with_its_cap_and_bundle_checks',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e6l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_video_over_the_cap is broken_runner: undeclared exception deaths ['LabRejected@records.py']: 1 failed, 17 deselected in 2.93s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['LabRejected@records.py']: 1 failed, 17 deselected in 2.93s").killed
+
+tests/integration/lab_evaluate/test_mutants.py:76: AssertionError
+___________ test_stack_mutant_is_killed[st_split_conflict_accepted] ____________
+
+mutant = Mutant(name='st_split_conflict_accepted', invariant='one group is never declared in two splits', file='infrx/datasets/...:', cases=('test_j04_a_leaking_base_is_refused_and_the_frozen_holdout_admits_no_relative',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e6l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_split_conflict_accepted is broken_runner: undeclared exception deaths ['LabRejected@records.py']: 1 failed, 17 deselected in 3.91s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['LabRejected@records.py']: 1 failed, 17 deselected in 3.91s").killed
+
+tests/integration/lab_evaluate/test_mutants.py:76: AssertionError
+__________ test_stack_mutant_is_killed[st_near_duplicates_unrelated] ___________
+
+mutant = Mutant(name='st_near_duplicates_unrelated', invariant='text equal up to case and spacing is one family', file='infrx/d...istically', 'test_j04_a_leaking_base_is_refused_and_the_frozen_holdout_admits_no_relative'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e6l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_near_duplicates_unrelated is broken_runner: undeclared exception deaths ['ImportRejected@__init__.py']: 2 failed, 16 deselected in 5.66s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['ImportRejected@__init__.py']: 2 failed, 16 deselected in 5.66s").killed
+
+tests/integration/lab_evaluate/test_mutants.py:76: AssertionError
+_______________ test_stack_mutant_is_killed[st_clips_unrelated] ________________
+
+mutant = Mutant(name='st_clips_unrelated', invariant='two spans of one clip are one family', file='infrx/datasets/versions/__in...'    if False:', cases=('test_j04_related_sources_are_placed_whole_and_deterministically',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e6l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_clips_unrelated is broken_runner: undeclared exception deaths ['ImportRejected@__init__.py']: 1 failed, 17 deselected in 4.50s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['ImportRejected@__init__.py']: 1 failed, 17 deselected in 4.50s").killed
+
+tests/integration/lab_evaluate/test_mutants.py:76: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_evaluate/test_mutants.py::test_stack_mutant_is_killed[st_changed_upload_redefines]
+FAILED tests/integration/lab_evaluate/test_mutants.py::test_stack_mutant_is_killed[st_video_over_the_cap]
+FAILED tests/integration/lab_evaluate/test_mutants.py::test_stack_mutant_is_killed[st_split_conflict_accepted]
+FAILED tests/integration/lab_evaluate/test_mutants.py::test_stack_mutant_is_killed[st_near_duplicates_unrelated]
+FAILED tests/integration/lab_evaluate/test_mutants.py::test_stack_mutant_is_killed[st_clips_unrelated]
+5 failed, 38 passed in 269.93s (0:04:29)

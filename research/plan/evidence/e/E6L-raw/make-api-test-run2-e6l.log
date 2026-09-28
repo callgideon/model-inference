@@ -1,0 +1,630 @@
+cd apps/infrx-api && uv run --frozen pytest -q
+.........ss........................................................sssss [  1%]
+sss..................................................................... [  2%]
+........................................................................ [  4%]
+........................................................................ [  5%]
+........................................................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 10%]
+........................................................................ [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+........................................................................ [ 20%]
+........................................................................ [ 21%]
+........................................................................ [ 22%]
+........................................................................ [ 24%]
+........................................................................ [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+..........x............................................................. [ 29%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+......................................................................xx [ 33%]
+....x................................................................... [ 34%]
+.........................x.............................................. [ 36%]
+........................................................................ [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+........................................................................ [ 41%]
+........................................................................ [ 42%]
+........................................................................ [ 44%]
+...............F..F..F..F.F..F..F.................s..................... [ 45%]
+.............xx....x.................................................... [ 46%]
+........................................................................ [ 48%]
+........................................................................ [ 49%]
+........................................................................ [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 53%]
+........................................................................ [ 54%]
+........................................................................ [ 56%]
+.........................ssss........................................... [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+...........s....ssss.................................................... [ 64%]
+........................................................................ [ 65%]
+..................x..................................................... [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+..............................................s......................... [ 74%]
+........................................................................ [ 76%]
+........................................................................ [ 77%]
+................s....................................................... [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+..............s.s.s.s.s.s.s.sssss..s......s.....s...ss.................. [ 82%]
+.................................................sssssssss.............. [ 84%]
+........................................................................ [ 85%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+........................................................s.s.s..s........ [ 91%]
+sssssssssss.............s.s.s.s..s.s.s.s.s................s.s.s.s.s.s.s. [ 92%]
+.s.s.................................................................... [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+.....................sss........s....................................... [ 97%]
+.................................................................s...... [ 99%]
+.................................ssss..............s                     [100%]
+=================================== FAILURES ===================================
+__ test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged[valkey] __
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            relay = OutboxRelay(h.extra["store"], q, redelivery_s=REDELIVERY_S)
+            a, c = await admitted(h, 2)
+            first = await relay.pump()
+            assert first == {"read": 2, "indexed": 2, "acknowledged": 2, "deferred": 0}, first
+            prep = await drain(q, OutboxKind.prepare_dispatch)
+            assert sorted(e.job_id for e in prep) == sorted([a.request_id, c.request_id])
+            lease = await h.port.claim_preparation(a.request_id, "prep-a")
+            await h.port.prepared(lease, ())
+            h.clock.advance(REDELIVERY_S)
+            second = await relay.pump()
+            assert second["read"] == 1 and second["acknowledged"] == 1, second
+            inference = await drain(q, OutboxKind.inference_dispatch)
+            assert [(e.job_id, e.kind) for e in inference] == \
+                [(a.request_id, OutboxKind.inference_dispatch)]
+            h.clock.advance(REDELIVERY_S)
+            assert (await relay.pump())["read"] == 0, "an acknowledged row was delivered again"
+>       run(body)
+
+tests/d/test_outbox_relay.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:80: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+_ test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate[valkey] _
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            # the relay reads and indexes, then dies before `acknowledge_dispatch`
+            [event] = await store.dispatch_pending(worker_id="relay-dead",
+                                                   redelivery_s=REDELIVERY_S)
+            assert await q.enqueue(event) is True
+            relay = OutboxRelay(store, q, redelivery_s=REDELIVERY_S)     # a restarted relay
+            assert (await relay.pump())["read"] == 0, "redelivered inside the window"
+            h.clock.advance(REDELIVERY_S)
+            again = await relay.pump()
+            assert again == {"read": 1, "indexed": 1, "acknowledged": 1, "deferred": 0}, again
+            got = await drain(q)
+            assert [(e.event_id, e.job_id) for e in got] == [(event.event_id, a.request_id)], \
+                "a redelivery indexed a second candidate"
+>       run(body)
+
+tests/d/test_outbox_relay.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:106: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+____ test_outbox__a_duplicate_delivery_never_makes_a_second_attempt[valkey] ____
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_duplicate_delivery_never_makes_a_second_attempt(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()
+            [event] = await store.dispatch_snapshot()
+            assert await q.enqueue(event) is False, "a replayed event indexed a second candidate"
+            mine = await q.claim_candidate("w1", kind=OutboxKind.prepare_dispatch)
+            # the index loses w1's claim and is rebuilt from PostgreSQL: the job reappears
+            await OutboxRelay(store, q).rebuild()
+            theirs = await q.claim_candidate("w2", kind=OutboxKind.prepare_dispatch)
+            assert mine.job_id == theirs.job_id == a.request_id
+            results = await asyncio.gather(h.port.claim_preparation(a.request_id, "w1"),
+                                           h.port.claim_preparation(a.request_id, "w2"),
+                                           return_exceptions=True)
+            leases = [r for r in results if not isinstance(r, BaseException)]
+            refused = [r for r in results if isinstance(r, errors.NotClaimable)]
+            assert len(leases) == 1 and len(refused) == 1, results
+            loser = "w2" if leases[0].worker_id == "w1" else "w1"
+            forged = leases[0].model_copy(update={"worker_id": loser})
+            with pytest.raises(errors.StaleLease):
+                await h.port.prepared(forged, ())
+            queued = await h.port.prepared(leases[0], ())
+            assert queued.state.value == "queued"
+            kinds = h.extra["outbox_kinds"](a.request_id)
+            assert kinds.count(OutboxKind.inference_dispatch) == 1, kinds
+>       run(body)
+
+tests/d/test_outbox_relay.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:130: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+_ test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job[valkey] _
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            jobs = await admitted(h, 4)
+            await OutboxRelay(store, q).pump()
+            await h.port.prepared(await h.port.claim_preparation(jobs[0].request_id, "p"), ())
+            busy = await h.port.claim_preparation(jobs[1].request_id, "p")   # being prepared
+            # the index loses everything (a Valkey restart) and the relay process restarts
+            fresh = index(backend, h)
+            rebuilt = await OutboxRelay(store, fresh).rebuild()
+            got = {(e.job_id, e.kind) for e in await drain(fresh)}
+            want = {(jobs[0].request_id, OutboxKind.inference_dispatch),
+                    (jobs[2].request_id, OutboxKind.prepare_dispatch),
+                    (jobs[3].request_id, OutboxKind.prepare_dispatch)}
+            assert rebuilt == 3 and got == want, (rebuilt, got)
+            # the job under a live preparation lease comes back once that lease is lost
+            h.clock.advance(busy.expires_at.timestamp() - h.clock.now().timestamp())
+            again = await OutboxRelay(store, fresh).rebuild()
+            assert again == 4 and (jobs[1].request_id, OutboxKind.prepare_dispatch) in \
+                {(e.job_id, e.kind) for e in await drain(fresh)}
+>       run(body)
+
+tests/d/test_outbox_relay.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:164: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+______ test_outbox__a_full_index_defers_rows_and_never_drops_them[valkey] ______
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", ("memory", "valkey"))
+    def test_outbox__a_full_index_defers_rows_and_never_drops_them(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h, max_items=1)
+            store = h.extra["store"]
+            jobs = await admitted(h, 3)
+            relay = OutboxRelay(store, q, redelivery_s=REDELIVERY_S)
+            first = await relay.pump()
+            assert (first["indexed"], first["deferred"]) == (1, 2), first
+            seen = set()
+            for _ in range(3):                  # no clock movement: deferred rows are released
+                seen |= {e.job_id for e in await drain(q)}
+                await relay.pump()
+            seen |= {e.job_id for e in await drain(q)}
+            assert seen == {j.request_id for j in jobs}, "a deferred row was lost"
+>       run(body)
+
+tests/d/test_outbox_relay.py:204: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:192: in body
+    q = index(backend, h, max_items=1)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+___ test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[valkey] ___
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job(backend) -> None:
+        """OB-1: a acknowledged; the rebuild snapshots; c is admitted; a second relay pumps
+        (indexes + acknowledges) c; the rebuild lands on the snapshot, which lacks c. Without
+        the reopen fence c sat queued with its row "delivered" until its queue deadline."""
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+            late = {}
+    
+            async def race():
+                [late["c"]] = await admitted(h)
+                report = await OutboxRelay(store, q, worker_id="relay-b").pump()
+                assert report["acknowledged"] == 1, report        # c delivered and acked
+                # OB-1c: the store clock moves on after B's ack, so a fence read AFTER the
+                # snapshot (a later `since`) would miss that ack and measurably strand c
+                h.clock.advance(1)
+    
+            await OutboxRelay(_SnapshotThenRace(store, race), q).rebuild()
+            got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+            assert got == {a.request_id, late["c"].request_id}, \
+                f"the rebuild stranded a pumped job: dispatchable {got}"
+>       run(body)
+
+tests/d/test_outbox_relay.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:233: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+__ test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job[valkey] __
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job(backend) -> None:
+        """OB-1b: B's index write is wiped by A's rebuild; B's ack arrives after A reopened the
+        row. The ack must be refused (the reopen cleared B's claim), so A's pump re-sends c."""
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+            seen: dict = {}
+    
+            async def relay_b_reads_and_indexes():
+                [seen["c"]] = await admitted(h)
+                events = await store.dispatch_pending(worker_id="relay-b",
+                                                      redelivery_s=REDELIVERY_S)
+                for event in events:
+                    await q.enqueue(event)
+                seen["ids"] = [event.event_id for event in events]
+    
+            async def relay_b_acknowledges_late():
+                seen["late_ack"] = await store.acknowledge_dispatch(seen["ids"],
+                                                                    worker_id="relay-b")
+    
+            await OutboxRelay(_AckAfterReopen(store, relay_b_reads_and_indexes,
+                                              relay_b_acknowledges_late), q).rebuild()
+            assert seen["late_ack"] == 0, \
+                f"relay B's late acknowledgment landed after the reopen: {seen['late_ack']}"
+            got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+            assert got == {a.request_id, seen["c"].request_id}, \
+                f"the late acknowledgment stranded a job: dispatchable {got}"
+>       run(body)
+
+tests/d/test_outbox_relay.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:283: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/contracts/test_config_and_imports.py::test_each_lab_gate_owns_a_compose_block_below_the_band, argvalues type: enumerate
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/d/test_code_mutants_d6f.py::test_sql_mutant_is_killed[d6f_concurrent_duplicate_fails]
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-99 (<lambda>)
+  
+  Traceback (most recent call last):
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/tests/d/test_d6f_feedback.py", line 276, in <lambda>
+      "second", call(second, "accept_feedback", accept_args(key, n=41))))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/tests/d/test_d6f_feedback.py", line 69, in call
+      return conn.execute(f"select infrx.{name}(%s)", (Jsonb(args),)).fetchone()[0]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection.py", line 304, in execute
+      raise ex.with_traceback(None)
+  psycopg.errors.UniqueViolation: duplicate key value violates unique constraint "idempotency_pkey"
+  DETAIL:  Key (org_id, operation, key)=(0a000000-0000-4000-8000-00000000000a, feedback, race-8d72ba72-34e7-4ad0-acd1-0e2b6b56fe33) already exists.
+  CONTEXT:  SQL statement "insert into infrx.idempotency (org_id, operation, key, payload_digest, feedback_id)
+    values (v_org, p_args->'idem'->>'operation', p_args->'idem'->>'key',
+            p_args->'idem'->>'payload_hash', f.feedback_id)"
+  PL/pgSQL function accept_feedback(jsonb) line 47 at SQL statement
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/d/test_code_mutants_l2sql.py::test_sql_mutant_is_killed[l2_writers_race]
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-101 (<lambda>)
+  
+  Traceback (most recent call last):
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/tests/d/test_l2sql_access.py", line 253, in <lambda>
+      "second", call(second, "lab_put_access_grant", pair)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/tests/d/test_l2sql_access.py", line 71, in call
+      return conn.execute(f"select infrx.{name}(%s)", (Jsonb(args),)).fetchone()[0]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate/apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection.py", line 304, in execute
+      raise ex.with_traceback(None)
+  psycopg.errors.UniqueViolation: duplicate key value violates unique constraint "lab_access_grants_one_pair"
+  DETAIL:  Key (grantor_org_id, recipient_provider_org_id, version)=(bd29dedd-32c8-4a43-a97f-7adf33a8c3c5, b0000001-0000-4000-8000-000000000001, 1) already exists.
+  CONTEXT:  SQL statement "insert into infrx.lab_access_grants (grant_id, version, grantor_org_id,
+        recipient_provider_org_id, model_ids, categories, purposes, retention_days,
+        effective_at, expires_at, written_by)
+      values (coalesce(prev.grant_id, gen_random_uuid()), coalesce(prev.version, 0) + 1,
+        (p_args->>'grantor_org_id')::uuid, v_provider, v_models,
+        array(select jsonb_array_elements_text(p_args->'categories')),
+        array(select jsonb_array_elements_text(p_args->'purposes')),
+        (p_args->>'retention_days')::int, infrx.now(), (p_args->>'expires_at')::timestamptz,
+        (p_args->>'actor_user_id')::uuid)
+      returning *"
+  PL/pgSQL function lab_put_access_grant(jsonb) line 15 at SQL statement
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/d/test_outbox_relay.py::test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_duplicate_delivery_never_makes_a_second_attempt[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_full_index_defers_rows_and_never_drops_them[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job[valkey]
+7 failed, 5273 passed, 91 skipped, 9 xfailed, 5 warnings in 3316.12s (0:55:16)
+make: *** [Makefile:13: api-test] Error 1
