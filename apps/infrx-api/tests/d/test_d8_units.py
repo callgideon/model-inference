@@ -169,3 +169,140 @@ def test_checkpoint_ledger__round_trips_b3s_models_provider_scoped() -> None:
         ("lab_checkpoint_decisions", {"subscription_id": "sub"}),
         ("lab_checkpoint_decide", {"subscription_id": "sub", "checkpoint_id": CP,
                                    "state": "queued", "reason": None, "run_id": "run-1"})]
+
+
+# --- the remaining LW3 requests (0043) --------------------------------------------------------
+POLICY = {"schema": "lab.rollout_policy.1", "provider_org_id": NEMO,
+          "policy_id": "000000b0-0000-4000-8000-0000000000b0", "version": 1,
+          "created_at": "2026-09-27T10:00:00Z", "endpoint_id": "000000e0-0000-4000-8000-0000000000e0",
+          "baseline_ref": f"lab:serving:{NEMO}:0000005e-0000-4000-8000-000000000001@sha256:{'e' * 64}",
+          "mode": "canary", "cohort": "account", "candidates": [
+              {"serving_ref": f"lab:serving:{NEMO}:0000005e-0000-4000-8000-000000000002"
+                              f"@sha256:{'e' * 64}", "weight_bp": 2500}]}
+POLICY_REF = f"lab:policy:{NEMO}:000000b0-0000-4000-8000-0000000000b0@sha256:{'a' * 64}"
+
+
+def r1_release():
+    """R1's `Release` (`infrx.rollouts.routing`), or a stand-in with its fields."""
+    try:
+        from infrx.rollouts.routing import Release
+        return Release
+    except ImportError:
+        pass
+    from dataclasses import dataclass
+    from typing import Mapping
+
+    @dataclass(frozen=True)
+    class Release:
+        policy: Any
+        policy_ref: str
+        revisions: Mapping[str, str]
+        shadow_limit: int = 0
+    package = sys.modules.setdefault("infrx.rollouts", types.ModuleType("infrx.rollouts"))
+    package.__path__ = []
+    module = types.ModuleType("infrx.rollouts.routing")
+    module.Release = Release
+    sys.modules["infrx.rollouts.routing"] = module
+    return Release
+
+
+class _Rows:
+    """A connection answering whole rows (the routing port reads a table function)."""
+
+    def __init__(self, rows: list) -> None:
+        self.rows, self.sent = rows, []
+
+    async def execute(self, sql, params=()):
+        self.sent.append((sql, params))
+        row = self.rows.pop(0)
+
+        async def one():
+            return row
+        return types.SimpleNamespace(fetchone=one)
+
+    async def close(self) -> None:
+        pass
+
+
+def test_routing__reads_the_head_as_rs_release_eligibility_and_records_once() -> None:
+    from infrx.contracts.lab import records
+    from infrx.state.lab_rollout import PgRoutingReleases
+    release_type = r1_release()
+    pins = {POLICY["candidates"][0]["serving_ref"]: "nemostation/marlin-2b@cand"}
+    conn = _Rows([(POLICY, POLICY_REF, pins, 4), None, (True,), (None,)])
+
+    async def connect():
+        return conn
+    store = PgRoutingReleases(connect)
+    got = _ok(store.active("nemostation/marlin-2b"))
+    assert type(got) is release_type, got
+    assert (got.policy.policy_id, got.policy_ref, dict(got.revisions), got.shadow_limit) == \
+        (POLICY["policy_id"], POLICY_REF, pins, 4), got
+    assert _ok(store.active("nemostation/other")) is None
+    assert _ok(store.eligible("p", types.SimpleNamespace(org_id="o"))) is True
+    assignment = records.parse({"schema": "lab.rollout_assignment.1", "provider_org_id": NEMO,
+                                "policy_ref": POLICY_REF, "request_id": CP,
+                                "cohort_digest": "sha256:" + "c" * 64,
+                                "serving_ref": POLICY["baseline_ref"], "pinned_by": "cohort"})
+    _ok(store.record(assignment))
+    assert [p for _, p in conn.sent[:3]] == [("nemostation/marlin-2b",), ("nemostation/other",),
+                                             ("p", "o")]
+    sent = conn.sent[3][1][0].obj
+    assert (sent.get("request_id"), sent.get("schema")) == (CP, "lab.rollout_assignment.1"), sent
+
+
+def test_reads_and_proposals__send_the_provider_the_fence_and_a_validated_decision() -> None:
+    import asyncio
+
+    import pytest
+    from infrx.contracts.lab import records
+    from infrx.state.lab_consent import PgJudgeLedger
+    from infrx.state.lab_data import PgLabReads
+    from infrx.state.lab_rollout import PgReleaseProposals
+    conn = _Conn([[], {"experiment_id": "e"}, [], {"state": "proposed"}, {"state": "approved"},
+                  [], [], {"calibration_id": 3}])
+
+    async def connect():
+        return conn
+    reads, proposals = PgLabReads(connect), PgReleaseProposals(connect)
+    ledger, cps = PgJudgeLedger(connect), PgCheckpointLedger(connect)
+    decision = {"schema": "lab.rollout_decision.1", "provider_org_id": NEMO,
+                "policy_ref": POLICY_REF, "decision": "expand", "evidence_refs": [
+                    f"lab:run:{NEMO}:000000b1-0000-4000-8000-0000000000b1@sha256:{'b' * 64}"],
+                "decided_by": CP, "decided_at": "2026-09-28T12:00:00Z"}
+    _ok(reads.datasets(provider_org_id=NEMO))
+    _ok(reads.put_experiment("e", provider_org_id=NEMO, protocol={"k": 1},
+                             protocol_digest="sha256:x", baseline_run_ref="b",
+                             candidate_run_ref="c", actor="dev"))
+    _ok(reads.experiments(provider_org_id=NEMO))
+    _ok(proposals.propose(POLICY_REF, provider_org_id=NEMO, proposal_id="q", kind="expand",
+                          fence=2, proposed_by="u"))
+    _ok(proposals.decide("q", approve=True, decided_by="u", decision=decision,
+                         reasons=("b2",)))
+    with pytest.raises(records.LabRejected):
+        asyncio.run(proposals.decide("q", approve=True, decided_by="u",
+                                     decision={**decision, "decision": "maybe"}))
+    _ok(proposals.proposals(provider_org_id=NEMO))
+    _ok(cps.listing(provider_org_id=NEMO))
+    assert _ok(ledger.put_calibration({"state": "uncalibrated"}, provider_org_id=NEMO,
+                                      grantor_org_id="g", judge_model="j",
+                                      rubric_version=1)) == 3
+    assert [_sent(conn, n) for n in range(8)] == [
+        ("lab_list_datasets", {"provider_org_id": NEMO}),
+        ("lab_put_experiment", {"provider_org_id": NEMO, "experiment_id": "e",
+                                "protocol": {"k": 1}, "protocol_digest": "sha256:x",
+                                "baseline_run_ref": "b", "candidate_run_ref": "c",
+                                "actor": "dev"}),
+        ("lab_experiments", {"provider_org_id": NEMO}),
+        ("lab_propose_release", {"provider_org_id": NEMO, "proposal_id": "q",
+                                 "policy_ref": POLICY_REF, "kind": "expand", "fence": 2,
+                                 "proposed_by": "u"}),
+        ("lab_decide_release_proposal", {"proposal_id": "q", "approve": True,
+                                         "decided_by": "u", "decision": decision,
+                                         "reasons": ["b2"]}),
+        ("lab_release_proposals", {"provider_org_id": NEMO}),
+        ("lab_checkpoint_listing", {"provider_org_id": NEMO}),
+        ("lab_put_judge_calibration", {"provider_org_id": NEMO, "grantor_org_id": "g",
+                                       "judge_model": "j", "rubric_version": 1,
+                                       "calibration": {"state": "uncalibrated"}})]
+    assert len(conn.sent) == 8, "a malformed decision reached the database"

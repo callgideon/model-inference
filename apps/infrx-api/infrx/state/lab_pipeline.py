@@ -148,6 +148,11 @@ class PgCheckpointLedger:
             "lab_checkpoint_subscriptions", {"provider_org_id": provider_org_id,
                                              "external_run_ref": external_run_ref})]
 
+    async def listing(self, *, provider_org_id: str) -> list[dict[str, Any]]:
+        """WR-B4-2: the provider's subscriptions (no evaluator spec, no subscriber) with their
+        decisions (checkpoint, step, receipt state, decision)."""
+        return await self._call("lab_checkpoint_listing", {"provider_org_id": provider_org_id})
+
     async def decisions(self, subscription_id: str) -> dict[str, dict[str, Any]]:
         return await self._call("lab_checkpoint_decisions", {"subscription_id": subscription_id})
 

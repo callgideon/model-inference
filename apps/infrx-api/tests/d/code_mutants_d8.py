@@ -456,6 +456,8 @@ LOG = "test_label_log__sends_the_provider_and_the_event_whole"
 LEDGER = "test_run_ledger__sends_the_cas_the_key_and_the_cost_as_given"
 TEACH = "test_teacher_ledger__reserves_the_dataset_and_reads_its_consent_back"
 CPS = "test_checkpoint_ledger__round_trips_b3s_models_provider_scoped"
+ROUTING = "test_routing__reads_the_head_as_rs_release_eligibility_and_records_once"
+READS = "test_reads_and_proposals__send_the_provider_the_fence_and_a_validated_decision"
 
 
 def _p(name, invariant, old, new, *cases, file=F, **kw) -> Mutant:
@@ -509,6 +511,47 @@ CODE_MUTANTS = (
     _p("d8_py_rejected_dropped", "an event carries whether it was rejected",
        'return [(event_type.model_validate(row["event"]), row["rejected"])',
        'return [(event_type.model_validate(row["event"]), False)', CPS),
+    _p("q_py_head_unpinned", "the router gets each candidate's pin",
+       "policy_ref=row[1], revisions=row[2],", "policy_ref=row[1], revisions={},", ROUTING,
+       file="state/lab_rollout.py"),
+    _p("q_py_shadow_unbounded", "the shadow bound is the store's",
+       "                       shadow_limit=row[3])", "                       shadow_limit=10**6)",
+       ROUTING, file="state/lab_rollout.py"),
+    _p("q_py_no_head_is_a_release", "no running head is no release",
+       "        if row is None:\n            return None\n        from ..rollouts",
+       "        if row is None:\n            row = (None,) * 4\n        from ..rollouts",
+       ROUTING, file="state/lab_rollout.py"),
+    _p("q_py_eligible_other_org", "eligibility is the subject organization's",
+       "(policy_id, auth.org_id)))[0]", "(policy_id, None)))[0]", ROUTING,
+       file="state/lab_rollout.py"),
+    _p("q_py_assignment_by_name", "an assignment is sent by its wire names",
+       "(Jsonb(assignment.model_dump(mode=\"json\", by_alias=True)),))",
+       "(Jsonb(assignment.model_dump(mode=\"json\")),))", ROUTING, file="state/lab_rollout.py"),
+    _p("q_py_proposal_fence_lost", "a proposal carries the fence the page showed",
+       '"policy_ref": policy_ref, "kind": kind, "fence": fence, "proposed_by": proposed_by})',
+       '"policy_ref": policy_ref, "kind": kind, "fence": None, "proposed_by": proposed_by})',
+       READS, file="state/lab_rollout.py"),
+    _p("q_py_decision_unvalidated", "an approval's decision is a validated record",
+       "        if approve:\n            records.parse(decision)", "        if False:\n"
+       "            records.parse(decision)", READS, file="state/lab_rollout.py"),
+    _p("q_py_reasons_dropped", "a decision keeps its reasons",
+       '"decision": decision, "reasons": list(reasons)})', '"decision": decision, '
+       '"reasons": []})', READS, file="state/lab_rollout.py"),
+    _p("q_py_experiment_runs_swapped", "baseline and candidate stay in their places",
+       '"baseline_run_ref": baseline_run_ref, "candidate_run_ref": candidate_run_ref,',
+       '"baseline_run_ref": candidate_run_ref, "candidate_run_ref": baseline_run_ref,', READS,
+       file="state/lab_data.py"),
+    _p("q_py_datasets_unscoped", "the dataset list is the provider's",
+       'return await self._call("lab_list_datasets", {"provider_org_id": provider_org_id})',
+       'return await self._call("lab_list_datasets", {"provider_org_id": None})', READS,
+       file="state/lab_data.py"),
+    _p("q_py_listing_unscoped", "the checkpoint listing is the provider's",
+       'return await self._call("lab_checkpoint_listing", {"provider_org_id": provider_org_id})',
+       'return await self._call("lab_checkpoint_listing", {"provider_org_id": None})', READS),
+    _p("q_py_calibration_other_model", "a calibration is its configuration's",
+       '"judge_model": judge_model, "rubric_version": rubric_version,',
+       '"judge_model": None, "rubric_version": rubric_version,', READS,
+       file="state/lab_consent.py"),
     _p("d8_py_decision_run_lost", "a decision carries its run id",
        '"state": state, "reason": reason, "run_id": run_id})', '"state": state, "reason": '
        'reason, "run_id": None})', CPS),
