@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "f2b6a912",
+ "integration_head": "cd0a8af2",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 210,
- "updated": "2026-09-28T10:04:09Z",
+ "revision": 211,
+ "updated": "2026-09-28T10:43:51Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4665,18 +4665,18 @@
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T10:43:51Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at 0bfaa6ed (0031–0040; majors LSQ-C1/C2 fixed+rechecked) → merge batch #8 (wf_8b3ed962-97d) with WR-LSQ-1/2/3, WR-LSQ-7 half, WR-L3-5; consuming lanes' real halves → lab-sql-integration lane after #6 + #8 land; 0041+ → lab-sql-lw3",
+   "next_action": "DONE (schema): merged --no-ff at 594554ca + wirings cbd73efa/659167d6 (0031–0040 LOCAL-ONLY; harness pin; own-process mutants 235/0; six callers; C3F stack on 0038; WR-L3-5 catalog); consuming lanes' integration → lab-sql-integration lane (WR-LSQ-4/5/6, the eval half of WR-LSQ-7 = runner.freeze put_evaluator + all-revoked state 'failed', B-R1 flip, WR-OBS-3, E6L-O1/O2) and l3-integration (WR-LSQ-8)",
    "estimate": {
-    "optimistic_h": 3.5,
-    "likely_h": 8.5,
-    "pessimistic_h": 17,
-    "confidence": "medium",
-    "basis": "handback: per-task review rounds + the consuming lanes' merge-time reruns",
-    "at": "2026-09-28T09:15:45Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T10:43:51Z"
    },
    "evidence": [
     "research/plan/evidence/d/D6J-be40bda.md",
@@ -5770,24 +5770,24 @@
    "branch": "codex/w5-merge-8",
    "worktree": ".claude/worktrees/codex-w5-merge-8",
    "base": "608d7e6c",
-   "head": null,
+   "head": "659167d6",
    "isolation": {
     "ports": "dlab / app-c3f (checks only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T09:15:45Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T10:43:51Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "DONE: merged onto claude/consumer-v1 at cd0a8af2 (clean); outbox[valkey] cases blocked by a foreign leftover infrx-d2-valkey (a finished reviewer clone) — the user removes it",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "one merge with PG checks",
-    "at": "2026-09-28T09:15:45Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T10:43:51Z"
    },
    "evidence": [],
    "commands": [],
