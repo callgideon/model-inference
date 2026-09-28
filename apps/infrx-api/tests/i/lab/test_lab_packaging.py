@@ -427,3 +427,21 @@ def test_i2l__the_control_factory_is_the_gateways_one_lab_operations_composition
     except Exception as died:              # noqa: BLE001 - the type is compared
         refused = died
     assert type(refused) is errors.DependencyUnavailable, refused
+
+
+def test_i2l__a_lab_worker_that_refuses_to_start_is_not_restarted_in_a_loop():
+    """0-F5: `python -m infrx.lab.workers <role>` exits 2 on a refusal (a missing setting, or
+    a role with no work source yet - R198) and 1 when a pass dies. Every Lab worker unit
+    restarts on failure but never on exit 2 (`docker run --init` hands the container's status
+    back): a refusal is final until the operator fixes the env file, not a restart every
+    10 s. The unit set is every unit that runs the entry point, so a new one is held too."""
+    units = {path: path.read_text() for path in sorted((DEPLOY / "lab").glob("*/*.service"))
+             if "python -m infrx.lab.workers" in path.read_text()}
+    assert {path.stem for path in units} == {
+        f"infrx-lab-{role}" for role in ("eval", "checkpoints", "datasets", "judge",
+                                         "annotation", "training", "rollout")}
+    for path, text in units.items():
+        service = text.split("[Service]", 1)[1].split("\n[", 1)[0]
+        lines = [line.strip() for line in service.splitlines()]
+        assert "Restart=on-failure" in lines, path.name
+        assert "RestartPreventExitStatus=2" in lines, path.name
