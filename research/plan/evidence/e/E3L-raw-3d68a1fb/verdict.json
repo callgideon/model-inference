@@ -1,0 +1,300 @@
+{
+  "task": "E3L",
+  "gate": "LAB-OPERATE (local half; I2L staging needs P-08)",
+  "verdict": "FAIL",
+  "exit": 1,
+  "cells": {
+    "LAB-ACCESS": "PASS",
+    "LAB-PUBLISH": "FAIL",
+    "SPLIT-CONTRACT": "FAIL"
+  },
+  "label": "real PostgreSQL/PostgREST/Valkey/S3-compatible services, the merged L1/L2 code, a controlled protocol engine and a local Lab build; not Marlin quality, not GPU capacity, not hosted behaviour",
+  "pins": {
+    "base": "49393c56",
+    "head": "3d68a1fba725b193e809069b694ec0630c4eff4a",
+    "dirty": true,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    }
+  },
+  "namespace": "e3l",
+  "ports": {
+    "postgres": 57032,
+    "valkey": 57079,
+    "clickhouse_http": 57023,
+    "clickhouse_native": 57090,
+    "s3": 57000,
+    "fake_vllm": 57080
+  },
+  "started": "2026-09-28T21:20:04+00:00",
+  "seconds": 218.3,
+  "stack": {
+    "usable": true,
+    "why_not": null,
+    "stages": [
+      {
+        "stage": "preflight",
+        "status": "PASS",
+        "seconds": 2.1
+      },
+      {
+        "stage": "services",
+        "status": "PASS",
+        "seconds": 19.2
+      },
+      {
+        "stage": "migrate",
+        "status": "PASS",
+        "seconds": 1.2
+      },
+      {
+        "stage": "backend-teardown",
+        "status": "PASS",
+        "seconds": 189.0
+      },
+      {
+        "stage": "teardown",
+        "status": "PASS",
+        "seconds": 6.8
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "l01",
+      "title": "two providers: own workspace only; every cross-provider operation refused; revoked membership refused next call",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_l01_each_provider_session_sees_only_its_own_workspace": "PASS",
+        "test_l01_a_member_of_one_provider_is_refused_every_operation_on_the_other": "PASS",
+        "test_l01_a_revoked_membership_is_refused_on_its_next_call": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l01"
+    },
+    {
+      "id": "l02",
+      "title": "private dev revisions excluded from App discovery and admission",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3",
+        "L4"
+      ],
+      "status": "PASS",
+      "cases": {
+        "test_l02_the_seeded_private_dev_deployment_is_not_discoverable_or_admissible": "PASS",
+        "test_l02_a_provider_created_dev_revision_never_reaches_app_discovery": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l02"
+    },
+    {
+      "id": "l03",
+      "title": "registry validation: artifact, schema, runtime, digest, ownership",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "PASS",
+      "cases": {
+        "test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l03"
+    },
+    {
+      "id": "l04",
+      "title": "production publication: operator approval, audit, rate snapshot",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3",
+        "L4"
+      ],
+      "status": "INVALID",
+      "cases": {
+        "test_l04_publication_needs_operator_approval_and_snapshots_the_rate": "INVALID"
+      },
+      "reasons": [
+        "test_l04_publication_needs_operator_approval_and_snapshots_the_rate: INVALID[harness] RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l04"
+    },
+    {
+      "id": "l05",
+      "title": "App discovery and a metered call on the published revision",
+      "test_ids": [
+        "LAB-PUBLISH",
+        "SPLIT-CONTRACT"
+      ],
+      "lanes": [
+        "L3",
+        "L4"
+      ],
+      "status": "FAIL",
+      "cases": {
+        "test_l05_app_discovers_and_serves_the_published_revision": "INVALID",
+        "test_l05_discovery_reports_the_listing_version_it_serves": "FAIL"
+      },
+      "reasons": [
+        "test_l05_app_discovers_and_serves_the_published_revision: INVALID[harness] RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use",
+        "test_l05_discovery_reports_the_listing_version_it_serves: AssertionError: [{'schema_version': 2, 'object': 'model', 'id': 'nemostation/marlin-2b', 'created': 1788220800, ...}]\nassert [(1, '3e15c03...4c3894b25d2')] == [(2, '3e15c03...4c3894b25d2')]\n  \n  At index 0 diff: (1, '3e15c034-77a5-493e-8a8b-a4c3894b25d2') != (2, '3e15c034-77a5-493e-8a8b-a4c3894b25d2')\n  Use -v to get more diff"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l05"
+    },
+    {
+      "id": "l06",
+      "title": "rollback during a queued request keeps its serving and rate pins",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "PASS",
+      "cases": {
+        "test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l06"
+    },
+    {
+      "id": "l07",
+      "title": "consumer keys reach no provider control and are no Lab session",
+      "test_ids": [
+        "LAB-ACCESS",
+        "SPLIT-CONTRACT"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_l07_a_consumer_key_reaches_no_provider_control_on_the_gateway": "PASS",
+        "test_l07_a_consumer_key_is_no_lab_session": "PASS",
+        "test_l07_a_consumer_owner_has_no_provider_workspace": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l07"
+    },
+    {
+      "id": "l08",
+      "title": "consumer data denied without a current, purpose-matching grant",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_l08_no_grant_no_content": "PASS",
+        "test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call": "PASS",
+        "test_l08_a_provider_session_reads_no_consumer_rows_directly": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l08"
+    },
+    {
+      "id": "l09",
+      "title": "fault injection on the publish/rollback CAS",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "PASS",
+      "cases": {
+        "test_l09_publish_and_rollback_cas_under_injected_faults": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l09"
+    },
+    {
+      "id": "l10",
+      "title": "control-service restart mid-operation",
+      "test_ids": [
+        "LAB-PUBLISH"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "FAIL",
+      "cases": {
+        "test_l10_a_control_service_restart_mid_operation_loses_nothing": "PASS",
+        "test_l10_a_retry_after_a_lost_answer_proposes_once": "FAIL"
+      },
+      "reasons": [
+        "test_l10_a_retry_after_a_lost_answer_proposes_once: AssertionError: [('46ed5f21-fae9-41ab-8893-59d60018940e', 'proposed_public'), ('5b3976bd-9f2d-4595-b696-dcefa24ed980', 'proposed_public')]\nassert 2 == 1\n +  where 2 = <built-in method count of list object at 0x7890506244c0>('proposed_public')\n +    where <built-in method count of list object at 0x7890506244c0> = ['proposed_public', 'proposed_public'].count"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l10"
+    },
+    {
+      "id": "l11",
+      "title": "App inference with the Lab down, crash-looping and rolled back",
+      "test_ids": [
+        "SPLIT-CONTRACT"
+      ],
+      "lanes": [],
+      "status": "FAIL",
+      "cases": {
+        "test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving": "PASS",
+        "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once": "FAIL"
+      },
+      "reasons": [
+        "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once: AssertionError: the Lab web exited 1"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l11"
+    },
+    {
+      "id": "l12",
+      "title": "consumer keys refused by every control-service operation",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "PASS",
+      "cases": {
+        "test_l12_a_consumer_key_is_refused_by_every_control_operation": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir> --only l12"
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e3l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "lab_build": {
+      "exit": 0,
+      "seconds": 4.3,
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/lab-build.log",
+      "build_id": "Z4in2WiI8T6p-dEspFYs-"
+    },
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs -o junit_family=xunit1 --junitxml=/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/tests/integration/lab_operate/scenarios_access.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/tests/integration/lab_operate/scenarios_publish.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/tests/integration/lab_operate/scenarios_split.py",
+      "exit": 1,
+      "seconds": 184.6,
+      "summary": "5 failed, 17 passed in 182.68s (0:03:02)",
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/scenarios.xml",
+    "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/scenarios.log",
+    "box_logs": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-3d68a1fb/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out <dir>"
+}

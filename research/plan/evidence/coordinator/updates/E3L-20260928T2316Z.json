@@ -1,0 +1,89 @@
+{
+  "task": "E3L",
+  "slice": "E3L-BIND: l02-l06, l09, l10, l12 bound to the real L3 (LabControl/PgControlStore/PgRegistry/PgCatalogDirectory; R186 factory process for l10/l12) + full make lab-operate at bab9b180: 20/22 cases PASS; gate FAIL on E3L-F1 (l05b /v1/models listing_version constant) and E3L-F2 (l10b retried proposal opens a second one); J01/J02 NOT RUN (composition-2 not on base)",
+  "activity": "review",
+  "head": "9b19864d",
+  "worktree": ".claude/worktrees/codex-w5-e3l-bind",
+  "branch": "codex/w5-e3l-bind",
+  "owned_paths": [
+    "tests/integration/lab_operate/",
+    "research/plan/evidence/e/E3L-*"
+  ],
+  "cells": {
+    "l01": "PASS",
+    "l02": "PASS",
+    "l03": "PASS",
+    "l04": "PASS",
+    "l05": "FAIL (l05a PASS, l05b FAIL = E3L-F1)",
+    "l06": "PASS",
+    "l07": "PASS",
+    "l08": "PASS",
+    "l09": "PASS",
+    "l10": "FAIL (l10a PASS, l10b FAIL = E3L-F2)",
+    "l11": "PASS",
+    "l12": "PASS",
+    "J01/J02": "NOT RUN (WR-LAB-API-2 composition not on base; plus WR-LSQ-9, WR-L3-2)",
+    "gate": "FAIL",
+    "LAB-ACCESS": "PASS",
+    "LAB-PUBLISH": "FAIL",
+    "SPLIT-CONTRACT": "FAIL"
+  },
+  "commands": [
+    {
+      "cmd": "make lab-operate (attempt 4, head bab9b180, clean before the run)",
+      "exit": 1,
+      "summary": "gate FAIL: 20 passed, 2 failed (l05b E3L-F1, l10b E3L-F2) in 136 s; raw research/plan/evidence/e/E3L-raw-bab9b180/"
+    },
+    {
+      "cmd": "make lab-operate attempts 1-3",
+      "exit": "1/1/3",
+      "summary": "INVALID[harness] 57080/57070 bind collisions; BLOCKED provisioning (ephemeral range, WR-E3L-2); recorded"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l python -m pytest -q tests/integration/lab_operate/test_mutants.py (kept stack)",
+      "exit": 0,
+      "summary": "45 passed: 12 layer-1 + 29 stack mutants killed, 0 survivors; 2 earlier attempts' pristine broken by 57080 collisions"
+    },
+    {
+      "cmd": "python -m pytest -q tests/integration/lab_operate/test_e3l_runner.py tests/integration/lab_operate/test_mutants.py",
+      "exit": 0,
+      "summary": "17 passed, 1 skipped (empty param set)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q tests/i/lab",
+      "exit": 0,
+      "summary": "17 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l3 make api-test",
+      "exit": 2,
+      "summary": "6414 passed; 50 failed + 8 errors all shared-lock/foreign (d2-valkey, i8 locks); tests/i alone 349 passed; outbox relay alone 13 passed, 7 ForeignContainer infrx-d2-valkey"
+    },
+    {
+      "cmd": "python -m pytest -q tests/integration --co",
+      "exit": 2,
+      "summary": "608 collected, 3 pre-existing test_mutants.py basename collisions; --import-mode=importlib 631 collected"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "E3L 3/6/12 second half; this slice ~3.5 h incl. 4 gate attempts under host load; remaining = rerun after F1/F2 fixes + ControlReads route halves and J01/J02 after WR-LSQ-9 / composition-2",
+    "at": "2026-09-28T23:16Z"
+  },
+  "blockers": [
+    "E3L-F1 -> G7 + A3/D10 (listing version in discovery)",
+    "E3L-F2 -> lab-sql + L3 (idempotent proposal)",
+    "WR-E3L-2 port reservation 57000-57599 (host collisions)"
+  ],
+  "wiring_requests": [
+    "WR-E3L-2 (open): reserve 57000-57599 in ip_local_reserved_ports (user/root, P-21 extension)"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E3L-BIND-bab9b18.md",
+    "research/plan/evidence/e/E3L-raw-bab9b180/",
+    "research/plan/evidence/e/E3L-raw-3d68a1fb/"
+  ]
+}

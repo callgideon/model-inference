@@ -43,7 +43,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 NAMESPACE = "e3l"
-BASE = "eb0734d7"            # the LW3 base this runner was built on (coordinator dispatch)
+BASE = "49393c56"            # the E3L-BIND base (coordinator dispatch; the runner: eb0734d7)
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
 EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}
@@ -88,7 +88,8 @@ REQUIRED = {
             "test_l02_a_provider_created_dev_revision_never_reaches_app_discovery"),
     "l03": ("test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership",),
     "l04": ("test_l04_publication_needs_operator_approval_and_snapshots_the_rate",),
-    "l05": ("test_l05_app_discovers_and_serves_the_published_revision",),
+    "l05": ("test_l05_app_discovers_and_serves_the_published_revision",
+            "test_l05_discovery_reports_the_listing_version_it_serves"),
     "l06": ("test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins",),
     "l07": ("test_l07_a_consumer_key_reaches_no_provider_control_on_the_gateway",
             "test_l07_a_consumer_key_is_no_lab_session",
@@ -97,7 +98,8 @@ REQUIRED = {
             "test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call",
             "test_l08_a_provider_session_reads_no_consumer_rows_directly"),
     "l09": ("test_l09_publish_and_rollback_cas_under_injected_faults",),
-    "l10": ("test_l10_a_control_service_restart_mid_operation_loses_nothing",),
+    "l10": ("test_l10_a_control_service_restart_mid_operation_loses_nothing",
+            "test_l10_a_retry_after_a_lost_answer_proposes_once"),
     "l11": ("test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving",
             "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once"),
     "l12": ("test_l12_a_consumer_key_is_refused_by_every_control_operation",),
