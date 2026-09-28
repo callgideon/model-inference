@@ -1,0 +1,128 @@
+#!/usr/bin/env node
+// R4's mutant runner (R32; LANE-RULES addendum) over tests/r, on the shared Lab harness.
+// Usage: node tests/r/run-mutants.mjs [--only ID,ID]
+import { m, runMutants } from "../l/shell/harness.mjs";
+
+const SUITE = ["view", "journey", "actions", "pages"].map((f) => `tests/r/${f}.test.ts`);
+const PORT = "lib/services/rollouts/port.ts";
+const FAKE = "lib/services/rollouts/fake.ts";
+const VIEW = "lib/services/rollouts/view.ts";
+const ACTIONS = "lib/services/rollouts/actions.ts";
+const RELEASES = "app/(provider)/releases/page.tsx";
+const OPTIMIZATIONS = "app/(provider)/optimizations/page.tsx";
+
+const C = {
+  v01: "R4-V01 a release row shows the frozen plan, cohort, baseline and candidate weights from the D9 record",
+  v02: "R4-V02 progress shows traffic, errors, p99, quality coverage, spend and assignments from R1's aggregates; empty metrics show dashes",
+  v03: "R4-V03 spend in another unit than the budget is named, never converted",
+  v04: "R4-V04 an inconclusive evaluation blocks promotion and says so; only an expand verdict offers expansion",
+  v05: "R4-V05 actions follow the record and the role: only an administrator proposes; nothing on a rolled-back release or while a request is pending",
+  v06: "R4-V06 a rollback is shown from the D9 decision records with reasons and who decided, never from a request",
+  v07: "R4-V07 a variant row names the hardware and runtime scope of both sides and what changed",
+  v08: "R4-V08 performance is a measurement only when every source is an experiment results path at a commit",
+  v09: "R4-V09 an optimization is claimed and a variant is eligible only for an equivalent comparison",
+  v10: "R4-V10 a refusal is fixed copy for a known reason and nothing for anything else in the URL",
+  v11: "R4-V11 the releases port fails closed: unavailable until the real adapter is wired, the preview never in production",
+  j01: "R4-J01 guardrail rollback: the controller's rollback verdict is one D9 transition and the page shows it from the records",
+  j02: "R4-J02 promotion: expand verdict → administrator proposal → operator approval → approved with its evidence",
+  j03: "R4-J03 unsafe proposals: another provider, a viewer or developer, a stale fence, a double click, an inconclusive verdict, a rolled-back release",
+  j04: "R4-J04 an operator approval of a stale or rejected proposal leaves the release untouched",
+  a01: "R4-A01 a proposal runs as the session's provider and role, whatever the form claims",
+  a02: "R4-A02 a role without propose_publication is refused before the releases service is asked",
+  a03: "R4-A03 malformed input is refused as invalid and never reaches the releases service",
+  a04: "R4-A04 the service's refusal is carried as its reason; its success is a plain return to the records",
+  a05: "R4-A05 a consumer-only user gets a 404 and the releases service is never asked",
+  p01: "R4-P01 each page reads the records as the session's workspace and shows ?refused= only as fixed copy",
+  p02: "R4-P02 no page offers a launch or allocation control or claims success; the preview stand-in is labelled only when it is on",
+};
+
+const MUTANTS = [
+  // port
+  m("R4-X01", "the default port is the stand-in, not unavailable", PORT, "  return UNAVAILABLE;\n}", "  return (preview ??= new FakeReleases());\n}", [C.v11]),
+  m("R4-X02", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v11]),
+  m("R4-X03", "any preview flag value turns the stand-in on", PORT, 'env.LAB_RELEASES_PREVIEW === "1"', "env.LAB_RELEASES_PREVIEW !== undefined", [C.v11]),
+  // release rows
+  m("R4-X04", "candidate weights are shown as raw basis points", VIEW, "${(c.weightBp / 100).toFixed(2)}%", "${c.weightBp}%", [C.v01]),
+  m("R4-X05", "the budget loses its unit", VIEW, "budget ${money(p.budget)}", "budget ${p.budget.amount}", [C.v01]),
+  m("R4-X06", "the cohort unit is not shown", VIEW, "${r.cohort} cohort", "cohort", [C.v01]),
+  m("R4-X07", "an idle window divides errors by zero", VIEW, "errors: cand && cand.requests > 0 ?", "errors: cand ?", [C.v02]),
+  m("R4-X08", "an idle window divides quality coverage by zero", VIEW, "quality: cand && cand.requests > 0 ?", "quality: cand ?", [C.v02]),
+  m("R4-X09", "no progress reads as zero traffic", VIEW, ': "no traffic observed"', ': "candidate 0 · baseline 0 requests"', [C.v02]),
+  m("R4-X10", "a missing p99 renders as a number", VIEW, 'p99: cand?.p99Ms == null ? "—"', 'p99: cand === undefined ? "—"', [C.v02]),
+  m("R4-X11", "assignments lose how they were pinned", VIEW, "${a.requests} (${a.pinnedBy})", "${a.requests}", [C.v02]),
+  m("R4-X12", "spend in another unit is shown against the budget", VIEW, "live.spent.unit !== p.budget.unit", "false", [C.v03]),
+  m("R4-X13", "an inconclusive evaluation is not named", VIEW, 'inconclusive ? "Promotion blocked: the evaluation is inconclusive." : ', "", [C.v04]),
+  m("R4-X14", "inconclusive is read from the wrong reason", VIEW, 'includes("report_inconclusive")', 'includes("no_report")', [C.v04]),
+  m("R4-X15", "expansion is offered on any verdict", VIEW, 'r.state === "running" && v?.action === "expand"', 'r.state === "running"', [C.v04, C.v05]),
+  m("R4-X16", "expansion is offered on an approved release", VIEW, 'if (r.state === "running" && v?.action', "if (v?.action", [C.v05]),
+  m("R4-X17", "rollback is offered on a rolled-back release", VIEW, 'if (r.state !== "rolled_back") actions.push("rollback");', 'actions.push("rollback");', [C.v05, C.j01]),
+  m("R4-X18", "a pending request does not block another", VIEW, "if (!pending && holds(", "if (holds(", [C.v05]),
+  m("R4-X19", "a decided request still reads as pending", VIEW, 'x.policyRef === r.policyRef && x.state === "proposed"', "x.policyRef === r.policyRef", [C.v05]),
+  m("R4-X20", "another release's request blocks this one", VIEW, 'x.policyRef === r.policyRef && x.state === "proposed"', 'x.state === "proposed"', [C.v05]),
+  m("R4-X21", "a developer may propose", VIEW, 'holds(role, "propose_publication")', 'holds(role, "manage_dev_deployment")', [C.v05]),
+  m("R4-X22", "a request reads as done", VIEW, "proposed · awaiting operator approval", "done", [C.v05, C.j02]),
+  m("R4-X23", "the form carries another fence than the record's", VIEW, "fence: r.fence,", "fence: r.version,", [C.v05]),
+  m("R4-X24", "a requested rollback is shown as rolled back", VIEW, 'status: r.state === "rolled_back" ?', 'status: r.state === "rolled_back" || pending?.kind === "rollback" ?', [C.v06]),
+  m("R4-X25", "lineage carries other releases' decisions", VIEW, "decisions.filter((d) => d.policyRef === r.policyRef)", "decisions.filter(() => true)", [C.v06]),
+  m("R4-X26", "lineage drops the reasons", VIEW, '${d.reasons.length ? `: ${d.reasons.join(", ")}` : ""}', "", [C.v06, C.j01]),
+  m("R4-X27", "lineage drops the evidence", VIEW, '${d.evidenceRefs.length ? ` · evidence ${d.evidenceRefs.join(", ")}` : ""}', "", [C.v06]),
+  m("R4-X28", "a settled release still shows promotion blocked", VIEW, 'blocked: r.state !== "running" || ', "blocked: ", [C.v06]),
+  m("R4-X29", "an expand verdict still shows promotion blocked", VIEW, ' || v?.action === "expand" ? null', " ? null", [C.v04]),
+  m("R4-X30", "an approved release reads as running", VIEW, ': r.state === "approved" ? "expansion approved by an operator"', ": false ? \"\"", [C.v06]),
+  m("R4-X31", "an unevaluated release reads as passing", VIEW, ': "running · not evaluated yet"', ': "running · expand: every guardrail passes"', [C.v04]),
+  // variant rows
+  m("R4-X32", "the scope drops the hardware", VIEW, " on ${i.hardware}", "", [C.v07]),
+  m("R4-X33", "the scope drops the engine version", VIEW, "${i.engine} ${i.engineVersion}", "${i.engine}", [C.v07]),
+  m("R4-X34", "a fixture is labelled a measurement", VIEW, "const measured = perf !== null && perf.sources.every((s) => RESULTS.test(s));", "const measured = perf !== null;", [C.v08, C.v09]),
+  m("R4-X35", "a results path without a commit counts", VIEW, "\\S+@[0-9a-f]{7,40}$/;", "\\S+(@[0-9a-f]{7,40})?$/;", [C.v08]),
+  m("R4-X36", "one measured source is enough", VIEW, "perf.sources.every(", "perf.sources.some(", [C.v08]),
+  m("R4-X37", "a non-equivalent variant claims an optimization", VIEW, 'claim: c?.outcome === "equivalent" && c.optimizationClaimed', "claim: c?.optimizationClaimed", [C.v09]),
+  m("R4-X38", "an unmeasured claim is trusted", VIEW, "c.optimizationClaimed && measured ?", "c.optimizationClaimed ?", [C.v09]),
+  m("R4-X39", "a claim the record does not make is shown", VIEW, "c.optimizationClaimed && measured ?", "measured ?", [C.v09]),
+  m("R4-X40", "an inconclusive variant is eligible", VIEW, 'eligible: c?.outcome === "equivalent" ?', "eligible: c ?", [C.v09]),
+  m("R4-X41", "an uncompared variant reads as compared", VIEW, ': "not compared";', ': "equivalent";', [C.v09]),
+  m("R4-X42", "the comparison's reasons are dropped", VIEW, '${c.reasons.length ? `: ${c.reasons.join(", ")}` : ""}', "", [C.v09]),
+  m("R4-X43", "any ?refused= string is looked up", VIEW, "(REFUSALS as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v10]),
+  // fake (the WR-R4-1 contract)
+  m("R4-X44", "reads are not scoped to the provider", FAKE, "rows.filter((r) => r.providerId === actor.providerId)", "rows.filter(() => true)", [C.j03]),
+  m("R4-X45", "another provider's release can be proposed on", FAKE, "x.policyRef === policyRef && x.providerId === actor.providerId", "x.policyRef === policyRef", [C.j03]),
+  m("R4-X46", "a foreign id is judged by role first (confirms it exists)", FAKE,
+    '    if (r === undefined) return no("not_found");\n    if (!holds(actor.role, "propose_publication")) return no("denied");',
+    '    if (!holds(actor.role, "propose_publication")) return no("denied");\n    if (r === undefined) return no("not_found");', [C.j03]),
+  m("R4-X47", "the service does not re-check the capability", FAKE, '    if (!holds(actor.role, "propose_publication")) return no("denied");\n', "", [C.j03]),
+  m("R4-X48", "a stale fence is accepted", FAKE, "const fits = r.fence === fence && (", "const fits = (", [C.j03]),
+  m("R4-X49", "expansion is proposed on an inconclusive verdict", FAKE, 'r.state === "running" && r.verdict?.action === "expand"', 'r.state === "running"', [C.j03]),
+  m("R4-X50", "an approved release is expanded again", FAKE, 'r.state === "running" && r.verdict?.action === "expand"', 'r.verdict?.action === "expand"', [C.j03]),
+  m("R4-X51", "a rolled-back release takes a rollback proposal", FAKE, ': r.state !== "rolled_back");', ": true);", [C.j03]),
+  m("R4-X52", "a double click makes two proposals", FAKE, ' || this.requests.some((p) => p.policyRef === policyRef && p.state === "proposed")', "", [C.j03]),
+  m("R4-X53", "a transition does not move the fence", FAKE, "fence: r.fence + 1", "fence: r.fence", [C.j01, C.j04]),
+  m("R4-X54", "a settled release is transitioned again", FAKE, '    if (r.state !== "running") return;\n', "", [C.j01]),
+  m("R4-X55", "a rollback verdict is not acted on", FAKE, '    if (verdict.action === "rollback") this.transition(', "    if (false) this.transition(", [C.j01]),
+  m("R4-X56", "a stale approval is applied", FAKE, "const stale = approve && r.fence !== p.fence;", "const stale = false;", [C.j04]),
+  m("R4-X57", "a rejected proposal is applied", FAKE, '    if (!approve) return "ok";\n', "", [C.j04]),
+  m("R4-X58", "an expansion drops its evidence", FAKE, "r.verdict!.evidenceRefs", "[]", [C.j02]),
+  m("R4-X59", "an operator rollback carries no reason", FAKE, '["operator:proposal"]', "[]", [C.j02]),
+  m("R4-X60", "an approval is recorded as the controller's", FAKE, '"expand", operatorId,', '"expand", "controller",', [C.j02]),
+  // actions
+  m("R4-X61", "a proposal acts as the form's provider", ACTIONS, "{ providerId: w.providerId, role: w.role }", '{ providerId: String(data.get("providerId")), role: w.role }', [C.a01]),
+  m("R4-X62", "the capability check is skipped", ACTIONS, '!holds(w.role, "propose_publication") ? "denied" : ', "", [C.a02]),
+  m("R4-X63", "proposing needs only the dev capability", ACTIONS, 'holds(w.role, "propose_publication")', 'holds(w.role, "manage_dev_deployment")', [C.a02]),
+  m("R4-X64", "malformed input reaches the releases service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+  m("R4-X65", "an unknown proposal kind is accepted", ACTIONS, '(kind === "expand" || kind === "rollback") && ', "", [C.a03]),
+  m("R4-X66", "any policy reference passes the shape check", ACTIONS, "const POLICY_REF = /^lab:policy:", "const POLICY_REF = /^lab:\\w+:", [C.a03]),
+  m("R4-X67", "any fence passes the shape check", ACTIONS, "const FENCE = /^\\d{1,15}$/;", "const FENCE = /./;", [C.a03]),
+  m("R4-X68", "a refusal is dropped on the way back", ACTIONS, 'redirect(result.ok ? "/releases" : `/releases?refused=${result.reason}`);', 'redirect("/releases");', [C.a02, C.a03, C.a04]),
+  m("R4-X69", "a success is flagged by the action, not the records", ACTIONS, 'redirect(result.ok ? "/releases" :', 'redirect(result.ok ? "/releases?done=1" :', [C.a01]),
+  m("R4-X70", "an action runs without a provider workspace", ACTIONS, "  const w = await requireProviderWorkspace();",
+    '  const w = { providerId: "11111111-1111-4111-8111-111111111111", providerName: "x", role: "administrator" } as const;', [C.a05]),
+  // pages
+  m("R4-X71", "a page reads records as a fixed provider", RELEASES, "{ providerId: workspace.providerId, role: workspace.role }", '{ providerId: "11111111-1111-4111-8111-111111111111", role: workspace.role }', [C.p01]),
+  m("R4-X72", "a page shows ?refused= raw", RELEASES, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
+  m("R4-X73", "a proposal does not name the revision the page showed", RELEASES, '                <input type="hidden" name="fence" value={r.fence} />\n', "", [C.p01]),
+  m("R4-X74", "unreadable variants render as an empty page", OPTIMIZATIONS, 'if (!variants.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;', "if (!variants.ok) return null;", [C.p01]),
+  m("R4-X75", "a page claims success on its own", RELEASES, "<h1>Releases</h1>", "<h1>Releases</h1>\n      <p>Rollback succeeded.</p>", [C.p02]),
+  m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={a} />', '<input type="hidden" name="kind" value={a} />\n                <input name="weightBp" />', [C.p02]),
+  m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
+];
+
+process.exit(await runMutants({ suite: SUITE, prefix: "R4", mutants: MUTANTS }));
