@@ -113,6 +113,7 @@ REQUIRED = {
     "j07": ("test_j07_a_required_slice_regression_rejects_despite_an_aggregate_gain",
             "test_j07_a_clean_win_is_accepted_and_claimed_improved",
             "test_j07_a_missing_candidate_output_is_counted_not_dropped",
+            "test_j07_an_unfinished_candidate_counts_its_missing_cases",
             "test_j07_tool_cases_are_recorded_and_not_comparable"),
     "j08": ("test_j08_a_checkpoint_delivered_twice_is_one_receipt_and_one_run",
             "test_j08_a_crash_before_the_decision_is_one_run_on_redelivery"),

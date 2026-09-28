@@ -107,6 +107,7 @@ N2 = "infrx/datasets/versions/__init__.py"
 H1 = "infrx/harnesses/replay.py"
 B2 = "infrx/evaluation/reports/__init__.py"
 B3 = "infrx/evaluation/checkpoints/__init__.py"
+B1 = "infrx/evaluation/runner/__init__.py"
 D7 = "../app/supabase/migrations/0029_lab_data.sql"
 
 J01_REFUSED = "test_j01_a_benchmark_with_bad_rows_is_refused_until_its_rejects_are_accepted"
@@ -123,6 +124,7 @@ J06 = "test_j06_two_serving_versions_reproduce_the_frozen_benchmark"
 J07_REJECT = "test_j07_a_required_slice_regression_rejects_despite_an_aggregate_gain"
 J07_ACCEPT = "test_j07_a_clean_win_is_accepted_and_claimed_improved"
 J07_MISSING = "test_j07_a_missing_candidate_output_is_counted_not_dropped"
+J07_UNFINISHED = "test_j07_an_unfinished_candidate_counts_its_missing_cases"
 J07_TOOLS = "test_j07_tool_cases_are_recorded_and_not_comparable"
 J08_TWICE = "test_j08_a_checkpoint_delivered_twice_is_one_receipt_and_one_run"
 J08_CRASH = "test_j08_a_crash_before_the_decision_is_one_run_on_redelivery"
@@ -213,6 +215,15 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_accept_without_evidence", "accept only with every verdict non-inferior", B2,
        '        {"outcome": "inconclusive", "reasons": unsure} if unsure else \\',
        '        {"outcome": "accept", "reasons": unsure} if unsure else \\', J07_MISSING),
+    _m("st_missing_not_counted", "a case with no record is counted missing", B2,
+       '            "missing": len(cases) - len(recs),', '            "missing": 0,',
+       J07_UNFINISHED),
+    _m("st_mean_over_the_records", "the mean is over the universe, a missing case scores 0",
+       B2, '"mean": math.fsum(v or 0.0 for v in values) / len(cases),',
+       '"mean": math.fsum(v or 0.0 for v in values) / max(1, len(recs)),', J07_UNFINISHED),
+    _m("st_no_call_fence", "a cancel stops spending at the fence before each model call", B1,
+       "        await self._store.heartbeat(lease, lease_s=self._limits.lease_s)   # the fence",
+       "        pass", J05_CANCEL),
     _m("st_improving_claims_nothing", "a clean win is claimed improved", B2,
        '            "improved": low > 0}', '            "improved": False}', J07_ACCEPT),
 )

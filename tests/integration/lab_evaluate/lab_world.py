@@ -245,10 +245,11 @@ class Lab:
         return run(runner.freeze(self.store, payload, evaluator=SPEC, access=self.access,
                                  user_id=user or self.DEV, provider_org_id=self.NEMO))
 
-    def runner(self, endpoint, *, worker: str = "w", limits=None, recordings=None):
+    def runner(self, endpoint, *, worker: str = "w", limits=None, recordings=None,
+               objects=None):
         from infrx.evaluation.runner import Limits, Runner
         from tests.b.runner.world import DEPLOYMENT
-        return Runner(self.store, self.objects, endpoint, DEPLOYMENT, worker_id=worker,
+        return Runner(self.store, objects or self.objects, endpoint, DEPLOYMENT, worker_id=worker,
                       limits=limits or Limits(lease_s=30, max_attempts=3, dispatch_retries=2,
                                               concurrency=2), recordings=recordings)
 

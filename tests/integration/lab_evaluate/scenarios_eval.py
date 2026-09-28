@@ -10,6 +10,7 @@ The expectations below are that declaration's arithmetic, not the code's output.
 from __future__ import annotations
 
 import asyncio
+import threading
 
 import lab_world as lw
 import psycopg
@@ -116,29 +117,55 @@ def test_j05_duplicate_delivery_scores_each_case_once(lab):
     assert report["costs"] == {"CREDIT": str(wallet.debited)}
 
 
+def cancel(lab, frozen) -> None:
+    """A durable cancel from another session (the provider's), committed on return."""
+    with psycopg.connect(lab.dsn, autocommit=True) as other:
+        lab.l2.call(other, "lab_cancel_run", {"provider_org_id": lab.NEMO,
+                                              "run_id": frozen.run.run_id})
+
+
+class Gated:
+    """The object store as the runner sees it: the second case fetched - after its lease,
+    before its model call - waits until the cancel has committed."""
+
+    def __init__(self, objects) -> None:
+        self.objects, self.fetched = objects, 0
+        self.leased, self.cancelled = threading.Event(), threading.Event()
+
+    async def get(self, key):
+        self.fetched += 1
+        if self.fetched == 2:
+            self.leased.set()
+            assert await asyncio.to_thread(self.cancelled.wait, 30), "the cancel never came"
+        return await self.objects.get(key)
+
+
 def test_j05_a_cancel_mid_run_stops_spending(lab):
-    """A durable cancel while the second case is at the endpoint: the run is `cancelled`, the
-    in-flight case is abandoned (its charge reported unrecorded), nothing further is sent."""
+    """Two workers (production's concurrency): the first case is at the endpoint, the second
+    is leased and about to call, when a durable cancel commits. The run is `cancelled`; the
+    in-flight case is abandoned with its charge reported unrecorded; the leased one is stopped
+    by B1's per-call fence - no call is sent after the cancel, no result is kept."""
     from infrx.evaluation.runner import Limits
     frozen = lab.freeze(lab.run_payload(53, text(lab), harness(lab), lab.serving("baseline"),
                                         max_cases=6))
-    calls = []
+    gate, sent_at_cancel = Gated(lab.objects), []
     with lw.endpoint("baseline") as (wallet, http):
         model = wallet.answer
 
         def answer(prompt):
-            calls.append(prompt)
-            if len(calls) == 2:
-                with psycopg.connect(lab.dsn, autocommit=True) as other:
-                    lab.l2.call(other, "lab_cancel_run", {"provider_org_id": lab.NEMO,
-                                                          "run_id": frozen.run.run_id})
+            if not gate.cancelled.is_set():
+                assert gate.leased.wait(30), "the second worker never leased"
+                cancel(lab, frozen)
+                sent_at_cancel.append(len(wallet.calls))
+                gate.cancelled.set()
             return model(prompt)
         wallet.answer = answer
-        report = run(lab.runner(http, limits=Limits(30, 3, 2, 1)).run(frozen))
+        report = run(lab.runner(http, objects=gate, limits=Limits(30, 3, 2, 2)).run(frozen))
     assert report["state"] == "cancelled" and report["stopped"] == "cancelled"
-    assert len(wallet.calls) == 2 and len(lab.results(frozen.run.run_id)) == 1
-    assert report["abandoned"] == [frozen.cases[1]]
-    assert report["unrecorded"]["CREDIT"] != "0"
+    assert sent_at_cancel == [1] and len(wallet.calls) == 1, "a call was sent after the cancel"
+    assert lab.results(frozen.run.run_id) == {}
+    assert report["abandoned"] == sorted(frozen.cases[:2])
+    assert report["unrecorded"]["CREDIT"] == str(wallet.debited) != "0"
 
 
 # ------------------------------------------------------------------------------------ j06
@@ -208,6 +235,40 @@ def test_j07_a_missing_candidate_output_is_counted_not_dropped(lab, workdir):
     assert report["estimates"]["slices"]["math"]["diff"] == pytest.approx(-1 / 6)
     assert report["decision"]["outcome"] == "inconclusive"
     assert "slice math uncertain" in report["decision"]["reasons"]
+
+
+def test_j07_an_unfinished_candidate_counts_its_missing_cases(lab, workdir):
+    """improving, cancelled while its 10th case is at the endpoint (one worker): 9 results
+    and 11 cases with no record at all. B2 counts them missing, never drops them: the mean is
+    over the universe (9/20, not 9/9), 9 pairs, and the decision is `inconclusive` on
+    coverage 9/20."""
+    from infrx.evaluation import reports
+    from infrx.evaluation.runner import Limits
+    frozen = lab.freeze(lab.run_payload(66, text(lab), harness(lab), lab.serving("improving")))
+    with lw.endpoint("improving") as (wallet, http):
+        model, calls = wallet.answer, []
+
+        def answer(prompt):
+            calls.append(prompt)
+            if len(calls) == 10:
+                cancel(lab, frozen)
+            return model(prompt)
+        wallet.answer = answer
+        ran = run(lab.runner(http, limits=Limits(30, 3, 2, 1)).run(frozen))
+    assert ran["state"] == "cancelled" and len(lab.results(frozen.run.run_id)) == 9
+    base, _, _ = completed(lab, "baseline", 61)
+    report = reports.compare(base.run.model_dump(by_alias=True, exclude_unset=True),
+                             lab.case_records(base),
+                             frozen.run.model_dump(by_alias=True, exclude_unset=True),
+                             lab.case_records(frozen), universe=list(base.cases),
+                             protocol=PROTOCOL)
+    lw.save(workdir, "report-baseline-unfinished.json", report)
+    candidate = report["observed"]["candidate"]
+    assert (candidate["missing"], candidate["errors"]) == (11, 0)
+    assert candidate["mean"] == pytest.approx(9 / 20)
+    assert report["observed"]["paired"] == 9
+    assert report["decision"]["outcome"] == "inconclusive"
+    assert report["decision"]["reasons"][0] == "coverage 9/20"
 
 
 def test_j07_tool_cases_are_recorded_and_not_comparable(lab, workdir):
