@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 31 planned; 91 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 25 planned; 97 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -94,21 +94,21 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | C1 | implemented / C | [Typed repositories, pagination and tenant query boundary](handoffs/C-console-services.md) | F2 | D1, C0 |
 | C2 | implemented / C | [Lab content access, expiry and safe signed references](handoffs/C-console-services.md) | F2P, C0 | M3, T3, L2 |
 | V1 | implemented / V | [Paginated trace list and filters](handoffs/V-trace-ui.md) | F2 | V1M |
-| V2 | planned / V | [Trace detail, content and feedback](handoffs/V-trace-ui.md) | V1M | C2, C3F |
-| V3 | planned / V | [Judge score and calibration presentation](handoffs/V-trace-ui.md) | V2, F2P | J2 |
+| V2 | implemented / V | [Trace detail, content and feedback](handoffs/V-trace-ui.md) | V1M | C2, C3F |
+| V3 | implemented / V | [Judge score and calibration presentation](handoffs/V-trace-ui.md) | V2, F2P | J2 |
 | D6F | implemented / D | [Durable feedback and immutable author provenance](09-amendment-workstreams.md) | D5, F2P | — |
 | D6J | implemented / D | [Lab consent, USD budget and external submission coordination](09-amendment-workstreams.md) | D5, F2P | L2 |
 | G4F | implemented / G | [Owned feedback HTTP adapter](09-amendment-workstreams.md) | G1R | D6F |
-| G4T | planned / G | [Owned trace export HTTP adapter](09-amendment-workstreams.md) | G1R | T2I, T3, C2 |
+| G4T | implemented / G | [Owned trace export HTTP adapter](09-amendment-workstreams.md) | G1R | T2I, T3, C2 |
 | T2I | implemented / T | [Inference analytics and content projection](09-amendment-workstreams.md) | T1, F2P | D5 |
 | T2F | implemented / T | [Feedback analytics projection](09-amendment-workstreams.md) | T2I, F2P | D6F |
 | C3F | implemented / C | [Authorized feedback and review actions](09-amendment-workstreams.md) | F2P, C0 | D6F, L2 |
-| C3L | planned / C | [Lab judge and calibration control actions](09-amendment-workstreams.md) | F2P, C0 | D6J, J2, L2 |
+| C3L | implemented / C | [Lab judge and calibration control actions](09-amendment-workstreams.md) | F2P, C0 | D6J, J2, L2 |
 | L1 | implemented / L | [Provider app shell and separate build/auth boundary](09-amendment-workstreams.md) | F2P | L2 |
 | L2 | implemented / L | [Provider role and purpose-specific data-access services](09-amendment-workstreams.md) | F2P | D1R |
 | L3 | implemented / L | [Assisted model registration and dev/prod revision services](09-amendment-workstreams.md) | L2, F2P | G1R, W2, A3 |
-| L4 | planned / L | [Model/deployment/publication UI and aggregate health](09-amendment-workstreams.md) | L1, F2P | L3 |
-| I2L | planned / I | [Independent Lab app and control-service deployment](09-amendment-workstreams.md) | I1, F2P | L1, L2, L3, L4 |
+| L4 | implemented / L | [Model/deployment/publication UI and aggregate health](09-amendment-workstreams.md) | L1, F2P | L3 |
+| I2L | implemented / I | [Independent Lab app and control-service deployment](09-amendment-workstreams.md) | I1, F2P | L1, L2, L3, L4 |
 | E3L | planned / E | [Provider access, publication and rollback integration gate](09-amendment-workstreams.md) | E2, F2P | L1, L2, L3, L4, E2R, D1R |
 | E5L | planned / E | [Provider traces, review and evaluation integration gate](09-amendment-workstreams.md) | E3L, F2P | D6F, D6J, G4F, G4T, T3, J2, J3, C3F, C3L, V3 |
 | V1M | implemented / V | [Move the implemented trace explorer into the authorized Lab shell](11-wave3-revision-handoffs.md) | F2P, L1 | L2, C0, T2I |

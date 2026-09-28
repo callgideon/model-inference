@@ -1268,14 +1268,15 @@
       ],
       "track": "V",
       "handoff": "handoffs/V-trace-ui.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "move",
       "product": "lab",
       "milestone": "LAB-M1",
       "amendment": "Provider content/review UI goes to Lab; reusable own-request components can later serve App.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "trace-ui merged #2 (WR-V2-3/4; real C3F door), lab-ui-swap #17 session-token routes"
     },
     {
       "id": "V3",
@@ -1293,14 +1294,15 @@
       ],
       "track": "V",
       "handoff": "handoffs/V-trace-ui.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "move",
       "product": "lab",
       "milestone": "LAB-M1",
       "amendment": "Judge/calibration presentation goes to Lab.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "trace-ui merged #2, judge-lw4 #6 (WR-V3-1 read shape)"
     },
     {
       "id": "I1",
@@ -1802,11 +1804,12 @@
         "LAB-ACCESS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "G4",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "content merged #6 (WR-G4T-1/2, TRACE_EXPORT_API OFF); WR-G4T-3 composition owed"
     },
     {
       "id": "T2I",
@@ -1945,11 +1948,12 @@
         "LAB-ACCESS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "C3",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "judge-lw4 merged #6 (WR-C3L-2), lab-sql-lw3 SR-J3-1 #16; doors 0037/0038"
     },
     {
       "id": "L1",
@@ -2041,10 +2045,11 @@
         "CONSOLE-FLOWS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "lab-app-lw2 merged #1 (WR-L4-2/3/4), lab-api #4, l3-integration #13; the real-L3 journey rerun on PgControlStore ControlReads owed at WR-LSQ-9-C"
     },
     {
       "id": "I2A",
@@ -2121,11 +2126,12 @@
         "OPS-RECOVER"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "I2",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "lab-operate merged #5 (units, Caddyfile, control factory WR-I2L-2 via #13); local half; the infrx_lab_control password (WR-I2L-4) and P-08 staging are operator work"
     },
     {
       "id": "E3A",
