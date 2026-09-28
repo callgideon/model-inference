@@ -35,6 +35,7 @@ Lab web (Vercel project `infrx-lab`, per environment; `apps/lab/.env.example`) [
 | `NEXT_PUBLIC_SUPABASE_URL` | public | staging: the staging project; production: the App's project |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | that project's publishable key. **Never** `SUPABASE_SERVICE_ROLE_KEY` |
 | `LAB_DATASETS_API_URL` | server | server-only base URL of the datasets backend (WR-N4-5, `apps/lab/lib/services/datasets/server.ts`); unset = the datasets pages answer "unavailable" |
+| `LAB_TRACES_API_URL` | server | server-only lab-api base URL for the provider trace read (V1M/WR-LAB-API-5, `apps/lab/lib/services/traces/`, `GET /lab/v1/traces` behind `LAB_TRACES`); unset = the request pages read nothing and say so |
 
 Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
 

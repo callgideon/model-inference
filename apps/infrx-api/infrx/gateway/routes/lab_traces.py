@@ -37,6 +37,7 @@ from ...contracts import errors
 from ...contracts.v2.records import DataCategory, DataPurpose
 from ...contracts.v2.records import ProviderCapability as Cap
 from ...traces.retention import CONTENT, REQUEST
+from ...state.lab_data import grant_ref
 from ...traces.ship.shipper import COLUMNS, TABLE, TraceRow, _row
 from .. import lab_auth
 
@@ -46,8 +47,9 @@ CATEGORIES = (DataCategory.request_content, DataCategory.response_content)
 #: What any member developer sees of a request on its deployment.
 METADATA = ("request_id", "started_at", "completed_at", "mode", "loss_reason",
             "serving_version_id", "model_revision", "rate_card_version", "policy_version")
-#: What a current grant from the request's organization adds.
-GRANTED = ("grantor_org_id", "content_complete", "content_bytes", "content_available")
+#: What a current grant from the request's organization adds; `grant_ref` names the grant version
+#: the row was read under (`lab_data.grant_ref`), so a C2 content ref can be bound to it (WR-V2-1).
+GRANTED = ("grantor_org_id", "grant_ref", "content_complete", "content_bytes", "content_available")
 
 
 class ProviderServing(Protocol):
@@ -162,21 +164,22 @@ def register(app, rt, traces: LabTraces | None = None):
         await lab_auth.member(traces.access, user_id, provider, Cap.manage_dev_deployment)
         return user_id, provider, await traces.serving.serving(provider)
 
-    async def granted(user_id, provider, org_id, model_id) -> bool:
+    async def granted(user_id, provider, org_id, model_id) -> str | None:
+        """The ref of the current grant allowing both categories, or None."""
         try:
             for category in CATEGORIES:
-                await traces.access.authorize_content(
+                grant = await traces.access.authorize_content(
                     user_id=user_id, provider_org_id=provider, grantor_org_id=org_id,
                     model_id=model_id, category=category, purpose=DataPurpose.provider_sharing)
         except errors.Forbidden:
-            return False
-        return True
+            return None
+        return grant_ref(grant)
 
     async def visible(user_id, provider, serving, rows) -> list[tuple[TraceRow, dict]]:
         t3 = traces.retention
         stones = await t3.store.get({(r.org_id, r.request_id) for r in rows})
         now = t3.clock()
-        grants: dict[tuple[str, str], bool] = {}
+        grants: dict[tuple[str, str], str | None] = {}
         out = []
         for row in rows:
             scopes = stones.get((row.org_id, row.request_id), {})
@@ -188,8 +191,8 @@ def register(app, rt, traces: LabTraces | None = None):
                 grants[key] = await granted(user_id, provider, row.org_id, model_id)
             item = {name: getattr(row, name) for name in METADATA}
             item |= {"model_id": model_id, "access": "metadata"}
-            if grants[key]:
-                item |= {"access": "content", "grantor_org_id": row.org_id,
+            if grants[key] is not None:
+                item |= {"access": "content", "grantor_org_id": row.org_id, "grant_ref": grants[key],
                          "content_complete": row.content_complete,
                          "content_bytes": row.content_bytes,
                          "content_available": row.content_stored and CONTENT not in scopes

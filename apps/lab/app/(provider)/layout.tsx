@@ -45,6 +45,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
           <SignOut />
           <nav>
             <Link href="/overview">Overview</Link> · <Link href="/models">Models</Link> · <Link href="/deployments">Deployments</Link> ·{" "}
+            <Link href="/requests">Requests</Link> ·{" "}
             <Link href="/judge">Judge</Link> ·{" "}
             <Link href="/evaluations">Evaluations</Link> ·{" "}
             <Link href="/releases">Releases</Link> · <Link href="/optimizations">Optimizations</Link> ·{" "}

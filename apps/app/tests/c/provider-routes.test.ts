@@ -14,7 +14,7 @@ import orgs from "../../lib/contracts/fixtures/orgs.json" with { type: "json" };
 import { providerRoute } from "../../lib/services/console.ts";
 
 const CONSOLE = join(resolve(dirname(fileURLToPath(import.meta.url)), "../.."), "app", "(console)");
-const PAGES = ["traces", "dedicated", "teams"];
+const PAGES = ["dedicated", "teams"]; // /traces moved to the Lab (V1M: apps/lab/app/(provider)/requests)
 const NOT_FOUND = new Error("NEXT_HTTP_ERROR_FALLBACK;404");
 const notFound = (): never => {
   throw NOT_FOUND;

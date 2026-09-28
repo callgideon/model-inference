@@ -278,6 +278,8 @@ def test_lab_traces__a_current_grant_releases_content_per_grantor(world):
     assert set(items["ungranted"]) == METADATA
     detail = get(c, w.DEV_A, w.A, "/" + t.ids["granted"]).json()
     assert (detail["access"], detail["content"]) == ("content", '{"prompt":"c1"}')
+    assert detail["grant_ref"] == items["granted"]["grant_ref"]
+    assert detail["grant_ref"].startswith(f"lab:grant:{w.A}:")
     assert "content" not in get(c, w.DEV_A, w.A, "/" + t.ids["ungranted"]).json()
     assert get(c, w.BOTH, w.A, "/" + t.ids["granted"]).json()["grantor_org_id"] == w.C1
 

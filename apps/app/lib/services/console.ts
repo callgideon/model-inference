@@ -1597,7 +1597,7 @@ export function consoleShell(
 }
 
 /**
- * Provider routes (/traces, /dedicated, /teams) until V1M moves them to Lab. Brief 04 keeps them out of
+ * Provider routes (/dedicated, /teams) until they move to the Lab (/traces moved in V1M). Brief 04 keeps them out of
  * consumer navigation AND protected: anything but an operator flag of exactly `true` is a 404, thrown
  * before the page reads anything (E3A F-2). `notFound` is Next's, passed in so this stays node-loadable.
  */

@@ -57,6 +57,8 @@ test("V1M-S01..S06 the six L2 cases on the real route: own requests, another pro
     assert.ok(view.kind === "rows" && view.rows.every((r) => r.href === `/requests/${r.requestId}`));
     const one = await as("dev_a").detail(A, w.ids.ungranted);
     assert.ok(one.ok && one.value.request_id === w.ids.ungranted);
+    const shared = await as("dev_a").detail(A, w.ids.granted);
+    assert.ok(shared.ok && shared.value.access === "content" && shared.value.grant_ref.startsWith(`lab:grant:${w.A}:`), JSON.stringify(shared));
   });
 
   await t.test("S02 provider B learns nothing: A's request is not_found as B and as A, and B's own list is empty", async () => {

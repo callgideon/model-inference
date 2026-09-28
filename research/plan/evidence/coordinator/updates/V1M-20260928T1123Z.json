@@ -1,7 +1,7 @@
 {
  "task": "V1M",
  "slice": "move + provider read (+ WR-LAB-API-5, WR-V2-1, WR-V2-5)",
- "activity": "review (fix round 0-V1M-R1/1-V1M-R1)",
+ "activity": "review",
  "head": "007f1c2d",
  "worktree": ".claude/worktrees/codex-w5-v1m",
  "branch": "codex/w5-v1m",
