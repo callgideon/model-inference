@@ -25,6 +25,11 @@ import re
 import lab_world as lw
 
 
+def waits(sid: str, *lanes: str, why: str) -> None:
+    """NOT RUN while `lanes` are unmerged, naming the rerun."""
+    lw.not_run(sid, *lanes, why=why)
+
+
 def unbound():
     """Reached only if `lw.not_run` did not skip: an unbound case is never a pass."""
     import pytest
@@ -36,7 +41,7 @@ def test_i07_the_annotation_worker_process_resumes_a_batch_once():
              "chunks; restart; one teacher job per chunk, labels imported once")
     assert not (lw.API / "infrx" / "lab" / "workers" / "__main__.py").exists(), \
         "the worker entry point landed: bind this case"
-    lw.not_run("i07", "composition-2", why=f"no I6 worker entry point on this base. Steps: "
+    waits("i07", "composition-2", why=f"no I6 worker entry point on this base. Steps: "
                                            f"{steps}")
     unbound()
 
@@ -46,7 +51,7 @@ def test_i07_the_training_worker_process_never_resubmits():
              "SIGKILL mid-poll; restart; one job at the protocol server, one settlement")
     assert not (lw.API / "infrx" / "lab" / "workers" / "__main__.py").exists(), \
         "the worker entry point landed: bind this case"
-    lw.not_run("i07", "composition-2", why=f"no I6 worker entry point on this base. Steps: "
+    waits("i07", "composition-2", why=f"no I6 worker entry point on this base. Steps: "
                                            f"{steps}")
     unbound()
 
@@ -55,7 +60,7 @@ def test_i08_the_provider_ui_drives_labels_to_an_eligible_candidate():
     pilot = (lw.API / "infrx" / "gateway" / "pilot.py").read_text()
     assert not re.search(r"LabPipelines\([^)]*evals", pilot), \
         "LAB_PIPELINES composes P3's evaluation port: bind apps/lab/tests/e2e/improve/"
-    lw.not_run("i08", "LAB_PIPELINES", "P3-evaluations",
+    waits("i08", "LAB_PIPELINES", "P3-evaluations",
                why="`/lab/v1/pipelines` is composed with the store only (label log, run "
                    "ledger and P3's evaluation port answer 503). Steps: labels, review, "
                    "export, bundle, checkpoint and approve through apps/lab/tests/e2e/improve/")
@@ -64,7 +69,7 @@ def test_i08_the_provider_ui_drives_labels_to_an_eligible_candidate():
 
 def test_i09_the_candidate_is_promoted_through_l3_l4_staging():
     assert not os.environ.get("INFRX_E7L_STAGING"), "a staging target is named: bind this case"
-    lw.not_run("i09", "staging-target",
+    waits("i09", "staging-target",
                why="no private or allocated staging deployment for key e7l. Steps: register "
                    "candidate 1 through L3, propose/approve it through L4/R2, collect its "
                    "traces pinned to that serving version, then i03 over them")

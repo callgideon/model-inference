@@ -117,6 +117,7 @@ REQUIRED = {
             "test_i03_the_second_iteration_improves_on_the_same_holdout_with_its_lineage",
             "test_i03_budgets_reconcile_per_unit_across_both_iterations"),
     "i04": ("test_i04_a_revocation_stops_the_queue_the_submit_and_the_export_reads",
+            "test_i04_a_regrant_leaves_the_n3_gate_closed",
             "test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training"),
     "i05": ("test_i05_a_duplicate_teacher_submit_is_one_paid_job",
             "test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted",

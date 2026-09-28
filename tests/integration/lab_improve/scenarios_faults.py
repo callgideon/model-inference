@@ -89,15 +89,39 @@ def test_i04_a_revocation_stops_the_queue_the_submit_and_the_export_reads(lab, w
                                          "view": view})
 
 
-def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdir):
-    """DATA-LINEAGE (transitive revocation): RACER grants again; N3's gate stays closed for
-    the tombstoned samples, and so must every training path that reads them - a new label
-    export and the prepared training run's submit (N3: `permitted` is the one gate every
-    export and external submission re-checks)."""
+def regranted(lab):
+    """RACER grants again (after `revoked`); the caller revokes once done."""
     r = revoked(lab)
     lab.put_trace_grant(lab.RACER)
+    return r
+
+
+def test_i04_a_regrant_leaves_the_n3_gate_closed(lab):
+    """DATA-LINEAGE: D7 reads the samples again under the re-grant, but N3's gate - the
+    tombstones are permanent - stays closed, and a derivation omits them."""
+    from infrx.datasets import versions
+    r = regranted(lab)
     try:
-        assert lab.permitted(r.ref) == set(), "N3's gate: a re-grant resurrected a sample"
+        assert sorted(run(lab.store.accessible_samples(
+            r.ref, provider_org_id=lab.NEMO, purpose="training"))) == r.samples
+        assert lab.permitted(r.ref) == set(), "a re-grant resurrected a tombstoned sample"
+        with pytest.raises(errors.InvalidRequest):
+            run(versions.derive(lab.store, lab.objects, provider_org_id=lab.NEMO,
+                                actor="dev@nemo", dataset_id=lw.uid(9, 0xda8), version=1,
+                                created_at="2026-09-28T13:00:00Z",
+                                policy=versions.SplitPolicy(seed=7), add=[r.ref],
+                                now=lab.db_now()))
+    finally:
+        lab.revoke(lab.RACER)
+
+
+def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdir):
+    """DATA-LINEAGE (transitive revocation): after the re-grant every training path must
+    still refuse the tombstoned samples - a new P1 label export and the prepared P3 run's
+    submit (N3: `permitted` is the one gate every export and external submission
+    re-checks). Today P1/P3 read D7's `accessible_samples` only: 0-E7L-1."""
+    r = regranted(lab)
+    try:
         leaks = []
         export = lab.export(r.ref, 5)
         shipped = sorted({x["sample_id"] for x in export["lineage"]} & set(r.samples))
@@ -198,19 +222,27 @@ def test_i05_the_budget_stops_the_batch_before_the_chunk_it_cannot_cover(lab):
 # ------------------------------------------------------------------------------------ i06
 @contextlib.contextmanager
 def protocol_server(app):
-    """P3's protocol test server over TCP on the e7l block's protocol port."""
+    """P3's protocol test server over TCP on the e7l block's protocol port (else a spare)."""
+    import errno
+
     import uvicorn
-    port = lw.SERVICE_PORTS["protocol"]
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    try:
+
+    def start(port):
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,
+                                               log_level="critical"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
         for _ in range(100):
-            if server.started:
+            if server.started or not thread.is_alive():
                 break
             time.sleep(0.05)
         if not server.started:
-            raise OSError(f"address already in use: the protocol server did not start on {port}")
+            server.should_exit = True
+            thread.join(timeout=10)
+            raise OSError(errno.EADDRINUSE, f"address already in use: {port}")
+        return server, thread
+    (server, thread), port = lw.bound(start, lw.SERVICE_PORTS["protocol"])
+    try:
         yield f"http://127.0.0.1:{port}"
     finally:
         server.should_exit = True

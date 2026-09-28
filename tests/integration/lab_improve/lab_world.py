@@ -268,7 +268,7 @@ class Lab:
 
     def teacher_fake(self):
         from tests.j.submit.judge_fake import JudgeFake
-        return JudgeFake(port=SERVICE_PORTS["teacher"])
+        return bound(lambda port: JudgeFake(port=port), SERVICE_PORTS["teacher"])[0]
 
     def wiring(self, **over):
         from infrx.contracts.limits import DEFAULTS
@@ -365,14 +365,14 @@ class Lab:
                               checkpoint_id=uid(n, 0xc7e)))
 
     # ---------------------------------------------------------------- evaluation (H1, B1)
-    @functools.cached_property
-    def harness_ref(self) -> str:
-        return run(self.store.publish({
+    async def harness_ref(self) -> str:
+        """H1's text harness (`answer {{q}}`), published once (content-addressed)."""
+        return await self.store.publish({
             "schema": "lab.harness_revision.1", "provider_org_id": self.NEMO,
             "harness_id": uid(1, 0xa77), "version": 1, "created_at": "2026-09-28T10:00:00Z",
             "adapter": "text", "prompt_template": "answer {{q}}", "processor_profile": "e7l-1",
             "input_mapping": {"q": "sample.content"}, "tools": []},
-            provider_org_id=self.NEMO, actor="dev@nemo"))
+            provider_org_id=self.NEMO, actor="dev@nemo")
 
     def serving(self, name: str) -> str:
         digest = hashlib.sha256(f"e7l:{name}".encode()).hexdigest()
@@ -387,7 +387,7 @@ class Lab:
             run_id = uid(len(self.frozen) + 1, 0x7e7)
             payload = {"schema": "lab.eval_run.1", "provider_org_id": self.NEMO,
                        "run_id": run_id, "created_at": "2026-09-28T10:00:00Z",
-                       "dataset_ref": ref, "harness_ref": self.harness_ref,
+                       "dataset_ref": ref, "harness_ref": await self.harness_ref(),
                        "serving_ref": self.serving(name), "evaluator_ref": EVALUATOR(self.NEMO),
                        "seed": 7, "environment": "dev", "max_cases": 100, "state": "queued",
                        "idempotency_key": records.run_key(run_id),
@@ -576,13 +576,14 @@ def answer_for(name: str):
     return answer
 
 
-def _bind(wallet, port: int):
-    """The endpoint's own port, else the first free spare of the block (runner.SPARE_PORTS)."""
+def bound(make, port: int):
+    """(make(port), port) on the process's own port, else on the first free spare of the
+    block (runner.SPARE_PORTS): a client socket of any process can hold a port of the block,
+    which is inside Linux's ephemeral range."""
     import errno
-    from tests.b.runner.world import serve
     for candidate in (port, *_gate().SPARE_PORTS):
         try:
-            return serve(wallet, candidate, KEY), candidate
+            return make(candidate), candidate
         except OSError as busy:
             if busy.errno != errno.EADDRINUSE:
                 raise
@@ -595,7 +596,8 @@ def endpoint(name: str, *, funded: str = "100000"):
     from infrx.evaluation.runner import HttpDevEndpoint
     from tests.b.runner.world import RATE_CARD, DevWallet
     wallet = DevWallet(funded, answer=answer_for(name))
-    server, port = _bind(wallet, ENDPOINT_PORTS[name])
+    from tests.b.runner.world import serve
+    server, port = bound(lambda p: serve(wallet, p, KEY), ENDPOINT_PORTS[name])
     try:
         yield wallet, HttpDevEndpoint(f"http://127.0.0.1:{port}", api_key=KEY,
                                       model=f"e7l-{name}", rate_card=RATE_CARD)
