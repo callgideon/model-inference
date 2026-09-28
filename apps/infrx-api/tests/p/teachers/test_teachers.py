@@ -57,7 +57,7 @@ class Case:
         self.objects = asyncio.run(fakes.objects_for(self.store))
         self.payer = j2.payer(self.w.A)
         budget = budget if budget is not None else usd(100)
-        self.ledger = j2.FakeJudgeLedger({self.payer: budget})
+        self.ledger = fakes.TeacherLedger({self.payer: budget})
         self.provider = provider or fakes.Provider(mode, on_submit)
         self.labels = fakes.Labels()
         self.wiring = TeacherWiring(members=self.w.store, ledger=self.ledger,
@@ -209,6 +209,7 @@ def test_p2__collected_labels_import_once_as_model_labels_never_ground_truth():
             "model": j1.JUDGE_MODEL, "prompt": "teach-v1", "confidence": 0.9}]}]
     assert got.failures == ((sid(2), "malformed_label"), (sid(1), "duplicate"),
                             (sid(6), "not_sent"))
+    assert asyncio.run(case.ledger.failures(first)) == list(got.failures)   # D8's log (WR-P2-D8)
     assert got.run.state == "completed" and case.ledger.spent[case.payer] == case.provider.cost
     again = case.collect(first)
     assert again.run.state == "completed" and len(case.labels.calls) == 1
@@ -228,6 +229,20 @@ def test_p2__an_unfinished_batch_imports_what_arrived_and_settles_later():
                                              "model": j1.JUDGE_MODEL, "prompt": "teach-v1"}]
     case.provider.done = True
     assert case.collect(first).run.state == "completed"
+    assert case.ledger.spent[case.payer] == case.provider.cost
+
+
+def test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_or_the_settlement():
+    """0-LSI2-F1: the teacher's ids are untrusted; one D8 cannot store stays in the result only."""
+    case = Case()
+    case.run()
+    first = case.run_ids()[0]
+    case.provider.outputs["batch-1"] = [(sid(1), '{"label": "a"}'), ("bogus-id", '{"label": "x"}')]
+    got = case.collect(first)
+    assert got.run.state == "completed" and got.failures == (("bogus-id", "not_sent"),)
+    assert case.collect(first).run.state == "completed"
+    assert len(case.labels.calls) == 1 and case.labels.calls[0]["rows"][0]["sample_id"] == sid(1)
+    assert asyncio.run(case.ledger.failures(first)) == []
     assert case.ledger.spent[case.payer] == case.provider.cost
 
 

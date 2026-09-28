@@ -5,6 +5,7 @@ revoke a grant the moment a chunk leaves. The D6J ledger and the provider are J2
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from types import SimpleNamespace
 
@@ -78,6 +79,32 @@ class Labels:
         self.calls.append({"provider_org_id": provider_org_id, "actor": actor,
                            "dataset_ref": dataset_ref, "rubric_ref": rubric_ref, "rows": rows})
         return SimpleNamespace(accepted=[f"ref:{r['sample_id']}" for r in rows], rejected=[])
+
+
+class TeacherLedger(j2.FakeJudgeLedger):
+    """J2's ledger plus D8's per-item failure log (`PgTeacherLedger.record_failures/failures`,
+    0042 `lab_teacher_failures`): append-only, one row per (run, sample, reason)."""
+
+    def __init__(self, *args, **kw) -> None:
+        super().__init__(*args, **kw)
+        self.failure_log: list[tuple[str, str, str]] = []
+
+    async def record_failures(self, run_id: str, failures) -> int:
+        failures = list(failures)
+        for sample, reason in failures:          # 0042: (sample_id)::uuid, reason ~ '^[a-z][a-z_]{0,63}$'
+            try:
+                uuid.UUID(sample)
+            except (ValueError, TypeError, AttributeError):
+                raise errors.InvalidRequest("a failure is a sample id and a reason word") from None
+            if not re.fullmatch(r"[a-z][a-z_]{0,63}", reason):
+                raise errors.InvalidRequest("a failure is a sample id and a reason word")
+        new = [(run_id, s, r) for s, r in dict.fromkeys(failures)
+               if (run_id, s, r) not in self.failure_log]
+        self.failure_log += new
+        return len(new)
+
+    async def failures(self, run_id: str) -> list[tuple[str, str]]:
+        return [(s, r) for run, s, r in self.failure_log if run == run_id]
 
 
 class Provider(j2.FakeProvider):

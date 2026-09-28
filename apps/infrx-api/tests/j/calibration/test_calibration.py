@@ -200,3 +200,34 @@ def test_j3__the_report_projects_into_the_v3_calibration_shape():
     empty = run([], []).calibration()
     assert empty == {"state": "uncalibrated", "labels": 0, "required": MIN_PAIRS,
                      "agreement": None, "interval": None}
+
+
+class Calibrations:
+    """D8's `PgJudgeLedger.put_calibration` (0043): every stored calibration, in order."""
+
+    def __init__(self) -> None:
+        self.stored: list[dict] = []
+
+    async def put_calibration(self, calibration, *, provider_org_id, grantor_org_id,
+                              judge_model, rubric_version) -> int:
+        self.stored.append({"calibration": calibration, "provider_org_id": provider_org_id,
+                            "grantor_org_id": grantor_org_id, "judge_model": judge_model,
+                            "rubric_version": rubric_version})
+        return len(self.stored)
+
+
+def test_j3__the_report_job_stores_its_configurations_calibration():
+    """WR-J3-D8: the job reports one organization (the grantor) for one configuration and
+    stores exactly that report's calibration under (provider, grantor, judge model, rubric
+    version) - the key the Lab's judge-runs door reads."""
+    import asyncio
+
+    from infrx.judge.calibration import publish
+    ledger, (results, labels) = Calibrations(), labelled(agreeing(MIN_PAIRS))
+    out = asyncio.run(publish(ledger, results, labels, provider_org_id=fakes.ORG_B,
+                              org_id=fakes.ORG_A, judge_model="judge-1", rubric_version=1))
+    assert out == run(results, labels)
+    assert ledger.stored == [{"calibration": out.calibration(), "provider_org_id": fakes.ORG_B,
+                              "grantor_org_id": fakes.ORG_A, "judge_model": "judge-1",
+                              "rubric_version": 1}]
+    assert out.calibration()["state"] == "calibrated"

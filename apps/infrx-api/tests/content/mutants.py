@@ -166,8 +166,9 @@ def case_names() -> set[str]:
     return set(re.findall(r"^def (test_\w+)\(", (API_DIR / SUITE_FILE).read_text(), re.M))
 
 
-# The copies run the in-memory world; the MinIO half (`-m s3`) is the suite's own run.
-RUNNER = Runner(name="c2", targets=(SUITE_FILE,), extra_args=("-m", "not s3"))
+# The copies run the in-memory world; the MinIO (`-m s3`) and PostgreSQL (`-m pg`, WR-C2-5)
+# halves are the suite's own runs.
+RUNNER = Runner(name="c2", targets=(SUITE_FILE,), extra_args=("-m", "not s3 and not pg"))
 
 
 def run_mutant(mutant) -> Result:

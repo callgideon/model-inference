@@ -27,7 +27,7 @@ A, B = "a0000000-0000-4000-8000-00000000000a", "b0000000-0000-4000-8000-00000000
 C1, C2 = "c1000000-0000-4000-8000-0000000000c1", "c2000000-0000-4000-8000-0000000000c2"
 DEV_A, DEV_A2 = "d0000000-0000-4000-8000-00000000000a", "d0000000-0000-4000-8000-0000000000a2"
 VIEWER_A, DEV_B = "e0000000-0000-4000-8000-00000000000a", "d0000000-0000-4000-8000-00000000000b"
-MODEL_A, MODEL_B = "m0000000-0000-4000-8000-00000000000a", "m0000000-0000-4000-8000-00000000000b"
+MODEL_A, MODEL_B = "dd000000-0000-4000-8000-00000000000a", "dd000000-0000-4000-8000-00000000000b"
 KEY = "3c3c3c3c-0000-4000-8000-000000000003"
 REQ, REQ_B = "4d4d4d4d-0000-4000-8000-000000000001", "4d4d4d4d-0000-4000-8000-000000000002"
 S3_KEY, S3_SECRET, S3_BUCKET = "infrxe2minio", "infrx-e2-local-secret", "infrx-lab-c2"
@@ -128,7 +128,7 @@ def s3_store(prefix: str):
 
 class World:
     def __init__(self, objects=None) -> None:
-        self.store = FakeAccessStore(now=T0)
+        self.store = self._store()
         for provider, user, role in ((A, DEV_A, v2.ProviderRole.developer),
                                      (A, DEV_A2, v2.ProviderRole.developer),
                                      (A, VIEWER_A, v2.ProviderRole.viewer),
@@ -139,7 +139,7 @@ class World:
                 granted_at=T0 - timedelta(days=1))
         self.grant(C1, A, MODEL_A)
         self.grant(C2, B, MODEL_B)
-        self.refs = FakeContentRefs(self.store)
+        self.refs = self._refs()
         self.traces, self.tombstones, self.objects = Traces(), Tombstones(), Objects(objects)
         self.retention = Retention(self.tombstones, self.traces, None, self.objects,
                                    clock=lambda: self.store.now)
@@ -149,6 +149,12 @@ class World:
         self.trace(C1, REQ, BODY.model_dump_json().encode())
         self.trace(C2, REQ_B, BODY.model_dump_json().encode())
         self.advance(60)
+
+    def _store(self):
+        return FakeAccessStore(now=T0)
+
+    def _refs(self):
+        return FakeContentRefs(self.store)
 
     # --- the clock ---------------------------------------------------------------
     def advance(self, seconds: float) -> None:

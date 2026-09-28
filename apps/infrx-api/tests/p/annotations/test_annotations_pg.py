@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """P1 against the merged real stores: D7's `PgLabDataStore` (labels are `lab.annotation.1`
 records in `infrx.lab_records`) and L2's `PgAccessStore` (reviewer roles on the database
-clock), on the task-local PostgreSQL (0001-0030, D7's seeded world). D8's label log is not
-merged, so it stays the fake (`world.FakeLabelLog`); this file is rerun on the real log at
-D8's merge (wiring request WR-P1-1).
+clock) and D8's `PgLabelLog` (0042: one label/assign/review event per (provider, key) for
+ever; WR-P1-D8), on the task-local PostgreSQL (D7's seeded world).
 
 T2I/G8's pattern: outside the mutant runner; the oracles are the fake-world cases' mutants.
 
@@ -23,6 +22,7 @@ from infrx.state import migrations
 from infrx.state.jobstore import connector
 from infrx.state.lab_access import PgAccessStore
 from infrx.state.lab_data import PgLabDataStore
+from infrx.state.lab_pipeline import PgLabelLog
 
 from ...d import pgharness
 from ...d import test_d7_lab_data as d7
@@ -30,7 +30,7 @@ from ...d import test_l2sql_access as l2
 from ...n.imports.world import NEMO, chunks, fixture, run
 from ...n.versions.test_versions import uid
 from .test_annotations import label_rows
-from .world import NOW, RUBRIC, FakeLabelLog, rows
+from .world import NOW, RUBRIC, rows
 
 _reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") else \
     "PostgreSQL only on an explicit task-local key (INFRX_D_TASK=p1)"
@@ -57,7 +57,7 @@ def world():
                         for i in rows(6, splits=("train", "holdout", "validation")))
         ref = run(imports.Importer(store, objects).run(
             spec, chunks(data, 64), provider_org_id=NEMO, actor="dev@nemo")).dataset_ref
-        yield conn, store, objects, PgAccessStore(connect), FakeLabelLog(), ref
+        yield conn, store, objects, PgAccessStore(connect), PgLabelLog(connect), ref
 
 
 def test_p1_pg_labels_are_d7_records_reviewed_on_the_l2_clock(world) -> None:
@@ -98,6 +98,11 @@ def test_p1_pg_labels_are_d7_records_reviewed_on_the_l2_clock(world) -> None:
     assert sorted(x["sample_id"] for x in rec["lineage"]) == sorted(train)
     assert {"human"} in [set(x["methods"]) for x in rec["lineage"]]
     assert {o["reason"] for o in rec["omitted"]} == {"holdout", "validation"}
+    kinds = dict(conn.execute("select kind, count(*) from infrx.lab_label_events group by kind"
+                              ).fetchall())
+    # WR-P1-D8: the log is D8's - 6 imported labels (the re-import replays, adding none) + the
+    # human correction, one assignment and one review per label
+    assert kinds == {"label": 7, "assign": 6, "review": 6}, kinds
 
 
 def test_p1_pg_a_revoked_grant_stops_labels_and_exports(world) -> None:

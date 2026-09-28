@@ -28,7 +28,7 @@ from ...n.versions.test_versions import derive, imported, uid
 from ..annotations.test_annotations import accept_all, label_rows, load
 from ..annotations.world import (ADMIN, DEV, GRANT_2, GRANT_3, NOW, VIEWER, FakeLabelLog,
                                  members, rows)
-from .world import (PAYER, CheckpointStore, FakeEvaluations, FakeRunLedger, client,
+from .world import (OPERATOR, PAYER, CheckpointStore, FakeEvaluations, FakeRunLedger, client,
                     descriptor, digest, protocol_app)
 
 CONFIG = {"objective": "sft", "adaptation": "lora", "base_model": "marlin-2b",
@@ -298,6 +298,38 @@ def test_p3_a_crash_mid_submit_never_resubmits() -> None:
     assert app.state.posts == 0 and w.reservation().get("state") == "held"
     with pytest.raises(errors.StateConflict):
         run(p3.cancel(w.ledger, http, provider_org_id=NEMO, external_run_id=EXT))
+
+
+def test_p3_an_ambiguous_run_ends_only_on_an_operators_written_confirmation() -> None:
+    """Oracle (R184, TRAIN-RECOVER): egress is blocked, so the provider's receipt is unknown:
+    the run is `ambiguous` and its reservation held; every resume only looks the key up (the
+    server never saw it) - never resent, never released, never failed by the platform. Only
+    D8's operator transition with the provider's written confirmation fails it, releasing the
+    hold with it; a resume of the failed run posts nothing."""
+
+    class Blocked(p3.HttpConnector):
+        async def submit(self, bundle, *, key):
+            raise httpx.ConnectError("egress blocked")
+
+    w = World()
+    app, http = automatic(w)
+    w.prepare(connector="protocol-test")
+    first = w.submit(Blocked(http.client, "protocol-test"), advertised=ON)
+    assert first["state"] == "ambiguous" and w.reservation()["state"] == "held"
+    for _ in range(2):
+        assert w.submit(http, advertised=ON) == first
+    assert (app.state.posts, w.reservation()["state"]) == (0, "held")
+    fail = dict(provider_org_id=NEMO, expected="ambiguous", target="failed")
+    with pytest.raises(errors.StateConflict):
+        run(w.ledger.release(f"submit:{EXT}", provider_org_id=NEMO))
+    with pytest.raises(errors.Forbidden):
+        run(w.ledger.move(EXT, operator=DEV, confirmation_ref="mail:2026-09-28", **fail))
+    with pytest.raises(errors.InvalidRequest):
+        run(w.ledger.move(EXT, operator=OPERATOR, confirmation_ref=" ", **fail))
+    assert w.run_state()["state"] == "ambiguous"
+    run(w.ledger.move(EXT, operator=OPERATOR, confirmation_ref="mail:2026-09-28", **fail))
+    assert (w.run_state()["state"], w.reservation()["state"]) == ("failed", "released")
+    assert w.submit(http, advertised=ON)["state"] == "failed" and app.state.posts == 0
 
 
 def test_p3_a_refused_submit_fails_and_releases_its_budget() -> None:
