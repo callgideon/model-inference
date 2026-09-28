@@ -1,0 +1,163 @@
+diff --git a/apps/lab/lib/services/rollouts/http.ts b/apps/lab/lib/services/rollouts/http.ts
+new file mode 100644
+index 00000000..4d454a8c
+--- /dev/null
++++ b/apps/lab/lib/services/rollouts/http.ts
+@@ -0,0 +1,41 @@
++// WR-R4-1: the releases port over infrx-api's `/lab/v1/releases` and `/lab/v1/optimizations`
++// (LAB_RELEASES), as the signed-in user: the credential is the session's own access token and the
++// provider is the actor's, sent as `provider_org_id`; the route re-derives both. The route speaks
++// snake_case (D9/R1/R2/R3's records), the port camelCase: every key is renamed, no value is touched.
++// Lists come as `{data}`; every refusal is the route's status mapped to the port's reason.
++import type { Actor, Refusal, ReleasesPort, Result } from "./port.ts";
++
++const REASONS: Record<number, Refusal> = { 401: "denied", 403: "denied", 404: "not_found", 409: "conflict", 422: "invalid" };
++export type HttpOptions = { baseUrl: string; token: string; fetch?: typeof fetch };
++
++/** snake_case keys to camelCase, deep; these records carry no data-keyed maps. */
++export const camel = (value: unknown): unknown =>
++  Array.isArray(value) ? value.map(camel)
++    : value !== null && typeof value === "object"
++      ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase()), camel(v)]))
++      : value;
++
++export function httpReleases({ baseUrl, token, fetch: send = fetch }: HttpOptions): ReleasesPort {
++  const root = `${baseUrl.replace(/\/+$/, "")}/lab/v1`;
++  async function call<T>(actor: Actor, path: string, body?: unknown): Promise<Result<T>> {
++    const url = `${root}/${path}?provider_org_id=${encodeURIComponent(actor.providerId)}`;
++    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
++    if (body !== undefined) headers["content-type"] = "application/json";
++    try {
++      const response = await send(url, {
++        method: body === undefined ? "GET" : "POST", headers, cache: "no-store",
++        body: body === undefined ? undefined : JSON.stringify(body),
++      });
++      if (!response.ok) return { ok: false, reason: REASONS[response.status] ?? "unavailable" };
++      const payload = await response.json();
++      return { ok: true, value: camel(body === undefined ? payload.data : payload) as T }; // a read is {data}
++    } catch {
++      return { ok: false, reason: "unavailable" }; // transport or an unreadable answer
++    }
++  }
++  return {
++    releases: (actor) => call(actor, "releases"),
++    variants: (actor) => call(actor, "optimizations"),
++    propose: (actor, kind, policyRef, fence) => call(actor, "releases/proposals", { kind, policy_ref: policyRef, fence }),
++  };
++}
+diff --git a/apps/lab/tests/r/http.test.ts b/apps/lab/tests/r/http.test.ts
+new file mode 100644
+index 00000000..fd937f9d
+--- /dev/null
++++ b/apps/lab/tests/r/http.test.ts
+@@ -0,0 +1,59 @@
++// WR-R4-1: the HTTP adapter speaks lab-api-2's `/lab/v1/releases` wire exactly (tests/g/lab_releases on
++// the Python side): the session token, the actor's provider, the records renamed to the port's keys only,
++// the fixed refusals.
++import assert from "node:assert/strict";
++import test from "node:test";
++import { httpReleases } from "../../lib/services/rollouts/http.ts";
++
++const A = { providerId: "a0000000-0000-4000-8000-00000000000a", role: "administrator" as const };
++type Seen = { url: string; method: string; headers: Record<string, string>; body: unknown };
++
++function server(answer: (seen: Seen) => Response | Promise<Response>) {
++  const seen: Seen[] = [];
++  const fetch = (async (url: string, init: RequestInit) => {
++    const s = { url, method: String(init.method), headers: init.headers as Record<string, string>, body: init.body === undefined ? undefined : JSON.parse(String(init.body)) };
++    seen.push(s);
++    return answer(s);
++  }) as unknown as typeof globalThis.fetch;
++  return { seen, port: httpReleases({ baseUrl: "https://api.test/", token: "eyJ0.a.b", fetch }) };
++}
++const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
++const RELEASE = {
++  policy_ref: "lab:policy:p", state: "running", fence: 2, plan: { horizon_s: 86400, budget: { unit: "CREDIT", amount: "1" } },
++  progress: { assignments: [{ serving_ref: "s", pinned_by: "cohort", requests: 9 }] },
++  verdict: { action: "hold", reasons: ["report_inconclusive"], evidence_refs: [], evaluated_at: "t" },
++};
++
++test("R4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched", async () => {
++  const { seen, port } = server((s) => s.url.includes("/proposals")
++    ? json({ proposal_id: "p1", kind: "expand", policy_ref: "lab:policy:p", fence: 2, state: "proposed", proposed_at: "t", decided_at: null }, 201)
++    : json({ data: s.url.includes("optimizations") ? [{ variant_ref: "v", comparison: { performance: { p99_ms_delta: -3 } } }] : { releases: [RELEASE], decisions: [], proposals: [] } }));
++  const read = await port.releases(A);
++  assert.deepEqual(read, { ok: true, value: { releases: [{
++    policyRef: "lab:policy:p", state: "running", fence: 2, plan: { horizonS: 86400, budget: { unit: "CREDIT", amount: "1" } },
++    progress: { assignments: [{ servingRef: "s", pinnedBy: "cohort", requests: 9 }] },
++    verdict: { action: "hold", reasons: ["report_inconclusive"], evidenceRefs: [], evaluatedAt: "t" } }], decisions: [], proposals: [] } });
++  assert.deepEqual(await port.variants(A), { ok: true, value: [{ variantRef: "v", comparison: { performance: { p99MsDelta: -3 } } }] });
++  assert.deepEqual(await port.propose(A, "expand", "lab:policy:p", 2), { ok: true, value: {
++    proposalId: "p1", kind: "expand", policyRef: "lab:policy:p", fence: 2, state: "proposed", proposedAt: "t", decidedAt: null } });
++  const q = `?provider_org_id=${A.providerId}`;
++  assert.deepEqual(seen.map((s) => [s.method, s.url]), [
++    ["GET", `https://api.test/lab/v1/releases${q}`], ["GET", `https://api.test/lab/v1/optimizations${q}`],
++    ["POST", `https://api.test/lab/v1/releases/proposals${q}`],
++  ]);
++  assert.ok(seen.every((s) => s.headers.authorization === "Bearer eyJ0.a.b"));
++  assert.deepEqual(seen[2].body, { kind: "expand", policy_ref: "lab:policy:p", fence: 2 });
++  assert.equal(seen[2].headers["content-type"], "application/json");
++});
++
++test("R4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable", async () => {
++  const cases: [number, string][] = [[401, "denied"], [403, "denied"], [404, "not_found"], [409, "conflict"], [422, "invalid"], [410, "unavailable"], [503, "unavailable"], [500, "unavailable"]];
++  for (const [status, reason] of cases) {
++    const { port } = server(() => json({ refusal: "x" }, status));
++    assert.deepEqual(await port.propose(A, "rollback", "lab:policy:p", 1), { ok: false, reason }, String(status));
++  }
++  const down = server(() => { throw new TypeError("fetch failed"); });
++  assert.deepEqual(await down.port.releases(A), { ok: false, reason: "unavailable" });
++  const garbled = server(() => new Response("<html>", { status: 200 }));
++  assert.deepEqual(await garbled.port.variants(A), { ok: false, reason: "unavailable" });
++});
+diff --git a/apps/lab/tests/r/run-mutants.mjs b/apps/lab/tests/r/run-mutants.mjs
+index 7087ad50..6d3b0586 100644
+--- a/apps/lab/tests/r/run-mutants.mjs
++++ b/apps/lab/tests/r/run-mutants.mjs
+@@ -3,13 +3,14 @@
+ // Usage: node tests/r/run-mutants.mjs [--only ID,ID]
+ import { m, runMutants } from "../l/shell/harness.mjs";
+ 
+-const SUITE = ["view", "journey", "actions", "pages"].map((f) => `tests/r/${f}.test.ts`);
++const SUITE = ["view", "journey", "actions", "pages", "http"].map((f) => `tests/r/${f}.test.ts`);
+ const PORT = "lib/services/rollouts/port.ts";
+ const FAKE = "lib/services/rollouts/fake.ts";
+ const VIEW = "lib/services/rollouts/view.ts";
+ const ACTIONS = "lib/services/rollouts/actions.ts";
+ const RELEASES = "app/(provider)/releases/page.tsx";
+ const OPTIMIZATIONS = "app/(provider)/optimizations/page.tsx";
++const HTTP = "lib/services/rollouts/http.ts";
+ 
+ const C = {
+   v01: "R4-V01 a release row shows the frozen plan, cohort, baseline and candidate weights from the D9 record",
+@@ -34,6 +35,8 @@ const C = {
+   a05: "R4-A05 a consumer-only user gets a 404 and the releases service is never asked",
+   p01: "R4-P01 each page reads the records as the session's workspace and shows ?refused= only as fixed copy",
+   p02: "R4-P02 no page offers a launch or allocation control or claims success; the preview stand-in is labelled only when it is on",
++  h01: "R4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched",
++  h02: "R4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
+ };
+ 
+ const MUTANTS = [
+@@ -123,6 +126,21 @@ const MUTANTS = [
+   m("R4-X75", "a page claims success on its own", RELEASES, "<h1>Releases</h1>", "<h1>Releases</h1>\n      <p>Rollback succeeded.</p>", [C.p02]),
+   m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={a} />', '<input type="hidden" name="kind" value={a} />\n                <input name="weightBp" />', [C.p02]),
+   m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
++  // the HTTP adapter (WR-R4-1, lane lab-api-2)
++  m("R4-X78", "the session token is not sent", HTTP, "authorization: `Bearer ${token}`", 'authorization: "Bearer"', [C.h01]),
++  m("R4-X79", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
++  m("R4-X80", "a read is not unwrapped from {data}", HTTP, "camel(body === undefined ? payload.data : payload)", "camel(payload)", [C.h01]),
++  m("R4-X81", "records keep the route's snake_case keys", HTTP, "k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())", "k", [C.h01]),
++  m("R4-X82", "nested records are not renamed", HTTP, "camel(v)]", "v]", [C.h01]),
++  m("R4-X83", "a list of records is not renamed", HTTP, "Array.isArray(value) ? value.map(camel)", "Array.isArray(value) ? value", [C.h01]),
++  m("R4-X84", "optimizations read the releases", HTTP, 'call(actor, "optimizations")', 'call(actor, "releases")', [C.h01]),
++  m("R4-X85", "the proposal carries the port's key", HTTP, "policy_ref: policyRef", "policyRef", [C.h01]),
++  m("R4-X86", "the proposal is a read", HTTP, 'method: body === undefined ? "GET" : "POST"', 'method: "GET"', [C.h01]),
++  m("R4-X87", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
++  m("R4-X88", "no session reads as unavailable", HTTP, '401: "denied", ', "", [C.h02]),
++  m("R4-X89", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
++  m("R4-X90", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
++  m("R4-X91", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
+ ];
+ 
+ process.exit(await runMutants({ suite: SUITE, prefix: "R4", mutants: MUTANTS }));
