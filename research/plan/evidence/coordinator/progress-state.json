@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 244,
- "updated": "2026-09-28T23:25:57Z",
+ "revision": 245,
+ "updated": "2026-09-28T23:33:11Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6687,26 +6687,28 @@
    "branch": "codex/w5-pipeline-ui-2",
    "worktree": ".claude/worktrees/codex-w5-pipeline-ui-2",
    "base": "49393c56",
-   "head": null,
+   "head": "66f1db34",
    "isolation": {
     "ports": "p2 57528/57529; p1 57527",
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T20:38:50Z",
-   "updated": "2026-09-28T20:38:50Z",
+   "updated": "2026-09-28T23:33:11Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "merge batch #24 (wf_38099086-cdf, Sonnet; R202) → WR-P4B-1 lab_teachers switch → composition-4",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "P4.b 1/2/4 + the route half",
-    "at": "2026-09-28T20:38:50Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT 66f1db34; merge running",
+    "at": "2026-09-28T23:33:11Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/p/P4b-9234fd3.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/gateway/routes/lab_pipelines.py",
@@ -6715,7 +6717,10 @@
     "apps/lab/lib/services/pipelines/**",
     "apps/lab/tests/p/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-P4B-1",
+    "WR-P4B-2"
+   ]
   },
   {
    "id": "W5-I-HARNESS-KEY",
@@ -7100,6 +7105,38 @@
     "infrx/state/lab_*.py",
     "tests/d/**"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-24",
+   "task": null,
+   "slice": "merge batch #24 (Sonnet): pipeline-ui-2 66f1db34 (+R202); workflow wf_38099086-cdf",
+   "agent": "sonnet",
+   "branch": "codex/w5-merge-24",
+   "worktree": ".claude/worktrees/codex-w5-merge-24",
+   "base": "ad828a2d",
+   "head": null,
+   "isolation": {
+    "ports": "p2 57528/57529 (lane-owned)",
+    "prefix": "infrx-p2-",
+    "db": "p2"
+   },
+   "activity": "running",
+   "started": "2026-09-28T23:33:11Z",
+   "updated": "2026-09-28T23:33:11Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-28T23:33:11Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
