@@ -10,6 +10,23 @@ import { fileURLToPath } from "node:url";
 const lab = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 export const m = (id, what, file, find, replace, cases) => ({ id, what, file, find, replace, cases });
 
+// The failed cases in a TAP report and whether each failed by assertion. A failure block ends at its
+// YAML terminator: "..." exactly two spaces deeper than its "not ok" line. A deeper "..." belongs to
+// the block (node's deep-equal diff prints one, and "... Skipped lines").
+export function failed(out) {
+  const cases = [];
+  const re = /^( *)not ok \d+ - (.*)$/gm;
+  for (let hit = re.exec(out); hit !== null; hit = re.exec(out)) {
+    const rest = out.slice(hit.index + hit[0].length);
+    const end = rest.search(new RegExp(`^${hit[1]}  \\.\\.\\.$`, "m"));
+    cases.push({ name: hit[2].trim(), assertion: /code: 'ERR_ASSERTION'/.test(end === -1 ? rest : rest.slice(0, end)) });
+  }
+  return cases;
+}
+
+// A replacer function: String.replace never expands $`, $' or $& in a mutant's replacement.
+export const mutate = (source, find, replace) => source.replace(find, () => replace);
+
 export async function runMutants({ suite, prefix, mutants }) {
   const args = process.argv.slice(2);
   const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
@@ -32,24 +49,13 @@ export async function runMutants({ suite, prefix, mutants }) {
     });
   }
 
-  function failed(out) {
-    const cases = [];
-    const re = /^ *not ok \d+ - (.*)$/gm;
-    for (let hit = re.exec(out); hit !== null; hit = re.exec(out)) {
-      const rest = out.slice(hit.index + hit[0].length);
-      const end = rest.search(/^ *\.\.\.$/m);
-      cases.push({ name: hit[1].trim(), assertion: /code: 'ERR_ASSERTION'/.test(end === -1 ? rest : rest.slice(0, end)) });
-    }
-    return cases;
-  }
-
   async function judge(mutant) {
     const pristine = readFileSync(join(lab, mutant.file), "utf8");
     const hits = pristine.split(mutant.find).length - 1;
     if (hits !== 1) return `STALE (find matches ${hits} times)`;
     const root = copy();
     try {
-      writeFileSync(join(root, mutant.file), pristine.replace(mutant.find, mutant.replace));
+      writeFileSync(join(root, mutant.file), mutate(pristine, mutant.find, mutant.replace));
       const { code, out } = await run(root);
       if (code === 0) return "SURVIVED (suite passed)";
       const fails = failed(out);
