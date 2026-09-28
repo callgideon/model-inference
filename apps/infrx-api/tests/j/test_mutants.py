@@ -132,9 +132,11 @@ def test_the_required_invariants_each_have_a_mutant():
 def test_every_judge_module_is_covered():
     """dryrun.py shipped with no mutant at all, so "every invariant has one" was false for
     a whole module. One file with no mutant is one file nothing proves."""
-    modules = {path.name for path in (SUITE_DIR.parents[1] / "infrx" / "judge").glob("*.py")
-               if path.name != "__init__.py"}
-    covered = {pathlib.Path(m.file).name for m in ALL}
+    judge = SUITE_DIR.parents[1] / "infrx" / "judge"
+    modules = {str(path.relative_to(judge)) for path in judge.rglob("*.py")
+               if path.name != "__init__.py"}       # J3: subpackages count too
+    covered = {str(pathlib.Path(m.file).relative_to("judge")) for m in ALL
+               if m.file.startswith("judge/")}
     assert modules <= covered, f"no mutant touches {sorted(modules - covered)}"
 
 

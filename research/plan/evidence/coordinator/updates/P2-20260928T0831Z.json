@@ -1,0 +1,75 @@
+{
+ "task": "P2",
+ "slice": "LW4 judge-lw4 task 2: bounded teacher batches over N2 + D6J USD through J2's one egress path (judge.submit.send), labels into D8 via P1 import_labels as model/synthetic; fake ledger/P1",
+ "activity": "review",
+ "head": "e4836faf",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-judge-lw4",
+ "branch": "codex/w5-judge-lw4",
+ "owned_paths": [
+  "apps/infrx-api/infrx/pipelines/teachers/",
+  "apps/infrx-api/tests/p/teachers/",
+  "apps/infrx-api/infrx/judge/submit.py",
+  "apps/infrx-api/tests/j/submit/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/p/teachers (red, before the module)",
+   "exit": 2,
+   "summary": "ModuleNotFoundError infrx.pipelines"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/p/teachers",
+   "exit": 0,
+   "summary": "12 cases pass incl. HTTP round trip on the p2 teacher fake 57529"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p2 uv run --frozen pytest -q tests/j/submit -m pg",
+   "exit": 0,
+   "summary": "1 passed: J2's PG world after the send() extraction"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/j/test_mutants.py tests/j/submit/test_mutants.py tests/j/calibration/test_mutants.py tests/p/teachers/test_mutants.py",
+   "exit": 0,
+   "summary": "235 passed (J1 126, J2 35, J3 34, P2 40): 0 survivors"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p2 make api-test",
+   "exit": 2,
+   "summary": "5259 passed, 91 skipped, 9 xfailed; 50 failed + 8 errors all shared-lock/known outside owned paths (outbox[valkey] d2 lock 7, tests/i/test_mutants baseline 43, tests/i pooler 8 errors); tests/i files pass alone, outbox[valkey] still HarnessBusy alone"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p2 uv run --frozen pytest -q tests/p/teachers tests/j -m 'not pg' (fix round)",
+   "exit": 0,
+   "summary": "334 passed; redaction before egress asserted"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=p2 uv run --frozen pytest -q tests/p/teachers/test_mutants.py (fix round)",
+   "exit": 0,
+   "summary": "41 passed: 39 mutants incl. content_sent_unredacted, 0 survivors"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1.5,
+  "likely_h": 3,
+  "pessimistic_h": 6,
+  "confidence": "medium",
+  "basis": "WR-P2-2 composition over merged P1 + SR-P2-1 real ledger on PG 57528 + one verify round (brief 2/4/8; ~2.5 h spent)",
+  "at": "2026-09-28T08:31:53Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "SR-P2-1 (lab-sql D8, AMENDED fix round): for purpose='teacher_annotation', 0036 lab_judge_reserve and lab_judge_record_sent must snapshot/recheck the N2 version's per-sample external_judging+training rights instead of lab_access_grants (today they refuse ConsentRef(dataset_ref,1)); or a D8 twin of both RPCs; append-only per-item failure log. Carry: PG case on p2:57528 with the real ledger",
+  "WR-P2-2 (coordinator after P1): TeacherWiring.labels = infrx.pipelines.annotations.import_labels, log = D8 LabelLog; composed case over tests/p/annotations world",
+  "WR-P2-3 (Makefile api-mutants): append tests/p/teachers/test_mutants.py",
+  "WR-P2-4 (N2 owner): expose the export redaction helper publicly; WR-P2-2 wires it as TeacherWiring.redact (required). Gate: no teacher host past P-10 without it"
+ ],
+ "evidence": [
+  "research/plan/evidence/p/P2-e4836fa.md"
+ ],
+ "fix_round": {
+  "findings": {
+   "1-JLW4-1": "fixed (SR-P2-1 amended; PG proof carried to the real-ledger rerun)",
+   "1-JLW4-2": "fixed (required redact seam applied before egress; mutant content_sent_unredacted; P-10 gate; WR-P2-4)"
+  }
+ }
+}

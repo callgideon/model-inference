@@ -125,11 +125,12 @@ test("C3L-P01 calibration pages are bounded: the limit is clamped, a bad cursor 
   const s = server();
   await listCalibration(s.rpc, dev, { limit: "500" });
   await listCalibration(s.rpc, dev, {});
-  assert.deepEqual(s.calls.map((c) => c.args.p_limit), [PAGE_MAX, PAGE_MAX]);
+  await listCalibration(s.rpc, dev, { after: "", limit: "" }); // the page form's blank optional fields
+  assert.deepEqual(s.calls.map((c) => c.args.p_limit), [PAGE_MAX, PAGE_MAX, PAGE_MAX]);
   for (const bad of [{ limit: "0" }, { limit: "-1" }, { limit: "abc" }, { after: "label-3" }]) {
     assert.deepEqual(await listCalibration(s.rpc, dev, bad), { ok: false, reason: "invalid" });
   }
-  assert.equal(s.calls.length, 2);
+  assert.equal(s.calls.length, 3);
 });
 
 test("C3L-P02 a full page carries the next cursor, a short page ends, an over-long page is refused", async () => {

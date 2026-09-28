@@ -509,12 +509,12 @@ def test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffe
     quiet stream's keepalive, admits an upload's bytes, and rewrites no header: the contract
     headers pass through both ways."""
     from infrx.contracts.limits import DEFAULTS
-    from infrx.gateway.routes import ingress, uploads
+    from infrx.gateway.routes import ingress, trace_export, uploads
 
     text = (DEPLOY / "Caddyfile").read_text()
     routes = [("POST", ingress.CHAT_PATH), *ingress.JOBS_ROUTES,
               ("POST", uploads.UPLOADS_PATH), ("PUT", uploads.DESTINATION_PATH),
-              ("POST", uploads.COMPLETE_PATH)]
+              ("POST", uploads.COMPLETE_PATH), ("GET", trace_export.EXPORT_PATH)]
     reached = {path: _edge_block(text, path.replace("{handle}", ingress.SAMPLE_JOB_HANDLE))
                for _, path in routes}
     assert {path for path, where in reached.items() if where in ("private", "health")} == set()

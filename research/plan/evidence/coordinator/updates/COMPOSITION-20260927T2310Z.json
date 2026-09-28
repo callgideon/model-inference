@@ -1,0 +1,109 @@
+{
+ "task": "COMPOSITION",
+ "lane": "composition",
+ "slice": "LW2 composition batch: WR-T-4 (done), WR-N-3 (blocked), WR-B-5 (done; sources blocked on WR-B-2(b)/WR-B-3), E4 regression (switches off)",
+ "activity": "fix-round",
+ "at": "2026-09-28T07:00:00Z",
+ "head": "feaf4ab",
+ "base": "2252e5a0",
+ "worktree": ".claude/worktrees/codex-w5-composition",
+ "branch": "codex/w5-composition",
+ "owned_paths": [
+  "apps/infrx-api/infrx/config.py",
+  "apps/infrx-api/infrx/worker/__main__.py",
+  "apps/infrx-api/deploy/preflight.py",
+  "apps/infrx-api/tests/contracts/test_config_and_imports.py",
+  "apps/infrx-api/tests/w/test_worker_main.py",
+  "apps/infrx-api/tests/w/worker_main_mutants.py",
+  "apps/infrx-api/tests/w/test_worker_traces_pg.py",
+  "apps/infrx-api/tests/w/test_worker_lab_eval_pg.py",
+  "apps/infrx-api/tests/g/mutants.py",
+  "research/plan/08-contracts-v1-encoding.md",
+  "research/plan/evidence/coordinator/COMPOSITION-feaf4ab.md"
+ ],
+ "commands": [
+  {
+   "cmd": "pytest tests/w/test_worker_main.py -k <new> (tests first)",
+   "exit": 1,
+   "summary": "10 failed before the implementation"
+  },
+  {
+   "cmd": "pytest tests/w/test_worker_main.py tests/contracts/test_config_and_imports.py tests/i/test_packaging.py tests/i/test_worker_unit.py",
+   "exit": 0,
+   "summary": "370 passed, 4 skipped"
+  },
+  {
+   "cmd": "INFRX_D_TASK=t2f INFRX_T2F_STACK=1 pytest tests/w/test_worker_traces_pg.py",
+   "exit": 0,
+   "summary": "1 passed (ship with PG pins to ClickHouse+MinIO, feedback projected+acked, retention pass)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b1 pytest tests/w/test_worker_lab_eval_pg.py",
+   "exit": 0,
+   "summary": "2 passed; a freezing handler fails the revocation case (Forbidden)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=t2f ... pytest tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 1,
+   "summary": "2523 passed, 5 skipped, 10 HarnessBusy errors (shared d2 valkey lock, other lanes); rerun alone 14 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/w/test_worker_main_mutants.py",
+   "exit": 0,
+   "summary": "81 passed (20 new mutants killed)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n2 INFRX_MUTANTS=all pytest tests/contracts/test_mutants.py tests/g/test_mutants.py",
+   "exit": 1,
+   "summary": "948 passed, 1 misdeclared (given_stores_replaced: base defect from f4bceeba); re-anchored, 5 passed"
+  },
+  {
+   "cmd": "make app-e2e (e4b)",
+   "exit": 0,
+   "summary": "PASS; journey 20/20; APP-LOCAL 17/17 (4 delegated) = last accepted"
+  },
+  {
+   "cmd": "pytest tests/w/test_worker_main.py (1-F1 tests first, then fix)",
+   "exit": 0,
+   "summary": "red 2 failed before the fix; 53 passed, 4 skipped after"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n2 INFRX_MUTANTS=all pytest tests/w/test_worker_main_mutants.py",
+   "exit": 0,
+   "summary": "76 passed, 7 skipped (PG list, no S3 on n2); 2 new mutants killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=t2f ... pytest tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 1,
+   "summary": "2489 passed; 46 ForeignContainer (t2f/d2/b1 held by reviewer checkouts), no product failure"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b1 pytest tests/w/test_worker_lab_eval_pg.py",
+   "exit": 1,
+   "summary": "not run: infrx-b1-postgres held by reviewer checkout rv-comp; rerun needed for the new ordering proof"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "1-F1 fixed; remaining: the b1 proof once its container is free (~2 min run) and the coordinator's verify",
+  "at": "2026-09-28T07:00:00Z"
+ },
+ "blockers": [
+  "WR-N-3: no bundle route exists and no gateway credential satisfies WR-N-2 (L2 membership of an individual); needs a route owner (G/L, N4) and a ruling",
+  "LAB_EVAL_WORKER cannot start in a deployment until WR-B-2(b) evaluator source and WR-B-3 target source exist",
+  "b1 PG proof (incl. 1-F1 ordering case) unrun: infrx-b1-postgres owned by scratchpad/rv-comp; also a stray infrx-d1-postgres labelled with this checkout to remove"
+ ],
+ "wiring_requests": [
+  "WR-COMP-1 lab-sql: evaluator table/read RPC (WR-B-2(b))",
+  "WR-COMP-2 lab-access: serving_ref -> (HttpDevEndpoint, DeploymentRevision) (WR-B-3)",
+  "WR-COMP-3 T: build_shipper's PgPins on the dedicated runtime login (role rule) + outbox DML grants before hosted TRACE_PUMPS",
+  "WR-COMP-4 capture wiring: ship step moves to the spool-owning process",
+  "WR-N-3 carried (G/L + N4)"
+ ],
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-feaf4ab.md"
+ ]
+}

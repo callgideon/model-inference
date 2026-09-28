@@ -16,7 +16,7 @@ const C = {
   j03: "V3-J03 without media, media criteria read not scored and the verdict is never a pass",
   j04: "V3-J04 in-flight and ambiguous runs show the held USD budget and no scores; nothing is ever CREDIT",
   j05: "V3-J05 calibration is claimed only with the statistics and enough operator labels behind it",
-  j06: "V3-J06 the judge read is the provider's own, developer+, and unavailable until the real adapter is wired",
+  j06: "V3-J06 the judge read is the provider's own, developer+, and the wired adapter fails closed without lab_judge_runs",
   p01: "V3-P01 the judge panel is read only, shows refusals as fixed copy and links judge consent to Settings",
   p02: "V3-P02 the page reads judge runs as the session's actor and shows them only beside a visible request",
 };
@@ -49,7 +49,7 @@ const MUTANTS = [
   m("V3-X25", "another provider's runs are returned", FAKE, "r.providerId === actor.providerId && ", "", [C.j06]),
   m("V3-X26", "another request's runs are returned", FAKE, " && r.requestId === requestId", "", [C.j06]),
   m("V3-X27", "a viewer reads judge results", FAKE, '    if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.j06]),
-  m("V3-X28", "the default judge port answers", PORT, "  return UNAVAILABLE;\n}", "  return { runs: async () => ({ ok: true, value: [] }) };\n}", [C.j06]),
+  m("V3-X28", "the default judge port answers", PORT, "  return rpcJudgePort(async () => (await import(\"../../../lib/services/judge/session.ts\")).session());\n}", "  return { runs: async () => ({ ok: true, value: [] }) };\n}", [C.j06]),
   m("V3-X29", "the panel offers a paid run", PANEL, "      <p>\n        Judge consent", '      <form action="/judge"><button type="submit">Run judge</button></form>\n      <p>\n        Judge consent', [C.p01]),
   m("V3-X30", "a refusal is shown raw", PANEL, "{JUDGE_COPY[result.reason]}", "{result.reason}", [C.p01]),
   m("V3-X31", "consent is not linked to Settings", PANEL, '<Link href="/settings">Settings</Link>', "Settings", [C.p01]),

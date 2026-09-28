@@ -35,6 +35,7 @@ K = "auth/keys.py"                      # F1's caches: G owns the file, and the 
 C = "gateway/routes/catalog.py"         # G1R: model resolution for a credential's audience
 R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and the SSE relay
 P = "gateway/pilot.py"                  # G2: the pilot composition
+ROLLOUT_CASE = "test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it"
 OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
 ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
 M = "gateway/routes/models.py"          # G7: public discovery, one projection
@@ -893,45 +894,67 @@ MUTANTS: tuple[Mutant, ...] = (
     # The cutover itself (G2 item 5), in files G does not own, in the temporary copy only:
     # the retired `unset_mode_refuses` / `composition_root_mounts_the_ingress` inverted.
     _m("composition_root_mounts_the_legacy_route", "chat is served by the ingress only",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
        "from .routes import chat as _chat\n"
-       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # === the cutover lane (CUTOVER item 1): the full mount and the adapters from settings ==
     _m("composition_root_drops_uploads", "the composition root mounts G4U's upload routes",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
-       "ROUTERS = (health, models, ingress, jobs, feedback, lab_control, lab_traces, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, ingress, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     _m("composition_root_drops_jobs", "the composition root mounts G3's jobs routes",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, feedback, lab_control, lab_traces, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, feedback, trace_export, lab_control, lab_traces, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     _m("composition_root_jobs_before_ingress", "jobs and uploads mount after the ingress",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
-       "ROUTERS = (health, models, jobs, ingress, uploads, feedback, lab_control, lab_traces, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, jobs, ingress, uploads, feedback, trace_export, lab_control, lab_traces, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # E4B's served-build check (CUTOVER item 7): /metrics mounted, the build gauge from settings
     _m("composition_root_drops_metrics", "the composition root mounts I3B's /metrics",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces)", BUILD_CASE,
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces)", BUILD_CASE,
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # G4F (WR-G4F-1): the feedback route is mounted only when FEEDBACK_API turns it on
     _m("composition_root_drops_feedback", "the composition root mounts G4F's feedback route",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, lab_control, lab_traces, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, lab_control, lab_traces, metrics)",
        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
     _m("feedback_switch_ignored", "FEEDBACK_API off mounts no feedback route, even with a service",
        P, "    rt.feedback = feedback if deployment.feedback_api else None\n",
        "    rt.feedback = feedback\n",
        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
+    # G4T (WR-G4T-1): the trace export is mounted only when TRACE_EXPORT_API turns it on
+    _m("composition_root_drops_trace_export", "the composition root mounts G4T's export route",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
+       "test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it"),
+    _m("trace_export_switch_ignored", "TRACE_EXPORT_API off mounts no export, even with one",
+       P, "if deployment.trace_export_api else None\n", "if True else None\n",
+       "test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it"),
+    _m("trace_export_enabled_without_clickhouse", "enabled without ClickHouse refuses to start",
+       P, "    if export is None:\n        raise RuntimeMisconfigured(",
+       "    if False:\n        raise RuntimeMisconfigured(",
+       "test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it"),
+    # R1 (WR-R1-1): admission is routed only when ROLLOUT_ROUTING turns it on, over a router
+    _m("rollout_switch_ignored", "ROLLOUT_ROUTING off leaves the relay's own accept serving",
+       P, "    if deployment.rollout_routing:\n        # R1", "    if rollouts is not None:\n        # R1",
+       ROLLOUT_CASE),
+    _m("rollout_router_dropped", "ROLLOUT_ROUTING on routes every admission",
+       P, "        relay.accept = routing.hook(relay.accept, rollouts)\n", "        pass\n",
+       ROLLOUT_CASE),
+    _m("rollout_store_optional", "ROLLOUT_ROUTING on without a router refuses to start",
+       P, "        if rollouts is None:\n            raise RuntimeMisconfigured",
+       "        if False:\n            raise RuntimeMisconfigured", ROLLOUT_CASE),
     # LAB-API (WR-LAB-API-1): each Lab surface is mounted only when its switch turns it on
     _m("composition_root_drops_lab_control", "the composition root mounts WR-L4-1's control",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_traces, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_traces, metrics)",
        "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
     _m("composition_root_drops_lab_traces", "the composition root mounts WR-V1M-2's traces",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, metrics)",
        "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
     _m("lab_control_switch_ignored", "LAB_CONTROL off mounts no control route, even composed",
        P, "    rt.lab_control = lab_control if deployment.lab_control else None\n",
@@ -1027,6 +1050,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
        dies_by=("RuntimeMisconfigured",)),        # the given store refused: the defect
     _m("given_stores_replaced", "injected stores are used as given, with no pool of ours",
+       # the G4F feedback entry (f4bceeba) sits between the pool and the given adapters
        P, "                       if settings.deployment.feedback_api else {}),\n"
           "                    **adapters}",
        "                       if settings.deployment.feedback_api else {})}",

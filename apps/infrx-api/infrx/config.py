@@ -355,11 +355,28 @@ class DeploymentSettings:
     # store's pool. Off by default, so the launched API is unchanged; the database's own
     # `feedback` flag gates every write again (off: 503 dependency_unavailable).
     feedback_api: bool = False
+    # G4T (WR-G4T-1): mount `GET /v1/traces` over C2's `OwnedExport` on the trace projection
+    # (`CLICKHOUSE_URL`, which it then requires). Off by default, so the launched API is
+    # unchanged; it stays off until T3 and C2 are live (wave-5 plan rule 5).
+    trace_export_api: bool = False
     # LAB-API (WR-LAB-API-1): mount the Lab's `/lab/v1/control` (WR-L4-1) and `/lab/v1/traces`
     # (WR-V1M-2), each over the forwarded Supabase session and L2's `LabAccess` on the job
     # store's pool. Off by default: the launched API is unchanged and no Lab route exists.
     lab_control: bool = False
     lab_traces: bool = False
+    # WR-T-4 (composition lane, LW2): the worker runs T2I's shipper (over a spool on
+    # `TRACE_SPOOL_DIR`, which it then owns), T3's retention and T2F's feedback projection.
+    # Off by default; on, `TRACE_SPOOL_DIR`, `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` are
+    # required. Capture stays off: the gateway builds no trace sink either way.
+    trace_pumps: bool = False
+    # WR-B-5 (composition lane, LW2): the worker works D7's `eval_run` outbox events (B1's
+    # `resume` + `Runner`) and runs `lab_recover`. Lab-only, off by default; on, it refuses
+    # to start until an evaluator source (WR-B-2(b)) and a dev target source (WR-B-3) exist.
+    lab_eval_worker: bool = False
+    # R1 (WR-R1-1): route admission through the Lab rollout router (shadow, canary, A/B
+    # over D9's release policies). Off by default, so the launched API is unchanged; on, a
+    # gateway without a release store refuses to start. Public shadow/canary waits on P-12.
+    rollout_routing: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

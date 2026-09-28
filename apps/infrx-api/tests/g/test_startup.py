@@ -19,7 +19,7 @@ from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
 from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_control, lab_traces,
-                                  models, uploads)
+                                  models, trace_export, uploads)
 from infrx.observe import host
 from infrx.observe import route as metrics
 from infrx.scheduling.memory import MemoryScheduler
@@ -158,8 +158,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     loopback-only /metrics last - the one chat handler is the ingress's, every upload and jobs
     route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
     slash redirects) is served."""
-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, lab_control,
-                                   lab_traces, metrics)
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, trace_export,
+                                   lab_control, lab_traces, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}
@@ -219,6 +219,47 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
     answer = local(on).post(feedback.FEEDBACK_PATH, json=body, headers=headers)
     assert answer.status_code == 201 and answer.json()["author_role"] == "customer"
     ingress.assert_route_table(on)
+
+
+def test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it():
+    """G4T (WR-G4T-1): `TRACE_EXPORT_API` is off by default, and then no export route exists
+    even with an export at hand (the launched API is unchanged); on, `GET /v1/traces` is the
+    trace export router's and answers through the composed export; on without ClickHouse
+    refuses to start rather than silently mounting nothing."""
+    import dataclasses
+
+    from infrx.config import deployment_from_env
+
+    class Stub:
+        async def page(self, org_id, **kw):
+            return [], None
+
+    assert deployment_from_env({}).trace_export_api is False
+
+    def composed(on, export=Stub()):
+        world = relay_support.World()
+        world.stream.usage = lambda: asyncio.sleep(0, {})
+        config = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                                 trace_export_api=on))
+        return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
+                                      clock=world.now_s, catalog=world.catalog,
+                                      stream=world.stream, objects=world.objects,
+                                      jobs=world.jobs, index=MemoryScheduler(world.clock.now),
+                                      trace_export=export)
+
+    off = composed(False)
+    assert off.state.runtime.trace_export is None
+    assert all(getattr(r, "path", "") != trace_export.EXPORT_PATH for r in off.routes)
+    assert local(off).get(trace_export.EXPORT_PATH, headers=support.AUTH).status_code == 404
+    on = composed(True)
+    assert on.state.runtime.trace_export is not None
+    assert [r.methods for r in on.routes
+            if getattr(r, "path", "") == trace_export.EXPORT_PATH] == [{"GET"}]
+    answer = local(on).get(trace_export.EXPORT_PATH, headers=support.AUTH)
+    assert answer.status_code == 200 and answer.json() == {"data": [], "next_cursor": None}
+    ingress.assert_route_table(on)
+    with pytest.raises(RuntimeMisconfigured, match="CLICKHOUSE_URL"):
+        composed(True, export=None)
 
 
 def test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them():
@@ -287,6 +328,53 @@ def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabl
         pilot._lab(settings(lab_traces=True), connect=None)
     monkeypatch.setattr(pilot, "_lab_traces", lambda *args: "traces")
     assert pilot._lab(settings(lab_traces=True), connect=None) == {"lab_traces": "traces"}
+
+
+def test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it():
+    """R1 (WR-R1-1): `ROLLOUT_ROUTING` is off by default, and then the relay's own `accept`
+    serves the ingress and the jobs route even with a router at hand (the launched API is
+    unchanged); on without a router the gateway refuses to start; on, every admission goes
+    through the router first - here a release-store outage, answered 503 before anything is
+    admitted."""
+    import dataclasses
+
+    from infrx.config import deployment_from_env
+    from infrx.gateway.routes.relay import Relay
+    from infrx.rollouts import routing
+
+    class Down:
+        asked: list = []
+
+        async def active(self, requested_model):
+            self.asked.append(requested_model)
+            raise ConnectionError("release store unreachable")
+
+    assert deployment_from_env({}).rollout_routing is False
+
+    def composed(on, router):
+        world = relay_support.World()
+        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.during.append(lambda: world.clock.advance(3_600))    # a wait ends, never hangs
+        config = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                                 rollout_routing=on))
+        return world, composition.create_app(
+            config, client=support.upstream(), sb=support.supabase(), clock=world.now_s,
+            catalog=world.catalog, stream=world.stream, objects=world.objects, jobs=world.jobs,
+            index=MemoryScheduler(world.clock.now), rollouts=router)
+
+    store = Down()
+    _, off = composed(False, routing.Router(store, None))
+    rt = off.state.runtime
+    assert getattr(rt.relay.accept, "__func__", None) is Relay.accept
+    assert rt.ingress.accept == rt.relay.accept
+    with pytest.raises(RuntimeMisconfigured, match="ROLLOUT_ROUTING"):
+        composed(True, None)
+    world, on = composed(True, routing.Router(store, None))
+    assert on.state.runtime.ingress.accept is on.state.runtime.relay.accept
+    answer = local(on).post(support.CHAT_PATH, json=support.BODY, headers=support.AUTH)
+    assert answer.status_code == 503, answer.text
+    assert answer.json()["error"]["code"] == "dependency_unavailable"
+    assert store.asked == [support.PUBLIC_MODEL] and world.jobs.jobs == {}
 
 
 def fixture_host(monkeypatch, root: pathlib.Path) -> None:

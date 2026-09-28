@@ -234,6 +234,9 @@ NOT_SETTABLE = {
     "FEEDBACK_API": "mounts POST /v1/feedback (G4F, off by default): enabling it on the hosted "
                     "gateway needs the E4 regression rerun and the database feedback flag, a "
                     "deploy change, not a --set",
+    "TRACE_EXPORT_API": "mounts GET /v1/traces (G4T, off by default): enabling it on the "
+                        "hosted gateway needs T3 and C2 live, CLICKHOUSE_URL and the E4 "
+                        "regression rerun, a deploy change, not a --set",
     "LAB_CONTROL": "mounts /lab/v1/control (WR-L4-1, off by default): enabling it on the hosted "
                    "gateway needs L3 merged, the Lab migrations applied hosted (plan rule 4) "
                    "and the E4 regression rerun, a deploy change, not a --set",
@@ -241,6 +244,14 @@ NOT_SETTABLE = {
                   "gateway needs the trace projection (CLICKHOUSE_URL, S3_TRACE_BUCKET), the Lab "
                   "migrations applied hosted and the E4 regression rerun, a deploy change, "
                   "not a --set",
+    "TRACE_PUMPS": "runs the trace shipper, retention and feedback projection in the worker "
+                   "(WR-T-4, off by default): enabling it needs ClickHouse, the trace bucket "
+                   "and the E4 regression rerun, a deploy change, not a --set",
+    "LAB_EVAL_WORKER": "runs the Lab eval_run worker (WR-B-5, off by default, Lab-only): the "
+                       "hosted database has no Lab schema (plan rule 4), never a --set",
+    "ROLLOUT_ROUTING": "routes admission through the Lab rollout router (R1, off by default): "
+                       "enabling it on the hosted gateway needs D9's release store, the E4 "
+                       "regression rerun and P-12, a deploy change, not a --set",
 }
 
 
