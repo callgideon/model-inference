@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 237,
- "updated": "2026-09-28T20:59:01Z",
+ "revision": 238,
+ "updated": "2026-09-28T21:06:01Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6298,26 +6298,28 @@
    "branch": "codex/w5-composition-2",
    "worktree": ".claude/worktrees/codex-w5-composition-2",
    "base": "900729e0",
-   "head": "9fa49b2f",
+   "head": "39426585",
    "isolation": {
     "ports": "b1 / j2 / p3 / r2 / n3 / b3 / e6l / e4b",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T15:11:47Z",
-   "updated": "2026-09-28T18:48:37Z",
+   "updated": "2026-09-28T21:06:01Z",
    "blocker": null,
-   "next_action": "handback → verify → coordinator merges the branch",
+   "next_action": "merge batch #22 (wf_bcf70fd7-c5c, R197–R200, WR-CB2-MK) → flips I5/I6/I7; then WR-LSQ-9-C after #21",
    "estimate": {
-    "optimistic_h": 6,
-    "likely_h": 12,
-    "pessimistic_h": 24,
-    "confidence": "low",
-    "basis": "the first composition lane 3.5 h for three wirings; this one carries about nine",
-    "at": "2026-09-28T15:11:47Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "accepted; merge batch running",
+    "at": "2026-09-28T21:06:01Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/COMPOSITION-2-b790f17.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/worker/**",
@@ -6331,7 +6333,24 @@
     "tests/integration/lab_evaluate (j09 bind)",
     "08 settings rows"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-B3-3",
+    "WR-C2-2b",
+    "WR-CB2-MK",
+    "WR-I6-3b",
+    "WR-I7-1b",
+    "WR-LAB-API-2c",
+    "WR-LSQ-9-C",
+    "WR-LSQ-C2A",
+    "WR-LSQ-C2B",
+    "WR-N3-2a",
+    "WR-N3-2b",
+    "WR-N4-1b",
+    "WR-N4-3",
+    "WR-P2-4",
+    "WR-P2-D8b",
+    "WR-R2-3"
+   ]
   },
   {
    "id": "W5-LAB-UI-SWAP",
@@ -6486,11 +6505,11 @@
     "prefix": "infrx-e7l-",
     "db": "e7l"
    },
-   "activity": "integration",
+   "activity": "review",
    "started": "2026-09-28T15:38:37Z",
-   "updated": "2026-09-28T20:59:01Z",
+   "updated": "2026-09-28T21:06:01Z",
    "blocker": null,
-   "next_action": "merge batch #20 (wf_0bcd7fc2-cb4, +R193, WR-E7L-2) → E7L runner on the tip; LAB-IMPROVE-LOCAL not accepted until WR-E7L-3 (pipelines-lineage) + WR-E7L-1/4 binds + rerun",
+   "next_action": "LAB-IMPROVE-LOCAL after WR-E7L-3 (pipelines-lineage) + WR-E7L-1/4 + rerun",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -6740,33 +6759,40 @@
    "branch": "codex/w5-tracker-waves",
    "worktree": ".claude/worktrees/codex-w5-tracker-waves",
    "base": "49393c56",
-   "head": null,
+   "head": "e633f5f9",
    "isolation": {
     "ports": null,
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T20:38:50Z",
-   "updated": "2026-09-28T20:38:50Z",
+   "updated": "2026-09-28T21:06:01Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "merge batch #23 (wf_af33d798-86b, R201, WR-TW-1/4) → render + republish the tracker",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "a third of the TRACKER lane",
-    "at": "2026-09-28T20:38:50Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "accepted; merge batch running",
+    "at": "2026-09-28T21:06:01Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/TRACKER-WAVES-ee51751.md"
+   ],
    "commands": [],
    "owned_paths": [
     "research/plan/scripts/progress.py",
     "research/plan/scripts/test_progress.py",
     "research/plan/consumer-v1/07-post-launch-waves.md"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-TW-1",
+    "WR-TW-2",
+    "WR-TW-3",
+    "WR-TW-4"
+   ]
   },
   {
    "id": "W5-MERGE-19",
@@ -6805,22 +6831,22 @@
   {
    "id": "W5-MERGE-20",
    "task": null,
-   "slice": "merge batch #20: lab-improve 49a19656 (+R193, WR-E7L-2 Makefile); workflow wf_0bcd7fc2-cb4",
+   "slice": "merge batch #20: lab-improve 49a19656 (+R193, WR-E7L-2 Makefile); workflow wf_0bcd7fc2-cb4; integrated 21ee48de",
    "agent": "opus",
    "branch": "codex/w5-merge-20",
    "worktree": ".claude/worktrees/codex-w5-merge-20",
    "base": "1b2fab07",
-   "head": null,
+   "head": "1df3ec83",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T20:59:01Z",
-   "updated": "2026-09-28T20:59:01Z",
+   "updated": "2026-09-28T21:06:01Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 → then #21",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -6865,6 +6891,138 @@
    "owned_paths": [
     "infrx/datasets/**",
     "tests/n/**"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-21",
+   "task": null,
+   "slice": "merge batch #21: lab-sql-lw4 0a1b1d27 (+R194–R196, LSQ4 wiring patch, root pytest.ini for WR-E7L-5); workflow wf_193cbd2e-fc3",
+   "agent": "opus",
+   "branch": "codex/w5-merge-21",
+   "worktree": ".claude/worktrees/codex-w5-merge-21",
+   "base": "21ee48de",
+   "head": null,
+   "isolation": {
+    "ports": "l3 57502, dlab 57500 (lane-owned)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-28T21:06:01Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (rulings reordered at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-28T21:06:01Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-22",
+   "task": null,
+   "slice": "merge batch #22: composition-2 39426585 (+R197–R200, WR-CB2-MK); workflow wf_bcf70fd7-c5c",
+   "agent": "opus",
+   "branch": "codex/w5-merge-22",
+   "worktree": ".claude/worktrees/codex-w5-merge-22",
+   "base": "21ee48de",
+   "head": null,
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-28T21:06:01Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (rulings reordered at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-28T21:06:01Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-23",
+   "task": null,
+   "slice": "merge batch #23: tracker-waves e633f5f9 (+R201, WR-TW-1/4); workflow wf_af33d798-86b",
+   "agent": "opus",
+   "branch": "codex/w5-merge-23",
+   "worktree": ".claude/worktrees/codex-w5-merge-23",
+   "base": "21ee48de",
+   "head": null,
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-28T21:06:01Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (rulings reordered at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-28T21:06:01Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-PIPELINES-LINEAGE",
+   "task": "E7L",
+   "slice": "(wave5 LW6 lane pipelines-lineage) WR-E7L-3 = 0-E7L-1 under R193: P1/P2/P3 reads gate on lineage.permitted; E7L rerun (i04 re-grant PASS); workflow wf_84353e14-45d; base 21ee48de",
+   "agent": "opus",
+   "branch": "codex/w5-pipelines-lineage",
+   "worktree": ".claude/worktrees/codex-w5-pipelines-lineage",
+   "base": "21ee48de",
+   "head": null,
+   "isolation": {
+    "ports": "p1 57527; p2 57528/57529; p3 57530/57531; e7l 57300-57399",
+    "prefix": "infrx-p3-",
+    "db": "p3"
+   },
+   "activity": "running",
+   "started": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-28T21:06:01Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge → LAB-IMPROVE-LOCAL rerun",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "six reads re-gated + one gate rerun"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/pipelines/**",
+    "tests/p/**",
+    "tests/integration/lab_improve/**",
+    "research/plan/evidence/e/E7L-*"
    ],
    "wiring_requests": []
   }
