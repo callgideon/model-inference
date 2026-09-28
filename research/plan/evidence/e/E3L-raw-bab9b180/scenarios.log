@@ -1,0 +1,56 @@
+..............F...F...                                                                                                                                                                                                                                                                                                                                                                                   [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+___________________________________________________________________________________________________________________________________________________________________________ test_l05_discovery_reports_the_listing_version_it_serves ___________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-bab9b180/cases/test_l05_discovery_reports_the_listing_version_it_serves'), record_property = <function record_property.<locals>.append_property at 0x76f6ea51c400>
+
+    def test_l05_discovery_reports_the_listing_version_it_serves(workdir, record_property):
+        """Oracle: /v1/models' `listing_version` is the catalog listing the entry serves - after
+        the publication, listing 2 (the published deployment), never a constant."""
+        with world.composed(workdir, start=()) as trip:
+            alpha, _, proposal, published, card = published_l05(trip)
+            trip.box.start("gateway", ACTIVE_RATE_CARD_VERSION=card)
+            entries = discovery(trip, alpha)
+            record_property("listed", [(e["listing_version"], e["deployment_revision_id"])
+                                       for e in entries])
+>           assert [(e["listing_version"], e["deployment_revision_id"]) for e in entries] == [
+                (published.version, proposal.deployment_revision_id)], entries
+E           AssertionError: [{'schema_version': 2, 'object': 'model', 'id': 'nemostation/marlin-2b', 'created': 1788220800, ...}]
+E           assert [(1, '384c5ff...84fadef47a3')] == [(2, '384c5ff...84fadef47a3')]
+E             
+E             At index 0 diff: (1, '384c5ffa-5a3e-40f7-902d-c84fadef47a3') != (2, '384c5ffa-5a3e-40f7-902d-c84fadef47a3')
+E             Use -v to get more diff
+
+tests/integration/lab_operate/scenarios_publish.py:257: AssertionError
+______________________________________________________________________________________________________________________________________________________________________________ test_l10_a_retry_after_a_lost_answer_proposes_once ______________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-bab9b180/cases/test_l10_a_retry_after_a_lost_answer_proposes_once'), record_property = <function record_property.<locals>.append_property at 0x76f6ea697a60>
+
+    def test_l10_a_retry_after_a_lost_answer_proposes_once(workdir, record_property):
+        """Oracle: the Lab's retry of a proposal whose answer was lost to the crash, after the
+        restart, never leaves a second open proposal of the same dev revision (it answers the
+        recorded proposal or is refused) - one operation, one proposal."""
+        with world.composed(workdir, start=("gateway",)) as trip:
+            lab.seed_lab(trip)
+            _, dev = lab.ready_dev(lab.control(trip), "l10r")
+            source = dev.deployment_revision_id
+            with lab.control_service(trip, workdir) as (service, _):
+                lost = crash_mid_proposal(trip, service, workdir, source)
+                service.start()
+                retried = service.call("POST", "proposals", lab.session(ADMIN_A), body={
+                    "kind": "publish", "deployment_revision_id": source})
+                made = proposals_of(trip, source)
+            record_property("retry", {"lost": lost, "retried": [retried.status_code,
+                                                                 retried.json()], "made": made})
+            assert lost and isinstance(lost[0], str), f"premise: the answer was lost: {lost}"
+>           assert [state for _, state in made].count("proposed_public") == 1, made
+E           AssertionError: [('2adaf52d-3ecc-42be-9719-7c1e8ad9032c', 'proposed_public'), ('c4fa3086-2534-41ea-af51-b73703a53d77', 'proposed_public')]
+E           assert 2 == 1
+E            +  where 2 = <built-in method count of list object at 0x76f6ea693cc0>('proposed_public')
+E            +    where <built-in method count of list object at 0x76f6ea693cc0> = ['proposed_public', 'proposed_public'].count
+
+tests/integration/lab_operate/scenarios_publish.py:511: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_operate/scenarios_publish.py::test_l05_discovery_reports_the_listing_version_it_serves - AssertionError: [{'schema_version': 2, 'object': 'model', 'id': 'nemostation/marlin-2b', 'created': 1788220800, ...}]
+FAILED tests/integration/lab_operate/scenarios_publish.py::test_l10_a_retry_after_a_lost_answer_proposes_once - AssertionError: [('2adaf52d-3ecc-42be-9719-7c1e8ad9032c', 'proposed_public'), ('c4fa3086-2534-41ea-af51-b73703a53d77', 'proposed_public')]
+2 failed, 20 passed in 136.11s (0:02:16)

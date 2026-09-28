@@ -1,0 +1,20 @@
+apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-bab9b180
+[ok  ] preflight: {"docker": "29.6.2", "images": {"postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb678…
+[PEND] services: could not provision: port bind failed twice (ephemeral-range collision, R-c): docker compose -p infrx-e3l -f /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/tests/integration/compose.yaml…
+[ok  ] backend-teardown: {"removed": []}
+[ok  ] teardown: {"removed": ["infrx-e3l-clickhouse", "infrx-e3l-postgres", "infrx-e3l-s3", "infrx-e3l-valkey"], "still_named_ours_but_not_ours": []}
+ BLOCKED  l01  two providers: own workspace only; every cross-provider operation refused; revoked membership refused next call
+ BLOCKED  l02  private dev revisions excluded from App discovery and admission
+ BLOCKED  l03  registry validation: artifact, schema, runtime, digest, ownership
+ BLOCKED  l04  production publication: operator approval, audit, rate snapshot
+ BLOCKED  l05  App discovery and a metered call on the published revision
+ BLOCKED  l06  rollback during a queued request keeps its serving and rate pins
+ BLOCKED  l07  consumer keys reach no provider control and are no Lab session
+ BLOCKED  l08  consumer data denied without a current, purpose-matching grant
+ BLOCKED  l09  fault injection on the publish/rollback CAS
+ BLOCKED  l10  control-service restart mid-operation
+ BLOCKED  l11  App inference with the Lab down, crash-looping and rolled back
+ BLOCKED  l12  consumer keys refused by every control-service operation
+cells {'LAB-ACCESS': 'BLOCKED', 'LAB-PUBLISH': 'BLOCKED', 'SPLIT-CONTRACT': 'BLOCKED'}
+gate BLOCKED -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-e3l-bind/research/plan/evidence/e/E3L-raw-bab9b180/verdict.json
+make: *** [Makefile:160: lab-operate] Error 3
