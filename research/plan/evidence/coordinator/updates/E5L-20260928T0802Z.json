@@ -1,0 +1,58 @@
+{
+ "activity": "review",
+ "head": "3da696a0",
+ "worktree": ".claude/worktrees/codex-w5-lab-observe",
+ "branch": "codex/w5-lab-observe",
+ "owned_paths": [
+  "infra/lab/observe/",
+  "apps/infrx-api/deploy/lab/observe/",
+  "tests/integration/lab_observe/",
+  "research/plan/evidence/e/E5L-*"
+ ],
+ "task": "E5L",
+ "slice": "LAB-OBSERVE gate runner + real local run (dry-run judge)",
+ "commands": [
+  {
+   "cmd": "tests/integration/lab_observe/runner.py --keep --out research/plan/evidence/e/E5L-raw-3da696a/gate",
+   "exit": 1,
+   "summary": "gate FAIL: 17 cases 13 PASS / 1 FAIL (E5L-F1: J2 sends deleted/expired content before the sweep) / 3 NOT RUN (COMPOSITION, LAB-API+C3L+G4T, D6J+J3); cells TRACE-RECOVER PASS, FEEDBACK-ACK PASS, TRACE-TENANT FAIL, JUDGE-BUDGET FAIL, others NOT RUN"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e5l pytest tests/integration/lab_observe/test_mutants.py (+ one mutant rerun alone)",
+   "exit": 0,
+   "summary": "37/37 layer-1 and 14/14 stack mutants killed (one first-run broken_runner = engine port bind collision, rerun alone killed)"
+  },
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/i (rerun alone, i8 lock free)",
+   "exit": 0,
+   "summary": "273 passed, 5 skipped, 1 xfailed; first run 51 failures all i8 lock"
+  },
+  {
+   "cmd": "pytest -q tests/integration (layer 1)",
+   "exit": 1,
+   "summary": "463 passed, 4 failed - the same 4 fail on base 9a48300c"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 3,
+  "pessimistic_h": 8,
+  "confidence": "medium",
+  "basis": "4.5 h lane time this round; one verify round + a post-merge rerun (~15 min incl. stack mutants); pessimistic = a J2 fix round for E5L-F1",
+  "at": "2026-09-28T08:02Z"
+ },
+ "blockers": [
+  "E5L-F1 (J2 submit reads the raw projection; WR-OBS-3)",
+  "D6J/J3, LAB-API/C3L/G4T, COMPOSITION unmerged (NOT RUN cells)"
+ ],
+ "wiring_requests": [
+  "WR-OBS-1 judge entry point (with WR-B-5)",
+  "WR-OBS-2 observe cycle merges infra/lab/observe/alerts.json + lab-traces.prom (diff in raw dir)",
+  "WR-OBS-3 J2 reads through Retention.read_content",
+  "WR-OBS-4 Makefile api-mutants += tests/integration/lab_observe/test_mutants.py"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E5L-3da696a.md",
+  "research/plan/evidence/e/E5L-raw-3da696a/"
+ ]
+}

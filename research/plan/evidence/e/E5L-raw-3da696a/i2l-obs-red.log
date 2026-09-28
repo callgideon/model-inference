@@ -1,0 +1,366 @@
+FFFFFFFFFF                                                               [100%]
+=================================== FAILURES ===================================
+____ test_i2l_obs__every_observe_unit_is_off_until_its_role_env_file_exists ____
+
+    def test_i2l_obs__every_observe_unit_is_off_until_its_role_env_file_exists():
+        """OFF by default (LAB-M1 needs P-08/P-09/P-10): a unit whose env file is absent is a
+        condition-failed no-op, and the runbook never writes one outside its enable step. Oracle: a
+        unit that starts without the file puts trace reads or judge egress on the box unasked."""
+>       roles = manifest()["roles"]
+                ^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:28: in manifest
+    return json.loads(MANIFEST.read_text())
+                      ^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+______ test_i2l_obs__no_app_unit_links_to_an_observe_unit_or_the_reverse _______
+
+    def test_i2l_obs__no_app_unit_links_to_an_observe_unit_or_the_reverse():
+        """A Lab observe outage must not stop, restart or hold back App inference. Oracle: a
+        `PartOf=`/`Requires=` link either way lets `systemctl stop` of one take the other down."""
+        links = ("Requires", "Requisite", "BindsTo", "PartOf", "Wants", "After", "Before",
+                 "Upholds", "PropagatesStopTo", "StopPropagatedFrom")
+        app_units = sorted(p.name for p in DEPLOY.glob("*.service"))
+        assert app_units, "the App runtime units moved"
+        for name in app_units:
+            assert "lab" not in no_comments((DEPLOY / name).read_text()).lower(), name
+>       for name in (p.name for p in UNITS.iterdir()):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:89: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:89: in <genexpr>
+    for name in (p.name for p in UNITS.iterdir()):
+                                 ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/apps/infrx-api/deploy/lab/observe')
+
+    def iterdir(self):
+        """Yield path objects of the directory contents.
+    
+        The children are yielded in arbitrary order, and the
+        special entries '.' and '..' are not included.
+        """
+>       for name in os.listdir(self):
+                    ^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/apps/infrx-api/deploy/lab/observe'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1056: FileNotFoundError
+________ test_i2l_obs__each_unit_is_bounded_least_privilege_and_its_own ________
+
+    def test_i2l_obs__each_unit_is_bounded_least_privilege_and_its_own():
+        """Least privilege and bounded, as I5's workers: read-only, no capabilities, memory/CPU
+        weight/pids caps, a uid outside the runtime's (no media root, no usage log), no volume but
+        the ones named read-only, and its own env file - never the gateway's. Oracle: an unbounded
+        Lab process starves the gateway; a writable mount lets it change App state."""
+>       for spec in manifest()["roles"].values():
+                    ^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:100: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:28: in manifest
+    return json.loads(MANIFEST.read_text())
+                      ^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+___________ test_i2l_obs__the_judge_worker_runs_its_role_and_drains ____________
+
+    def test_i2l_obs__the_judge_worker_runs_its_role_and_drains():
+        """The judge unit runs the Lab worker entry point's `judge` role (WR-OBS-1) with a health
+        port of its own, and its stop budget outlasts the drain. Oracle: a stop shorter than the
+        drain kills a submit between `record_sent` and the provider's answer (an ambiguous run)."""
+>       argv = docker_run("infrx-lab-judge.service")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:43: in docker_run
+    argv = shlex.split(unit(name)["ExecStart"][0])
+                       ^^^^^^^^^^
+tests/integration/lab_observe/test_i2l_obs.py:33: in unit
+    text = re.sub(r"\\\n\s*", " ", (UNITS / name).read_text())
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/apps/infrx-api/deploy/lab/observe/infrx-lab-judge.service')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/apps/infrx-api/deploy/lab/observe/infrx-lab-judge.service'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+___ test_i2l_obs__the_trace_gauges_run_on_a_timer_from_the_shipped_exporter ____
+
+    def test_i2l_obs__the_trace_gauges_run_on_a_timer_from_the_shipped_exporter():
+        """The trace role's unit is a oneshot of `infra/lab/observe/trace_gauges.py` every minute,
+        writing the textfile the observe cycle reads. Oracle: a unit that names another path or
+        file runs code the repository does not ship, or writes where no evaluator reads."""
+>       service = unit("infrx-lab-trace-gauges.service")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:33: in unit
+    text = re.sub(r"\\\n\s*", " ", (UNITS / name).read_text())
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/apps/infrx-api/deploy/lab/observe/infrx-lab-trace-gauges.service')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/apps/infrx-api/deploy/lab/observe/infrx-lab-trace-gauges.service'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+___ test_i2l_obs__secret_names_only_and_every_name_a_unit_reads_is_declared ____
+
+    def test_i2l_obs__secret_names_only_and_every_name_a_unit_reads_is_declared():
+        """Names only: no value in the manifest, and every `${NAME}` a unit reads is declared with
+        its exposure. Oracle: an undeclared name is a setting nobody reviews; a DSN, key or URL
+        value in the repository is a leaked secret."""
+>       declared = {item["name"]: item for items in manifest()["env"].values() for item in items}
+                                                    ^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:152: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:28: in manifest
+    return json.loads(MANIFEST.read_text())
+                      ^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_i2l_obs__storage_grants_are_object_prefixes_under_the_trace_root_never_a_bucket _
+
+    def test_i2l_obs__storage_grants_are_object_prefixes_under_the_trace_root_never_a_bucket():
+        """Grants are object prefixes: the trace role reads/writes/deletes under T2I's content
+        prefix only, the judge reads only, and no observe role touches the App's media, upload or
+        payload prefixes. Oracle: a bucket-wide grant lets a Lab worker read or delete App media."""
+        from infrx.traces.ship import CONTENT_PREFIX
+>       grants = manifest()["storage_grants"]
+                 ^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:28: in manifest
+    return json.loads(MANIFEST.read_text())
+                      ^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+___ test_i2l_obs__judge_egress_is_the_local_fake_and_a_zero_budget_until_p10 ___
+
+    def test_i2l_obs__judge_egress_is_the_local_fake_and_a_zero_budget_until_p10():
+        """Egress budgets: the judge may reach only the hosts J2's adapter allows (the local fake)
+        with a live budget of 0 USD and `dry_run` as the mode, until P-10 approves a provider and
+        its rates; the trace role reaches only its own stores. Oracle: a manifest that allows
+        another host, or a non-zero budget, would be an approval nobody gave."""
+        from infrx.contracts.limits import DEFAULTS
+        from infrx.judge.submit import LOCAL_HOSTS
+>       egress = manifest()["egress"]
+                 ^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:28: in manifest
+    return json.loads(MANIFEST.read_text())
+                      ^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/observe.json'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_i2l_obs__the_alarms_are_t3s_rules_with_runbook_anchors_and_no_name_clash _
+
+    def test_i2l_obs__the_alarms_are_t3s_rules_with_runbook_anchors_and_no_name_clash():
+        """WR-T-5: T3's `RULES` exactly (same names, metrics, thresholds, severities), each with a
+        runbook anchor that exists, in the evaluator's shape; no name clashes with the App's rule
+        files, so a merge cannot shadow one. Oracle: a hand-copied threshold drifts from the code."""
+        from infrx.traces.retention.policy import RULES
+>       doc = json.loads(ALERTS.read_text())
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/alerts.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/alerts.json'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_i2l_obs__the_exporter_writes_t3s_gauges_and_a_failure_is_up_0_never_silence _
+
+tmp_path = PosixPath('/tmp/pytest-of-rey/pytest-7118/test_i2l_obs__the_exporter_wri0')
+capsys = <_pytest.capture.CaptureFixture object at 0x7e51d8c55ee0>
+
+    def test_i2l_obs__the_exporter_writes_t3s_gauges_and_a_failure_is_up_0_never_silence(tmp_path,
+                                                                                        capsys):
+        """The exporter renders `retention.gauges` (loss, deletion backlog, projection lag, spool
+        bytes) as Prometheus text with `infrx_trace_gauges_up 1`, every T3 alarm's metric present;
+        a failure writes `up 0`, exits 1 and prints no value. Oracle: a silent exporter blinds every
+        trace alarm; a printed DSN leaks a credential."""
+        from infrx.traces.retention.policy import RULES, Retention, firing
+>       exporter = gauges_module()
+                   ^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/test_i2l_obs.py:248: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/test_i2l_obs.py:59: in gauges_module
+    spec.loader.exec_module(module)
+<frozen importlib._bootstrap_external>:995: in exec_module
+    ???
+<frozen importlib._bootstrap_external>:1132: in get_code
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_frozen_importlib_external.SourceFileLoader object at 0x7e51d8c58170>
+path = '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/trace_gauges.py'
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe/infra/lab/observe/trace_gauges.py'
+
+<frozen importlib._bootstrap_external>:1190: FileNotFoundError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__every_observe_unit_is_off_until_its_role_env_file_exists
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__no_app_unit_links_to_an_observe_unit_or_the_reverse
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__each_unit_is_bounded_least_privilege_and_its_own
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__the_judge_worker_runs_its_role_and_drains
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__the_trace_gauges_run_on_a_timer_from_the_shipped_exporter
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__secret_names_only_and_every_name_a_unit_reads_is_declared
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__storage_grants_are_object_prefixes_under_the_trace_root_never_a_bucket
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__judge_egress_is_the_local_fake_and_a_zero_budget_until_p10
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__the_alarms_are_t3s_rules_with_runbook_anchors_and_no_name_clash
+FAILED tests/integration/lab_observe/test_i2l_obs.py::test_i2l_obs__the_exporter_writes_t3s_gauges_and_a_failure_is_up_0_never_silence
+10 failed in 0.75s

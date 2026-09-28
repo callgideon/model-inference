@@ -1,0 +1,274 @@
+..F......................................FFFFFFFFFFFFFF..                [100%]
+=================================== FAILURES ===================================
+____________________ test_every_case_is_covered_by_a_mutant ____________________
+
+    def test_every_case_is_covered_by_a_mutant():
+        layer1 = {case for m in LAYER1 for case in m.cases}
+        stack = {case for m in STACK for case in m.cases}
+        assert mutation_list.case_names() - layer1 == set(), \
+            sorted(mutation_list.case_names() - layer1)
+>       assert mutation_list.stack_case_names() - stack == set(), \
+            sorted(mutation_list.stack_case_names() - stack)
+E       AssertionError: ['test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge']
+E       assert {'test_o06_co...es_the_judge'} == set()
+E         
+E         Extra items in the left set:
+E         'test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge'
+E         Use -v to get more diff
+
+tests/integration/lab_observe/test_mutants.py:71: AssertionError
+____________ test_stack_mutant_is_killed[st_capture_on_in_the_box] _____________
+
+mutant = Mutant(name='st_capture_on_in_the_box', invariant='the drill judges capture off with the box at its defaults', file='.... trip:", cases=('test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_capture_on_in_the_box is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+______________ test_stack_mutant_is_killed[st_ship_without_pins] _______________
+
+mutant = Mutant(name='st_ship_without_pins', invariant='a shipped row carries the pins PostgreSQL admitted', file='infrx/traces..., cases=('test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_ship_without_pins is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+_______________ test_stack_mutant_is_killed[st_find_of_any_org] ________________
+
+mutant = Mutant(name='st_find_of_any_org', invariant="a projection read is bound to the server's org", file='infrx/traces/ship/..., cases=('test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_find_of_any_org is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+______ test_stack_mutant_is_killed[st_feedback_ack_before_commit_status] _______
+
+mutant = Mutant(name='st_feedback_ack_before_commit_status', invariant='the ack is a 201 rendered from the committed row', file...ojected_once', 'test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_feedback_ack_before_commit_status is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+_____________ test_stack_mutant_is_killed[st_first_grant_version] ______________
+
+mutant = Mutant(name='st_first_grant_version', invariant='the current grant is the latest version (a revocation is one)', file=...nt_sharing_grant', 'test_o05_a_grant_revoked_between_reservation_and_egress_sends_nothing'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_first_grant_version is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+______________ test_stack_mutant_is_killed[st_judge_in_any_mode] _______________
+
+mutant = Mutant(name='st_judge_in_any_mode', invariant='only live mode submits', file='infrx/judge/submit.py', old='    if wiri...ODE_LIVE:', new='    if False:', cases=('test_o04_the_default_dry_run_mode_sends_nothing',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_judge_in_any_mode is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+____________ test_stack_mutant_is_killed[st_judge_sends_one_sample] ____________
+
+mutant = Mutant(name='st_judge_sends_one_sample', invariant='every consented sample with content is sent', file='infrx/judge/su..., cases=('test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_judge_sends_one_sample is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+___________ test_stack_mutant_is_killed[st_no_recheck_before_egress] ___________
+
+mutant = Mutant(name='st_no_recheck_before_egress', invariant='the permission is checked again just before egress', file='infrx...inError:', cases=('test_o05_a_grant_revoked_between_reservation_and_egress_sends_nothing',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_no_recheck_before_egress is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+____________ test_stack_mutant_is_killed[st_deleted_request_found] _____________
+
+mutant = Mutant(name='st_deleted_request_found', invariant='a deleted request has no rows for any read', file='infrx/traces/ret...=('test_o06_expired_or_deleted_content_is_gone_for_every_read_before_and_after_the_sweep',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_deleted_request_found is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+_____________ test_stack_mutant_is_killed[st_sweep_keeps_objects] ______________
+
+mutant = Mutant(name='st_sweep_keeps_objects', invariant='the sweep deletes the content it cleans', file='infrx/traces/retentio...every_read_before_and_after_the_sweep', 'test_o06_after_the_sweep_nothing_is_left_to_send'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_sweep_keeps_objects is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+_____________ test_stack_mutant_is_killed[st_failed_insert_acked] ______________
+
+mutant = Mutant(name='st_failed_insert_acked', invariant='a segment whose insert failed is held, never acked', file='infrx/trac..., cases=('test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_failed_insert_acked is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+_____________ test_stack_mutant_is_killed[st_timeout_is_a_failure] _____________
+
+mutant = Mutant(name='st_timeout_is_a_failure', invariant='an unknown submit outcome is quarantined, never released', file='inf...come: "', cases=('test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_timeout_is_a_failure is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+_____________ test_stack_mutant_is_killed[st_claim_window_ignored] _____________
+
+mutant = Mutant(name='st_claim_window_ignored', invariant='a claimed event is not redelivered inside its window', file='infrx/t...rue)', cases=('test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_claim_window_ignored is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+____________ test_stack_mutant_is_killed[st_worker_never_restarted] ____________
+
+mutant = Mutant(name='st_worker_never_restarted', invariant='the drill judges the job after the worker came back', file='../../...', cases=('test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_worker_never_restarted is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace', '../../tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it', '../../tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_observe/test_mutants.py::test_every_case_is_covered_by_a_mutant
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_capture_on_in_the_box]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_ship_without_pins]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_find_of_any_org]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_feedback_ack_before_commit_status]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_first_grant_version]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_judge_in_any_mode]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_judge_sends_one_sample]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_no_recheck_before_egress]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_deleted_request_found]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_sweep_keeps_objects]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_failed_insert_acked]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_timeout_is_a_failure]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_claim_window_ignored]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_worker_never_restarted]
+15 failed, 42 passed in 107.53s (0:01:47)

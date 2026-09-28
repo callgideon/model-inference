@@ -1,0 +1,196 @@
+..s.F...Fs..s.FF.                                                                                                                                                                                                                                                                                                                                                                                        [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+__________________________________________________________________________________________________________________________________________________________________ test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge ___________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l-run2/cases/test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge')
+
+    def test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge(workdir):
+        """The owner deletes one request and the other's content passes its bound; the sweep has
+        not run yet. Oracle: J2 reading the raw projection sends what every read already hides."""
+        from infrx.traces.retention import Retention
+        with ow.observe_trip(workdir) as trip:
+            alpha = trip.world.alpha
+            expiring, deleted = traced(trip, 2, "o06")
+            live = trip.traces.retention
+            later = Retention(live.store, live.traces, live.feedback, live.objects,
+                              content_days=live.content_days, metadata_months=live.metadata_months,
+                              clock=lambda: ow.Wall.now() + timedelta(days=live.content_days + 1))
+            assert run(later.expire()) >= 1
+            run(live.delete(alpha.org_id, deleted, "owner"))
+            with ow.judge(trip) as judge:
+                job = judge.job(trip, [expiring, deleted])
+                outcome = run(ow.submit(judge, trip, [expiring, deleted], job=job))
+                sent = [item["sample_id"] for post in judge.posts() for item in post["items"]]
+>               assert sent == [], f"expired/deleted content reached the judge: {sent}"
+E               AssertionError: expired/deleted content reached the judge: ['93cab0ab-f0d9-49bd-9dce-619372a820d6', 'afe624b2-c0d7-4246-9026-d7f56ff67dcd']
+E               assert ['93cab0ab-f0...d7f56ff67dcd'] == []
+E                 
+E                 Left contains 2 more items, first extra item: '93cab0ab-f0d9-49bd-9dce-619372a820d6'
+E                 Use -v to get more diff
+
+tests/integration/lab_observe/scenarios_judge.py:125: AssertionError
+________________________________________________________________________________________________________________________________________________________________ test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it ________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...0b8e137e1f2b/scratchpad/e5l-run2/cases/test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it')
+
+    def test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it(workdir):
+        with ow.observe_trip(workdir) as trip:
+            alpha, beta = trip.world.alpha, trip.world.beta
+            ids = [ow.served(trip, alpha, f"o01-{n}") for n in range(2)]
+            ow.captured(trip, alpha, ids, CONTENT)
+            report = ow.shipped(trip)
+            assert (report.shipped, report.rows, report.held) == (1, 2, {}), report
+            retention = trip.traces.retention
+            for request_id in ids:
+                [row] = run(retention.find_traces(alpha.org_id, request_id))
+>               assert (row.serving_version_id, row.rate_card_version) == pins_of(trip, request_id)
+                                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+trip = <pilotbox.Journey object at 0x7478d3f87470>, request_id = '5c7b4b0a-efb5-497f-8337-f5ee6e8f44e4'
+
+    def pins_of(trip, request_id: str) -> tuple:
+        admission = trip.one("select infrx.job_admission(%s)", request_id)[0]
+>       return (admission["serving_version_id"], admission["rate_card"]["version"])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'serving_version_id'
+
+tests/integration/lab_observe/scenarios_trace.py:22: KeyError
+________________________________________________________________________________________________________________________________________________________________ test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after ________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...0b8e137e1f2b/scratchpad/e5l-run2/cases/test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after')
+
+    def test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after(workdir):
+>       with ow.observe_trip(workdir) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:476: in composed
+    bind_retried(engine.start)
+tests/integration/backend/e3c/world.py:430: in bind_retried
+    return start()
+           ^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <fake_vllm.FakeVllmServer object at 0x7478c907a0f0>, timeout = 30.0
+
+    def start(self, timeout: float = 30.0) -> "FakeVllmServer":
+        # `--host` explicitly, never the CLI default: a change to that default would otherwise
+        # take every server in the suite down at `setup_module` (17 collection errors, measured
+        # against the reviewer's V7 mutant) instead of failing the one case that guards it.
+        argv = [sys.executable, str(Path(__file__).resolve()), "--port", str(self.port),
+                "--host", "127.0.0.1",
+                "--fault", self.fault, "--stall-real-s", str(self.stall_real_s)]
+        self._drop_log()        # a restart after a kill would otherwise orphan the old one
+        # The child's stderr goes to a temporary file, not to DEVNULL: a server that dies on
+        # startup (a busy port is the obvious one) otherwise reports only its exit status, and
+        # "exited 3" with no reason costs whoever reads it an afternoon. The file is UNLINKED
+        # the moment it is created (`TemporaryFile`), so it cannot be leaked even when this
+        # process is killed outright - which is exactly what the SIGTERM drill does to itself
+        # under the mutant that removes the handler (measured: 28 leaked logs in $TMPDIR).
+        self._log = tempfile.TemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log")
+        # r1 review, same pass: its OWN process group, so a signal handler can take the whole
+        # server down with one `killpg` and a SIGTERM to run.py cannot leave it orphaned on a
+        # task-local port for the next run to trip over.
+        self.process = subprocess.Popen(argv, stdout=self._log, stderr=subprocess.STDOUT,
+                                        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                                        start_new_session=True)
+        import httpx
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if self.process.poll() is not None:
+                # r1 review B3 side effect: a raise here used to leak the log file, because
+                # only `stop()` dropped it and a caller that never started has nothing to stop.
+                reason = self._tail()
+                self._drop_log()
+>               raise RuntimeError(f"fake vLLM exited {self.process.returncode} during startup "
+                                   f"on port {self.port}: {reason}")
+E               RuntimeError: fake vLLM exited 3 during startup on port 57180: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57180): [errno 98] address already in use
+
+tests/integration/fake_vllm.py:484: RuntimeError
+__________________________________________________________________________________________________________________________________________________________________ test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once ___________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l-run2/cases/test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once')
+
+    def test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once(workdir):
+        from infrx.state.jobstore import connector
+        from infrx.traces.feedback import FeedbackProjector
+        from infrx.traces.feedback.pg import PgFeedbackOutbox
+>       with ow.observe_trip(workdir, start=("worker",)) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:207: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:476: in composed
+    bind_retried(engine.start)
+tests/integration/backend/e3c/world.py:430: in bind_retried
+    return start()
+           ^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <fake_vllm.FakeVllmServer object at 0x7478cb75e870>, timeout = 30.0
+
+    def start(self, timeout: float = 30.0) -> "FakeVllmServer":
+        # `--host` explicitly, never the CLI default: a change to that default would otherwise
+        # take every server in the suite down at `setup_module` (17 collection errors, measured
+        # against the reviewer's V7 mutant) instead of failing the one case that guards it.
+        argv = [sys.executable, str(Path(__file__).resolve()), "--port", str(self.port),
+                "--host", "127.0.0.1",
+                "--fault", self.fault, "--stall-real-s", str(self.stall_real_s)]
+        self._drop_log()        # a restart after a kill would otherwise orphan the old one
+        # The child's stderr goes to a temporary file, not to DEVNULL: a server that dies on
+        # startup (a busy port is the obvious one) otherwise reports only its exit status, and
+        # "exited 3" with no reason costs whoever reads it an afternoon. The file is UNLINKED
+        # the moment it is created (`TemporaryFile`), so it cannot be leaked even when this
+        # process is killed outright - which is exactly what the SIGTERM drill does to itself
+        # under the mutant that removes the handler (measured: 28 leaked logs in $TMPDIR).
+        self._log = tempfile.TemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log")
+        # r1 review, same pass: its OWN process group, so a signal handler can take the whole
+        # server down with one `killpg` and a SIGTERM to run.py cannot leave it orphaned on a
+        # task-local port for the next run to trip over.
+        self.process = subprocess.Popen(argv, stdout=self._log, stderr=subprocess.STDOUT,
+                                        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                                        start_new_session=True)
+        import httpx
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if self.process.poll() is not None:
+                # r1 review B3 side effect: a raise here used to leak the log file, because
+                # only `stop()` dropped it and a caller that never started has nothing to stop.
+                reason = self._tail()
+                self._drop_log()
+>               raise RuntimeError(f"fake vLLM exited {self.process.returncode} during startup "
+                                   f"on port {self.port}: {reason}")
+E               RuntimeError: fake vLLM exited 3 during startup on port 57180: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57180): [errno 98] address already in use
+
+tests/integration/fake_vllm.py:484: RuntimeError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_observe/scenarios_judge.py::test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge - AssertionError: expired/deleted content reached the judge: ['93cab0ab-f0d9-49bd-9dce-619372a820d6', 'afe624b2-c0d7-4246-9026-d7f56ff67dcd']
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it - KeyError: 'serving_version_id'
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after - RuntimeError: fake vLLM exited 3 during startup on port 57180: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57180): [errno 98] address already in use
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once - RuntimeError: fake vLLM exited 3 during startup on port 57180: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57180): [errno 98] address already in use
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[D6J,J3] the judge ledger here is J2's in-memory D6J fake (tests/j/submit/fakes.py); reservation races under real PostgreSQL contention and J3's calibration need D6J/J3 merged; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o04
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[COMPOSITION] capture off -> on in the box needs the gateway's spool sink (WR-COMP-4) and the worker's TRACE_PUMPS switch (codex/w5-composition), neither on this base; TRACE-BOUNDS' peak-budget accumulation is only observable there; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[LAB-API,C3L,G4T] the provider traces route (codex/w5-lab-api) and the provider review read (C3L/G4T) are not on this base; the V2/V3 panels have no server read to render against; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o03
+4 failed, 10 passed, 3 skipped in 197.56s (0:03:17)

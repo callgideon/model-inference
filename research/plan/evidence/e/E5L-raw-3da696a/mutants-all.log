@@ -1,0 +1,22 @@
+....................................................F....                [100%]
+=================================== FAILURES ===================================
+_____________ test_stack_mutant_is_killed[st_timeout_is_a_failure] _____________
+
+mutant = Mutant(name='st_timeout_is_a_failure', invariant='an unknown submit outcome is quarantined, never released', file='inf...come: "', cases=('test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_timeout_is_a_failure is broken_runner: undeclared exception deaths ['RuntimeError@fake_vllm.py']: 1 failed, 16 deselected in 29.99s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['RuntimeError@fake_vllm.py']: 1 failed, 16 deselected in 29.99s").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_timeout_is_a_failure]
+1 failed, 56 passed in 596.98s (0:09:56)
