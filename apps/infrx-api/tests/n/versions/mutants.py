@@ -93,7 +93,7 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n2_revoked_read", "derivation reads through the access gate now",
       "if sample.sample_id not in readable:", "if False:", REVOKED),
     m("n2_access_gate_is_training", "derivation is the access gate (provider_sharing)",
-      'purpose="provider_sharing"))', 'purpose="training"))', REVOKED),
+      'purpose="provider_sharing",', 'purpose="training",', REVOKED),
     m("n2_closed_policy_over_a_base", "new samples over a frozen holdout need somewhere to go",
       "if base and not policy.train_bp + policy.validation_bp:", "if False:", SCOPE),
     m("n2_parents_dropped", "a derived version names all its parents",
@@ -105,10 +105,9 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n2_export_rights_unchecked", "an export reads the grant now",
       'None if sample.sample_id in allowed else "grant_not_current"', "None", EXPRIGHTS, RESUME),
     m("n2_export_gate_is_access", "the export gate is training",
-      'allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,\n'
-      '                                                 purpose="training"))',
-      'allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,\n'
-      '                                                 purpose="provider_sharing"))', EXPRIGHTS),
+      'provider_org_id=provider_org_id, purpose="training", now=now)\n    where =',
+      'provider_org_id=provider_org_id, purpose="provider_sharing", now=now)\n    where =',
+      EXPRIGHTS),
     m("n2_omission_unreported", "every omitted sample is reported with its reason",
       'omitted.append({"sample_id": sample.sample_id, "reason": reason})', "None",
       REEXP, EXPRIGHTS),
@@ -140,12 +139,9 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n2_read_ignores_rights", "a read re-reads the grant",
       'if json.loads(line)["sample_id"] in allowed)', "if True)", EXPRIGHTS),
     m("n2_read_gate_is_access", "a read is the export gate (training)",
-      'allowed = set(await store.accessible_samples(record["dataset_ref"],\n'
-      '                                                 provider_org_id=provider_org_id,\n'
-      '                                                 purpose="training"))',
-      'allowed = set(await store.accessible_samples(record["dataset_ref"],\n'
-      '                                                 provider_org_id=provider_org_id,\n'
-      '                                                 purpose="provider_sharing"))', EXPRIGHTS),
+      'provider_org_id=provider_org_id, purpose="training", now=now)\n    return',
+      'provider_org_id=provider_org_id, purpose="provider_sharing", now=now)\n    return',
+      EXPRIGHTS),
     m("n2_cancel_ignored", "a cancelled export is gone",
       "    if await objects.head(f\"{base}/cancelled\") is not None:\n",
       "    if False:\n", CANCEL),

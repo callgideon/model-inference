@@ -451,3 +451,52 @@ def test_n1_the_spec_is_strict() -> None:
     for payload in bad:
         with pytest.raises(errors.InvalidRequest):
             imports.parse_spec(payload, provider_org_id=NEMO)
+
+
+# --- WR-N-2: the acting provider comes from the L2 port -----------------------------------
+def test_wrn2_only_a_current_developer_member_acts_for_the_provider() -> None:
+    """Oracle (DATA-RIGHTS, LAB-ACCESS): a dataset call (import, preview, derive, export,
+    trace selection) acts for `provider_org_id` only when L2 says the user is a current
+    developer-or-above member of it; a consumer-only user, a revoked member and another
+    provider's developer are `NotFound` (a foreign workspace id confirms nothing), a viewer
+    is `Forbidden` - each before the importer writes any object. A check that accepted any
+    membership, a revoked one, or another provider's, fails."""
+    from datetime import UTC, datetime, timedelta
+
+    from infrx.contracts.v2 import records as v2
+    from infrx.datasets import acting_provider
+    from infrx.lab.access import LabAccess
+    from infrx.lab.access.fakes import FakeAccessStore
+
+    now = datetime(2026, 9, 27, 12, tzinfo=UTC)
+    store = FakeAccessStore(now=now, provider_names={NEMO: "Nemo", OTHER: "Other"})
+    users = {}
+    for n, (provider, role, revoked) in enumerate((
+            (NEMO, "developer", False), (NEMO, "administrator", False), (NEMO, "viewer", False),
+            (NEMO, "developer", True), (OTHER, "developer", False))):
+        users[(provider, role, revoked)] = user = f"a0000000-0000-4000-8000-{n + 1:012x}"
+        store.memberships[(provider, user)] = v2.ProviderMembership(
+            provider_org_id=provider, user_id=user, role=role, granted_by="ops",
+            granted_at=now - timedelta(days=1),
+            revoked_at=now - timedelta(seconds=1) if revoked else None)
+    access = LabAccess(store)
+    spec, data = fixture("benchmark")
+
+    def route(user: str) -> str:        # the composed caller: L2 first, then the importer
+        _, objects, importer = world()
+
+        async def call():
+            provider = await acting_provider(access, user, NEMO)
+            await importer.run(spec, chunks(data), provider_org_id=provider, actor=user)
+            return provider
+        try:
+            return run(call())
+        except errors.DomainError as refused:
+            assert run(objects.keys("")) == [], "an object was written before the refusal"
+            return type(refused).__name__
+    assert route(users[(NEMO, "developer", False)]) == NEMO
+    assert route(users[(NEMO, "administrator", False)]) == NEMO
+    assert route(users[(NEMO, "viewer", False)]) == "Forbidden"
+    assert route(users[(NEMO, "developer", True)]) == "NotFound"
+    assert route(users[(OTHER, "developer", False)]) == "NotFound"
+    assert route("f1000000-0000-4000-8000-0000000000f1") == "NotFound"    # consumer-only

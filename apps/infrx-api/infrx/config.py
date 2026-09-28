@@ -355,6 +355,11 @@ class DeploymentSettings:
     # store's pool. Off by default, so the launched API is unchanged; the database's own
     # `feedback` flag gates every write again (off: 503 dependency_unavailable).
     feedback_api: bool = False
+    # LAB-API (WR-LAB-API-1): mount the Lab's `/lab/v1/control` (WR-L4-1) and `/lab/v1/traces`
+    # (WR-V1M-2), each over the forwarded Supabase session and L2's `LabAccess` on the job
+    # store's pool. Off by default: the launched API is unchanged and no Lab route exists.
+    lab_control: bool = False
+    lab_traces: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

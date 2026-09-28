@@ -18,7 +18,8 @@ from fastapi.testclient import TestClient
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
-from infrx.gateway.routes import chat, feedback, health, ingress, jobs, models, uploads
+from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_control, lab_traces,
+                                  models, uploads)
 from infrx.observe import host
 from infrx.observe import route as metrics
 from infrx.scheduling.memory import MemoryScheduler
@@ -157,7 +158,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     loopback-only /metrics last - the one chat handler is the ingress's, every upload and jobs
     route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
     slash redirects) is served."""
-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, metrics)
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, lab_control,
+                                   lab_traces, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}
@@ -217,6 +219,74 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
     answer = local(on).post(feedback.FEEDBACK_PATH, json=body, headers=headers)
     assert answer.status_code == 201 and answer.json()["author_role"] == "customer"
     ingress.assert_route_table(on)
+
+
+def test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them():
+    """LAB-API (WR-LAB-API-1): `LAB_CONTROL` and `LAB_TRACES` are off by default, and then no
+    Lab route exists even with both surfaces composed (the launched API is unchanged); each
+    switch mounts its own surface only, which answers through `lab_auth` (no session: 401)."""
+    import dataclasses
+
+    from infrx.config import deployment_from_env
+
+    assert (deployment_from_env({}).lab_control, deployment_from_env({}).lab_traces) \
+        == (False, False)
+    surfaces = {"lab_control": (lab_control.LabControl(sessions=None, access=None),
+                                lab_control.CONTROL_PREFIX + "/models"),
+                "lab_traces": (lab_traces.LabTraces(None, None, None, None, None),
+                               lab_traces.TRACES_PATH)}
+
+    def composed(**on):
+        world = relay_support.World()
+        world.stream.usage = lambda: asyncio.sleep(0, {})
+        config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
+        return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
+                                      clock=world.now_s, catalog=world.catalog,
+                                      stream=world.stream, objects=world.objects,
+                                      jobs=world.jobs, index=MemoryScheduler(world.clock.now),
+                                      **{name: deps for name, (deps, _) in surfaces.items()})
+
+    for on in ({}, {"lab_control": True}, {"lab_traces": True},
+               {"lab_control": True, "lab_traces": True}):
+        app = composed(**on)
+        paths = {getattr(r, "path", "") for r in app.routes}
+        for name, (deps, path) in surfaces.items():
+            enabled = on.get(name, False)
+            assert (getattr(app.state.runtime, name) is deps) is enabled, (on, name)
+            assert (path in paths) is enabled, (on, name)
+            answer = local(app).get(path)
+            assert answer.status_code == (401 if enabled else 404), (on, name)
+        ingress.assert_route_table(app)
+
+
+def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled(monkeypatch):
+    """LAB-API (WR-LAB-API-1): off, nothing Lab is built; `LAB_CONTROL` builds the control
+    over the project's auth server and L2 on the pool, with L3's operations absent (503 until
+    L3 merges); `LAB_TRACES` without the trace projection and bucket refuses startup."""
+    import dataclasses
+
+    from infrx.gateway import pilot
+    from infrx.lab.access import LabAccess
+
+    def settings(**on):
+        return support.settings(deployment=dataclasses.replace(support.BUILD, **on))
+
+    assert pilot._lab(settings(), connect=None) == {}
+    built = pilot._lab(settings(lab_control=True), connect=None)
+    assert list(built) == ["lab_control"]
+    control = built["lab_control"]
+    assert (str(control.sessions.client.base_url), control.sessions.apikey) \
+        == ("https://fake.supabase.co", "service-role")
+    assert isinstance(control.access, LabAccess) and control.operations is None
+    import clickhouse_connect
+
+    def connected(**kw):
+        raise AssertionError("connected to a projection that is not configured")
+    monkeypatch.setattr(clickhouse_connect, "get_client", connected)
+    with pytest.raises(RuntimeMisconfigured, match="CLICKHOUSE_URL.*S3_TRACE_BUCKET"):
+        pilot._lab(settings(lab_traces=True), connect=None)
+    monkeypatch.setattr(pilot, "_lab_traces", lambda *args: "traces")
+    assert pilot._lab(settings(lab_traces=True), connect=None) == {"lab_traces": "traces"}
 
 
 def fixture_host(monkeypatch, root: pathlib.Path) -> None:

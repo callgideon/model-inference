@@ -1,0 +1,105 @@
+{
+ "task": "P3",
+ "slice": "P3.a + P3.b + P3.c (infrx/pipelines/training)",
+ "activity": "review (fix round)",
+ "worktree": ".claude/worktrees/codex-w5-pipelines",
+ "branch": "codex/w5-pipelines",
+ "blockers": [
+  "B3 not started, D8/D6J not on base: integration owed (fakes only for the ledger and evaluations)"
+ ],
+ "head": "eae84c13",
+ "owned_paths": [
+  "apps/infrx-api/infrx/pipelines/training/",
+  "apps/infrx-api/tests/p/training/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/p/training/test_training.py (before the module)",
+   "exit": 2,
+   "summary": "ImportError: cannot import name 'training' from 'infrx.pipelines' (seam first)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p3 uv run --frozen pytest -q tests/p/training/test_training_services.py",
+   "exit": 0,
+   "summary": "2 passed: D7 records/receipts on PG 57530; protocol server over TCP 57531 (timeout after accept = 1 POST, 1 job)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/p/annotations/test_mutants.py tests/p/training/test_mutants.py @c9d2948e",
+   "exit": 0,
+   "summary": "132 passed; P3 63 mutants killed, every case covered"
+  },
+  {
+   "cmd": "ruff check infrx/pipelines tests/p",
+   "exit": 0,
+   "summary": "all checks passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p1 make api-test @c9d2948e",
+   "exit": 2,
+   "summary": "5107 passed, 7 failed, 79 skipped, 9 xfailed (1h42m); tests/p green; the 7 = tests/d/test_outbox_relay[valkey] HarnessBusy on the shared d2 Valkey lock"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p1 pytest -q tests/d/test_outbox_relay.py (alone, twice)",
+   "exit": 1,
+   "summary": "13 passed, 7 failed: same HarnessBusy, lock still held by another lane; rerun when free"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/p/annotations/test_annotations.py tests/p/training/test_training.py @eae84c13",
+   "exit": 0,
+   "summary": "15 + 15 passed (P1 +3 cases, P3 +1 case)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p1 uv run --frozen pytest -q tests/p/annotations @eae84c13",
+   "exit": 0,
+   "summary": "28 passed (incl. test_annotations_pg.py on real 0001-0030; D8 log fake)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p3 uv run --frozen pytest -q tests/p/training @eae84c13",
+   "exit": 0,
+   "summary": "27 passed (incl. test_training_services.py: PG 57530, protocol TCP 57531)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/annotations/test_mutants.py @eae84c13",
+   "exit": 0,
+   "summary": "75 passed: P1 73 mutants killed (65 + 8 fix-round), every case covered"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/training/test_mutants.py @eae84c13",
+   "exit": 0,
+   "summary": "79 passed: P3 77 mutants killed (63 + 14 fix-round), every case covered"
+  },
+  {
+   "cmd": "uv run --frozen ruff check infrx/pipelines tests/p @eae84c13",
+   "exit": 0,
+   "summary": "all checks passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 3,
+  "pessimistic_h": 6,
+  "confidence": "medium",
+  "basis": "one review round on ~400 lines + integration reruns against D8's ledger and B3's subscription at their merges (P3 merges after B3); fix round done, remaining = coordinator rerun at merge + D8/B3 integration",
+  "at": "2026-09-28"
+ },
+ "wiring_requests": [
+  "SR-P3-1 (lab-sql D8+D6J) RunLedger: get/move(CAS, expected None creates)/reserve(one PROVIDER_USD per submit_key)/settle(once, None=unknown)/release/note/noted (full shape in the evidence; FakeRunLedger is the executable spec)",
+  "SR-P3-2 (eval-ops B3) Evaluations: evaluate(provider, checkpoint_id, dataset_ref, split, holdout_sha256)->run_ref idempotent per checkpoint; evaluation(provider, checkpoint_id)->{run_ref,dataset_ref,split,holdout_sha256,state}|None; persist rejection reason with the receipt",
+  "WR-P-1 Makefile api-mutants (same line as P1)",
+  "WR-P-4 (L2/H1) LabAccess.authorize takes ExternalRun.purpose for external_submission",
+  "WR-P-5 routes/workers derive provider/user from L2; `advertised` only from a P-11 record",
+  "WR-P-6 (P4) show ambiguous, unknown cost and rejection reasons; automatic connectors hidden until P-11",
+  "WR-P-9 (P4) prepare takes the server clock `now` and only {format, export_id} of the export; the Lab offers finish() for a manual run and never a reservation for it"
+ ],
+ "evidence": [
+  "research/plan/evidence/p/P3-c9d2948.md"
+ ],
+ "fix_round": {
+  "findings_fixed": [
+   "0-P3-EXPORT-PIN-UNVERIFIED",
+   "0-P3-MANUAL-RESERVATION-HELD",
+   "1-PIPE-R1"
+  ],
+  "at": "2026-09-28"
+ }
+}

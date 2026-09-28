@@ -21,8 +21,8 @@ near-duplicate review. A repeated content digest is omitted (`duplicate`), so a 
 never changes the holdout.
 
 **Rights at every read (R160).** Derivation reads through the access gate (the grant's
-current version for `provider_sharing`) and omits what it may no longer read
-(`grant_not_current`) - yet a base sample it may no longer read still anchors its family's
+current version for `provider_sharing`, less N3's tombstoned and expired trace samples:
+`lineage.permitted`) and omits what it may no longer read (`grant_not_current`) - yet a base sample it may no longer read still anchors its family's
 base split, so a new relative of an unreadable holdout sample stays out; an export reads
 through the export gate (`training`) and never ships the holdout. A published manifest confers nothing: `read_part` re-reads the gate, so an
 export made before a revocation stops serving the revoked items.
@@ -39,19 +39,20 @@ export reuses finished parts and refuses (`Conflict`) parts its inputs no longer
 a finished one replays. `cancel` stops it for good; reads after expiry or cancellation are
 `Gone`.
 
-The caller's `provider_org_id` is server-derived (the L2 membership check at the route:
-wiring).
+The caller's `provider_org_id` is server-derived: `datasets.acting_provider` (the L2
+membership check, WR-N-2) at the route.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from ...contracts import errors
 from ...contracts.ids import UUID_RE
 from ...contracts.lab import records as lab
+from .. import lineage
 from ..imports import _MISSING, SPLITS, _get, sample_key, spec_key, write_once
 
 MAX_EXPORT_TTL_S = 7 * 86_400
@@ -113,7 +114,7 @@ async def _body(objects, provider: str, digest: str) -> dict:
 
 async def derive(store, objects, *, provider_org_id: str, actor: str, dataset_id: str,
                  version: int, created_at: str, policy: SplitPolicy, base: str | None = None,
-                 add=()) -> Derived:
+                 add=(), now: datetime | None = None) -> Derived:
     parents = list(dict.fromkeys(([base] if base else []) + list(add)))   # none: F3 refuses
     if base and not policy.train_bp + policy.validation_bp:
         raise errors.InvalidRequest("over a frozen holdout, new samples need train/validation")
@@ -121,8 +122,9 @@ async def derive(store, objects, *, provider_org_id: str, actor: str, dataset_id
     anchors = []            # base samples no longer readable: left out, their splits still bind
     for ref in parents:
         manifest = await store.resolve(ref, provider_org_id=provider_org_id)
-        readable = set(await store.accessible_samples(ref, provider_org_id=provider_org_id,
-                                                      purpose="provider_sharing"))
+        readable = await lineage.permitted(store, objects, ref, provider_org_id=provider_org_id,
+                                           purpose="provider_sharing",
+                                           now=now or datetime.now(UTC))
         where = {i: n for n in SPLITS for i in getattr(manifest.splits, n)}
         for sample in sorted(manifest.samples, key=lambda s: (s.content_digest, s.sample_id)):
             if sample.sample_id not in readable:
@@ -232,8 +234,8 @@ async def export(store, objects, *, provider_org_id: str, dataset_ref: str, expo
             raise errors.Conflict(f"export {export_id} is of another dataset")
         return record
     manifest = await store.resolve(dataset_ref, provider_org_id=provider_org_id)
-    allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
-                                                 purpose="training"))
+    allowed = await lineage.permitted(store, objects, dataset_ref,
+                                      provider_org_id=provider_org_id, purpose="training", now=now)
     where = {i: n for n in SPLITS for i in getattr(manifest.splits, n)}
     keys = sorted(set(redact))
     items, omitted, sources, paths = [], [], {}, {}      # paths: source -> its content path
@@ -295,8 +297,7 @@ async def read_part(store, objects, *, provider_org_id: str, export_id: str, par
     if not 0 <= part < len(record["parts"]):
         raise errors.NotFound(f"export {export_id} has no part {part}")
     data = await objects.get(record["parts"][part]["key"]) or b""
-    allowed = set(await store.accessible_samples(record["dataset_ref"],
-                                                 provider_org_id=provider_org_id,
-                                                 purpose="training"))
+    allowed = await lineage.permitted(store, objects, record["dataset_ref"],
+                                      provider_org_id=provider_org_id, purpose="training", now=now)
     return b"".join(line + b"\n" for line in data.splitlines()
                     if json.loads(line)["sample_id"] in allowed)

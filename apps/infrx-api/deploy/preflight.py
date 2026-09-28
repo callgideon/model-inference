@@ -234,6 +234,13 @@ NOT_SETTABLE = {
     "FEEDBACK_API": "mounts POST /v1/feedback (G4F, off by default): enabling it on the hosted "
                     "gateway needs the E4 regression rerun and the database feedback flag, a "
                     "deploy change, not a --set",
+    "LAB_CONTROL": "mounts /lab/v1/control (WR-L4-1, off by default): enabling it on the hosted "
+                   "gateway needs L3 merged, the Lab migrations applied hosted (plan rule 4) "
+                   "and the E4 regression rerun, a deploy change, not a --set",
+    "LAB_TRACES": "mounts /lab/v1/traces (WR-V1M-2, off by default): enabling it on the hosted "
+                  "gateway needs the trace projection (CLICKHOUSE_URL, S3_TRACE_BUCKET), the Lab "
+                  "migrations applied hosted and the E4 regression rerun, a deploy change, "
+                  "not a --set",
 }
 
 
