@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "270b0f62",
+ "integration_head": "eac5b149",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 198,
- "updated": "2026-09-28T06:59:31Z",
+ "revision": 200,
+ "updated": "2026-09-28T07:05:02Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -4810,18 +4810,18 @@
     "prefix": "infrx-i2l-",
     "db": "i2l"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-27T19:05:00Z",
-   "updated": "2026-09-28T06:30:53Z",
+   "updated": "2026-09-28T07:05:02Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at af1426d8 (I2L: off-by-default Lab control unit on 127.0.0.1:8003, control Caddy site, lab.json secret names, staging runbook; local drill l11 PASS = Lab outage/bad deploy leaves App serving; E3L runner: l01/l07/l08/l11 PASS, L3/L4 cells NOT RUN with rerun commands; minors F1/F2 fixed+rechecked) → merge batch #5 (wf_c9bf166f-4e5, parallel to #4 on its own lines) with WR-I2L-1 (Caddyfile import), WR-I2L-3 (api-mutants), WR-E3L-1 (lab-operate make target + mutants line); WR-I2L-2 → L3 integration (control factory infrx.lab.control.app:create_app), WR-I2L-4 → lab-sql, WR-E3L-2 = P-21 (user); E3L-BIND + real run after L3/L3-SQL/L4 merge",
+   "next_action": "DONE (local half): merged --no-ff at 0bdfb4ce + wirings 19f02ac1 (Caddyfile import, own api-mutants line incl. tests/i/lab 19/19 + E3L layer-1 13/13, lab-operate target) + lib.sh half; LAB-PUBLISH cells NOT RUN until L3/L3-SQL/L4 merge → E3L-BIND + `make lab-operate`; hosted staging needs P-08; WR-I2L-2 → L3 integration, WR-I2L-4 → lab-sql, WR-E3L-2 = P-21",
    "estimate": {
-    "optimistic_h": 4,
-    "likely_h": 8,
-    "pessimistic_h": 17,
-    "confidence": "medium",
-    "basis": "handback: I2L 1/2/5 + E3L 3/6/12 (E3L-BIND + real run after LW2)",
-    "at": "2026-09-28T06:30:53Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T07:05:02Z"
    },
    "evidence": [
     "research/plan/evidence/i/I2L-d1b0f21.md",
@@ -5217,26 +5217,28 @@
    "branch": "codex/w5-composition",
    "worktree": ".claude/worktrees/codex-w5-composition",
    "base": "2252e5a0",
-   "head": null,
+   "head": "c241ca81",
    "isolation": {
     "ports": "t2f / n2 / b1 / e4b (gate)",
     "prefix": "infrx-t2f-",
     "db": "t2f"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-27T21:02:36Z",
-   "updated": "2026-09-28T05:45:52Z",
+   "updated": "2026-09-28T07:00:40Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "ACCEPT_WITH_FIXES at c241ca81 (worker-only: TRACE_PUMPS = shipper/retention/feedback-projection loops, t2f proof; LAB_EVAL_WORKER = OutboxRelay(PgLabDataStore, EvalRuns) resume-never-freeze + lab_recover, b1 proof, refuses to start until evaluator (WR-COMP-1) and dev-target (WR-COMP-2) sources exist; E4 regression green, App gate 17/17; WR-N-3 NOT mounted — needs a ruling on the Lab provider identity at the gateway + a route owner; minor R1/R2 fixed+rechecked) → merge batch #6 first (its given_stores_replaced re-anchor and DEPLOYMENT_EXPECTED edits conflict with the tip's 37859776 re-cut and lab-api's patch: resolve keeping both), rulings proposal numbered R182; WR-COMP-1 → lab-sql (WR-B-2(b)), WR-COMP-2 → L3 integration, WR-COMP-3 (PgPins role rule on the dedicated runtime login) + WR-COMP-4 (ship step moves to the gateway when capture is wired) → before any hosted TRACE_PUMPS",
    "estimate": {
-    "optimistic_h": 0,
-    "likely_h": 0,
-    "pessimistic_h": 0,
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 4,
     "confidence": "medium",
-    "basis": "three mounts like G4F's + the App gate",
-    "at": "2026-09-27T21:02:36Z"
+    "basis": "handback: one merge with conflict resolution; WR-N-3 needs a ruling first",
+    "at": "2026-09-28T07:00:40Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/COMPOSITION-feaf4ab.md"
+   ],
    "commands": [],
    "owned_paths": [
     "wave5-plan §5 LW2 composition"
@@ -5353,24 +5355,24 @@
    "branch": "codex/w5-merge-5",
    "worktree": ".claude/worktrees/codex-w5-merge-5",
    "base": "9a48300c",
-   "head": null,
+   "head": "19f02ac1",
    "isolation": {
     "ports": "i2l (checks only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T06:59:31Z",
+   "updated": "2026-09-28T07:05:02Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch after #4 lands",
+   "next_action": "DONE: merged onto claude/consumer-v1 at eac5b149 (verify ok; the deploy/lib.sh half of WR-I2L-1 applied by the coordinator in the following commit, checked on i2l)",
    "estimate": {
-    "optimistic_h": 0.5,
-    "likely_h": 1,
-    "pessimistic_h": 2,
-    "confidence": "medium",
-    "basis": "one merge",
-    "at": "2026-09-28T06:59:31Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T07:05:02Z"
    },
    "evidence": [],
    "commands": [],
