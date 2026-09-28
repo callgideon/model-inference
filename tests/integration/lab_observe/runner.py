@@ -235,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-k", dest="keyword", default=None, help="pytest -k expression")
     args = parser.parse_args(argv)
     started, clock = datetime.now(timezone.utc), time.monotonic()
-    out = args.out or Path(os.environ.get("TMPDIR", "/tmp")) / f"infrx-e5l-{started:%Y%m%dT%H%M%SZ}"
+    out = (args.out or Path(os.environ.get("TMPDIR", "/tmp")) / f"infrx-e5l-{started:%Y%m%dT%H%M%SZ}").resolve()
     out.mkdir(parents=True, exist_ok=True)
     os.environ["INFRX_E2_NAMESPACE"] = NAMESPACE          # before E2's harness is imported
     sys.path[:0] = [str(HERE), str(HERE.parent), str(HERE.parent / "backend")]
