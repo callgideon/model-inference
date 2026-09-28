@@ -275,8 +275,10 @@ def roll_runtime(trip, card: str, roles=("gateway",)) -> None:
 
 
 # ------------------------------------------------------------------ the control service
-CONTROL_PORT = harness.PORT_RANGE.start + 3            # e3l: 57003 (the unit's 127.0.0.1:8003)
-SESSIONS_PORT = harness.PORT_RANGE.start + 4           # e3l: 57004, the session verifier
+# e3l: 57003 (the unit's 127.0.0.1:8003) and 57004 (the session verifier), each with spares of
+# the block: it lies inside the kernel's ephemeral range (E2's documented limit, WR-E3L-2).
+CONTROL_PORTS = tuple(harness.PORT_RANGE.start + n for n in (3, 15, 16, 17, 18))
+SESSIONS_PORTS = tuple(harness.PORT_RANGE.start + n for n in (4, 11, 12, 13, 14))
 
 
 @contextlib.contextmanager
@@ -324,20 +326,27 @@ def sessions():
             self.end_headers()
             self.wfile.write(body)
 
-    server = world.bind_retried(lambda: _serve(ThreadingHTTPServer, Handler))
+    server = _first_free(lambda port: ThreadingHTTPServer(("127.0.0.1", port), Handler),
+                         SESSIONS_PORTS)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        yield types.SimpleNamespace(url=f"http://127.0.0.1:{SESSIONS_PORT}", handler=Handler)
+        yield types.SimpleNamespace(url=f"http://127.0.0.1:{server.server_address[1]}",
+                                    handler=Handler)
     finally:
         server.shutdown()
         server.server_close()
 
 
-def _serve(server_class, handler):
-    try:
-        return server_class(("127.0.0.1", SESSIONS_PORT), handler)
-    except OSError as busy:                             # bind_retried's vocabulary
-        raise RuntimeError(f"address already in use: {busy}") from None
+def _first_free(make, ports):
+    """`make(port)` on the first port of `ports` that binds."""
+    import errno
+    for port in ports:
+        try:
+            return make(port)
+        except OSError as busy:
+            if busy.errno != errno.EADDRINUSE:
+                raise
+    raise RuntimeError(f"address already in use: every one of {ports}")
 
 
 class ControlService:
@@ -351,19 +360,28 @@ class ControlService:
                     "INFRX_LAB_DATABASE_URL": harness.pg_dsn(trip.world.database),
                     "INFRX_LAB_SUPABASE_URL": sessions_url,
                     "INFRX_LAB_SUPABASE_ANON_KEY": stack.jwt("anon", ttl_s=3600)}
-        import httpx
-        self.http = httpx.Client(base_url=f"http://127.0.0.1:{CONTROL_PORT}", timeout=30.0)
+        self.http = None                               # bound to the port `start` got
 
     def start(self, **env: str) -> None:
+        """Start on the first control port that binds (a bind failure exits the process)."""
         import subprocess
-        self.starts += 1
-        log = open(self.workdir / f"control-{self.starts}.log", "wb")
-        self.process = subprocess.Popen(
-            [sys.executable, str(HERE / "control_box.py"), str(CONTROL_PORT)],
-            env={**self.env, **env}, stdout=log, stderr=subprocess.STDOUT,
-            start_new_session=True, cwd=str(harness.REPO_ROOT))
-        log.close()
-        world.wait_for(self.ready, 60, f"the control service ready ({self.tail()})", every=0.2)
+
+        import httpx
+        for port in CONTROL_PORTS:
+            self.starts += 1
+            log = open(self.workdir / f"control-{self.starts}.log", "wb")
+            self.process = subprocess.Popen(
+                [sys.executable, str(HERE / "control_box.py"), str(port)],
+                env={**self.env, **env}, stdout=log, stderr=subprocess.STDOUT,
+                start_new_session=True, cwd=str(harness.REPO_ROOT))
+            log.close()
+            self.http = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+            try:
+                return world.wait_for(self.ready, 60, "the control service ready", every=0.2)
+            except AssertionError:
+                if "address already in use" not in self.tail():
+                    raise
+        raise RuntimeError(f"address already in use: every one of {CONTROL_PORTS}")
 
     def ready(self) -> bool:
         import httpx
@@ -412,7 +430,8 @@ def control_service(trip, workdir: Path):
             yield service, verifier
         finally:
             service.kill()
-            service.http.close()
+            if service.http is not None:
+                service.http.close()
 
 
 def session(user: str) -> str:

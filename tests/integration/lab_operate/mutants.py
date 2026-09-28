@@ -4,7 +4,7 @@ runner (`apps/infrx-api/tests/contracts/mutants.py`, a private copy whose Python
 check is relaxed for the SQL targets, as track I's).
 
 * `MUTANTS` (layer 1, no stack): the runner's classification, cells, gate and exit codes, the
-  NOT RUN vocabulary, and the unbound L3/L4 cases (never a pass once they stop skipping).
+  NOT RUN vocabulary.
 * `STACK_MUTANTS`: the product decisions the running scenarios guard (L2's service and store,
   the 0027/0030 doors, 0001's RLS, the catalog, the gateway) and the l11 drill's premises, killed
   on a kept e3l stack by the scenario cases, in a copy whose gateway and worker import the
@@ -45,8 +45,7 @@ shared.compile = lambda source, filename, mode, *a, **k: (
 
 R = "tests/integration/lab_operate/runner.py"
 W = "tests/integration/lab_operate/lab_world.py"
-P = "tests/integration/lab_operate/scenarios_publish.py"
-LAYER1_FILES = ("tests/integration/lab_operate/test_e3l_runner.py", P)
+LAYER1_FILES = ("tests/integration/lab_operate/test_e3l_runner.py",)
 
 MATRIX = "test_e3l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases"
 REQUIRED = "test_e3l_the_required_cases_are_exactly_what_the_scenario_modules_define"
@@ -57,10 +56,6 @@ GATE = "test_e3l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_doe
 NO_STACK = "test_e3l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e3l_the_namespace_is_the_reserved_block"
 RERUN = "test_e3l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
-#: the L3/L4 cases still waiting on a lane (their body calls `waits`); E3L-BIND binds the rest
-UNBOUND = tuple(name for name, body in re.findall(r"^def (test_l\d\d_\w+)\((.*?)(?=^def |\Z)",
-                                                  (REPO / P).read_text(), re.M | re.S)
-                if "waits(" in body)
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("xfail_is_a_pass", "an xfail is never a pass", R,
@@ -93,8 +88,6 @@ MUTANTS: tuple[Mutant, ...] = (
        'NAMESPACE = "e3l"', 'NAMESPACE = "e3c"', NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
-    _m("unbound_case_runs", "an L3/L4 case not bound to its port is never a pass", P,
-       '    lab.not_run(sid, *lanes, why=f"{why}. Steps: {steps}")', "    return", *UNBOUND),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -123,9 +116,12 @@ L04 = "test_l04_publication_needs_operator_approval_and_snapshots_the_rate"
 L05 = "test_l05_app_discovers_and_serves_the_published_revision"
 L06 = "test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins"
 L09 = "test_l09_publish_and_rollback_cas_under_injected_faults"
+L10 = "test_l10_a_control_service_restart_mid_operation_loses_nothing"
 L12 = "test_l12_a_consumer_key_is_refused_by_every_control_operation"
 L3 = "infrx/lab/control/__init__.py"
 LAB_AUTH = "infrx/gateway/lab_auth.py"
+OPS = "infrx/lab/control/operations.py"
+PUBLISH = "../../tests/integration/lab_operate/scenarios_publish.py"
 M32 = M + "0032_lab_control.sql"
 L11_DOWN = "test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving"
 L11_BAD = "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once"
@@ -229,23 +225,29 @@ STACK_MUTANTS += (
     _m("st_consumer_session_not_denied", "a consumer account has no provider workspace",
        LAB_AUTH, "    if not workspaces:\n        raise errors.Forbidden(",
        "    if False:\n        raise errors.Forbidden(", L12),
+    _m("st_restarted_proposal_misread", "the Lab lists a committed proposal as proposed",
+       OPS, '            state = ("proposed" if d.state is S.proposed_public',
+       '            state = ("approved" if d.state is S.proposed_public', L10),
+    _m("st_control_never_crashed", "the restart drill judges only a service really killed",
+       PUBLISH, "    service.kill()\n    thread.join(60)", "    service.kill\n    thread.join(60)",
+       L10),
 )
 #: Cases whose FAIL is a recorded cross-lane finding (evidence E3L-BIND): kept out of the
 #: stack list's pristine baseline until the owning lane fixes it (as E8L's KNOWN_FAIL).
-KNOWN_FAIL = {"test_l05_discovery_reports_the_listing_version_it_serves"}
+KNOWN_FAIL = {"test_l05_discovery_reports_the_listing_version_it_serves",      # E3L-F1
+              "test_l10_a_retry_after_a_lost_answer_proposes_once"}             # E3L-F2
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 
 
 def case_names() -> set[str]:
-    """The layer-1 cases: the runner's own, and the unbound L3/L4 cases."""
-    return set(re.findall(r"^def (test_\w+)\(", (REPO / LAYER1_FILES[0]).read_text(), re.M)) \
-        | set(UNBOUND)
+    """The layer-1 cases: the runner's own (E3L-BIND bound every L3/L4 case)."""
+    return set(re.findall(r"^def (test_\w+)\(", (REPO / LAYER1_FILES[0]).read_text(), re.M))
 
 
 def stack_case_names() -> set[str]:
     return {name for path in HERE.glob("scenarios_*.py")
             for name in re.findall(r"^def (test_l\d\d_\w+)\(", path.read_text(), re.M)} \
-        - set(UNBOUND) - KNOWN_FAIL
+        - KNOWN_FAIL
 
 
 def _layer1(root: pathlib.Path) -> pathlib.Path:

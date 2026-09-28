@@ -1,18 +1,19 @@
 """E3L l02-l06, l09, l10, l12: provider publication, rollback and the control service
-(LAB-PUBLISH, LAB-ACCESS, SPLIT-CONTRACT). They need L3's control operations
-(`infrx/lab/control/`, lab-access) over L3-SQL's revision state machine (lab-sql) and L4's
-workflows (lab-app); none is on this base, so each case below is NOT RUN with the rerun command
-until they merge. l02 has one base-half case that runs now: the seed's private dev deployment
-is neither discoverable nor admissible by a consumer key.
+(LAB-PUBLISH, LAB-ACCESS, SPLIT-CONTRACT), bound to L3 (E3L-BIND): `LabControl` over lab-sql's
+`PgControlStore` (0032), A3's `PgRegistry`/`PgCatalogDirectory` and L2's `LabAccess` on the
+scenario's clone (`lab_world.control`), and - for l10 and l12 - R186's control factory as its own
+process (`control_box.py`) behind a session-verifier stand-in (the stack runs no GoTrue). The
+engine smoke is `lab_world.EngineSmoke` (WR-L3-2 is not wired: the factory's smoke is 503).
 
-Each NOT RUN case states its oracle and steps (04 LAB-PUBLISH: register -> dev validation ->
-publication -> App call -> rollback during a queued request; dev stays private, public approval
-and rate audited, old requests pinned, new routing correct), so the binding after the merge is
-the control port's calls only (evidence E3L: follow-up E3L-BIND).
+04 LAB-PUBLISH: register -> dev validation -> publication -> App call -> rollback during a
+queued request; dev stays private, public approval and rate audited, old requests pinned, new
+routing correct. Not bound here, and why: the route halves of register/smoke and the
+Operations list reads (`models`, `deployments`) need lab-sql's `ControlReads` (WR-LSQ-9, not
+merged) and the engine smoke adapter (WR-L3-2); the Lab App journey J01/J02 needs WR-LAB-API-2's
+composition (codex/w5-composition-2, not merged).
 """
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -21,17 +22,6 @@ import lab_world as lab                                 # noqa: E402
 
 world, stack, harness = lab.world, lab.stack, lab.harness
 A, DEV_A, ADMIN_A = lab.PROVIDER_A, lab.DEV_A, lab.ADMIN_A
-
-
-def control_merged() -> bool:
-    return importlib.util.find_spec("infrx.lab.control") is not None
-
-
-def waits(sid: str, *lanes: str, steps: str):
-    """NOT RUN until L3's control package exists; then NOT RUN until the case is bound to it."""
-    why = ("infrx.lab.control is absent on this tree" if not control_merged()
-           else "L3 merged; the case is not yet bound to its control port (E3L-BIND)")
-    lab.not_run(sid, *lanes, why=f"{why}. Steps: {steps}")
 
 
 def discovery(trip, tenant) -> list[dict]:
@@ -43,12 +33,6 @@ def discovery(trip, tenant) -> list[dict]:
 def listed(entries) -> list[dict]:
     """/v1/models without its clock (`availability_as_of` moves on every read)."""
     return [{k: v for k, v in entry.items() if k != "availability_as_of"} for entry in entries]
-
-
-def unbound():
-    """Reached only if `waits` did not skip: an unbound case is never a pass."""
-    import pytest
-    pytest.fail("E3L-BIND: this case is not bound to L3's control port yet")
 
 
 # ------------------------------------------------------------------ l02 dev exclusion
@@ -433,11 +417,96 @@ def test_l09_publish_and_rollback_cas_under_injected_faults(workdir, record_prop
         assert published(trip) == audits + 1
 
 
-def test_l10_a_control_service_restart_mid_operation_loses_nothing(workdir):
-    waits("l10", "L3", steps="SIGKILL the control process between accepting a publication and "
-          "answering; on restart the operation is either applied once or absent, the retry "
-          "under the same key answers the recorded result, App inference serves throughout")
-    unbound()
+def crash_mid_proposal(trip, service, workdir, source: str) -> list:
+    """ADMIN_A's publication proposal through the control service, SIGKILLed after the
+    store committed it and before it answered (control_box's hold point). The client's
+    outcome: a status, or the transport error of an answer that never came."""
+    import threading
+
+    import httpx
+    marker = workdir / "control-hold.json"
+    marker.unlink(missing_ok=True)
+    service.start(E3L_HOLD="propose", E3L_HOLD_MARKER=str(marker))
+    outcome: list = []
+
+    def post():
+        try:
+            outcome.append(service.call("POST", "proposals", lab.session(ADMIN_A), body={
+                "kind": "publish", "deployment_revision_id": source}).status_code)
+        except httpx.HTTPError as lost:
+            outcome.append(type(lost).__name__)
+    thread = threading.Thread(target=post)
+    thread.start()
+    world.wait_for(marker.exists, 30, "the proposal committed, its answer held")
+    service.kill()
+    thread.join(60)
+    assert not service.answers(), "premise: the control service is down"
+    return outcome
+
+
+def proposals_of(trip, source: str) -> list[tuple]:
+    """(proposal id, state) of every publication proposal of this dev revision."""
+    return trip.db("select d.deployment_revision_id::text, d.state from "
+                   "infrx.lab_control_events e join infrx.deployment_revisions d on "
+                   "d.deployment_revision_id::text = e.subject where e.action = 'lab_propose' "
+                   "and e.after->>'source' = %s order by e.at", source)
+
+
+def test_l10_a_control_service_restart_mid_operation_loses_nothing(workdir, record_property):
+    """Oracle: the control service SIGKILLed between committing ADMIN_A's proposal and
+    answering it: App inference serves (and settles once) while it is down; after the
+    restart the operation is there exactly once, as a proposal the Lab lists as `proposed`
+    with its audit row and no listing moved - and it goes on to publication (the operator's
+    approval; the Lab then lists it `approved`)."""
+    with world.composed(workdir) as trip:
+        lab.seed_lab(trip)
+        alpha, ctl = trip.world.alpha, lab.control(trip)
+        _, dev = lab.ready_dev(ctl, "l10")
+        source = dev.deployment_revision_id
+        with lab.control_service(trip, workdir) as (service, _):
+            lost = crash_mid_proposal(trip, service, workdir, source)
+            during = trip.send(alpha, "sync", world.TEXT, "e3l-l10-down")
+            service.start()
+            listed = service.call("GET", "proposals", lab.session(ADMIN_A))
+            made = proposals_of(trip, source)
+            seed = lab.listing(trip)
+            approved = lab.call(ctl.approve(lab.operator(), made[0][0] if made else source,
+                                            rate_card_version="rc_e3l_l10", input_rate="300",
+                                            output_rate="900", expected_version=seed[0],
+                                            reason="e3l l10"))
+            after = service.call("GET", "proposals", lab.session(ADMIN_A)).json()["data"]
+        record_property("restart", {"lost": lost, "during": during.status_code,
+                                    "listed": listed.json(), "made": made, "after": after})
+        assert lost and isinstance(lost[0], str), f"premise: the answer was lost: {lost}"
+        assert during.status_code == 200, during.text[:300]
+        world.settled_once(trip, world.job_of(trip, alpha.org_id, "e3l-l10-down")[0][0])
+        assert len(made) == 1 and made[0][1] == "proposed_public", made
+        assert listed.status_code == 200 and [
+            (p["proposal_id"], p["deployment_revision_id"], p["state"])
+            for p in listed.json()["data"]] == [(made[0][0], source, "proposed")], listed.text
+        assert seed[:2] == (1, stack.SEED_PUBLIC_DEPLOYMENT), seed
+        assert (approved.version, approved.deployment_revision_id) == (2, made[0][0])
+        assert [(p["proposal_id"], p["state"]) for p in after] == [(made[0][0], "approved")]
+
+
+def test_l10_a_retry_after_a_lost_answer_proposes_once(workdir, record_property):
+    """Oracle: the Lab's retry of a proposal whose answer was lost to the crash, after the
+    restart, never leaves a second open proposal of the same dev revision (it answers the
+    recorded proposal or is refused) - one operation, one proposal."""
+    with world.composed(workdir, start=("gateway",)) as trip:
+        lab.seed_lab(trip)
+        _, dev = lab.ready_dev(lab.control(trip), "l10r")
+        source = dev.deployment_revision_id
+        with lab.control_service(trip, workdir) as (service, _):
+            lost = crash_mid_proposal(trip, service, workdir, source)
+            service.start()
+            retried = service.call("POST", "proposals", lab.session(ADMIN_A), body={
+                "kind": "publish", "deployment_revision_id": source})
+            made = proposals_of(trip, source)
+        record_property("retry", {"lost": lost, "retried": [retried.status_code,
+                                                             retried.json()], "made": made})
+        assert lost and isinstance(lost[0], str), f"premise: the answer was lost: {lost}"
+        assert [state for _, state in made].count("proposed_public") == 1, made
 
 
 CONTROL_OPERATIONS = (("GET", "models"), ("GET", "deployments"), ("GET", "proposals"),

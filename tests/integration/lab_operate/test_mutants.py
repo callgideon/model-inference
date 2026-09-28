@@ -31,7 +31,7 @@ mutation_list = _load("e3l_mutants", "mutants.py")
 
 LAYER1, STACK = mutation_list.MUTANTS, mutation_list.STACK_MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
-SUBSET = ("not_run_is_a_pass", "unbound_case_runs")
+SUBSET = ("not_run_is_a_pass", "gate_is_the_best_status")
 SELECTED = LAYER1 if FULL_RUN else tuple(m for m in LAYER1 if m.name in SUBSET)
 SELECTED_STACK = STACK if FULL_RUN else ()
 Mutant, Outcome = mutation_list.Mutant, mutation_list.Outcome
