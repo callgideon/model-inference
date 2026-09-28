@@ -52,7 +52,7 @@ const MUTANTS = [
   m("V2-X23", "an empty review is blank", VIEW, "empty: rows.length === 0 ? FEEDBACK_COPY.empty : null", "empty: null", [C.d05]),
   m("V2-X24", "the feedback comment is dropped", VIEW, "text: e.comment,", "text: null,", [C.d05]),
   m("V2-X25", "a missing request says it is another provider's", VIEW, "No request with this id is visible in this workspace. A request made in the last few minutes may not be projected yet; try again shortly.", "That request belongs to another provider.", [C.d06]),
-  m("V2-X26", "a preview flag turns a stand-in on", PORT, "  return UNAVAILABLE;\n}", '  return process.env.LAB_TRACES_PREVIEW === "1" ? ({ traces: { detail: async () => ({ ok: true, value: {} }) }, content: UNAVAILABLE.content } as never) : UNAVAILABLE;\n}', [C.d07]),
+  m("V2-X26", "a preview flag turns a stand-in on", PORT, "  return { traces: labTraces(), content: UNAVAILABLE.content };\n}", '  return process.env.LAB_TRACES_PREVIEW === "1" ? ({ traces: { detail: async () => ({ ok: true, value: {} }) }, content: UNAVAILABLE.content } as never) : { traces: labTraces(), content: UNAVAILABLE.content };\n}', [C.d07]),
   m("V2-X27", "the content read returns other text", FAKE, "value: { text: row.text,", 'value: { text: "",', [C.j01]),
   m("V2-X28", "the trace read is not scoped to the provider", FAKE, "r.detail.request_id === requestId && r.providerId === actor.providerId", "r.detail.request_id === requestId", [C.j02]),
   m("V2-X29", "a viewer reads individual requests", FAKE, '    if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.j02]),

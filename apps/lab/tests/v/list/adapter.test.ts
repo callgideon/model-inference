@@ -1,179 +1,94 @@
-// node --test "tests/**/*.test.ts"
-//
-// V1 — tenant scope of the trace list (oracle TRACE-TENANT).
-//
-// The list has no organization parameter and cannot acquire one: the tenant is `session.orgId`. These
-// cases are the ones that make that claim mean something — they use *more than one session*, which
-// the first round of V1 evidence claimed without doing. What is provable here is that the page's own
-// query cannot widen the tenant and that a cursor minted in one organization returns nothing in
-// another; the enforcement itself is the service's, and C1 re-proves it against real PostgreSQL.
+// V1M / WR-LAB-API-5 (TRACE-TENANT, LAB-ACCESS): the Lab's adapter over lab-api's provider trace read
+// (R176, apps/infrx-api/infrx/gateway/routes/lab_traces.py). The tenancy itself is the route's (provider
+// A vs B, consumer-only, revoked grant, T3): these cases pin what the Lab sends and how it reads the
+// answer; stack.test.ts runs the same adapter against the real route on lab-v1m + ClickHouse.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { httpTraces, LIST_LIMIT, offlineTraces } from "../../../lib/services/traces/port.ts";
+import type { Actor } from "../../../components/traces/detail/port.ts";
 
-import { parseTraceParams, traceHref } from "../../app/(console)/traces/query.ts";
-import { buildTraceListView } from "../../app/(console)/traces/view-model.ts";
-import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts";
-import type { ApiKeySummary, SessionContext, TraceListItem } from "../../lib/contracts/types.ts";
+const A = "a0000001-0000-4000-8000-000000000001";
+const REQ = "5c000000-0000-4000-8000-0000000000f1";
+const ORG = "0a000000-0000-4000-8000-00000000000a";
+const actor: Actor = { providerId: A, role: "developer" };
+const meta = {
+  request_id: REQ, started_at: "2026-09-27T10:00:00+00:00", completed_at: null, mode: "full", loss_reason: "none",
+  serving_version_id: "sv-1", model_revision: "acme-7b@r2", rate_card_version: "rc-3", policy_version: null, model_id: "acme-7b", access: "metadata",
+};
+const granted = { ...meta, access: "content", grantor_org_id: ORG, grant_ref: "grant-1", content_complete: true, content_bytes: 812, content_available: true };
 
-const NOW = Date.parse("2026-09-21T12:00:00.000Z");
-const WIDE = { range: "30d" as const };
-
-type Loaded = { rows: TraceListItem[]; keys: ApiKeySummary[] };
-
-async function load(
-  services: ReturnType<typeof createFakeConsoleServices>,
-  session: SessionContext,
-  raw: Record<string, string> = {},
-): Promise<Loaded> {
-  const keysResult = await services.keys.list(session);
-  assert.ok(keysResult.ok, `keys.list failed for ${session.email}`);
-  const parsed = parseTraceParams({ ...WIDE, ...raw }, {
-    now: NOW,
-    keyIds: keysResult.value.map((key) => key.id),
-  });
-  const rows: TraceListItem[] = [];
-  let cursor: string | null = null;
-  for (let page = 0; page < 20; page += 1) {
-    const result = await services.traces(session, {
-      ...parsed.query,
-      ...(cursor === null ? {} : { cursor }),
-    });
-    assert.ok(result.ok, `traces failed for ${session.email}: ${result.ok ? "" : result.error.code}`);
-    rows.push(...result.value.items);
-    cursor = result.value.next_cursor;
-    if (cursor === null) return { rows, keys: keysResult.value };
-    // A cursor is only accepted with the window pinned, which is what the page's links carry.
-    parsed.filters.pinned = true;
-  }
-  throw new Error("the walk did not terminate");
+type Call = { url: string; init: RequestInit };
+function server(status: number, body: unknown, token: string | null = "eyJ0.tok.sig") {
+  const calls: Call[] = [];
+  const fetch = (async (url: string, init: RequestInit) => {
+    calls.push({ url, init });
+    return new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
+  }) as unknown as typeof globalThis.fetch;
+  return { calls, port: httpTraces({ baseUrl: "https://api.example/", token: async () => token, fetch }) };
 }
 
-test("V1-T01 each session sees its own organization's traces and nothing else", async () => {
-  const services = createFakeConsoleServices();
-  const { sessions } = services;
-
-  const owner = await load(services, sessions.owner);
-  const member = await load(services, sessions.member);
-  const operator = await load(services, sessions.operator);
-  const other = await load(services, sessions.otherOwner);
-  const suspended = await load(services, sessions.suspendedOwner);
-
-  assert.ok(owner.rows.length > 0, "the established organization has trace rows");
-  assert.ok(suspended.rows.length > 0, "the suspended organization has trace rows of its own");
-
-  // Role does not change the tenant: an owner, a member and a platform operator whose own
-  // organization this is all read the same rows.
-  const ids = (loaded: Loaded) => loaded.rows.map((row) => row.request_id);
-  assert.deepEqual(ids(member), ids(owner), "a member reads the same list as the owner");
-  assert.deepEqual(ids(operator), ids(owner), "an operator session reads its own organization");
-
-  // Suspension gates new work, not reads (R33) — and the rows it reads are its own.
-  assert.equal(
-    ids(suspended).filter((id) => ids(owner).includes(id)).length,
-    0,
-    "the suspended organization shares rows with the first",
-  );
-
-  // The second organization's only key has tracing off, so its list is legitimately empty — and that
-  // has to read as "nothing is captured", never as a failure or as someone else's traffic.
-  assert.deepEqual(ids(other), [], "an organization with every key off has no trace rows (R13)");
-  const idle = parseTraceParams({}, { now: NOW, keyIds: other.keys.map((key) => key.id) });
-  const otherView = buildTraceListView({ ok: true, value: { items: [], next_cursor: null } }, {
-    filters: idle.filters,
-    keys: other.keys,
-    narrowed: idle.narrowed,
-  });
-  assert.equal(otherView.kind, "empty");
-  if (otherView.kind === "empty") assert.equal(otherView.reason, "tracing_off");
-
-  // Disjoint: no key id crosses between organizations either.
-  for (const [name, loaded] of [
-    ["the second organization", other],
-    ["the suspended organization", suspended],
-  ] as const) {
-    const keyOverlap = loaded.keys
-      .map((key) => key.id)
-      .filter((id) => owner.keys.some((own) => own.id === id));
-    assert.deepEqual(keyOverlap, [], `${name} shares keys with the first`);
+test("V1M-A01 reads as the session's workspace with the user's own token: the list and one request", async () => {
+  const s = server(200, { data: [meta], next_cursor: "Y3Vy" });
+  assert.deepEqual(await s.port.list(actor, null), { ok: true, value: { items: [meta], next_cursor: "Y3Vy" } });
+  await s.port.list(actor, "Y3Vy");
+  await s.port.detail(actor, "a b/../x");
+  assert.deepEqual(s.calls.map((c) => c.url), [
+    `https://api.example/lab/v1/traces?provider_org_id=${A}&limit=${LIST_LIMIT}`,
+    `https://api.example/lab/v1/traces?provider_org_id=${A}&limit=${LIST_LIMIT}&cursor=Y3Vy`,
+    `https://api.example/lab/v1/traces/a%20b%2F..%2Fx?provider_org_id=${A}`,
+  ]);
+  for (const { init } of s.calls) {
+    assert.equal(new Headers(init.headers).get("authorization"), "Bearer eyJ0.tok.sig");
+    assert.equal(init.cache, "no-store");
   }
-
-  // Every row belongs to a key of the session that read it — the join the list view does, checked
-  // against the row data rather than assumed.
-  for (const [name, loaded] of [
-    ["owner", owner],
-    ["member", member],
-    ["other owner", other],
-    ["suspended owner", suspended],
-  ] as const) {
-    const own = new Set(loaded.keys.map((key) => key.id));
-    for (const row of loaded.rows) {
-      assert.ok(own.has(row.key_id), `${name} was shown a row keyed to another organization`);
-    }
-    // And the view never renders a name it does not have: an unknown key id would be shortened.
-    const view = buildTraceListView({ ok: true, value: { items: loaded.rows.slice(0, 25), next_cursor: null } }, {
-      filters: parseTraceParams(WIDE, { now: NOW, keyIds: [...own] }).filters,
-      keys: loaded.keys,
-    });
-    if (view.kind === "rows") {
-      for (const rendered of view.rows) {
-        assert.ok(rendered.keyLabel.length > 0, `${name}: a row rendered without a key label`);
-      }
-    }
-  }
+  assert.equal(LIST_LIMIT, 50);
 });
 
-test("V1-T02 a key or cursor from another organization returns nothing of that organization", async () => {
-  const services = createFakeConsoleServices();
-  const { sessions, ids } = services;
-  const ownerKeys = await services.keys.list(sessions.owner);
-  assert.ok(ownerKeys.ok);
-  const otherKeys = await services.keys.list(sessions.otherOwner);
-  assert.ok(otherKeys.ok);
-
-  // The page refuses the foreign key id before it becomes a query at all (it is not in this
-  // session's `keys.list`), so the reader is told rather than shown an empty list.
-  const foreign = parseTraceParams(
-    { ...WIDE, key: ids.otherOrgKeyId },
-    { now: NOW, keyIds: ownerKeys.value.map((key) => key.id) },
-  );
-  assert.equal(foreign.query.key_id, undefined);
-  assert.deepEqual(
-    foreign.rejected.map((entry) => entry.name),
-    ["key"],
-  );
-
-  // A cursor minted in one organization is bound to it. Used in another session it must not resume
-  // that walk: the contract makes it `invalid_cursor`, and the page renders the way back.
-  const firstPage = await services.traces(sessions.owner, { limit: 25 });
-  assert.ok(firstPage.ok);
-  const minted = firstPage.value.next_cursor;
-  assert.ok(minted !== null, "the fixtures have more than one page");
-  const ownerIds = firstPage.value.items.map((row) => row.request_id);
-
-  const replayed = await services.traces(sessions.otherOwner, { limit: 25, cursor: minted });
-  if (replayed.ok) {
-    for (const row of replayed.value.items) {
-      assert.ok(!ownerIds.includes(row.request_id), "a foreign cursor returned the other tenant's row");
-    }
-  } else {
-    assert.equal(replayed.error.code, "invalid_cursor");
-    const view = buildTraceListView(replayed, {
-      filters: parseTraceParams({ ...WIDE }, { now: NOW, keyIds: [] }).filters,
-      keys: otherKeys.value,
-    });
-    assert.equal(view.kind, "error");
-    if (view.kind === "error") {
-      assert.ok(!(view.action?.href ?? "").includes("cursor="), "and the way back drops it");
-    }
+test("V1M-A02 refusals map to denied, not_found or unavailable, and no token sends nothing", async () => {
+  for (const [status, reason] of [[401, "denied"], [403, "denied"], [404, "not_found"], [422, "unavailable"], [500, "unavailable"], [503, "unavailable"]] as const) {
+    const s = server(status, { refusal: "x" });
+    assert.deepEqual(await s.port.list(actor, null), { ok: false, reason }, String(status));
+    assert.deepEqual(await s.port.detail(actor, REQ), { ok: false, reason }, String(status));
   }
+  const tokenless = server(200, { data: [], next_cursor: null }, null);
+  assert.deepEqual(await tokenless.port.list(actor, null), { ok: false, reason: "unavailable" });
+  assert.deepEqual(await tokenless.port.detail(actor, REQ), { ok: false, reason: "unavailable" });
+  assert.equal(tokenless.calls.length, 0);
+  const down = httpTraces({ baseUrl: "https://api.example", token: async () => "t", fetch: (async () => { throw new TypeError("fetch failed"); }) as never });
+  assert.deepEqual(await down.list(actor, null), { ok: false, reason: "unavailable" });
+  const thrown = httpTraces({ baseUrl: "https://api.example", token: async () => { throw new Error("cookies outside a request"); } });
+  assert.deepEqual(await thrown.list(actor, null).catch(() => "threw"), { ok: false, reason: "unavailable" });
+  const off = offlineTraces();
+  assert.deepEqual([await off.list(actor, null), await off.detail(actor, REQ)], [{ ok: false, reason: "unavailable" }, { ok: false, reason: "unavailable" }]);
+});
 
-  // Nothing the page builds can name an organization: the only identifiers in a URL it produces are
-  // this tenant's own key and an opaque cursor.
-  const href = traceHref(
-    parseTraceParams({ ...WIDE, key: ownerKeys.value[0].id }, {
-      now: NOW,
-      keyIds: ownerKeys.value.map((key) => key.id),
-    }).filters,
-  );
-  assert.ok(!href.includes(ids.orgId) && !href.includes(ids.otherOrgId), href);
+test("V1M-A03 only the route's named fields are kept: a metadata row never carries an organization, key, size or content", async () => {
+  const leaky = { ...meta, org_id: ORG, key_id: "k-customer", content_bytes: 9, content: "secret prompt", grantor_org_id: ORG };
+  const s = server(200, { data: [leaky, granted], next_cursor: null });
+  const page = await s.port.list(actor, null);
+  assert.ok(page.ok);
+  assert.deepEqual(page.value.items, [meta, granted]);
+  const one = server(200, { ...granted, content: "text", extra: 1 });
+  assert.deepEqual(await one.port.detail(actor, REQ), { ok: true, value: granted });
+});
+
+test("V1M-A04 an answer that is not the route's shape is unavailable, never a partial record", async () => {
+  const bad = [
+    "not json", "null", [], { data: "x", next_cursor: null }, { data: [meta], next_cursor: 5 }, { data: [{ ...granted, access: "all" }], next_cursor: null },
+    { data: [{ ...meta, model_id: null }], next_cursor: null },
+    { data: [{ ...meta, started_at: 1 }], next_cursor: null }, { data: [{ ...meta, completed_at: undefined }], next_cursor: null },
+    { data: [{ ...granted, content_bytes: "812" }], next_cursor: null }, { data: [{ ...meta, rate_card_version: 3 }], next_cursor: null },
+  ];
+  for (const body of bad) {
+    const answer = await server(200, body).port.list(actor, null).catch(() => "threw");
+    assert.deepEqual(answer, { ok: false, reason: "unavailable" }, JSON.stringify(body));
+  }
+  // A granted detail must name the grant it was read under (WR-LAB-API-6): C2 binds its content ref to it.
+  const unnamed: Record<string, unknown> = { ...granted };
+  delete unnamed.grant_ref;
+  assert.deepEqual(await server(200, unnamed).port.detail(actor, REQ).catch(() => "threw"), { ok: false, reason: "unavailable" });
+  assert.deepEqual(await server(200, "not json").port.detail(actor, REQ).catch(() => "threw"), { ok: false, reason: "unavailable" });
+  // The list reads no content, so a granted row without the ref still lists (the ref is never used there).
+  const listed = await server(200, { data: [unnamed], next_cursor: null }).port.list(actor, null);
+  assert.ok(listed.ok && listed.value.items[0].access === "content" && (listed.value.items[0] as { grant_ref: string }).grant_ref === "");
 });
