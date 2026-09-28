@@ -86,3 +86,16 @@
 
 ## Estimate (remaining, this lane): 1/2.5/5 h, confidence medium
 Basis: one review round (D10-0025 analogue 1/2/5) plus the E5L o06 rerun once the foreign e5l volumes are cleared and the R1 real half once batch #6 and lab-sql-lw3 merge (~1 h each, analogue: this lane's R2 swap took ~0.5 h).
+
+## Fix round (handback 1159cee8, finding 0-LSQI-1)
+0-LSQI-1 (major): `JudgeWiring` dropped `projection`/`objects` for `retention`, so the E5L world's `judge()` raises TypeError until WR-LSQ-INT-1 lands. Both files are outside this lane's owned paths, so the fix ships as a ready-to-apply, pre-verified patch for the coordinator to apply in the same merge batch: `research/plan/evidence/coordinator/WR-LSQ-INT-1.patch` (`git apply` from the repo root).
+- Contents: `observe_world.py` `judge()` passes `retention=trip.traces.retention` (the property already exists at `observe_world.py:101`); `mutants.py` `KNOWN_FAIL = {}` and a new stack mutant `st_judge_reads_the_raw_projection` (SUBMIT: `wiring.retention.read_content(...)` -> `shipper.read_content(wiring.retention.traces, wiring.retention.objects, ...)`) naming `O06_JUDGE`.
+
+| # | command (worktree root; patch applied as a scratch edit, then reverted) | exit | result |
+|---|---|---|---|
+| F1 | `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/lab_observe/test_mutants.py` | 0 | 8 passed 1 skipped: new mutant's anchor occurs once, `KNOWN_FAIL={}` coverage holds, every stack case bound |
+| F2 | mutant `st_judge_reads_the_raw_projection` applied to `infrx/judge/submit.py`, `pytest -q apps/infrx-api/tests/j/submit/test_submit.py -k deleted_or_expired` | 1 | killed in the fake world (T3's real `Retention`): deleted/expired content reaches the judge; restored -> 1 passed |
+| F3 | `git apply --check research/plan/evidence/coordinator/WR-LSQ-INT-1.patch` on 1159cee8 | 0 | applies cleanly |
+| F4 | `apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <scratch>/e5l-o06-fix/run --only o06` | 3 | **BLOCKED**, still: foreign `infrx-e5l_{clickhouse,postgres,s3}-data` volumes present (not touched) |
+
+Status: fixed on this lane's side (patch + oracle proof). Still open, and still required before J2 flips to implemented: the coordinator applies the patch at merge, and the o06 rerun (F4 command) is recorded once the owner clears the e5l volumes.

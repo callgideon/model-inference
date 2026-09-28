@@ -7,7 +7,7 @@
   "branch": "codex/w5-lab-sql-integration",
   "slice": "WR-LSQ-4 (PgJudgeLedger as JudgeLedger) + WR-OBS-3 (content through Retention)",
   "activity": "review",
-  "at": "2026-09-28T11:30:00Z",
+  "at": "2026-09-28T12:30:00Z",
   "owned_paths": [
     "apps/infrx-api/infrx/judge/submit.py",
     "apps/infrx-api/tests/j/submit/",
@@ -48,6 +48,11 @@
       "cmd": "INFRX_D_TASK=b1 make api-test",
       "exit": 2,
       "summary": "5819 passed, 90 skipped, 9 xfailed, 60 failed, 8 errors; none in tests/j|b|r|h - foreign d2-valkey (7), tests/i key baseline (43), i8 pooler lock held elsewhere (8 errors), base defects I5 72-observe-install (6) and I2L LAB_DATASETS_API_URL (3), lab-sql race mutant c3l_double_click_twice (1)"
+    },
+    {
+      "cmd": "tests/integration/lab_observe/runner.py --only o06 (fix round, patch applied as scratch)",
+      "exit": 3,
+      "summary": "BLOCKED: foreign infrx-e5l_* volumes still present"
     }
   ],
   "estimate": {
@@ -59,7 +64,7 @@
     "at": "2026-09-28T11:30:00Z"
   },
   "blockers": [
-    "E5L o06 rerun blocked by foreign infrx-e5l_* volumes; needs WR-LSQ-INT-1"
+    "WR-LSQ-INT-1.patch must be applied in the merge batch (JudgeWiring signature); E5L o06 rerun blocked by foreign infrx-e5l_* volumes, record it before the J2 flip"
   ],
   "wiring_requests": [
     "WR-LSQ-INT-1 tests/integration/lab_observe/observe_world.py JudgeWiring(retention=trip.traces.retention) + mutants.py KNOWN_FAIL={} and an O06_JUDGE mutant (evidence has the patch)",
@@ -67,6 +72,12 @@
     "WR-LSQ-INT-3 composition: JudgeWiring(ledger=PgJudgeLedger, retention=Retention); Controller(PgReleaseStore); optimization.store(PgLabDataStore)"
   ],
   "evidence": [
-    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md"
-  ]
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-a6b4bbb.md",
+    "research/plan/evidence/coordinator/WR-LSQ-INT-1.patch"
+  ],
+  "fix_round": {
+    "handback": "1159cee8",
+    "finding": "0-LSQI-1",
+    "status": "patch shipped: research/plan/evidence/coordinator/WR-LSQ-INT-1.patch (git apply --check ok; lab_observe/test_mutants 8 passed 1 skipped with it; the new O06_JUDGE mutant is killed by test_j2__deleted_or_expired_content_never_reaches_the_judge)"
+  }
 }
