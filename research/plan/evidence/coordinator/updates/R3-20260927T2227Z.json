@@ -1,0 +1,85 @@
+{
+ "task": "R3",
+ "slice": "R3.a-c fake-only: W3 VllmEngine probe (MockTransport), H1 pairing, B2-shaped report",
+ "activity": "fix-round",
+ "head": "0a239a5d",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-rollout-control",
+ "branch": "codex/w5-rollout-control",
+ "owned_paths": [
+  "apps/infrx-api/infrx/rollouts/control/",
+  "apps/infrx-api/infrx/rollouts/optimization/",
+  "apps/infrx-api/tests/r/control/",
+  "apps/infrx-api/tests/r/optimization/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/optimization/test_optimization.py (red, before impl)",
+   "exit": 2,
+   "summary": "ImportError infrx.rollouts.optimization"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/optimization/test_optimization.py",
+   "exit": 0,
+   "summary": "9 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/r/optimization/test_mutants.py",
+   "exit": 0,
+   "summary": "43 passed: 41/41 mutants killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 make api-test (e0b23744)",
+   "exit": 2,
+   "summary": "5066 passed, 77 skipped, 9 xfailed, 43 failed, 8 errors; all in tests/i: 8 = shared i8 PG lock held by rollout-routing's tests/i run, 43 = tests/i/test_mutants pristine-baseline broken_runner on those cases (non-default key, recorded)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 uv run --frozen pytest -q tests/i --deselect tests/i/test_mutants.py (alone, lock free)",
+   "exit": 0,
+   "summary": "211 passed, 1 xfailed"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/optimization/test_optimization.py (fix round, red before impl)",
+   "exit": 1,
+   "summary": "2 failed, 7 passed"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/optimization/test_optimization.py (fix round 0a239a5d)",
+   "exit": 0,
+   "summary": "9 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/r/optimization/test_mutants.py (fix round)",
+   "exit": 0,
+   "summary": "44/44 killed after re-anchoring r3_inconclusive_equivalent/r3_reasons_dropped (first run: 2 misdeclared)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r (fix round)",
+   "exit": 0,
+   "summary": "48 passed; 5x repeat of both suites 32 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "code complete (9 tests, 41 mutants); one verify round + B2 real-report rerun after merge; brief 2/4/8, ~1.5 h spent",
+  "at": "2026-09-27T23:10Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-R3-1 lab-access L3: the register entry point checks manage_dev_deployment via L2 (LabAccess needs a public require(user_id, provider_org_id, capability)); publishes the variant through D7 and creates the dev serving revision",
+  "WR-R3-2 lab-sql: store infrx.variant_comparison.1 beside the B2 report",
+  "WR-R3-3 experiment owners: measured loads as <exp>/results/<file>@<sha> rows (serving_ref, profile_digest, engine_version, hardware, throughput_tok_s, p99_ms, memory_gib); none exist today",
+  "WR-R2-5 Makefile:21 api-mutants line 1 += tests/r/control/test_mutants.py tests/r/optimization/test_mutants.py",
+  "WR-R2-6 infrx/rollouts/__init__.py (R1-owned): control/optimization are subpackages; add to __all__/docstring if R1 declares one",
+  "WR-R3-4 W3 infrx/worker/engine.py: VllmEngine.capabilities() exposes served capabilities so R3 verifies claims against the probe; new engine adapters register in optimization.ADAPTERS"
+ ],
+ "evidence": [
+  "research/plan/evidence/r/R3-e0b2374.md",
+  "research/plan/evidence/coordinator/updates/R3-20260927T2227Z.json"
+ ],
+ "fixes": [
+  "0-RC-C2 fixed: engine kind must match the W3 adapter; capability gains beyond the base are capability_unverified -> inconclusive"
+ ]
+}
