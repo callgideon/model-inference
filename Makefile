@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate lab-rollout
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -25,6 +25,7 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab/test_mutants.py && cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_operate/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_evaluate/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_observe/test_mutants.py
+	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_rollout/test_mutants.py
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py
 
 console-test:
@@ -161,3 +162,7 @@ lab-operate:
 # E6L: the LAB-EVALUATE gate (tests/integration/lab_evaluate); not in check. verdict.json lands in the evidence dir.
 lab-evaluate:
 	$(API)/.venv/bin/python tests/integration/lab_evaluate/runner.py --out $(CURDIR)/research/plan/evidence/e/E6L-raw-$(shell git rev-parse --short HEAD)
+
+# E8L: the LAB-ROLLOUT gate (tests/integration/lab_rollout); not in check. verdict.json lands in the evidence dir.
+lab-rollout:
+	$(API)/.venv/bin/python tests/integration/lab_rollout/runner.py --out $(CURDIR)/research/plan/evidence/e/E8L-raw-$(shell git rev-parse --short HEAD)

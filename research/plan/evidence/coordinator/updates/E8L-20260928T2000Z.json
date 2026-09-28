@@ -1,0 +1,101 @@
+{
+ "task": "E8L",
+ "slice": "LAB-ROLLOUT-LOCAL gate runner + real e8l run (lane lab-rollout, LW6)",
+ "activity": "review",
+ "head": "205f639d",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout",
+ "branch": "codex/w5-lab-rollout",
+ "owned_paths": [
+  "tests/integration/lab_rollout/",
+  "apps/lab/tests/e2e/rollout/ (not written: k10 waits on lab-ui-swap)",
+  "research/plan/evidence/e/E8L-*"
+ ],
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --keep --out <scratch>/e8l-fix/run (copied to research/plan/evidence/e/E8L-raw-205f639/run)",
+   "exit": 1,
+   "summary": "gate FAIL unchanged: k01-k05, k07 PASS (16 cases incl. new k05); k06 FAIL (E8L-F1); k08/k09/k10 NOT RUN"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l apps/infrx-api/.venv/bin/python -m pytest -v -p no:cacheprovider tests/integration/lab_rollout/test_mutants.py",
+   "exit": 0,
+   "summary": "52 passed in 358 s: 16/16 layer-1 + 32/32 stack mutants killed, 0 survivors"
+  },
+  {
+   "cmd": "pytest -q tests/integration/lab_rollout/test_e8l_runner.py tests/integration/lab_rollout/test_mutants.py",
+   "exit": 0,
+   "summary": "17 passed, 1 skipped"
+  },
+  {
+   "cmd": "runner.py --reuse --only k08 (teardown)",
+   "exit": 3,
+   "summary": "no e8l container left"
+  },
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --reuse --keep --out research/plan/evidence/e/E8L-raw-2334e6a/run",
+   "exit": 1,
+   "summary": "gate FAIL: k01-k05, k07 PASS (15 cases); k06 FAIL (E8L-F1: 0043 release_active reads serving_version_id, R188/L3 name deployment_revision_id); k08 NOT RUN[P-08], k09 NOT RUN[composition-2], k10 NOT RUN[lab-ui-swap]. Cells ROLLOUT-PIN NOT RUN, ROLLOUT-RECOVER FAIL, OPT-PARITY NOT RUN"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_rollout/test_mutants.py",
+   "exit": 0,
+   "summary": "48 passed in 389 s: 16/16 layer-1 + 28/28 stack mutants killed, 0 survivors; every case named except KNOWN_FAIL k06"
+  },
+  {
+   "cmd": "pytest -q tests/integration/lab_rollout",
+   "exit": 0,
+   "summary": "17 passed, 1 skipped"
+  },
+  {
+   "cmd": "pytest -q tests/integration/lab_rollout/test_e8l_runner.py (runner.py absent)",
+   "exit": 2,
+   "summary": "seam red: FileNotFoundError runner.py"
+  },
+  {
+   "cmd": "INFRX_D_TASK=e8l INFRX_D2_VALKEY_CONTAINER=infrx-e8l-d2-valkey INFRX_D2_VALKEY_PORT=57491 make api-test",
+   "exit": 2,
+   "summary": "43 failed (tests/i/test_mutants.py all broken_runner: E8L-O4 base defect), 6415 passed, 130 skipped, 9 xfailed, 13 errors (i8 lock held by another run; judge_fake port taken)"
+  },
+  {
+   "cmd": "same env: uv run --frozen pytest -q tests/i tests/j/submit/test_http.py (lock free)",
+   "exit": 1,
+   "summary": "43 failed (E8L-O4 only), 315 passed, 4 skipped, 1 xfailed; 13 errors gone"
+  },
+  {
+   "cmd": "i0-layout-probe.py (wraps tests/i/mutants.py _layout, no edit)",
+   "exit": 0,
+   "summary": "gateway_public_bind broken_runner as-is, killed once infra/lab/observe is copied -> WR-E8L-6"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 2,
+  "likely_h": 4,
+  "pessimistic_h": 8,
+  "confidence": "medium",
+  "basis": "remaining to accepted LAB-ROLLOUT-LOCAL: F1 fix in lab-sql 0043 (1-2 h, D10-0025 analogue 1/2/5), bind k09 after composition-2 and k10 after lab-ui-swap (E6L/E3L bind analogues 1-3 h each), k08 stays NOT RUN until P-08, one verify round 47-234 min; this slice took ~4 h + continuation ~1 h against 3/6/12",
+  "at": "2026-09-28T19:07Z"
+ },
+ "blockers": [
+  "E8L-F1 (lab-sql 0043 vs R188): k06 FAIL until one serving-ref identity",
+  "k09 waits on composition-2 99a9dbf6",
+  "k10 waits on lab-ui-swap",
+  "k08 waits on P-08 GPU target"
+ ],
+ "wiring_requests": [
+  "WR-E8L-1 Makefile: api-mutants line `cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_rollout/test_mutants.py` + target `lab-rollout: $(API)/.venv/bin/python tests/integration/lab_rollout/runner.py --out $(CURDIR)/research/plan/evidence/e/E8L-raw-$(shell git rev-parse --short HEAD)` (+ .PHONY)",
+  "WR-E8L-2 lab-sql/L3: 0043 release_active resolves a candidate by deployment_revision_id per R188 and checks its digest; then k06 gets st_converge_skipped and leaves KNOWN_FAIL",
+  "WR-E8L-3 lab-sql (WR-LSQ-9): ControlReads.endpoint_alias/listing_versions on PgControlStore; swap lab_world.Reads",
+  "WR-E8L-4 lab-sql: operator RPC to raise lab_rollouts.shadow_limit",
+  "WR-E8L-5 composition-2: production provider-funded ShadowRunner for the composed router; bind k09",
+  "WR-E8L-6 tests/i/mutants.py _layout: add (\"infra\", \"lab\", \"observe\") beside (\"infra\", \"observe\") - fixes 43 broken_runner i mutants (base defect from WR-OBS-5 2de48ddd)"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E8L-2334e6a.md",
+  "research/plan/evidence/e/E8L-raw-2334e6a/"
+ ],
+ "fix_round": {
+  "finding": "0-E8L-RV-1",
+  "fixed": true,
+  "summary": "k05 test_k05_missing_or_stale_evidence_never_expands (metrics_stale, quality_coverage, min_requests, cohort_skew holds; approval refused; no D9 row) + st_metrics_stale_ignored, st_coverage_ignored, st_min_requests_ignored, st_cohort_skew_ignored"
+ }
+}

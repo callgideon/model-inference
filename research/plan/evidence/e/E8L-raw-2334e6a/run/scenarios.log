@@ -1,0 +1,84 @@
+..sss......F.......                                                                                                                                                                                                                                                                                                                                                                                      [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+__________________________________________________________________________________________________________________________________________________________________________ test_k06_an_emergency_rollback_moves_a_promoted_alias_back __________________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x7a96b72e9b80>, workdir = PosixPath('research/plan/evidence/e/E8L-raw-2334e6a/run/cases/test_k06_an_emergency_rollback_moves_a_promoted_alias_back')
+
+    def test_k06_an_emergency_rollback_moves_a_promoted_alias_back(lab, workdir):
+        """Approved on an accepting report, the operator promotes the candidate (L3: the alias's
+        next listing serves serving_2 on the same endpoint); the operator's emergency rollback
+        then records one D9 decision and moves the alias back to the baseline deployment through
+        L3's CAS. The policy is the one R1 routes: its candidate ref must be what L3's alias reads
+        as the candidate, or the rollback leaves the alias on it."""
+        policy, ref, r, runs = launched(lab, 0x6a)
+        listed = lab.listing()
+        at = horizon(lab, ref)
+        report = lab.report(runs, "improving", lw.PROTOCOL)
+        run(lab.controller().approve(lw.OPERATOR, policy, ref, lw.plan(),
+                                     lw.live(r.counts, policy.policy_id, now=at), now=at,
+                                     report=report, runs=runs))
+        lab.promote(lab.q8.W["serving_2"], 1)
+        serving = lab.serving()
+        try:
+            promoted = run(serving.serving(policy.endpoint_id))
+            run(lab.controller().emergency_rollback(lw.OPERATOR, policy, ref, now=at,
+                                                    reason="e8l drill"))
+            after = lab.listing()
+            # the other way round: a policy naming the candidate as L3 reads it does not route
+            l3_named = lab.policy(weights=(10_000,), candidates=(promoted[0],))
+            lab.launch(l3_named, lw.plan())
+            try:
+                run(router(lab).route(who(lab.subjects(1)[0]), request(lab.ALIAS, 1, 0x6b)))
+                routes = "routed"
+            except Exception as refused:                    # noqa: BLE001 - recorded
+                routes = type(refused).__name__
+            lw.save(workdir, "alias.json", {
+                "policy_candidates": [c.serving_ref for c in policy.candidates],
+                "alias_serving_ref_when_promoted": promoted, "listing_before": listed,
+                "listing_after": after, "decisions": lab.decisions(ref),
+                "a_policy_naming_l3s_ref_routes": routes})
+            assert [d[1] for d in lab.decisions(ref)] == ["approved", "rolled_back"]
+>           assert after[1] == listed[1], (
+                f"the alias still serves the candidate after the rollback: L3 reads it as "
+                f"{promoted[0]}, the policy R1 routes names {policy.candidates[0].serving_ref}; a "
+                f"policy naming L3's ref instead routes: {routes}")
+E               AssertionError: the alias still serves the candidate after the rollback: L3 reads it as lab:serving:b0000001-0000-4000-8000-000000000001:00000de8-0000-4000-8000-000000000001@sha256:39ddd03cf0fd0e38f3fb7ddd3dd39de9115984892e4bbb083f930e4836124b01, the policy R1 routes names lab:serving:b0000001-0000-4000-8000-000000000001:0000005e-0000-4000-8000-000000000002@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee; a policy naming L3's ref instead routes: DependencyUnavailable
+E               assert '00000de8-000...-000000000001' == 'c0000004-000...-000000000004'
+E                 
+E                 - c0000004-0000-4000-8000-000000000004
+E                 ? -     ^^                           ^
+E                 + 00000de8-0000-4000-8000-000000000001
+E                 ?      ^^^                           ^
+
+tests/integration/lab_rollout/scenarios_recover.py:247: AssertionError
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- Captured log call -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ERROR    infrx.rollouts:__init__.py:100 release store failed routing 0000006b-0000-4000-8000-000000000001
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout/apps/infrx-api/infrx/rollouts/routing/__init__.py", line 92, in route
+    release = await self.releases.active(request.model_revision)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout/tests/integration/lab_rollout/lab_world.py", line 349, in call
+    return await target(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout/apps/infrx-api/infrx/state/lab_rollout.py", line 159, in active
+    row = await self._row("select record, policy_ref, revisions, shadow_limit from "
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout/apps/infrx-api/infrx/state/lab_rollout.py", line 154, in _row
+    raise domain_error(failed) from None
+infrx.contracts.errors.StateConflict: state_conflict: candidate lab:serving:b0000001-0000-4000-8000-000000000001:00000de8-0000-4000-8000-000000000001@sha256:39ddd03cf0fd0e38f3fb7ddd3dd39de9115984892e4bbb083f930e4836124b01 is not a published revision of nemostation/marlin-2b
+=============================================================================================================================================================================================== warnings summary ===============================================================================================================================================================================================
+tests/integration/lab_rollout/scenarios_route.py::test_k01_routing_off_serves_todays_request_over_a_live_release
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/integration/lab_rollout/scenarios_route.py::test_k01_routing_off_serves_todays_request_over_a_live_release
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_rollout/scenarios_recover.py::test_k06_an_emergency_rollback_moves_a_promoted_alias_back - AssertionError: the alias still serves the candidate after the rollback: L3 reads it as lab:serving:b0000001-0000-4000-8000-000000000001:00000de8-0000-4000-8000-000000000001@sha256:39ddd03cf0fd0e38f3fb7ddd3dd39de9115984892e4bbb083f930e4836124b01, the policy R1 routes names lab...
+SKIPPED [1] tests/integration/lab_rollout/lab_world.py:80: NOT RUN[P-08] no allocated GPU target and no measured results on this base. Steps: serve.sh + bench.py for base and variant on the target, commit marlin2b/results/R3-parity-*, then k07 with those loads; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k08
+SKIPPED [1] tests/integration/lab_rollout/lab_world.py:80: NOT RUN[composition-2] no `python -m infrx.lab.workers rollout` on this base. Steps: start it on the Lab database, breach, kill -9 between D9's decision and the alias CAS, restart: one decision, alias converged, emergency-rollback once; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k09
+SKIPPED [1] tests/integration/lab_rollout/lab_world.py:80: NOT RUN[lab-ui-swap] the Lab releases UI is not bound to /lab/v1/releases on this base. Steps: verdict, proposal at the fence, approval, emergency rollback through apps/lab/tests/e2e/rollout/; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k10
+1 failed, 15 passed, 3 skipped, 2 warnings in 46.19s
