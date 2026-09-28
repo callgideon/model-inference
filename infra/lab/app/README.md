@@ -34,6 +34,7 @@ Lab web (Vercel project `infrx-lab`, per environment; `apps/lab/.env.example`) [
 | `NEXT_PUBLIC_LAB_URL` | public | the Lab's own https origin, no path (production refuses http) |
 | `NEXT_PUBLIC_SUPABASE_URL` | public | staging: the staging project; production: the App's project |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | that project's publishable key. **Never** `SUPABASE_SERVICE_ROLE_KEY` |
+| `LAB_DATASETS_API_URL` | server | server-only base URL of the datasets backend (WR-N4-5, `apps/lab/lib/services/datasets/server.ts`); unset = the datasets pages answer "unavailable" |
 
 Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
 
