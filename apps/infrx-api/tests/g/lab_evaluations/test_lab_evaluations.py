@@ -297,7 +297,7 @@ def test_lab_evaluations__a_launch_is_checked_before_anything_is_written():
     catalog (another provider's, or none) is a 422 like a run limit in another unit than
     CREDIT, a protocol with no margin rule or a body naming a provider or user; another
     provider's member launching this form reaches nothing of it (422) - and no experiment or
-    run exists after any of them."""
+    run exists after any of them, nor was an evaluator spec asked for."""
     w = World()
     c = w.client()
     other = le.runner.evaluator_ref(SPEC, provider_org_id=NEMO, evaluator_id=uid(9, 0xee))
@@ -317,6 +317,7 @@ def test_lab_evaluations__a_launch_is_checked_before_anything_is_written():
         answer = call(c, DEV, "POST", "experiments", body)
         assert (answer.status_code, answer.json()) == (status, {"refusal": reason}), body
     assert (w.store.runs, w.experiments.rows) == ({}, {})
+    assert "evaluator" not in w.catalog.calls           # refused by the listing, no spec asked
 
 
 def test_lab_evaluations__a_launch_naming_what_the_provider_does_not_hold_is_invalid():
