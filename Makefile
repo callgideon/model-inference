@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -23,6 +23,7 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/l/access/test_mutants.py tests/h/test_mutants.py tests/d/test_l2sql_self_mutants.py
 	INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab/test_mutants.py && cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_operate/test_mutants.py
+	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_evaluate/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -154,3 +155,7 @@ backend-local:
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:
 	$(API)/.venv/bin/python tests/integration/lab_operate/runner.py --out $(CURDIR)/research/plan/evidence/e/E3L-raw-$(shell git rev-parse --short HEAD)
+
+# E6L: the LAB-EVALUATE gate (tests/integration/lab_evaluate); not in check. verdict.json lands in the evidence dir.
+lab-evaluate:
+	$(API)/.venv/bin/python tests/integration/lab_evaluate/runner.py --out $(CURDIR)/research/plan/evidence/e/E6L-raw-$(shell git rev-parse --short HEAD)
