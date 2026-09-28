@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 219,
- "updated": "2026-09-28T13:05:46Z",
+ "revision": 220,
+ "updated": "2026-09-28T13:51:15Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6158,7 +6158,7 @@
    "branch": "codex/w5-merge-11",
    "worktree": ".claude/worktrees/codex-w5-merge-11",
    "base": "3df6f537",
-   "head": null,
+   "head": "681cbf8f",
    "isolation": {
     "ports": "b3 (checks only)",
     "prefix": null,
@@ -6166,9 +6166,9 @@
    },
    "activity": "running",
    "started": "2026-09-28T13:01:11Z",
-   "updated": "2026-09-28T13:01:11Z",
+   "updated": "2026-09-28T13:51:15Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "next_action": "merge 3f413ecf + wirings 681cbf8f done (ROUTERS/pins/G anchors re-cut against batch #6; R183); verify BLOCKING at the merged tree: an unregistered evaluator launch is 404 not 422 (0034's registered-evaluator check post-dates the lane's base; the PG fixture never registers one) + two checks unfinished → fix round wf_8f9ef0ff-d59 on the merge branch (fixture put_evaluator, 422 per R183, ruff), then the big suite + mutants, then a verify lens",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
