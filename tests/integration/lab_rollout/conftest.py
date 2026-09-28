@@ -1,0 +1,31 @@
+"""E8L fixtures: the session's Lab world on the e8l stack, and where a case's artifacts live."""
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture
+def workdir(request, tmp_path) -> Path:
+    """`$INFRX_E8L_OUT/cases/<case>` under the runner (kept as the verdict's raw evidence),
+    else pytest's own temporary directory."""
+    out = os.environ.get("INFRX_E8L_OUT")
+    if not out:
+        return tmp_path
+    path = Path(out) / "cases" / re.sub(r"[^A-Za-z0-9_.-]+", "_", request.node.name)[:120]
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+@pytest.fixture(scope="session")
+def lab():
+    """One Lab database and object prefix per session; BLOCKED without a provisioned stack."""
+    import lab_world
+    if not lab_world.stack.has_stack():
+        pytest.skip(f"BLOCKED[stack] no e8l stack: {lab_world.RERUN}")
+    world = lab_world.Lab()
+    yield world
+    world.close()

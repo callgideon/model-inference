@@ -1,0 +1,93 @@
+{
+ "baseline_run": "lab:run:b0000001-0000-4000-8000-000000000001:0000005a-0000-4000-8000-000000000004@sha256:0f578cbe51513dd89d35016341d8f717e2eef274171a84ce03fdf2808e41e07e",
+ "candidate_run": "lab:run:b0000001-0000-4000-8000-000000000001:0000005a-0000-4000-8000-000000000005@sha256:cf85be501713027bb1ebcfd4f3046ee9134575bf2fedc973c24c7b6a49b815cc",
+ "decision": {
+  "outcome": "accept",
+  "reasons": []
+ },
+ "estimates": {
+  "basis": "deterministic_metric",
+  "overall": {
+   "clusters": 20,
+   "diff": 0.6,
+   "high": 0.835234190315827,
+   "improved": true,
+   "low": 0.36476580968417294,
+   "n": 40,
+   "verdict": "non_inferior"
+  },
+  "slices": {
+   "math": {
+    "clusters": 6,
+    "diff": 0.0,
+    "high": 0.0,
+    "improved": false,
+    "low": 0.0,
+    "n": 12,
+    "verdict": "non_inferior"
+   }
+  }
+ },
+ "observed": {
+  "baseline": {
+   "costs": {
+    "CREDIT": "0.40000000"
+   },
+   "errors": 0,
+   "latency_ms": {
+    "max": 139,
+    "n": 40,
+    "p50": 119,
+    "p90": 135,
+    "p99": 139
+   },
+   "mean": 0.4,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "candidate": {
+   "costs": {
+    "CREDIT": "0.80000000"
+   },
+   "errors": 0,
+   "latency_ms": {
+    "max": 139,
+    "n": 40,
+    "p50": 119,
+    "p90": 135,
+    "p99": 139
+   },
+   "mean": 1.0,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "cost_delta": {
+   "CREDIT": "0.40000000"
+  },
+  "paired": 40,
+  "universe": 40
+ },
+ "pairing": {
+  "factors": [
+   "serving_ref"
+  ],
+  "kind": "single_factor",
+  "tag": null
+ },
+ "protocol": {
+  "confidence": 0.95,
+  "margin": 0.05,
+  "metric_source": "deterministic_metric",
+  "min_cases": 10,
+  "required_slices": {
+   "math": {
+    "margin": 0.0,
+    "min_cases": 5
+   }
+  }
+ },
+ "protocol_digest": "sha256:5a63aba5f370f36ca9cfe6cddda0960fb3537f355ee9892063eb6957c136b109",
+ "report_digest": "sha256:bcf3f1792fa2419476b10d7fe6bb41cfd1ddfa5c14e9008eb4a9e681e0275b3f",
+ "schema": "infrx.eval_report.1",
+ "universe_digest": "sha256:6eb7b222734e86a18a3d26c979fd0fe18f14e7e95f854f242f03e976fe1bbb93"
+}

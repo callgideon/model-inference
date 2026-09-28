@@ -1,0 +1,19 @@
+
+==================================== ERRORS ====================================
+______ ERROR collecting tests/integration/lab_rollout/test_e8l_runner.py _______
+tests/integration/lab_rollout/test_e8l_runner.py:27: in <module>
+    runner = _load("e8l_runner", "runner.py")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_rollout/test_e8l_runner.py:23: in _load
+    spec.loader.exec_module(module)
+<frozen importlib._bootstrap_external>:995: in exec_module
+    ???
+<frozen importlib._bootstrap_external>:1132: in get_code
+    ???
+<frozen importlib._bootstrap_external>:1190: in get_data
+    ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout/tests/integration/lab_rollout/runner.py'
+=========================== short test summary info ============================
+ERROR tests/integration/lab_rollout/test_e8l_runner.py - FileNotFoundError: [...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.10s

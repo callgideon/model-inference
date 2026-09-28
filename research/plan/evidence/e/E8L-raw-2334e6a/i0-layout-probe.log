@@ -1,0 +1,2 @@
+as-is broken_runner pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): [tests/i/test_ops_steps.py::test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name ...]
+with infra/lab/observe killed 1 failed, 22 deselected in 0.12s
