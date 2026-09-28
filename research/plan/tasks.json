@@ -1071,14 +1071,15 @@
       ],
       "track": "C",
       "handoff": "handoffs/C-console-services.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "modify",
       "product": "shared",
       "milestone": "LAB-M1",
       "amendment": "Real consumer PostgREST QueryPort is C0, not C2. C2 adds only authorized Lab/content adapters.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "WR-C2-5 merged #19 (2ebd7681/lab-c2 pg+s3 world); composition WR-C2-2 owed"
     },
     {
       "id": "C3",
@@ -2660,7 +2661,7 @@
       "track": "N",
       "product": "lab",
       "milestone": "LAB-M3",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2687,7 +2688,8 @@
       ],
       "acceptance": "Capture, provider analysis, annotation, external egress and training are independent purposes. Logical denial is immediate; physical purge follows recorded retention jobs. Never claim a trained model has been unlearned or an external export recalled.",
       "failure_oracle": "Revoke a source after selection, during queue wait and before external submission; no new unauthorized egress. Missing projection cannot substitute for permission; retained aggregate evidence contains no revoked content.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "R1/R2 halves merged #19 on n3; the 0041 port move is WR-N3-5 (datasets lane)"
     },
     {
       "id": "N4",
@@ -2837,7 +2839,7 @@
       "track": "B",
       "product": "lab",
       "milestone": "LAB-M2",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2862,7 +2864,8 @@
       ],
       "acceptance": "An external training loop can submit a checkpoint and obtain one evaluation per subscription/version. Arrival order does not silently redefine latest; no checkpoint is automatically public or promoted.",
       "failure_oracle": "Replay/forge/reorder events, mutate artifact bytes under a URL, burst many checkpoints and crash between receipt/dispatch; stable dedup, bounded budget and visible skipped states.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "WR-B3-D8 merged #19 (PgCheckpointLedger on b3); composition WR-B3-D8-C owed"
     },
     {
       "id": "B4",
@@ -2946,7 +2949,7 @@
       "track": "P",
       "product": "lab",
       "milestone": "LAB-M3",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2972,7 +2975,8 @@
       ],
       "acceptance": "Existing annotation pipeline output and later human correction round-trip with provenance. App feedback is evidence, not privileged calibration truth. Record rejected label mappings and missing evidence.",
       "failure_oracle": "Forge reviewer role, relabel synthetic output as human truth, replay a correction or include holdout descendants in training export; deny or quarantine and retain original history.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "WR-P1-D8 merged #19 (PgLabelLog on p1); composition WR-P1-D8-C owed"
     },
     {
       "id": "P2",
@@ -3017,7 +3021,7 @@
       "track": "P",
       "product": "lab",
       "milestone": "LAB-M3",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3045,7 +3049,8 @@
       ],
       "acceptance": "A provider exports a training bundle, runs their existing SFT/LoRA or compatible preference workflow, imports a checkpoint and compares it on the frozen holdout. Managed RLHF, remote uploaded code and an unselected paid vendor are not required. LoRA is an adaptation method, not a competing objective to SFT.",
       "failure_oracle": "Missing/incompatible artifacts, duplicate checkpoint/callback, cancelled run returning a late checkpoint and unknown provider submission cannot auto-promote, duplicate paid work or lose lineage.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "WR-P3-D8 + WR-P3-R184 (R192) merged #19; composition WR-P3-D8-C owed"
     },
     {
       "id": "P4",
@@ -3127,7 +3132,7 @@
       "track": "R",
       "product": "lab",
       "milestone": "LAB-M4",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3154,7 +3159,8 @@
       ],
       "acceptance": "Shadow does not change user output or debit their wallet twice; provider-funded duplicate work has its own limits. Canary and A/B use declared stable cohorts; video/robot episode assignment requires the relevant extension contract.",
       "failure_oracle": "Retry admissions, change weights mid-session, revoke eligibility and overload candidate; no duplicate consumer billing, assignment drift for promised cohort, accidental shadow output or production tool execution.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "WR-R1-3 merged #19 (Router(PgRoutingReleases) on r1); composition WR-R1-3-C owed, flag default OFF"
     },
     {
       "id": "R2",

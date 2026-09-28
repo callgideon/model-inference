@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 235,
- "updated": "2026-09-28T20:42:30Z",
+ "revision": 236,
+ "updated": "2026-09-28T20:48:38Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6424,11 +6424,11 @@
     "prefix": "infrx-lab-c2-",
     "db": "lab_c2"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-28T15:37:12Z",
-   "updated": "2026-09-28T20:42:30Z",
+   "updated": "2026-09-28T20:48:38Z",
    "blocker": null,
-   "next_action": "merge batch #19 (wf_9330f386-ace) → flips C2/P1/P3/B3/R1/N3 + P2/J3 halves; composition wirings → composition-2; WR-N3-5 → datasets lane",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -6754,22 +6754,22 @@
   {
    "id": "W5-MERGE-19",
    "task": null,
-   "slice": "merge batch #19: lab-sql-integration-2 9b04287c (+R192); workflow wf_9330f386-ace",
+   "slice": "merge batch #19: lab-sql-integration-2 9b04287c (+R192); workflow wf_9330f386-ace; integrated d07470b5",
    "agent": "opus",
    "branch": "codex/w5-merge-19",
    "worktree": ".claude/worktrees/codex-w5-merge-19",
    "base": "ed4ce519",
-   "head": null,
+   "head": "8bc7f3dd",
    "isolation": {
     "ports": "p2 57528/57529, n3 57518/57519 (lane-owned)",
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T20:42:30Z",
-   "updated": "2026-09-28T20:42:30Z",
+   "updated": "2026-09-28T20:48:38Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator ff onto claude/consumer-v1 → flips",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -6778,7 +6778,9 @@
     "basis": "single-lane batch, like #15/#18",
     "at": "2026-09-28T20:42:30Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/LAB-SQL-INTEGRATION-2-368c87a.md"
+   ],
    "commands": [],
    "owned_paths": [],
    "wiring_requests": []
