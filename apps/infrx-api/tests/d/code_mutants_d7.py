@@ -420,6 +420,7 @@ RESOLVE = "test_resolve__is_the_parsed_record_and_a_refusal_is_typed"
 CALLS = "test_calls__carry_the_callers_provider_the_lease_and_the_cost"
 OUTBOX = "test_outbox__is_the_relays_store_half_with_the_claimant_on_every_ack"
 FOLLOW = "test_followup__error_release_results_evaluators_reports_and_uses"
+VARIANT_UNITS = "test_variant__a_comparison_is_sent_as_its_canonical_bytes_and_read_back_whole"
 
 
 def _p(name, invariant, old, new, *cases, **kw) -> Mutant:
@@ -499,6 +500,17 @@ CODE_MUTANTS = (
     _p("d7_py_uses_unscoped", "uses are of the caller's own dataset",
        '"lab_dataset_uses", {"provider_org_id": provider_org_id, "dataset_ref": dataset_ref}',
        '"lab_dataset_uses", {"dataset_ref": dataset_ref}', FOLLOW),
+    _p("d7_py_variant_python_json", "a comparison is stored as its RFC 8785 bytes",
+       '"body": records.canonical(comparison).decode()}))["comparison_digest"]',
+       '"body": json.dumps(comparison)}))["comparison_digest"]', VARIANT_UNITS),
+    _p("d7_py_variant_read_raw", "comparisons read back as their documents",
+       '        return [json.loads(row["body"]) for row in await self._call(',
+       '        return [row for row in await self._call(', VARIANT_UNITS),
+    _p("d7_py_variant_read_unscoped", "comparisons are the caller's provider's",
+       '            "lab_variant_comparisons", {"provider_org_id": provider_org_id,\n'
+       '                                        "report_digest": report_digest})]',
+       '            "lab_variant_comparisons", {"report_digest": report_digest})]',
+       VARIANT_UNITS),
 )
 
 
@@ -531,3 +543,59 @@ def kill_followup(mutant) -> tuple[str, str]:
 
 def run_code_mutant(mutant):
     return shared.run_mutant(mutant, RUNNER)
+
+
+# --- WR-R3-2: variant comparisons, `0040_lab_variant_comparisons.sql` (test_d7_variant) ----
+VARIANT_FILE = "0040_lab_variant_comparisons.sql"
+DB_V = f"{pgharness.DATABASE}_d7vmut"
+V_ROLES = "check_browser_roles_reach_nothing"
+V_STORED = "check_a_comparison_is_stored_once_beside_its_report"
+V_LINEAGE = "check_a_comparison_rests_on_the_providers_variant_and_report"
+V_STORE = "check_the_store_composes"
+
+
+def _v(name, old, new, check, why, **kw):
+    return _d.Mutant(name, VARIANT_FILE, old, new, "lab", check, why, **kw)
+
+
+VARIANT = (
+    _v("r3_service_edits", "grant select on infrx.lab_variant_comparisons to service_role;",
+       "grant select, delete on infrx.lab_variant_comparisons to service_role;", V_ROLES,
+       "the platform role deletes the evidence an optimization claim rests on"),
+    _v("r3_rows_mutable", "create or replace trigger lab_variant_comparisons_immutable before "
+       "update or delete", "create or replace trigger lab_variant_comparisons_immutable before "
+       "delete", V_STORED, "a stored comparison is rewritten after the fact"),
+    _v("r3_not_content_addressed", "  constraint lab_variant_comparisons_content_addressed\n"
+       "    check (comparison_digest = 'sha256:' || encode(sha256(convert_to(body, 'UTF8')), "
+       "'hex')),\n", "", V_STORED, "a row claims a digest its bytes do not have"),
+    _v("r3_replay_second_row", "    on conflict (comparison_digest) do nothing;", ";", V_STORED,
+       "storing the same comparison again is a 500"),
+    _v("r3_read_any_provider", "     and c.provider_org_id = (p_args->>'provider_org_id')::uuid",
+       "", V_STORED, "a provider reads another's comparisons"),
+    _v("r3_any_variant", "  if not exists (select 1 from infrx.lab_records r where r.ref = "
+       "v_doc->>'variant_ref'\n                  and r.kind = 'variant' and r.provider_org_id = "
+       "v_provider)\n     or", "  if false\n     or", V_LINEAGE,
+       "a comparison names another provider's (or no) variant"),
+    _v("r3_any_record_is_a_variant", "                  and r.kind = 'variant' and "
+       "r.provider_org_id = v_provider)", "                  and r.provider_org_id = "
+       "v_provider)", V_LINEAGE, "a run record is taken for the variant"),
+    _v("r3_any_report", "     or not exists (select 1 from infrx.lab_eval_reports e\n"
+       "                     where e.report_digest = v_doc->>'report_digest'\n"
+       "                       and e.provider_org_id = v_provider) then", " then", V_LINEAGE,
+       "a comparison rests on another provider's report (or a raw FK error)"),
+    _v("r3_claim_unproven", "  constraint lab_variant_comparisons_claim_is_equivalence\n"
+       "    check (not optimization_claimed or outcome = 'equivalent')\n", "  constraint "
+       "lab_variant_comparisons_claim_is_equivalence check (true)\n", V_LINEAGE,
+       "an inconclusive comparison claims an optimization"),
+    _v("r3_any_schema", "  if v_doc->>'schema' is distinct from 'infrx.variant_comparison.1' "
+       "then", "  if false then", V_LINEAGE, "any JSON is stored as a comparison"),
+    _v("r3_read_empty", "   where c.report_digest = p_args->>'report_digest'\n",
+       "   where false and c.report_digest = p_args->>'report_digest'\n", V_STORE,
+       "the stored comparison never reads back"),
+)
+VARIANT_NAMES = tuple(m.name for m in VARIANT)
+
+
+def kill_variant(mutant) -> tuple[str, str]:
+    from . import test_d7_variant as variant_world
+    return kill(mutant, DB_V, variant_world)

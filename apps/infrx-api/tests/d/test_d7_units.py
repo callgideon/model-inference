@@ -169,3 +169,24 @@ def test_followup__error_release_results_evaluators_reports_and_uses() -> None:
         ("lab_put_eval_report", {"provider_org_id": NEMO, "actor": "b2", "body": body}),
         ("lab_eval_report", {"provider_org_id": NEMO, "report_digest": digest}),
         ("lab_dataset_uses", {"provider_org_id": NEMO, "dataset_ref": "d"})]
+
+
+def test_variant__a_comparison_is_sent_as_its_canonical_bytes_and_read_back_whole() -> None:
+    """WR-R3-2: the stored body is the RFC 8785 bytes (so its digest is the content's)."""
+    import json
+
+    from infrx.contracts.lab import records
+    from infrx.state.lab_data import PgLabDataStore
+    doc = {"schema": "infrx.variant_comparison.1", "outcome": "equivalent", "é": 1}
+    conn = _Conn([{"comparison_digest": "sha256:d"}, [{"body": json.dumps(doc)}]])
+
+    async def connect():
+        return conn
+    store = PgLabDataStore(connect)
+    assert _ok(store.put_variant_comparison(doc, provider_org_id=NEMO, actor="r3")) == \
+        "sha256:d"
+    assert _ok(store.variant_comparisons("sha256:r", provider_org_id=NEMO)) == [doc]
+    assert [_sent(conn, n) for n in range(2)] == [
+        ("lab_put_variant_comparison", {"provider_org_id": NEMO, "actor": "r3",
+                                        "body": records.canonical(doc).decode()}),
+        ("lab_variant_comparisons", {"provider_org_id": NEMO, "report_digest": "sha256:r"})]

@@ -159,6 +159,21 @@ class PgLabDataStore:
                                                    "report_digest": report_digest})
         return {**json.loads(row["body"]), "report_digest": row["report_digest"]}
 
+    async def put_variant_comparison(self, comparison: dict[str, Any], *, provider_org_id: str,
+                                     actor: str) -> str:
+        """WR-R3-2: store R3's `infrx.variant_comparison.1` beside its B2 report, write-once
+        by the sha256 of its RFC 8785 bytes (the digest is returned)."""
+        return (await self._call("lab_put_variant_comparison", {
+            "provider_org_id": provider_org_id, "actor": actor,
+            "body": records.canonical(comparison).decode()}))["comparison_digest"]
+
+    async def variant_comparisons(self, report_digest: str, *,
+                                  provider_org_id: str) -> list[dict[str, Any]]:
+        """The comparisons resting on the provider's report, oldest first."""
+        return [json.loads(row["body"]) for row in await self._call(
+            "lab_variant_comparisons", {"provider_org_id": provider_org_id,
+                                        "report_digest": report_digest})]
+
     # --- H1's DatasetSources port (R172) --------------------------------------------------
     async def uses(self, provider_org_id: str, dataset_ref: str) -> tuple[DatasetUse, ...]:
         """Every (grantor, model, category) of the grant versions the provider's OWN

@@ -13,18 +13,19 @@ from . import code_mutants_d7 as mutation_list
 from . import migration_mutants as _d
 from . import pgharness
 from . import test_d7_followup as followup
+from . import test_d7_variant as variant_world
 from . import test_d7_lab_data as t
 from . import test_d7_units as units
 
 SQL, CODE = mutation_list.SQL_MUTANTS, mutation_list.CODE_MUTANTS
-FOLLOWUP = mutation_list.FOLLOWUP
+FOLLOWUP, VARIANT = mutation_list.FOLLOWUP, mutation_list.VARIANT
 _reason = pgharness.unavailable()
 
 
 def test_the_lists_are_well_formed() -> None:
-    names = [m.name for m in SQL + FOLLOWUP] + [m.name for m in CODE]
+    names = [m.name for m in SQL + FOLLOWUP + VARIANT] + [m.name for m in CODE]
     assert len(set(names)) == len(names), "duplicate mutant names"
-    stale = [f"{m.name}: {_d.anchor_count(m)}" for m in SQL + FOLLOWUP
+    stale = [f"{m.name}: {_d.anchor_count(m)}" for m in SQL + FOLLOWUP + VARIANT
              if _d.anchor_count(m) != m.occurrences]
     assert not stale, f"misdeclared SQL anchors: {stale}"
     for m in CODE:
@@ -32,19 +33,21 @@ def test_the_lists_are_well_formed() -> None:
         assert source.count(m.old) == m.occurrences, f"{m.name}: {source.count(m.old)}"
     assert all(m.check in t.CHECKS for m in SQL)
     assert all(m.check in followup.CHECKS for m in FOLLOWUP)
+    assert all(m.check in variant_world.CHECKS for m in VARIANT)
     print(f"D7 mutants: {len(SQL)} + {len(FOLLOWUP)} SQL, {len(CODE)} Python")
 
 
 def test_no_mutant_anchors_in_a_superseded_function_body() -> None:
     """D5 item 10b's guard for these lists: 0034 redefines three 0029 bodies, whose mutants
     moved with them."""
-    found = _d.superseded(SQL + FOLLOWUP)
+    found = _d.superseded(SQL + FOLLOWUP + VARIANT)
     assert not found, found
 
 
 def test_every_case_is_covered_by_a_mutant() -> None:
     uncovered = sorted(set(t.CHECKS) - {m.check for m in SQL})
     uncovered += sorted(set(followup.CHECKS) - {m.check for m in FOLLOWUP})
+    uncovered += sorted(set(variant_world.CHECKS) - {m.check for m in VARIANT})
     cases = {name for name in dir(units) if name.startswith("test_")}
     uncovered += sorted(cases - {c for m in CODE for c in m.cases})
     assert not uncovered, f"cases no mutant can break: {uncovered}"
@@ -54,6 +57,15 @@ def test_every_case_is_covered_by_a_mutant() -> None:
 @pytest.mark.parametrize("mutant", SQL, ids=lambda m: m.name)
 def test_sql_mutant_is_killed(mutant) -> None:
     outcome, detail = mutation_list.kill(mutant)
+    assert outcome == _d.KILLED, (f"{mutant.name} was {outcome} by {mutant.check}: {detail}. "
+                                  f"In production: {mutant.why}")
+    print(f"{mutant.name}: {outcome} -> {detail}")
+
+
+@pytest.mark.skipif(_reason is not None, reason=f"task-local PostgreSQL unavailable: {_reason}")
+@pytest.mark.parametrize("mutant", VARIANT, ids=lambda m: m.name)
+def test_variant_mutant_is_killed(mutant) -> None:
+    outcome, detail = mutation_list.kill_variant(mutant)
     assert outcome == _d.KILLED, (f"{mutant.name} was {outcome} by {mutant.check}: {detail}. "
                                   f"In production: {mutant.why}")
     print(f"{mutant.name}: {outcome} -> {detail}")
