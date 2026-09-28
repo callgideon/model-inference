@@ -96,3 +96,5 @@ New mutants (36 total, all killed): `activated_task_not_flagged`, `open_lane_cov
 | `progress.py render` | OK (outputs restored, not committed) |
 | `validate_plan.py` | PASS, 949 links / 372 documents |
 | `ruff check` (the three scripts) | same 4 pre-existing E731, no new finding |
+
+Rulings: WR-TW-2 numbered as R201 in `08-contracts-v1-encoding.md` §10 at the tracker-waves merge (`codex/w5-merge-23`, amends R151); WR-TW-1 applied as `apps/infrx-api/tests/d/test_upgrade_split.py`.
