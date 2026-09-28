@@ -1,10 +1,12 @@
 // B4: the Lab's view of the evaluation backends - B1 runs (D7 `lab_run_status`), B2 reports, B3
-// checkpoint subscriptions, H1 harness revisions - through one LAB_EVALS surface that lab-api does not
-// serve yet (filed as WR-B4-1). Records are the backends' own JSON (snake_case, verbatim) so nothing is
-// re-derived here. Until the adapter is wired the port is "unavailable" (fails closed), or, only
-// outside production and only when asked for, the labelled preview fake.
+// checkpoint subscriptions, H1 harness revisions - through lab-api's LAB_EVALS surface (WR-B4-1,
+// `/lab/v1/evaluations`). Records are the backends' own JSON (snake_case, verbatim) so nothing is
+// re-derived here. With LAB_EVALS_API_URL set the port is the HTTP adapter (server.ts); unset it is
+// "unavailable" (fails closed), or, only outside production and only when asked for, the labelled
+// preview fake.
 import type { Role } from "../../auth/access.ts";
 import { FakeEvaluation } from "./fake.ts";
+import { labEvaluation } from "./server.ts";
 
 /** contracts/v2 ROLE_CAPABILITIES: every role reads, developer and administrator run evaluations. */
 export type Capability = "read_aggregate_health" | "run_evaluation";
@@ -132,8 +134,8 @@ let preview: FakeEvaluation | undefined;
 export const isPreview = (env: Record<string, string | undefined> = process.env) =>
   env.LAB_EVALS_PREVIEW === "1" && env.NODE_ENV !== "production";
 
-/** The wiring seam for WR-B4-1: the real adapter replaces UNAVAILABLE here. */
+/** WR-B4-1: the HTTP adapter when configured; otherwise unavailable. */
 export function evaluationPort(env: Record<string, string | undefined> = process.env): EvaluationPort {
   if (isPreview(env)) return (preview ??= new FakeEvaluation());
-  return UNAVAILABLE;
+  return labEvaluation(env) ?? UNAVAILABLE;
 }
