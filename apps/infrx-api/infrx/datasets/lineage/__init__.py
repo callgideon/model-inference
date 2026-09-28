@@ -22,7 +22,7 @@ ids), and a run or artifact names its dataset. What D7 does not hold is the trac
 sample: `lab/<provider>/lineage/samples/<sample id>.json` (grantor, request, grant, model,
 digest, `content_until` = T3's content bound) and a per-request marker
 `lab/<provider>/lineage/traces/<grantor>/<request>/<sample id>`, all write-once; the bound
-is also D7's (0041 `lab_sample_bounds`, written before the version is published).
+is also D7's (0041 `lab_sample_bounds`).
 
 **Denial (N3.c).** `permitted` is the one gate every dataset read, derivation, export, part
 read, queued job and external submission re-checks: D7's samples under a grant current NOW
@@ -31,8 +31,9 @@ expiry is denied the instant it passes, with no job in between) - 0041's
 `lab_permitted_samples` on D7's clock, less the bounds the caller's `now` has passed. A
 tombstone (0041 `lab_sample_tombstones`, WR-N3-5: reason and D7's time, never content;
 `restrictions` is `PgSampleRestrictions`) is permanent - a later re-grant does not resurrect
-the sample. The object tombstones of before WR-N3-5 move once with `backfill`. `tombstone` is the push (a T3
-deletion or an L2 revocation hook, wiring); `reconcile` is the pull that finds the rest
+the sample; the object tombstones of before WR-N3-5 move once with `backfill`. `tombstone`
+is the push (a T3 deletion or an L2 revocation hook, wiring); `reconcile` is the pull that
+finds the rest
 (grant no longer current, a newer version of it dropping the entry's model or one of its
 categories (`grant_narrowed`), request deleted, content expired) and, only for deletion and
 expiry, then deletes the sample copies: logical denial first, physical purge after
