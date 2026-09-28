@@ -57,7 +57,7 @@ class Case:
         self.objects = asyncio.run(fakes.objects_for(self.store))
         self.payer = j2.payer(self.w.A)
         budget = budget if budget is not None else usd(100)
-        self.ledger = j2.FakeJudgeLedger({self.payer: budget})
+        self.ledger = fakes.TeacherLedger({self.payer: budget})
         self.provider = provider or fakes.Provider(mode, on_submit)
         self.labels = fakes.Labels()
         self.wiring = TeacherWiring(members=self.w.store, ledger=self.ledger,
@@ -209,6 +209,7 @@ def test_p2__collected_labels_import_once_as_model_labels_never_ground_truth():
             "model": j1.JUDGE_MODEL, "prompt": "teach-v1", "confidence": 0.9}]}]
     assert got.failures == ((sid(2), "malformed_label"), (sid(1), "duplicate"),
                             (sid(6), "not_sent"))
+    assert asyncio.run(case.ledger.failures(first)) == list(got.failures)   # D8's log (WR-P2-D8)
     assert got.run.state == "completed" and case.ledger.spent[case.payer] == case.provider.cost
     again = case.collect(first)
     assert again.run.state == "completed" and len(case.labels.calls) == 1

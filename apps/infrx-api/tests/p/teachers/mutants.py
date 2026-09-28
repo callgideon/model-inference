@@ -134,18 +134,24 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("numeric_label_accepted", "a label is text",
        T, "if type(label) is not str or", "if not isinstance(label, (str, int)) or", LABEL,
        dies_by=("AttributeError",)),
+    _m("failures_unrecorded", "each per-item failure is kept in D8's log (WR-P2-D8)",
+       T, "        await ledger.record_failures(run_id, failures)\n", "        pass\n", COLLECT),
     _m("ambiguous_submit_released", "an unknown outcome keeps its hold (ambiguous)",
        "judge/submit.py", "        return await ledger.quarantine(run.run_id,",
        '        return await ledger.release(run.run_id, "failed",', AMBIG),
 )
 
-RUNNER = Runner(name="p2", targets=(SUITE,), extra_args=(f"--ignore={SUITE}/test_mutants.py",))
+#: the real-store half (WR-P2-D8) is outside the runner (T2I/G8's pattern): the fake cases'
+#: mutants are its oracles.
+OUTSIDE = ("test_mutants.py", "test_teachers_pg.py")
+RUNNER = Runner(name="p2", targets=(SUITE,),
+                extra_args=tuple(f"--ignore={SUITE}/{name}" for name in OUTSIDE))
 
 
 def case_names() -> set[str]:
     import re
     pattern = re.compile(r"^def (test_\w+)", re.MULTILINE)
-    return {name for path in (API_DIR / SUITE).glob("test_*.py") if path.name != "test_mutants.py"
+    return {name for path in (API_DIR / SUITE).glob("test_*.py") if path.name not in OUTSIDE
             for name in pattern.findall(path.read_text())}
 
 

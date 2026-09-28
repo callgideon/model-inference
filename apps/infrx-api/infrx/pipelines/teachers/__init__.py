@@ -26,7 +26,7 @@ stops the batch (`stopped="permission"`).
 **Collection** reads a submitted run's results once per poll: a label is one short text with
 an optional confidence (`parse_label`); a result for a sample the run never sent, a
 duplicate, a malformed label or a sample the provider may no longer train on is a per-item
-failure, never imported. The rest reconcile into D8 through P1's `import_labels` as method
+failure, never imported, and recorded in D8's per-item failure log. The rest reconcile into D8 through P1's `import_labels` as method
 `model` - P1 publishes those as `synthetic`, never `human` and never ground truth - with the
 teacher model and prompt pinned on each row. The run settles once, when the provider is done.
 """
@@ -71,7 +71,7 @@ class TeacherBatch:
 @dataclass(frozen=True)
 class TeacherWiring:
     members: Any                  # the L2 AccessStore (`membership`, `db_now`)
-    ledger: JudgeLedger           # D6J (J2's seam; D8's purpose-specific twin is SR-P2-1)
+    ledger: JudgeLedger           # D8's PgTeacherLedger: J2's ledger + `record_failures`
     provider: JudgeProvider       # J2's HttpJudgeProvider to the local teacher fake
     store: Any                    # the D7/N2 store (`resolve`, `accessible_samples`)
     objects: Any                  # N2 sample content objects
@@ -263,6 +263,8 @@ async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) ->
         if parsed[1] is not None:
             row["confidence"] = parsed[1]
         rows.append(row)
+    if failures:                                        # D8's append-only per-item log
+        await ledger.record_failures(run_id, failures)
     imported = None
     if rows:
         imported = await wiring.labels(wiring.store, wiring.log,
