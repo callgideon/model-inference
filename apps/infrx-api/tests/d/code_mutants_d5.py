@@ -177,8 +177,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("public_resolves_an_inactive_deployment", "review CF-3: a public alias resolves "
        "only an ACTIVE deployment", "    and d.visibility = 'public' and d.state = 'active'",
        "    and d.visibility = 'public'", CATALOG, file=C),
-    _m("private_resolves_a_retired_deployment", "review CF-3: a retired private deployment "
-       "never resolves", " and d.visibility = 'private' and d.state <> 'retired'",
+    _m("private_resolves_a_retired_deployment", "review CF-3 + WR-L3-5: only a ready_private "
+       "private deployment resolves", " and d.visibility = 'private' and d.state = 'ready_private'",
        " and d.visibility = 'private'", CATALOG, file=C),
     # D10 (F2C.c finding 2): "the card" is the listing's; the effective check moved with it.
     _m("card_not_effective_checked", "a card is active only once effective (DB clock)",

@@ -153,8 +153,13 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 #: The service's edits, killed by the same cases on PostgreSQL (after L3-SQL merges).
+#: WR-LSQ-8: not `dev_revision_of_any_environment` - 0032's `lab_control_transition` and
+#: `lab_control_propose` also refuse a prod source, so on PostgreSQL that edit is equivalent
+#: (the store's rule is killed by lab-sql's own list; the fake list keeps the service's).
+PG_EQUIVALENT = frozenset({"dev_revision_of_any_environment"})
 PG_MUTANTS: tuple[Mutant, ...] = tuple(
-    dataclasses.replace(m, name=f"pg_{m.name}") for m in MUTANTS if m.file == C)
+    dataclasses.replace(m, name=f"pg_{m.name}") for m in MUTANTS
+    if m.file == C and m.name not in PG_EQUIVALENT)
 
 
 def case_names() -> set[str]:
