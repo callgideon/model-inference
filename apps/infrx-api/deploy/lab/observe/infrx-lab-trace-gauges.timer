@@ -1,0 +1,12 @@
+[Unit]
+Description=Write the Lab trace gauges every minute (I2L-OBS) - OFF unless /etc/infrx-lab/traces.env exists
+ConditionPathExists=/etc/infrx-lab/traces.env
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=infrx-lab-trace-gauges.service
+
+[Install]
+WantedBy=timers.target

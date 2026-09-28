@@ -1,0 +1,476 @@
+.FsFFFFFFsFFs.F.F                                                                                                                                                                                                                                                                                                                                                                                        [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+________________________________________________________________________________________________________________________________________________________________ test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet ________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet')
+
+    def test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet(workdir):
+        from infrx.judge.submit import collect
+        with ow.observe_trip(workdir) as trip:
+            ids = traced(trip, 2, "o04")
+>           before = books(trip)
+                     ^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_judge.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_observe/scenarios_judge.py:33: in books
+    trip.db("select wallet_id, ledger_total, reserved_total from infrx.wallets "
+tests/integration/backend/pilotbox.py:310: in db
+    return conn.execute(sql, args).fetchall()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Connection [BAD] at 0x7fbe84a049b0>, query = 'select wallet_id, ledger_total, reserved_total from infrx.wallets order by wallet_id', params = (), prepare = None, binary = False
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool = False,
+    ) -> Cursor[Row]:
+        """Execute a query and return a cursor to read its results."""
+        try:
+            cur = self.cursor()
+            if binary:
+                cur.format = BINARY
+    
+            if isinstance(query, Template):
+                if params is not None:
+                    raise TypeError(
+                        "'execute()' with string template query doesn't support parameters"
+                    )
+                return cur.execute(query, prepare=prepare)
+            else:
+                return cur.execute(query, params, prepare=prepare)
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           psycopg.errors.UndefinedColumn: column "wallet_id" does not exist
+E           LINE 1: select wallet_id, ledger_total, reserved_total from infrx.wa...
+E                          ^
+
+apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection.py:304: UndefinedColumn
+____________________________________________________________________________________________________________________________________________________________________ test_o05_a_grant_revoked_between_reservation_and_egress_sends_nothing _____________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o05_a_grant_revoked_between_reservation_and_egress_sends_nothing')
+
+    def test_o05_a_grant_revoked_between_reservation_and_egress_sends_nothing(workdir):
+        from infrx.contracts import errors
+        with ow.observe_trip(workdir) as trip:
+            ids = traced(trip, 1, "o05")
+            with ow.judge(trip) as judge:
+                ledger = judge.ledger
+                begin = ledger.begin_submit
+    
+                async def revoked_while_queued(run_id):
+                    answer = await begin(run_id)
+                    ow.revoke(trip, trip.world.alpha)             # the owner revokes, mid-queue
+                    return answer
+                ledger.begin_submit = revoked_while_queued
+                job = judge.job(trip, ids)
+                try:
+                    run(ow.submit(judge, trip, ids, job=job))
+                    raise AssertionError("a revoked grant still submitted")
+                except (errors.Forbidden, errors.NotFound):
+                    pass
+                assert judge.posts() == [], "content left after the revocation"
+                assert ledger.runs[job.run_id].state == "failed"
+>               assert ledger.committed(judge.payer).is_zero(), "the hold was kept"
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'bool' object is not callable
+
+tests/integration/lab_observe/scenarios_judge.py:104: TypeError
+__________________________________________________________________________________________________________________________________________________________________ test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge ___________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge')
+
+    def test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge(workdir):
+        """The owner deletes one request and the other's content passes its bound; the sweep has
+        not run yet. Oracle: J2 reading the raw projection sends what every read already hides."""
+        from infrx.traces.retention import Retention
+        with ow.observe_trip(workdir) as trip:
+            alpha = trip.world.alpha
+            expiring, deleted = traced(trip, 2, "o06")
+            live = trip.traces.retention
+            later = Retention(live.store, live.traces, live.feedback, live.objects,
+                              content_days=live.content_days, metadata_months=live.metadata_months,
+                              clock=lambda: ow.Wall.now() + timedelta(days=live.content_days + 1))
+            assert run(later.expire()) >= 1
+            run(live.delete(alpha.org_id, deleted, "owner"))
+            with ow.judge(trip) as judge:
+                job = judge.job(trip, [expiring, deleted])
+                outcome = run(ow.submit(judge, trip, [expiring, deleted], job=job))
+                sent = [item["sample_id"] for post in judge.posts() for item in post["items"]]
+>               assert sent == [], f"expired/deleted content reached the judge: {sent}"
+E               AssertionError: expired/deleted content reached the judge: ['5161610e-feb8-403b-807f-e611937c6ced', 'a21d153d-3b86-405c-9074-77ce90b67533']
+E               assert ['5161610e-fe...77ce90b67533'] == []
+E                 
+E                 Left contains 2 more items, first extra item: '5161610e-feb8-403b-807f-e611937c6ced'
+E                 Use -v to get more diff
+
+tests/integration/lab_observe/scenarios_judge.py:125: AssertionError
+_______________________________________________________________________________________________________________________________________________________________________________ test_o06_after_the_sweep_nothing_is_left_to_send _______________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o06_after_the_sweep_nothing_is_left_to_send')
+
+    def test_o06_after_the_sweep_nothing_is_left_to_send(workdir):
+        from infrx.traces.retention import Retention
+        with ow.observe_trip(workdir) as trip:
+            alpha = trip.world.alpha
+            expiring, deleted = traced(trip, 2, "o06-swept")
+            live = trip.traces.retention
+            later = Retention(live.store, live.traces, live.feedback, live.objects,
+                              content_days=live.content_days, metadata_months=live.metadata_months,
+                              clock=lambda: ow.Wall.now() + timedelta(days=live.content_days + 1))
+            run(later.expire())
+            run(live.delete(alpha.org_id, deleted, "owner"))
+            assert run(later.sweep())["failed"] == 0
+            with ow.judge(trip) as judge:
+                outcome = run(ow.submit(judge, trip, [expiring, deleted]))
+                assert judge.posts() == [] and outcome.state == "failed", outcome
+>               assert judge.ledger.committed(judge.payer).is_zero()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'bool' object is not callable
+
+tests/integration/lab_observe/scenarios_judge.py:144: TypeError
+____________________________________________________________________________________________________________________________________________________________________ test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled ____________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled')
+
+    def test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled(workdir):
+        from infrx.judge.submit import collect, reconcile
+>       with ow.observe_trip(workdir) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_judge.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:475: in composed
+    with stack.journey_postgrest(world.database) as rest:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/stack.py:574: in journey_postgrest
+    postgrest_up(JOURNEY_PROJECT, JOURNEY_POSTGREST_PORT, database)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+project = 'infrx-e5lrestj', port = 57131, database = 'infrx_e5l_4152761_6'
+
+    def postgrest_up(project: str = PROJECT, port: int = POSTGREST_PORT,
+                     database: str = harness.PG_DATABASE) -> str:
+        """Start PostgREST on E2's network and wait for it. Refuses a container it did not
+        create. PostgREST reads its schema cache at start, so this runs AFTER `migrate`."""
+        container = f"{project}-postgrest"
+        owner = postgrest_owner(container)
+        if owner not in (None, "ours"):
+>           raise harness.HarnessError(f"refusing to touch {container}: {owner}")
+E           harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+
+tests/integration/backend/stack.py:533: HarnessError
+___________________________________________________________________________________________________________________________________________________________________ test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace ____________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace')
+
+    def test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace(workdir):
+>       with ow.observe_trip(workdir) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:27: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:475: in composed
+    with stack.journey_postgrest(world.database) as rest:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/stack.py:574: in journey_postgrest
+    postgrest_up(JOURNEY_PROJECT, JOURNEY_POSTGREST_PORT, database)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+project = 'infrx-e5lrestj', port = 57131, database = 'infrx_e5l_4152761_7'
+
+    def postgrest_up(project: str = PROJECT, port: int = POSTGREST_PORT,
+                     database: str = harness.PG_DATABASE) -> str:
+        """Start PostgREST on E2's network and wait for it. Refuses a container it did not
+        create. PostgREST reads its schema cache at start, so this runs AFTER `migrate`."""
+        container = f"{project}-postgrest"
+        owner = postgrest_owner(container)
+        if owner not in (None, "ours"):
+>           raise harness.HarnessError(f"refusing to touch {container}: {owner}")
+E           harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+
+tests/integration/backend/stack.py:533: HarnessError
+________________________________________________________________________________________________________________________________________________________________ test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it ________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it')
+
+    def test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it(workdir):
+>       with ow.observe_trip(workdir) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:475: in composed
+    with stack.journey_postgrest(world.database) as rest:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/stack.py:574: in journey_postgrest
+    postgrest_up(JOURNEY_PROJECT, JOURNEY_POSTGREST_PORT, database)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+project = 'infrx-e5lrestj', port = 57131, database = 'infrx_e5l_4152761_8'
+
+    def postgrest_up(project: str = PROJECT, port: int = POSTGREST_PORT,
+                     database: str = harness.PG_DATABASE) -> str:
+        """Start PostgREST on E2's network and wait for it. Refuses a container it did not
+        create. PostgREST reads its schema cache at start, so this runs AFTER `migrate`."""
+        container = f"{project}-postgrest"
+        owner = postgrest_owner(container)
+        if owner not in (None, "ours"):
+>           raise harness.HarnessError(f"refusing to touch {container}: {owner}")
+E           harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+
+tests/integration/backend/stack.py:533: HarnessError
+______________________________________________________________________________________________________________________________________________________________ test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once ______________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...137e1f2b/scratchpad/e5l-run1/cases/test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once')
+
+    def test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once(workdir):
+        from infrx.state.jobstore import connector
+        from infrx.traces.feedback import FeedbackProjector
+        from infrx.traces.feedback.pg import PgFeedbackOutbox
+>       with ow.observe_trip(workdir, start=("worker",)) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:70: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:475: in composed
+    with stack.journey_postgrest(world.database) as rest:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/stack.py:574: in journey_postgrest
+    postgrest_up(JOURNEY_PROJECT, JOURNEY_POSTGREST_PORT, database)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+project = 'infrx-e5lrestj', port = 57131, database = 'infrx_e5l_4152761_9'
+
+    def postgrest_up(project: str = PROJECT, port: int = POSTGREST_PORT,
+                     database: str = harness.PG_DATABASE) -> str:
+        """Start PostgREST on E2's network and wait for it. Refuses a container it did not
+        create. PostgREST reads its schema cache at start, so this runs AFTER `migrate`."""
+        container = f"{project}-postgrest"
+        owner = postgrest_owner(container)
+        if owner not in (None, "ours"):
+>           raise harness.HarnessError(f"refusing to touch {container}: {owner}")
+E           harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+
+tests/integration/backend/stack.py:533: HarnessError
+________________________________________________________________________________________________________________________________________________________________ test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant _________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...-0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant')
+
+    def test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant(workdir):
+        from infrx.contracts import errors
+        from infrx.contracts.v2.records import DataCategory, DataPurpose
+>       with ow.observe_trip(workdir) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:108: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:475: in composed
+    with stack.journey_postgrest(world.database) as rest:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/stack.py:574: in journey_postgrest
+    postgrest_up(JOURNEY_PROJECT, JOURNEY_POSTGREST_PORT, database)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+project = 'infrx-e5lrestj', port = 57131, database = 'infrx_e5l_4152761_10'
+
+    def postgrest_up(project: str = PROJECT, port: int = POSTGREST_PORT,
+                     database: str = harness.PG_DATABASE) -> str:
+        """Start PostgREST on E2's network and wait for it. Refuses a container it did not
+        create. PostgREST reads its schema cache at start, so this runs AFTER `migrate`."""
+        container = f"{project}-postgrest"
+        owner = postgrest_owner(container)
+        if owner not in (None, "ours"):
+>           raise harness.HarnessError(f"refusing to touch {container}: {owner}")
+E           harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+
+tests/integration/backend/stack.py:533: HarnessError
+________________________________________________________________________________________________________________________________________________________________ test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after ________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after')
+
+    def test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after(workdir):
+>       with ow.observe_trip(workdir) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:475: in composed
+    with stack.journey_postgrest(world.database) as rest:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/stack.py:574: in journey_postgrest
+    postgrest_up(JOURNEY_PROJECT, JOURNEY_POSTGREST_PORT, database)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+project = 'infrx-e5lrestj', port = 57131, database = 'infrx_e5l_4152761_12'
+
+    def postgrest_up(project: str = PROJECT, port: int = POSTGREST_PORT,
+                     database: str = harness.PG_DATABASE) -> str:
+        """Start PostgREST on E2's network and wait for it. Refuses a container it did not
+        create. PostgREST reads its schema cache at start, so this runs AFTER `migrate`."""
+        container = f"{project}-postgrest"
+        owner = postgrest_owner(container)
+        if owner not in (None, "ours"):
+>           raise harness.HarnessError(f"refusing to touch {container}: {owner}")
+E           harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+
+tests/integration/backend/stack.py:533: HarnessError
+________________________________________________________________________________________________________________________________________________________________ test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once _________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...-0b8e137e1f2b/scratchpad/e5l-run1/cases/test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once')
+
+    def test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once(workdir):
+>       with ow.observe_trip(workdir, start=("gateway",)) as trip:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/lab_observe/observe_world.py:181: in observe_trip
+    with world.composed(workdir, start=start, **env) as trip:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/integration/backend/e3c/world.py:471: in composed
+    world = stack.provision_two_tenants()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/backend/stack.py:383: in provision_two_tenants
+    h = pg_jobstore()
+        ^^^^^^^^^^^^^
+tests/integration/backend/stack.py:215: in pg_jobstore
+    return _factory(limits=limits)        # D4: pgtesting's `stream` is PgStreamStore
+           ^^^^^^^^^^^^^^^^^^^^^^^
+apps/infrx-api/infrx/state/pgtesting.py:294: in factory
+    name = fresh_database()
+           ^^^^^^^^^^^^^^^^
+tests/integration/backend/stack.py:193: in fresh_database
+    _admin(f'create database "{name}" template "{TEMPLATE}"')
+tests/integration/backend/stack.py:145: in _admin
+    conn.execute(statement)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Connection [BAD] at 0x7fbe82d73380>, query = 'create database "infrx_e5l_4152761_14" template "infrx_e5l_tmpl"', params = None, prepare = None, binary = False
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool = False,
+    ) -> Cursor[Row]:
+        """Execute a query and return a cursor to read its results."""
+        try:
+            cur = self.cursor()
+            if binary:
+                cur.format = BINARY
+    
+            if isinstance(query, Template):
+                if params is not None:
+                    raise TypeError(
+                        "'execute()' with string template query doesn't support parameters"
+                    )
+                return cur.execute(query, prepare=prepare)
+            else:
+                return cur.execute(query, params, prepare=prepare)
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           psycopg.errors.InvalidCatalogName: template database "infrx_e5l_tmpl" does not exist
+
+apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection.py:304: InvalidCatalogName
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_observe/scenarios_judge.py::test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet - psycopg.errors.UndefinedColumn: column "wallet_id" does not exist
+FAILED tests/integration/lab_observe/scenarios_judge.py::test_o05_a_grant_revoked_between_reservation_and_egress_sends_nothing - TypeError: 'bool' object is not callable
+FAILED tests/integration/lab_observe/scenarios_judge.py::test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge - AssertionError: expired/deleted content reached the judge: ['5161610e-feb8-403b-807f-e611937c6ced', 'a21d153d-3b86-405c-9074-77ce90b67533']
+FAILED tests/integration/lab_observe/scenarios_judge.py::test_o06_after_the_sweep_nothing_is_left_to_send - TypeError: 'bool' object is not callable
+FAILED tests/integration/lab_observe/scenarios_judge.py::test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled - harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace - harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it - harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once - harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant - harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after - harness.HarnessError: refusing to touch infrx-e5lrestj-postgrest: foreign ('/tmp/e5l-stack-pristine-uolzut1n/tests/integration/backend')
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once - psycopg.errors.InvalidCatalogName: template database "infrx_e5l_tmpl" does not exist
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[D6J,J3] the judge ledger here is J2's in-memory D6J fake (tests/j/submit/fakes.py); reservation races under real PostgreSQL contention and J3's calibration need D6J/J3 merged; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o04
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[COMPOSITION] capture off -> on in the box needs the gateway's spool sink (WR-COMP-4) and the worker's TRACE_PUMPS switch (codex/w5-composition), neither on this base; TRACE-BOUNDS' peak-budget accumulation is only observable there; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01
+SKIPPED [1] tests/integration/lab_observe/observe_world.py:62: NOT RUN[LAB-API,C3L,G4T] the provider traces route (codex/w5-lab-api) and the provider review read (C3L/G4T) are not on this base; the V2/V3 panels have no server read to render against; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o03
+11 failed, 3 passed, 3 skipped in 75.38s (0:01:15)

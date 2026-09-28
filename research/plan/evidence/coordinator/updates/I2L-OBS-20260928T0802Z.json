@@ -1,0 +1,43 @@
+{
+ "activity": "review",
+ "head": "3da696a0",
+ "worktree": ".claude/worktrees/codex-w5-lab-observe",
+ "branch": "codex/w5-lab-observe",
+ "owned_paths": [
+  "infra/lab/observe/",
+  "apps/infrx-api/deploy/lab/observe/",
+  "tests/integration/lab_observe/",
+  "research/plan/evidence/e/E5L-*"
+ ],
+ "task": "I2L-OBS",
+ "slice": "I2L-OBS: trace/judge units, storage grants, egress budgets, T3 alarms (off by default)",
+ "commands": [
+  {
+   "cmd": "pytest tests/integration/lab_observe/test_i2l_obs.py",
+   "exit": 0,
+   "summary": "10 passed (red first: 10 failed)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py",
+   "exit": 0,
+   "summary": "22/22 I2L-OBS mutants killed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "one verify round on 5 small files",
+  "at": "2026-09-28T08:02Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-OBS-1",
+  "WR-OBS-2",
+  "WR-OBS-4"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E5L-I2L-OBS-3da696a.md"
+ ]
+}

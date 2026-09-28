@@ -35,12 +35,20 @@ grep -E '^MONITOR_DATABASE_URL=' /etc/infrx-observe.env > "$dsn_env" 2>/dev/null
 
 rules=$(mktemp -p "$run" rules.XXXXXX.json)
 trap 'rm -f "$dsn_env" "$firing" "$rules"' EXIT
-python3 "$repo/infra/observe/rules.py" "$repo/infra/alerts" > "$rules"
+# I2L-OBS (WR-OBS-2): the Lab trace textfile once the role is enabled (missing or stale, it is
+# ScrapeFailed), and its alarms only when the pinned copy holds them: a pin from before
+# WR-OBS-5 must never empty the rule merge and silence every App alert.
+lab_rules=() lab_sources=()
+if [[ -f /etc/infrx-lab/traces.env ]]; then
+  lab_sources=(--source /m/lab-traces.prom)
+  [[ -f $repo/infra/lab/observe/alerts.json ]] && lab_rules=("$repo/infra/lab/observe/alerts.json")
+fi
+python3 "$repo/infra/observe/rules.py" "$repo/infra/alerts" "${lab_rules[@]}" > "$rules"
 chmod 0644 "$rules"
 "${contained[@]}" -v "$rules:/rules.json:ro" -v "$dir:/m" "$image" \
   python -m infrx.observe.alerts --rules /rules.json \
   --source http://127.0.0.1:8001/metrics --source "http://127.0.0.1:${WORKER_HEALTH_PORT:-8002}/metrics" \
-  --source /m/host.prom --source /m/durable.prom --source /m/canary.prom \
+  --source /m/host.prom --source /m/durable.prom --source /m/canary.prom "${lab_sources[@]}" \
   --state /m/alert-state.json --max-age "${MAX_AGE_S:-900}" > "$firing"
 version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$rules")
 python3 "$repo/infra/observe/deliver.py" --state "$dir/delivered.json" \

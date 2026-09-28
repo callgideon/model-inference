@@ -1,0 +1,7 @@
+E       AssertionError: an empty rule file: every App alert silent
+E       assert ''
+E        +  where '' = <built-in method strip of str object at 0x153b6e8>()
+E        +    where <built-in method strip of str object at 0x153b6e8> = ''.strip
+E        +      where '' = read_text()
+E        +        where read_text = PosixPath('/tmp/pytest-of-rey/pytest-7201/test_i2l_obs__the_pinned_monit0/rules.json').read_text
+1 failed, 12 deselected in 0.20s

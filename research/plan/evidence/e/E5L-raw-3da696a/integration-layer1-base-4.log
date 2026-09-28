@@ -1,0 +1,6 @@
+=========================== short test summary info ============================
+FAILED tests/integration/backend/recovery/test_runbooks.py::test_e4c_rb09_the_copy_is_seeded_with_hosted_s_own_applied_history
+FAILED tests/integration/test_harness.py::test_nothing_in_this_directory_points_at_production
+FAILED tests/integration/test_preflight.py::test_a_green_consumer_local_composition_passes_on_its_own_namespace
+FAILED tests/integration/test_run.py::test_every_mutant_anchor_occurs_as_declared_on_the_checkout
+4 failed in 3.02s
