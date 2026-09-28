@@ -47,6 +47,16 @@
    "cmd": "wiring proof: tests/contracts tests/i/test_packaging.py tests/g tests/w (+patch)",
    "exit": 0,
    "summary": "2580 passed, 15 skipped; final patch fresh apply 446 passed, 1 skipped; 15/15 wiring G mutants killed"
+  },
+  {
+   "cmd": "fix round 1-LAB-API-RSI-1: consumer-v1 + merge 6487d36a + fixed patch, INFRX_MUTANTS=all tests/g/test_mutants.py",
+   "exit": 0,
+   "summary": "416 passed; given_stores_replaced killed (was misdeclared)"
+  },
+  {
+   "cmd": "fix round: 6487d36a + fixed patch, tests/contracts tests/i/test_packaging.py tests/g tests/w",
+   "exit": 0,
+   "summary": "2581 passed, 15 skipped"
   }
  ],
  "estimate": {
@@ -67,5 +77,11 @@
  "evidence": [
   "research/plan/evidence/g/WR-L4-1-f36a6ab.md",
   "research/plan/evidence/g/LAB-API-f36a6ab-wiring.patch"
- ]
+ ],
+ "fix_round": {
+  "findings": {
+   "1-LAB-API-RSI-1": "fixed"
+  },
+  "at": "2026-09-28"
+ }
 }

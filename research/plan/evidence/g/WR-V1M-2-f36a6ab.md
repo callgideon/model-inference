@@ -80,3 +80,14 @@ optimistic 1 h / likely 2 h / pessimistic 5 h, confidence medium. Basis: G4F 1/2
 | 14 | the wiring's G mutants in the scratch (`python -m tests.g.mutants <15 names>`: the 6 re-anchored ROUTERS mutants, feedback's 2, the 8 new lab ones) | 0 | 15/15 killed after the fix round (`lab_control_composed_when_off` survived and `lab_traces_without_projection` died by `OperationalError` on the first run: the case now stubs `_lab_traces` and fails any ClickHouse connect by assertion) |
 
 Patch r0 → final: + the `_lab` composition case, its 3 G mutants, the Makefile `api-mutants` line (#13/#14 cover them).
+
+## Fix round (2026-09-28, finding 1-LAB-API-RSI-1)
+
+Finding: the patch put `**_lab(settings, connect),` between the two lines coordinator commit `37859776` (on `claude/consumer-v1`) re-anchored `given_stores_replaced` to, so on the merged tree that G mutant was misdeclared (anchor 0 times). Fix (patch only, same file name): the `_lab` line moves above the G4F feedback block in `adapters_from_env`, so the `...feedback_api else {}),\n **adapters}` anchor is intact; no mutant re-anchor needed. Route/auth code unchanged.
+
+| # | cmd | exit | result |
+|---|---|---|---|
+| F1 | `--shared` clone, `claude/consumer-v1` + `merge 6487d36a` + `git apply --exclude=Makefile` fixed patch; `python -c ... run_mutant(given_stores_replaced)` | 0 | `killed` (was `misdeclared ... appears 0 times`) |
+| F2 | same merged tree: `INFRX_D_TASK=l4 INFRX_MUTANTS=all pytest -q tests/g/test_mutants.py` | 0 | 416 passed (22:19): every G mutant killed, incl. the lab/feedback/ROUTERS ones |
+| F3 | `--shared` clone at `6487d36a` + fixed patch (`git apply --check` then apply): `INFRX_D_TASK=l4 pytest -q tests/contracts tests/i/test_packaging.py tests/g tests/w` | 0 | 2581 passed, 15 skipped (18:40) |
+| F4 | same clone: `run_mutant(given_stores_replaced)` | - | `misdeclared`: pre-existing at `f4bceeba` (the anchor `37859776` fixed is not on this base); killed once merged (F1) |
