@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "description": "I2L-OBS (WR-T-5): T3's trace loss, lag and retention alarms (infrx.traces.retention.policy.RULES, copied exactly; test_i2l_obs holds them equal) over the Lab trace gauges textfile (trace_gauges.py). Same rule shape as infra/alerts/*.json. Lab-only: evaluated by the observe cycle only once WR-OBS-2 merges it and the traces role is enabled.",
+  "rules": [
+    {
+      "name": "TraceDeletionBacklogOld",
+      "severity": "ticket",
+      "summary": "A trace deletion or content expiry that nothing holds has waited more than 24 h for its physical cleanup (logical access is already gone).",
+      "metric": "infrx_trace_deletion_backlog_seconds",
+      "op": ">",
+      "threshold": 86400,
+      "threshold_status": "derived: O3, a deletion completes within 24 h (research/traces/01-requirements.md)",
+      "runbook": "infra/lab/observe/README.md#tracedeletionbacklogold"
+    },
+    {
+      "name": "FeedbackProjectionLagging",
+      "severity": "ticket",
+      "summary": "Accepted feedback has waited more than 15 min to reach the projection (acceptance is PostgreSQL's and is unaffected).",
+      "metric": "infrx_feedback_projection_lag_seconds",
+      "op": ">",
+      "threshold": 900,
+      "threshold_status": "est.: 30 redelivery windows of 30 s; ⚠️ TO BE VERIFIED against the measured pump interval",
+      "runbook": "infra/lab/observe/README.md#feedbackprojectionlagging"
+    },
+    {
+      "name": "TraceLossHigh",
+      "severity": "ticket",
+      "summary": "More than 1% of eligible traces were captured with a loss reason.",
+      "metric": "infrx_trace_loss_ratio",
+      "op": ">",
+      "threshold": 0.01,
+      "threshold_status": "est.: product default; ⚠️ TO BE VERIFIED against measured loss",
+      "runbook": "infra/lab/observe/README.md#tracelosshigh"
+    },
+    {
+      "name": "TraceSpoolFilling",
+      "severity": "page",
+      "summary": "The trace spool holds more than 80% of its byte cap: capture will pause.",
+      "metric": "infrx_trace_spool_bytes",
+      "op": ">",
+      "threshold": 8589934592,
+      "threshold_status": "derived: 80% of TRACE_SPOOL_MAX_BYTES (contracts limits)",
+      "runbook": "infra/lab/observe/README.md#tracespoolfilling"
+    }
+  ]
+}

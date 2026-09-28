@@ -1,0 +1,54 @@
+{
+  "comment": "I2L-OBS: the Lab observe roles' deployment inputs, NAMES only (values live in the operator's 0600 env files, never here). Read by tests/integration/lab_observe/test_i2l_obs.py and README.md. Every role is OFF until its env file exists; LAB-M1 enable needs P-08 (the staging window), P-09 (capture consent) and, for any live judge, P-10.",
+  "enabled": false,
+  "roles": {
+    "traces": {
+      "env_file": "/etc/infrx-lab/traces.env",
+      "units": ["infrx-lab-trace-gauges.service", "infrx-lab-trace-gauges.timer"],
+      "install_dir": "/opt/infrx/observe",
+      "textfile": "lab-traces.prom",
+      "pumps": "the trace ship/retention/feedback pumps run in the consumer worker behind TRACE_PUMPS (composition WR-T-4, off by default); this role only measures them"
+    },
+    "judge": {
+      "env_file": "/etc/infrx-lab/judge.env",
+      "units": ["infrx-lab-judge.service"],
+      "health_port": 8014
+    }
+  },
+  "env": {
+    "traces": [
+      {"name": "INFRX_IMAGE", "exposure": "unit", "purpose": "the release image the exporter runs in (a content-addressed id, as the gateway env)"},
+      {"name": "CLICKHOUSE_URL", "exposure": "secret", "purpose": "a read-only ClickHouse login for trace_envelopes / trace_deletions"},
+      {"name": "LAB_DATABASE_URL", "exposure": "secret", "purpose": "a read-only login on the transaction pooler (6543) for the feedback outbox lag"},
+      {"name": "TRACE_SPOOL_DIR", "exposure": "server", "purpose": "the worker's spool directory, mounted read-only for its size"},
+      {"name": "S3_TRACE_BUCKET", "exposure": "server", "purpose": "the trace content bucket (the pumps' grant below)"},
+      {"name": "S3_ENDPOINT_URL", "exposure": "server", "purpose": "unset on AWS; a local S3-compatible endpoint otherwise"},
+      {"name": "OBJECT_PREFIX", "exposure": "server", "purpose": "the deployment's object prefix (the runtime's `infrx/`)"}
+    ],
+    "judge": [
+      {"name": "INFRX_IMAGE", "exposure": "unit", "purpose": "the release image (a content-addressed id)"},
+      {"name": "LAB_DATABASE_URL", "exposure": "secret", "purpose": "the judge's own login on the transaction pooler: L2 grants, the D6J ledger"},
+      {"name": "JUDGE_MODE", "exposure": "server", "purpose": "dry_run until P-10 (contracts limits default)"},
+      {"name": "JUDGE_LIVE_BUDGET_USD", "exposure": "server", "purpose": "the live PROVIDER_USD cap; 0 until P-10"},
+      {"name": "JUDGE_PROVIDER_URL", "exposure": "server", "purpose": "the judge endpoint; J2's adapter accepts loopback only until P-10"},
+      {"name": "CLICKHOUSE_URL", "exposure": "secret", "purpose": "read-only: the projection rows a judge job reads by durable request id"},
+      {"name": "S3_TRACE_BUCKET", "exposure": "server", "purpose": "read-only content objects under the trace prefix"}
+    ]
+  },
+  "storage_grants": [
+    {"role": "traces", "bucket_setting": "S3_TRACE_BUCKET", "prefix": "${OBJECT_PREFIX}trace/",
+     "actions": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+     "why": "T2I writes content once; T3 sweeps delete it (the consumer worker's TRACE_PUMPS role)"},
+    {"role": "judge", "bucket_setting": "S3_TRACE_BUCKET", "prefix": "${OBJECT_PREFIX}trace/",
+     "actions": ["s3:GetObject"],
+     "why": "J2 reads the consented request content it sends; never writes or deletes"}
+  ],
+  "egress": {
+    "judge": {"hosts": ["127.0.0.1", "::1", "localhost"],
+              "budget": {"JUDGE_MODE": "dry_run", "JUDGE_LIVE_BUDGET_USD": "0", "approval": "P-10"},
+              "why": "J2's HttpJudgeProvider refuses any other host; a live provider and its rates need P-10"},
+    "traces": {"hosts_from": ["CLICKHOUSE_URL", "S3_ENDPOINT_URL", "LAB_DATABASE_URL"],
+               "why": "its own stores only; no third party"}
+  },
+  "alerts": "alerts.json"
+}

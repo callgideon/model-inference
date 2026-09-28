@@ -1,0 +1,40 @@
+[Unit]
+Description=infrx Lab judge worker - J2 consented, budgeted judge submissions and collection - OFF unless /etc/infrx-lab/judge.env exists
+# I2L-OBS (LAB-M1). Disabled by default: nothing installs the env file below, so the unit does
+# not start (a skipped condition, not a failure) until an operator enables this role
+# (infra/lab/observe/README.md). JUDGE_MODE stays dry_run and JUDGE_LIVE_BUDGET_USD 0 until P-10:
+# J2's adapter refuses every host but the local judge fake. No Requires=/PartOf= on the consumer
+# units and none of them names this one: a Lab outage never stops, restarts or blocks inference.
+ConditionPathExists=/etc/infrx-lab/judge.env
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+# A crash loop stops after 5 starts in 10 minutes; a submit a crash interrupted stays
+# `submitting`/`ambiguous` in D6J and is reconciled by its submit key, never sent again.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+User=ubuntu
+# Its own env file (root 0600): LAB_DATABASE_URL (the transaction pooler, 6543), JUDGE_MODE,
+# JUDGE_LIVE_BUDGET_USD, CLICKHOUSE_URL, S3_TRACE_BUCKET; never the gateway's env file.
+EnvironmentFile=/etc/infrx-lab/judge.env
+ExecStartPre=-/usr/bin/docker rm -f infrx-lab-judge
+# Bounded and least privilege as I5's workers (a quarter of the default CPU weight, so
+# inference wins contention). The entry point (WR-OBS-1) exits 2 naming a missing setting,
+# answers /readyz and /metrics on 127.0.0.1:8014 and drains on SIGTERM.
+ExecStart=/usr/bin/docker run --rm --init --name infrx-lab-judge --network host \
+  --user 10004:10000 --read-only --tmpfs /tmp:rw,size=64m,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --memory 512m --memory-swap 512m --cpus 0.5 --cpu-shares 256 --pids-limit 64 \
+  --env-file /etc/infrx-lab/judge.env -e LAB_WORKER_HEALTH_PORT=8014 \
+  ${INFRX_IMAGE} python -m infrx.lab.workers judge
+ExecStop=/usr/bin/docker stop -t 60 infrx-lab-judge
+TimeoutStopSec=90
+KillSignal=SIGTERM
+KillMode=mixed
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
