@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 203,
- "updated": "2026-09-28T07:32:29Z",
+ "revision": 204,
+ "updated": "2026-09-28T07:52:32Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5435,18 +5435,18 @@
     "prefix": "infrx-b3-",
     "db": "b3"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T07:32:29Z",
+   "updated": "2026-09-28T07:52:32Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at 9794260f (B4 launch/progress/cancel/B3 subscriptions/B2 comparison over a fake LAB_EVALS port with real B1/B2/D7 fixtures from b3; major F1 cancel-on-terminal fixed+rechecked) → merge batch #7 (wf_6847e484-eeb) with WR-B4-3 nav + WR-B4-4; WR-B4-1 → lab-api-2 (wf_08ac7660-a02); WR-B4-2 (experiments table, subscription listing, lab_cancel_run refusing finished runs, run timestamps) → lab-sql LW3",
+   "next_action": "DONE (UI over fake): merged --no-ff at 55354846 + WR-B4-3/4 48c01691; integration after lab-api-2's /lab/v1/evaluations (WR-B4-1) + WR-B4-2 (lab-sql)",
    "estimate": {
-    "optimistic_h": 1.5,
-    "likely_h": 3,
-    "pessimistic_h": 6,
-    "confidence": "medium",
-    "basis": "handback: http adapter after WR-B4-1 + J01–J03 rerun + one verify round",
-    "at": "2026-09-28T07:32:29Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T07:52:32Z"
    },
    "evidence": [
     "research/plan/evidence/b/B4-7683330.md"
@@ -5473,18 +5473,18 @@
     "prefix": "infrx-p1-",
     "db": "p1"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T07:32:29Z",
+   "updated": "2026-09-28T07:52:32Z",
    "blocker": null,
-   "next_action": "ACCEPT at c8ea6362 (P4.a annotations + P4.c training pages over a fake LAB_PIPELINES port; USD budget + named payer, render-minted run/checkpoint ids, ambiguous/unknown-cost states, lineage, ground truth only from Lab review; 29 cases, 98/98 mutants; minors F1/F2 carried; P4.b teacher slice waits for P2 from judge-lw4) → merge batch #7 (wf_6847e484-eeb) with WR-P4-2 (nav), WR-P4-3 (lab-mutants), WR-P4-4 (.env.example); WR-P4-1 (lab_pipelines route, LAB_PIPELINES OFF) → lab-api-2 (wf_08ac7660-a02); WR-P4-5 (tests/l/shell/harness.mjs failed()/replacer bugs) → lab-app owner, coordinator fix",
+   "next_action": "DONE (UI over fake): merged --no-ff at 1be964bd + WR-P4-2..5 f3b3f381 (harness.mjs fix + self-check); integration after lab-api-2's /lab/v1/pipelines (WR-P4-1); P4.b after P2",
    "estimate": {
-    "optimistic_h": 1.5,
-    "likely_h": 3,
-    "pessimistic_h": 6,
-    "confidence": "medium",
-    "basis": "handback: route + http adapter + J01–J05 on p1 + one verify round; P4.b +1/2/4 after P2",
-    "at": "2026-09-28T07:27:42Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T07:52:32Z"
    },
    "evidence": [
     "research/plan/evidence/p/P4-b9321b3.md"
@@ -5511,18 +5511,18 @@
     "prefix": "infrx-r2-",
     "db": "r2"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T07:32:29Z",
+   "updated": "2026-09-28T07:52:32Z",
    "blocker": null,
-   "next_action": "ACCEPT at 36507934 (R4 releases/optimizations pages over a fake LAB_RELEASES port; expand offered only on R2's expand verdict, inconclusive blocks promotion, rollback from D9 records, measured only from <exp>/results@sha; 22 cases, 77/77 mutants; minor RV-1 fake approve fidelity carried) → merge batch #7 (wf_6847e484-eeb) with WR-R4-3 (nav) + WR-R4-4 (lab-mutants); WR-R4-1 (lab_releases route, LAB_RELEASES OFF) → lab-api-2 (wf_08ac7660-a02); WR-R4-2 (proposals table) → lab-sql LW3",
+   "next_action": "DONE (UI over fake): merged --no-ff at 288cc573 + WR-R4-3/4 6167bf9d; integration after lab-api-2's /lab/v1/releases (WR-R4-1) + D9/proposals (WR-R4-2)",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "handback: adapter swap after WR-R4-1 + one verify round",
-    "at": "2026-09-28T07:17:34Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T07:52:32Z"
    },
    "evidence": [
     "research/plan/evidence/r/R4-b9b84b7.md"
@@ -5652,24 +5652,24 @@
    "branch": "codex/w5-merge-7",
    "worktree": ".claude/worktrees/codex-w5-merge-7",
    "base": "1bf53455",
-   "head": null,
+   "head": "48c01691",
    "isolation": {
     "ports": null,
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T07:32:29Z",
-   "updated": "2026-09-28T07:32:29Z",
+   "updated": "2026-09-28T07:52:32Z",
    "blocker": null,
-   "next_action": "merge agents → verify lens → coordinator merges the branch (nav/lab-mutants overlap with #4 resolved at integration)",
+   "next_action": "DONE: merged onto claude/consumer-v1 (verify ok)",
    "estimate": {
-    "optimistic_h": 0.5,
-    "likely_h": 1.5,
-    "pessimistic_h": 3,
-    "confidence": "medium",
-    "basis": "three Lab-only merges",
-    "at": "2026-09-28T07:32:29Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T07:52:32Z"
    },
    "evidence": [],
    "commands": [],
