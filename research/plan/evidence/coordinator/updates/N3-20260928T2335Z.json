@@ -1,0 +1,29 @@
+{
+  "task": "N3",
+  "lane": "datasets-lw5",
+  "slice": "WR-N3-5: N3's sample restrictions moved to 0041 (PgSampleRestrictions); backfill of the object era",
+  "activity": "review",
+  "at": "2026-09-28T23:35:00Z",
+  "head": "92d0f9e1",
+  "base": "1b2fab07",
+  "worktree": ".claude/worktrees/codex-w5-datasets-lw5",
+  "branch": "codex/w5-datasets-lw5",
+  "owned_paths": ["apps/infrx-api/infrx/datasets/**", "apps/infrx-api/tests/n/**",
+                  "research/plan/evidence/coordinator/DATASETS-LW5-92d0f9e.md"],
+  "isolation": {"keys": ["n3", "n2"]},
+  "commands": [
+    {"cmd": "INFRX_D_TASK=n3 uv run --frozen pytest -q tests/n/lineage/test_lineage_pg.py", "exit": 0, "summary": "2 passed; red at base: the tombstone never reached 0041 (1 failed)"},
+    {"cmd": "INFRX_D_TASK=n3 INFRX_MUTANTS=all uv run --frozen pytest -q tests/n", "exit": 0, "summary": "198 passed, 0 skipped; lineage 45 mutants, 0 survivors"},
+    {"cmd": "INFRX_D_TASK=n2 INFRX_MUTANTS=all uv run --frozen pytest -q tests/n", "exit": 0, "summary": "198 passed, 0 skipped"},
+    {"cmd": "INFRX_D_TASK=n3 INFRX_D2_VALKEY_CONTAINER=infrx-n3-valkey INFRX_D2_VALKEY_PORT=57519 make api-test", "exit": 2, "summary": "6470 passed, 157 skipped, 9 xfailed, 0 failed, 8 errors: all tests/i i8-pooler flock held by another agent (BlockingIOError at tests/i/pooler.py:110)"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium",
+               "basis": "implemented and proven on n2/n3 with 0 survivors; one review round remains; wiring requests are other lanes'",
+               "at": "2026-09-28T23:35:00Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-DS5-1 lab-sql: PgLabDataStore.restrictions property (optional)",
+                      "WR-DS5-2 composition-2: pass restrictions=PgSampleRestrictions(connect) to tombstone/reconcile/export_evidence callers (flag OFF)",
+                      "WR-DS5-3 coordinator: one-shot lineage.backfill per provider with object-era tombstones (nothing hosted today)",
+                      "WR-DS5-4 pipelines-lineage: P2's fake Store needs .restrictions when it calls lineage.permitted"],
+  "evidence": ["research/plan/evidence/coordinator/DATASETS-LW5-92d0f9e.md"]
+}
