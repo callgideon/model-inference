@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 223,
- "updated": "2026-09-28T15:09:32Z",
+ "revision": 224,
+ "updated": "2026-09-28T15:11:47Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6253,6 +6253,83 @@
    "commands": [],
    "owned_paths": [
     "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-15",
+   "task": null,
+   "slice": "(wave5 merge lane #15, parallel to composition-2) v1m 8ce6acd2 (WR-V1M-3 App removal, WR-V1M-4 + lab.json/runbook LAB_TRACES_API_URL, WR-LAB-API-6 grant_ref; R190); workflow wf_e8287674-649; base 900729e0",
+   "agent": "opus",
+   "branch": "codex/w5-merge-15",
+   "worktree": ".claude/worktrees/codex-w5-merge-15",
+   "base": "900729e0",
+   "head": null,
+   "isolation": {
+    "ports": "l4 / lab-v1m / t2i (checks only)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T15:11:47Z",
+   "updated": "2026-09-28T15:11:47Z",
+   "blocker": null,
+   "next_action": "handback → verify → coordinator merges the branch",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "three proven patches + App and Lab checks",
+    "at": "2026-09-28T15:11:47Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-COMPOSITION-2",
+   "task": null,
+   "slice": "(wave5 LW5 lane composition-2, coordinator-delegated roots) python -m infrx.lab.workers <role> (E6L-O5 ruling; WR-B-5 amended, WR-OBS-1, WR-I6-3, WR-I7-1, WR-J2-3, WR-P2-2/P2-D8/P3-D8, WR-B3-D8, WR-COMP-1/2, WR-LSQ-INT-3), routes lab_checkpoints (WR-B3-2) + lab_datasets (WR-N4-1, resolving WR-N-3 via the LAB-AUTH session), hooks WR-N3-2 + WR-C2-2, WR-LAB-API-2 composition, the E6L j09 bind, one E4 regression; workflow wf_ad273813-b30; base 900729e0",
+   "agent": "opus",
+   "branch": "codex/w5-composition-2",
+   "worktree": ".claude/worktrees/codex-w5-composition-2",
+   "base": "900729e0",
+   "head": null,
+   "isolation": {
+    "ports": "b1 / j2 / p3 / r2 / n3 / b3 / e6l / e4b",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T15:11:47Z",
+   "updated": "2026-09-28T15:11:47Z",
+   "blocker": null,
+   "next_action": "handback → verify → coordinator merges the branch",
+   "estimate": {
+    "optimistic_h": 6,
+    "likely_h": 12,
+    "pessimistic_h": 24,
+    "confidence": "low",
+    "basis": "the first composition lane 3.5 h for three wirings; this one carries about nine",
+    "at": "2026-09-28T15:11:47Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/worker/**",
+    "infrx/lab/workers/ (new)",
+    "infrx/gateway/{app,pilot}.py",
+    "infrx/gateway/routes/lab_{datasets,checkpoints}.py (new)",
+    "infrx/config.py",
+    "deploy/preflight.py",
+    "pins + tests/g/test_startup.py + tests/w + tests/g/mutants.py",
+    "tests/g/lab_{datasets,checkpoints}/",
+    "tests/integration/lab_evaluate (j09 bind)",
+    "08 settings rows"
    ],
    "wiring_requests": []
   }
