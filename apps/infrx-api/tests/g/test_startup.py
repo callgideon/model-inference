@@ -304,8 +304,10 @@ def test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables
 
 def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled(monkeypatch):
     """LAB-API (WR-LAB-API-1): off, nothing Lab is built; `LAB_CONTROL` builds the control
-    over the project's auth server and L2 on the pool, with L3's operations absent (503 until
-    L3 merges); `LAB_TRACES` without the trace projection and bucket refuses startup."""
+    over the project's auth server and L2 on the pool, with L3's operations (WR-LAB-API-2:
+    `Operations` over `LabControl` on the same pool - the control store, A3's registry and
+    catalog; its listings wait on WR-LSQ-9's reads, 503); `LAB_TRACES` without the trace
+    projection and bucket refuses startup."""
     import dataclasses
 
     from infrx.gateway import pilot
@@ -315,12 +317,22 @@ def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabl
         return support.settings(deployment=dataclasses.replace(support.BUILD, **on))
 
     assert pilot._lab(settings(), connect=None) == {}
-    built = pilot._lab(settings(lab_control=True), connect=None)
+    built = pilot._lab(settings(lab_control=True), connect="pool")
     assert list(built) == ["lab_control"]
     control = built["lab_control"]
     assert (str(control.sessions.client.base_url), control.sessions.apikey) \
         == ("https://fake.supabase.co", "service-role")
-    assert isinstance(control.access, LabAccess) and control.operations is None
+    assert isinstance(control.access, LabAccess)
+    from infrx.lab.control.operations import Operations
+    from infrx.state.catalog import PgCatalogDirectory
+    from infrx.state.lab_control import PgControlStore
+    from infrx.state.operations import PgRegistry
+    ops = control.operations
+    assert type(ops) is Operations and type(ops.reads) is pilot.NoControlReads
+    l3 = ops.control
+    assert (type(l3.store), type(l3.registry), type(l3.catalog)) \
+        == (PgControlStore, PgRegistry, PgCatalogDirectory)
+    assert l3.access is control.access and l3.store._connect == "pool"
     import clickhouse_connect
 
     def connected(**kw):

@@ -262,7 +262,8 @@ def _lab(settings, connect, objects=None) -> dict:
                                                 timeout=httpx.Timeout(5, connect=2)),
                               settings.supabase_key)
     access = LabAccess(PgAccessStore(connect))
-    lab = {"lab_control": LabControl(sessions, access)} if deployment.lab_control else {}
+    lab = {"lab_control": LabControl(sessions, access, lab_operations(connect, access))} \
+        if deployment.lab_control else {}
     if deployment.lab_traces:
         lab["lab_traces"] = _lab_traces(settings, connect, sessions, access)
     if deployment.lab_datasets:           # WR-N4-1 over D7, L2 and the Lab objects (R182)
@@ -332,6 +333,14 @@ def lab_control(connect, access):
     from ..state.operations import PgRegistry
     return LabControl(access, PgControlStore(connect), PgRegistry(connect),
                       PgCatalogDirectory(connect), engine=NoEngine())
+
+
+def lab_operations(connect, access):
+    """WR-LAB-API-2: L3's `Operations` for `/lab/v1/control` - the gateway's and the I2L
+    control service's one composition (`infrx.lab.control.app`, WR-LAB-API-2c). Its
+    listings and registration read `ControlReads` and answer 503 until WR-LSQ-9."""
+    from ..lab.control.operations import Operations
+    return Operations(lab_control(connect, access), NoControlReads())
 
 
 def control_serving(connect, principal: str):
