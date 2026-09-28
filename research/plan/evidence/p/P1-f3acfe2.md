@@ -48,3 +48,25 @@
 
 ## Estimate (remaining for P1)
 optimistic 1 h / likely 2 h / pessimistic 5 h, confidence medium. Basis: one review round on ~400 lines + the rerun of `test_annotations_pg.py` on D8's real log at its merge (SR-P1-1) — N2's review round took ~2 h on a similar size.
+
+## Fix round (2026-09-28T06:08Z, head eae84c13, from handback a9bbd8c0)
+| Finding | Fix | Case / mutants |
+|---|---|---|
+| 0-P1-SUPERSEDE-BYPASS | `review()` refuses any decision outside {accepted, rejected} with `InvalidRequest`; supersession is adjudication's alone | `test_p1_only_an_adjudication_supersedes` (the reproduction: DEV2 reviewing DEV's human correction `superseded` or `submitted` is refused, log unchanged, correction still exports) / `p1_review_supersedes` |
+| 0-P1-CROSS-VERSION-DISAGREEMENT-STUCK | new `_labels()` walks `_lineage` (this version + ancestors, labels of this version's samples only); `disagreements`, `adjudicate` and `export` all read it; the adjudicator-independence check scans every lineage event; each disputed label's move is logged under the version it lives on | `test_p1_a_disagreement_across_versions_is_adjudicated` (parent label vs child label: export omits `disagreement`, `disagreements(child)` lists both, a reviewer of the parent label is refused, an independent one adjudicates, parent label superseded in the parent log, child's in the child's, the child exports the adjudicated label alone; a parent-only disagreement is not the child's) / `p1_ancestor_labels_ignored` (now also this case), `p1_ancestor_move_logged_here`, `p1_ancestor_review_unseen`, `p1_ancestor_only_samples_disagree` |
+| 1-PIPE-R2 | `export()` takes `now` and `ttl_s` (1 s..7 days, N2's `MAX_EXPORT_TTL_S`), records `created_at`/`expires_at`; new `read_export()` is `Gone` at expiry and returns only the lines whose sample the training gate allows now (lines align with `lineage`) | `test_p1_a_label_export_expires_and_rereads_the_training_gate` / `p1_export_ttl_unbounded`, `p1_export_expiry_unrecorded`, `p1_export_never_expires`, `p1_export_read_ungated` |
+
+Failure-first: each new guard's single-edit removal is a named mutant and is killed by its new case (below), i.e. the case fails on the pre-fix behaviour. Existing mutants re-anchored for the refactor: `p1_accepted_rejected`, `p1_submitted_superseded` (`labels[r][2]`), `p1_export_gate_is_access`, `p1_export_id_unchecked` (the UUID check now also appears in `read_export`).
+
+| Command | Head | Exit | Result |
+|---|---|---|---|
+| `uv run --frozen pytest -q tests/p/annotations/test_annotations.py` | eae84c13 | 0 | 15 passed |
+| `INFRX_D_TASK=p1 uv run --frozen pytest -q tests/p/annotations` | eae84c13 | 0 | 28 passed (the PG cases on real 0001-0030; label log still fake) |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/annotations/test_mutants.py` | eae84c13 | 0 | **75 passed: 73 mutants killed** (65 + 8), every case covered |
+| `uv run --frozen ruff check infrx/pipelines tests/p` | eae84c13 | 0 | all checks passed |
+
+`make api-test` was not rerun whole in this round (the only change is to tests/p and infrx/pipelines, which nothing else imports); the shared-lock `tests/d/test_outbox_relay[valkey]` rerun remains owed as before.
+
+Wiring (new): **WR-P-7 (P4/composition)** P1 label exports are served only through `annotations.read_export`; nothing reads `lab/<p>/label-exports/` directly. **WR-P-8 (N3)** revocation tombstoning also walks `lab/<p>/label-exports/<id>/` (its `export.json` lineage names each sample). SR-P1-1 unchanged: the moves `adjudicate` writes for an ancestor's label carry that ancestor's `dataset_ref`.
+
+Estimate (remaining for P1): optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium. Basis: coordinator rerun at merge + the PG rerun on D8's real label log.
