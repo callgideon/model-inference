@@ -236,7 +236,7 @@ create table if not exists infrx.lab_checkpoint_rejections (
 create table if not exists infrx.lab_checkpoint_subscriptions (
   subscription_id uuid primary key,
   provider_org_id uuid not null references infrx.provider_orgs on delete restrict,
-  owner_user_id uuid not null references public.profiles(id) on delete restrict,
+  owner_user_id uuid not null,         -- the subscriber (server-derived, as D9's decided_by)
   external_run_ref text not null references infrx.lab_records on delete restrict,
   body jsonb not null check (jsonb_typeof(body) = 'object'),
   created_at timestamptz not null default infrx.now()
