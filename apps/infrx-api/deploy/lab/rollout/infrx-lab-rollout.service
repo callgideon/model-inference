@@ -6,6 +6,10 @@ Description=infrx Lab rollout controller - R2 guardrails and CAS rollback of con
 # accounting: admission reads D9's stored policy itself (R1, ROLLOUT_ROUTING off by default)
 # and the controller never expands traffic on its own. Runbook:
 # infra/lab/workers/rollout/RUNBOOK.md.
+# Two switches, both needed (conditions are ANDed): I2L's Lab-wide enable marker
+# (infra/lab/app/lab.json enable_marker; its Disable removes it and every Lab unit stays
+# down) and this role's own env file.
+ConditionPathExists=/etc/infrx-lab/enabled
 ConditionPathExists=/etc/infrx-lab/rollout.env
 Requires=docker.service
 After=docker.service network-online.target
@@ -19,13 +23,16 @@ User=ubuntu
 # no budget, no cloud credential (the preflight refuses AWS_* and every adapter setting), so it
 # cannot buy capacity; nothing is mounted, so it cannot start containers either.
 EnvironmentFile=/etc/infrx-lab/rollout.env
-ExecStartPre=/usr/bin/python3 /home/ubuntu/model-inference/infra/lab/workers/training/preflight.py --role rollout --env-file /etc/infrx-lab/rollout.env
+ExecStartPre=/usr/bin/python3 -I /home/ubuntu/model-inference/infra/lab/workers/training/preflight.py --role rollout --env-file /etc/infrx-lab/rollout.env
 ExecStartPre=-/usr/bin/docker rm -f infrx-lab-rollout
 # One pass per interval over every running or rolled-back release (R2 Controller.step); a
 # pass that cannot converge the alias exits non-zero and the restart below converges it.
 # Egress denied as I6's (a dead proxy except LAB_EGRESS_ALLOW).
-ExecStart=/usr/bin/docker run --rm --init --name infrx-lab-rollout --network host \
-  --user 10003:10000 --read-only --tmpfs /tmp:rw,size=64m,mode=1777 \
+# `--pull never`: INFRX_IMAGE is the release's local id (the preflight refuses a registry
+# reference), so the daemon never pulls - no registry egress outside the deny proxy. uid 10003
+# in its own group 10003 (I2L's), not the runtime's 10000.
+ExecStart=/usr/bin/docker run --rm --init --pull never --name infrx-lab-rollout --network host \
+  --user 10003:10003 --read-only --tmpfs /tmp:rw,size=64m,mode=1777 \
   --cap-drop ALL --security-opt no-new-privileges \
   --memory 512m --memory-swap 512m --cpus 0.5 --cpu-shares 256 --pids-limit 64 \
   --env-file /etc/infrx-lab/rollout.env -e LAB_WORKER_HEALTH_PORT=8016 \

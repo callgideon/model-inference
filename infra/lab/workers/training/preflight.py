@@ -12,9 +12,14 @@ python3 runs it from the deployed checkout, so the approvals are the deployed co
   egress allowlist and concurrency, plus - for the annotation (teacher, P-10) and training
   (connector, P-11) roles only - that role's adapter, endpoint, token, USD budget and payer.
   Anything else (a consumer secret, another purpose's token, cloud credentials, a proxy
-  override in any letter case) is refused. A bare `NAME` line is refused: docker's
-  `--env-file` would copy it unchecked from the calling environment. `INFRX_IMAGE` (expanded
-  into the unit's argv) may not be a docker flag such as `--privileged`.
+  override in any letter case, a `DOCKER_*`, `PYTHON*` or `LD_*` setting: EnvironmentFile=
+  reaches every Exec line of the unit) is refused. A bare `NAME` line is refused: docker's
+  `--env-file` would copy it unchecked from the calling environment; a line whose name is
+  not an identifier (a pasted DSN) is refused by line number, never printed. `INFRX_IMAGE`
+  (one argv word of the unit) must be a local image id, `sha256:<64 hex>`: never a docker
+  flag, never absent (docker would run the public `python`), never a registry reference
+  (the daemon's pull is egress the container's deny proxy never sees).
+* **The file.** Readable by its owner only (0600 or 0400): it holds the token and password.
 * **Adapters.** The default (`dry-run` teacher, `manual-bundle` training; rollout has none)
   needs no approval and carries no endpoint, token, budget or payer (a stray one is refused,
   so nothing turns on by editing one line). Any other adapter needs its role's entry in
@@ -30,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -43,6 +49,8 @@ ADAPTERS = {"annotation": ("LAB_ANNOTATION_TEACHER", "dry-run", "LAB_ANNOTATION_
             "training": ("LAB_TRAINING_CONNECTOR", "manual-bundle", "LAB_TRAINING_CONNECTOR",
                          "P-11")}
 ROLES = (*ADAPTERS, "rollout")
+NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+IMAGE = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def paid_names(role: str) -> tuple[str, ...]:
@@ -67,8 +75,10 @@ def parse(text: str) -> tuple[dict[str, str], list[str]]:
         name, eq, value = line.partition("=")
         if not eq:
             refusals.append(f"line {n}: a bare name copies the caller's environment")
-            continue
-        env[name] = value
+        elif not NAME.fullmatch(name):
+            refusals.append(f"line {n}: not a setting name (not printed)")
+        else:
+            env[name] = value
     return env, refusals
 
 
@@ -88,8 +98,8 @@ def check(role: str, env: dict[str, str], approvals: dict[str, list[dict]]) -> l
         raise ValueError(f"unknown role {role!r}")
     names = allowed_names(role)
     refusals = [f"{name}: not a {role} setting" for name in sorted(env) if name not in names]
-    if env.get("INFRX_IMAGE", "").startswith("-"):       # one argv word before the command
-        refusals.append("INFRX_IMAGE: an image reference, not a docker flag")
+    if not IMAGE.fullmatch(env.get("INFRX_IMAGE", "")):
+        refusals.append("INFRX_IMAGE: not a local image id (sha256:<64 hex>)")
     hosts = {_host(env["LAB_S3_ENDPOINT"])} if env.get("LAB_S3_ENDPOINT") else set()
     if role in ADAPTERS:
         setting, default, prefix, approval_id = ADAPTERS[role]
@@ -101,7 +111,7 @@ def check(role: str, env: dict[str, str], approvals: dict[str, list[dict]]) -> l
         else:
             approved = [a for a in approvals.get(role, []) if a["adapter"] == adapter]
             if not approved:
-                refusals.append(f"{setting}: {adapter} has no {approval_id} approval")
+                refusals.append(f"{setting}: this adapter has no {approval_id} approval")
             else:
                 (approval,) = approved
                 hosts.add(approval["host"])
@@ -133,7 +143,10 @@ def main(argv=None) -> int:
     ap.add_argument("--env-file", required=True)
     ap.add_argument("--approvals", default=str(APPROVALS))
     a = ap.parse_args(argv)
-    env, refusals = parse(Path(a.env_file).read_text())
+    path = Path(a.env_file)
+    env, refusals = parse(path.read_text())
+    if path.stat().st_mode & 0o077:
+        refusals.append("the env file is readable by another account (chmod 0600)")
     refusals += check(a.role, env, load_approvals(Path(a.approvals)))
     for refusal in refusals:
         print(f"FAIL {a.role}: {refusal}")

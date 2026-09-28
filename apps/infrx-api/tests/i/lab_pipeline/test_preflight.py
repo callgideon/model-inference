@@ -61,7 +61,7 @@ def test_i6_the_shipped_approvals_are_empty_so_every_role_is_local_or_manual_onl
     assert check("training", {**BASE, "LAB_TRAINING_CONNECTOR": "manual-bundle"}, shipped) == []
     assert check("annotation", {**BASE, "LAB_ANNOTATION_TEACHER": "dry-run"}, shipped) == []
     assert check("training", paid(), shipped) == [
-        "LAB_TRAINING_CONNECTOR: trainer-x has no P-11 approval",
+        "LAB_TRAINING_CONNECTOR: this adapter has no P-11 approval",
         "LAB_EGRESS_ALLOW: entry 2 is neither the object store nor an approved endpoint"]
 
 
@@ -101,7 +101,7 @@ def test_i6_an_adapter_is_approved_per_role_and_nothing_is_enabled_silently() ->
     by editing one line later), or a secret lookup failure that falls back to another
     provider instead of refusing."""
     assert check("annotation", {**BASE, "LAB_ANNOTATION_TEACHER": "trainer-x"}) == [
-        "LAB_ANNOTATION_TEACHER: trainer-x has no P-10 approval"]
+        "LAB_ANNOTATION_TEACHER: this adapter has no P-10 approval"]
     for stray in ("LAB_TRAINING_CONNECTOR_URL", "LAB_TRAINING_CONNECTOR_TOKEN",
                   "LAB_TRAINING_BUDGET_USD", "LAB_TRAINING_PAYER_REF"):
         assert check("training", {**BASE, stray: "x"}) == [
@@ -124,15 +124,47 @@ def test_i6_an_adapter_is_approved_per_role_and_nothing_is_enabled_silently() ->
     ("annotation", "https_proxy"),                       # an egress override, any case
     ("annotation", "No_Proxy"),
     ("training", "LAB_EVAL_CONCURRENCY"),                # another Lab role's knob
+    ("training", "ALL_PROXY"),                           # the proxy httpx reads last
+    ("annotation", "DOCKER_HOST"),                       # the unit's docker CLI, elsewhere
+    ("training", "PYTHONPATH"),                          # the preflight's own interpreter
+    ("rollout", "LD_PRELOAD"),
+    ("training", "SSL_CERT_FILE"),                       # a trusted interception CA
+    ("training", "AWS_ENDPOINT_URL"),                    # the object store redirected
 ])
 def test_i6_every_setting_is_named_for_its_role_and_purpose(role, name) -> None:
     """Failure oracle: an env file that smuggles a consumer secret, another purpose's secret,
-    cloud credentials (capacity purchases) or a proxy override (egress bypass) past the
-    preflight because the name was not on the role's own list, or an image setting that is a
-    docker flag (`${INFRX_IMAGE}` is one argv word of the unit, before the command)."""
+    cloud credentials (capacity purchases), a proxy override (egress bypass) or a setting that
+    steers the unit's docker CLI, the preflight's interpreter or TLS trust past the preflight
+    because the name was not on the role's own list. EnvironmentFile= reaches every Exec line
+    of the unit, not only the container."""
     assert check(role, {**BASE, name: "x"}) == [f"{name}: not a {role} setting"]
-    assert check(role, {**BASE, "INFRX_IMAGE": "--privileged"}) == [
-        "INFRX_IMAGE: an image reference, not a docker flag"]
+
+
+def test_i6_the_image_is_a_local_content_addressed_id_never_a_flag_or_a_pull() -> None:
+    """`${INFRX_IMAGE}` is one argv word of `docker run`, before the command. Failure oracle:
+    a docker flag there (`--privileged` and the image becomes `python`), an absent or empty
+    one (docker then runs the public `python` image), or a registry reference (the daemon
+    pulls from that registry: egress the container's deny proxy never sees). Only the
+    release's local image id, as the consumer's `image_id` (deploy/preflight.py)."""
+    image = "INFRX_IMAGE: not a local image id (sha256:<64 hex>)"
+    for bad in (None, "", "--privileged", "-v/:/host", "python", "evil.example/x:latest",
+                "ghcr.io/x@sha256:" + "a" * 64, "sha256:" + "a" * 63, "sha256:" + "A" * 64,
+                "sha256:" + "a" * 64 + " --privileged"):
+        env = {k: v for k, v in {**BASE, "INFRX_IMAGE": bad}.items() if v is not None}
+        assert check("training", env) == [image], bad
+
+
+def test_i6_a_refusal_never_echoes_a_value_pasted_as_a_name_or_an_adapter() -> None:
+    """Secret leakage into the journal. Failure oracle: a pasted DSN (`...?sslmode=require`
+    has an `=`, so its password lands in the name) or a token pasted into the adapter setting
+    printed back by the refusal naming it."""
+    env, refusals = PF["parse"](f"postgresql://lab:{SECRET}@h:6543/db?sslmode=require\n"
+                                f"Bearer {SECRET}=x\nLAB_S3_BUCKET=b\n")
+    assert env == {"LAB_S3_BUCKET": "b"}
+    assert refusals == ["line 1: not a setting name (not printed)",
+                        "line 2: not a setting name (not printed)"]
+    refused = check("training", {**BASE, "LAB_TRAINING_CONNECTOR": SECRET})
+    assert refused == ["LAB_TRAINING_CONNECTOR: this adapter has no P-11 approval"]
 
 
 def test_i6_the_egress_allowlist_is_exact_hosts_of_the_object_store_and_the_approval() -> None:
@@ -167,7 +199,8 @@ def test_i6_the_cli_exits_1_on_a_refusal_and_never_prints_a_value(tmp_path) -> N
     good.write_text("".join(f"{k}={v}\n" for k, v in paid().items()))
     bad.write_text("".join(f"{k}={v}\n" for k, v in paid(
         LAB_TRAINING_CONNECTOR_URL=f"https://{SECRET}.evil.example/",
-        DATABASE_URL=SECRET).items()))
+        LAB_TRAINING_CONNECTOR=SECRET, DATABASE_URL=SECRET).items()))
+    good.chmod(0o600), bad.chmod(0o600)
 
     def cli(env_file: Path) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, str(SCRIPT), "--role", "training", "--env-file",
@@ -179,3 +212,18 @@ def test_i6_the_cli_exits_1_on_a_refusal_and_never_prints_a_value(tmp_path) -> N
     assert "FAIL" in refused.stdout and "PASS" in ok.stdout
     for out in (ok, refused):
         assert SECRET not in out.stdout + out.stderr
+
+
+def test_i6_the_cli_refuses_an_env_file_another_account_can_read(tmp_path) -> None:
+    """The env file holds the role's token and database password. Failure oracle: a group- or
+    world-readable env file (`install` without `-m 0600`, a `cp` under umask 022) that starts
+    anyway."""
+    env_file = tmp_path / "training.env"
+    env_file.write_text("".join(f"{k}={v}\n" for k, v in BASE.items()))
+    for mode, code in ((0o600, 0), (0o400, 0), (0o640, 1), (0o604, 1)):
+        env_file.chmod(mode)
+        out = subprocess.run([sys.executable, str(SCRIPT), "--role", "training",
+                              "--env-file", str(env_file)], capture_output=True, text=True)
+        assert out.returncode == code, (oct(mode), out.stdout)
+    assert "FAIL training: the env file is readable by another account (chmod 0600)" in \
+        out.stdout

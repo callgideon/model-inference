@@ -32,9 +32,13 @@ NAMES = "test_i6_every_setting_is_named_for_its_role_and_purpose"
 ALLOW = "test_i6_the_egress_allowlist_is_exact_hosts_of_the_object_store_and_the_approval"
 PARSE = "test_i6_the_env_file_is_parsed_like_docker_and_refuses_a_bare_name"
 CLI = "test_i6_the_cli_exits_1_on_a_refusal_and_never_prints_a_value"
+MODE = "test_i6_the_cli_refuses_an_env_file_another_account_can_read"
+IMAGE = "test_i6_the_image_is_a_local_content_addressed_id_never_a_flag_or_a_pull"
+ECHO = "test_i6_a_refusal_never_echoes_a_value_pasted_as_a_name_or_an_adapter"
+ARGV = "test_i6_argv_carries_no_mount_privilege_namespace_pull_or_secret"
 WIDEN = "test_i6_only_the_allowlisted_host_is_reachable_and_the_env_file_cannot_widen_it"
 EMPTY = "test_i6_an_empty_allowlist_denies_every_http_host"
-PRE = ("ExecStartPre=/usr/bin/python3 /home/ubuntu/model-inference/infra/lab/workers/training/"
+PRE = ("ExecStartPre=/usr/bin/python3 -I /home/ubuntu/model-inference/infra/lab/workers/training/"
        "preflight.py --role training --env-file /etc/infrx-lab/training.env\n")
 m = i5.m
 
@@ -52,7 +56,32 @@ MUTANTS: tuple[Mutant, ...] = (
     m("i6_annotation_memory_unbounded", "memory is bounded", AN,
       "--memory 1g --memory-swap 1g ", "", BOUNDED),
     m("i6_training_consumer_uid", "not the consumer worker's uid", TR,
-      "--user 10003:10000", "--user 10002:10000", BOUNDED),
+      "--user 10003:10003", "--user 10002:10003", BOUNDED, ARGV),
+    m("i6_training_consumer_group", "not the consumer runtime's group", TR,
+      "--user 10003:10003", "--user 10003:10000", BOUNDED, ARGV),
+    m("i6_training_preflight_not_isolated", "PYTHON* settings never steer the preflight", TR,
+      "python3 -I /home", "python3 /home", BOUNDED),
+    m("i6_annotation_no_enable_marker", "the Lab-wide enable marker gates every role", AN,
+      "ConditionPathExists=/etc/infrx-lab/enabled\n", "", BOUNDED),
+    # --- the security lens on argv: mounts, privilege, namespaces, pulls, secrets
+    m("i6_training_pulls", "the daemon never pulls", TR, "--pull never ", "", ARGV),
+    m("i6_annotation_pull_always", "the daemon never pulls", AN,
+      "--pull never --name", "--pull always --name", ARGV),
+    m("i6_training_docker_socket", "no host path or socket is mounted", TR,
+      "--network host \\\n",
+      "--network host -v /var/run/docker.sock:/var/run/docker.sock \\\n", ARGV),
+    m("i6_annotation_seccomp_off", "no seccomp/AppArmor opt-out", AN,
+      "--security-opt no-new-privileges",
+      "--security-opt no-new-privileges --security-opt seccomp=unconfined", ARGV),
+    m("i6_training_privileged", "no privilege added", TR,
+      "--cap-drop ALL ", "--cap-drop ALL --cap-add SYS_ADMIN ", ARGV),
+    m("i6_training_host_pid", "no host namespace", TR,
+      "--pids-limit 128 ", "--pids-limit 128 --pid=host ", ARGV),
+    m("i6_training_tmpfs_exec", "scratch space is noexec", TR,
+      "--tmpfs /tmp:rw,size=256m", "--tmpfs /tmp:rw,exec,size=256m", ARGV),
+    m("i6_training_secret_in_argv", "no secret on the command line", TR,
+      "-e LAB_WORKER_HEALTH_PORT=8015 ",
+      "-e LAB_WORKER_HEALTH_PORT=8015 -e T=${LAB_TRAINING_CONNECTOR_TOKEN} ", ARGV, FLAGS),
     m("i6_training_shares_eval_port", "each Lab role its own health port", TR,
       "LAB_WORKER_HEALTH_PORT=8015", "LAB_WORKER_HEALTH_PORT=8012", BOUNDED),
     m("i6_training_part_of_inference", "a consumer restart never takes a Lab unit along", TR,
@@ -85,8 +114,25 @@ MUTANTS: tuple[Mutant, ...] = (
     m("i6_pf_other_role_knob", "another Lab role's knob is refused", PF,
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY"}',
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY", "LAB_EVAL_CONCURRENCY"}', NAMES),
-    m("i6_pf_image_flag_allowed", "the image is not a docker flag", PF,
-      'if env.get("INFRX_IMAGE", "").startswith("-"):', "if False:", NAMES),
+    m("i6_pf_image_unchecked", "the image is a local id", PF,
+      'if not IMAGE.fullmatch(env.get("INFRX_IMAGE", "")):', "if False:", IMAGE),
+    m("i6_pf_image_flag_only", "a registry reference or no image is refused too", PF,
+      'if not IMAGE.fullmatch(env.get("INFRX_IMAGE", "")):',
+      'if env.get("INFRX_IMAGE", "").startswith("-"):', IMAGE),
+    m("i6_pf_image_prefix", "the whole word is the id", PF,
+      "IMAGE.fullmatch(", "IMAGE.match(", IMAGE),
+    m("i6_pf_image_any_case", "a lowercase hex id", PF,
+      'IMAGE = re.compile(r"sha256:[0-9a-f]{64}")', 'IMAGE = re.compile(r"sha256:[0-9a-fA-F]{64}")',
+      IMAGE),
+    m("i6_pf_pasted_line_named", "a non-identifier name is refused by line only", PF,
+      "        elif not NAME.fullmatch(name):\n", "        elif False:\n", ECHO),
+    m("i6_pf_adapter_echoed", "the adapter value is never printed", PF,
+      "{setting}: this adapter has no", "{setting}: {adapter} has no", SHIPPED, SILENT, ECHO,
+      CLI),
+    m("i6_pf_mode_unchecked", "a readable env file is refused", PF,
+      "    if path.stat().st_mode & 0o077:\n", "    if False:\n", MODE),
+    m("i6_pf_mode_world_only", "group-readable is refused too", PF,
+      "st_mode & 0o077", "st_mode & 0o007", MODE),
     m("i6_pf_bare_name_allowed", "a bare name is refused", PF,
       "        if not eq:\n", "        if False:\n", PARSE),
     m("i6_pf_indented_comment", "an indented comment is a comment", PF,

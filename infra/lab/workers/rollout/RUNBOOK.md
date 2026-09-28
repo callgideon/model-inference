@@ -2,7 +2,8 @@
 
 Scope: the R2 controller of LAB-M4 as its own process and systemd unit, I6's shape
 (`infra/lab/workers/training/RUNBOOK.md`: bounds, OFF until its env file exists, the
-preflight gate, egress denied, no consumer coupling).
+preflight gate, egress denied, the hardening and residuals of its §2, no consumer coupling)
+and I2L's Lab-wide enable marker `/etc/infrx-lab/enabled`.
 
 | role | work | unit | health port | adapter |
 |---|---|---|---|---|
@@ -39,15 +40,17 @@ pass converges. `python -m infrx.lab.workers rollout emergency-rollback --policy
   follows. Killed between the two, the next pass converges; an alias someone else moved on is
   left alone.
 * **No automatic capacity purchases.** No adapter, budget or cloud credential in its env file
-  (the preflight refuses them), nothing mounted, no capability added.
+  (the preflight refuses them), nothing mounted, no capability added, `--pull never` (the image
+is the release's local id; the daemon never fetches one).
 
 ## 3. Enable, disable, emergency controls
 
 Enable (window only): write `/etc/infrx-lab/rollout.env` (ubuntu, 0600: `INFRX_IMAGE`,
 `LAB_DATABASE_URL` on the transaction pooler, `LAB_ROLLOUT_CONCURRENCY=1`, optional
 `LAB_EGRESS_ALLOW` naming nothing but the object store), run the preflight
-(`python3 infra/lab/workers/training/preflight.py --role rollout --env-file
-/etc/infrx-lab/rollout.env` prints `PASS rollout`), install and `enable --now` the unit, then
+(`python3 -I infra/lab/workers/training/preflight.py --role rollout --env-file
+/etc/infrx-lab/rollout.env` prints `PASS rollout`), install the unit, make sure I2L's marker
+`/etc/infrx-lab/enabled` exists, `enable --now` the unit, then
 `curl -fsS 127.0.0.1:8016/readyz`.
 
 Emergency controls, in order:
@@ -98,3 +101,9 @@ only through a W3 engine adapter (only `vllm` has one) and claims an optimizatio
 load measurements from an experiment branch's `results/`; so every variant other than a vLLM
 serving of Marlin-2B on that hardware stays unregistered or `inconclusive`, and no release can
 route to it. A new hardware row needs a measured `results/` commit first.
+
+## Verification log
+
+- 2026-09-28: I7 packaging and the local rollback exercise written (lab-workers lane, LW5);
+  I2L's enable marker, `python3 -I`, `--pull never` and group 10003 added. Nothing run on
+  staging or the pilot box.

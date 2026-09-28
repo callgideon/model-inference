@@ -2,7 +2,9 @@
 
 Scope: the two Lab worker roles of LAB-M3. Each is its own process and systemd unit, and
 each follows I5's shape (`infra/lab/workers/eval/RUNBOOK.md`: bounds, OFF until
-`/etc/infrx-lab/<role>.env` exists, no consumer coupling, drain on SIGTERM).
+`/etc/infrx-lab/<role>.env` exists, no consumer coupling, drain on SIGTERM) and I2L's switch
+(`infra/lab/app/README.md`): a unit also needs the Lab-wide marker `/etc/infrx-lab/enabled`,
+so the Lab's Disable (removing the marker) keeps every Lab role down.
 
 | role | work | unit | health port | adapter (default) | approval |
 |---|---|---|---|---|---|
@@ -27,11 +29,24 @@ the unit's egress deny applies.
 
 ## 2. Security: settings, secrets and egress
 
-Before each start `preflight.py --role <role>` (the unit's `ExecStartPre`, as ubuntu, from
-the deployed checkout) refuses the start, naming the setting and never its value, when:
+Threat model: the env file's author (ubuntu or root; ubuntu is in the docker group, so
+root-equivalent) is trusted but fallible. The checks stop a mistake or a one-line edit from
+enabling paid work, widening egress or leaking a secret; they are not a boundary against
+that account.
 
+Before each start `python3 -I preflight.py --role <role>` (the unit's `ExecStartPre`, as
+ubuntu, from the deployed checkout; `-I` because `EnvironmentFile=` reaches every Exec line,
+so no `PYTHON*` setting steers the checker) refuses the start, naming the setting and never
+its value, when:
+
+* the env file is readable by another account (not 0600/0400);
 * a setting is not the role's own (a consumer secret, another purpose's token, `AWS_*`, any
-  `*_proxy` in any letter case) or a line is a bare name;
+  `*_proxy` in any letter case, `DOCKER_HOST` and other settings that steer the unit's docker
+  CLI, `PYTHONPATH`, `LD_PRELOAD`, `SSL_CERT_FILE`), a line is a bare name, or a line's name
+  is not an identifier (a pasted DSN: refused by line number, never printed);
+* `INFRX_IMAGE` is not the release's local image id `sha256:<64 hex>` (a docker flag, an
+  empty value - docker would run the public `python` - or a registry reference; the unit
+  also runs `--pull never`, so the daemon never pulls: registry egress outside the deny);
 * the default adapter carries an endpoint, token, budget or payer (no one-line enable);
 * a non-default adapter has no `egress.json` entry for this role, an endpoint other than
   `https://<approved host>`, an absent or empty token (**a failed secret lookup refuses; the
@@ -43,12 +58,29 @@ the deployed checkout) refuses the start, naming the setting and never its value
 Egress deny: the unit points `HTTP(S)_PROXY` (both cases) at `127.0.0.1:9` (privileged, so no
 unprivileged process can become the proxy) with `NO_PROXY` = `LAB_EGRESS_ALLOW`. An
 unlisted host is a connection error, and P3 turns an unknown submit outcome into
-`ambiguous` with the reservation held, never a retry. **Residual** (owed from staging): this
-guards HTTP clients that trust the environment; a network-level rule (an egress proxy or an
-nftables owner match on uid 10003) is the operator's P-08 decision.
+`ambiguous` with the reservation held, never a retry. **Residuals** (owed from staging, the
+operator's P-08 decision):
+
+* the deny guards HTTP clients that trust the environment; the units use `--network host`
+  (I5's), so a raw socket is not stopped - a network-level rule (an egress proxy or an
+  nftables owner match on uid 10003) closes it;
+* httpx reads a `NO_PROXY` host as that host **and its subdomains** (0.28.1:
+  `all://*<host>`), so allowing the regional S3 endpoint also allows virtual-hosted URLs of
+  any bucket (`<bucket>.s3.<region>.amazonaws.com`), as path-style URLs are anyway: a host
+  allowlist cannot pin the bucket; an S3 VPC endpoint policy naming the Lab bucket does;
+* `docker inspect` shows the container's environment (the token) to the docker group, as
+  for every consumer unit.
+
+Hardening of every unit (checked as shipped, `tests/i/lab_pipeline/test_units.py`): exactly
+the listed `docker run` flags - no mount, device, socket, added capability, `--privileged`,
+host namespace, seccomp/AppArmor opt-out or DNS/hosts override; `--cap-drop ALL`,
+`no-new-privileges`, read-only root, a noexec/nosuid/nodev tmpfs, uid 10003 in its own group
+10003 (I2L's; not the runtime's 10000), `--pull never`, and only `INFRX_IMAGE` and
+`LAB_EGRESS_ALLOW` expanded into argv (never a secret: argv is readable in `ps`).
 
 Secrets: purpose-specific (`LAB_ANNOTATION_TEACHER_TOKEN`, `LAB_TRAINING_CONNECTOR_TOKEN`),
-only in that role's env file (ubuntu, 0600: docker reads `--env-file` as the unit's user),
+only in that role's env file (ubuntu, 0600 - the preflight refuses a readable one; docker
+reads `--env-file` as the unit's user),
 never in argv, logs or this repository. Rotation = rewrite and restart; revocation = empty the
 token and restart (the preflight refuses the start, so nothing runs on a stale credential).
 
@@ -58,11 +90,15 @@ token and restart (the preflight refuses the start, so nothing runs on a stale c
    `payer_ref`, `budget_usd`) and deploy that commit; never edit the box's checkout.
 2. Budget the pooler: `infra/lab/workers/eval/pool_budget.py` (wiring WR-I6-2 adds these
    roles to its `ROLES`), then write `/etc/infrx-lab/<role>.env`.
-3. `python3 infra/lab/workers/training/preflight.py --role <role> --env-file
-   /etc/infrx-lab/<role>.env` prints `PASS <role>`; then install and `enable --now` the unit
-   (I5 runbook §2 step 3) and `curl -fsS 127.0.0.1:<port>/readyz`.
+3. `python3 -I infra/lab/workers/training/preflight.py --role <role> --env-file
+   /etc/infrx-lab/<role>.env` prints `PASS <role>`; then install the unit (I5 runbook §2 step
+   3), make sure I2L's marker exists (`sudo install -d -m 0755 /etc/infrx-lab && sudo touch
+   /etc/infrx-lab/enabled`, I2L's Enable), `enable --now` it and
+   `curl -fsS 127.0.0.1:<port>/readyz`.
 
-Roll back: `sudo systemctl disable --now infrx-lab-<role> && sudo rm /etc/infrx-lab/<role>.env`.
+Roll back one role: `sudo systemctl disable --now infrx-lab-<role> && sudo rm
+/etc/infrx-lab/<role>.env`. Every Lab role at once: I2L's Disable (`sudo rm -f
+/etc/infrx-lab/enabled`, then stop the units; none restarts without the marker).
 Nothing is lost: runs stay in their D8 state, reservations stay held, and they are reconciled
 when the role is enabled again.
 
@@ -103,3 +139,12 @@ Local (task-local key `i6`, no container needed): from `apps/infrx-api`,
 Remaining adapter and staging inputs: P-10 (teacher model, USD rates, egress host), P-11
 (connector, paid terms, sandbox), P-08 (window, operator identity, network-level egress
 rule), D8/D6J merged (the ledger), and the entry point (composition).
+
+## Verification log
+
+- 2026-09-28: I6 packaging, preflight, egress deny and drills written (lab-workers lane, LW5);
+  nothing run on staging or the pilot box.
+- 2026-09-28: security lens extended - I2L's enable marker, `python3 -I`, `--pull never`, own
+  group 10003, local image id only, owner-only env file, no value echoed (adapter or pasted
+  line), exact `docker run` flag set; residuals (host network, httpx subdomain match, docker
+  inspect) recorded. Local only.

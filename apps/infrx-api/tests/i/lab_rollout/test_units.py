@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 from ..lab_eval.test_units import directive
-from ..lab_pipeline.test_units import shape, unit
+from ..lab_pipeline.test_units import hardening, shape, unit
 
 API = Path(__file__).resolve().parents[3]
 REPO = API.parents[1]
@@ -35,7 +35,9 @@ def test_i7_the_controller_cannot_buy_capacity_or_reach_past_the_object_store() 
     """No automatic capacity purchases. Failure oracle: the docker socket or any host path
     mounted (a controller that can start containers or read host credentials), added
     capabilities or privileges, or a host PID/IPC namespace."""
-    (start,) = directive(unit("rollout", UNITS), "ExecStart")
+    text = unit("rollout", UNITS)
+    hardening("rollout", text)
+    (start,) = directive(text, "ExecStart")
     assert "docker.sock" not in start
     assert not re.search(r" (-v|--volume|--mount|--privileged|--cap-add|--pid|--ipc|--device)"
                          r"[ =]", start), start

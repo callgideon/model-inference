@@ -1,0 +1,26 @@
+      Extra items in the right set:
+      '--pull'
+      Use -v to get more diff
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/tests/i/lab_pipeline/test_units.py:116: AssertionError: {'--pull'}
+E   AssertionError: ('rollout', '--user 10003:10003')
+    assert '--user 10003:10003' in '/usr/bin/docker run --rm --init --name infrx-lab-rollout --network host    --user 10003:10000 --read-only --tmpfs /tm... -e NO_PROXY=${LAB_EGRESS_ALLOW} -e no_proxy=${LAB_EGRESS_ALLOW}    ${INFRX_IMAGE} python -m infrx.lab.workers rollout'
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/tests/i/lab_pipeline/test_units.py:43: AssertionError: ('rollout', '--user 10003:10003')
+E   AssertionError: {'--pull'}
+    assert {'--cap-drop'...-memory', ...} == {'--cap-drop'...-memory', ...}
+      Extra items in the right set:
+      '--pull'
+      Use -v to get more diff
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/tests/i/lab_pipeline/test_units.py:116: AssertionError: {'--pull'}
+=========================== short test summary info ============================
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_the_shipped_approvals_are_empty_so_every_role_is_local_or_manual_only
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_an_adapter_is_approved_per_role_and_nothing_is_enabled_silently
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_the_image_is_a_local_content_addressed_id_never_a_flag_or_a_pull
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_a_refusal_never_echoes_a_value_pasted_as_a_name_or_an_adapter
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_the_cli_exits_1_on_a_refusal_and_never_prints_a_value
+FAILED tests/i/lab_pipeline/test_preflight.py::test_i6_the_cli_refuses_an_env_file_another_account_can_read
+FAILED tests/i/lab_pipeline/test_units.py::test_i6_each_role_is_bounded_off_by_default_and_gated_by_the_preflight
+FAILED tests/i/lab_pipeline/test_units.py::test_i6_argv_carries_no_mount_privilege_namespace_pull_or_secret
+FAILED tests/i/lab_rollout/test_units.py::test_i7_the_controller_is_bounded_off_by_default_gated_and_independently_ready
+FAILED tests/i/lab_rollout/test_units.py::test_i7_the_controller_cannot_buy_capacity_or_reach_past_the_object_store
+10 failed, 20 passed in 0.21s
+exit 1

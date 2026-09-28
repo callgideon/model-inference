@@ -42,6 +42,13 @@ MUTANTS: tuple[Mutant, ...] = (
       "--cap-drop ALL ", "--cap-drop ALL --cap-add NET_ADMIN ", CAPACITY),
     m("i7_rollout_host_pid", "no host PID namespace", RO,
       "--pids-limit 64 ", "--pids-limit 64 --pid=host ", CAPACITY),
+    m("i7_rollout_no_enable_marker", "the Lab-wide enable marker gates the controller", RO,
+      "ConditionPathExists=/etc/infrx-lab/enabled\n", "", READY),
+    m("i7_rollout_pulls", "the daemon never pulls", RO, "--pull never ", "", CAPACITY),
+    m("i7_rollout_consumer_group", "not the consumer runtime's group", RO,
+      "--user 10003:10003", "--user 10003:10000", READY, CAPACITY),
+    m("i7_rollout_preflight_not_isolated", "PYTHON* settings never steer the preflight", RO,
+      "python3 -I /home", "python3 /home", READY),
     # --- R2 under the exercise
     m("i7_stale_metrics_expand", "stale telemetry holds", R2,
       '        hold.append("metrics_stale")\n', "        pass\n", EXERCISE),
