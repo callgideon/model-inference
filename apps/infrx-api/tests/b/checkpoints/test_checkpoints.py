@@ -180,7 +180,8 @@ def test_b3_out_of_order_events_never_redefine_latest() -> None:
     """CHECKPOINT-IDEM: a `latest_only` subscription evaluates the highest step received,
     whatever the arrival order - an older step arriving after a newer one is `superseded`
     (and so is one handled after a newer one arrived); a newer step that was rejected does
-    not supersede anything; an `every` subscription evaluates each."""
+    not supersede anything, in either handling order (a pending newer step is registered
+    before it may supersede); an `every` subscription evaluates each."""
     w = World()
     subscribe(w, w.subscription(1))
     subscribe(w, w.subscription(2, policy="every"))
@@ -195,6 +196,14 @@ def test_b3_out_of_order_events_never_redefine_latest() -> None:
     handle(w, w.event(5))
     handle(w, w.event(3))
     assert states(w, 1)[3] == ("queued", None) and states(w, 1)[5] == ("skipped", "rejected")
+    w = World()                           # the reverse handling order: the same outcome
+    subscribe(w, w.subscription(1))
+    receive(w, w.event(3))
+    receive(w, w.event(5, data=b"junk"))  # a truncated upload of the newest checkpoint
+    handle(w, w.event(3))
+    handle(w, w.event(5))
+    assert states(w, 1) == {3: ("queued", None), 5: ("skipped", "rejected")}
+    assert len(w.store.runs) == 1
 
 
 def test_b3_a_burst_is_bounded_by_concurrency_and_budget_with_visible_skips() -> None:
@@ -252,9 +261,12 @@ def test_b3_a_revoked_owner_or_grant_is_a_visible_skip() -> None:
     receive(w, w.event(1))
     handle(w, w.event(1))
     assert states(w, 1) == {1: ("skipped", "not_found")}
+    assert w.deployer.calls == [] and w.store.runs == {}   # no dev deployment for it
+    assert w.store.receipts[w.event(1)["checkpoint_id"]]["state"] == "validated"
     store.memberships[(NEMO, DEV)] = store.memberships[(NEMO, DEV)].model_copy(
         update={"revoked_at": None})
     w.store.revoke(w.grant)
     receive(w, w.event(2))
     handle(w, w.event(2))
     assert states(w, 1)[2] == ("skipped", "forbidden") and w.store.runs == {}
+    assert w.store.receipts[w.event(2)["checkpoint_id"]]["state"] == "validated"

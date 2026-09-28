@@ -230,22 +230,12 @@ async def on_checkpoint(checkpoint_id: str, *, provider_org_id: str, ledger: Che
     """B3.b: register the checkpoint, then decide it once per subscription; answers
     subscription id -> decision. Raises `CapacityExhausted` to be retried later."""
     event = await ledger.event(checkpoint_id, provider_org_id=provider_org_id)
-    receipt = await store.receive_checkpoint(         # a redelivery: the current receipt
-        provider_org_id=provider_org_id, checkpoint_id=checkpoint_id,
-        external_run_ref=event.external_run_ref, artifact_digest=event.artifact.digest)
+    receipt = await _registered(event, store, ledger, registries)
     subs = await ledger.subscriptions(event.external_run_ref, provider_org_id=provider_org_id)
-    if receipt["state"] == "received":
-        reason = await _register(event, registries)
-        if reason:
-            await ledger.reject(checkpoint_id, reason, provider_org_id=provider_org_id)
-        receipt = await store.transition_checkpoint(
-            checkpoint_id, "rejected" if reason else "validated",
-            provider_org_id=provider_org_id)
     if receipt["state"] == "rejected":
         return {s.subscription_id: await _once(ledger, s, event, "skipped", "rejected")
                 for s in subs}
-    newer = [e.step for e, rejected in await ledger.events(
-        event.external_run_ref, provider_org_id=provider_org_id) if not rejected]
+    superseded = None                 # a newer step counts only once it registered valid
     serving, out, busy = None, {}, False
     for sub in subs:
         mine = await ledger.decisions(sub.subscription_id)
@@ -254,7 +244,15 @@ async def on_checkpoint(checkpoint_id: str, *, provider_org_id: str, ledger: Che
             out[sub.subscription_id] = done
             continue
         if done is None:
-            if sub.policy == "latest_only" and max(newer) > event.step:
+            if sub.policy == "latest_only" and superseded is None:
+                superseded = False
+                for e, _ in await ledger.events(event.external_run_ref,
+                                                provider_org_id=provider_org_id):
+                    if e.step > event.step and (await _registered(
+                            e, store, ledger, registries))["state"] != "rejected":
+                        superseded = True
+                        break
+            if sub.policy == "latest_only" and superseded:
                 out[sub.subscription_id] = await _once(ledger, sub, event, "skipped",
                                                        "superseded")
                 continue
@@ -268,6 +266,12 @@ async def on_checkpoint(checkpoint_id: str, *, provider_org_id: str, ledger: Che
             if len(active) >= sub.max_active:
                 busy = True
                 continue
+        try:                          # the L2 half of R160 before any GPU is spent
+            await runner.may_schedule(access, user_id=sub.owner_user_id,
+                                      provider_org_id=provider_org_id)
+        except (errors.Forbidden, errors.NotFound) as refused:
+            out[sub.subscription_id] = await _once(ledger, sub, event, "skipped", refused.code)
+            continue
         serving = serving or await deployer.deploy(
             provider_org_id=provider_org_id, checkpoint_id=checkpoint_id,
             uri=event.artifact.uri, digest=event.artifact.digest)
@@ -282,12 +286,28 @@ async def on_checkpoint(checkpoint_id: str, *, provider_org_id: str, ledger: Che
         out[sub.subscription_id] = done or await ledger.decide(
             sub.subscription_id, checkpoint_id, state="queued", reason=None,
             run_id=frozen.run.run_id)
-    if serving and receipt["state"] == "validated":
+    if receipt["state"] == "validated" and any(d["state"] == "queued" for d in out.values()):
         await store.transition_checkpoint(checkpoint_id, "evaluated",
                                           provider_org_id=provider_org_id)
     if busy:
         raise errors.CapacityExhausted("a subscription is at its concurrent-run bound")
     return out
+
+
+async def _registered(event: CheckpointEvent, store, ledger: CheckpointLedger,
+                      registries) -> dict[str, Any]:
+    """The D7 receipt of a received event, registered (validated or rejected) once."""
+    receipt = await store.receive_checkpoint(         # a redelivery: the current receipt
+        provider_org_id=event.provider_org_id, checkpoint_id=event.checkpoint_id,
+        external_run_ref=event.external_run_ref, artifact_digest=event.artifact.digest)
+    if receipt["state"] != "received":
+        return receipt
+    reason = await _register(event, registries)
+    if reason:
+        await ledger.reject(event.checkpoint_id, reason, provider_org_id=event.provider_org_id)
+    return await store.transition_checkpoint(
+        event.checkpoint_id, "rejected" if reason else "validated",
+        provider_org_id=event.provider_org_id)
 
 
 async def _once(ledger: CheckpointLedger, sub: Subscription, event: CheckpointEvent,
