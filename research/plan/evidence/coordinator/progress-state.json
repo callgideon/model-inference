@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 206,
- "updated": "2026-09-28T09:15:45Z",
+ "revision": 207,
+ "updated": "2026-09-28T09:42:17Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5589,26 +5589,29 @@
    "branch": "codex/w5-lab-observe",
    "worktree": ".claude/worktrees/codex-w5-lab-observe",
    "base": "9a48300c",
-   "head": null,
+   "head": "7cc5b19f",
    "isolation": {
     "ports": "e5l 57100-57199 (PG 57132)",
     "prefix": "infrx-e5l-",
     "db": "e5l"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T08:39:49Z",
-   "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge (fakes never count: real halves rerun at merge)",
+   "updated": "2026-09-28T09:42:17Z",
+   "blocker": "E5L-F1: J2 submit reads the raw projection (WR-OBS-3, judge code) → fixed in the lab-sql-integration lane, then E5L o06 rerun",
+   "next_action": "REJECT-with-one-carried-defect at 7cc5b19f (I2L-OBS units OFF, observe.json/alerts.json, exporter; E5L runner 13 PASS / 1 FAIL E5L-F1 / 3 NOT RUN; majors F2 flaky wait, F3 silent exporter, F4/SCOPE-1 monitor copy, INT-1 port 8017 fixed+rechecked) → merge batch #9 (wf_f7c04eae-8db) with WR-OBS-2/4/5 + the update-JSON rename; WR-OBS-3 → lab-sql-integration; WR-OBS-1 judge worker entry point → composition batch 2; LAB-OBSERVE not accepted until E5L reruns green",
    "estimate": {
-    "optimistic_h": 0,
-    "likely_h": 0,
-    "pessimistic_h": 0,
+    "optimistic_h": 1.5,
+    "likely_h": 4,
+    "pessimistic_h": 11,
     "confidence": "medium",
-    "basis": "plan 1/3/6 + 4/8/16",
-    "at": "2026-09-28T06:59:31Z"
+    "basis": "handback: E5L 1/3/8 + I2L-OBS 0.5/1/3 incl. the J2 fix round and a gate rerun",
+    "at": "2026-09-28T09:42:17Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E5L-3da696a.md",
+    "research/plan/evidence/e/E5L-I2L-OBS-3da696a.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infra/lab/observe/",
@@ -5861,6 +5864,40 @@
     "apps/app/supabase/migrations/0041+_*.sql",
     "infrx/state/lab_*.py",
     "tests/d/test_{c2rpc,d8,...}_*.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-9",
+   "task": null,
+   "slice": "(wave5 merge lane #9, parallel to #6/#8 on its own lines) lab-observe 7cc5b19f (WR-OBS-2/4/5, update-JSON rename); workflow wf_f7c04eae-8db; base 608d7e6c",
+   "agent": "opus",
+   "branch": "codex/w5-merge-9",
+   "worktree": ".claude/worktrees/codex-w5-merge-9",
+   "base": "608d7e6c",
+   "head": null,
+   "isolation": {
+    "ports": null,
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T09:42:17Z",
+   "updated": "2026-09-28T09:42:17Z",
+   "blocker": null,
+   "next_action": "merge agent → verify lens → coordinator merges the branch after #6/#8",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "one merge, no docker",
+    "at": "2026-09-28T09:42:17Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
    ],
    "wiring_requests": []
   }
