@@ -255,11 +255,13 @@ class Waves(Base):
         # Oracle: `check` passing a map that drops D6F, lists L1 twice, invents ZZ9 or a slice of an unknown task,
         # schedules launch-scope E4C, or names a gate task outside its wave.
         waves = P.load_waves()
+        self.state["activated"] = ["D6F", "L2"]  # activated tasks are post-launch too: dropping one is the same error
         waves[1]["lanes"][0]["ids"].remove("D6F")
+        waves[1]["lanes"][0]["ids"].remove("D7")
         waves[2]["lanes"][0]["ids"] += ["L1", "ZZ9", "Q9-SQL", "E4C", "L3-SQL"]
         waves[3]["gate_lanes"].append({"task": "B4", "lane": "eval-ui"})
         errors = P.Model(self.manifest, self.state, NOW, self.dir, waves).errors
-        for want in ("wave map: deferred task D6F is in no wave", "wave map: L1 is in more than one wave", "wave map: unknown ID 'ZZ9' in LW2",
+        for want in ("wave map: deferred task D6F is in no wave", "wave map: deferred task D7 is in no wave", "wave map: L1 is in more than one wave", "wave map: unknown ID 'ZZ9' in LW2",
                      "wave map: unknown ID 'Q9-SQL' in LW2", "wave map: E4C is backend, not post-launch", "wave map: gate task B4 is not in LW3"):
             self.assertIn(want, errors)
         self.assertFalse(any("L3-SQL" in x for x in errors))  # a slice of a manifest task is fine
@@ -296,11 +298,32 @@ class Waves(Base):
 
     def test_wave_eta_uses_the_live_lanes_and_eta_params(self):
         # Oracle: the milestone arithmetic (1 + rework, + one merge per lane, capacity over free slots) not applied; a date
-        # while a live lane has no estimate, while open work has no live lane, or while an open input blocks an open task.
-        self.assertEqual(self.wave(self.model(), "LW6")["eta"]["status"], "unknown")  # open work, no lane
+        # while a live lane has no estimate, while open work has no live lane (even if another lane of the wave is live), from
+        # a lane whose task is already implemented, or while an open input blocks an open task.
+        self.assertEqual(self.wave(self.model(), "LW6")["eta"]["text"], "no live lane for E7L, E8L")  # open work, no lane
+        self.lane("W5-LAB-IMPROVE", "LW6 lane lab-improve", "running", (3, 6, 12))
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["status"], f["text"], "finish" in f), ("unknown", "no live lane for E8L", False))  # E8L open, no lab-rollout lane
+        self.state["lanes"].pop()
+        self.implement("E7L")
+        self.state["lanes"].append({"id": "W5-DONE", "task": "E7L", "activity": "blocked", "slice": None, "updated": hours_ago(1),
+                                    "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 3, "confidence": "high", "at": hours_ago(1)}})
+        self.assertEqual(self.wave(self.model(), "LW6")["eta"]["text"], "no live lane for E8L")  # a lane for finished work covers nothing
+        self.lane("W5-LAB-ROLLOUT", "LW6 lane lab-rollout", "review", (2, 4, 8), "low")
+        f = self.wave(self.model(), "LW6")["eta"]
+        self.assertEqual((f["status"], f["effort_h"], f["confidence"]), ("forecast", [3.1, 5.7, 10.9], "low"))  # W5-DONE not counted
+        self.state["lanes"][-2:] = []
+        for t in self.manifest["tasks"]:
+            if t["id"] == "E7L":
+                t["status"] = "planned"
+        self.implement("V1M")  # lab-app [L4, V1M]: a lane keyed to the finished V1M does not cover the open L4
+        self.state["lanes"].append({"id": "V1M-LANE", "task": "V1M", "activity": "blocked", "updated": hours_ago(1)})
+        self.assertIn("L4", self.wave(self.model(), "LW2")["eta"]["text"])
+        self.state["lanes"].pop()
+        self.lane("W5-X", "LW6 lane lab-rollout-x", "running")  # nor does a similarly named lane
         self.lane("W5-LAB-IMPROVE", "LW6 lane lab-improve", "running", (3, 6, 12))
         self.lane("W5-LAB-ROLLOUT", "LW6 lane lab-rollout", "review", (2, 4, 8), "low")
-        self.lane("W5-OLD", "LW6 lane old", "complete")  # a finished lane adds nothing
+        self.lane("W5-OLD", "LW6 lane lab-improve", "complete")  # a finished lane adds nothing
         f = self.wave(self.model(), "LW6")["eta"]
         self.assertEqual((f["status"], f["effort_h"], f["wall_h"], f["confidence"]), ("forecast", [7.5, 14.0, 27.0], [4.4, 8.3, 16.1], "low"))
         self.assertEqual(f["finish"][1], P.iso(NOW + dt.timedelta(hours=8.3)))
@@ -316,7 +339,7 @@ class Waves(Base):
         self.assertEqual((f["wall_h"], f["constraint"]), ([1.0, 1.0, 1.0], "serial integration queue: 2 merges × 0.5 h"))
         for x, est in zip(self.state["lanes"][-3:-1], saved):
             x["estimate"] = est
-        self.lane("W5-NOEST", "LW6 lane noest", "running")
+        self.lane("W5-NOEST", "LW6 lane lab-improve", "running")
         f = self.wave(self.model(), "LW6")["eta"]
         self.assertEqual((f["status"], "finish" in f), ("unknown", False))
         self.assertIn("W5-NOEST", f["text"])

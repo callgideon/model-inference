@@ -695,10 +695,19 @@ def wave_eta(M, v):
     if v["state"] == "EXIT MET":
         return {"status": "done", "text": "exit met"}
     live = [x for x in v["overlay"] if x["activity"] not in ("complete", "deferred")]
+    need = [x for x in v["lanes"] if x["gating"] and set(x["ids"]) & set(v["open"])]  # map lanes with open gating work
+
+    def serves(y, x):  # an overlay lane working map lane x: its slice names the lane, or it is keyed to one of x's open tasks
+        return y.get("task") in set(x["ids"]) & set(v["open"]) or re.search(rf"\blane {re.escape(x['name'])}(?![\w-])", str(y.get("slice") or ""))
+    uncovered = [i for x in need if not any(serves(y, x) for y in live) for i in x["ids"] if i in v["open"]]
+    if need:  # a lane for finished work (e.g. a blocked lane whose task is implemented) says nothing about the open work
+        live = [y for y in live if any(serves(y, x) for x in need)]
     inputs = sorted(p["id"] for p in M.s.get("inputs", []) if p.get("status") != "resolved" and set(v["open"]) & set(p.get("blocks", [])))
     unknown = [x["id"] for x in live if estimate_problem(x.get("estimate")) or None in [(x.get("estimate") or {}).get(k) for k in HOURS]]
     if inputs:
         return {"status": "blocked", "text": "blocked pending " + ", ".join(inputs)}
+    if uncovered:
+        return {"status": "unknown", "text": "no live lane for " + ", ".join(uncovered)}
     if unknown or not live:
         return {"status": "unknown", "text": ("no remaining-effort estimate for " + ", ".join(unknown) if unknown else "no live lane for the open work")}
     p, slots = M.s.get("eta_params", {}), M.s.get("agent_slots", {})
