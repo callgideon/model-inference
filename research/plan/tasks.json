@@ -2908,7 +2908,7 @@
       "track": "D",
       "product": "shared",
       "milestone": "LAB-M3",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -2936,7 +2936,8 @@
       ],
       "acceptance": "Review provenance cannot be forged by consumers; human ground truth and synthetic labels remain distinct. One budget reservation per logical operation includes outstanding/unknown submissions.",
       "failure_oracle": "Duplicate callback, revoke consent before submit, simultaneous spends and stale workers cannot double settle, reclassify synthetic labels or expose another provider’s datasets.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "2026-09-29: implemented via the lab-sql-lw3 merge a9752e7f (0042_lab_d8_ledgers = the union of SR-P1-1 label log, SR-P3-1 run ledger with one D6J PROVIDER_USD reservation per submit key settled once, SR-P2-1 teacher ledger, WR-B3-1 checkpoint ledger; a synthetic annotation claiming ground truth is refused; PgLabelLog/PgRunLedger/PgTeacherLedger/PgCheckpointLedger; 61 + 44 SQL and 28 Python mutants). LOCAL-ONLY (R151). The consuming modules swap their fakes in the lab-sql-integration-2 lane."
     },
     {
       "id": "P1",

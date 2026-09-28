@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "ae72957f",
+ "integration_head": "6ab5ee47",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 226,
- "updated": "2026-09-28T15:33:53Z",
+ "revision": 227,
+ "updated": "2026-09-28T15:37:12Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5857,18 +5857,18 @@
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T09:15:45Z",
-   "updated": "2026-09-28T14:42:50Z",
+   "updated": "2026-09-28T15:37:12Z",
    "blocker": null,
-   "next_action": "ACCEPT_WITH_FIXES at d62d96af (0041 C2-RPC + sample restrictions; 0042 D8 = label log, run ledger, teacher ledger, checkpoint ledger; 0043 reads, proposals, lab_judge_runs, SR-R1-1, infrx_lab_control login; major LSQ3-C1 fixed+rechecked; 565 mutants; P1/P3/B3 pass on a scratch merged tree with the adapters) → merge batch #16 (wf_8445363c-222) with WR-LSQ3-1/2/3/4; then the lab-sql-integration-2 lane (WR-C2-5, WR-P1-D8, WR-P3-D8, WR-B3-D8, WR-P2-D8, WR-J3-D8, WR-R1-3, WR-N3-4, WR-COMP-1) and the C2/D8 manifest flips; WR-I2L-4 password = operator step (P-08)",
+   "next_action": "DONE (schema): 0041–0043 merged LOCAL-ONLY (b85d90da + 5b549f54 + 6ab5ee47); D8 → implemented; C2 flips after WR-C2-5; the consuming swaps run in lab-sql-integration-2 (wf_150aa718-d5e)",
    "estimate": {
-    "optimistic_h": 1.5,
-    "likely_h": 3.5,
-    "pessimistic_h": 9,
-    "confidence": "medium",
-    "basis": "handback: C2 0.5/1/3 + D8 1/2.5/6 + the consuming reruns",
-    "at": "2026-09-28T14:42:50Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T15:37:12Z"
    },
    "evidence": [
     "research/plan/evidence/d/C2-dd08e1e.md",
@@ -6230,24 +6230,24 @@
    "branch": "codex/w5-merge-16",
    "worktree": ".claude/worktrees/codex-w5-merge-16",
    "base": "4975c92a",
-   "head": null,
+   "head": "5b549f54",
    "isolation": {
     "ports": "dlab (checks only)",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T14:42:50Z",
-   "updated": "2026-09-28T14:42:50Z",
+   "updated": "2026-09-28T15:37:12Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "next_action": "DONE: merged onto claude/consumer-v1 at a9752e7f; WR-LSQ3-5 (checks_credit D10_ROLES + infrx_lab_control) applied at 6ab5ee47 — test_credit_schema 21 green on dlab; WR-I2L-4b (control app.py set_role=False) → composition-2/l3 follow-up; WR-P3-R184 → lab-sql-integration-2",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "one merge with PG checks",
-    "at": "2026-09-28T14:42:50Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T15:37:12Z"
    },
    "evidence": [],
    "commands": [],
@@ -6402,6 +6402,51 @@
     "infrx/state/lab_control.py",
     "tests/d/test_l3sql_*.py",
     "tests/l/control PG cases"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-SQL-INTEGRATION-2",
+   "task": null,
+   "slice": "(wave5 LW4 lane lab-sql-integration-2) the consuming lanes on 0041–0043: WR-C2-5, WR-P1-D8, WR-P3-D8 + WR-P3-R184, WR-B3-D8, WR-P2-D8, WR-J3-D8, WR-R1-3, WR-N3-4; workflow wf_150aa718-d5e; base 6ab5ee47",
+   "agent": "opus",
+   "branch": "codex/w5-lab-sql-integration-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-sql-integration-2",
+   "base": "6ab5ee47",
+   "head": null,
+   "isolation": {
+    "ports": "lab-c2 / p1 / p3 / b3 / p2 / j2 / r1 / n3",
+    "prefix": "infrx-lab-c2-",
+    "db": "lab_c2"
+   },
+   "activity": "running",
+   "started": "2026-09-28T15:37:12Z",
+   "updated": "2026-09-28T15:37:12Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge; then C2, P1, P3, B3, R1, N3 (+ P2/J3 with their judge halves) → implemented",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 8,
+    "pessimistic_h": 16,
+    "confidence": "medium",
+    "basis": "the first integration lane 6 h for six swaps; eight here",
+    "at": "2026-09-28T15:37:12Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/content/**",
+    "tests/content/**",
+    "infrx/pipelines/**",
+    "tests/p/**",
+    "infrx/evaluation/checkpoints/**",
+    "tests/b/checkpoints/**",
+    "infrx/judge/calibration/**",
+    "tests/j/calibration/**",
+    "infrx/rollouts/routing/**",
+    "tests/r/routing/**",
+    "infrx/datasets/lineage/**",
+    "tests/n/lineage/**"
    ],
    "wiring_requests": []
   }
