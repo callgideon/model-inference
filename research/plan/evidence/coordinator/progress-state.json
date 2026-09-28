@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 227,
- "updated": "2026-09-28T15:37:12Z",
+ "revision": 228,
+ "updated": "2026-09-28T15:38:37Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6449,6 +6449,76 @@
     "tests/n/lineage/**"
    ],
    "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-IMPROVE",
+   "task": null,
+   "slice": "(wave5 LW6 lane lab-improve) the E7L LAB-IMPROVE gate runner started early: labels → training bundle → checkpoint import → held-out evaluation → candidate; iteration 2 via N3; faults (revocation mid-iteration, duplicate teacher submit, lost training poll, R184); workflow wf_3e2acfd0-903; base b2906856",
+   "agent": "opus",
+   "branch": "codex/w5-lab-improve",
+   "worktree": ".claude/worktrees/codex-w5-lab-improve",
+   "base": "b2906856",
+   "head": null,
+   "isolation": {
+    "ports": "e7l 57300-57399 (PG 57332)",
+    "prefix": "infrx-e7l-",
+    "db": "e7l"
+   },
+   "activity": "running",
+   "started": "2026-09-28T15:38:37Z",
+   "updated": "2026-09-28T15:38:37Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge (gate runner; accepted run after composition-2 + E5L/E6L)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "plan 3/6/12",
+    "at": "2026-09-28T15:38:37Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_improve/",
+    "research/plan/evidence/e/E7L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-ROLLOUT",
+   "task": null,
+   "slice": "(wave5 LW6 lane lab-rollout) the E8L LAB-ROLLOUT gate runner started early: shadow/canary/A-B with a controller restart, non-inferiority + cost decision, rollback once through the CAS, R1 harmless when off, R3 parity NOT RUN; workflow wf_bd119196-754; base b2906856",
+   "agent": "opus",
+   "branch": "codex/w5-lab-rollout",
+   "worktree": ".claude/worktrees/codex-w5-lab-rollout",
+   "base": "b2906856",
+   "head": null,
+   "isolation": {
+    "ports": "e8l 57400-57499 (PG 57432)",
+    "prefix": "infrx-e8l-",
+    "db": "e8l"
+   },
+   "activity": "running",
+   "started": "2026-09-28T15:38:37Z",
+   "updated": "2026-09-28T15:38:37Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge (gate runner; accepted run after composition-2 + E5L/E6L)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "plan 3/6/12",
+    "at": "2026-09-28T15:38:37Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_rollout/",
+    "research/plan/evidence/e/E8L-*"
+   ],
+   "wiring_requests": []
   }
  ],
  "review_queue": [],
@@ -10943,6 +11013,8 @@
   "E3L",
   "E5L",
   "E6L",
+  "E7L",
+  "E8L",
   "F3",
   "G4F",
   "G4T",
