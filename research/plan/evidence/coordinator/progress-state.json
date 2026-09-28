@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 245,
- "updated": "2026-09-28T23:33:11Z",
+ "revision": 246,
+ "updated": "2026-09-28T23:37:10Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6652,32 +6652,39 @@
    "branch": "codex/w5-e3l-bind",
    "worktree": ".claude/worktrees/codex-w5-e3l-bind",
    "base": "49393c56",
-   "head": null,
+   "head": "8851ceea",
    "isolation": {
     "ports": "e3l 57000-57099 (PG 57032); l3/l4",
     "prefix": "infrx-e3l-",
     "db": "e3l"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T20:38:50Z",
-   "updated": "2026-09-28T20:38:50Z",
+   "updated": "2026-09-28T23:37:10Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "merge batch #25 (wf_61cf9314-9db, Sonnet; R203–R205); LAB-OPERATE-LOCAL after E3L-F1 (e3l-f1) + E3L-F2 (lab-sql-lw6) + a rerun binding J01/J02 and the ControlReads route halves",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 12,
-    "confidence": "medium",
-    "basis": "E3L's second half",
-    "at": "2026-09-28T20:38:50Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT 8851ceea; merge running",
+    "at": "2026-09-28T23:37:10Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E3L-BIND-bab9b18.md",
+    "research/plan/evidence/e/E3L-raw-bab9b180/"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_operate/**",
     "research/plan/evidence/e/E3L-*"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-E3L-2",
+    "E3L-F1",
+    "E3L-F2"
+   ]
   },
   {
    "id": "W5-PIPELINE-UI-2",
@@ -7137,6 +7144,73 @@
    "evidence": [],
    "commands": [],
    "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-25",
+   "task": null,
+   "slice": "merge batch #25 (Sonnet): e3l-bind 8851ceea (+R203–R205); workflow wf_61cf9314-9db",
+   "agent": "sonnet",
+   "branch": "codex/w5-merge-25",
+   "worktree": ".claude/worktrees/codex-w5-merge-25",
+   "base": "ad828a2d",
+   "head": null,
+   "isolation": {
+    "ports": "l4 57503",
+    "prefix": "infrx-l4-",
+    "db": "l4"
+   },
+   "activity": "running",
+   "started": "2026-09-28T23:37:10Z",
+   "updated": "2026-09-28T23:37:10Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R202 before R203 at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-28T23:37:10Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-E3L-F1",
+   "task": "E3L",
+   "slice": "(wave5 LW3 lane e3l-f1, Sonnet) E3L-F1: /v1/models projects the constant LISTING_VERSION = 1; the catalog port returns the listing version resolution landed on (R195) and models.py projects it; workflow wf_2fb43991-c91; base ad828a2d",
+   "agent": "sonnet",
+   "branch": "codex/w5-e3l-f1",
+   "worktree": ".claude/worktrees/codex-w5-e3l-f1",
+   "base": "ad828a2d",
+   "head": null,
+   "isolation": {
+    "ports": "g7 55446; dlab 57500",
+    "prefix": "infrx-g7-",
+    "db": "g7"
+   },
+   "activity": "running",
+   "started": "2026-09-28T23:37:10Z",
+   "updated": "2026-09-28T23:37:10Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge → l05b rerun",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "one constant, one port read, one PG case"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/gateway/routes/models.py",
+    "infrx/state/catalog.py",
+    "tests/g/**"
+   ],
    "wiring_requests": []
   }
  ],
