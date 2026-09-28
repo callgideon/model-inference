@@ -27,6 +27,7 @@ from infrx.state import migrations
 from infrx.state.feedback import PgFeedbackService
 from infrx.state.jobstore import connector
 from infrx.state.lab_access import PgAccessStore
+from infrx.state.lab_content import PgSampleRestrictions
 from infrx.state.lab_data import PgLabDataStore
 from infrx.traces import ship
 from infrx.traces.retention import Retention
@@ -129,6 +130,12 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
         "select grant_id::text from infrx.lab_access_grants where grantor_org_id = %s "
         "and recipient_provider_org_id = %s limit 1", (w.grantor, NEMO)).fetchone()[0]
     assert bound == [(grant_id, "train")]
+    assert w.conn.execute(
+        "select sample_id::text, content_until from infrx.lab_sample_bounds "
+        "where provider_org_id = %s", (NEMO,)).fetchall() == \
+        [(sample_id, now - timedelta(hours=1) + timedelta(days=90))
+         for sample_id in [run(store.resolve(got.dataset_ref,
+                                             provider_org_id=NEMO)).samples[0].sample_id]]
     view = run(lineage.status(store, w.objects, got.dataset_ref, provider_org_id=NEMO, now=now))
     [sample] = view["samples"]
     assert (sample["restricted"], sample["trace"]["request_id"]) == (None, w.request)
@@ -157,3 +164,8 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
     assert run(store.accessible_samples(got.dataset_ref, provider_org_id=NEMO,
                                         purpose="training")) == [sample["sample_id"]]
     assert gate() == set(), "a re-grant resurrected a tombstoned sample"
+    restrictions = PgSampleRestrictions(connector(dsn))      # WR-N3-5: 0041 is the authority
+    assert run(restrictions.blocked(got.dataset_ref, provider_org_id=NEMO)) == \
+        {sample["sample_id"]: "grant_not_current"}, "the tombstone never reached 0041"
+    assert run(restrictions.permitted(got.dataset_ref, provider_org_id=NEMO,
+                                      purpose="training")) == []

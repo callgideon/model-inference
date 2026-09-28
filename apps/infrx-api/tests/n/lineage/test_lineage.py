@@ -11,7 +11,7 @@ mutant in `mutants.py`.
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from infrx.contracts import errors
@@ -105,6 +105,10 @@ def test_n3_permitted_traces_become_a_dataset_with_lineage_per_sample() -> None:
                      "categories": ["request_content", "response_content", "feedback"],
                      "content_until": (row.started_at + timedelta(days=90)).isoformat()}
     assert sample.group_key == a
+    assert w.lab.restrictions.bounds == {                  # WR-N3-5: 0041 holds the bound
+        (NEMO, s.sample_id): datetime.fromisoformat(run(lineage.trace_of(
+            w.objects, provider_org_id=NEMO, sample_id=s.sample_id))["content_until"])
+        for s in manifest.samples}
     assert permitted(w, got.dataset_ref) == {s.sample_id for s in manifest.samples}
 
 
@@ -237,6 +241,8 @@ def test_n3_revocation_tombstones_every_derived_version_and_export() -> None:
     report = run(lineage.reconcile(w.directory, w.retention, w.objects, provider_org_id=NEMO))
     assert sorted(t["reason"] for t in report["tombstoned"]) == ["grant_not_current"] * 4
     assert report["purged"] == 0                       # logical now; physical after retention
+    assert run(w.lab.restrictions.blocked(derived, provider_org_id=NEMO)) == \
+        dict.fromkeys(trace_ids, "grant_not_current"), "the tombstones never reached 0041"
     w.grant(GRANTOR, 0x91, *w.directory.grants[(GRANTOR, NEMO)].categories[2:])
     assert permitted(w, derived, "training") & trace_ids == set(), "a re-grant resurrected"
     part = run(versions.read_part(w.lab, w.objects, provider_org_id=NEMO, export_id=rid(0xe1),
@@ -255,8 +261,7 @@ def test_n3_revocation_tombstones_every_derived_version_and_export() -> None:
     assert (evidence["dataset_ref"], evidence["recalled"]) == (derived, False)
     assert sorted(a["sample_id"] for a in evidence["affected"]) == sorted(trace_ids)
     assert export["created_at"] == evidence["delivered_from"]
-    stones = [run(w.objects.get(k)) for k in run(w.objects.keys(f"lab/{NEMO}/lineage/tomb"))]
-    retained = b"".join(stones) + json.dumps(evidence).encode()
+    retained = json.dumps([evidence, sorted(w.lab.restrictions.stones.items())]).encode()
     assert b"question" not in retained and b"answer" not in retained
 
 
