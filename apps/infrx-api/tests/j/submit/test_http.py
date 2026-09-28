@@ -16,7 +16,6 @@ from infrx.judge.submit import HttpJudgeProvider, collect, reconcile
 
 from tests.j import fakes as j1
 
-from . import fakes
 from .judge_fake import JudgeFake
 from .test_submit import Case
 

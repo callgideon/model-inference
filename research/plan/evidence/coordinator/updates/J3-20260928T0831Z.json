@@ -1,0 +1,63 @@
+{
+ "task": "J3",
+ "slice": "LW4 judge-lw4 task 1: operator calibration + quality report (infrx/judge/calibration) and the WR-V3-1 per-request adapter (apps/lab/lib/services/judge/runs.ts); fake-only",
+ "activity": "review",
+ "head": "e4836faf",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-judge-lw4",
+ "branch": "codex/w5-judge-lw4",
+ "owned_paths": [
+  "apps/infrx-api/infrx/judge/",
+  "apps/infrx-api/tests/j/",
+  "apps/lab/lib/services/judge/",
+  "apps/lab/tests/c/judge/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/j/calibration (red, before the module)",
+   "exit": 2,
+   "summary": "ImportError MIN_PAIRS"
+  },
+  {
+   "cmd": "node --test tests/c/judge/runs.test.ts (red, before runs.ts)",
+   "exit": 1,
+   "summary": "ERR_MODULE_NOT_FOUND runs.ts"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/j/calibration",
+   "exit": 0,
+   "summary": "19 passed (13 cases + subset)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/j/test_mutants.py tests/j/submit/test_mutants.py tests/j/calibration/test_mutants.py tests/p/teachers/test_mutants.py",
+   "exit": 0,
+   "summary": "235 passed (J1 126, J2 35, J3 34, P2 40): 0 survivors"
+  },
+  {
+   "cmd": "make lab-test lab-lint lab-typecheck lab-build lab-mutants",
+   "exit": 0,
+   "summary": "98 tests 94 pass 4 skipped; lint/typecheck/build clean (/judge built); runners 69/47/20/42/36/72 killed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p2 make api-test",
+   "exit": 2,
+   "summary": "5259 passed, 91 skipped, 9 xfailed; 50 failed + 8 errors all shared-lock/known outside owned paths (outbox[valkey] d2 lock 7, tests/i/test_mutants baseline 43, tests/i pooler 8 errors); tests/i files pass alone, outbox[valkey] still HarnessBusy alone"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "SR-J3-1 + WR-J3-2 composition, PostgREST rerun of J3L-R01..R05, one verify round (brief 2/4/8; ~2.5 h spent)",
+  "at": "2026-09-28T08:31:53Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "SR-J3-1 (lab-sql): public.lab_judge_runs(p_provider_org_id, p_request_id) developer+ own-runs, JudgeRun shape + J3 calibration",
+  "WR-J3-2 (trace-ui/coordinator): components/traces/judge/port.ts judgePort() returns sessionJudgePort() from lib/services/judge/session.ts",
+  "WR-J3-3 (Makefile api-mutants): append tests/j/calibration/test_mutants.py"
+ ],
+ "evidence": [
+  "research/plan/evidence/j/J3-e4836fa.md"
+ ]
+}

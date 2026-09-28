@@ -37,6 +37,7 @@ R = "judge/rubric.py"
 C = "judge/cost.py"
 D = "judge/dryrun.py"
 J2 = "judge/submit.py"         # J2's own list is tests/j/submit/mutants.py
+J3 = "judge/calibration/report.py"   # J3's own list is tests/j/calibration/mutants.py
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- consent: the gate, its currency, its tenancy and its window (R56) ----------
@@ -586,6 +587,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "the submit path imports no provider SDK: egress only through a JudgeProvider (J2)",
        J2, "from urllib.parse import urlsplit\n",
        "from urllib.parse import urlsplit\nimport anthropic\n",
+       "test_the_judge_package_never_imports_the_provider_sdk"),
+    # --- J3: the calibration report imports no provider SDK either ---------------------------
+    _m("provider_sdk_imported_on_the_calibration_path",
+       "the calibration report imports no provider SDK (J3)",
+       J3, "from collections import Counter\n", "from collections import Counter\nimport anthropic\n",
        "test_the_judge_package_never_imports_the_provider_sdk"),
 )
 

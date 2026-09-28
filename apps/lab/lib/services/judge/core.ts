@@ -112,7 +112,7 @@ export async function listCalibration(rpc: Rpc, w: Membership, input: Input): Pr
   if (RANK[w.role] < RANK.developer) return REFUSED;
   const cursor = input.after ?? "";
   const after = cursor === "" ? null : id(cursor);
-  const limit = input.limit === undefined ? PAGE_MAX : count(input.limit, 999_999);
+  const limit = input.limit === undefined || input.limit === "" ? PAGE_MAX : count(input.limit, 999_999);
   if ((cursor !== "" && !after) || limit === null) return INVALID;
   const size = Math.min(limit, PAGE_MAX);
   const out = await call(rpc, RPC.calibration, { p_provider_org_id: w.providerId, p_after: after, p_limit: size });
