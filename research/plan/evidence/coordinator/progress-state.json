@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 221,
- "updated": "2026-09-28T14:03:31Z",
+ "revision": 222,
+ "updated": "2026-09-28T14:42:50Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5851,26 +5851,30 @@
    "branch": "codex/w5-lab-sql-lw3",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw3",
    "base": "0bfaa6ed",
-   "head": null,
+   "head": "d62d96af",
    "isolation": {
     "ports": "dlab 57500 (decoy 27500)",
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-28T09:15:45Z",
-   "updated": "2026-09-28T09:15:45Z",
+   "updated": "2026-09-28T14:42:50Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "ACCEPT_WITH_FIXES at d62d96af (0041 C2-RPC + sample restrictions; 0042 D8 = label log, run ledger, teacher ledger, checkpoint ledger; 0043 reads, proposals, lab_judge_runs, SR-R1-1, infrx_lab_control login; major LSQ3-C1 fixed+rechecked; 565 mutants; P1/P3/B3 pass on a scratch merged tree with the adapters) → merge batch #16 (wf_8445363c-222) with WR-LSQ3-1/2/3/4; then the lab-sql-integration-2 lane (WR-C2-5, WR-P1-D8, WR-P3-D8, WR-B3-D8, WR-P2-D8, WR-J3-D8, WR-R1-3, WR-N3-4, WR-COMP-1) and the C2/D8 manifest flips; WR-I2L-4 password = operator step (P-08)",
    "estimate": {
-    "optimistic_h": 4,
-    "likely_h": 9,
-    "pessimistic_h": 18,
+    "optimistic_h": 1.5,
+    "likely_h": 3.5,
+    "pessimistic_h": 9,
     "confidence": "medium",
-    "basis": "plan C2-RPC 1/2/5 + D8 2/4/8 + eleven requests",
-    "at": "2026-09-28T09:15:45Z"
+    "basis": "handback: C2 0.5/1/3 + D8 1/2.5/6 + the consuming reruns",
+    "at": "2026-09-28T14:42:50Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/d/C2-dd08e1e.md",
+    "research/plan/evidence/d/D8-1079c32.md",
+    "research/plan/evidence/d/D8-1079c32-wiring.patch"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/app/supabase/migrations/0041+_*.sql",
@@ -6210,6 +6214,40 @@
     "confidence": "high",
     "basis": "merged",
     "at": "2026-09-28T14:03:31Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-16",
+   "task": null,
+   "slice": "(wave5 merge lane #16, parallel to the #11 fix round, own lines) lab-sql-lw3 d62d96af (WR-LSQ3-1/2/3/4); workflow wf_8445363c-222; base 4975c92a",
+   "agent": "opus",
+   "branch": "codex/w5-merge-16",
+   "worktree": ".claude/worktrees/codex-w5-merge-16",
+   "base": "4975c92a",
+   "head": null,
+   "isolation": {
+    "ports": "dlab (checks only)",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T14:42:50Z",
+   "updated": "2026-09-28T14:42:50Z",
+   "blocker": null,
+   "next_action": "merge agent → verify lens → coordinator merges the branch",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "one merge with PG checks",
+    "at": "2026-09-28T14:42:50Z"
    },
    "evidence": [],
    "commands": [],
