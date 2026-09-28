@@ -61,11 +61,12 @@ wait_ready() {
 # layout); the directory, not the file, is mounted, so a rename of the active site is
 # visible to a reload. INFRX_SITE is the rehearsal's address; unset on the box.
 edge_install() {
-  local src=$1 site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"}) f
+  local src=$1 site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"}) f lab=()
+  [ -d "$CADDY_DIR/lab" ] && lab=(-v "$CADDY_DIR/lab:/etc/caddy/lab:ro")
   # Both sites: a maintenance site that does not parse would only surface at drain.sh
   # pause, whose failed reload leaves the edge open.
   for f in Caddyfile Caddyfile.maintenance; do
-    docker run --rm --network none "${site[@]}" -v "$src/$f:/etc/caddy/Caddyfile:ro" \
+    docker run --rm --network none "${site[@]}" "${lab[@]}" -v "$src/$f:/etc/caddy/Caddyfile:ro" \
       "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null \
       || die "$f does not validate with the pinned Caddy; the edge was not changed" 4
   done
