@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 241,
- "updated": "2026-09-28T22:14:21Z",
+ "revision": 242,
+ "updated": "2026-09-28T22:15:23Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7025,6 +7025,45 @@
     "tests/p/**",
     "tests/integration/lab_improve/**",
     "research/plan/evidence/e/E7L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-COMPOSITION-3",
+   "task": null,
+   "slice": "(wave5 LW5 lane composition-3) the owed composition wirings from #19/#22: WR-P2-D8-C, WR-J3-D8-C, WR-R1-3-C, WR-P3/B3/P1-D8-C, WR-C2-2b, WR-N3-2a/b, WR-LAB-API-2c, 0-F5 unit restart policy; E4 regression every switch OFF; workflow wf_809ef756-10a; base 3529168d",
+   "agent": "opus",
+   "branch": "codex/w5-composition-3",
+   "worktree": ".claude/worktrees/codex-w5-composition-3",
+   "base": "3529168d",
+   "head": null,
+   "isolation": {
+    "ports": "p2 57528/57529; j2 57511/57512; r1 57532/57533; p3 57530/57531; b3 57522",
+    "prefix": "infrx-p2-",
+    "db": "p2"
+   },
+   "activity": "running",
+   "started": "2026-09-28T22:15:23Z",
+   "updated": "2026-09-28T22:15:23Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge (+ WR-LSQ-9-C as a merge wiring after #21) → flip P2/J3",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "medium",
+    "basis": "eight small wirings + the E4 regression; composition-2's fix round as the analogue"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/gateway/pilot.py",
+    "infrx/worker/**",
+    "infrx/lab/workers/**",
+    "infrx/lab/control/app.py",
+    "infrx/traces/**",
+    "tests/w/**",
+    "tests/i/lab"
    ],
    "wiring_requests": []
   }
