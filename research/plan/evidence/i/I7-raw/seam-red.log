@@ -1,0 +1,76 @@
+.FF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_i7_the_controller_is_bounded_off_by_default_gated_and_independently_ready _
+
+    def test_i7_the_controller_is_bounded_off_by_default_gated_and_independently_ready() -> None:
+        """Failure oracle: a controller that is unbounded, starts without its env file or when the
+        preflight refuses it, is coupled to a consumer unit (a controller restart restarting
+        inference, or the reverse), or answers readiness on a port another Lab role uses."""
+>       text, runbook = unit("rollout", UNITS), RUNBOOK.read_text()
+                        ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/i/lab_rollout/test_units.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/i/lab_pipeline/test_units.py:29: in unit
+    return (units / f"infrx-lab-{role}.service").read_text()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/rollout/infrx-lab-rollout.service')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/rollout/infrx-lab-rollout.service'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+__ test_i7_the_controller_cannot_buy_capacity_or_reach_past_the_object_store ___
+
+    def test_i7_the_controller_cannot_buy_capacity_or_reach_past_the_object_store() -> None:
+        """No automatic capacity purchases. Failure oracle: the docker socket or any host path
+        mounted (a controller that can start containers or read host credentials), added
+        capabilities or privileges, or a host PID/IPC namespace."""
+>       (start,) = directive(unit("rollout", UNITS), "ExecStart")
+                             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/i/lab_rollout/test_units.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/i/lab_pipeline/test_units.py:29: in unit
+    return (units / f"infrx-lab-{role}.service").read_text()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/rollout/infrx-lab-rollout.service')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-workers/apps/infrx-api/deploy/lab/rollout/infrx-lab-rollout.service'
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py:1013: FileNotFoundError
+=========================== short test summary info ============================
+FAILED tests/i/lab_rollout/test_units.py::test_i7_the_controller_is_bounded_off_by_default_gated_and_independently_ready
+FAILED tests/i/lab_rollout/test_units.py::test_i7_the_controller_cannot_buy_capacity_or_reach_past_the_object_store
+2 failed, 1 passed in 0.30s

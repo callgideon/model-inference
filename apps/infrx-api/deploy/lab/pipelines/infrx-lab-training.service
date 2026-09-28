@@ -1,0 +1,55 @@
+[Unit]
+Description=infrx Lab training worker - P3 training bundles, connector submit/reconcile/poll/cancel and checkpoint imports (manual bundle until P-11) - OFF unless /etc/infrx-lab/training.env exists
+# I6 (LAB-WORKERS, PIPELINE-BUDGET). I5's shape (infra/lab/workers/eval/RUNBOOK.md): disabled
+# by default (install.sh never writes the env file below, so the unit does not start - a
+# skipped condition, not a failure), no Requires=/PartOf= on a consumer unit and none of them
+# names this one: a Lab outage never stops, restarts or blocks inference.
+# Runbook: infra/lab/workers/training/RUNBOOK.md.
+# Two switches, both needed (conditions are ANDed): I2L's Lab-wide enable marker
+# (infra/lab/app/lab.json enable_marker; its Disable removes it and every Lab unit stays
+# down) and this role's own env file.
+ConditionPathExists=/etc/infrx-lab/enabled
+ConditionPathExists=/etc/infrx-lab/training.env
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+User=ubuntu
+# Its own env file (ubuntu, 0600): the role's settings only - never the gateway's
+# /etc/marlin2b-gateway.env. LAB_TRAINING_CONNECTOR (manual-bundle) is the only adapter
+# unless egress.json records its approval.
+EnvironmentFile=/etc/infrx-lab/training.env
+# Refuses to start (no "-": a refusal is a failed start; no "+": never root running a file the
+# ubuntu account can edit) unless every setting is this role's, every external endpoint is
+# approved, a paid adapter has its USD budget, named payer and token, and the egress
+# allowlist is exact.
+ExecStartPre=/usr/bin/python3 -I /home/ubuntu/model-inference/infra/lab/workers/training/preflight.py --role training --env-file /etc/infrx-lab/training.env
+ExecStartPre=-/usr/bin/docker rm -f infrx-lab-training
+# Egress denied by default: every HTTP client (httpx, botocore) goes through a dead proxy on
+# privileged port 9, in both letter cases so the env file cannot switch it off (docker applies
+# -e after --env-file), except the preflight-checked LAB_EGRESS_ALLOW. Database connections
+# (psycopg, not HTTP) are unaffected. Bounds as I5's.
+# `--pull never`: INFRX_IMAGE is the release's local id (the preflight refuses a registry
+# reference), so the daemon never pulls - no registry egress outside the deny proxy. uid 10003
+# in its own group 10003 (I2L's), not the runtime's 10000.
+ExecStart=/usr/bin/docker run --rm --init --pull never --name infrx-lab-training --network host \
+  --user 10003:10003 --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --memory 1g --memory-swap 1g --cpus 1 --cpu-shares 256 --pids-limit 128 \
+  --env-file /etc/infrx-lab/training.env -e LAB_WORKER_HEALTH_PORT=8015 \
+  -e HTTP_PROXY=http://127.0.0.1:9 -e http_proxy=http://127.0.0.1:9 \
+  -e HTTPS_PROXY=http://127.0.0.1:9 -e https_proxy=http://127.0.0.1:9 \
+  -e NO_PROXY=${LAB_EGRESS_ALLOW} -e no_proxy=${LAB_EGRESS_ALLOW} \
+  ${INFRX_IMAGE} python -m infrx.lab.workers training
+ExecStop=/usr/bin/docker stop -t 60 infrx-lab-training
+TimeoutStopSec=90
+KillSignal=SIGTERM
+KillMode=mixed
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

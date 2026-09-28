@@ -1,0 +1,4 @@
+# head af0ceaab; cmd: INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py
+.....                                                                    [100%]
+77 passed in 131.80s (0:02:11)
+exit 0
