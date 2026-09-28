@@ -8,7 +8,9 @@ Records are the Lab's `apps/lab/lib/services/rollouts/port.ts` in snake_case.
 
 As `/lab/v1/control` (`lab_auth`): the actor is re-derived per call before a body is read;
 every role reads (`read_aggregate_health`); only an administrator proposes
-(`propose_publication`). A proposal is the Lab's whole say: an operator decides it through
+(`propose_publication`), checked once the policy is found in the provider's listing, so an
+unknown or foreign policy is a 404 whatever the role (the Lab fake's order).
+A proposal is the Lab's whole say: an operator decides it through
 R2 (`Controller.approve` / `emergency_rollback`), outside the Lab, under D9's CAS. So a
 proposal is refused (409) unless it names the revision D9 holds NOW (`ReleaseStore.release`:
 the fence the page showed is still D9's), an expansion is proposed only on a running release
@@ -35,7 +37,7 @@ from ...contracts import errors
 from ...contracts.lab import records as lab
 from ...contracts.v2.records import ProviderCapability as Cap
 from .. import lab_auth
-from .lab_evaluations import lab_actor, lab_body
+from .lab_evaluations import lab_actor, lab_body, require
 
 RELEASES_PATH, OPTIMIZATIONS_PATH = "/lab/v1/releases", "/lab/v1/optimizations"
 
@@ -99,6 +101,7 @@ async def propose(x: LabReleases, who, wanted: ProposalRequest) -> dict[str, Any
                   if r["policy_ref"] == wanted.policy_ref), None)
     if shown is None:
         raise errors.NotFound("no such release for this provider")
+    require(who, Cap.propose_publication)
     live = await x.port("store").release(wanted.policy_ref)
     if live.fence != wanted.fence:
         raise errors.StateConflict("the release moved since the page was read")
@@ -134,7 +137,8 @@ def register(app, rt, lab_releases: LabReleases | None = None):
     @app.post(f"{RELEASES_PATH}/proposals")
     @lab_auth.guarded
     async def add_proposal(request: Request):
-        who = await lab_actor(request, x.sessions, x.access, Cap.propose_publication)
+        who = await lab_actor(request, x.sessions, x.access,
+                              Cap.read_aggregate_health)          # the role: `propose`
         wanted = await lab_body(request, rt, ProposalRequest)
         return lab_auth.ok(await propose(x, who, wanted), 201)
 

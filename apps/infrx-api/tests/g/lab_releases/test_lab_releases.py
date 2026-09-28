@@ -234,13 +234,13 @@ def test_lab_releases__a_consumer_only_user_is_denied_and_another_provider_is_no
 
 def test_lab_releases__every_role_reads_and_only_an_administrator_proposes():
     """Oracle: a viewer and a developer read both surfaces and are refused (403) a proposal
-    before its body is read; an administrator's proposal is a 201."""
+    on their provider's release before D9 is read; an administrator's proposal is a 201."""
     w = World()
     c = w.client()
     for user in (w.VIEWER_A, w.DEV_A):
         got = [call(c, user, m, path, body).status_code for m, path, body in routes(w)]
         assert got == [200, 200, 403], user
-        answer = call(c, user, "POST", PROPOSE, {"forged": True})
+        answer = call(c, user, "POST", PROPOSE, w.proposal(4, "rollback"))
         assert (answer.status_code, answer.json()) == (403, {"refusal": "denied"})
     assert (w.proposals.rows, w.d9.reads) == ([], [])
     assert call(c, ADMIN_A, "POST", PROPOSE, w.proposal()).status_code == 201
@@ -315,6 +315,21 @@ def test_lab_releases__another_providers_policy_is_not_found_and_d9_is_not_read(
     for body in (other, unknown):
         answer = call(c, ADMIN_A, "POST", PROPOSE, body)
         assert (answer.status_code, answer.json()) == (404, {"refusal": "not_found"})
+    assert (w.proposals.rows, w.d9.reads) == ([], [])
+
+
+def test_lab_releases__an_unknown_policy_is_not_found_whatever_the_role():
+    """Oracle (LAB-ACCESS; R4 journey: "existence is not confirmed by role"): a viewer or a
+    developer naming another provider's or an unknown policy revision is a 404, as an
+    administrator is - never a 403 - and D9 is not read."""
+    w = World()
+    c = w.client()
+    other = {**w.proposal(5), "policy_ref": w.refs[5]}
+    unknown = {**w.proposal(1), "policy_ref": policy(w.A, 9)[0]}
+    for user in (w.VIEWER_A, w.DEV_A):
+        for body in (other, unknown):
+            answer = call(c, user, "POST", PROPOSE, body)
+            assert (answer.status_code, answer.json()) == (404, {"refusal": "not_found"}), user
     assert (w.proposals.rows, w.d9.reads) == ([], [])
 
 

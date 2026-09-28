@@ -29,7 +29,13 @@ VERDICT = C + "only_an_expand_verdict_on_a_running_release_can_be_proposed"
 FOREIGN = C + "another_providers_policy_is_not_found_and_d9_is_not_read"
 UNWIRED, BODY = C + "an_unwired_port_is_unavailable_after_the_access_checks", \
     C + "a_body_is_json_and_exactly_a_proposal"
-ADMIN = "        who = await lab_actor(request, x.sessions, x.access, Cap.propose_publication)\n"
+ADMIN = ("        who = await lab_actor(request, x.sessions, x.access,\n"
+         "                              Cap.read_aggregate_health)"
+         "          # the role: `propose`\n")
+UNKNOWN = C + "an_unknown_policy_is_not_found_whatever_the_role"
+FOUND = ('    if shown is None:\n'
+         '        raise errors.NotFound("no such release for this provider")\n')
+REQUIRE = "    require(who, Cap.propose_publication)\n"
 BODY_READ = "        wanted = await lab_body(request, rt, ProposalRequest)\n"
 
 
@@ -45,17 +51,19 @@ MUTANTS: tuple[Mutant, ...] = (
        'getattr(rt, "lab_releases", None)', "None", MOUNT),
     # --- identity, access, capability --------------------------------------------------------
     _m("body_before_identity", "a proposal body is read after the session and membership",
-       ADMIN + BODY_READ, BODY_READ + ADMIN, SESSION, ROLES),
+       ADMIN + BODY_READ, BODY_READ + ADMIN, SESSION),
     _m("consumer_only_not_denied", "a consumer-only user is a 403 on every route",
        "    if not workspaces:\n", "    if False:\n", ACCESS, file=auth.F),
     _m("foreign_provider_is_forbidden", "another provider's id is a 404 on every route",
        'raise errors.NotFound("no such provider workspace")',
        'raise errors.Forbidden("no such provider workspace")', ACCESS, file=auth.F),
     _m("reads_need_administration", "every role reads releases and optimizations",
-       "x.sessions, x.access, Cap.read_aggregate_health)",
-       "x.sessions, x.access, Cap.propose_publication)", ROLES),
+       "x.sessions, x.access, Cap.read_aggregate_health)\n",
+       "x.sessions, x.access, Cap.propose_publication)\n", ROLES),
     _m("developer_proposes", "only an administrator proposes",
-       ADMIN, ADMIN.replace("propose_publication", "manage_dev_deployment"), ROLES),
+       REQUIRE, REQUIRE.replace("propose_publication", "manage_dev_deployment"), ROLES),
+    _m("role_before_the_policy", "an unknown or foreign policy is a 404 whatever the role",
+       FOUND + REQUIRE, REQUIRE + FOUND, UNKNOWN),
     # --- the records ---------------------------------------------------------------------------
     _m("optimizations_are_releases", "each surface reads its own records",
        "listing(variants)", "listing(releases)", RECORDS),
