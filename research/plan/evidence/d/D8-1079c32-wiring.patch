@@ -1,0 +1,48 @@
+diff --git a/apps/infrx-api/tests/d/checks.py b/apps/infrx-api/tests/d/checks.py
+index 69af43ec..0a3fb9a7 100644
+--- a/apps/infrx-api/tests/d/checks.py
++++ b/apps/infrx-api/tests/d/checks.py
+@@ -1726,6 +1726,16 @@ EXPECTED_FUNCTION_CALLERS = {
+     "public.consumer_credit_ledger(text,integer)": {"authenticated", "service_role"},
+     "public.consumer_may_create_key()": {"authenticated", "service_role"},
+ "public.lab_provider_memberships()": {"authenticated", "service_role"},   # 0030 (Lab, local-only): the R156 session door
++    # WR-LSQ-3: the LW2 doors (0037 judge, 0038 feedback; Lab, local-only)
++    "public.lab_judge_configure(uuid,uuid,uuid,text,integer,integer)": {"authenticated", "service_role"},
++    "public.lab_judge_set_budget(uuid,text,jsonb)": {"authenticated", "service_role"},
++    "public.lab_judge_request_run(uuid,uuid,uuid,text)": {"authenticated", "service_role"},
++    "public.lab_judge_calibration(uuid,uuid,integer)": {"authenticated", "service_role"},
++    "public.submit_feedback(jsonb)": {"authenticated", "service_role"},
++    "public.lab_review_feedback(jsonb)": {"authenticated", "service_role"},
++    # WR-LSQ3-3: the LW3 doors (0041 content refs, 0043 judge runs; Lab, local-only)
++    "public.lab_content_ref_issue(text,uuid,text,uuid,text)": {"authenticated", "service_role"},
++    "public.lab_judge_runs(uuid,uuid)": {"authenticated", "service_role"},
+     # D10-0025 (U3 WR-U3-1, R143): the operator console's writes, with the operator's own
+     # JWT (is_operator() inside); never the platform key - service_role holds no EXECUTE.
+     "public.operator_adjust_credit(uuid,text,text,text)": {"authenticated"},
+diff --git a/apps/infrx-api/tests/d/checks_operator.py b/apps/infrx-api/tests/d/checks_operator.py
+index e1a6cb12..29d871f5 100644
+--- a/apps/infrx-api/tests/d/checks_operator.py
++++ b/apps/infrx-api/tests/d/checks_operator.py
+@@ -475,7 +475,7 @@ def check_operator_privileges(conn) -> str:
+         "p.pronamespace where n.nspname in ('infrx', 'public') "
+         "and has_function_privilege('infrx_runtime', p.oid, 'execute') and not exists "
+         "(select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')")}
+-    assert held == checks_reads.RUNTIME_FUNCTIONS and len(held) == 41, sorted(held)
++    assert held == checks_reads.RUNTIME_FUNCTIONS and len(held) == 44, sorted(held)
+     return (f"3 RPCs authenticated-only, helper nobody's, definer/{owner}; 2 views SELECT "
+             f"for authenticated+service_role; runtime set {len(held)} unchanged")
+ 
+diff --git a/apps/infrx-api/tests/d/checks_reads.py b/apps/infrx-api/tests/d/checks_reads.py
+index fe69126c..c47cff85 100644
+--- a/apps/infrx-api/tests/d/checks_reads.py
++++ b/apps/infrx-api/tests/d/checks_reads.py
+@@ -431,6 +431,9 @@ def check_flag_freeze_race(connect, database: str) -> str:
+ #: `admit_ready` and the preparation worker claims through `claim_preparation_ready` (W5).
+ REVOKED_DOORS = frozenset({"infrx.admit(jsonb)", "infrx.claim_preparation(jsonb)"})
+ RUNTIME_FUNCTIONS = frozenset({
++    # WR-LSQ3-4 (0043, SR-R1-1): the router's port over D9, the runtime's alone
++    "infrx.record_rollout_assignment(jsonb)", "infrx.release_active(text)",
++    "infrx.release_eligible(uuid,uuid)",
+     "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)", "infrx.append(jsonb)",
+     "infrx.cancel(jsonb)", "infrx.claim(jsonb)", "infrx.claim_preparation_ready(jsonb)",
+     "infrx.content_acknowledge_delete(jsonb)", "infrx.content_candidates(jsonb)",
