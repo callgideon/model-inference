@@ -1,0 +1,83 @@
+{
+ "task": "L3",
+ "slice": "WR-LSQ-9 ControlReads + 0044 (control login reads catalog_listings), WR-LAB-API-4 decision (not done, recorded), SR-R1-1 vs 0043 logins, LW2/LW3 minors; lane lab-sql-lw4",
+ "activity": "review",
+ "head": "807227fb",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw4",
+ "branch": "codex/w5-lab-sql-lw4",
+ "blockers": [],
+ "owned_paths": [
+  "apps/app/supabase/migrations/0044_lab_control_reads.sql",
+  "apps/infrx-api/infrx/state/lab_control.py",
+  "apps/infrx-api/tests/d/test_l3sql_reads.py",
+  "apps/infrx-api/tests/d/test_l3sql_units.py",
+  "apps/infrx-api/tests/d/code_mutants_l3sql.py",
+  "apps/infrx-api/tests/d/test_code_mutants_l3sql.py",
+  "apps/infrx-api/tests/d/test_d6j_doors.py",
+  "apps/infrx-api/tests/d/test_upgrade_lab.py"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_l3sql_reads.py (seam first, base + test)",
+   "exit": 1,
+   "summary": "2 failed: PgControlStore has no provider_servings"
+  },
+  {
+   "cmd": "same, reads implemented, no 0044",
+   "exit": 1,
+   "summary": "1 failed: InsufficientPrivilege on catalog_listings for infrx_lab_control"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q test_l3sql_reads test_l3sql_control test_l3sql_units test_d6j_doors test_upgrade_lab",
+   "exit": 0,
+   "summary": "26 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_l3sql.py tests/d/test_code_mutants_d6j.py",
+   "exit": 0,
+   "summary": "177 passed, 0 survivors"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d -k 'well_formed or every_case or superseded'",
+   "exit": 0,
+   "summary": "34 passed"
+  },
+  {
+   "cmd": "merged tree (tip f29aea9e + 807227fb + LSQ4-807227f-wiring.patch) INFRX_D_TASK=l3 pytest -q tests/l/control/test_operations.py",
+   "exit": 0,
+   "summary": "18 passed (7 pg cases on real PgControlStore); red with tip lab_control.py: 7 failed"
+  },
+  {
+   "cmd": "merged tree INFRX_D_TASK=l3 pytest -q tests/l/control tests/l/access",
+   "exit": 0,
+   "summary": "85 passed, 2 skipped"
+  },
+  {
+   "cmd": "merged tree INFRX_D_TASK=l3 INFRX_MUTANTS=all pytest -q tests/l/control/test_mutants.py",
+   "exit": 0,
+   "summary": "95 passed, 0 survivors"
+  },
+  {
+   "cmd": "merged tree INFRX_D_TASK=dlab make api-test",
+   "exit": 2,
+   "summary": "6438 passed, 129 skipped, 9 xfailed; 50 failed + 8 errors all foreign: 7 infrx-d2-valkey ForeignContainer, 8 i8 pooler flock busy, 43 tests/i mutants broken_runner (ops_steps baseline in copy); no tests/d or tests/l failure"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "two wiring hunks already verified on the merged tree (harness pin, tests/l/control PG cases) plus one verify round; LW3 fix round (~1.5 h) analogue",
+  "at": "20260928T2029Z"
+ },
+ "wiring_requests": [
+  "WR-LSQ4-1 tests/integration/test_harness.py pin 0044_lab_control_reads.sql after 0043 (hunk in LSQ4-807227f-wiring.patch)",
+  "WR-LSQ4-2 tests/l/control/test_operations.py + worlds.py: 7 cases fake_world->world, PgWorld.control_store = real PgControlStore with row views (hunks in LSQ4-807227f-wiring.patch; 18 passed on l3, control mutants 95/95)",
+  "Makefile: none (l3sql and d6j lists already on the own-process PG line on the tip); checks*.py: none (D10_ROLES strips infrx_lab_control=); composition: no signature change; Operations(l3, PgControlStore(connect)) / Serving(...) need 0044 on the control login"
+ ],
+ "evidence": [
+  "research/plan/evidence/d/LSQ4-807227f.md",
+  "research/plan/evidence/d/LSQ4-807227f-wiring.patch"
+ ]
+}
