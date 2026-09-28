@@ -1,0 +1,2 @@
+2026-09-28 21:31:25,376 botocore.credentials Found credentials in environment variables.
+2026-09-28 21:31:26,036 infrx.gateway /v1/chat/completions: invalid_request on request 980548ba-1767-4959-a3a3-68ed6e077f59
