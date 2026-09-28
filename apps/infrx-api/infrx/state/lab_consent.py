@@ -115,7 +115,10 @@ def _run(doc: dict[str, Any] | None) -> JudgeRun | None:
         return None
     return JudgeRun(
         run_id=str(doc["run_id"]), provider_org_id=str(doc["provider_org_id"]),
-        payer_ref=doc["payer_ref"], consent=Consent(str(doc["grant_id"]), doc["grant_version"]),
+        payer_ref=doc["payer_ref"],
+        # a teacher run (0042) is consented per sample of its dataset: its ref stands for it
+        consent=Consent(doc["dataset_ref"], 1) if doc.get("dataset_ref") else
+        Consent(str(doc["grant_id"]), doc["grant_version"]),
         sample_ids=tuple(doc["sample_ids"]), media_ids=frozenset(doc["media_ids"]),
         price_version=doc["price_version"], reserved=ProviderUsd(doc["reserved"]),
         state=doc["state"], submit_key=doc["submit_key"], external_id=doc["external_id"],
