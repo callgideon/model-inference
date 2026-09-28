@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 211,
- "updated": "2026-09-28T10:43:51Z",
+ "revision": 212,
+ "updated": "2026-09-28T10:45:41Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5934,6 +5934,84 @@
    "commands": [],
    "owned_paths": [
     "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-SQL-INTEGRATION",
+   "task": null,
+   "slice": "(wave5 LW3 lane lab-sql-integration) consuming lanes on the real 0031–0040 stores: WR-LSQ-4 J2 PgJudgeLedger, WR-LSQ-7 eval half + B-R1 flip + E6L-O1/O2 (B1/B2/H1), WR-LSQ-5 R2 PgReleaseStore, WR-LSQ-6 R3 comparisons, WR-OBS-3 J2 content via Retention (+ E5L o06 rerun), R1 real half if SR-R1-1 exists; workflow wf_8ac8366d-4b4; base 8ae65fa8",
+   "agent": "opus",
+   "branch": "codex/w5-lab-sql-integration",
+   "worktree": ".claude/worktrees/codex-w5-lab-sql-integration",
+   "base": "8ae65fa8",
+   "head": null,
+   "isolation": {
+    "ports": "j2 57511/57512; r2 57534; r1 57532/57533; b3 57522; b1 57520/57521",
+    "prefix": "infrx-j2-",
+    "db": "j2"
+   },
+   "activity": "running",
+   "started": "2026-09-28T10:45:41Z",
+   "updated": "2026-09-28T10:45:41Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "six adapter swaps with real-PG reruns + two carried defects",
+    "at": "2026-09-28T10:45:41Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/judge/**",
+    "tests/j/**",
+    "infrx/evaluation/**",
+    "tests/b/**",
+    "infrx/rollouts/**",
+    "tests/r/**",
+    "tests/h (E6L-O1 case)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-V1M",
+   "task": null,
+   "slice": "(wave5 LW2 lane v1m) the trace explorer moves App → Lab (git mv), provider session + L2 grants, @infrx/shared QueryPort + the Lab traces route; WR-LAB-API-5 traces adapter, WR-V2-1 port wiring, WR-V2-5 row links; App-side removal = WR-V1M-3 (coordinator); workflow wf_68c04425-a3b; base 8ae65fa8",
+   "agent": "opus",
+   "branch": "codex/w5-v1m",
+   "worktree": ".claude/worktrees/codex-w5-v1m",
+   "base": "8ae65fa8",
+   "head": null,
+   "isolation": {
+    "ports": "lab-v1m 57513; t2i 57540/57541; l4 57503",
+    "prefix": "infrx-lab-v1m-",
+    "db": "lab_v1m"
+   },
+   "activity": "running",
+   "started": "2026-09-28T10:45:41Z",
+   "updated": "2026-09-28T10:45:41Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 8,
+    "pessimistic_h": 16,
+    "confidence": "low",
+    "basis": "lab-app's V1M estimate (3,280 lines moved, real L2 evidence)",
+    "at": "2026-09-28T10:45:41Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/app/(provider)/requests/page.tsx",
+    "apps/lab/lib/services/traces/",
+    "apps/lab/components/traces/list/",
+    "apps/lab/tests/v/list/",
+    "apps/app/app/(console)/traces + apps/app/tests/v (moved)"
    ],
    "wiring_requests": []
   }
