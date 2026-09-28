@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "0643073b",
+ "integration_head": "f2b6a912",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 209,
- "updated": "2026-09-28T10:01:03Z",
+ "revision": 210,
+ "updated": "2026-09-28T10:04:09Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5597,9 +5597,9 @@
    },
    "activity": "review",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T09:42:17Z",
+   "updated": "2026-09-28T10:04:09Z",
    "blocker": "E5L-F1: J2 submit reads the raw projection (WR-OBS-3, judge code) → fixed in the lab-sql-integration lane, then E5L o06 rerun",
-   "next_action": "REJECT-with-one-carried-defect at 7cc5b19f (I2L-OBS units OFF, observe.json/alerts.json, exporter; E5L runner 13 PASS / 1 FAIL E5L-F1 / 3 NOT RUN; majors F2 flaky wait, F3 silent exporter, F4/SCOPE-1 monitor copy, INT-1 port 8017 fixed+rechecked) → merge batch #9 (wf_f7c04eae-8db) with WR-OBS-2/4/5 + the update-JSON rename; WR-OBS-3 → lab-sql-integration; WR-OBS-1 judge worker entry point → composition batch 2; LAB-OBSERVE not accepted until E5L reruns green",
+   "next_action": "DONE (runner + I2L-OBS merged): --no-ff 5a2020c5 + WR-OBS-2/4/5 2de48ddd; E5L 13 PASS / 1 FAIL (WR-OBS-3 → integration lane) / 3 NOT RUN; LAB-OBSERVE not accepted until E5L reruns green after WR-OBS-3, D6J/J3 real halves, LAB-API and the composition switches",
    "estimate": {
     "optimistic_h": 1.5,
     "likely_h": 4,
@@ -5877,24 +5877,24 @@
    "branch": "codex/w5-merge-9",
    "worktree": ".claude/worktrees/codex-w5-merge-9",
    "base": "608d7e6c",
-   "head": null,
+   "head": "2de48ddd",
    "isolation": {
     "ports": null,
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T09:42:17Z",
-   "updated": "2026-09-28T09:42:17Z",
+   "updated": "2026-09-28T10:04:09Z",
    "blocker": null,
-   "next_action": "merge agent → verify lens → coordinator merges the branch after #6/#8",
+   "next_action": "DONE: merged onto claude/consumer-v1 at f2b6a912 (Makefile api-mutants adjacent-line conflict with #10 resolved keeping both; the 3 contracts PG cases blocked by a foreign d1 container rerun on g4f at the merge)",
    "estimate": {
-    "optimistic_h": 0.5,
-    "likely_h": 1,
-    "pessimistic_h": 2,
-    "confidence": "medium",
-    "basis": "one merge, no docker",
-    "at": "2026-09-28T09:42:17Z"
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged",
+    "at": "2026-09-28T10:04:09Z"
    },
    "evidence": [],
    "commands": [],
