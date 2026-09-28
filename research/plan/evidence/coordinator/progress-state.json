@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 233,
- "updated": "2026-09-28T19:46:30Z",
+ "revision": 234,
+ "updated": "2026-09-28T20:38:50Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6592,6 +6592,151 @@
    "commands": [],
    "owned_paths": [
     "merge commits + listed wirings only"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-E3L-BIND",
+   "task": null,
+   "slice": "(wave5 LW3 lane e3l-bind) the eight LAB-PUBLISH cells of E3L bound to the real L3 (PgControlStore, the I2L control factory) + the full `make lab-operate` run; workflow wf_075abe60-7ec; base 49393c56",
+   "agent": "opus",
+   "branch": "codex/w5-e3l-bind",
+   "worktree": ".claude/worktrees/codex-w5-e3l-bind",
+   "base": "49393c56",
+   "head": null,
+   "isolation": {
+    "ports": "e3l 57000-57099 (PG 57032); l3/l4",
+    "prefix": "infrx-e3l-",
+    "db": "e3l"
+   },
+   "activity": "running",
+   "started": "2026-09-28T20:38:50Z",
+   "updated": "2026-09-28T20:38:50Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "E3L's second half",
+    "at": "2026-09-28T20:38:50Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_operate/**",
+    "research/plan/evidence/e/E3L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-PIPELINE-UI-2",
+   "task": null,
+   "slice": "(wave5 LW5 lane pipeline-ui-2) P4.b = the teacher dry-run/budget-approval slice: the /lab/v1/pipelines teacher surface + the training page section over P2; workflow wf_c51a8c40-941; base 49393c56",
+   "agent": "opus",
+   "branch": "codex/w5-pipeline-ui-2",
+   "worktree": ".claude/worktrees/codex-w5-pipeline-ui-2",
+   "base": "49393c56",
+   "head": null,
+   "isolation": {
+    "ports": "p2 57528/57529; p1 57527",
+    "prefix": "infrx-p2-",
+    "db": "p2"
+   },
+   "activity": "running",
+   "started": "2026-09-28T20:38:50Z",
+   "updated": "2026-09-28T20:38:50Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "P4.b 1/2/4 + the route half",
+    "at": "2026-09-28T20:38:50Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/gateway/routes/lab_pipelines.py",
+    "tests/g/lab_pipelines/**",
+    "apps/lab/app/(provider)/training/**",
+    "apps/lab/lib/services/pipelines/**",
+    "apps/lab/tests/p/**"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-I-HARNESS-KEY",
+   "task": null,
+   "slice": "(wave5 track-I lane i-harness-key) tests/i/test_mutants.py green under any INFRX_D_TASK key (the 43-case baseline noise every lane records); workflow wf_47585b96-936; base 49393c56",
+   "agent": "opus",
+   "branch": "codex/w5-i-harness-key",
+   "worktree": ".claude/worktrees/codex-w5-i-harness-key",
+   "base": "49393c56",
+   "head": null,
+   "isolation": {
+    "ports": "i8 (exclusive) / i3",
+    "prefix": "infrx-i3-",
+    "db": "i3"
+   },
+   "activity": "running",
+   "started": "2026-09-28T20:38:50Z",
+   "updated": "2026-09-28T20:38:50Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "one harness defect",
+    "at": "2026-09-28T20:38:50Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/i/mutants.py",
+    "tests/i/test_mutants.py",
+    "tests/i/conftest.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-TRACKER-WAVES",
+   "task": null,
+   "slice": "(wave5 LW0 lane tracker-waves) WR-LW0-3: the checked-in wave map 07-post-launch-waves.md + a 'Post-launch waves' section in the HTML/PROGRESS tracker with per-wave counts, gates and ETA; LW0 minors C3/C4; workflow wf_3e295019-200; base 49393c56",
+   "agent": "opus",
+   "branch": "codex/w5-tracker-waves",
+   "worktree": ".claude/worktrees/codex-w5-tracker-waves",
+   "base": "49393c56",
+   "head": null,
+   "isolation": {
+    "ports": null,
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-28T20:38:50Z",
+   "updated": "2026-09-28T20:38:50Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "a third of the TRACKER lane",
+    "at": "2026-09-28T20:38:50Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "research/plan/scripts/progress.py",
+    "research/plan/scripts/test_progress.py",
+    "research/plan/consumer-v1/07-post-launch-waves.md"
    ],
    "wiring_requests": []
   }
