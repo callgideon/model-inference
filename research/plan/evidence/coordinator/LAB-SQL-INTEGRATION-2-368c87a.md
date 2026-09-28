@@ -88,3 +88,5 @@ Findings 0-LSI2-F1 and 1-LSI2-1 (the same defect): d91cce76 made P2's `collect` 
 | `uv run --frozen ruff check infrx/pipelines/teachers tests/p/teachers` | 0 | clean |
 
 Only P2's suite is touched; the other seven items and `make api-test` stand as recorded above. Isolation: p2 key only; no foreign container touched.
+
+Rulings: the proposed ruling above (an ambiguous external run ends only by an operator's move to failed with the provider's written confirmation reference, releasing its PROVIDER_USD hold in the same transaction) is numbered R192 in `research/plan/08-contracts-v1-encoding.md` §10 at the lab-sql-integration-2 merge (2026-09-28, `codex/w5-merge-19`); next free ruling R193.
