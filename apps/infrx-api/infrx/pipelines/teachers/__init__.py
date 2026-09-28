@@ -36,7 +36,7 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 from ...contracts import errors
 from ...contracts.limits import MAX_FEEDBACK_TEXT_CHARS, PilotSettings
@@ -79,6 +79,10 @@ class TeacherWiring:
     log: Any                      # P1's `LabelLog` (D8)
     rates: RateTable
     settings: PilotSettings
+    # P2.a: every sample's content passes through this before egress. Required, no default:
+    # N2's redaction helper is not public yet (WR-P2-4), and a teacher host past P-10 must
+    # not be wired without one (a gate on P-10, not an option).
+    redact: Callable[[str], str]
 
 
 @dataclass(frozen=True)
@@ -174,7 +178,9 @@ async def run_batch(batch: TeacherBatch, *, wiring: TeacherWiring) -> BatchRepor
             run = await ledger.reserve(
                 run_id=run_id, provider_org_id=batch.provider_org_id, payer_ref=batch.payer_ref,
                 # the consent snapshot of a batch is its dataset version; per-sample grants
-                # are in the version's manifest (SR-P2-1 asks D8 for the purpose column)
+                # are in the version's manifest. 0036's reserve/record_sent check
+                # lab_access_grants and refuse this ref: SR-P2-1 (amended) asks them to branch
+                # on purpose='teacher_annotation' and recheck the version's per-sample rights
                 consent=ConsentRef(batch.dataset_ref, 1), sample_ids=ids, media_ids=frozenset(),
                 price_version=rate.price_version,
                 max_cost=ProviderUsd(worst_case(rate, batch.ceilings, len(ids))))
@@ -192,7 +198,7 @@ async def run_batch(batch: TeacherBatch, *, wiring: TeacherWiring) -> BatchRepor
                                                        sample.content_digest))
             if body is not None:
                 items.append({"sample_id": sample.sample_id,
-                              "content": json.loads(body)["content"],
+                              "content": wiring.redact(json.loads(body)["content"]),
                               "prompt_version": batch.prompt_version})
         try:
             runs.append(await send(ledger, wiring.provider, run, items,

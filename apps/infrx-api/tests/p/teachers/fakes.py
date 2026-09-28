@@ -59,8 +59,9 @@ class Store:
 async def objects_for(store: Store) -> InMemoryObjectStore:
     objects = InMemoryObjectStore()
     for sample in store.samples:
+        body = {"content": f"q a@b.example {sample.sample_id}"}
         await objects.put_if_absent(sample_key(store.provider, sample.content_digest),
-                                    json.dumps({"content": f"q {sample.sample_id}"}).encode(),
+                                    json.dumps(body).encode(),
                                     "application/json")
     return objects
 
@@ -91,3 +92,8 @@ class Provider(j2.FakeProvider):
         if self.on_submit:
             self.on_submit(len(self.calls))
         return batch
+
+
+def redact(text: str) -> str:
+    """Stands in for N2's redaction helper (WR-P2-4): masks the one PII shape the fixtures carry."""
+    return text.replace("a@b.example", "[redacted]")

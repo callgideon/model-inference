@@ -76,6 +76,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("revoked_sample_sent", "a sample not permitted now is skipped before egress",
        T, "            if sample.sample_id not in allowed:\n                continue",
        "            if False:\n                continue", ONCE, REVOKED),
+    _m("content_sent_unredacted", "P2.a: content is redacted before egress",
+       T, 'wiring.redact(json.loads(body)["content"])', 'json.loads(body)["content"]', ONCE),
     _m("missing_content_sent", "a sample with no content object is skipped before egress",
        T, "            if body is not None:", "            if True:", MISSING,
        dies_by=("TypeError",)),

@@ -36,6 +36,16 @@
    "cmd": "INFRX_D_TASK=p2 make api-test",
    "exit": 2,
    "summary": "5259 passed, 91 skipped, 9 xfailed; 50 failed + 8 errors all shared-lock/known outside owned paths (outbox[valkey] d2 lock 7, tests/i/test_mutants baseline 43, tests/i pooler 8 errors); tests/i files pass alone, outbox[valkey] still HarnessBusy alone"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p2 uv run --frozen pytest -q tests/p/teachers tests/j -m 'not pg' (fix round)",
+   "exit": 0,
+   "summary": "334 passed; redaction before egress asserted"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=p2 uv run --frozen pytest -q tests/p/teachers/test_mutants.py (fix round)",
+   "exit": 0,
+   "summary": "41 passed: 39 mutants incl. content_sent_unredacted, 0 survivors"
   }
  ],
  "estimate": {
@@ -48,11 +58,18 @@
  },
  "blockers": [],
  "wiring_requests": [
-  "SR-P2-1 (lab-sql D8): purpose teacher_annotation + dataset_ref snapshot on the reservation; append-only per-item failure log",
+  "SR-P2-1 (lab-sql D8, AMENDED fix round): for purpose='teacher_annotation', 0036 lab_judge_reserve and lab_judge_record_sent must snapshot/recheck the N2 version's per-sample external_judging+training rights instead of lab_access_grants (today they refuse ConsentRef(dataset_ref,1)); or a D8 twin of both RPCs; append-only per-item failure log. Carry: PG case on p2:57528 with the real ledger",
   "WR-P2-2 (coordinator after P1): TeacherWiring.labels = infrx.pipelines.annotations.import_labels, log = D8 LabelLog; composed case over tests/p/annotations world",
-  "WR-P2-3 (Makefile api-mutants): append tests/p/teachers/test_mutants.py"
+  "WR-P2-3 (Makefile api-mutants): append tests/p/teachers/test_mutants.py",
+  "WR-P2-4 (N2 owner): expose the export redaction helper publicly; WR-P2-2 wires it as TeacherWiring.redact (required). Gate: no teacher host past P-10 without it"
  ],
  "evidence": [
   "research/plan/evidence/p/P2-e4836fa.md"
- ]
+ ],
+ "fix_round": {
+  "findings": {
+   "1-JLW4-1": "fixed (SR-P2-1 amended; PG proof carried to the real-ledger rerun)",
+   "1-JLW4-2": "fixed (required redact seam applied before egress; mutant content_sent_unredacted; P-10 gate; WR-P2-4)"
+  }
+ }
 }

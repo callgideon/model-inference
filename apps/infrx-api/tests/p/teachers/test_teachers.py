@@ -63,7 +63,8 @@ class Case:
         self.wiring = TeacherWiring(members=self.w.store, ledger=self.ledger,
                                     provider=self.provider, store=self.store,
                                     objects=self.objects, labels=self.labels, log=object(),
-                                    rates=rates, settings=settings)
+                                    rates=rates, settings=settings,
+                                    redact=fakes.redact)
         self.batch = TeacherBatch(
             batch_id=str(uuid.UUID(int=77, version=4)), provider_org_id=self.w.A,
             requested_by=self.w.DEV_A, dataset_ref=fakes.DATASET_REF, rubric_ref=fakes.RUBRIC_REF,
@@ -124,7 +125,7 @@ def test_p2__each_chunk_leaves_once_through_the_j2_path():
     assert [run.state for run in report.runs] == ["submitted"] * 3 and report.stopped is None
     assert [[item["sample_id"] for item in items] for _, items in case.provider.calls] == [
         [sid(1), sid(2)], [sid(3), sid(4)], [sid(6)]]
-    assert case.provider.calls[0][1][0] == {"sample_id": sid(1), "content": f"q {sid(1)}",
+    assert case.provider.calls[0][1][0] == {"sample_id": sid(1), "content": f"q [redacted] {sid(1)}",
                                             "prompt_version": "teach-v1"}
     assert [case.ledger.runs[r].reserved for r in case.run_ids()] == [usd(2)] * 3
     assert {run.payer_ref for run in case.ledger.runs.values()} == {case.payer}
