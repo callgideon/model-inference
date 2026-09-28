@@ -1,0 +1,103 @@
+{
+ "task": "P1",
+ "slice": "P1.a + P1.b + P1.c (infrx/pipelines/annotations)",
+ "activity": "review (fix round)",
+ "worktree": ".claude/worktrees/codex-w5-pipelines",
+ "branch": "codex/w5-pipelines",
+ "blockers": [],
+ "head": "eae84c13",
+ "owned_paths": [
+  "apps/infrx-api/infrx/pipelines/__init__.py",
+  "apps/infrx-api/infrx/pipelines/annotations/",
+  "apps/infrx-api/tests/p/annotations/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/p/annotations/test_annotations.py (before the module)",
+   "exit": 2,
+   "summary": "ModuleNotFoundError: No module named 'infrx.pipelines' (seam first)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p1 uv run --frozen pytest -q tests/p/annotations/test_annotations_pg.py",
+   "exit": 0,
+   "summary": "2 passed on real 0001-0030 (PgLabDataStore + PgAccessStore; D8 log fake)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/p/annotations/test_mutants.py tests/p/training/test_mutants.py @c9d2948e",
+   "exit": 0,
+   "summary": "132 passed; P1 65 mutants killed, every case covered"
+  },
+  {
+   "cmd": "ruff check infrx/pipelines tests/p",
+   "exit": 0,
+   "summary": "all checks passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p1 make api-test @c9d2948e",
+   "exit": 2,
+   "summary": "5107 passed, 7 failed, 79 skipped, 9 xfailed (1h42m); tests/p green; the 7 = tests/d/test_outbox_relay[valkey] HarnessBusy on the shared d2 Valkey lock"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p1 pytest -q tests/d/test_outbox_relay.py (alone, twice)",
+   "exit": 1,
+   "summary": "13 passed, 7 failed: same HarnessBusy, lock still held by another lane; rerun when free"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/p/annotations/test_annotations.py tests/p/training/test_training.py @eae84c13",
+   "exit": 0,
+   "summary": "15 + 15 passed (P1 +3 cases, P3 +1 case)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p1 uv run --frozen pytest -q tests/p/annotations @eae84c13",
+   "exit": 0,
+   "summary": "28 passed (incl. test_annotations_pg.py on real 0001-0030; D8 log fake)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p3 uv run --frozen pytest -q tests/p/training @eae84c13",
+   "exit": 0,
+   "summary": "27 passed (incl. test_training_services.py: PG 57530, protocol TCP 57531)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/annotations/test_mutants.py @eae84c13",
+   "exit": 0,
+   "summary": "75 passed: P1 73 mutants killed (65 + 8 fix-round), every case covered"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/training/test_mutants.py @eae84c13",
+   "exit": 0,
+   "summary": "79 passed: P3 77 mutants killed (63 + 14 fix-round), every case covered"
+  },
+  {
+   "cmd": "uv run --frozen ruff check infrx/pipelines tests/p @eae84c13",
+   "exit": 0,
+   "summary": "all checks passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "one review round on ~400 lines (N2 analogue ~2 h) + rerun of test_annotations_pg.py on D8's real label log at its merge; fix round done, remaining = coordinator rerun at merge + D8/B3 integration",
+  "at": "2026-09-28"
+ },
+ "wiring_requests": [
+  "SR-P1-1 (lab-sql D8) label log: RPCs infrx.lab_label_append({provider_org_id, event}) / infrx.lab_label_events({provider_org_id, dataset_ref}); table lab_label_events unique (provider_org_id, key), append-only, same key+body = replay else idempotency_conflict (full shape in the evidence)",
+  "WR-P-1 Makefile api-mutants (line 21): append ' tests/p/annotations/test_mutants.py tests/p/training/test_mutants.py' after ' tests/n/versions/test_mutants.py'",
+  "WR-P-2 label routes derive provider_org_id/user_id from the L2 port (as WR-N-2)",
+  "WR-P-3 (P2) teacher outputs go through annotations.import_labels with method 'model' (synthetic)",
+  "WR-P-7 (P4/composition) P1 label exports are served only through annotations.read_export (expiring, training gate re-read per line); nothing reads lab/<p>/label-exports/ directly",
+  "WR-P-8 (N3) revocation tombstoning also walks lab/<p>/label-exports/<id>/ (export.json lineage names each sample)"
+ ],
+ "evidence": [
+  "research/plan/evidence/p/P1-f3acfe2.md"
+ ],
+ "fix_round": {
+  "findings_fixed": [
+   "0-P1-SUPERSEDE-BYPASS",
+   "0-P1-CROSS-VERSION-DISAGREEMENT-STUCK",
+   "1-PIPE-R2"
+  ],
+  "at": "2026-09-28"
+ }
+}
