@@ -30,6 +30,7 @@ MISSING = "test_p2__a_sample_without_content_is_skipped_before_egress"
 COLLECT = "test_p2__collected_labels_import_once_as_model_labels_never_ground_truth"
 PARTIAL = "test_p2__an_unfinished_batch_imports_what_arrived_and_settles_later"
 LABEL = "test_p2__a_label_is_one_short_text_with_an_optional_confidence"
+FOREIGN = "test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_or_the_settlement"
 HTTP = "test_p2_http__a_batch_round_trips_through_the_local_teacher_fake"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -135,7 +136,9 @@ MUTANTS: tuple[Mutant, ...] = (
        T, "if type(label) is not str or", "if not isinstance(label, (str, int)) or", LABEL,
        dies_by=("AttributeError",)),
     _m("failures_unrecorded", "each per-item failure is kept in D8's log (WR-P2-D8)",
-       T, "        await ledger.record_failures(run_id, failures)\n", "        pass\n", COLLECT),
+       T, "        await ledger.record_failures(run_id, logged)", "        pass", COLLECT),
+    _m("foreign_id_jams_the_collect", "a provider id D8 cannot store never blocks import/settle",
+       T, "if _is_uuid(f[0])]", "]", FOREIGN),
     _m("ambiguous_submit_released", "an unknown outcome keeps its hold (ambiguous)",
        "judge/submit.py", "        return await ledger.quarantine(run.run_id,",
        '        return await ledger.release(run.run_id, "failed",', AMBIG),

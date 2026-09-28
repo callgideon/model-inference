@@ -232,6 +232,20 @@ def test_p2__an_unfinished_batch_imports_what_arrived_and_settles_later():
     assert case.ledger.spent[case.payer] == case.provider.cost
 
 
+def test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_or_the_settlement():
+    """0-LSI2-F1: the teacher's ids are untrusted; one D8 cannot store stays in the result only."""
+    case = Case()
+    case.run()
+    first = case.run_ids()[0]
+    case.provider.outputs["batch-1"] = [(sid(1), '{"label": "a"}'), ("bogus-id", '{"label": "x"}')]
+    got = case.collect(first)
+    assert got.run.state == "completed" and got.failures == (("bogus-id", "not_sent"),)
+    assert case.collect(first).run.state == "completed"
+    assert len(case.labels.calls) == 1 and case.labels.calls[0]["rows"][0]["sample_id"] == sid(1)
+    assert asyncio.run(case.ledger.failures(first)) == []
+    assert case.ledger.spent[case.payer] == case.provider.cost
+
+
 def test_p2__a_label_is_one_short_text_with_an_optional_confidence():
     assert parse_label('{"label": "cat"}') == ("cat", None)
     assert parse_label('{"label": "cat", "confidence": 1}') == ("cat", 1)

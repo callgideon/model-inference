@@ -215,6 +215,14 @@ async def _samples(batch: TeacherBatch, store, ids) -> list:
     return [s for s in manifest.samples if s.sample_id in wanted]
 
 
+def _is_uuid(value) -> bool:
+    try:
+        uuid.UUID(value)
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return True
+
+
 def parse_label(text: str) -> tuple[str, float | int | None] | None:
     """`{"label": <short text>, "confidence"?: 0..1}`, or None. Never raises."""
     try:
@@ -263,8 +271,9 @@ async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) ->
         if parsed[1] is not None:
             row["confidence"] = parsed[1]
         rows.append(row)
-    if failures:                                        # D8's append-only per-item log
-        await ledger.record_failures(run_id, failures)
+    logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+    if logged:                                          # in the result only (0-LSI2-F1)
+        await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
     imported = None
     if rows:
         imported = await wiring.labels(wiring.store, wiring.log,

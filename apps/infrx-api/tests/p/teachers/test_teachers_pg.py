@@ -115,3 +115,20 @@ def test_p2_pg_a_batch_carries_to_labels_failures_and_one_settlement(world) -> N
     assert again.run == got.run and len(run(wiring.ledger.failures(first.run_id))) == 2
     assert conn.execute("select state from infrx.lab_judge_runs where "
                         "run_id = %s", (first.run_id,)).fetchone()[0] == "completed"
+
+
+def test_p2_pg_a_provider_id_that_is_no_sample_id_never_jams_the_collect(world) -> None:
+    """0-LSI2-F1's twin on 0042: a non-UUID id from the teacher is returned as `not_sent`, never
+    sent to lab_teacher_record_failures; the good label imports and the run settles once."""
+    conn, fake, wiring, batch = world
+    report = run(run_batch(batch, wiring=wiring))
+    second = report.runs[1]
+    sent = sorted(second.sent_ids)
+    fake.outputs[second.external_id] = [[sent[0], '{"label": "a"}'], ["junk-id", '{"label": "x"}']]
+    got = run(collect(batch, second.run_id, wiring=wiring))
+    assert got.run.state == "completed" and len(got.imported.accepted) == 1
+    assert got.failures == (("junk-id", "not_sent"),)
+    assert run(collect(batch, second.run_id, wiring=wiring)).run == got.run
+    assert run(wiring.ledger.failures(second.run_id)) == []
+    assert conn.execute("select state from infrx.lab_judge_runs where run_id = %s",
+                        (second.run_id,)).fetchone()[0] == "completed"

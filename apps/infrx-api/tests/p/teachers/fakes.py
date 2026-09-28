@@ -5,6 +5,7 @@ revoke a grant the moment a chunk leaves. The D6J ledger and the provider are J2
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from types import SimpleNamespace
 
@@ -89,6 +90,14 @@ class TeacherLedger(j2.FakeJudgeLedger):
         self.failure_log: list[tuple[str, str, str]] = []
 
     async def record_failures(self, run_id: str, failures) -> int:
+        failures = list(failures)
+        for sample, reason in failures:          # 0042: (sample_id)::uuid, reason ~ '^[a-z][a-z_]{0,63}$'
+            try:
+                uuid.UUID(sample)
+            except (ValueError, TypeError, AttributeError):
+                raise errors.InvalidRequest("a failure is a sample id and a reason word") from None
+            if not re.fullmatch(r"[a-z][a-z_]{0,63}", reason):
+                raise errors.InvalidRequest("a failure is a sample id and a reason word")
         new = [(run_id, s, r) for s, r in dict.fromkeys(failures)
                if (run_id, s, r) not in self.failure_log]
         self.failure_log += new
