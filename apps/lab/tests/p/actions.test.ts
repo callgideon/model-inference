@@ -132,6 +132,25 @@ test("P4-A06 a consumer-only user gets a 404 from every action and the pipeline 
   assert.equal(lab.calls.length, before);
 });
 
+const TEACH = { batchId: uuid(50), datasetRef: DATASET, rubricRef: RUBRIC, teacherModel: "claude-opus-5", promptVersion: "teach-v1", payerRef: PAYER, budgetUsd: "1.00000000", chunkSize: "2" };
+
+test("P4-A07 a teacher dry run and its approval: the session's actor and the form's batch id; a developer never approves; malformed input never reaches the service", async () => {
+  as("developer");
+  const before = lab.calls.length;
+  assert.equal(await landing(actions.planTeachers(form({ ...TEACH, providerId: uuid(7), live: "1" }))), "/training");
+  same(lab.calls.slice(before), [["planTeachers", { providerId: P, role: "developer" }, { ...TEACH, chunkSize: 2 }]]);
+  assert.equal(await landing(actions.approveTeachers(form({ batchId: uuid(50) }))), "/training?refused=denied");
+  for (const bad of [{ budgetUsd: "1" }, { budgetUsd: "1.00000000 CREDIT" }, { payerRef: ref("payer", uuid(7), uuid(3)) }, { datasetRef: ref("dataset", uuid(7), uuid(1)) },
+    { chunkSize: "0" }, { chunkSize: "201" }, { chunkSize: "2.5" }, { batchId: "b-1" }, { teacherModel: "" }, { promptVersion: "" }, { rubricRef: "r" }])
+    assert.equal(await landing(actions.planTeachers(form({ ...TEACH, ...bad }))), "/training?refused=invalid", JSON.stringify(bad));
+  as("administrator");
+  assert.equal(await landing(actions.approveTeachers(form({ batchId: "b-1" }))), "/training?refused=invalid");
+  assert.equal(lab.calls.length, before + 1);
+  assert.equal(await landing(actions.approveTeachers(form({ batchId: uuid(50) }))), "/training");
+  same(lab.calls.at(-1), ["approveTeachers", { providerId: P, role: "administrator" }, uuid(50)]);
+  assert.equal(await landing(actions.approveTeachers(form({ batchId: uuid(59) }))), "/training?refused=not_found");
+});
+
 function value<T>(r: { ok: true; value: T } | { ok: false; reason: string }): T {
   assert.ok(r.ok, `refused: ${!r.ok && r.reason}`);
   return r.value;

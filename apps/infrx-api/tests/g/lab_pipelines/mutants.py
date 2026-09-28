@@ -31,6 +31,10 @@ HUMAN, CONNECTOR = C + "review_corrections_and_adjudications_are_human_ground_tr
 GONE, UNWIRED = C + "an_expired_export_is_gone", \
     C + "an_unwired_port_is_unavailable_after_the_access_checks"
 BODY = C + "a_body_is_json_bounded_and_valid_before_p1_and_p3"
+DRY, APPROVE = C + "a_teacher_batch_is_a_dry_run_until_approved", \
+    C + "only_an_administrator_approves_a_batch_within_its_budget"
+READBACK, FORM = C + "an_ambiguous_or_stopped_batch_reads_back_as_recorded", \
+    C + "a_teacher_form_names_only_what_the_provider_holds"
 
 
 def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
@@ -144,6 +148,96 @@ MUTANTS: tuple[Mutant, ...] = (
        "args.append(await lab_body(request, rt, model))", BODY),
     _m("usd_limit_unshaped", "a run's limit is an exact 8-decimal USD amount",
        "    limit: str = Field(pattern=USD)", "    limit: str", BODY),
+    # --- P2 teacher batches (P4.b): the dry run --------------------------------------------
+    _m("dry_run_sends", "a dry run reserves and sends nothing",
+       "    return await _teacher_batch(x, provider, stored)\n\n\nasync def approve_teachers",
+       "    await p2.run_batch(_teacher(stored, provider, who.user_id), wiring=wiring)\n"
+       "    return await _teacher_batch(x, provider, stored)\n\n\nasync def approve_teachers",
+       DRY),
+    _m("batch_conflict_unchecked", "another batch under a batch id is a 409",
+       '    if stored["request_sha256"] != asked:\n        raise errors.IdempotencyConflict('
+       '"the batch id names another batch")',
+       '    if False:\n        raise errors.IdempotencyConflict("the batch id names another batch")',
+       DRY),
+    _m("batch_rewritten_on_replay", "a replayed batch id is the stored batch",
+       "    if await objects.get(key) is None:\n        await held(",
+       "    if True:\n        await held(", DRY),
+    _m("batch_record_leaks_the_digest", "a batch is the port's record, nothing more",
+       "    return {**_receipt(stored), ", "    return {**stored, ", DRY),
+    _m("batch_answered_200", "a dry run is a 201",
+       "model=TeacherBody, status=201)", "model=TeacherBody)", DRY),
+    _m("chunk_ceiling_hidden", "each chunk shows its reservation at the rate in force",
+       '"ceiling_usd": rate and str(ProviderUsd(worst_case(rate, batch.ceilings, len(ids)))),',
+       '"ceiling_usd": None,', DRY),
+    _m("chunk_sent_is_its_size", "a chunk shows the samples that left, none before approval",
+       '"sent": 0 if run is None else len(run.sent_ids),', '"sent": len(ids),', DRY),
+    _m("holdout_count_hidden", "the plan shows the holdout it leaves out",
+       '"holdout": len(planned.omitted),', '"holdout": 0,', DRY),
+    _m("not_permitted_hidden", "the plan shows the samples that may not leave",
+       '"not_permitted": len(planned.not_permitted),', '"not_permitted": 0,', DRY),
+    _m("price_version_hidden", "the plan names the rate it priced at",
+       '"price_version": planned.price_version,', '"price_version": None,', DRY),
+    _m("within_budget_ignores_the_budget", "a ceiling over the batch budget is not within it",
+       '"within_budget": ceiling is not None and ceiling <= ProviderUsd(stored["budget_usd"]),',
+       '"within_budget": ceiling is not None,', APPROVE),
+    _m("within_budget_unpriced", "an unpriced batch is not within its budget",
+       '"within_budget": ceiling is not None and ceiling <= ProviderUsd(stored["budget_usd"]),',
+       '"within_budget": ceiling is None or ceiling <= ProviderUsd(stored["budget_usd"]),', DRY),
+    # --- the approval --------------------------------------------------------------------------
+    _m("approve_role_before_the_batch", "R183: an unknown batch is a 404 whatever the role",
+       "          capability=Cap.read_aggregate_health)",
+       "          capability=Cap.manage_members)", APPROVE),
+    _m("developer_approves", "only an administrator approves a live batch",
+       "    require(who, Cap.manage_members)\n    wiring, stored",
+       "    require(who, Cap.run_evaluation)\n    wiring, stored", APPROVE),
+    _m("over_budget_approved", "a ceiling over the batch budget is a 409",
+       '    if ceiling is None or ceiling > ProviderUsd(stored["budget_usd"]):',
+       "    if ceiling is None:", APPROVE),
+    _m("unpriced_approved", "an unpriced batch is a 409, never sent",
+       '    if ceiling is None or ceiling > ProviderUsd(stored["budget_usd"]):',
+       '    if ceiling is not None and ceiling > ProviderUsd(stored["budget_usd"]):', APPROVE),
+    _m("live_switch_unchecked", "live submission off: nothing approved or reserved (503)",
+       "    if wiring.settings.judge_mode != JUDGE_MODE_LIVE:\n",
+       "    if False:\n", APPROVE),
+    _m("approval_unrecorded", "the approval (who, when) is recorded",
+       '    await objects.put_if_absent(_batch_key(provider, batch_id, "approval.json")',
+       '    await objects.head(_batch_key(provider, batch_id, "approval.json")', APPROVE),
+    _m("approved_by_the_requester", "the approver is the session's administrator",
+       '"approved_by": who.user_id,', '"approved_by": stored["requested_by"],', APPROVE),
+    _m("approval_hidden", "a batch shows its approval",
+       '"approval": approval and json.loads(approval),', '"approval": None,', APPROVE),
+    _m("approval_does_not_run", "an approval runs the batch",
+       "    await p2.run_batch(batch, wiring=wiring)\n", "", APPROVE),
+    # --- read back from P2's ledger -----------------------------------------------------------
+    _m("chunk_state_not_the_ledgers", "a chunk's state is the ledger's (ambiguous included)",
+       '"state": "unreserved" if run is None else run.state,', '"state": "unreserved",',
+       APPROVE, READBACK),
+    _m("chunk_hold_hidden", "a chunk shows the hold the ledger keeps",
+       '"reserved_usd": run and str(run.reserved),', '"reserved_usd": None,', APPROVE, READBACK),
+    _m("chunk_cost_hidden", "a chunk shows its settled cost",
+       '"cost_usd": run and _usd(run.actual),', '"cost_usd": None,', READBACK),
+    _m("failures_hidden", "a chunk's per-item failures read back from the ledger's log",
+       "                                                for s, r in await wiring.ledger.failures("
+       "run_id)]})", "                                                for s, r in []]})",
+       READBACK),
+    _m("batch_listing_reads_approvals", "only batch records are listed",
+       '            for key in sorted(keys) if key.endswith("/batch.json")]',
+       "            for key in sorted(keys)]", READBACK),
+    # --- the form ------------------------------------------------------------------------------
+    _m("foreign_payer_accepted", "a batch is paid by this provider's own payer",
+       "        require_own_payer(provider, body.payer_ref)\n", "        pass\n", FORM),
+    _m("foreign_payer_is_forbidden", "R183: a payer the provider does not hold is a 422",
+       '        raise errors.InvalidRequest("the payer is not this provider\'s") from None',
+       "        raise", FORM),
+    _m("unknown_dataset_is_not_found", "R183: a dataset the provider does not hold is a 422",
+       "        await held(wiring.store.resolve(", "        await (wiring.store.resolve(", FORM),
+    _m("budget_unshaped", "a batch budget is an exact 8-decimal USD amount",
+       "    budget_usd: str = Field(pattern=USD)", "    budget_usd: str", FORM),
+    _m("chunk_unbounded", "a chunk is at most J1's scan bound, refused before anything is stored",
+       "    chunk_size: int = Field(ge=1, le=MAX_CANDIDATES)", "    chunk_size: int = Field(ge=1)",
+       FORM),
+    _m("teachers_unwired_lists_nothing", "no teacher wiring (P-10): the listing is a 503",
+       '    x.port("teachers")\n    keys', "    keys", FORM),
 )
 
 

@@ -34,8 +34,7 @@ test("P4-P02 every import, export, bundle and checkpoint form carries an id mint
 
 test("P4-P03 the paid forms show the USD budget and named payer, and no form picks a connector", () => {
   const training = read(TRAINING);
-  assert.match(training, /<input name="payerRef" required/);
-  assert.match(training, /<input name="limitUsd" required/);
+  assert.match(training, /<input name="payerRef" required placeholder="lab:payer:…" \/><\/label>\s*<label>Limit, USD <input name="limitUsd" required/);
   assert.match(training, /Budget \(USD\)/);
   assert.match(training, /\{r\.budget\} · payer \{r\.payer\}/);
   assert.doesNotMatch(training, /name="connector"|CREDIT/);
@@ -46,4 +45,16 @@ test("P4-P04 labels show their kind and ground-truth status apart; the preview s
   const annotations = read(ANNOTATIONS);
   assert.match(annotations, /<td>\{l\.kind\}<\/td><td>\{l\.truth\}<\/td>/);
   for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <p role="note">Preview: /, path);
+});
+
+test("P4-P05 the teacher section: a dry-run form with its batch id minted at render, its USD budget and payer; approval only where the view allows it; unavailable said as such", () => {
+  const training = read(TRAINING);
+  assert.match(training, /<form action=\{planTeachers\}>[\s\S]*<input type="hidden" name="batchId" value=\{randomUUID\(\)\} \/>/);
+  assert.match(training, /<legend>Teacher budget \(USD\)<\/legend>/);
+  assert.match(training, /<input name="payerRef" required placeholder="lab:payer:… \(pays the teacher\)" \/><\/label>\s*<label>Budget, USD <input name="budgetUsd" required/);
+  assert.match(training, /<button type="submit">Plan a dry run \(nothing is sent\)<\/button>/);
+  assert.match(training, /\{b\.approvable && \(\s*<form action=\{approveTeachers\}>\s*<input type="hidden" name="batchId" value=\{b\.id\} \/>/);
+  assert.match(training, /\{b\.budget\}.*\{b\.ceiling\}/);
+  assert.match(training, /!batches\.ok \? <p role="note">\{TEACHER_UNAVAILABLE\}<\/p>/);
+  assert.doesNotMatch(training, /name="live"|name="approve"/);
 });

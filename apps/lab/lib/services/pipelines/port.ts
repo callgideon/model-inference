@@ -81,6 +81,32 @@ export type Checkpoint = {
   eligible: boolean;
 };
 
+/** P2: a teacher batch over an N2 version, a dry run until an administrator approves it (live egress only
+ *  to the local teacher fake until P-10). Each chunk is one PROVIDER_USD reservation against the named
+ *  payer; `unreserved` = never reserved (the dry run, or a batch stopped before it). */
+export const TEACHER_CHUNK_STATES = ["unreserved", "prepared", "submitting", "submitted", "ambiguous", "completed", "failed", "cancelled"] as const;
+export type TeacherChunk = {
+  runId: string;
+  samples: number;
+  ceilingUsd: string | null; // the chunk's reservation at the rate in force; null: no approved rate
+  state: (typeof TEACHER_CHUNK_STATES)[number];
+  reservedUsd: string | null;
+  costUsd: string | null; // as reported once settled; null: unknown, never estimated
+  sent: number;
+  failures: { sampleId: string; reason: string }[];
+};
+export type TeacherBatch = {
+  batchId: string; datasetRef: string; rubricRef: string; teacherModel: string; promptVersion: string;
+  payerRef: string; budgetUsd: string; chunkSize: number; requestedBy: string;
+  priceVersion: string | null; ceilingUsd: string | null; withinBudget: boolean; holdout: number; notPermitted: number;
+  approval: { approvedBy: string; approvedAt: string } | null;
+  chunks: TeacherChunk[];
+};
+export type TeacherInput = {
+  batchId: string; datasetRef: string; rubricRef: string; teacherModel: string; promptVersion: string;
+  payerRef: string; budgetUsd: string; chunkSize: number;
+};
+
 export const REFUSALS = ["denied", "not_found", "invalid", "conflict", "gone", "unavailable"] as const;
 export type Refusal = (typeof REFUSALS)[number];
 export type Result<T> = { ok: true; value: T } | { ok: false; reason: Refusal };
@@ -120,13 +146,18 @@ export interface PipelinesPort {
   /** A redelivery (same checkpointId) is the first outcome. */
   importCheckpoint(actor: Actor, input: CheckpointInput): Promise<Result<Checkpoint>>;
   approve(actor: Actor, input: { externalRunId: string; checkpointId: string }): Promise<Result<Checkpoint>>;
+  teacherBatches(actor: Actor): Promise<Result<TeacherBatch[]>>;
+  /** The dry run, write-once per batchId: nothing is reserved or sent. */
+  planTeachers(actor: Actor, input: TeacherInput): Promise<Result<TeacherBatch>>;
+  /** An administrator's live submit within the budget; again, it resumes and sends nothing twice. */
+  approveTeachers(actor: Actor, batchId: string): Promise<Result<TeacherBatch>>;
 }
 
 const down = async () => ({ ok: false, reason: "unavailable" }) as const;
 const UNAVAILABLE: PipelinesPort = {
   labels: down, disagreements: down, imports: down, exports: down, importLabels: down, assign: down, review: down,
   adjudicate: down, exportLabels: down, runs: down, checkpoints: down, bundle: down, prepare: down, submit: down,
-  finish: down, cancel: down, importCheckpoint: down, approve: down,
+  finish: down, cancel: down, importCheckpoint: down, approve: down, teacherBatches: down, planTeachers: down, approveTeachers: down,
 };
 
 let preview: FakePipelines | undefined;
