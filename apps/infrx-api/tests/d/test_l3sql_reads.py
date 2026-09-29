@@ -182,6 +182,72 @@ def check_endpoint_alias_orders_across_aliases_by_time_not_by_either_ones_versio
     return "the newer alias's v1 outranks the older alias's v2 on a shared endpoint"
 
 
+def check_endpoint_alias_answers_nothing_for_an_endpoint_the_alias_moved_off(conn) -> str:
+    """0-F1/LSQ5-m2: a catalog listing is never deleted or moved (0007 keeps it as history), so
+    an alias that republishes to a NEW deployment on a DIFFERENT endpoint leaves its OLD
+    listing behind, still (per its own row) naming a deployment on the endpoint it just moved
+    off. `_ENDPOINT_ALIAS`/the fake must only count a listing that is ALSO its own alias's
+    CURRENT (highest-version) listing - the old endpoint answers nothing once nothing current
+    claims it, even though the stale listing is still the newest row ever written there."""
+    other_model = "e0000016-0000-4000-8000-000000000001"
+    other_version = "e0000016-0000-4000-8000-000000000002"
+    other_serving = "e0000016-0000-4000-8000-000000000003"
+    alias = "nemostation/moved"
+    params = {"m": other_model, "p": NEMO, "v": other_version, "s": other_serving,
+              "ep_a": "e0000016-0000-4000-8000-000000000004",
+              "ep_b": "e0000016-0000-4000-8000-000000000005",
+              "dep_a": "e0000016-0000-4000-8000-000000000006",
+              "dep_b": "e0000016-0000-4000-8000-000000000007",
+              "base": cc.MODEL, "base_s": cc.SERVING}
+    for statement in (
+        "insert into public.models (id, name, provider, description, status, base_url, "
+        "served_model, input_usd_per_m, output_usd_per_m, context_tokens, input_modalities, "
+        "output_modalities, model_uuid, provider_org_id) values ('nemostation/moved', "
+        "'s', 's', 's', 'live', 'https://s.example', 's', 1, 1, 1024, '{text}', '{text}', "
+        "%(m)s, %(p)s);"
+        "insert into infrx.model_versions (model_version_id, model_id, provider_org_id, "
+        "model_repo, model_commit, weight_shard_digests, tokenizer_digest, "
+        "chat_template_digest, digest_source, created_by) select %(v)s, %(m)s, %(p)s, "
+        "model_repo, model_commit, weight_shard_digests, tokenizer_digest, "
+        "chat_template_digest, digest_source, 't' from infrx.model_versions "
+        "where model_id = %(base)s limit 1;"
+        "insert into infrx.serving_versions (serving_version_id, model_version_id, model_id, "
+        "provider_org_id, revision_label, prompt_harness_ref, preprocessor_profile_version, "
+        "runtime_image_ref, runtime_image_digest, engine_options_digest, precision, "
+        "capability, created_by) select %(s)s, %(v)s, %(m)s, provider_org_id, 'moved-1', "
+        "prompt_harness_ref, preprocessor_profile_version, runtime_image_ref, "
+        "runtime_image_digest, engine_options_digest, precision, capability, 't' "
+        "from infrx.serving_versions where serving_version_id = %(base_s)s;"
+        "insert into infrx.endpoints (endpoint_id, provider_org_id, name, environment, "
+        "created_by) values (%(ep_a)s, %(p)s, 'moved-a', 'prod', 't'), "
+        "(%(ep_b)s, %(p)s, 'moved-b', 'prod', 't');"
+        "insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id, "
+        "provider_org_id, environment, serving_version_id, visibility, state, "
+        "max_input_tokens, max_output_tokens, created_by) values "
+        "(%(dep_a)s, %(ep_a)s, %(p)s, 'prod', %(s)s, 'public', 'active', 1, 1, 't'), "
+        "(%(dep_b)s, %(ep_b)s, %(p)s, 'prod', %(s)s, 'public', 'active', 1, 1, 't');"
+        "insert into infrx.rate_card_versions (rate_card_version, model_id, "
+        "deployment_revision_id, serving_version_id, input_rate_per_million, "
+        "output_rate_per_million, effective_at, approved_by, provisional) values "
+        "('rc_moved_1', %(m)s, %(dep_a)s, %(s)s, 400, 1200, infrx.now(), 't', true), "
+        "('rc_moved_2', %(m)s, %(dep_b)s, %(s)s, 400, 1200, infrx.now(), 't', true);"
+        f"insert into infrx.catalog_listings (public_model_id, version, model_id, "
+        f"deployment_revision_id, serving_version_id, rate_card_version, effective_at, "
+        f"approved_by, created_at) values "
+        f"('{alias}', 1, %(m)s, %(dep_a)s, %(s)s, 'rc_moved_1', infrx.now(), 't', infrx.now()), "
+        f"('{alias}', 2, %(m)s, %(dep_b)s, %(s)s, 'rc_moved_2', infrx.now(), 't', "
+        "infrx.now() + interval '1 second')").split(";"):
+        conn.execute(statement, params)
+    store = PgControlStore(connector(pgharness.dsn(conn.info.dbname)))
+    moved_off = _answered(store.endpoint_alias(params["ep_a"]))
+    assert moved_off is None, (
+        f"{alias}'s v1 (on {params['ep_a']}) is no longer its current listing (v2 moved to "
+        f"{params['ep_b']}); the old endpoint must answer nothing, got {moved_off!r}")
+    current = _answered(store.endpoint_alias(params["ep_b"]))
+    assert current == alias, f"{alias}'s current (v2) listing is on {params['ep_b']}, got {current!r}"
+    return f"{alias} moved off {params['ep_a']}; only {params['ep_b']} (its current listing) answers"
+
+
 def check_the_router_functions_are_the_runtime_logins_alone(conn) -> str:
     """SR-R1-1 against 0043's login roles: R1's adapter (`PgRoutingReleases`) answers on the
     runtime's own session (`infrx_runtime`, no `set role`), and the control service's login
@@ -217,6 +283,7 @@ CHECKS = {c.__name__: c for c in (
     check_the_control_reads_are_the_registrys_rows,
     check_the_control_login_holds_what_operations_reads,
     check_endpoint_alias_orders_across_aliases_by_time_not_by_either_ones_version,
+    check_endpoint_alias_answers_nothing_for_an_endpoint_the_alias_moved_off,
     check_the_router_functions_are_the_runtime_logins_alone)}
 
 

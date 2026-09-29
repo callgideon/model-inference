@@ -242,6 +242,8 @@ R_LOGIN = "check_the_control_login_holds_what_operations_reads"
 R_ROUTER = "check_the_router_functions_are_the_runtime_logins_alone"
 #: LSQ5-m1/m2 (WR-E8L-2's endpoint_alias oracle).
 R_ORDER = "check_endpoint_alias_orders_across_aliases_by_time_not_by_either_ones_version"
+#: 0-F1/LSQ5-m2: an endpoint the alias has since moved off must answer nothing.
+R_MOVED = "check_endpoint_alias_answers_nothing_for_an_endpoint_the_alias_moved_off"
 
 
 def _r(name, old, new, check, why, file="0044_lab_control_reads.sql", **kw):
@@ -309,6 +311,10 @@ READS_PY = (
                "order by l.version desc limit 1", R_ORDER,
                "LSQ5-m1: a second alias's newer listing on a shared endpoint loses to an "
                "older listing under an alias with a higher version number"),
+    ReadMutant("l3r_alias_ignores_superseded", "_ENDPOINT_ALIAS",
+               '"where v.public_model_id = l.public_model_id) "', "where false) ", R_MOVED,
+               "0-F1/LSQ5-m2: a listing its own alias has since superseded still answers for "
+               "the endpoint the alias moved off"),
     ReadMutant("l3r_listings_any_alias", "_LISTINGS",
                '"from infrx.catalog_listings where public_model_id = %s order by version"',
                "from infrx.catalog_listings where %s::text is not null order by version",

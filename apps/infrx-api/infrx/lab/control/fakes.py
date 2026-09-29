@@ -46,7 +46,9 @@ class FakeControl:
     # R195/LSQ5-m1: every listing ever published, in the order it was (global, across every
     # alias - `listings` alone only orders one alias's own versions). `endpoint_alias` walks
     # this backwards for the newest listing naming a deployment on an endpoint, the fake's
-    # analogue of the SQL read's `order by created_at desc`.
+    # analogue of the SQL read's `order by created_at desc`. 0-F1/LSQ5-m2: it must also skip a
+    # listing its own alias has since superseded (a republish to a new endpoint leaves the old
+    # listing in this log, still naming its old, now-abandoned endpoint).
     _listing_log: list[Listing] = dataclasses.field(default_factory=list, repr=False, compare=False)
 
     # --- seeding (an operator seed; synchronous) -----------------------------------
@@ -263,6 +265,9 @@ class FakeControl:
 
     async def endpoint_alias(self, endpoint_id: str) -> str | None:
         for listing in reversed(self._listing_log):
+            current = self.listings.get(listing.public_model_id, ())
+            if not current or current[-1] is not listing:
+                continue                       # 0-F1/LSQ5-m2: superseded by a later version
             if self.deployments[listing.deployment_revision_id].endpoint_id == endpoint_id:
                 return listing.public_model_id
         return None
