@@ -164,7 +164,10 @@ begin
   return query select v_doc, o.policy_ref, v_revisions, o.shadow_limit;
 end $$;
 
+-- infrx_runtime needs no direct grant here: `release_active` is SECURITY DEFINER, so its own
+-- calls into these run as its owner, not the caller (checks_reads.RUNTIME_FUNCTIONS, D10's
+-- enumerated allow-list of what infrx_runtime executes directly, is unmoved by this file).
 revoke all on function infrx.lab_rfc3339(timestamptz), infrx.lab_serving_ref_digest(uuid),
-  infrx.lab_serving_ref(uuid) from public, anon, authenticated;
+  infrx.lab_serving_ref(uuid) from public, anon, authenticated, infrx_runtime;
 grant execute on function infrx.lab_rfc3339(timestamptz), infrx.lab_serving_ref_digest(uuid),
-  infrx.lab_serving_ref(uuid) to service_role, infrx_runtime;
+  infrx.lab_serving_ref(uuid) to service_role;

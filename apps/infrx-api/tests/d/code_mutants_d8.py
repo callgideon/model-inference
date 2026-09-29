@@ -310,6 +310,7 @@ Q_ACTIVE = "check_release_active_answers_the_running_head_with_pins"
 Q_ELIGIBLE = "check_release_eligibility_is_current_and_default_deny"
 Q_RECORD = "check_assignments_are_recorded_once_for_the_runtime"
 Q_ROLE = "check_the_control_login_is_bounded_and_lab_only"
+Q_SHADOW = "check_the_operator_raises_the_shadow_limit_and_only_the_operator"
 
 
 def _q(name, old, new, check, why, **kw):
@@ -324,6 +325,14 @@ IDENTITY_FILE = "0045_lab_serving_ref_identity.sql"
 
 def _qid(name, old, new, check, why, **kw):
     return _d.Mutant(name, IDENTITY_FILE, old, new, "lab", check, why, **kw)
+
+
+#: WR-E8L-4: the operator RPC to raise `lab_rollouts.shadow_limit`.
+SHADOW_FILE = "0046_lab_shadow_limit_operator.sql"
+
+
+def _q46(name, old, new, check, why, **kw):
+    return _d.Mutant(name, SHADOW_FILE, old, new, "lab", check, why, **kw)
 
 
 REQUESTS = (
@@ -520,6 +529,13 @@ REQUESTS = (
        "infrx_lab_control;", "grant select (model_uuid, id, provider_org_id) on public.models to "
        "infrx_lab_control;\ngrant select on public.api_keys to infrx_lab_control;", Q_ROLE,
        "the Lab login reads the App's key hashes"),
+    _q46("q_shadow_no_door", "v_actor text := infrx.console_operator(p_reason, "
+       "p_idempotency_key);", "v_actor text;", Q_SHADOW,
+       "any authenticated caller raises another provider's shadow bound"),
+    _q46("q_shadow_lowers", "  if p_shadow_limit > o.shadow_limit then", "  if true then",
+       Q_SHADOW, "an operator call can shrink the shadow bound another operator granted"),
+    _q46("q_shadow_negative", "  if p_shadow_limit is null or p_shadow_limit < 0 then",
+       "  if false then", Q_SHADOW, "a negative shadow limit is accepted"),
 )
 REQUEST_NAMES = tuple(m.name for m in REQUESTS)
 

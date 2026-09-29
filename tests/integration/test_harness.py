@@ -233,6 +233,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0044_lab_control_reads.sql",
     # Lab (local-only, R151/R201): lab-sql LW5 (E8L-F1, WR-E8L-2)
     "0045_lab_serving_ref_identity.sql",
+    # Lab (local-only, R151/R201): lab-sql LW5 (WR-E8L-4)
+    "0046_lab_shadow_limit_operator.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()

@@ -601,6 +601,34 @@ def check_release_eligibility_is_current_and_default_deny(conn) -> str:
 
 
 @rolled_back
+def check_the_operator_raises_the_shadow_limit_and_only_the_operator(conn) -> str:
+    """WR-E8L-4: `public.operator_raise_lab_shadow_limit` moves `lab_rollouts.shadow_limit`
+    up only (never down, and a call at or below the bound in force is a no-op naming the
+    unchanged bound), under `infrx.console_operator`'s door (0025) - not a provider, not an
+    anonymous caller, only a platform operator."""
+    from . import checks_operator as op
+    ref, body = launch(conn, 9)
+    pid = body["policy_id"]
+    op.make_operator(conn)
+    sql = "select public.operator_raise_lab_shadow_limit(%s, %s, %s, %s)"
+    code, answer, _ = op.call(conn, op.OPERATOR, sql, (pid, 5, "e8l drill", "shadow-1"))
+    assert code is None and answer == {"policy_id": pid, "shadow_limit": 5}, (code, answer)
+    lowered = op.call(conn, op.OPERATOR, sql, (pid, 2, "e8l drill", "shadow-2"))
+    assert lowered == (None, {"policy_id": pid, "shadow_limit": 5}, ""), \
+        "a call at or below the bound in force never lowers it"
+    assert conn.execute("select shadow_limit from infrx.lab_rollouts where policy_id = %s",
+                        (pid,)).fetchone() == (5,)
+    assert op.call(conn, DEV, sql, (pid, 9, "not an operator", "shadow-3"))[0] == "42501", \
+        "an authenticated non-operator"
+    assert op.call(conn, "anon", sql, (pid, 9, "x", "shadow-4"))[0] == "42501", "anonymous"
+    unknown = op.call(conn, op.OPERATOR, sql, (uid(99, 0xb0), 1, "e8l drill", "shadow-5"))
+    assert unknown[0] == "not_found", unknown
+    negative = op.call(conn, op.OPERATOR, sql, (pid, -1, "e8l drill", "shadow-6"))
+    assert negative[0] == "invalid_request", negative
+    return "raises only, monotonic, replay-safe by construction; operator door holds"
+
+
+@rolled_back
 def check_assignments_are_recorded_once_for_the_runtime(conn) -> str:
     """SR-R1-1: an admitted request's assignment is recorded once (a retry records nothing
     new and never changes the serving), only for a serving the revision offers, under the
@@ -720,6 +748,7 @@ CHECKS = {c.__name__: c for c in (
     check_calibrations_are_j3s_and_the_latest_stands,
     check_release_active_answers_the_running_head_with_pins,
     check_release_eligibility_is_current_and_default_deny,
+    check_the_operator_raises_the_shadow_limit_and_only_the_operator,
     check_assignments_are_recorded_once_for_the_runtime,
     check_the_control_login_is_bounded_and_lab_only)}
 
