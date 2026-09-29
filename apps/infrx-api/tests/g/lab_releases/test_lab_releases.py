@@ -453,6 +453,10 @@ def test_lab_releases__a_unit_refused_live_nulls_its_own_row_and_the_others_list
                 raise fails[policy_ref]
             return r2w.live()
 
+        async def tally(self, policy_ref):     # 0058 once lab-sql-lw9 lands: never for a refused row
+            assert policy_ref not in fails, "a refused row reads no tally"
+            return []
+
     class D7:
         async def resolve(self, ref, *, provider_org_id):
             return r2w.POLICY
