@@ -204,6 +204,11 @@ class PgJudgeLedger:
         """`submitting` runs whose worker went silent -> `ambiguous` (then `reconcile`)."""
         return (await self._call("lab_judge_sweep", {"older_than_s": older_than_s}))["expired"]
 
+    async def providers_in(self, states: Sequence[str]) -> list[str]:
+        """WR-C5-PROVIDERS (0053): the providers with a judge run in one of `states`."""
+        return await self._call("lab_providers_with", {"work": "judge",
+                                                       "states": list(states)})
+
     async def runs_in(self, states: Sequence[str], limit: int, *,
                       provider_org_id: str) -> list[JudgeRun]:
         """WR-LSQ-C2A: up to `limit` of the provider's runs in one of `states`

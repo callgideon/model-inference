@@ -29,7 +29,8 @@ never runs in a consumer process.
 * `judge`      JUDGE_PROVIDER_URL, CLICKHOUSE_URL, S3_TRACE_BUCKET (+ JUDGE_MODE, default
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
                and T3's retention; its passes move silent `submitting` runs to `ambiguous`
-               and reconcile/collect every provider's ambiguous/submitted runs (WR-LSQ-C2A);
+               and reconcile/collect the ambiguous/submitted runs of every provider with such
+               work (WR-LSQ-C2A; 0053's listing, WR-C5-PROVIDERS);
                `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
                every provider with a lineage, every page (WR-N3-2's pull half), and N1's
@@ -91,10 +92,12 @@ LAB_PREFIX = "infrx/"
 JUDGE_PASS_S = 60.0
 JUDGE_SILENT_S = 300                  # a `submitting` run silent this long is `ambiguous`
 JUDGE_BATCH = 100                     # runs per provider, state and pass (oldest first)
+JUDGE_WORK = ("ambiguous", "submitted")   # the states the pass works (0053's provider listing)
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
 IMPORT_PASS_S = 5.0                   # 0051's import-job queue, claimed
 TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
 ROLLOUT_PASS_S = 30.0                 # R2's controller pass over the live releases
+ROLLOUT_STATES = ("running", "rolled_back")   # what the pass steps (R216: converge only)
 PROBE_TIMEOUT_S = 5.0
 
 
@@ -319,19 +322,7 @@ def _judge(mode, env, connect, objects, worker_id, **_):
     return {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
                                          "judge sweep"),
             "judge_collect": lambda: every(JUDGE_PASS_S, lambda: judge_pass(
-                wiring, partial(provider_ids, connect)), "judge collect")}, wiring
-
-
-async def provider_ids(connect) -> list[str]:
-    """Every provider org, on the role's login.
-    ponytail: one select until lab-sql lists the providers with work (WR-C5-PROVIDERS)."""
-    conn = await connect()
-    try:
-        cursor = await conn.execute("select provider_org_id::text from infrx.provider_orgs "
-                                    "order by 1")
-        return [row[0] for row in await cursor.fetchall()]
-    finally:
-        await conn.close()
+                wiring, partial(ledger.providers_in, JUDGE_WORK)), "judge collect")}, wiring
 
 
 async def judge_pass(wiring, providers) -> dict[str, int]:
@@ -344,7 +335,7 @@ async def judge_pass(wiring, providers) -> dict[str, int]:
     done = {"reconciled": 0, "waiting": 0, "collected": 0, "failed": 0}
     ledger = wiring.ledger
     for provider in await providers():
-        for state in ("ambiguous", "submitted"):
+        for state in JUDGE_WORK:
             for run in await ledger.runs_in((state,), JUDGE_BATCH, provider_org_id=provider):
                 if run.consent.grant_id.startswith("lab:"):
                     continue
@@ -445,18 +436,16 @@ def plan_key(provider_org_id: str, policy_id: str) -> str:
 
 async def rollout_pass(objects, store, releases, controller, live) -> dict[str, int]:
     """WR-R2-3: `Controller.step` for every running or rolled-back D9 release of every
-    provider with a release under `lab/<p>/releases/`, on its stored plan and D7's policy.
-    A running release needs R1's aggregates (held while unreadable); a rolled-back one only
+    provider D9 lists with one (0053, WR-C5-PROVIDERS), on its stored plan and D7's policy;
+    one without a stored plan is counted held (0-F2: the report shows the gap). A running
+    release needs R1's aggregates (held while unreadable); a rolled-back one only
     converges (R216). ponytail: no stored B2 report is linked to a release yet
     (WR-C5-REPORT), so none is passed and a running release holds `no_report`; the wall
     clock is `now`, D9's CAS orders the decisions."""
     from ...rollouts.control import Plan
     done = {"stepped": 0, "held": 0, "failed": 0}
-    providers = sorted({key.split("/")[1] for key in await objects.keys("lab/")
-                        if key.split("/")[2:3] == ["releases"]})
-    for provider in providers:
-        for item in await releases.releases_in(("running", "rolled_back"),
-                                               provider_org_id=provider):
+    for provider in await releases.providers_in(ROLLOUT_STATES):
+        for item in await releases.releases_in(ROLLOUT_STATES, provider_org_id=provider):
             try:
                 raw = await objects.get(plan_key(provider, item.policy_id))
                 if raw is None:

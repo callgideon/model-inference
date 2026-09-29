@@ -9,6 +9,7 @@ from __future__ import annotations
 from . import code_mutants_d7 as d7
 from . import migration_mutants as _d
 from . import pgharness
+from . import test_c6_judge as j
 from . import test_c6_reads as t
 
 FILE = "0053_lab_composition_reads.sql"
@@ -16,6 +17,9 @@ DB = f"{pgharness.DATABASE}_c6mut"
 ROLES = "check_browser_roles_reach_nothing"
 DECISIONS = "check_decisions_are_the_providers_own_oldest_first"
 RECEIPT = "check_a_checkpoint_receipt_is_read_for_its_own_provider"
+RELEASES = "check_providers_with_releases_are_listed_by_state"
+JUDGE_CHECK = "check_providers_with_judge_work_are_listed_by_state"
+DB_J = f"{pgharness.DATABASE}_c6jmut"
 
 
 def _s(name, old, new, check, why, **kw):
@@ -46,8 +50,33 @@ SQL_MUTANTS = (
        "     and r.checkpoint_id = (p_args->>'checkpoint_id')::uuid\n$$;\ngrant usage on schema "
        "infrx to authenticated;\ngrant execute on function infrx.lab_checkpoint_receipt(jsonb) "
        "to authenticated;\n", ROLES, "a browser session reads checkpoint digests and runs"),
+    # --- WR-C5-PROVIDERS (the rollout pass)
+    _s("c6_release_providers_any_state", "                      where o.state = any(v_states));",
+       "                      where true);", RELEASES,
+       "the rollout pass visits providers whose releases are all settled"),
+    _s("c6_providers_unbounded", "  if cardinality(v_states) = 0 then\n", "  if false then\n",
+       RELEASES, "a worker's empty state list scans every provider"),
+    _s("c6_providers_other_work", "  else\n    perform infrx.refuse('invalid_request', 'a provider "
+       "listing is of judge", "  else\n    return '[]';\n    perform infrx.refuse("
+       "'invalid_request', 'a provider listing is of judge", RELEASES,
+       "a misspelt work kind reads as no work at all"),
+)
+
+# --- WR-C5-PROVIDERS (the judge pass), on D6J's world (`test_c6_judge.py`) ----------------------
+JUDGE = (
+    _s("c6_judge_providers_any_state", "                      where r.state = any(v_states));",
+       "                      where true);", JUDGE_CHECK,
+       "the judge pass visits providers with only prepared or finished runs"),
+    _s("c6_judge_providers_are_releases", "    v_found := array(select distinct "
+       "r.provider_org_id::text from infrx.lab_judge_runs r\n",
+       "    v_found := array(select distinct r.provider_org_id::text from infrx.lab_rollouts r\n",
+       JUDGE_CHECK, "the judge pass lists providers by their releases, missing judge work"),
 )
 
 
 def kill(mutant) -> tuple[str, str]:
     return d7.kill(mutant, DB, t)
+
+
+def kill_judge(mutant) -> tuple[str, str]:
+    return d7.kill(mutant, DB_J, j)

@@ -28,7 +28,7 @@ pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_c6"
 NEMO, OTHER, uid, ok, t = d9.NEMO, d9.OTHER, d9.uid, d9.ok, d9.t
-RPCS = ("lab_release_decisions", "lab_checkpoint_receipt")
+RPCS = ("lab_release_decisions", "lab_checkpoint_receipt", "lab_providers_with")
 seed = d9.seed
 
 
@@ -108,10 +108,38 @@ def check_a_checkpoint_receipt_is_read_for_its_own_provider(conn) -> str:
     return "own provider only; none for another provider or an unknown id; the store reads it"
 
 
+def check_providers_with_releases_are_listed_by_state(conn) -> str:
+    """WR-C5-PROVIDERS (the rollout pass, 0-F2): the providers with a D9 release in one of the
+    given states - never one whose releases are all elsewhere; no state at all, or work other
+    than judge/release, is refused (never an unbounded scan). Commits (tags 70-71)."""
+    running = d9r.launch(conn, 70, endpoint=uid(70, 0xe0))
+    with conn.transaction():
+        other = t.publish(conn, d9.policy(uid(71, 0xb0), endpoint=uid(71, 0xe1),
+                                          provider=OTHER), provider=OTHER)
+    ok(conn, "lab_release_start", {"provider_org_id": OTHER, "policy_ref": other,
+                                   "plan_digest": d9r.PLAN, "decided_by": d9r.USER,
+                                   "reason": "x"})
+    ok(conn, "lab_release_transition", d9r.move(other, 1, "rolled_back",
+                                                d9r.decision(other, provider=OTHER)))
+    assert running
+    listed = ok(conn, "lab_providers_with", {"work": "release", "states": ["running"]})
+    assert NEMO in listed and OTHER not in listed, listed      # OTHER's are all rolled back
+    both = ok(conn, "lab_providers_with", {"work": "release",
+                                          "states": ["running", "rolled_back"]})
+    assert {NEMO, OTHER} <= set(both) and both == sorted(set(both)), both
+    for args in ({"work": "release", "states": []}, {"work": "release"},
+                 {"work": "anything", "states": ["running"]}):
+        assert d9.refusal(conn, "lab_providers_with", args) == "invalid_request", args
+    store = PgReleaseStore(connector(pgharness.dsn(conn.info.dbname)))
+    assert NEMO in asyncio.run(store.providers_in(("running",)))
+    return "providers by release state, distinct and sorted; empty states or other work refused"
+
+
 CHECKS = {c.__name__: c for c in (
     check_browser_roles_reach_nothing,
     check_decisions_are_the_providers_own_oldest_first,
-    check_a_checkpoint_receipt_is_read_for_its_own_provider)}
+    check_a_checkpoint_receipt_is_read_for_its_own_provider,
+    check_providers_with_releases_are_listed_by_state)}
 
 
 # ----------------------------------------------------------------------------- tests
