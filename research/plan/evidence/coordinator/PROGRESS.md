@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-29 23:49Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 328, updated 2026-09-29 23:49Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-29 23:50Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 328, updated 2026-09-29 23:49Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -376,7 +376,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W5-MERGE-62 | support merge batch #62 (Opus): lab-rollout-7 dc3ba861 (+pilot.py/lab_releases conflicts vs #60 kept both sides, 0059 lab_control_grants_2, WR-LR7-I-OPT, minors, R259–R260); workflow wf_daf503a9-854; integrated (R259–R260; 0059 LOCAL-ONLY on the tip) | complete | codex/w5-merge-62 | a8bdd22c → 0688c5b5 | ports none (layer-1 only), prefix -, db - | 2026-09-29 23:21Z | — | 1–4 h remaining (likely 2 h), confidence unknown, estimated — |
 | W5-MERGE-63 | support merge batch #63 (Opus): lab-capture-2 8ddb75f8 (+WR-LC2-RUNTIME, the 0057 pin, minors, the o01 kept-stack rerun, R261); workflow wf_c1917f53-beb | running | codex/w5-merge-63 | 6738643c → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 23:13Z | integrate (sort §10; harness pins 0057 before 0058/0059) → E5L fully PASS on the tip | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 | W5-MERGE-64 | support merge batch #64 (Opus): lab-local-3 31d61031 (+the acceptance rerun `GATE_ARGS=--keep make lab-local` on the merged tree, minors, R262); workflow wf_242e3d2c-70f | running | codex/w5-merge-64 | 86617819 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 23:37Z | integrate (sort §10) → E4-ON accepted → INTERNAL-TESTING-PREP local half complete | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
-| W5-MERGE-65 | support merge batch #65 (Opus): lab-sql-lw9 96c5ec2e (+conflicts vs #60/#62 kept every side, WR-LW9-0, minors, R263) | running | codex/w5-merge-65 | 80821080 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 23:49Z | integrate (sort §10; harness pins 0057 before 0058) → known-good-reproof-4 after #63 too | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
+| W5-MERGE-65 | support merge batch #65 (Opus): lab-sql-lw9 96c5ec2e (+conflicts vs #60/#62 kept every side, WR-LW9-0, minors, R263); workflow wf_20cf986c-4a0 | running | codex/w5-merge-65 | 80821080 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 23:49Z | integrate (sort §10; harness pins 0057 before 0058) → known-good-reproof-4 after #63 too | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 
 ### Queues and locks
 

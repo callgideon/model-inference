@@ -9933,7 +9933,7 @@
   {
    "id": "W5-MERGE-65",
    "task": null,
-   "slice": "merge batch #65 (Opus): lab-sql-lw9 96c5ec2e (+conflicts vs #60/#62 kept every side, WR-LW9-0, minors, R263)",
+   "slice": "merge batch #65 (Opus): lab-sql-lw9 96c5ec2e (+conflicts vs #60/#62 kept every side, WR-LW9-0, minors, R263); workflow wf_20cf986c-4a0",
    "agent": "opus",
    "branch": "codex/w5-merge-65",
    "worktree": ".claude/worktrees/codex-w5-merge-65",
