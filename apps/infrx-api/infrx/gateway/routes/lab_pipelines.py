@@ -246,7 +246,8 @@ async def import_labels(x: LabPipelines, who, body: ImportBody) -> dict[str, Any
     asked = _digest(body.model_dump(mode="json"))
     stored = await objects.get(key)
     if stored is None:
-        done = await p1.import_labels(x.port("store"), x.port("log"), provider_org_id=provider,
+        done = await p1.import_labels(x.port("store"), x.port("log"), objects=objects,
+                                      now=await _now(x), provider_org_id=provider,
                                       actor=who.user_id, dataset_ref=body.dataset_ref,
                                       rubric_ref=body.rubric_ref, rows=_rows(body.rows))
         receipt = {"import_id": body.import_id, "dataset_ref": body.dataset_ref,
