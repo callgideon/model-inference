@@ -391,6 +391,12 @@ class DeploymentSettings:
     lab_checkpoints: bool = False
     lab_datasets: bool = False
     lab_checkpoint_keys: str = field(default="", repr=False)
+    # WR-P4B-1 (composition-4): P2's teacher batches under `/lab/v1/pipelines` (beside
+    # LAB_PIPELINES, which it then requires): D8's teacher ledger, N2's redaction, and J2's
+    # egress to the local teacher fake `LAB_TEACHER_URL` names (any other host refuses to
+    # start until P-10). Off by default; an approval stays a 503 while JUDGE_MODE is not live.
+    lab_teachers: bool = False
+    lab_teacher_url: str = ""
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

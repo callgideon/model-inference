@@ -271,6 +271,11 @@ NOT_SETTABLE = {
                        "and the E4 regression rerun, a deploy change, not a --set",
     "LAB_CHECKPOINT_KEYS": "the checkpoint receiver's signing keys, a credential: a secret "
                            "belongs in the secret store (by name), never in an argument",
+    "LAB_TEACHERS": "composes P2's teacher batches under /lab/v1/pipelines (WR-P4B-1, off by "
+                    "default): enabling it needs LAB_PIPELINES, D8's teacher ledger applied "
+                    "hosted, P-10 and the E4 regression rerun, a deploy change, not a --set",
+    "LAB_TEACHER_URL": "the teacher's endpoint, the local teacher fake only until P-10: a new "
+                       "egress host is an approval, not a --set",
 }
 
 

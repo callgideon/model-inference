@@ -530,6 +530,63 @@ def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
     assert outcome(lambda: x.port("evals")).code == "dependency_unavailable"
 
 
+TEACHER_FAKE = "http://127.0.0.1:57529"
+
+
+def test_lab_teachers__p2_is_composed_under_lab_pipelines_only_when_lab_teachers_is_on():
+    """WR-P4B-1: `LAB_TEACHERS` is off by default and then the pipeline surface has no
+    teacher port (`GET teacher-batches` is a typed 503). On (beside `LAB_PIPELINES`), P2's
+    `TeacherWiring` is L2's members, D8's `PgTeacherLedger` and `PgLabelLog`, D7's store, all
+    on the pool, the Lab objects, P1's import, the approved rate table, the pilot settings
+    (judge mode not live by default: an approval is a 503) and N2's public redaction
+    (WR-P2-4), sending only to the local teacher fake `LAB_TEACHER_URL` names (P-10). On
+    without `LAB_PIPELINES`, without a URL, or with any other host refuses to start by name."""
+    import dataclasses
+    from types import SimpleNamespace
+
+    from infrx.config import deployment_from_env
+    from infrx.datasets.versions import redact_content
+    from infrx.gateway import pilot
+    from infrx.judge.cost import APPROVED_RATES
+    from infrx.judge.submit import HttpJudgeProvider
+    from infrx.pipelines import annotations as p1
+    from infrx.pipelines.teachers import TeacherWiring
+    from infrx.state.lab_access import PgAccessStore
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_pipeline import PgLabelLog, PgTeacherLedger
+
+    default = deployment_from_env({})
+    assert (default.lab_teachers, default.lab_teacher_url) == (False, "")
+
+    def settings(**on):
+        return support.settings(deployment=dataclasses.replace(support.BUILD, **on))
+
+    objects, who = relay_support.World().objects, SimpleNamespace(provider_org_id="p")
+    off = pilot._lab(settings(lab_pipelines=True, lab_teacher_url=TEACHER_FAKE), connect="pool",
+                     objects=objects)["lab_pipelines"]
+    assert off.teachers is None
+    died = outcome(lambda: asyncio.run(lab_pipelines.teacher_batches(off, who)))
+    assert type(died) is errors.DependencyUnavailable, died
+    on = settings(lab_pipelines=True, lab_teachers=True, lab_teacher_url=TEACHER_FAKE + "/")
+    t = pilot._lab(on, connect="pool", objects=objects)["lab_pipelines"].teachers
+    assert type(t) is TeacherWiring
+    stores = (t.members, t.ledger, t.store, t.log)
+    assert [type(x) for x in stores] == [PgAccessStore, PgTeacherLedger, PgLabDataStore,
+                                         PgLabelLog]
+    assert {x._connect for x in stores} == {"pool"}
+    assert (t.objects, t.labels, t.rates, t.redact) == (objects, p1.import_labels,
+                                                        APPROVED_RATES, redact_content)
+    assert t.settings is on.pilot and t.settings.judge_mode != "live"
+    assert (type(t.provider), t.provider.base_url) == (HttpJudgeProvider, TEACHER_FAKE)
+    for bad, name in ((settings(lab_teachers=True, lab_teacher_url=TEACHER_FAKE), "LAB_PIPELINES"),
+                      (settings(lab_pipelines=True, lab_teachers=True), "LAB_TEACHER_URL"),
+                      (settings(lab_pipelines=True, lab_teachers=True,
+                                lab_teacher_url="https://api.teacher.example"), "LAB_TEACHER_URL")):
+        refused = outcome(lambda: pilot._lab(bad, connect="pool", objects=objects))
+        assert type(refused) is RuntimeMisconfigured and name in str(refused), (name, refused)
+        assert "teacher.example" not in str(refused)
+
+
 LAB_DATA = {"lab_datasets": ("lab_datasets", lab_datasets.LabDatasets,
                              lab_datasets.PREFIX + "/versions", "GET"),
             "lab_checkpoints": ("lab_checkpoints", lab_checkpoints.LabCheckpoints,
