@@ -65,7 +65,7 @@ def main() -> None:
     from tests.p.annotations.world import RUBRIC, FakeLabelLog, rows
     from tests.p.training import world as p3w
 
-    if os.environ.get("INFRX_D_TASK") != "p1":
+    if os.environ.get("INFRX_D_TASK") not in ("p1", "lab-on"):
         raise SystemExit("the p1 task-local key only (INFRX_D_TASK=p1)")
     db = f"{pgharness.DATABASE}_labui"
     pgharness.ensure()

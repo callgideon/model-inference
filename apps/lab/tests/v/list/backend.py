@@ -62,7 +62,7 @@ def main() -> None:
     from tests.d import pgharness
     from tests.l.access import worlds
 
-    if os.environ.get("INFRX_D_TASK") != "lab-v1m":
+    if os.environ.get("INFRX_D_TASK") not in ("lab-v1m", "lab-on"):
         raise SystemExit("the lab-v1m task-local key only (INFRX_D_TASK=lab-v1m)")
     db = f"{pgharness.DATABASE}_list"
     pgharness.ensure()

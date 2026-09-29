@@ -53,7 +53,7 @@ def main() -> None:
     from tests.g.lab_releases.test_lab_releases import Proposals, Sessions, token
     from tests.r.control import test_control as r2w
 
-    if os.environ.get("INFRX_D_TASK") != "r2":
+    if os.environ.get("INFRX_D_TASK") not in ("r2", "lab-on"):
         raise SystemExit("the r2 task-local key only (INFRX_D_TASK=r2)")
     db = f"{pgharness.DATABASE}_labui"
     pgharness.ensure()

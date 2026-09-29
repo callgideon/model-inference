@@ -190,3 +190,26 @@ round except RSI-2 (the coordinator's WR-LDP-5) is fixed with 0 survivors. What 
 coordinator's merge with WR-LDP-5 plus a rerun of `make api-test` (~45-90 min) and
 `make lab-local` (~45 min). LDP-F7 and WR-LDP-7 belong to other lanes (~1-2 h each). The hosted
 window stays P-08-gated.
+
+## Coordinator rulings (lab-deploy-prep merge, `codex/w5-merge-47`)
+
+- **R236** (Proposed rulings 1): no hosted Lab switch is turned ON at a release until its route
+  family PASSes in the E4-ON composition (`make lab-local`) at that release.
+- **R237** (Proposed rulings 2): the pilot box serves the Lab only from its own units (the control
+  factory on the `infrx_lab_control` login and the Lab worker roles), with the App gateway's Lab
+  switches OFF; the App gateway's Lab families are for the local composition only until WR-LDP-2
+  lands.
+- Applied in the wirings commit: WR-LDP-5 (tasklocal.py frozen sha `0624c8eb…f297`, unchanged at
+  the merge tree; `LAB_LANE_PORTS["lab-on"]`), WR-LDP-1 (the four backend guards accept `lab-on`),
+  WR-LDP-3 (`lab-workers` declares LAB_S3_PREFIX, LAB_EVAL_ENDPOINT_URL, LAB_EVAL_ENDPOINT_KEY
+  (secret), LAB_EVAL/CHECKPOINTS/DATASETS_CONCURRENCY). WR-LDP-6 skipped: `harness.NAMESPACES`
+  is a dict of 100-port blocks and none is free (a block would also need a `TASK_BLOCKS` entry
+  in the frozen tasklocal.py); lab-on keeps borrowing e3l under E3L's runner lock.
+
+## Carried
+
+- WR-LDP-2 + LDP-F1 + LDP-F3 → lane lab-control-routes.
+- WR-LDP-4 is already on the tip (bcb73cc1/41693d5d: EXPECTED_PENDING 0027–0051 — the next
+  reviewed patch is 0027–0052 after merge #46).
+- WR-E3L-J landed in merge #38.
+- Lens minors LDP-R5/R7, RSI-5 as recorded in the fix round.

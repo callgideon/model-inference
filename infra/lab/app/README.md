@@ -64,6 +64,12 @@ runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
 | `LAB_DATABASE_URL` | **secret** | the worker role's own Lab database login; never the runtime's DATABASE_URL |
 | `LAB_S3_BUCKET` | server | the Lab object store bucket (instance-role credentials only; AWS_* refused) |
 | `LAB_S3_ENDPOINT` | server | the Lab object store endpoint; its host may be in LAB_EGRESS_ALLOW |
+| `LAB_S3_PREFIX` | server | the Lab objects' key prefix in LAB_S3_BUCKET (`lab/<provider>/` under it, R182); unset = `infrx/`, the media store's default (infrx.lab.workers LAB_PREFIX) |
+| `LAB_EVAL_ENDPOINT_URL` | server | the eval role's dev endpoint: the gateway that meters provider_dev (HttpDevEndpoint); unset = the eval role exits 2 |
+| `LAB_EVAL_ENDPOINT_KEY` | **secret** | the eval role's credential for LAB_EVAL_ENDPOINT_URL; unset = the eval role exits 2 |
+| `LAB_EVAL_CONCURRENCY` | server | eval worker concurrency (pool_budget.py role default 4) |
+| `LAB_CHECKPOINTS_CONCURRENCY` | server | checkpoints worker concurrency (pool_budget.py role default 1) |
+| `LAB_DATASETS_CONCURRENCY` | server | datasets worker concurrency (pool_budget.py role default 2) |
 | `LAB_EGRESS_ALLOW` | unit | NO_PROXY allowlist: exactly the object store host, 169.254.169.254 and the enabled adapter's approved host |
 | `LAB_ANNOTATION_CONCURRENCY` | server | annotation worker concurrency (pool_budget.py role default 1) |
 | `LAB_ANNOTATION_TEACHER` | server | the annotation teacher adapter; default dry-run, any other needs its P-10 approval in egress.json |

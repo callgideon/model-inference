@@ -45,7 +45,7 @@ def main() -> None:
                                                                Experiments, Ledger, Sessions,
                                                                token)
 
-    if os.environ.get("INFRX_D_TASK") != "b3":
+    if os.environ.get("INFRX_D_TASK") not in ("b3", "lab-on"):
         raise SystemExit("the b3 task-local key only (INFRX_D_TASK=b3)")
     db = f"{pgharness.DATABASE}_labui"
     pgharness.ensure()
