@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import importlib
 import json
 import logging
@@ -436,14 +437,32 @@ def plan_key(provider_org_id: str, policy_id: str) -> str:
     return f"lab/{provider_org_id}/releases/{policy_id}/plan.json"
 
 
-async def rollout_pass(objects, store, releases, controller, live) -> dict[str, int]:
+async def release_report(reads, store, provider: str, policy, plan):
+    """WR-C5-REPORT: the release's B2 report and its two runs (D7's records) - the provider's
+    NEWEST experiment (B4's launch record, 0043's listing) with a stored report under the
+    plan's own protocol whose runs are the policy's baseline and one of its candidates - or
+    `(None, None)` (R2 then holds `no_report`). R2 checks the binding again."""
+    protocol = "sha256:" + hashlib.sha256(lab.canonical(plan.protocol)).hexdigest()
+    for e in await reads.experiments(provider_org_id=provider):          # newest first
+        if e["report"] is None or e["protocol_digest"] != protocol:
+            continue
+        runs = tuple([(await store.resolve(e[arm]["run_ref"], provider_org_id=provider))
+                      .model_dump(mode="json", by_alias=True, exclude_unset=True)   # its ref
+                      for arm in ("baseline", "candidate")])
+        if runs[0]["serving_ref"] == policy.baseline_ref and \
+                runs[1]["serving_ref"] in {c.serving_ref for c in policy.candidates}:
+            return ({**json.loads(e["report"]["body"]),
+                     "report_digest": e["report"]["report_digest"]}, runs)
+    return None, None
+
+
+async def rollout_pass(objects, store, releases, controller, live, reads) -> dict[str, int]:
     """WR-R2-3: `Controller.step` for every running or rolled-back D9 release of every
     provider D9 lists with one (0053, WR-C5-PROVIDERS), on its stored plan and D7's policy;
     one without a stored plan is counted held (0-F2: the report shows the gap). A running
     release needs R1's aggregates (held while unreadable); a rolled-back one only
-    converges (R216). ponytail: no stored B2 report is linked to a release yet
-    (WR-C5-REPORT), so none is passed and a running release holds `no_report`; the wall
-    clock is `now`, D9's CAS orders the decisions."""
+    converges (R216). A running one is stepped on its B2 report (`release_report`,
+    WR-C5-REPORT). ponytail: the wall clock is `now`, D9's CAS orders the decisions."""
     from ...rollouts.control import Plan
     done = {"stepped": 0, "held": 0, "failed": 0}
     for provider in await releases.providers_in(ROLLOUT_STATES):
@@ -455,8 +474,11 @@ async def rollout_pass(objects, store, releases, controller, live) -> dict[str, 
                     continue
                 current = await live(item) if item.release.state == "running" else None
                 policy = await store.resolve(item.policy_ref, provider_org_id=provider)
-                await controller.step(policy, item.policy_ref, Plan.model_validate_json(raw),
-                                      current, now=datetime.now(timezone.utc))
+                plan = Plan.model_validate_json(raw)
+                report, runs = await release_report(reads, store, provider, policy, plan) \
+                    if current is not None else (None, None)
+                await controller.step(policy, item.policy_ref, plan, current,
+                                      now=datetime.now(timezone.utc), report=report, runs=runs)
                 done["stepped"] += 1
             except errors.DependencyUnavailable:
                 done["held"] += 1
@@ -469,13 +491,14 @@ async def rollout_pass(objects, store, releases, controller, live) -> dict[str, 
 def _rollout(mode, env, connect, objects, worker_id, live=None, **_):
     from ...gateway.pilot import control_serving
     from ...rollouts.control import Controller
-    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_data import PgLabDataStore, PgLabReads
     from ...state.lab_rollout import PgReleaseStore
     operator, releases = env["LAB_OPERATOR_ID"], PgReleaseStore(connect)
     controller = Controller(releases, control_serving(connect, operator), actor_id=operator)
     store, live = PgLabDataStore(connect), live or NoLive()
+    reads = PgLabReads(connect)                             # WR-C5-REPORT: B4's experiments
     return {"rollout_pass": lambda: every(ROLLOUT_PASS_S, lambda: rollout_pass(
-        objects, store, releases, controller, live), "rollout pass")}, controller
+        objects, store, releases, controller, live, reads), "rollout pass")}, controller
 
 
 def _annotation(mode, env, connect, objects, worker_id, **_):

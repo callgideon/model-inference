@@ -36,6 +36,7 @@ ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
 DECIDE = C + "an_operator_decides_a_lab_proposal_through_d9s_cas"
 LAUNCH = C + "a_release_is_launched_with_its_plan_stored_first"
+B2 = C + "a_running_release_is_stepped_on_its_stored_b2_report"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
 ANNOT = C + "the_annotation_role_collects_teacher_batches_with_n2s_redaction"
 COLLECT = C + "the_teacher_pass_collects_every_submitted_run_of_every_approved_batch"
@@ -297,6 +298,31 @@ MUTANTS: tuple[Mutant, ...] = (
        "                   OperatorSession(ops=None, principal=principal))",
        '                   OperatorSession(ops=None, principal="rollout:controller"))', STOP,
        file=P),
+    # --- WR-C5-REPORT (composition-6): a running release is stepped on its B2 report ----------
+    _m("lw_report_never_read", "a running release is stepped on its stored B2 report",
+       "                report, runs = await release_report(reads, store, provider, policy, plan) \\\n"
+       "                    if current is not None else (None, None)\n",
+       "                report, runs = None, None\n", B2),
+    _m("lw_report_rolled_back_reads", "a rolled-back release reads no report (converge only)",
+       "                    if current is not None else (None, None)\n",
+       "                    if True else (None, None)\n", B2),
+    _m("lw_report_any_protocol", "the report is under the plan's own protocol",
+       '        if e["report"] is None or e["protocol_digest"] != protocol:\n',
+       '        if e["report"] is None:\n', B2),
+    _m("lw_report_unreported", "an experiment without a stored report is skipped",
+       '        if e["report"] is None or e["protocol_digest"] != protocol:\n',
+       '        if e["protocol_digest"] != protocol:\n', B2),
+    _m("lw_report_other_servings", "the report compares the policy's baseline and a candidate",
+       '        if runs[0]["serving_ref"] == policy.baseline_ref and \\\n', "        if True or \\\n",
+       B2),
+    _m("lw_report_oldest", "the newest matching experiment is the release's",
+       "    for e in await reads.experiments(provider_org_id=provider):",
+       "    for e in reversed(await reads.experiments(provider_org_id=provider)):", B2),
+    _m("lw_report_run_refs_changed", "the runs are D7's records as stored (their refs)",
+       '.model_dump(mode="json", by_alias=True, exclude_unset=True)   # its ref',
+       '.model_dump(mode="json", by_alias=True)', B2),
+    _m("lw_report_off_the_pool", "B4's experiments are read on the role's database",
+       "    reads = PgLabReads(connect)", '    reads = PgLabReads(connector(""))', B2),
     # --- WR-C5-PLAN (composition-6): the release launcher stores the plan, then D9 starts ------
     _m("lw_launch_without_bucket", "the launcher needs the Lab bucket the plan is stored in",
        '    values = settings(mode, env, (DATABASE, BUCKET, "LAB_OPERATOR_ID"))',

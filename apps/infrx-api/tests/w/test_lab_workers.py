@@ -573,7 +573,7 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
     plan - even a provider with no Lab object at all - is counted held; one failure is counted
     and the next release still runs."""
     from infrx.rollouts import control as r2
-    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_data import PgLabDataStore, PgLabReads
     from infrx.state.lab_rollout import PgReleaseStore
     from tests.r.control.test_control import plan
     objects, stepped, asked, listed = InMemoryObjectStore(), [], [], []
@@ -605,6 +605,9 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
         stepped.append((self, policy, policy_ref, plan_, live, report, runs))
         return r2.Verdict("hold", ())
 
+    async def no_experiments(self, *, provider_org_id):
+        return []
+
     async def live(item):
         if item.policy_id == "pol-p1-3":
             raise errors.DependencyUnavailable("R1's aggregates")
@@ -612,6 +615,7 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
     monkeypatch.setattr(PgReleaseStore, "releases_in", releases_in)
     monkeypatch.setattr(PgReleaseStore, "providers_in", providers_in)
     monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(PgLabReads, "experiments", no_experiments)
     monkeypatch.setattr(r2.Controller, "step", step)
     steps = captured_steps(monkeypatch)
     worker = lab_workers.compose("rollout", ENV["rollout"], objects=objects, live=live)
@@ -636,6 +640,88 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
     bare.tasks["rollout_pass"]().close()
     assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 1, "held": 5, "failed": 0}
     assert [s[2] for s in stepped] == ["ref-p1-2"]
+
+
+def test_lab_workers__a_running_release_is_stepped_on_its_stored_b2_report(monkeypatch):
+    """WR-C5-REPORT: the pass hands R2 the release's B2 report and its two runs - the
+    provider's NEWEST experiment (B4's launch record, 0043) with a stored report under the
+    plan's own protocol (its digest) whose runs (D7's records) are the policy's baseline and
+    one of its candidates; an experiment under another protocol, of other servings or without
+    a report is never used. None found: no report (R2 holds `no_report`). A rolled-back
+    release reads none (it only converges)."""
+    import json as _json
+
+    from infrx.contracts.lab import records as lab
+    from infrx.rollouts import control as r2
+    from infrx.state.lab_data import PgLabDataStore, PgLabReads
+    from infrx.state.lab_rollout import PgReleaseStore
+    from tests.r.control import test_control as r2w
+    objects, stepped, read = InMemoryObjectStore(), [], []
+    for n in (1, 2):
+        asyncio.run(objects.put_if_absent(f"lab/{r2w.P}/releases/pol-{n}/plan.json",
+                                          r2w.plan().model_dump_json().encode(), "x"))
+    other_run = {**r2w.CAND_RUN, "serving_ref": r2w.BASE}
+    runs = {lab.ref_of(r): r for r in (r2w.BASE_RUN, r2w.CAND_RUN, other_run)}
+    good, older = r2w.report(), r2w.report("reject")
+
+    def experiment(rep, base=r2w.BASE_RUN, cand=r2w.CAND_RUN, protocol=r2w.PROTOCOL):
+        body = {k: v for k, v in (rep or {}).items() if k != "report_digest"}
+        return {"protocol_digest": r2w.digest(protocol),
+                "baseline": {"run_ref": lab.ref_of(base)},
+                "candidate": {"run_ref": lab.ref_of(cand)},
+                "report": None if rep is None else {"report_digest": rep["report_digest"],
+                                                    "body": _json.dumps(body)}}
+
+    async def experiments(self, *, provider_org_id):
+        read.append((self._connect, provider_org_id))
+        return [experiment(r2w.report(protocol={"other": 1}), protocol={"other": 1}),
+                experiment(r2w.report(cand_run=other_run), cand=other_run),
+                experiment(None),
+                experiment(good), experiment(older)]
+
+    async def resolve(self, ref, *, provider_org_id):
+        if ref == r2w.POLICY_REF:
+            return r2w.POLICY
+        return lab.parse(runs[ref])
+
+    async def providers_in(self, states):
+        return [r2w.P]
+
+    async def releases_in(self, states=(), *, provider_org_id):
+        from infrx.state.lab_rollout import Release, ReleaseListing
+        return [ReleaseListing(policy_id=f"pol-{n}", provider_org_id=r2w.P, endpoint_id="e",
+                               policy_ref=r2w.POLICY_REF, latest_decision=None,
+                               release=Release(state=state, fence=1, plan_digest="d",
+                                               started_at=r2w.START))
+                for n, state in ((1, "running"), (2, "rolled_back"))]
+
+    async def step(self, policy, policy_ref, plan_, live, *, now, report=None, runs=None):
+        stepped.append((policy_ref, live, report, runs))
+        return r2.Verdict("hold", ())
+
+    async def aggregates(item):
+        return "live"
+    monkeypatch.setattr(PgLabReads, "experiments", experiments)
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(PgReleaseStore, "providers_in", providers_in)
+    monkeypatch.setattr(PgReleaseStore, "releases_in", releases_in)
+    monkeypatch.setattr(r2.Controller, "step", step)
+    steps = captured_steps(monkeypatch)
+    worker = lab_workers.compose("rollout", ENV["rollout"], objects=objects, live=aggregates)
+    worker.tasks["rollout_pass"]().close()
+    assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 2, "held": 0, "failed": 0}
+    (_, live, rep, pair), (_, live2, rep2, pair2) = stepped
+    assert rep == good and pair == (r2w.BASE_RUN, r2w.CAND_RUN), (rep, pair)
+    assert (live2, rep2, pair2) == (None, None, None)
+    assert read == [(worker.wiring._store._connect, r2w.P)]      # the rolled-back one: none
+    stepped.clear()
+
+    async def none(self, *, provider_org_id):
+        return [experiment(None)]
+    monkeypatch.setattr(PgLabReads, "experiments", none)
+    worker.tasks["rollout_pass"]().close()
+    asyncio.run(steps["rollout pass"][1]())
+    assert [(r, p) for _, _, r, p in stepped] == [(None, None), (None, None)]
 
 
 def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkeypatch):
