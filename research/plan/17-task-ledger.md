@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 21 planned; 101 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 19 planned; 103 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -90,7 +90,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | T3 | implemented / T | [Logical retention, deletion and observability](handoffs/T-traces.md) | T2I, F2P | T2F |
 | J1 | implemented / J | [Dry-run sampler, rubric and score validation](handoffs/J-judge.md) | F2 | — |
 | J2 | implemented / J | [Consent/budget coordinated submission and collection](handoffs/J-judge.md) | J1, F2P | D6J, T2I, L2 |
-| J3 | planned / J | [Operator calibration and quality report](handoffs/J-judge.md) | J2, F2P | C3L, V2 |
+| J3 | implemented / J | [Operator calibration and quality report](handoffs/J-judge.md) | J2, F2P | C3L, V2 |
 | C1 | implemented / C | [Typed repositories, pagination and tenant query boundary](handoffs/C-console-services.md) | F2 | D1, C0 |
 | C2 | implemented / C | [Lab content access, expiry and safe signed references](handoffs/C-console-services.md) | F2P, C0 | M3, T3, L2 |
 | V1 | implemented / V | [Paginated trace list and filters](handoffs/V-trace-ui.md) | F2 | V1M |
@@ -125,7 +125,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | B4 | implemented / B | [Build evaluations and experiment comparisons in Lab](13-lab-improvement-handoffs.md) | F3, L1 | B2, B3, H1 |
 | D8 | implemented / D | [Persist annotations and external training lifecycle](13-lab-improvement-handoffs.md) | F3, D7 | D6J |
 | P1 | implemented / P | [Import, review and export annotation records](13-lab-improvement-handoffs.md) | F3 | D8, N2 |
-| P2 | planned / P | [Run bounded teacher annotation batches](13-lab-improvement-handoffs.md) | F3 | P1, D8, N2, J2, J3 |
+| P2 | implemented / P | [Run bounded teacher annotation batches](13-lab-improvement-handoffs.md) | F3 | P1, D8, N2, J2, J3 |
 | P3 | implemented / P | [Integrate external training and import candidates](13-lab-improvement-handoffs.md) | F3 | D8, N2, B3, L2 |
 | P4 | implemented / P | [Build annotation and training workflows in Lab](13-lab-improvement-handoffs.md) | F3, L1 | P1, P2, P3, B2 |
 | D9 | implemented / D | [Persist release policies and stable experiment assignment](13-lab-improvement-handoffs.md) | F3, D7 | — |

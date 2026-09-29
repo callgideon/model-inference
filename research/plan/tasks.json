@@ -1011,14 +1011,15 @@
       ],
       "track": "J",
       "handoff": "handoffs/J-judge.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "move-ui-dependencies",
       "product": "lab",
       "milestone": "LAB-M1",
       "amendment": "Calibration uses Lab actions/review permissions.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "judge-lw4 merged #6, lab-sql-integration-2 #19 (WR-J3-D8: put_calibration on j2), composition-3 #30 (WR-J3-D8-C: the judge role carries the report job, publish per configuration); the timed listing WR-J3-D8-Cb → lab-sql"
     },
     {
       "id": "C1",
@@ -2991,7 +2992,7 @@
       "track": "P",
       "product": "lab",
       "milestone": "LAB-M3",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3020,7 +3021,8 @@
       ],
       "acceptance": "Dry-run works without approved rates or external calls. Live execution requires a selected adapter/model, approved rate, source permission and budget. Teacher accuracy is evaluated on independent reviewed cases; no automatic ground-truth designation.",
       "failure_oracle": "Timeout after provider accepts, change consent/rate while queued, malformed labels, partial output and budget exhaustion cannot cause duplicate charges or unauthorized egress.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "judge-lw4 merged #6, lab-sql-lw3 #16 (0041/0042), lab-sql-integration-2 #19 (WR-P2-D8: per-item failures in D8, non-UUID fix), pipeline-ui-2 #24 (P4.b teacher surface), composition-3 #30 (WR-P2-D8-C: teacher_wiring on PgTeacherLedger); the annotation worker role refuses until WR-P2-4 redaction; a production collect() caller → composition-4"
     },
     {
       "id": "P3",

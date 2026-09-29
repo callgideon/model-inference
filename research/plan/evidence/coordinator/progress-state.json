@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 263,
- "updated": "2026-09-29T02:51:14Z",
+ "revision": 264,
+ "updated": "2026-09-29T03:54:53Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7072,11 +7072,11 @@
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-28T22:15:23Z",
-   "updated": "2026-09-29T01:51:47Z",
+   "updated": "2026-09-29T03:54:53Z",
    "blocker": null,
-   "next_action": "merge batch #30 (Sonnet; WR-LSQ-9-C, 1-C3-1, R210–R212) → flip P2/J3 → composition-4 (WR-P4B-1, WR-DS5-2, WR-E7L-1/WR-B3-EVALS, lab-sql-lw6 halves)",
+   "next_action": "composition-4: WR-P4B-1, a P2 collect() caller, WR-DS5-2, WR-E7L-1/WR-B3-EVALS, WR-P2-4",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -7501,22 +7501,22 @@
   {
    "id": "W5-MERGE-30",
    "task": null,
-   "slice": "merge batch #30 (Sonnet): composition-3 655ad324 (+WR-LSQ-9-C, 1-C3-1, R210–R212); workflow wf_332bd457-b02",
+   "slice": "merge batch #30 (Sonnet): composition-3 655ad324 (+WR-LSQ-9-C, 1-C3-1, R210–R212); workflow wf_332bd457-b02; integrated 9698e51b",
    "agent": "sonnet",
    "branch": "codex/w5-merge-30",
    "worktree": ".claude/worktrees/codex-w5-merge-30",
    "base": "6fc7315f",
-   "head": null,
+   "head": "005283ea",
    "isolation": {
     "ports": "r1 57532/57533; l3 57502; j2 57511/57512",
     "prefix": "infrx-r1-",
     "db": "r1"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T01:51:47Z",
-   "updated": "2026-09-29T01:51:47Z",
+   "updated": "2026-09-29T03:54:53Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R209 before R210 at integration) → flip P2/J3",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
