@@ -3,12 +3,17 @@
 `/lab/v1/releases` as the gateway composes it with LAB_RELEASES on (`pilot._lab`), beside R186's
 control factory, on the task-local PostgreSQL (l4), D9's seeded world and the real L2.
 
-The gateway's composition carries no records or proposal port yet (WR-R4-1's lab-sql half,
-WR-R4-2): `/_test/composition {"as": "gateway"}` serves exactly it. `{"as": "journey"}` fills
-those ports for the journey: D9's REAL `PgReleaseStore` (0039 CAS, 0048 `lab_releases_in`) and
-0043's REAL proposal store (`PgReleaseProposals`: one pending per revision, filed at the fence the
-page showed, decided only by 0039's CAS at that fence) behind two small test-local adapters (the
-route's `ReleaseRecords` / `Proposals` shapes, WR-R4-2's to write), with R2's own `Controller`
+The gateway's composition carries the records, proposal and store ports since WR-R4-2
+(merge #50), over the Lab objects (in memory: l4 has no S3): `/_test/composition {"as":
+"gateway"}` serves exactly it, and it fails closed here because the seeded releases were started
+without a stored plan (R241: a 503 naming WR-C5-PLAN). The composed ports themselves are proven
+on E8L's stack by k10's port half (`rollout launch|decide`). `{"as": "journey"}` replaces
+them for the journey, because the page's verdicts and progress are R2's and R1's, which no
+composed read holds yet (WR-C6-LIVE): D9's REAL `PgReleaseStore` (0039 CAS, 0048
+`lab_releases_in`) and 0043's REAL proposal store (`PgReleaseProposals`: one pending per
+revision, filed at the fence the page showed, decided only by 0039's CAS at that fence) behind
+two small test-local adapters (the route's `ReleaseRecords` / `Proposals` shapes), with R2's own
+`Controller`
 deciding; R1's aggregates and R2's latest verdict are this backend's last-seen values (no table
 holds them yet). `world.composed` says which ports the gateway's own composition carries, so the
 gate reports NOT RUN until it carries them. Test-only doors: `/_test/launch`, `/_test/step`
@@ -37,6 +42,7 @@ def main() -> None:
     from infrx.contracts import errors
     from infrx.contracts.lab import records as lab
     from infrx.gateway.routes import lab_releases as lr
+    from infrx.media.store import InMemoryObjectStore
     from infrx.rollouts import control as r2
     from infrx.state.jobstore import connector
     from infrx.state.lab_data import PgLabDataStore
@@ -58,7 +64,7 @@ def main() -> None:
     users = {"admin": l2.ADMIN, "dev": l2.DEV, "viewer": l2.VIEWER, "other_dev": l2.BOTH,
              "consumer": l2.C1}
     stack.door(app, dsn, users)
-    gateway = stack.composed("lab_releases", dsn, url)["lab_releases"]
+    gateway = stack.composed("lab_releases", dsn, url, InMemoryObjectStore())["lab_releases"]
     composed = {name: getattr(gateway, name) is not None for name in PORTS}
 
     async def suite() -> dict:
@@ -238,7 +244,9 @@ def main() -> None:
     world = {"A": NEMO, "B": l2.OTHER, "operator": r2w.OPERATOR, "controller": r2w.CONTROLLER,
              "users": users, "composed": composed,
              "stand_ins": ["session verifier and PostgREST RPC door (stack.door)",
-                           "records/proposals adapters over D9 + 0043 (WR-R4-2's to compose)",
+                           "the journey's records/proposals adapters over D9 + 0043: R2's "
+                           "verdicts and R1's progress have no composed read (WR-C6-LIVE)",
+                           "the Lab objects in memory (l4 has no S3)",
                            "R1 aggregates and R2 verdict as last seen (no table yet)",
                            "L3's serving alias (R2's FakeServing)"]}
     stack.serve(app, sock, world, conn.close)
