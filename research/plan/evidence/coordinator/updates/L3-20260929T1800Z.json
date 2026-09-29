@@ -1,0 +1,15 @@
+{"task": "L3", "slice": "SR-LCR-1 (lab-sql-lw8): 0056_lab_control_grants.sql, LCR-F1 closed", "activity": "review",
+ "head": "6f28a64c", "worktree": ".claude/worktrees/codex-w5-lab-sql-lw8", "branch": "codex/w5-lab-sql-lw8",
+ "owned_paths": ["apps/app/supabase/migrations/0056_lab_control_grants.sql", "tests/integration/test_harness.py", "apps/infrx-api/tests/d/test_code_mutants_lw8.py", "Makefile", "apps/infrx-api/tests/i/lab_control/test_control_routes_pg.py", "research/plan/evidence/l/LAB-SQL-LW8-6f28a64.md"],
+ "commands": [
+  {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_code_mutants_lw8.py", "exit": 0, "summary": "13 passed; 7 SQL mutants killed, 0 survivors"},
+  {"cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q -m pg tests/i/lab_control", "exit": 0, "summary": "1 passed; lab column = owner column = EXPECTED (red before 0056: datasets/pipelines/releases 503)"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_LAB_API_PG=1 INFRX_D_TASK=l4 uv run --frozen pytest -q tests/i/lab_control/test_mutants.py", "exit": 0, "summary": "22 passed, 0 survivors (clean run; two earlier runs broken_runner under l4 lock contention)"},
+  {"cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_d8_requests.py tests/d/test_l3sql_reads.py tests/d/test_l3sql_control.py tests/d/test_upgrade_lab.py tests/d/test_l2sql_access.py tests/d/test_upgrade_split.py tests/d/test_c6_reads.py", "exit": 0, "summary": "52 passed"},
+  {"cmd": "tests/integration/test_harness.py -k migration_set", "exit": 0, "summary": "1 passed"},
+  {"cmd": "INFRX_D_TASK=l4 make api-test", "exit": 2, "summary": "6771 passed, 7 failed (all test_outbox_relay[valkey] HarnessBusy on the shared d2 valkey lock), 176 skipped; rerun of test_outbox_relay 20 passed"}],
+ "estimate": {"optimistic_h": 0.3, "likely_h": 0.75, "pessimistic_h": 2, "confidence": "medium",
+  "basis": "lane done with 0 survivors; remaining = coordinator merge (PG matrix conflict with #51: take the post-grant side) + WR-LW8-3 reconcile with lw7's 0055 (~15 min) + one make lab-local rerun (~45 min)", "at": "2026-09-29T18:00Z"},
+ "blockers": [],
+ "wiring_requests": ["WR-LW8-1 runbook 08 SR-LCR-1 rows -> served (text in evidence)", "WR-LW8-2 make lab-local o05 control-factory rerun", "WR-LW8-3 lw7's 0055 route functions need the infrx_lab_control grant + GRANTED/BEFORE update"],
+ "evidence": ["research/plan/evidence/l/LAB-SQL-LW8-6f28a64.md"]}
