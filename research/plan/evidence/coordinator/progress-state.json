@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 299,
- "updated": "2026-09-29T14:12:33Z",
+ "revision": 300,
+ "updated": "2026-09-29T14:59:31Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8540,11 +8540,11 @@
     "prefix": "infrx-<key>-",
     "db": "task-local"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T12:50:00Z",
-   "updated": "2026-09-29T13:59:28Z",
+   "updated": "2026-09-29T14:59:31Z",
    "blocker": null,
-   "next_action": "merge batch #50 (WR-C6-MK, minors, R240–R244) → lanes lab-live (WR-C6-LIVE), lab-rollout-5 (WR-C6-K10 + k09 breach), lab-sql (VARIANTS/REQUEUE)",
+   "next_action": "lab-live (R244), lab-rollout-5 (WR-C6-K10 + k10-UI rerun), lab-sql-lw7 (VARIANTS/REQUEUE) dispatched from the tip",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -8850,22 +8850,22 @@
   {
    "id": "W5-MERGE-50",
    "task": null,
-   "slice": "merge batch #50 (Opus): composition-6 3f6997f9 (+WR-C6-MK, F2–F4, R240–R244); workflow wf_3d86a8bc-a7d",
+   "slice": "merge batch #50 (Opus): composition-6 3f6997f9 (+WR-C6-MK, F2–F4, R240–R244); workflow wf_3d86a8bc-a7d; integrated (R240–R244 sorted into §10; 0053 LOCAL-ONLY on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-50",
    "worktree": ".claude/worktrees/codex-w5-merge-50",
    "base": "f9e6a14e",
-   "head": null,
+   "head": "5fe1cd4b",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T13:59:28Z",
-   "updated": "2026-09-29T13:59:28Z",
+   "updated": "2026-09-29T14:59:31Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → dispatch lab-live / lab-rollout-5 / lab-sql follow-ups",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -8942,6 +8942,110 @@
     "apps/infrx-api/infrx/gateway/",
     "apps/infrx-api/tests/t/",
     "research/plan/evidence/t/LAB-CAPTURE-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-LIVE",
+   "task": "R2",
+   "slice": "WR-C6-LIVE under R244: 0054 lab_release_live (LOCAL-ONLY) + the rollout pass evaluates running releases (R228) instead of holding NoLive (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-live",
+   "worktree": ".claude/worktrees/codex-w5-lab-live",
+   "base": "993d481c",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T14:59:31Z",
+   "updated": "2026-09-29T14:59:31Z",
+   "blocker": null,
+   "next_action": "handback → merge → k09 breach half (lab-rollout-6)",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 8,
+    "pessimistic_h": 16
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0054_*",
+    "apps/infrx-api/infrx/lab/workers/",
+    "apps/infrx-api/infrx/state/lab_releases.py",
+    "apps/infrx-api/tests/w/",
+    "apps/infrx-api/tests/r/",
+    "research/plan/evidence/r/LAB-LIVE-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-ROLLOUT-5",
+   "task": "E8L",
+   "slice": "WR-C6-K10: k10's port half over pilot.lab_releases + rollout decide; k10-UI rerun through the e2e suite (WR-R4-2 composed); the merged-tree k09 mutant kill on a kept e8l stack (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-rollout-5",
+   "worktree": ".claude/worktrees/codex-w5-lab-rollout-5",
+   "base": "993d481c",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T14:59:31Z",
+   "updated": "2026-09-29T14:59:31Z",
+   "blocker": null,
+   "next_action": "handback → merge → E8L k10 PASS",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_rollout/",
+    "apps/lab/tests/e2e/rollout/",
+    "research/plan/evidence/e/E8L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-SQL-LW7",
+   "task": "L3",
+   "slice": "WR-C6-VARIANTS (a provider listing of optimization variants with both identities + latest comparison → /lab/v1/optimizations) and WR-C6-REQUEUE (a requeue RPC for a failed import id) as 0055 LOCAL-ONLY (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-sql-lw7",
+   "worktree": ".claude/worktrees/codex-w5-lab-sql-lw7",
+   "base": "993d481c",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T14:59:31Z",
+   "updated": "2026-09-29T14:59:31Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0055_*",
+    "apps/infrx-api/infrx/state/lab_*",
+    "apps/infrx-api/infrx/gateway/routes/lab_optimizations.py",
+    "apps/infrx-api/tests/l3sql/",
+    "research/plan/evidence/l/LAB-SQL-LW7-*"
    ],
    "wiring_requests": []
   }
