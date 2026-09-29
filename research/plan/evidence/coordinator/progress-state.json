@@ -9680,7 +9680,7 @@
   {
    "id": "W5-MERGE-59",
    "task": null,
-   "slice": "merge batch #59 (Opus): known-good-reproof-3 3fc5b06c (+WR-KGR3-1/2 rows, hosted-migrate-0052-0056.patch + launch-v1.sh window via the patch, RV-1 test; no rulings)",
+   "slice": "merge batch #59 (Opus): known-good-reproof-3 3fc5b06c (+WR-KGR3-1/2 rows, hosted-migrate-0052-0056.patch + launch-v1.sh window via the patch, RV-1 test; no rulings); workflow wf_e53131b8-dd4",
    "agent": "opus",
    "branch": "codex/w5-merge-59",
    "worktree": ".claude/worktrees/codex-w5-merge-59",
