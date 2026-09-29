@@ -11,7 +11,6 @@ import pathlib
 
 import pytest
 
-from ..contracts import mutants as shared
 from . import mutants as mutation_list
 
 ALL = mutation_list.MUTANTS
