@@ -87,6 +87,9 @@ def router(*, access, store, objects, user_of, read, clock=lambda: datetime.now(
             return refusal(refused)
         except (KeyError, TypeError, AttributeError):
             return refusal(errors.InvalidRequest("the body is not this operation's"))
+        except Exception as failed:             # noqa: BLE001 - LDP-F3: a store fault is a
+            lab_auth.log.error("lab datasets route failed: %s", type(failed).__name__)  # 503
+            return refusal(errors.DependencyUnavailable("the datasets store failed"))
 
     @api.post("/imports/preview")
     async def preview(request: Request, provider: str):
