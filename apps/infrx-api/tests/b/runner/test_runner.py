@@ -386,6 +386,8 @@ def test_b1_an_unexpected_error_fails_its_case_visibly_and_the_delivery_goes_on(
     report = run(w.runner().run(frozen))
     assert report["failures"] == {w.ids[0]: "missing_content",
                                   w.ids[1]: "error:ZeroDivisionError"}
+    assert [a.get("error") for _, a in sorted(w.store.attempts.items())] == \
+        ["missing_content", "error:zerodivisionerror", None], "D7's code: 0034's form"
     assert report["cases"] == {"failed": 2, "done": 1} and list(w.results()) == [w.ids[2]]
 
 
@@ -611,3 +613,28 @@ def test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object(monkeypatch)
     assert url.path == "/b/lab/x/y"
     assert query.get("X-Amz-Algorithm") == ["AWS4-HMAC-SHA256"]
     assert query.get("X-Amz-Expires") == ["600"]
+
+
+def test_b1_a_refused_clip_reaches_the_run_record_by_name() -> None:
+    """WR-LEM-R3 (R239): a clip refused before signing fails its case with the refusal's name -
+    `invalid_request:media_foreign` / `invalid_request:video_over_cap` - in the run's report
+    AND on D7's attempt row (`finish(..., error=)`); any other refusal stays its code
+    (`test_b1_a_transient_failure_is_retried_under_the_same_key_and_bounded`)."""
+    w = World(n=2, harness={"adapter": "finite_video", "prompt_template": "label {{media_ref}}",
+                            "input_mapping": {}})
+    w.objects = Presigning()
+    # H1 passes both; B1 refuses each before signing
+    clips = (("sha256:" + "C" * 64, [0, 1000]), (f"sha256:{CLIP}", [-1, 1000]))
+    named = {}
+    for sample, (digest, span), name in zip(w.manifest["samples"], clips,
+                                            ("media_foreign", "video_over_cap")):
+        named[sample["sample_id"]] = f"invalid_request:{name}"
+        run(w.objects.put_if_absent(sample_key(NEMO, sample["content_digest"]),
+                                    records.canonical({
+                                        "modality": "finite_video", "content": {"action": "run"},
+                                        "media_digest": digest, "span_ms": span,
+                                        "original": {"answer": "run"}}), "application/json"))
+    report = run(w.runner().run(w.freeze()))
+    assert report["failures"] == named, report["failures"]
+    assert {k[1]: a.get("error") for k, a in w.store.attempts.items()} == named
+    assert w.objects.presigned == [] and w.wallet.calls == [], "a refused clip was sent"

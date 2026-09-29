@@ -44,6 +44,7 @@ UNEXPECTED = "test_b1_an_unexpected_error_fails_its_case_visibly_and_the_deliver
 VIDEO = "test_b1_a_finite_video_case_is_sent_as_its_presigned_clip_with_its_span"
 CLIPS = "test_b1_only_the_runs_providers_clip_within_the_cap_is_signed"
 PRESIGN = "test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object"
+REFUSED_CLIP = "test_b1_a_refused_clip_reaches_the_run_record_by_name"
 S3 = "media/s3.py"
 
 
@@ -144,7 +145,7 @@ MUTANTS: tuple[Mutant, ...] = (
     m("b1_bound_cost_dropped", "a failed attempt keeps its cost",
       'reason=f"bound:{bound.bound}", bill=bill)', 'reason=f"bound:{bound.bound}")', HARNESS),
     m("b1_refusal_unnamed", "a failed attempt names its refusal",
-      "reason=refused.code", 'reason="failed"', RETRY),
+      "                else refused.code))", '                else "failed"))', RETRY),
     m("b1_no_fence_before_a_call", "every paid call is fenced first",
       "        await self._store.heartbeat(lease, lease_s=self._limits.lease_s)   # the fence\n",
       "        pass\n", CANCEL),
@@ -307,6 +308,19 @@ MEDIA = (
       "all(type(ms) is int for ms in span)", "all(isinstance(ms, int) for ms in span)", CLIPS),
     m("b1_presign_head", "the presigned URL is a GET of the object, never a HEAD",
       '"get_object", Params=', '"head_object", Params=', PRESIGN, file=S3),
+    # WR-LEM-R3 (composition-7): R239's refusals reach the run record by name
+    m("b1_clip_refusal_unnamed", "a refused clip fails its case naming the refusal",
+      '                f"{refused.code}:{name}" if name in ("media_foreign", "video_over_cap")',
+      '                f"{refused.code}:{name}" if False', REFUSED_CLIP),
+    m("b1_clip_refusal_one_name", "both of R239's refusals are named",
+      'if name in ("media_foreign", "video_over_cap")', 'if name in ("media_foreign",)',
+      REFUSED_CLIP),
+    m("b1_refusal_not_stored", "D7's attempt row stores the failure's reason",
+      "                                     error=reason.lower() if reason else None)",
+      "                                     error=None)", REFUSED_CLIP, UNEXPECTED),
+    m("b1_error_code_cased", "the stored reason is 0034's lower-case error code (an "
+      "upper-case one is refused, failing the delivery)", "error=reason.lower() if reason",
+      "error=reason if reason", UNEXPECTED, dies_by=("InvalidRequest",)),
 )
 MUTANTS += MEDIA
 
