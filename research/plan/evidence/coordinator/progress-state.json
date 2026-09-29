@@ -9647,7 +9647,7 @@
   {
    "id": "W5-MERGE-58",
    "task": null,
-   "slice": "merge batch #58 (Opus): lab-observe-4 5cd59091 (+RV-2 output assertion, RV-3 beta sync, evidence minors, R254)",
+   "slice": "merge batch #58 (Opus): lab-observe-4 5cd59091 (+RV-2 output assertion, RV-3 beta sync, evidence minors, R254); workflow wf_5bbd8bfa-aef",
    "agent": "opus",
    "branch": "codex/w5-merge-58",
    "worktree": ".claude/worktrees/codex-w5-merge-58",
