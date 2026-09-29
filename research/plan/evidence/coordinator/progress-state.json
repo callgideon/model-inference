@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 320,
- "updated": "2026-09-29T21:40:25Z",
+ "revision": 321,
+ "updated": "2026-09-29T21:46:32Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9519,11 +9519,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T20:21:25Z",
-   "updated": "2026-09-29T21:34:42Z",
+   "updated": "2026-09-29T21:46:32Z",
    "blocker": null,
-   "next_action": "merge batch #59 (README/P-25 rows, the committed .patch + launch-v1.sh window uses it, RV-1 test) → the operator runs launch-v1.sh window",
+   "next_action": "operator: launch-v1.sh preflight → window (0052–0056); 0057/0058 need a further re-proof before their window",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9680,22 +9680,22 @@
   {
    "id": "W5-MERGE-59",
    "task": null,
-   "slice": "merge batch #59 (Opus): known-good-reproof-3 3fc5b06c (+WR-KGR3-1/2 rows, hosted-migrate-0052-0056.patch + launch-v1.sh window via the patch, RV-1 test; no rulings); workflow wf_e53131b8-dd4",
+   "slice": "merge batch #59 (Opus): known-good-reproof-3 3fc5b06c (+WR-KGR3-1/2 rows, hosted-migrate-0052-0056.patch + launch-v1.sh window via the patch, RV-1 test; no rulings); workflow wf_e53131b8-dd4; integrated — R151 condition 1 for 0052–0056 met on the tip; the operator runs launch-v1.sh window",
    "agent": "opus",
    "branch": "codex/w5-merge-59",
    "worktree": ".claude/worktrees/codex-w5-merge-59",
    "base": "83da7aef",
-   "head": null,
+   "head": "81e51eed",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T21:34:42Z",
-   "updated": "2026-09-29T21:34:42Z",
+   "updated": "2026-09-29T21:46:32Z",
    "blocker": null,
-   "next_action": "integrate → R151 condition 1 for 0052–0056 met on the tip → tell the operator to run launch-v1.sh window",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
