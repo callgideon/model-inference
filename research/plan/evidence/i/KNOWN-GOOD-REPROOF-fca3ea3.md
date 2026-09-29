@@ -218,3 +218,5 @@ Cases and mutants:
 Lane: 0 h remaining. Coordinator: WR-KGR-1/2 text patches take 0.1/0.2/0.4 h
 (optimistic/likely/pessimistic). Confidence is high. Basis: KNOWN-GOOD-PROOF-3's WR-KGP3-1/2 are
 the same patches.
+
+Rulings: the proposed ruling above is numbered R224 in `research/plan/08-contracts-v1-encoding.md` §10 at the merge on `codex/w5-merge-40` (2026-09-29).

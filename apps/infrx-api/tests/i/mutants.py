@@ -1350,6 +1350,11 @@ MUTANTS += (
        '        "lints the candidate\'s port registry with the old decoy formula (dlab\'s 57540 is t2i\'s "\n'
        '        "ClickHouse port in the Lab registry); no SQL and no catalog",\n', "",
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
+    # KGR-RV-1 (lens H2): a real SQL case takes the registry case's place; the count stays 14
+    _m("schema_proof_swaps_the_registry_shape_case_for_sql", "the driver deselects exactly the recorded SHAPE cases",
+       PROOF_PY, '    "tests/d/test_pgharness.py::test_the_decoy_is_the_tasks_own_and_d1s_is_unchanged":\n',
+       '    "tests/d/test_settle.py::test_dur_settle__one_winner_exact_decimals_then_replay":\n',
+       "test_ops_recover__the_driver_deselects_exactly_the_recorded_shape_cases"),
     _m("known_good_record_proves_other_0027", "the proof's 0027 hash is this tree's 0027",
        "../../apps/app/supabase/migrations/0027_lab_access.sql",
        "-- L2-SQL (wave-5 LW1, lane lab-sql;", "-- L2-SQL  (wave-5 LW1, lane lab-sql;",

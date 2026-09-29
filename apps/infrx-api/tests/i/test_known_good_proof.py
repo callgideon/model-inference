@@ -93,6 +93,31 @@ def test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_
         assert "KNOWN-GOOD-REPROOF-" in proof["evidence"][0], sha
 
 
+# The 14 SHAPE cases the record's runs deselected (KNOWN-GOOD-REPROOF-fca3ea3; KGR-RV-1): the
+# count alone lets a real SQL case replace one of them unnoticed.
+RECORDED_SHAPE = {
+    "tests/d/test_credit_schema.py::test_d1r_leaves_the_0001_0005_schema_unchanged",
+    "tests/d/test_credit_schema.py::test_credit_units__no_conversion_and_explicit_regimes",
+    "tests/d/test_credit_schema.py::test_credit_privileges__service_reads_money_and_writes_through_seams",
+    "tests/d/test_credit_schema.py::test_rerun__applying_d1r_twice_is_a_no_op",
+    "tests/d/test_schema_postgres.py::test_dur_rls__the_mutation_boundary_is_narrow_and_fails_closed",
+    "tests/d/test_schema_postgres.py::test_dur_rls__the_execute_surface_is_enumerated",
+    "tests/d/test_admission.py::test_media__uploads_finalize_once_and_objects_delete_only_when_idle",
+    "tests/d/test_settle.py::test_credit_spend__sql_settle_equals_v2_settle_on_the_grid",
+    "tests/d/test_admission.py::test_results__write_once_owner_read_and_the_prepared_prompt_count",
+    "tests/d/test_store_requests.py::test_put_result__write_once_reference_and_owner_read",
+    "tests/d/test_schema_postgres.py::test_dur_rls__browser_roles_cannot_reach_protected_state",
+    "tests/d/test_credit_schema.py::test_operator_seams__audit_keys_suspension_usage_holds",
+    "tests/d/test_schema_postgres.py::test_dur_rls__the_browser_privilege_surface_is_enumerated",
+    "tests/d/test_pgharness.py::test_the_decoy_is_the_tasks_own_and_d1s_is_unchanged",
+}
+
+
+def test_ops_recover__the_driver_deselects_exactly_the_recorded_shape_cases():
+    """KGR-RV-1: the driver's SHAPE keys are the recorded set, not only its count."""
+    assert set(PROOF["SHAPE"]) == RECORDED_SHAPE
+
+
 def test_ops_recover__the_proof_driver_refuses_a_bad_target_and_a_moved_history():
     for bad in ("bda1586", "f" * 40):                                # short; not a commit here
         with pytest.raises(SystemExit) as refused:
