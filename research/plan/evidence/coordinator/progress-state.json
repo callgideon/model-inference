@@ -8815,7 +8815,7 @@
   {
    "id": "W5-MERGE-49",
    "task": null,
-   "slice": "merge batch #49 (Opus): lab-eval-media d31ede4a (+scenarios_eval conflict, WR-LEM-1/2, m1–m4, R239)",
+   "slice": "merge batch #49 (Opus): lab-eval-media d31ede4a (+scenarios_eval conflict, WR-LEM-1/2, m1–m4, R239); workflow wf_4d165f60-7c4",
    "agent": "opus",
    "branch": "codex/w5-merge-49",
    "worktree": ".claude/worktrees/codex-w5-merge-49",

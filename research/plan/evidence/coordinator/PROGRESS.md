@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-29 13:46Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 296, updated 2026-09-29 13:46Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-29 13:47Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 296, updated 2026-09-29 13:46Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -344,7 +344,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W5-MERGE-47 | support merge batch #47 (Opus): lab-deploy-prep 02ec83ac (+WR-LDP-5 pins, WR-LDP-1/3/6, R236–R237); workflow wf_e22de6b6-eed | running | codex/w5-merge-47 | 046f4322 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 13:12Z | integrate → make lab-local + runbook 08 + infra/lab/rollout on the tip | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 | W5-LAB-CONTROL-ROUTES | I2L WR-LDP-2 + LDP-F1 + LDP-F3: every Lab route family mounted in the control unit (R237), typed 503s (Opus); workflow wf_ea4325ae-44f | running | codex/w5-lab-control-routes | 046f4322 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 13:12Z | handback → merge batch → runbook L-steps updated | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
 | W5-MERGE-48 | support merge batch #48 (Opus): lab-e2e 123f9736 (+conflict resolution vs #45 in lab_evaluate, WR-LE2E-1/2, R238); workflow wf_b07cccea-9d7; integrated (R238 on the tip; R236–R237 with #47) | complete | codex/w5-merge-48 | 31231785 → b97ab14c | ports none (layer-1 only), prefix -, db - | 2026-09-29 13:26Z | — | 1–4 h remaining (likely 2 h), confidence unknown, estimated — |
-| W5-MERGE-49 | support merge batch #49 (Opus): lab-eval-media d31ede4a (+scenarios_eval conflict, WR-LEM-1/2, m1–m4, R239) | running | codex/w5-merge-49 | 41bd46f5 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 13:46Z | integrate (sort §10) → E6L j11 PASS on the tip | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
+| W5-MERGE-49 | support merge batch #49 (Opus): lab-eval-media d31ede4a (+scenarios_eval conflict, WR-LEM-1/2, m1–m4, R239); workflow wf_4d165f60-7c4 | running | codex/w5-merge-49 | 41bd46f5 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 13:46Z | integrate (sort §10) → E6L j11 PASS on the tip | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 
 ### Queues and locks
 
