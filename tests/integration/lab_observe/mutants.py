@@ -233,7 +233,8 @@ KNOWN_FAIL: dict[str, str] = {}   # E5L-F1 fixed by WR-OBS-3 (J2 reads through R
 STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_capture_on_in_the_box", "the drill judges capture off with the box at its defaults",
        OWORLD, "    with world.composed(workdir, start=start, **env) as trip:",
-       "    with world.composed(workdir, start=start, **{'TRACE_PUMPS': '1', **env}) as trip:",
+       "    with world.composed(workdir, start=start, **{'TRACE_SPOOL_DIR': str(workdir), **env}) "
+       "as trip:",
        O01_OFF),
     _m("st_ship_without_pins", "a shipped row carries the pins PostgreSQL admitted", SHIP,
        "serving_version_id=pins.serving_version_id if pins else None,",
