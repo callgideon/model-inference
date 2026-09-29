@@ -1,0 +1,37 @@
+{
+  "task": "COMPOSITION-7",
+  "slice": "WR-LIVE-DECIDE, WR-LIVE-PAGE, WR-LR5-3, WR-LEM-R3 (lab-live / lab-rollout-5 / lab-eval-media carry-overs)",
+  "tasks_touched": ["R2", "E8L", "E6L", "B1", "G"],
+  "activity": "review",
+  "head": "252b65e8",
+  "worktree": ".claude/worktrees/codex-w5-composition-7",
+  "branch": "codex/w5-composition-7",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/workers/__main__.py",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/evaluation/runner/__init__.py",
+    "apps/infrx-api/tests/w/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "apps/infrx-api/tests/b/runner/",
+    "research/plan/evidence/coordinator/COMPOSITION-7-*"
+  ],
+  "commands": [
+    {"cmd": "INFRX_MUTANTS=all pytest tests/w/test_lab_workers_mutants.py", "exit": 0, "summary": "155 passed, 0 survivors"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/g/lab_releases/test_mutants.py", "exit": 0, "summary": "38 passed, 0 survivors"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/b/runner/test_mutants.py", "exit": 0, "summary": "100 passed, 0 survivors"},
+    {"cmd": "INFRX_D_TASK=r2 pytest tests/w/test_lab_workers_decide_pg.py tests/g/lab_releases/*_pg.py tests/r/control/test_control_pass_pg.py tests/r/control/test_control_pg.py", "exit": 0, "summary": "9 passed"},
+    {"cmd": "INFRX_D_TASK=b1 pytest tests/b/runner/test_runner_pg.py tests/w/test_worker_lab_eval_pg.py", "exit": 0, "summary": "14 passed"},
+    {"cmd": "INFRX_D_TASK=p3 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py", "exit": 0, "summary": "E4 2831 passed, 29 skipped, 0 failed (every switch OFF)"},
+    {"cmd": "pytest tests/integration/lab_*/test_mutants.py -k 'well_formed or every_case or anchor or declared or known'", "exit": 0, "summary": "19 passed; every gate anchor intact"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium",
+               "basis": "one verify/fix round on a finished lane (47-234 min, session-03); WR-C7-K10 (lab-rollout-6) and WR-C7-TALLY (lab-sql) outside", "at": "2026-09-29T18:36:31Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-C7-K10 (lab-rollout-6): scenarios_route.py:430 expects WR-C5-LIVE; now 'no admitted request is assigned' (exact diff in evidence); st_decide_expand_approved invariant text",
+    "WR-C7-TALLY (lab-sql): per-serving assignment tally for Progress.assignments (page shows [])",
+    "WR-C7-DOC (coordinator): 08 §5 Lab worker roles row text (WR-C5-LIVE retired)",
+    "tests/g/test_startup.py: C6 case's D9 fake gains live() -> None (applied as a declared deviation; re-apply as wiring if preferred)"
+  ],
+  "evidence": ["research/plan/evidence/coordinator/COMPOSITION-7-252b65e.md"]
+}
