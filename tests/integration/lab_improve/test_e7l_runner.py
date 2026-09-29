@@ -143,7 +143,7 @@ def test_e7l_the_namespace_is_the_reserved_block():
 
 def test_e7l_a_not_run_case_names_its_lanes_and_the_exact_rerun():
     """The coordinator reruns exactly what a NOT RUN reason says after the merge."""
-    import lab_world
+    lab_world = _load(f"{HERE.name}.lab_world", "lab_world.py")
     with pytest.raises(pytest.skip.Exception) as skipped:
         lab_world.not_run("i08", "LAB_PIPELINES", why="absent")
     message = str(skipped.value)
@@ -155,7 +155,7 @@ def test_e7l_the_i07_tripwire_fires_on_a_worker_pass_not_the_module(tmp_path, mo
     """composition-2's `python -m infrx.lab.workers` refuses `annotation`/`training` by name:
     its merge alone must not turn i07 into a FAIL, but a real pass must (never a silent NOT
     RUN once the worker exists)."""
-    import lab_world
+    lab_world = _load(f"{HERE.name}.lab_world", "lab_world.py")
     pending = _load("e7l_pending", "scenarios_pending.py")
     monkeypatch.setattr(lab_world, "API", tmp_path)
     assert not pending.pass_landed("annotation")                    # no module
