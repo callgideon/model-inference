@@ -30,8 +30,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py
 	# 0053's SQL list (composition-6): needs Docker, skips visibly without it; task-local key r2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/d/test_code_mutants_c6.py
-	# 0055's SQL list (lab-sql LW7): needs Docker, skips visibly without it; task-local key l3
-	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py
+	# 0055's SQL list + its ports' Python list (lab-sql LW7): the SQL needs Docker, skips visibly without it; task-local key l3
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
