@@ -131,7 +131,7 @@ def test_e3l_the_namespace_is_the_reserved_block():
 
 def test_e3l_a_not_run_case_names_its_lanes_and_the_exact_rerun():
     """The coordinator reruns exactly what a NOT RUN reason says after the LW2 merges."""
-    import lab_world
+    lab_world = _load(f"{HERE.name}.lab_world", "lab_world.py")
     with pytest.raises(pytest.skip.Exception) as skipped:
         lab_world.not_run("l06", "L3", why="absent")
     message = str(skipped.value)

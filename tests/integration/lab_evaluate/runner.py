@@ -44,6 +44,25 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
+
+
+def _sibling(name: str):
+    """Loaded under a name unique to this package's own directory: `lab_world` is also every
+    sibling lab_*/'s module name (WR-E7L-5) - with two such packages in one process, a bare
+    `import lab_world` resolves to whichever package's directory sorts first in sys.path, not
+    to the importing file's own package."""
+    import importlib.util
+    key = f"{HERE.name}.{name}"
+    cached = sys.modules.get(key)
+    if cached is not None:
+        return cached
+    spec = importlib.util.spec_from_file_location(key, HERE / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[key] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 NAMESPACE = "e6l"
 BASE = "9a48300c"            # the LW5 base this runner was built on (coordinator dispatch)
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
@@ -218,6 +237,12 @@ def pytest_run(out: Path, keyword: str | None) -> tuple[dict, str]:
     junit, log = out / "scenarios.xml", out / "scenarios.log"
     files = sorted(str(path) for path in HERE.glob("scenarios_*.py"))
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
+            # WR-E7L-5's repo-root pytest.ini forces --import-mode=importlib, which does not
+            # auto-insert a collected file's own directory into sys.path; these scenario
+            # files rely on that (bare `import lab_world` after their own path.insert), so
+            # this subprocess - run against the live checkout, never a scratch copy - needs
+            # prepend mode back, overriding the root ini's addopts.
+            "--import-mode=prepend",
             "-o", "junit_family=xunit1", f"--junitxml={junit}", *files,
             *(["-k", keyword] if keyword else [])]
     env = {**os.environ, "INFRX_E2_NAMESPACE": NAMESPACE, "INFRX_E6L_OUT": str(out),
@@ -243,7 +268,7 @@ def pins(harness) -> dict:
         images = harness.compose_images()
     except Exception as exc:                                   # noqa: BLE001 - recorded
         images = {"error": f"{type(exc).__name__}: {exc}"[:200]}
-    import lab_world
+    lab_world = _sibling("lab_world")
     return {"base": BASE, "head": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain")),
             "images": images, "fixtures_sha256": lab_world.fixture_hashes()}
 
@@ -263,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     os.environ["INFRX_E2_NAMESPACE"] = NAMESPACE          # before E2's harness is imported
     sys.path[:0] = [str(HERE), str(HERE.parent), str(HERE.parent / "backend")]
-    import lab_world
+    lab_world = _sibling("lab_world")
     import run
     harness = lab_world.harness
     only = {sid.strip() for sid in args.only.split(",") if sid.strip()}

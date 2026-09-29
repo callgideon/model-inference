@@ -41,7 +41,7 @@ def labels1(lab):
     imported = lab.import_labels(ref, human + [forged, stray])
     batch, wiring = lab.batch(ref, 1), lab.wiring()
     planned = run(plan(batch, store=lab.store, objects=lab.objects, rates=wiring.rates,
-                       now=lab.judge.now))
+                       now=run(lab.judge.db_now())))
     report = run(run_batch(batch, wiring=wiring))
     lab.answer_posts()
     collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
@@ -208,7 +208,7 @@ def test_i02_the_bundle_trains_on_the_train_export_and_pins_the_holdout(lab, wor
                                 "sha256": one.export["sha256"]}
     assert not [h for h in holdout if h in json.dumps(bundle)], "the bundle carries the holdout"
     assert first.submitted["state"] == "submitted" and first.finished["state"] == "completed"
-    assert (lab.NEMO, submit_key(first.ext)) not in lab.runs.reservations
+    assert lab.reservation(submit_key(first.ext)) is None, "the manual bundle reserves nothing"
     lw.save(workdir, "bundle-1.json", bundle)
 
 
@@ -377,9 +377,11 @@ def test_i03_budgets_reconcile_per_unit_across_both_iterations(lab, workdir):
     for r in runs:
         assert r.actual == reported
         total = total + r.actual
-    assert lab.judge.spent == {lab.payer: total} and lab.judge.committed(lab.payer) == total
-    assert not {(lab.NEMO, submit_key(lw.uid(n, 0xe71))) for n in (1, 2)} & \
-        set(lab.runs.reservations)
+    assert lab.judge_settled([r.run_id for r in runs]) == str(total), \
+        "the teacher's PROVIDER_USD is exactly the reported cost of each settled chunk"
+    assert lab.budget()["reserved"] == "0.00000000", "no hold left on the payer's budget"
+    assert all(lab.reservation(submit_key(lw.uid(n, 0xe71))) is None for n in (1, 2)), \
+        "the manual training runs reserved nothing"
     units = {row[0] for row in lab.sql(
         "select distinct cost_unit from infrx.lab_eval_attempts where cost_unit is not null")}
     assert units == {"CREDIT"}

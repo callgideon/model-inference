@@ -1,0 +1,51 @@
+{
+  "task": "E7L",
+  "lane": "lab-improve-2",
+  "slice": "WR-E7L-5: package-qualified import isolation for the five lab_* integration packages (item 1 of 3; WR-E7L-4 and the gate rerun follow)",
+  "activity": "running",
+  "at": "2026-09-29T15:00:00Z",
+  "head": "8609d0a2",
+  "base": "1d26fd59",
+  "worktree": ".claude/worktrees/codex-w5-lab-improve-2",
+  "branch": "codex/w5-lab-improve-2",
+  "owned_paths": [
+    "tests/integration/lab_evaluate/",
+    "tests/integration/lab_observe/",
+    "tests/integration/lab_operate/",
+    "tests/integration/lab_rollout/",
+    "tests/integration/lab_improve/",
+    "tests/integration/test_lab_package_isolation.py",
+    "pytest.ini",
+    "research/plan/evidence/e/WR-E7L-5-8609d0a2.md",
+    "research/plan/evidence/coordinator/updates/E7L-20260929T1500Z.json"
+  ],
+  "isolation": {
+    "ports": "e7l compose 57300-57399 touched only for a 20s throwaway script smoke check (no assertion made on it), torn down before this evidence was written",
+    "prefix": "none held",
+    "db": "none held"
+  },
+  "commands": [
+    {"cmd": "pytest tests/integration --co -q (repo root, apps/infrx-api/.venv python)", "exit": 0, "summary": "652 collected, 0 errors (was exit 2, 4 'import file mismatch' errors)"},
+    {"cmd": "pytest tests/integration/lab_rollout tests/integration/lab_improve -q", "exit": 1, "summary": "32 passed, 3 failed (both pre-existing baseline defects, unrelated), 2 skipped - the cross-package collision case now passes"},
+    {"cmd": "pytest tests/integration/test_lab_package_isolation.py -q", "exit": 0, "summary": "2 passed (fail-first test: red before the fix - lab_operate/lab_evaluate/lab_improve each reported lab_rollout's RUNNER path when all five packages were collected together; green after)"},
+    {"cmd": "per-package --co -q, alone", "exit": 0, "summary": "evaluate 18 / rollout 18 / observe 36 / improve 19 / operate 18 - unchanged"},
+    {"cmd": "uvx ruff check --line-length 100 over every changed file", "exit": 0, "summary": "clean; the two ruff findings inside these five packages are in untouched files (git status confirms)"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/integration/lab_{evaluate,observe,operate}/test_mutants.py", "exit": 0, "summary": "20+47+16 = 83 passed, 0 unexpected failures"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/integration/lab_rollout/test_mutants.py", "exit": 1, "summary": "4 passed, 16 failed - identical failure set (same names, same broken_runner detail) reproduced at the unmodified base 1d26fd59 in a throwaway worktree; caused by a pre-existing scenarios_pending.py::test_k09 assertion failure, not this fix"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/integration/lab_improve/test_mutants.py", "exit": 1, "summary": "21 passed, 1 failed (test_the_lists_are_well_formed) - same failure reproduced at 1d26fd59; datasets-lw5 moved the lineage line the st_tombstones_ignored mutant anchors to"},
+    {"cmd": "python -m py_compile on every file in each of the five packages", "exit": 0, "summary": "clean"},
+    {"cmd": "python tests/integration/lab_{improve,rollout,operate,evaluate}/runner.py --help", "exit": 0, "summary": "each still runs standalone as a script"}
+  ],
+  "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "this item took about 1h; WR-E7L-4 (rebind lab_world.py's stand-ins to D8's real PgLabelLog/PgRunLedger/PgTeacherLedger plus the i06 WR-P3-R184/R192 assertion) is comparable to a small D-track slice, plus one gate rerun and one verify round (47-234 min, session-03 basis)"
+  },
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": [
+    "research/plan/evidence/e/WR-E7L-5-8609d0a2.md"
+  ]
+}

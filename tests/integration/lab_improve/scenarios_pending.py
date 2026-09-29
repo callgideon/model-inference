@@ -21,10 +21,32 @@ bound; each asserts first that its binding has not landed (so a merge fails it l
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
+import sys
+from pathlib import Path
 
-import lab_world as lw
+HERE = Path(__file__).resolve().parent
+
+
+def _sibling(name: str):
+    """Loaded under a name unique to this package's own directory: `lab_world` is also every
+    sibling lab_*/'s module name (WR-E7L-5) - with two such packages in one process, a bare
+    `import lab_world` resolves to whichever package's directory sorts first in sys.path, not
+    to the importing file's own package."""
+    key = f"{HERE.name}.{name}"
+    cached = sys.modules.get(key)
+    if cached is not None:
+        return cached
+    spec = importlib.util.spec_from_file_location(key, HERE / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[key] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+lw = _sibling("lab_world")
 
 
 def waits(sid: str, *lanes: str, why: str) -> None:

@@ -142,7 +142,7 @@ def test_e8l_the_namespace_is_the_reserved_block():
 
 def test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun():
     """The coordinator reruns exactly what a NOT RUN reason says after the merge."""
-    import lab_world
+    lab_world = _load(f"{HERE.name}.lab_world", "lab_world.py")
     with pytest.raises(pytest.skip.Exception) as skipped:
         lab_world.not_run("k10", "lab-ui-swap", why="absent")
     message = str(skipped.value)

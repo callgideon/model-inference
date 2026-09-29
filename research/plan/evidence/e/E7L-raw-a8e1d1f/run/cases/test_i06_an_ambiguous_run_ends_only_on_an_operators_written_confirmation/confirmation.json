@@ -1,0 +1,17 @@
+{
+ "reservation": {
+  "amount": "25.00000000",
+  "cost": null,
+  "payer_ref": "lab:payer:b0000001-0000-4000-8000-000000000001:000009a7-0000-4000-8000-000000000001@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "state": "released"
+ },
+ "run": {
+  "confirmation_ref": "mail:e7l-i06",
+  "connector": "protocol-test",
+  "limit": "25.00000000",
+  "operator": "33333333-3333-4333-8333-333333333333",
+  "payer_ref": "lab:payer:b0000001-0000-4000-8000-000000000001:000009a7-0000-4000-8000-000000000001@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "run_ref": "lab:external_run:b0000001-0000-4000-8000-000000000001:00000e71-0000-4000-8000-000000000007@sha256:859a3f95ee7ac41eab0923c95282fa997fd2d170d7e2a591e35ac0f2be03f200",
+  "state": "failed"
+ }
+}
