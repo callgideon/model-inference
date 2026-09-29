@@ -279,11 +279,20 @@ def test_e8l_an_environment_enoent_is_blocked_harness_not_a_product_fail(tmp_pat
     lab.mkdir()
     monkeypatch.setattr(gate, "LAB", lab)
     monkeypatch.syspath_prepend(str(REPO / "apps" / "infrx-api"))
+    from types import SimpleNamespace
     ran = []
-    monkeypatch.setattr(gate.subprocess, "run", lambda *a, **k: ran.append(a))
-    with pytest.raises(gate.EnvironmentBlocked, match="ENOENT .*node_modules"):
+
+    def node(*argv, **_):
+        ran.append(argv)
+        return SimpleNamespace(returncode=1, stdout="", stderr="")
+    monkeypatch.setattr(gate.subprocess, "run", node)
+    try:
         gate.run("rollout", tmp_path / "out")
-    assert ran == [], "no suite runs without apps/lab/node_modules"
+        blocked = None
+    except gate.EnvironmentBlocked as why:
+        blocked = str(why)
+    assert ran == [] and blocked and blocked.startswith("ENOENT") and "node_modules" in blocked, \
+        "no suite runs without apps/lab/node_modules"
     (lab / "node_modules").mkdir()
 
     def no_node(*_, **__):
