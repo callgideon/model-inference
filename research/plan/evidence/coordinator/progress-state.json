@@ -7557,7 +7557,7 @@
   {
    "id": "W5-MERGE-32",
    "task": null,
-   "slice": "merge batch #32 (Opus): lab-improve-2 c3be7132 (+R213, the st_tombstones_ignored re-anchor)",
+   "slice": "merge batch #32 (Opus): lab-improve-2 c3be7132 (+R213, the st_tombstones_ignored re-anchor); workflow wf_3155c195-dbb",
    "agent": "opus",
    "branch": "codex/w5-merge-32",
    "worktree": ".claude/worktrees/codex-w5-merge-32",
