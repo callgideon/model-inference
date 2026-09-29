@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 296,
- "updated": "2026-09-29T13:46:53Z",
+ "revision": 297,
+ "updated": "2026-09-29T13:59:28Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8529,22 +8529,22 @@
   {
    "id": "W5-COMPOSITION-6",
    "task": "I7",
-   "slice": "WR-COMP-4, WR-R4-2, WR-C5-N4-ROUTE/RECEIPT/PROVIDERS/PLAN/REPORT/LIVE, #42 minors, every switch OFF (Opus); workflow wf_0f1297c2-881",
+   "slice": "WR-COMP-4, WR-R4-2, WR-C5-N4-ROUTE/RECEIPT/PROVIDERS/PLAN/REPORT/LIVE, #42 minors, every switch OFF (Opus); workflow wf_0f1297c2-881; ACCEPT_WITH_FIXES at 3f6997f9 (six of eight WRs; 0053 LOCAL-ONLY; E4 2828/0; 903 mutants 0 survivors; WR-COMP-4 → WR-C6-CAPTURE blocked on a capture seam)",
    "agent": "opus",
    "branch": "codex/w5-composition-6",
    "worktree": ".claude/worktrees/codex-w5-composition-6",
    "base": "8949ffb1",
-   "head": "868ff366",
+   "head": "3f6997f9",
    "isolation": {
     "ports": "p3/j2/n3/r2 task-local",
     "prefix": "infrx-<key>-",
     "db": "task-local"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T12:50:00Z",
-   "updated": "2026-09-29T12:34:54Z",
+   "updated": "2026-09-29T13:59:28Z",
    "blocker": null,
-   "next_action": "handback → merge batch → E5L o01 rerun → E5L flips under R222",
+   "next_action": "merge batch #50 (WR-C6-MK, minors, R240–R244) → lanes lab-live (WR-C6-LIVE), lab-rollout-5 (WR-C6-K10 + k09 breach), lab-sql (VARIANTS/REQUEUE)",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -8844,6 +8844,104 @@
     "apps/infrx-api/infrx/evaluation/runner/",
     "research/plan/08-contracts-v1-encoding.md",
     "research/plan/evidence/e/E6L-J11-9938ad6.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-50",
+   "task": null,
+   "slice": "merge batch #50 (Opus): composition-6 3f6997f9 (+WR-C6-MK, F2–F4, R240–R244)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-50",
+   "worktree": ".claude/worktrees/codex-w5-merge-50",
+   "base": "f9e6a14e",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T13:59:28Z",
+   "updated": "2026-09-29T13:59:28Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → dispatch lab-live / lab-rollout-5 / lab-sql follow-ups",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "Makefile",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/coordinator/COMPOSITION-6-a6cbba5.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-OBSERVE-3",
+   "task": "E5L",
+   "slice": "E5L final `make lab-observe` at the tip: o02–o10 PASS, o01 NOT RUN[product WR: WR-C6-CAPTURE]; the runner's R222 machine check (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-observe-3",
+   "worktree": ".claude/worktrees/codex-w5-lab-observe-3",
+   "base": "f9e6a14e",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T13:59:28Z",
+   "updated": "2026-09-29T13:59:28Z",
+   "blocker": null,
+   "next_action": "handback → merge batch → E5L flips under R222/R234 → COMPLETE-LOCAL",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_observe/",
+    "research/plan/evidence/e/E5L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-CAPTURE",
+   "task": "T2",
+   "slice": "WR-C6-CAPTURE: consent source, request-path capture hook, gateway lifespan ship, worker job-output spool; E5L o01 PASS (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-capture",
+   "worktree": ".claude/worktrees/codex-w5-lab-capture",
+   "base": "f9e6a14e",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T13:59:28Z",
+   "updated": "2026-09-29T13:59:28Z",
+   "blocker": null,
+   "next_action": "handback → merge batch → o01 rerun → E5L fully PASS",
+   "estimate": {
+    "optimistic_h": 6,
+    "likely_h": 12,
+    "pessimistic_h": 24
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/gateway/",
+    "apps/infrx-api/tests/t/",
+    "research/plan/evidence/t/LAB-CAPTURE-*"
    ],
    "wiring_requests": []
   }
