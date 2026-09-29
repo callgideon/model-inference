@@ -20,6 +20,7 @@ import uuid
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from psycopg.conninfo import make_conninfo
 from infrx.gateway import pilot
 from infrx.gateway.routes import lab_releases as lr
 from infrx.lab.access import LabAccess
@@ -284,3 +285,52 @@ def test_lab_releases_composition_pg__a_running_releases_verdict_is_r2s_evaluate
         assert (decided["action"], decided["reasons"]) == ("rollback", ["operator:pager"])
     finally:
         d7.advance(world, -5)
+
+
+LAB_PASSWORD = "infrx-r2-lab-control"
+
+
+@pytest.mark.xfail(strict=True, reason="WR-LR7-GRANT (lab-sql): 0056 grants infrx_lab_control "
+                   "no execute on lab_release_live / lab_experiments; strict - once the grant "
+                   "lands this XPASSes and fails: drop the marker")
+def test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict(
+        world, monkeypatch, tmp_path):
+    """0-LR7-RV-1: the verdict's grant seam. The page composed on the Lab control unit's own
+    login (0043's `infrx_lab_control`, as the unit runs it) lists a running release with one
+    healthy assigned job: progress is D9's Live (0054's `lab_release_live`) and the verdict
+    R2's hold read at request time (B4's `lab_experiments`) - the same answer as the owner login."""
+    owner = pgharness.dsn(DB)
+    world.execute(f"alter role infrx_lab_control password '{LAB_PASSWORD}'")
+    lab = make_conninfo(owner, user="infrx_lab_control", password=LAB_PASSWORD)
+    public = run(PgControlStore(connector(owner)).deployment(cc.PUBLIC_DEPLOYMENT))
+    baseline = serving_ref(public, run(PgCatalogDirectory(connector(owner)).serving_revision(
+        public.serving_version_id)))
+    candidate = ref_of(world, cc.DEV_DEPLOYMENT)
+    monkeypatch.setattr(lab_workers, "lab_objects", lambda mode, env: OBJECTS)
+    stored = tmp_path / "plan.json"
+    stored.write_text(plan(horizon_s=1, min_requests=2, max_skew_bp=10_000).model_dump_json())
+    payload = {**d9.policy(d9.uid(35, 0xb0), weights=(1_000,), endpoint=d9.uid(35, 0xe0)),
+               "baseline_ref": baseline,
+               "candidates": [{"serving_ref": candidate, "weight_bp": 1_000}]}
+    ref = d7.publish(world, payload)
+    assert lab_workers.main(["rollout", "launch", "--policy-ref", ref, "--plan", str(stored),
+                             "--reason", "canary 10%"],
+                            env={"LAB_DATABASE_URL": owner, "LAB_S3_BUCKET": "lab",
+                                 "LAB_OPERATOR_ID": OPERATOR}) == 0
+    job(world, ref, payload, d9.uid(1, 0x3e), candidate, "succeeded", ms=20)
+
+    def shown(dsn: str, **unit) -> dict:              # the unit: `set_role=False`, as app.py
+        connect = connector(dsn, **unit)
+        app = FastAPI()
+        lr.register(app, support.runtime(), pilot.lab_releases(
+            connect, Sessions((l2.VIEWER,)), LabAccess(PgAccessStore(connect)), OBJECTS))
+        answer = TestClient(app, raise_server_exceptions=False).get(
+            lr.RELEASES_PATH, params={"provider_org_id": d9.NEMO},
+            headers={"authorization": f"Bearer {token(l2.VIEWER)}"})
+        assert answer.status_code == 200, answer.text
+        return {r["policy_ref"]: r for r in answer.json()["data"]["releases"]}[ref]
+
+    mine = shown(owner)
+    assert mine["progress"]["candidate"]["requests"] == 1
+    assert mine["verdict"]["action"] == "hold", mine["verdict"]          # R2 evaluated it
+    assert shown(lab, set_role=False) == mine
