@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 256,
- "updated": "2026-09-29T01:51:47Z",
+ "revision": 257,
+ "updated": "2026-09-29T02:01:46Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6743,11 +6743,11 @@
     "prefix": "infrx-i3-",
     "db": "i3"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-28T20:38:50Z",
-   "updated": "2026-09-29T01:28:42Z",
+   "updated": "2026-09-29T02:01:46Z",
    "blocker": null,
-   "next_action": "merge batch #29 (Sonnet; R209)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -7384,22 +7384,22 @@
   {
    "id": "W5-MERGE-29",
    "task": null,
-   "slice": "merge batch #29 (Sonnet): i-harness-key 3fd8ccd1 (+R209); workflow wf_2bb0f42b-75b",
+   "slice": "merge batch #29 (Sonnet): i-harness-key 3fd8ccd1 (+R209); workflow wf_2bb0f42b-75b; integrated 1ca0dd83",
    "agent": "sonnet",
    "branch": "codex/w5-merge-29",
    "worktree": ".claude/worktrees/codex-w5-merge-29",
    "base": "0772ca1c",
-   "head": null,
+   "head": "ba658af4",
    "isolation": {
     "ports": "i4 57536",
     "prefix": "infrx-i4-",
     "db": "i4"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T01:28:42Z",
-   "updated": "2026-09-29T01:28:42Z",
+   "updated": "2026-09-29T02:01:46Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R207/R208 before R209 at integration)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
