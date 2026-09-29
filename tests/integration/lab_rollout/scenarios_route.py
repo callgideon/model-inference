@@ -430,8 +430,9 @@ def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, 
         assert first.returncode == 0, first.stderr[-1500:]
         reasons = ["operator:pager", f"proposal:{proposal['proposal_id']}"]
         [row] = mine(after, "releases")
-        assert (row["state"], row["fence"], row["verdict"]["action"], row["verdict"]["reasons"]) \
-            == ("rolled_back", 2, "rollback", reasons), row
+        verdict = row["verdict"] or {}
+        assert (row["state"], row["fence"], verdict.get("action"), verdict.get("reasons")) == \
+            ("rolled_back", 2, "rollback", reasons), row
         assert [(d["decision"], d["reasons"], d["decided_by"])
                 for d in mine(after, "decisions")] == [("rollback", reasons, lw.OPERATOR)]
         assert [(p["proposal_id"], p["state"]) for p in mine(after, "proposals")] == \
