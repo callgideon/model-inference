@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 268,
- "updated": "2026-09-29T04:31:32Z",
+ "revision": 269,
+ "updated": "2026-09-29T06:25:19Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7643,31 +7643,38 @@
    "branch": "codex/w5-rollout-identity",
    "worktree": ".claude/worktrees/codex-w5-rollout-identity",
    "base": "cd4f6e5b",
-   "head": null,
+   "head": "9aacd8f0",
    "isolation": {
     "ports": "r2 57534; e8l 57400-57499",
     "prefix": "infrx-r2-",
     "db": "r2"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T02:47:48Z",
-   "updated": "2026-09-29T02:47:48Z",
+   "updated": "2026-09-29T06:25:19Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge (+ the E8L-F2 ruling) → LAB-ROLLOUT-LOCAL rerun",
+   "next_action": "merge batch #35 (Opus; WR-E8L-9/10, R216) → the lab-rollout rerun lane",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "one product seam + one gate cell rerun"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT_WITH_FIXES 9aacd8f0; merge running",
+    "at": "2026-09-29T06:25:19Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/r/ROLLOUT-IDENTITY-6d36750.md",
+    "research/plan/evidence/e/E8L-raw-rollout-identity-6d36750/"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/rollouts/**",
     "tests/r/rollouts/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-E8L-9",
+    "WR-E8L-10"
+   ]
   },
   {
    "id": "W5-COMPOSITION-4",
@@ -7774,6 +7781,38 @@
     "apps/lab/tests/l/ui/**",
     "research/plan/evidence/e/E3L-*"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-35",
+   "task": null,
+   "slice": "merge batch #35 (Opus): rollout-identity 9aacd8f0 (+WR-E8L-9 k06 world patch, WR-E8L-10, R216)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-35",
+   "worktree": ".claude/worktrees/codex-w5-merge-35",
+   "base": "1ecaceee",
+   "head": null,
+   "isolation": {
+    "ports": "r2 57534",
+    "prefix": "infrx-r2-",
+    "db": "r2"
+   },
+   "activity": "running",
+   "started": "2026-09-29T06:25:19Z",
+   "updated": "2026-09-29T06:25:19Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 → lab-rollout-3",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T06:25:19Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
