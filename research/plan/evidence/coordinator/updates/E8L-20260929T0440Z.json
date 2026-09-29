@@ -1,0 +1,127 @@
+{
+ "task": "E8L",
+ "slice": "WR-E8L-8 (E8L-F2, lane rollout-identity) + fix round 0-RI-1",
+ "activity": "review",
+ "head": "7a5161ad",
+ "worktree": ".claude/worktrees/codex-w5-rollout-identity",
+ "branch": "codex/w5-rollout-identity",
+ "owned_paths": [
+  "apps/infrx-api/infrx/rollouts/**",
+  "apps/infrx-api/tests/r/control/**",
+  "research/plan/evidence/e/E8L-*",
+  "research/plan/evidence/r/ROLLOUT-IDENTITY-*"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/control/test_control.py (pre-fix)",
+   "exit": 1,
+   "summary": "1 failed, 24 passed (fail-first)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 pytest tests/r/control/test_control_pg.py (pre-fix)",
+   "exit": 1,
+   "summary": "1 failed, 3 passed (fail-first)"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/r/control/test_control.py",
+   "exit": 0,
+   "summary": "25 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 uv run --frozen pytest -q tests/r/control/test_control_pg.py",
+   "exit": 0,
+   "summary": "4 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/r/control/test_mutants.py",
+   "exit": 0,
+   "summary": "70 passed: 68 mutants killed, 0 survivors"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 make api-test",
+   "exit": 2,
+   "summary": "6609 passed, 7 failed (tests/d/test_outbox_relay [valkey]: ForeignContainer infrx-d2-valkey, foreign leftover), 161 skipped, 9 xfailed"
+  },
+  {
+   "cmd": "runner.py --keep --only k06 (clone: head + lab-rollout-2 f6c074f6)",
+   "exit": 1,
+   "summary": "k06 FAIL: E8L-F2 gone, E8L-F4 NotFound (opaque baseline stand-in)"
+  },
+  {
+   "cmd": "runner.py --reuse --keep --only k06 (+WR-E8L-9 world patch)",
+   "exit": 3,
+   "summary": "k06 PASS"
+  },
+  {
+   "cmd": "runner.py --reuse --keep --only k06 (+WR-E8L-9, R2 reverted)",
+   "exit": 1,
+   "summary": "k06 FAIL (negative control: E8L-F2 text)"
+  },
+  {
+   "cmd": "runner.py --reuse (+WR-E8L-9, full, teardown)",
+   "exit": 3,
+   "summary": "k01-k07 PASS, k08/k09/k10 NOT RUN; gate NOT RUN (was FAIL)"
+  },
+  {
+   "cmd": "pytest -q tests/r/control/test_control.py (0-RI-1 fail-first, 39de8f0c)",
+   "exit": 1,
+   "summary": "1 failed, 25 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 pytest tests/r/control/test_control_pg.py (0-RI-1 fail-first)",
+   "exit": 1,
+   "summary": "1 failed, 4 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 make api-test (59576dad)",
+   "exit": 2,
+   "summary": "6618 passed, 8 failed (7 foreign infrx-d2-valkey outbox_relay; i7_restart_does_not_converge anchor lost -> fixed 7a5161ad), 153 skipped, 9 xfailed"
+  },
+  {
+   "cmd": "pytest -q tests/r/control/test_control.py (7a5161ad)",
+   "exit": 0,
+   "summary": "26 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 pytest -q tests/r/control/test_control_pg.py (7a5161ad)",
+   "exit": 0,
+   "summary": "5 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/r/control/test_mutants.py (7a5161ad)",
+   "exit": 0,
+   "summary": "73 passed: 71 mutants killed, 0 survivors"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest -q tests/i/lab_rollout/test_mutants.py; pytest tests/i/lab_rollout (7a5161ad)",
+   "exit": 0,
+   "summary": "17 passed; 9 passed"
+  },
+  {
+   "cmd": "runner.py full, fresh e8l stack, teardown (clone 7a5161ad + lab-rollout-2 f6c074f6 + WR-E8L-9)",
+   "exit": 3,
+   "summary": "k01-k07 PASS (k06 PASS), k08/k09/k10 NOT RUN; gate NOT RUN"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "merge with #33 + WR-E8L-9/10 + one E8L rerun; session-03 merge-lane analogues; measured 57.1 s runner on reused stack",
+  "at": "2026-09-29T06:21Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-E8L-9: tests/integration/lab_rollout/scenarios_recover.py k06 launches its policy with baseline_ref = infrx.lab_serving_ref(listed deployment) (patch in E8L-raw-rollout-identity-6d36750/WR-E8L-9-k06-world.patch), after #33",
+  "WR-E8L-10: tests/integration/lab_rollout/mutants.py drop k06 from KNOWN_FAIL; stack mutant on infrx/rollouts/control serving_identity 'return ref' naming k06; k06 docstring updated"
+ ],
+ "evidence": [
+  "research/plan/evidence/r/ROLLOUT-IDENTITY-6d36750.md",
+  "research/plan/evidence/e/E8L-raw-rollout-identity-6d36750/",
+  "research/plan/evidence/e/E8L-raw-rollout-identity-7a5161a/"
+ ],
+ "fix_round": {
+  "0-RI-1": "fixed: identity membership only on the rollback decision (verdict, lost-race reread, emergency_rollback); a pass over a rolled_back row matches named candidate refs only, leaving later same-serving-version listings alone; proposed ruling text revised in the evidence (unnumbered)"
+ }
+}

@@ -37,6 +37,9 @@ RACE = "test_r2_a_lost_serving_race_rereads_and_converges"
 EMERG = "test_r2_emergency_rollback_needs_no_evidence_and_happens_once"
 LOST = "test_r2_a_decision_lost_to_another_transition_is_not_swallowed"
 FORGED = "test_r2_a_policy_other_than_the_stored_revision_is_refused"
+PROMO = "test_r2_a_promoted_candidate_is_recognised_by_its_serving_identity"
+DEPLOY = "test_r2_a_deployment_only_candidate_rolls_back_once_and_never_relists_the_baseline"
+LATER = "test_r2_a_later_listing_of_the_same_serving_version_is_left_alone_after_a_rollback"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -180,7 +183,7 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- R2.c converging the L3 alias
     m("r2_no_converge_after_rollback", "a rollback moves the alias back",
       '            await self._decide(policy, policy_ref, release, "rolled_back", verdict, '
-      "self._actor, now)\n            await self._converge(policy, policy_ref)\n",
+      "self._actor, now)\n            await self._converge(policy, policy_ref, decided=True)\n",
       '            await self._decide(policy, policy_ref, release, "rolled_back", verdict, '
       "self._actor, now)\n", ONCE),
     m("r2_no_converge_on_restart", "a restart finishes an interrupted rollback",
@@ -188,12 +191,40 @@ MUTANTS: tuple[Mutant, ...] = (
       '        if release.state == "rolled_back":\n', RESTART),
     m("r2_emergency_no_converge", "an emergency rollback moves the alias back",
       "                           Verdict(\"rollback\", (f\"operator:{reason}\",)), operator_id, now)\n"
-      "        await self._converge(policy, policy_ref)\n",
+      "        await self._converge(policy, policy_ref, decided=True)\n",
       "                           Verdict(\"rollback\", (f\"operator:{reason}\",)), operator_id, now)\n",
       EMERG),
     m("r2_converge_any_alias", "an alias moved on by someone else is left alone",
-      "            if current not in candidates:\n",
+      "            if current == policy.baseline_ref or key(current) not in candidates:\n",
       "            if current == policy.baseline_ref:\n", RACE),
+    # --- E8L-F2: the alias is a candidate by serving identity, not by the full ref
+    m("r2_converge_full_ref_membership", "a promoted candidate (fresh deployment revision) "
+      "is still this policy's candidate",
+      "        key = serving_identity if decided else str\n",
+      "        key = str\n", PROMO),
+    m("r2_identity_is_the_full_ref", "the identity drops the deployment revision",
+      "    return f\"{head.rpartition(':')[0]}@{digest}\"", "    return ref", PROMO),
+    m("r2_identity_drops_provider", "the identity keeps the provider",
+      "head.rpartition(':')[0]}", "head.rpartition(':')[0].rpartition(':')[0]}", PROMO),
+    m("r2_identity_drops_digest", "the identity keeps the serving revision's digest",
+      "    return f\"{head.rpartition(':')[0]}@{digest}\"",
+      "    return head.rpartition(':')[0]", PROMO, RACE),
+    m("r2_converge_relists_baseline", "an alias exactly on the baseline is never re-listed",
+      "            if current == policy.baseline_ref or key(current) not in candidates:\n",
+      "            if key(current) not in candidates:\n", DEPLOY),
+    # --- 0-RI-1: identity membership is the decision's; a later pass matches named refs only
+    m("r2_restart_converges_by_identity", "a pass over a rolled-back release leaves a later "
+      "listing of the same serving version alone",
+      '        if release.state == "rolled_back":\n            await self._converge(policy, policy_ref)\n',
+      '        if release.state == "rolled_back":\n            await self._converge(policy, policy_ref, decided=True)\n',
+      LATER),
+    m("r2_breach_converges_by_full_ref", "a breach's rollback recognises a promoted listing",
+      '"rolled_back", verdict, self._actor, now)\n            await self._converge(policy, policy_ref, decided=True)\n',
+      '"rolled_back", verdict, self._actor, now)\n            await self._converge(policy, policy_ref)\n',
+      PROMO),
+    m("r2_emergency_converges_by_full_ref", "the operator's stop recognises a promoted listing",
+      'operator_id, now)\n        await self._converge(policy, policy_ref, decided=True)\n',
+      'operator_id, now)\n        await self._converge(policy, policy_ref)\n', PROMO, LATER),
     m("r2_converge_target", "the alias goes back to the baseline",
       "to_serving_ref=policy.baseline_ref,", "to_serving_ref=current,", ONCE),
     m("r2_converge_gives_up", "a lost serving CAS is reread",
