@@ -11,7 +11,8 @@ family's read runs as provider A's administrator.
 Failure oracles: the unit not ready on its own login (LDP-F7); a member refused (401/404) or a
 family missing on it; any 500 (LDP-F3). SR-LCR-1 (0056, lab-sql-lw8): the Lab column equals the
 owner column for every family (LCR-F1 closed), each pinned in `EXPECTED`; a worker-only claim
-stays refused to the Lab login (42501).
+stays refused to the Lab login (42501); 0041's sample reads the families' lineage calls run on
+it (0-LW8-R1).
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from psycopg.types.json import Jsonb
 
 from infrx.contracts import errors
 from infrx.gateway import lab_auth
@@ -115,3 +117,14 @@ def test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_
     with psycopg.connect(database["lab"], autocommit=True) as lab:     # SR-LCR-1: routes only
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             lab.execute("select infrx.lab_import_job_claim('{}'::jsonb)")
+        # 0-LW8-R1: lineage.status / lineage.permitted (a version's page, derive, export,
+        # read_part; label imports, select, export; training prepare) run 0041's reads on the
+        # unit's login once a record exists - the absent `ds@1` above never reaches them.
+        for function in ("lab_blocked_samples", "lab_permitted_samples"):
+            args = {"provider_org_id": A, "dataset_ref": "lab:dataset:none"}
+            try:
+                lab.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
+            except psycopg.errors.InsufficientPrivilege as refused:
+                pytest.fail(f"{function}: {refused.sqlstate} on the Lab login")
+            except psycopg.Error:
+                pass            # the function ran and refused its arguments: granted

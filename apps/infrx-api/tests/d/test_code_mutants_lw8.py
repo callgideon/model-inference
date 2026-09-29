@@ -28,6 +28,8 @@ BEFORE = frozenset({
     "lab_control_reject", "lab_provider_memberships", "lab_access_grants",
     "lab_deployment_aggregates", "lab_control_operator"})
 #: The route halves the control unit's families call (0056's header lists them per family).
+#: 0041's lab_bound_samples / lab_tombstone_samples stay out: only lineage.select, tombstone
+#: and backfill (the datasets worker, T3's hook) write them - never a route.
 GRANTED = frozenset({
     "lab_resolve", "lab_publish", "lab_accessible_samples", "lab_import_job_enqueue",
     "lab_import_job", "lab_run_status", "lab_cancel_run", "lab_put_evaluator", "lab_create_run",
@@ -36,7 +38,8 @@ GRANTED = frozenset({
     "lab_run_reserve", "lab_run_release", "lab_run_settle", "lab_pipeline_note",
     "lab_pipeline_noted", "lab_checkpoint_record_event", "lab_checkpoint_subscriptions",
     "lab_judge_run", "lab_teacher_failures", "lab_releases_in", "lab_release",
-    "lab_release_decisions", "lab_release_proposals", "lab_propose_release"})
+    "lab_release_decisions", "lab_release_proposals", "lab_propose_release",
+    "lab_blocked_samples", "lab_permitted_samples"})
 #: One worker-only claim: an import job is claimed by the I5 datasets pool, never a route.
 WORKER_CLAIM = "lab_import_job_claim"
 
@@ -119,6 +122,10 @@ SQL_MUTANTS = (
     _s("lw8_drop_propose", "infrx.lab_release_proposals(jsonb), infrx.lab_propose_release(jsonb)",
        "infrx.lab_release_proposals(jsonb)", HOLDS,
        "a provider's release proposal answers 503 on the unit"),
+    _s("lw8_drop_permitted",
+       "  infrx.lab_blocked_samples(jsonb), infrx.lab_permitted_samples(jsonb),",
+       "  infrx.lab_blocked_samples(jsonb),", HOLDS,
+       "a version's derive/export and every label import answer 503 on the unit (0-LW8-R1)"),
     _s("lw8_grant_worker_claim", "infrx.lab_import_job(jsonb),",
        f"infrx.lab_import_job(jsonb), infrx.{WORKER_CLAIM}(jsonb),", WORKER,
        "the route login claims the datasets pool's import jobs"),
