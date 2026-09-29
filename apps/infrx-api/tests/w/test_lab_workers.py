@@ -1062,9 +1062,11 @@ def test_lab_workers__the_lab_objects_are_the_gateways_media_location_or_refused
         assert type(died) is RuntimeMisconfigured and died.missing == ("LAB_S3_BUCKET",), died
     assert connected == [], "an unset LAB_S3_BUCKET asked a bucket"
     for same in ({}, {"S3_MEDIA_BUCKET": "media"},
-                 {"S3_MEDIA_BUCKET": " media ", "S3_MEDIA_PREFIX": "p/", "LAB_S3_PREFIX": "p/"}):
+                 {"S3_MEDIA_BUCKET": " media ", "S3_MEDIA_PREFIX": "p/", "LAB_S3_PREFIX": "p/"},
+                 {"LAB_S3_BUCKET": " media ", "S3_MEDIA_BUCKET": "media"}):   # 0-F3: one strip
         assert type(objects(**same)) is Store, same
-    assert connected == [("media", "infrx/"), ("media", "infrx/"), ("media", "p/")]
+    assert connected == [("media", "infrx/"), ("media", "infrx/"), ("media", "p/"),
+                         ("media", "infrx/")], "the stripped LAB_S3_BUCKET is compared and used"
 
 
 # ------------------------------------------------------------ annotation / training (WR-I6-3)

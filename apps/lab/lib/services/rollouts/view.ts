@@ -27,7 +27,7 @@ export function releaseRows(role: Role, { releases, decisions, proposals }: Reco
       id: r.policyRef, fence: r.fence, setup: `${r.mode} · ${r.cohort} cohort · policy v${r.version}`, baseline: r.baselineRef,
       candidates: r.candidates.map((c) => `${c.servingRef} · ${(c.weightBp / 100).toFixed(2)}%`),
       plan: `horizon ${p.horizonS} s · at least ${p.minRequests} candidate requests · errors ≤ ${pct(p.maxErrorRate)} · p99 ≤ ${p.maxP99Ms} ms · cohort skew ≤ ${p.maxSkewBp} bp · quality coverage ≥ ${pct(p.minQualityCoverage)} · metrics lag ≤ ${p.maxLagS} s · budget ${money(p.budget)}`,
-      traffic: live ? `candidate ${live.candidate.requests} · baseline ${live.baseline.requests} requests` : "no traffic observed",
+      traffic: live ? `candidate ${live.candidate.requests} · baseline ${live.baseline.requests} requests` : r.refused === "unit_refused" ? "progress unavailable: settled in another unit" : "no traffic observed",
       errors: cand && cand.requests > 0 ? pct(cand.errors / cand.requests) : "—",
       p99: cand?.p99Ms == null ? "—" : `${cand.p99Ms} ms`,
       quality: cand && cand.requests > 0 ? `${live.qualityCovered} of ${cand.requests}` : "—",

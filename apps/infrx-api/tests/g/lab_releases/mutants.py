@@ -120,6 +120,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("page_any_failure_is_a_unit_refusal", "only R248's refusal degrades a row; an outage "
        "still fails the listing", "            except errors.InvalidRequest:     # R248",
        "            except errors.DomainError:     # R248", UNIT_REFUSED, file=P),
+    _m("page_not_found_is_a_unit_refusal", "a NotFound from Live still fails the listing "
+       "(0-F1)", "            except errors.InvalidRequest:     # R248",
+       "            except (errors.InvalidRequest, errors.NotFound):     # R248", UNIT_REFUSED,
+       file=P),
     _m("page_unit_refused_verdict_shown", "a unit-refused row shows no verdict",
        "out[-1].update(verdict=None, refused=refused)", "out[-1].update(refused=refused)",
        UNIT_REFUSED, file=P),

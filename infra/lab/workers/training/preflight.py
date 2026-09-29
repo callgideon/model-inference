@@ -87,6 +87,8 @@ def allowed_names(role: str) -> set[str]:
         names.add("LAB_TEACHER_URL")
     if role == "rollout":                  # WR-C5-PREFLIGHT: R2's pass acts as this principal
         names.add("LAB_OPERATOR_ID")
+        # WR-C7G-PREFLIGHT (R249): the plan location, compared at the role's start
+        names |= {"LAB_S3_PREFIX", "S3_MEDIA_BUCKET", "S3_MEDIA_PREFIX"}
     return names
 
 

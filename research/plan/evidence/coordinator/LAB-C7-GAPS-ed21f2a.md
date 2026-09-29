@@ -117,3 +117,22 @@ Only a test fake changed in this round, with no code change, so E4 was not rerun
 
 - 2026-09-29: lab-c7-gaps lane evidence (C7-RV-1/2/4/5/6, WR-C7-DOC); E4 2835/0 on p3; local only.
 - 2026-09-29: fix round 1-C7G-RV-A: corrected the pilot.py line (conflicts with lab-rollout-7 and lab-sql-lw9) and added the merge note, verified by two trial merges; the test fake answers tally; local only.
+
+## Coordinator rulings
+
+- **R255** (proposal 1, C7-RV-6): a release whose Live is refused as legacy USD (R248) degrades only its own row of `/lab/v1/releases`: `progress` and `verdict` null with `refused: "unit_refused"`; the other rows list; any other Live failure still fails the listing.
+- **R256** (proposal 2, C7-RV-4/C7-RV-5): an unset `LAB_S3_BUCKET` is named first: the rollout role and `rollout decide` refuse with 'requires LAB_S3_BUCKET' before any bucket call; R249's same-location check reads the stripped values and fires on the box, because the rollout unit's preflight allows `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` / `LAB_S3_PREFIX`.
+- Numbered in 08 §10 directly after R253 at the lab-c7-gaps merge on `codex/w5-merge-60` (R254 is on `codex/w5-merge-58`); next free R257. The coordinator sorts at integration.
+
+## Applied at merge (codex/w5-merge-60, one wirings commit)
+
+- **WR-C7G-PREFLIGHT**: `LAB-C7-GAPS-WR-C7G-PREFLIGHT.patch` applied as written (`allowed_names("rollout") |= {LAB_S3_PREFIX, S3_MEDIA_BUCKET, S3_MEDIA_PREFIX}`; case `test_i6_only_the_rollout_role_names_the_gateways_plan_location`; mutant `i6_pf_plan_location_refused`). 1-C7G-RV-B: rollout `RUNBOOK.md` §3 and `infra/lab/app/README.md` no longer say to leave the names out; the rollout unit's env names `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` equal to the gateway's (R249). 08 §5's row stays as the lane wrote it.
+- **0-F1**: the unit-refused case also asserts that `errors.NotFound` from `d9.live` fails the listing, and that 0054's mixed-units `InvalidRequest` (CREDIT and USD) reads `unit_refused`; mutant `page_not_found_is_a_unit_refusal` (`except (errors.InvalidRequest, errors.NotFound):`).
+- **0-F3**: `lab_objects` strips `LAB_S3_BUCKET` once (`bucket = settings(...)[BUCKET]`) and uses that value for the R249 comparison and the connection; case (`" media "` matches `S3_MEDIA_BUCKET=media` and connects to `media`) + mutant `lw_objects_bucket_unstripped`; `lw_objects_bucket_unnamed` re-anchored on the new line.
+- **0-F4 / 1-C7G-RV-C**: apps/lab: the port's `Release` carries the optional `refused?: "unit_refused"`, the HTTP decoder accepts it (`opt(oneOf("unit_refused"))`), and the releases page's traffic reads 'progress unavailable: settled in another unit' for such a row, never 'no traffic observed'; cases in R4-V02 / R4-H01; mutant R4-X122.
+
+## Integration note
+
+- `pilot.py`'s `ReleaseRecords` is also edited by lab-rollout-7 (the verdict) and lab-sql-lw9 (assignments / tally); the coordinator resolves those conflicts at their merges, following the merge note in "Fix round" above.
+- Step 0's repair of `tests/g/lab_releases`' WR-LIVE-PAGE case (`ReleaseRecords` takes 4 arguments after #56) was a tip bug: the tip's E4 was 1 failed; it is fixed here.
+- 2026-09-29: coordinator rulings R255/R256 and the merge wirings (WR-C7G-PREFLIGHT, 0-F1, 0-F3, 0-F4) recorded at the lab-c7-gaps merge on codex/w5-merge-60; local only.

@@ -28,7 +28,10 @@ const DECISION = { policyRef: RELEASE.policyRef, decision: "hold", reasons: ["mi
 const VARIANT = variant();
 
 test("R4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched", async () => {
-  const records = { releases: [RELEASE, release({ progress: null, verdict: EXPAND })], decisions: [DECISION], proposals: [PROPOSAL] };
+  const records = {
+    releases: [RELEASE, release({ progress: null, verdict: EXPAND }), release({ progress: null, verdict: null, refused: "unit_refused" })],
+    decisions: [DECISION], proposals: [PROPOSAL],
+  };
   const { seen, port } = server((s) => s.url.includes("/proposals") ? json(snake(PROPOSAL), 201)
     : json({ data: snake(s.url.includes("optimizations") ? [VARIANT, { ...VARIANT, comparison: null }] : records) }));
   assert.deepEqual(await port.releases(A), { ok: true, value: records });

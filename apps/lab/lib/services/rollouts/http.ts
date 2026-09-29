@@ -30,6 +30,7 @@ const RELEASE = obj({
     assignments: list(obj({ servingRef: str, pinnedBy: oneOf("cohort", "explicit"), requests: num })),
   })),
   verdict: nul(obj({ action: oneOf("rollback", "hold", "expand"), reasons: list(str), evidenceRefs: list(str), evaluatedAt: str })),
+  refused: opt(oneOf("unit_refused")), // R255: present only on a row whose Live was refused by unit
 });
 const DECISION = obj({ policyRef: str, decision: oneOf("expand", "hold", "rollback"), reasons: list(str), evidenceRefs: list(str), decidedBy: str, decidedAt: str });
 const PROPOSAL = obj({

@@ -467,9 +467,17 @@ def test_lab_releases__a_unit_refused_live_nulls_its_own_row_and_the_others_list
             refused.get("refused")) == (usd, None, None, "unit_refused"), refused
     assert listed["policy_ref"] == ok and listed["progress"]["candidate"]["requests"] == 1_000
     assert (listed["verdict"] or {}).get("action") == "hold" and "refused" not in listed, listed
-    fails[usd] = errors.DependencyUnavailable("D9 did not answer")
-    try:
-        asyncio.run(records.releases(r2w.P))
-        raise AssertionError("an outage was listed as a row")
-    except errors.DependencyUnavailable:
-        pass
+    # 0054's mixed-units refusal (CREDIT and USD) is the same typed refusal: that row only
+    fails[usd] = errors.InvalidRequest("this release's jobs settled in CREDIT and in USD: "
+                                       "units never mix")
+    refused, listed = asyncio.run(records.releases(r2w.P))
+    assert (refused["progress"], refused["verdict"], refused.get("refused")) == \
+        (None, None, "unit_refused") and "refused" not in listed, refused
+    for failure in (errors.DependencyUnavailable("D9 did not answer"),
+                    errors.NotFound("no such release")):   # 0-F1: only R248 degrades a row
+        fails[usd] = failure
+        try:
+            asyncio.run(records.releases(r2w.P))
+            raise AssertionError(f"{type(failure).__name__} was listed as a row")
+        except type(failure):
+            pass

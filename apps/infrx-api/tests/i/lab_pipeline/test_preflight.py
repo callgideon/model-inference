@@ -189,6 +189,19 @@ def test_i6_only_the_rollout_role_names_its_operator_principal() -> None:
             [f"LAB_OPERATOR_ID: not a {role} setting"], role
 
 
+def test_i6_only_the_rollout_role_names_the_gateways_plan_location() -> None:
+    """WR-C7G-PREFLIGHT (R249, C7-RV-5): the rollout role's env names the gateway's
+    `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` and its own `LAB_S3_PREFIX`, so `lab_objects` compares
+    the two plan locations at the role's start; the training and annotation roles never hold
+    the media location. Failure oracle: the rollout unit refusing the names R249's refusal
+    reads (the check never fires on the box), or another role accepting them."""
+    location = {"LAB_S3_PREFIX": "infrx/", "S3_MEDIA_BUCKET": "media", "S3_MEDIA_PREFIX": "infrx/"}
+    assert check("rollout", {**BASE, **location}) == []
+    for role in ("training", "annotation"):
+        assert check(role, {**BASE, "S3_MEDIA_BUCKET": "media"}) == \
+            [f"S3_MEDIA_BUCKET: not a {role} setting"], role
+
+
 def test_i6_the_image_is_a_local_content_addressed_id_never_a_flag_or_a_pull() -> None:
     """`${INFRX_IMAGE}` is one argv word of `docker run`, before the command. Failure oracle:
     a docker flag there (`--privileged` and the image becomes `python`), an absent or empty
