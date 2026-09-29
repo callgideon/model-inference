@@ -1,0 +1,24 @@
+{
+  "task": "R2",
+  "lane": "lab-live",
+  "slice": "WR-C6-LIVE under R244: 0054 lab_release_live + PgReleaseStore.live + the rollout pass on Live",
+  "activity": "review",
+  "at": "2026-09-29T15:45:00Z",
+  "head": "1f68d35",
+  "base": "993d481c",
+  "worktree": ".claude/worktrees/codex-w5-lab-live",
+  "branch": "codex/w5-lab-live",
+  "owned_paths": ["apps/app/supabase/migrations/0054_lab_release_live.sql", "tests/integration/test_harness.py (pin line)", "apps/infrx-api/tests/d/test_code_mutants_live.py", "Makefile (api-mutants line)", "apps/infrx-api/infrx/lab/workers/__main__.py (rollout pass)", "apps/infrx-api/infrx/state/lab_rollout.py", "apps/infrx-api/tests/w/", "apps/infrx-api/tests/r/", "research/plan/evidence/r/LAB-LIVE-1f68d35.md"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=r2 pytest tests/d/test_code_mutants_live.py (no 0054)", "exit": 1, "summary": "red: 6 failed, function absent"},
+    {"cmd": "INFRX_D_TASK=r2 pytest tests/r/control/test_control_pass_pg.py (before the pass change)", "exit": 1, "summary": "red: the bare pass held instead of stepping"},
+    {"cmd": "INFRX_D_TASK=r2 pytest tests/d/test_code_mutants_live.py", "exit": 0, "summary": "27 passed: 5 checks, 20 SQL mutants killed"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/w/test_lab_workers_mutants.py tests/r/control/test_mutants.py", "exit": 0, "summary": "219 passed, 0 survivors"},
+    {"cmd": "INFRX_D_TASK=r2 (valkey r1) pytest tests/g tests/w tests/contracts tests/i/test_packaging.py", "exit": 0, "summary": "E4 OFF: 2830 passed, 26 skipped, 0 failed"},
+    {"cmd": "INFRX_D_TASK=r1 pytest tests/d/{live,c6,d9*,d8_requests,d7_lab_data,upgrade_lab,port_d10} tests/r; tests/d/test_reads.py", "exit": 0, "summary": "181 passed; 42 passed 3 xfailed"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium", "basis": "one verify/fix round (47-234 min, session-03) on a complete lane; WR-LIVE-K09 (lab-rollout-5) and WR-LIVE-DECIDE/PAGE (composition) outside", "at": "2026-09-29T15:45:00Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-LIVE-K09: tests/integration/lab_rollout k09 breach half over Live (exact diff in the evidence)", "WR-LIVE-DECIDE: rollout decide --approve of an expansion on R2's expand verdict over PgReleaseStore.live, decided through 0043", "WR-LIVE-PAGE: /lab/v1/releases progress from PgReleaseStore.live"],
+  "evidence": ["research/plan/evidence/r/LAB-LIVE-1f68d35.md"]
+}
