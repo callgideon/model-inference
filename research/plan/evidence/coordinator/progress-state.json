@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 318,
- "updated": "2026-09-29T21:37:34Z",
+ "revision": 319,
+ "updated": "2026-09-29T21:38:55Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9442,22 +9442,22 @@
   {
    "id": "W5-LAB-LOCAL-2",
    "task": "I2L",
-   "slice": "`make lab-local` for real after #47/#51/#54/#55: o04 login PASS, o05 control-factory families equal to the owner (0056), e4-on pins green, an R222 machine check; stack mutants (Opus); workflow wf_c7e132a4-c28",
+   "slice": "`make lab-local` for real after #47/#51/#54/#55: o04 login PASS, o05 control-factory families equal to the owner (0056), e4-on pins green, an R222 machine check; stack mutants (Opus); workflow wf_c7e132a4-c28; ACCEPT_WITH_FIXES at 44a19b71 (make lab-local at fd0aba04: e4-on 2838/1 by design/14 skipped; o05 control-factory equal on both logins; 3 journeys PASS, 2 on harness WRs; 52 mutants; the machine check never excuses a FAIL)",
    "agent": "opus",
    "branch": "codex/w5-lab-local-2",
    "worktree": ".claude/worktrees/codex-w5-lab-local-2",
    "base": "c77e75ac",
-   "head": "1a5be321",
+   "head": "44a19b71",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T18:45:40Z",
-   "updated": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T21:38:55Z",
    "blocker": null,
-   "next_action": "resumed by run id 2026-09-29T20:15Z (the limit lifted)",
+   "next_action": "merge batch #61 (WR-LL2-1/2/4, minors, R257–R258) → lab-local-3 rerun flips the pipelines/traces journeys",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9747,6 +9747,42 @@
     "apps/infrx-api/tests/i/lab_pipeline/",
     "apps/lab/",
     "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-61",
+   "task": null,
+   "slice": "merge batch #61 (Opus): lab-local-2 44a19b71 (+WR-LL2-1/2 test-backend ports, WR-LL2-4, minors, R257–R258)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-61",
+   "worktree": ".claude/worktrees/codex-w5-merge-61",
+   "base": "1b19a1f4",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T21:38:55Z",
+   "updated": "2026-09-29T21:38:55Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → lab-local-3",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_local/",
+    "tests/integration/test_harness.py",
+    "apps/lab/tests/p/backend.py",
+    "apps/lab/tests/v/list/backend.py",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/e/E4ON-fd0aba04.md"
    ],
    "wiring_requests": []
   }
