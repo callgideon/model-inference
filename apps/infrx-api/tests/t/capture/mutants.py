@@ -36,11 +36,13 @@ HEAD = "test_the_policy_carries_the_consent_head_and_evaluation_only_at_full"
 TTL = "test_consent_is_read_once_per_key_within_the_ttl_and_again_after_it"
 BOUNDED = "test_the_consent_cache_is_bounded"
 FAILS = "test_a_consent_read_that_fails_is_off_and_never_raises"
-SQL = "test_the_sql_reads_the_key_of_its_own_org_and_the_consent_head"
+SQL = "test_consent_is_read_through_the_trace_consent_rpc"
 RUNTIME = "test_the_runtime_login_without_a_grant_reads_off"
 WITHOUT = "test_without_a_composed_capture_the_ingress_policy_is_off"
 PG_OPT_IN = "check_the_keys_opt_in_under_its_orgs_consent_head"
 PG_REVOKED = "check_a_revoked_head_is_off_not_an_older_consent"
+PG_RUNTIME = "check_the_runtime_login_reads_consent_through_the_rpc"
+PG_NO_GRANT = "check_without_the_grant_the_runtime_login_reads_off"
 SEAM = "test_the_ingress_admits_with_the_composed_capture_policy"
 SYNC = "test_a_consented_sync_request_writes_one_record_of_the_request_and_its_answer"
 UNCONSENTED = "test_an_unconsented_request_writes_nothing"
@@ -123,13 +125,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "            except Exception:                    # noqa: BLE001 - fail closed, never raise",
        "            except ZeroDivisionError:            # noqa: BLE001 - fail closed, never raise",
        FAILS, RUNTIME, dies_by=("OSError",)),
-    _m("sql_binds_in_the_wrong_order", "the key id, then its org", C,
-       "        rows = await self.rows(self.connect, CONSENT_SQL, (key_id, org_id))",
-       "        rows = await self.rows(self.connect, CONSENT_SQL, (org_id, key_id))", SQL),
-    _m("sql_head_skips_revoked_text", "a revoked head is off, never an older consent", C,
-       "                   from infrx.consent_history h where h.org_id = k.org_id\n",
-       "                   from infrx.consent_history h where h.org_id = k.org_id\n"
-       "                     and h.revoked_at is null\n", SQL),
+    _m("sql_binds_in_the_wrong_order", "the org, then the key (0057's signature)", C,
+       "        rows = await self.rows(self.connect, CONSENT_SQL, (org_id, key_id))",
+       "        rows = await self.rows(self.connect, CONSENT_SQL, (key_id, org_id))", SQL),
     # --- the ingress seam ---------------------------------------------------------------
     _m("ingress_ignores_the_capture_policy", "a composed capture's policy is admitted", I,
        "            if self.deps.capture is not None:        # WR-C6-CAPTURE (a): consent, not off",
@@ -370,21 +368,22 @@ MUTANTS: tuple[Mutant, ...] = (
 
 #: Killed in process against real PostgreSQL (`kill_in_process`): cases are `check_*` names.
 PG_MUTANTS: tuple[Mutant, ...] = (
-    _m("pg_binds_in_the_wrong_order", "the key id, then its org", C,
-       "        rows = await self.rows(self.connect, CONSENT_SQL, (key_id, org_id))",
-       "        rows = await self.rows(self.connect, CONSENT_SQL, (org_id, key_id))", PG_OPT_IN),
-    _m("pg_key_of_any_org", "a key answers only under its own organization", C,
-       'where k.id = %s and k.org_id = %s"""', 'where k.id = %s and %s::uuid is not null"""',
-       PG_OPT_IN),
-    _m("pg_head_skips_revoked", "a revoked head is off, never an older consent", C,
-       "                   from infrx.consent_history h where h.org_id = k.org_id\n",
-       "                   from infrx.consent_history h where h.org_id = k.org_id\n"
-       "                     and h.revoked_at is null\n", PG_REVOKED),
-    _m("pg_oldest_head", "the head is the newest version", C,
-       "order by h.consent_version desc limit 1", "order by h.consent_version asc limit 1",
-       PG_OPT_IN),
-    _m("pg_key_opt_in_ignored", "the key's opt-in column is read", C,
-       "select k.trace_mode, c.consent_version", "select 'full', c.consent_version", PG_OPT_IN),
+    # 0057's SQL (the head, the org predicate, the key's opt-in, the grants) is killed by
+    # tests/d/test_code_mutants_lc2.py; these are the Python half on real PostgreSQL.
+    _m("pg_binds_in_the_wrong_order", "the org, then the key (0057's signature)", C,
+       "        rows = await self.rows(self.connect, CONSENT_SQL, (org_id, key_id))",
+       "        rows = await self.rows(self.connect, CONSENT_SQL, (key_id, org_id))", PG_OPT_IN),
+    _m("pg_revoked_head_in_force", "a revoked head is off, never an older consent", C,
+       "    if mode is TraceMode.off or not snapshot.is_current(now):",
+       "    if mode is TraceMode.off:", PG_REVOKED),
+    _m("pg_reads_the_tables_directly", "the runtime login reads consent through the RPC", C,
+       'CONSENT_SQL = "select * from infrx.trace_consent(%s, %s)"',
+       'CONSENT_SQL = "select trace_mode, 1, trace_mode, 30, true, now() - interval \'1 day\', '
+       'null from public.api_keys where org_id = %s and id = %s"', PG_RUNTIME),
+    _m("pg_runtime_refusal_raises", "a login without the grant reads off, never an error", C,
+       "            except Exception:                    # noqa: BLE001 - fail closed, never raise",
+       "            except ZeroDivisionError:            # noqa: BLE001 - fail closed, never raise",
+       PG_NO_GRANT),
 )
 
 RUNNER = Runner(name="t-capture", targets=(SUITE,))

@@ -71,17 +71,11 @@ class Wall:
     def now() -> datetime:
         return datetime.now(timezone.utc)
 
-#: The key's opt-in and its organization's consent head. The head is the highest version,
-#: revoked or not: a revoked head is off, never a fall-back to an older consent.
-CONSENT_SQL = """
-select k.trace_mode, c.consent_version, c.trace_mode, c.content_retention_days,
-       c.evaluation_consent, c.effective_at, c.revoked_at
-from public.api_keys k
-left join lateral (select h.consent_version, h.trace_mode, h.content_retention_days,
-                          h.evaluation_consent, h.effective_at, h.revoked_at
-                   from infrx.consent_history h where h.org_id = k.org_id
-                   order by h.consent_version desc limit 1) c on true
-where k.id = %s and k.org_id = %s"""
+#: The key's opt-in and its organization's consent head (the highest version, revoked or
+#: not: a revoked head is off, never a fall-back to an older consent), for a key of that org,
+#: through 0057's RPC: the dedicated runtime login (0021) reads neither table, and where the
+#: RPC is absent (hosted before its window) the read fails and capture is off.
+CONSENT_SQL = "select * from infrx.trace_consent(%s, %s)"
 
 
 class ConsentSource:
@@ -95,7 +89,7 @@ class ConsentSource:
         self.rows = pg_rows
 
     async def read(self, org_id: str, key_id: str):
-        rows = await self.rows(self.connect, CONSENT_SQL, (key_id, org_id))
+        rows = await self.rows(self.connect, CONSENT_SQL, (org_id, key_id))
         return rows[0] if rows else None
 
     async def policy(self, auth, now) -> ConsentSnapshot:

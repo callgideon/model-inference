@@ -143,10 +143,9 @@ def test_the_runtime_login_without_a_grant_reads_off():
     assert run(consent.policy(AUTH, NOW)) == capture.off_mode_policy(support.ORG, NOW)
 
 
-def test_the_sql_reads_the_key_of_its_own_org_and_the_consent_head():
-    """Oracle (with the PostgreSQL case in test_capture_pg.py): the statement's binding in
-    the wrong order, or the head chosen among unrevoked rows only (a revoked head would fall
-    back to an older consent instead of off)."""
+def test_consent_is_read_through_the_trace_consent_rpc():
+    """Oracle (with test_capture_pg.py and 0057's list, tests/d/test_code_mutants_lc2.py):
+    the RPC's arguments bound in the wrong order (the org as the key: nothing ever reads)."""
     calls = []
 
     async def rows(connect, sql, params):
@@ -156,9 +155,8 @@ def test_the_sql_reads_the_key_of_its_own_org_and_the_consent_head():
     consent.rows = rows
     assert run(consent.read(support.ORG, support.KEY)) == row()
     [(sql, params)] = calls
-    assert params == (support.KEY, support.ORG)
-    assert "order by h.consent_version desc limit 1" in sql and "revoked_at is null" not in \
-        sql.split("left join")[1]
+    assert params == (support.ORG, support.KEY)
+    assert sql == "select * from infrx.trace_consent(%s, %s)"
 
 
 # --- (a) the ingress seam ---------------------------------------------------------------
