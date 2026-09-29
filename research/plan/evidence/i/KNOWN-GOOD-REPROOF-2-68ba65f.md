@@ -151,7 +151,7 @@ sha256 values in this file are the record.
 | `INFRX_MUTANTS=all pytest -q -rs tests/i/test_mutants.py -k "known_good or schema_proof"` | **29 passed** (29/29 killed, 0 survivors), exit 0, 173 s (log `abb0a293…`) |
 | `INFRX_D_TASK=i8 pytest -q tests/i/test_mutants.py` (the default subset + the runner's self-tests, i8 free) | 59 passed, exit 0, 241 s (`ac8060b4…`) |
 | `INFRX_D_TASK=d10 pytest -q -rs tests/i` (whole, including test_mutants' default subset) | **363 passed, 4 skipped, 1 xfailed**, exit 0, 379 s (`af3b4961…`) |
-| `python3 research/plan/scripts/validate_plan.py` | exit 0 |
+| `python3 research/plan/scripts/validate_plan.py` | exit 0 at `a71f0029` (before this evidence existed); **exit 1** at `62b9adab`/`6d8f7476` (broken link from the WR-KGR2-1 quote); exit 0 after the fix round (see "Fix round") |
 
 Two earlier whole-`tests/i` runs used `INFRX_D_TASK=i8` and failed. Neither failure was in a case
 this lane touches.
@@ -182,9 +182,13 @@ Cases and mutants:
 ## Wiring requests (text for the coordinator; not applied)
 
 - **WR-KGR2-1** `infra/rollout/README.md`:
-  - RR row, line 55. Replace:
-    - "carry a `schema_proof` through 0051 (0027-0051 are the Lab migrations at 72dc76ad; KNOWN-GOOD-REPROOF, plain PostgreSQL and the Supabase image; see the paragraph below), so the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has a target up to 0051; beyond 0051 none qualifies"
-    - with "carry a `schema_proof` through 0052 (0027-0052 are the Lab migrations at e9e32e0e; KNOWN-GOOD-REPROOF-2, plain PostgreSQL and the Supabase image; see the paragraph below), so the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has a target up to 0052; beyond 0052 none qualifies".
+  - RR row, line 55. Replace the first line below with the second (fenced so the quoted README link stays literal in this file):
+
+```
+carry a `schema_proof` through 0051 (0027-0051 are the Lab migrations at 72dc76ad; KNOWN-GOOD-REPROOF, plain PostgreSQL and the Supabase image; see the paragraph below), so the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has a target up to 0051; beyond 0051 none qualifies
+carry a `schema_proof` through 0052 (0027-0052 are the Lab migrations at e9e32e0e; KNOWN-GOOD-REPROOF-2, plain PostgreSQL and the Supabase image; see the paragraph below), so the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has a target up to 0052; beyond 0052 none qualifies
+```
+
   - Paragraph, lines 61-72:
     - "carry `through: 0051`" -> "carry `through: 0052`";
     - "0027-0051 the Lab migrations at 72dc76ad; KNOWN-GOOD-PROOF-2/3 and KNOWN-GOOD-REPROOF reran" -> "0027-0052 the Lab migrations at e9e32e0e; KNOWN-GOOD-PROOF-2/3 and KNOWN-GOOD-REPROOF(-2) reran";
@@ -236,3 +240,22 @@ suites and probe carry the proof).
 Lane: 0 h remaining. Coordinator: WR-KGR2-1/2 text patches take 0.1/0.2/0.4 h
 (optimistic/likely/pessimistic). Confidence is high. Basis: WR-KGR-1/2 were the same patches one
 migration earlier.
+
+## Fix round (0-KGR2-RV-1, 1-KGR2-RV-1)
+
+Finding: the WR-KGR2-1 RR-row quote carried the README's live link
+`../runbooks/rollback.md#known-good-rollback-drill`. That link is relative to `infra/rollout/`, so
+from this file it is broken. `validate_plan.py` strips only column-0 fenced blocks before it checks
+links. It exited 1 at `62b9adab` and `6d8f7476`, while the checks table and the update JSON said exit 0.
+The run behind that claim was made at `a71f0029`, before the WR text existed.
+
+- Red: `python3 research/plan/scripts/validate_plan.py` at `6d8f7476` printed
+  `ERROR: Broken link in research/plan/evidence/i/KNOWN-GOOD-REPROOF-2-68ba65f.md: ../runbooks/rollback.md`
+  twice, exit 1. A first attempt put the fence inside the list item, indented. It stayed red because
+  the stripper matches only a fence at column 0.
+- Fix: the two quoted strings (old, new) now sit in a column-0 fenced block, byte for byte the
+  same text. The checks-table row for validate_plan now records the real results.
+- Green: `validate_plan.py` exit 0 (PASS, 953 links across 400 documents);
+  `INFRX_D_TASK=d10 pytest -q tests/i/test_known_good_proof.py` 8 passed;
+  `INFRX_D_TASK=d10 INFRX_MUTANTS=all pytest -q -rs tests/i/test_mutants.py -k "known_good or schema_proof"`
+  29 passed (29/29 killed), 167 s. No code, test, mutant or record changed, only this file and the update JSON.

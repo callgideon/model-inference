@@ -60,7 +60,12 @@
     {
       "cmd": "python3 research/plan/scripts/validate_plan.py",
       "exit": 0,
-      "summary": "PASS"
+      "summary": "PASS after fix round (0-KGR2-RV-1/1-KGR2-RV-1: WR-KGR2-1 quote fenced); was exit 1 at 62b9adab/6d8f7476, exit 0 only at a71f0029"
+    },
+    {
+      "cmd": "INFRX_D_TASK=d10 INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'known_good or schema_proof' (fix round rerun)",
+      "exit": 0,
+      "summary": "29/29 killed, 167 s"
     }
   ],
   "estimate": {
