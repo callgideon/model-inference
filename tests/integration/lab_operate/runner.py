@@ -62,7 +62,7 @@ def _sibling(name: str):
 
 
 NAMESPACE = "e3l"
-BASE = "49393c56"            # the E3L-BIND base (coordinator dispatch; the runner: eb0734d7)
+BASE = "b816f974"            # the lab-operate-2 base (E3L-BIND: 49393c56; the runner: eb0734d7)
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
 EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}
