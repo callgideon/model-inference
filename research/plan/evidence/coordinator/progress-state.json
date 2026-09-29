@@ -9298,7 +9298,7 @@
   {
    "id": "W5-MERGE-55",
    "task": null,
-   "slice": "merge batch #55 (Opus): lab-sql-lw8 d5baa446 (+conflict resolution: post-grant matrix, Makefile, harness pin; teacher-approve grants; WR-LW8-1 runbook; R251)",
+   "slice": "merge batch #55 (Opus): lab-sql-lw8 d5baa446 (+conflict resolution: post-grant matrix, Makefile, harness pin; teacher-approve grants; WR-LW8-1 runbook; R251); workflow wf_f1c44aa3-8b5",
    "agent": "opus",
    "branch": "codex/w5-merge-55",
    "worktree": ".claude/worktrees/codex-w5-merge-55",
