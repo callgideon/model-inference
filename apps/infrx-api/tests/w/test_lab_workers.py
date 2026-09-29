@@ -836,7 +836,8 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
     the proposal's state in one transaction - carrying R2's `lab.rollout_decision.1` by the
     operator, then R2's operator stop converges the alias (its CAS finds the release already
     rolled back). An approved expansion reads the release's stored plan, so without
-    LAB_S3_BUCKET it refuses to start, nothing decided (its verdict: the next case). A refused
+    LAB_S3_BUCKET it refuses to start naming that setting (C7-RV-4, never a HeadBucket
+    failure), nothing decided (its verdict: the next case). A refused
     CAS (a stale fence) is exit 1."""
     from infrx.rollouts import control
     from infrx.state.lab_data import PgLabDataStore
@@ -882,8 +883,11 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
     assert decide_("p-rb", "reject") == 0
     assert decided == [("p-rb", False, operator, None, ())] and rolled == []
     decided.clear()
+    capsys.readouterr()
     assert decide_("p-ex", "approve") == 2                            # no LAB_S3_BUCKET
     assert (decided, rolled) == ([], [])
+    err = capsys.readouterr().err                                     # C7-RV-4: named
+    assert "requires LAB_S3_BUCKET" in err and "HeadBucket" not in err, err
     assert decide_("p-rb", "approve") == 0
     [(pid, approve, by, doc, reasons)] = decided
     assert (pid, approve, by, reasons) == ("p-rb", True, operator,
@@ -1031,7 +1035,8 @@ def test_lab_workers__the_lab_objects_are_the_gateways_media_location_or_refused
     LAB_S3_PREFIX, unset prefix `infrx/`) and read by the page through the gateway's
     `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX`. When the unit names the media location and it
     differs (bucket or prefix), the role refuses at start naming both settings and WR-C5-PLAN,
-    before any bucket is asked; the same location, or none named, connects and probes."""
+    before any bucket is asked; an unset LAB_S3_BUCKET is refused as a missing setting first
+    (C7-RV-4); the same location, or none named, connects and probes."""
     from infrx.media import s3
     connected = []
 
@@ -1052,6 +1057,10 @@ def test_lab_workers__the_lab_objects_are_the_gateways_media_location_or_refused
         assert all(name in str(died) for name in ("LAB_S3_BUCKET", "S3_MEDIA_BUCKET",
                                                     "WR-C5-PLAN")), died
     assert connected == [], "a differing location asked a bucket"
+    for unset in ({"LAB_S3_BUCKET": ""}, {"LAB_S3_BUCKET": " ", "S3_MEDIA_BUCKET": "media"}):
+        died = objects(**unset)                              # C7-RV-4: the name, first
+        assert type(died) is RuntimeMisconfigured and died.missing == ("LAB_S3_BUCKET",), died
+    assert connected == [], "an unset LAB_S3_BUCKET asked a bucket"
     for same in ({}, {"S3_MEDIA_BUCKET": "media"},
                  {"S3_MEDIA_BUCKET": " media ", "S3_MEDIA_PREFIX": "p/", "LAB_S3_PREFIX": "p/"}):
         assert type(objects(**same)) is Store, same

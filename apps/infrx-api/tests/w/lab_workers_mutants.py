@@ -369,6 +369,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_objects_media_unstripped", "the media bucket is compared as a setting (trimmed)",
        '(env.get("S3_MEDIA_BUCKET") or "").strip(),', '(env.get("S3_MEDIA_BUCKET") or ""),',
        OBJECTS),
+    _m("lw_objects_bucket_unnamed", "an unset LAB_S3_BUCKET is refused by name, never a "
+       "HeadBucket failure (C7-RV-4)", "    settings(mode, env, (BUCKET,))\n", "", OBJECTS,
+       DECIDE),
     _m("lw_objects_refusal_unnamed", "the refusal names both locations and WR-C5-PLAN",
        '"S3_MEDIA_BUCKET/S3_MEDIA_PREFIX (WR-C5-PLAN)")', '"the media location")', OBJECTS),
     # --- WR-R4-2 (composition-6): the operator decides a Lab proposal through D9's CAS ---------
