@@ -233,7 +233,7 @@ class Controller:
                 raise                  # lost to a different decision: never overwrite it
 
     async def _converge(self, policy: lab.RolloutPolicy, policy_ref: str, *,
-                        decided: bool = True) -> None:
+                        decided: bool = False) -> None:
         # `decided`: this call recorded (or reread) the rollback, so a promoted listing is the
         # one being rolled back; a later pass matches the named refs only (0-RI-1).
         key = serving_identity if decided else str
@@ -257,7 +257,7 @@ class Controller:
         """One controller pass: act on a rollback verdict, converge a rolled-back release."""
         release = await self._release(policy, policy_ref, plan)
         if release.state == "rolled_back":
-            await self._converge(policy, policy_ref, decided=False)
+            await self._converge(policy, policy_ref)
             return Verdict("rolled_back", ())
         if release.state != "running":
             return Verdict(release.state, ())
@@ -265,7 +265,7 @@ class Controller:
                            report=report, runs=runs)
         if verdict.action == "rollback":
             await self._decide(policy, policy_ref, release, "rolled_back", verdict, self._actor, now)
-            await self._converge(policy, policy_ref)
+            await self._converge(policy, policy_ref, decided=True)
         return verdict
 
     async def approve(self, operator_id: str, policy: lab.RolloutPolicy, policy_ref: str,
@@ -289,4 +289,4 @@ class Controller:
         release = await self._release(policy, policy_ref, None)
         await self._decide(policy, policy_ref, release, "rolled_back",
                            Verdict("rollback", (f"operator:{reason}",)), operator_id, now)
-        await self._converge(policy, policy_ref)
+        await self._converge(policy, policy_ref, decided=True)
