@@ -1,0 +1,47 @@
+{
+ "task": "E7L",
+ "lane": "composition-4",
+ "slice": "i07 (annotation worker process) and i08 (composed /lab/v1/pipelines) bound; i07 training NOT RUN[P-11]; i09 NOT RUN[staging-target]",
+ "activity": "review",
+ "head": "b7db806b",
+ "worktree": ".claude/worktrees/codex-w5-composition-4",
+ "branch": "codex/w5-composition-4",
+ "at": "2026-09-29T05:40:00Z",
+ "owned_paths": [
+  "tests/integration/lab_improve/{scenarios_surface.py,scenarios_pending.py,lab_world.py,runner.py,test_e7l_runner.py,mutants.py}"
+ ],
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --reuse --out research/plan/evidence/e/E7L-raw-17176f5/run",
+   "exit": 3,
+   "summary": "20 PASS / 0 FAIL / 2 NOT RUN case-level (was 18/0/4); cells PIPELINE-LINEAGE PASS, DATA-LINEAGE/PIPELINE-BUDGET/TRAIN-RECOVER NOT RUN (i09, i07-training only)"
+  },
+  {
+   "cmd": "layer-1: pytest tests/integration/lab_improve; INFRX_MUTANTS=all test_mutants.py",
+   "exit": 0,
+   "summary": "18 passed 1 skipped; 22 passed 27 skipped (stack list needs a kept stack)"
+  }
+ ],
+ "i07": "annotation case PASS (real process SIGKILL between chunks, restart: 3 teacher POSTs, settled 0.03 once, labels once); training case NOT RUN[P-11]",
+ "i08": "PASS over pilot._lab's surface with stand-ins: session verifier, checkpoint listing (WR-LAB2-4), B3 suites/dev deployer (WR-B3-3), TEST_RATES",
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 3,
+  "pessimistic_h": 8,
+  "confidence": "low",
+  "basis": "remaining E7L cells wait on P-11 (training pass) and an allocated staging target (i09); the i08 UI half on the Lab app",
+  "at": "2026-09-29T05:40:00Z"
+ },
+ "blockers": [
+  "P-11 (i07 training)",
+  "staging-target (i09)"
+ ],
+ "wiring_requests": [
+  "WR-C4-UI",
+  "WR-C4-B3-SUITES"
+ ],
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-4-b7db806.md",
+  "research/plan/evidence/e/E7L-raw-17176f5/"
+ ]
+}
