@@ -98,8 +98,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("pinned_journey_runs", "a key-pinned journey is NOT RUN, never run on its key", R,
        "    if spec[\"pinned\"]:\n        return", "    if False:\n        return", PINNED),
     _m("a_required_case_renamed", "the required cases are the module's cases", R,
-       '    "o04": ("test_o04_the_control_factory_serves_a_lab_session",),',
-       '    "o04": ("test_o04_the_control_factory_serves",),', REQUIRED),
+       '    "o04": ("test_o04_the_control_factory_serves_a_lab_session",\n',
+       '    "o04": ("test_o04_the_control_factory_serves",\n', REQUIRED),
     _m("another_lanes_block", "the block is borrowed only under E3L's own lock", R,
        'LOCK = Path("/tmp") / f"infrx-{NAMESPACE}.runner.lock"',
        'LOCK = Path("/tmp") / "infrx-lab-local.runner.lock"', KEY),
@@ -149,6 +149,8 @@ O02_SEAM = "test_o02_the_consumer_workers_lab_seam_refuses_by_name"
 O03 = {role: f"test_o03_the_{role}_role_starts" for role in
        ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets")}
 O04 = "test_o04_the_control_factory_serves_a_lab_session"
+#: LDP-F5: the factory on infrx_lab_control refuses /readyz off the pooler (set role).
+O04_LOGIN = "test_o04_the_control_factory_is_ready_on_its_own_login"
 O05_ALL = "test_o05_every_lab_route_family_answers_a_lab_session"
 O05_LAB = "test_o05_the_lab_routes_gateway_serves_every_family"
 O05_KEY = "test_o05_a_consumer_key_is_no_lab_session_on_any_family"
@@ -188,7 +190,7 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
 #: holds no grant on L2's RPCs, so every Lab route refuses; LDP-F3 datasets answers 500): a
 #: finding filed with the owning lanes, kept out of the stack list's pristine baseline (E8L's
 #: KNOWN_FAIL rule) until fixed.
-KNOWN_FAIL: set[str] = {O05_ALL}
+KNOWN_FAIL: set[str] = {O05_ALL, O04_LOGIN}
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIOS = "../../tests/integration/lab_local/scenarios_on.py"
 

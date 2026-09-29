@@ -397,11 +397,22 @@ def composition(workdir: Path):
             with operate.control_service(trip, workdir) as (control, _verifier):
                 control.env["INFRX_LAB_SUPABASE_URL"] = standin.url
                 control.env["INFRX_LAB_ORIGIN"] = LAB_ORIGIN
-                control.env["INFRX_LAB_DATABASE_URL"] = lab_control_dsn(trip.world.database)
                 try:
                     control.start(E3L_ENGINE_URL=trip.engine.base_url)
                 except (RuntimeError, AssertionError) as failed:
                     refused["lab-control"] = str(failed)[:1500]
+                # LDP-R4: the same factory on its own login, 0043's infrx_lab_control (the
+                # one above stays on the owner login so the families it serves are judged
+                # apart from LDP-F5); o04's login case reads its readiness.
+                (workdir / "control-login").mkdir(exist_ok=True)
+                own = operate.ControlService(trip, workdir / "control-login", standin.url)
+                own.env.update(control.env, INFRX_LAB_DATABASE_URL=lab_control_dsn(trip.world.database))
+                try:
+                    own.start(E3L_ENGINE_URL=trip.engine.base_url)
+                except (RuntimeError, AssertionError) as failed:
+                    refused["lab-control-login"] = str(failed)[:1500]
+                finally:
+                    own.kill()
                 yield types.SimpleNamespace(trip=trip, procs=procs, refused=refused,
                                             control=control, standin=standin, env=env,
                                             workdir=workdir, seam=seam, labgw=labgw)

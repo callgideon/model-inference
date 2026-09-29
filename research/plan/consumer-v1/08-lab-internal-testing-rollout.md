@@ -32,7 +32,7 @@ what works. On this base, **with no gateway switch turned on** (§5 rule 1):
 | `/lab/v1/control` API (register, listings, smoke, proposals) | the control service (`infrx-lab-control`, :8003) | **yes, API only**; the Lab web's control pages (`/overview`, `/models`, `/deployments`) say "unavailable" until WR-E3L-J (lab-app-control lane) gives apps/lab an HTTP control adapter |
 | `/requests` (traces) | the control service with `CLICKHOUSE_URL` + `S3_TRACE_BUCKET` | **no** until the trace projection is deployed (T2I/T3; not on the box) |
 | `/datasets`, `/annotations`, `/training`, `/evaluations`, `/releases`, `/optimizations` | the gateway's Lab routes only (`LAB_DATASETS`, `LAB_PIPELINES`, `LAB_EVALS`, `LAB_RELEASES`) | **no**: those switches are NOT_SETTABLE on the hosted gateway (`deploy/preflight.py`). Needs WR-LDP-2 (mount them in the control factory, so the App gateway keeps every Lab switch OFF); then evals/pipelines/releases still answer "unavailable" until WR-B4-2 / WR-LAB2-4 / WR-R4-1/2 / WR-P4B-1 merge (E4-ON o05/o07) |
-| Worker role `eval` | `infrx-lab-eval` | starts ready locally (E4-ON o03) — **on the owner login only**; on the box it needs its own login (WR-LDP-6, §3) |
+| Worker role `eval` | `infrx-lab-eval` | starts ready locally (E4-ON o03) — **on the owner login only**; on the box it needs its own login (WR-LDP-7, §3) |
 | Worker roles `judge`, `datasets` | `infrx-lab-{judge,datasets}` | **no on this box**: each requires `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` (`infrx.lab.workers` NEEDS) and the trace projection is not deployed; without them the entry point refuses (exit 2), so 50-lab-role.sh refuses the SPEC first. They start locally (o03) only because the composition gives every role a ClickHouse |
 | Worker role `annotation` | `infrx-lab-annotation` | has its teacher-collect pass on this base (needs `LAB_S3_BUCKET` + `LAB_TEACHER_URL` = the local teacher fake only, P-10); not for internal testing (§5 rule 3) |
 | Worker roles `checkpoints`, `training`, `rollout` | their units | **refuse by name** (exit 2, R198/R211) until WR-B3-3 / P-11 / WR-LSQ-9 |
@@ -137,9 +137,9 @@ then check with `aws ssm describe-parameters --parameter-filters Key=Name,Values
 
 The role logins: one per role, created by the lab-sql lane's role migration or the operator
 (`grant` shape as 0021's dedicated logins); until a role has its own login, **do not** switch it
-on with the owner DSN. **No such login exists yet** (WR-LDP-6): E4-ON proves the roles only on the
+on with the owner DSN. **No such login exists yet** (WR-LDP-7): E4-ON proves the roles only on the
 owner login (o03), and the control factory on `infrx_lab_control` (0043/0044, o04 since the fix
-round). So L5's proof is E4-ON o04 on `infrx_lab_control`; L7 waits for WR-LDP-6 and an E4-ON run
+round). So L5's proof is E4-ON o04 on `infrx_lab_control`; L7 waits for WR-LDP-7 and an E4-ON run
 whose o03 uses those logins. Proof: each `describe-parameters` line.
 
 ## 4. The box, in order (each step through `infra/rollout/ssm.sh`, as root)
@@ -154,7 +154,7 @@ whose o03 uses those logins. Proof: each `describe-parameters` line.
 | L5s | smoke | `infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh` | `PASS App gateway`, `PASS App worker`, `PASS Lab control` |
 | L6 | the control origin on the edge | `infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on RELEASE=$RELEASE` (DNS A record `lab-control.callbill.ai` → the box first, P-08) | `Lab site installed and the edge reloaded`; then from the host: `curl -s -o /dev/null -w '%{http_code}' https://lab-control.callbill.ai/lab/v1/control/models` = 401 (no session) and with `-H 'Authorization: Bearer sk-x'` = 401 `invalid_audience` |
 | L6s | smoke | 60-lab-smoke.sh again + `infra/rollout/verify-external.sh` (the App's external checks) | all PASS; App external `failures: 0` |
-| L7 | **`eval` only on this box** (after WR-LDP-6 gives it its own login); `judge`, then `datasets` only once `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` exist (the trace projection deployed) | `infra/rollout/ssm.sh infra/lab/rollout/steps/50-lab-role.sh STATE=on ROLE=eval RELEASE=$RELEASE SPEC="LAB_DATABASE_URL=/model-inference/lab/eval_database_url LAB_S3_BUCKET:=<Lab bucket> LAB_EVAL_ENDPOINT_URL:=https://marlin2b.callbill.ai/v1 LAB_EVAL_ENDPOINT_KEY=/model-inference/lab/eval_endpoint_key"` (later, judge: `JUDGE_PROVIDER_URL:=<P-10 approved host> CLICKHOUSE_URL=/model-inference/lab/clickhouse_url S3_TRACE_BUCKET:=<trace bucket> JUDGE_MODE:=dry_run`; datasets: `LAB_S3_BUCKET:=… CLICKHOUSE_URL=/model-inference/lab/clickhouse_url S3_TRACE_BUCKET:=…`). The step refuses (exit 2, before any change) a SPEC without a name the role needs | `wrote /etc/infrx-lab/eval.env: INFRX_IMAGE LAB_DATABASE_URL …`, `eval ON: 127.0.0.1:8012/readyz 200`; the pooler budget printed no FAIL |
+| L7 | **`eval` only on this box** (after WR-LDP-7 gives it its own login); `judge`, then `datasets` only once `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` exist (the trace projection deployed) | `infra/rollout/ssm.sh infra/lab/rollout/steps/50-lab-role.sh STATE=on ROLE=eval RELEASE=$RELEASE SPEC="LAB_DATABASE_URL=/model-inference/lab/eval_database_url LAB_S3_BUCKET:=<Lab bucket> LAB_EVAL_ENDPOINT_URL:=https://marlin2b.callbill.ai/v1 LAB_EVAL_ENDPOINT_KEY=/model-inference/lab/eval_endpoint_key"` (later, judge: `JUDGE_PROVIDER_URL:=<P-10 approved host> CLICKHOUSE_URL=/model-inference/lab/clickhouse_url S3_TRACE_BUCKET:=<trace bucket> JUDGE_MODE:=dry_run`; datasets: `LAB_S3_BUCKET:=… CLICKHOUSE_URL=/model-inference/lab/clickhouse_url S3_TRACE_BUCKET:=…`). The step refuses (exit 2, before any change) a SPEC without a name the role needs | `wrote /etc/infrx-lab/eval.env: INFRX_IMAGE LAB_DATABASE_URL …`, `eval ON: 127.0.0.1:8012/readyz 200`; the pooler budget printed no FAIL |
 | L7s | smoke after **each** role | 60-lab-smoke.sh | the new role PASS, App PASS |
 | L8 | record | release, Lab image id, parameter names + versions, which switches are ON, the smoke outputs | coordinator log entry |
 
@@ -286,7 +286,7 @@ reversal of Lab tables is never part of this runbook.
   **landed on the tip** (bcb73cc1; its post-check is `*"0051 lab_import_jobs"$'\n'"nothing
   pending"`, the form `lab-migrate.sh` checks) — and its W7 maintenance precondition for an
   additive Lab-only window (open).
-- **WR-LDP-6** (lab-sql lane): one dedicated login per Lab worker role (`infrx_lab_eval`, then
+- **WR-LDP-7** (lab-sql lane): one dedicated login per Lab worker role (`infrx_lab_eval`, then
   `infrx_lab_judge`, `infrx_lab_datasets`), noinherit, a connection limit, each granted exactly
   what its `infrx.lab.workers` composition calls (as 0043 does for `infrx_lab_control`), and
   `lab_world.role_env` switched to them so E4-ON o03 proves the roles on the box's logins. Until
@@ -310,7 +310,7 @@ reversal of Lab tables is never part of this runbook.
 | §2 a/b | `W6b PASS: COPY_DIGEST=…`, `W7 PASS: hosted 0001-0051` | `~/infrx-backups/migrate-*.log` + coordinator log |
 | §3 | `describe-parameters` name/type/version | coordinator log |
 | L5 | E4-ON o04 PASS with the control factory on `infrx_lab_control` (fix round) + L5's printed lines | verdict.json + coordinator log |
-| L7 | WR-LDP-6 merged + E4-ON o03 PASS on the per-role logins (NOT RUN today) | verdict.json |
+| L7 | WR-LDP-7 merged + E4-ON o03 PASS on the per-role logins (NOT RUN today) | verdict.json |
 | L1–L7 | each step's printed lines (names only) + `60-lab-smoke.sh` after each | `/var/log/infrx-lab-rollout.log` + coordinator log |
 | §6 | Vercel deployment id, domain, Redirect URLs | P-08 record |
 | §7 | the membership select (ids), each tester's workspace list | P-08 record |
@@ -329,5 +329,5 @@ reversal of Lab tables is never part of this runbook.
   plan's `NNNN name` form. §0/§4 L7/§5: judge and datasets require `CLICKHOUSE_URL` and
   `S3_TRACE_BUCKET`, so this box runs `eval` only; step 50 refuses a SPEC missing a needed name
   and keeps exit 5 for the pending roles. §3/§10/§11: the control factory is proven on
-  `infrx_lab_control`, the roles only on the owner login until WR-LDP-6. `LAB_TEACHERS` is on
+  `infrx_lab_control`, the roles only on the owner login until WR-LDP-7. `LAB_TEACHERS` is on
   the base (OFF on the box). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.

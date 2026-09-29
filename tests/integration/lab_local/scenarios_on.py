@@ -130,12 +130,18 @@ def test_o03_the_datasets_role_starts(on):
 
 def test_o04_the_control_factory_serves_a_lab_session(on):
     assert "lab-control" not in on.refused, f"the control factory refused: {on.refused.get('lab-control')}"
-    assert on.control.env["INFRX_LAB_DATABASE_URL"].startswith(
-        f"postgresql://{lw.CONTROL_LOGIN}:"), "premise: the control factory's own login (LDP-R4)"
     answer = on.control.call("GET", "deployments", operate.session(operate.DEV_A))
     assert answer.status_code == 200, f"{answer.status_code} {answer.text[:300]}"
     refused = on.control.call("GET", "deployments", operate.session(operate.DEV_B))
     assert refused.status_code in (403, 404), "B's developer reads nothing of A's"
+
+
+def test_o04_the_control_factory_is_ready_on_its_own_login(on):
+    """LDP-R4: the factory on 0043's `infrx_lab_control` (the box's L5 login), not the owner,
+    answers /readyz. (LDP-F5: off the transaction pooler it `set role service_role`, which that
+    login is refused: a finding for I2L's WR-I2L-4b, never patched here.)"""
+    assert "lab-control-login" not in on.refused, \
+        f"the control factory on {lw.CONTROL_LOGIN}: {on.refused.get('lab-control-login')}"
 
 
 def _client(url: str):

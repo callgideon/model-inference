@@ -68,7 +68,8 @@ REQUIRED = {
     "o03": tuple(f"test_o03_the_{role}_role_starts" for role in
                  ("eval", "checkpoints", "judge", "annotation", "training", "rollout",
                   "datasets")),
-    "o04": ("test_o04_the_control_factory_serves_a_lab_session",),
+    "o04": ("test_o04_the_control_factory_serves_a_lab_session",
+            "test_o04_the_control_factory_is_ready_on_its_own_login"),
     "o05": ("test_o05_every_lab_route_family_answers_a_lab_session",
             "test_o05_the_lab_routes_gateway_serves_every_family",
             "test_o05_a_consumer_key_is_no_lab_session_on_any_family"),
@@ -237,7 +238,8 @@ def e4_on(out: Path, lab_world) -> dict:
            "INFRX_D_TASK": KEY, "INFRX_D2_VALKEY_PORT": str(own["valkey"].host_port),
            "INFRX_D2_VALKEY_CONTAINER": own["valkey"].container,
            "INFRX_Q_VALKEY_PORT": str(own["valkey-q"].host_port),
-           "INFRX_M_S3_ENDPOINT": lab_world.harness.s3_endpoint(), "INFRX_M_S3_LOCAL_CREDS": "1"}
+           "INFRX_M_S3_ENDPOINT": lab_world.harness.s3_endpoint(), "INFRX_M_S3_LOCAL_CREDS": "1",
+           "INFRX_M_S3_BUCKET": lab_world.stack.media_bucket()}   # the n-track's objects (else infrx-n1)
     env.pop("INFRX_E2_NAMESPACE", None)          # the suites use their own harnesses
     argv = [str(PY), "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider", *E4_SUITES,
             f"--junitxml={junit}"]
