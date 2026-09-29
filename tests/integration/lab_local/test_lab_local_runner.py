@@ -12,6 +12,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 if str(REPO / "apps" / "infrx-api") not in sys.path:      # `infrx`, as harness.api_on_path
@@ -362,7 +364,8 @@ def test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case():
                            scenarios)["accepted"]
     mixed = runner.r222(e4([R198_CASE, "tests.g.x::test_y"]), scenarios)
     assert mixed["open"] == {"e4-on": runner.FAIL} and mixed["by_design"] == {}
-    assert runner.r222(e4([]), scenarios)["open"] == {"e4-on": runner.FAIL}
+    assert runner.r222(e4([]), scenarios) == {"accepted": False,                # 0-LL3R-2
+                                              "open": {"e4-on": runner.FAIL}, "by_design": {}}
     assert runner.r222(e4([], runner.BLOCKED), scenarios)["open"] == {"e4-on": runner.BLOCKED}
 
 
@@ -492,7 +495,7 @@ def test_lab_local_an_e4_skip_on_another_key_runs_on_that_key_or_is_not_run_by_n
     monkeypatch.setattr(runner, "logged", logged)
     monkeypatch.setattr(runner, "key_held", lambda key, wait_s=0: "t2f's lock is held"
                         if key == "t2f" else None)
-    monkeypatch.setattr(runner, "aux", lambda key: started.append(key) or [])
+    monkeypatch.setattr(runner, "aux", lambda key, into: started.append(key))
     rows = {row["stage"]: row for row in
             runner.e4_keyed(tmp_path, {"INFRX_D_TASK": runner.KEY, "LAB_X": "true"}, skipped)}
     assert set(rows) == {f"e4-on@{key}" for key in FD_KEYS}
@@ -511,6 +514,35 @@ def test_lab_local_an_e4_skip_on_another_key_runs_on_that_key_or_is_not_run_by_n
             (runner.BLOCKED if key == "j2" else runner.PASS), key   # a skip on its key too
     assert sorted(started) == sorted(set(FD_KEYS) - {"t2f"})
 
+
+
+def test_lab_local_a_keyed_stack_that_fails_to_start_is_removed_and_recorded(
+        tmp_path, monkeypatch):
+    """0-LL3R-1: when t2i's second `docker run` fails, the ClickHouse already started is removed
+    (never left to hold the key forever) and the stage is an INVALID[harness] row, not an
+    exception that aborts the gate before verdict.json is written."""
+    import subprocess
+    import httpx
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if argv[:2] == ["docker", "run"] and sum(c[:2] == ["docker", "run"] for c in calls) == 2:
+            raise subprocess.CalledProcessError(125, argv, stderr=b"port is already allocated")
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+    monkeypatch.setattr(runner.subprocess, "run", run)
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: types.SimpleNamespace(status_code=200))
+    monkeypatch.setattr(runner, "key_held", lambda key, wait_s=0: None)
+    monkeypatch.setattr(runner, "logged", lambda *a, **k: pytest.fail("ran without its stack"))
+    try:
+        rows = runner.e4_keyed(tmp_path, {}, ["tests.g.lab_traces.test_lab_traces_stack::test_x"])
+    except subprocess.CalledProcessError as escaped:
+        rows = [{"stage": "escaped", "status": repr(escaped)}]  # asserted below, not raised
+    first = calls[0][calls[0].index("--name") + 1]
+    assert ["docker", "rm", "-f", "-v", first] in calls
+    assert [r["stage"] for r in rows] == ["e4-on@t2i"] and rows[0]["status"] == runner.INVALID
+    assert rows[0]["reason"].startswith("INVALID[harness] ") and "CalledProcessError" in \
+        rows[0]["reason"] and rows[0]["rerun"]
 
 def junit_file(argv) -> str:
     """A passing junit for the node ids in argv (classname as pytest writes it)."""

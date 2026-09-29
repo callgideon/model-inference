@@ -470,9 +470,10 @@ def key_held(key: str, wait_s: float = 0.0, services: dict | None = None) -> str
     return reason
 
 
-def aux(key: str) -> list[str]:
+def aux(key: str, started: list[str]) -> None:
     """Start the key's ClickHouse/S3 (compose.yaml's pinned images, the key's literals) and
-    wait for them; the containers started, for removal. PostgreSQL is the case's harness's."""
+    wait for them; each container is appended to the caller's `started` as it starts, so a
+    later failure still removes it (0-LL3R-1). PostgreSQL is the case's harness's."""
     from infrx.contracts.tasklocal import local_services
     compose = (HERE.parent / "compose.yaml").read_text()
     image = lambda svc: re.search(rf"^  {svc}:\n(?:    #.*\n)*    image: (\S+)", compose,  # noqa: E731
@@ -483,7 +484,6 @@ def aux(key: str) -> list[str]:
             "s3": (9000, ["MINIO_ROOT_USER=infrxe2minio",
                           "MINIO_ROOT_PASSWORD=infrx-e2-local-secret"],
                    ["server", "/data", "--address", ":9000"], "/minio/health/live")}
-    started = []
     for name, svc in local_services(key).items():
         if name not in spec:
             continue
@@ -505,7 +505,6 @@ def aux(key: str) -> list[str]:
             if time.monotonic() > deadline:
                 raise RuntimeError(f"{svc.container} not ready in 90 s")
             time.sleep(1)
-    return started
 
 
 def e4_keyed(out: Path, env: dict, skipped: list[str]) -> list[dict]:
@@ -525,11 +524,15 @@ def e4_keyed(out: Path, env: dict, skipped: list[str]) -> list[dict]:
         junit = out / f"e4-on@{key}.xml"
         argv = [str(PY), "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
                 f"--junitxml={junit}", *plan["nodes"]]
-        started = []
+        started: list[str] = []
         try:
-            started = aux(key)
+            aux(key, started)
             code, seconds, log = logged(f"e4-on@{key}", argv, out, API,
                                         {**env, **plan["env"]}, 1800)
+        except Exception as error:                        # 0-LL3R-1: a row, never an abort
+            rows.append({**row, "status": INVALID,
+                         "reason": f"INVALID[harness] {type(error).__name__}: {error}"})
+            continue
         finally:
             for container in started:
                 subprocess.run(["docker", "rm", "-f", "-v", container], capture_output=True)

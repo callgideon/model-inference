@@ -75,6 +75,7 @@ JOURNEY_ENV = "test_lab_local_pipelines_and_traces_run_on_this_blocks_teacher_an
 KEYED = "test_lab_local_an_e4_skip_on_another_key_runs_on_that_key_or_is_not_run_by_name"
 KEY_FREE = "test_lab_local_a_key_is_free_only_with_its_ports_unbound_and_its_lock_free"
 KEYED_B9 = "test_lab_local_every_e4_skip_at_b94fd337_is_planned_on_its_key"
+KEYED_AUX = "test_lab_local_a_keyed_stack_that_fails_to_start_is_removed_and_recorded"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("a_switch_left_off", "EVERY switch is ON in the composition", W,
@@ -149,6 +150,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("r222_e4_by_design_accepted", "the e4-on by-design FAIL stays in open, reported (R257)",
        R, "            only.add(name)\n", "            only.add(name)\n            continue\n",
        R222_E4),
+    _m("r222_e4_empty_failed_accepted", "an e4-on FAIL with no failed ids is never accepted "
+       "(0-LL3R-2)", R, "and status == FAIL and failed \\", "and status == FAIL \\", R222_E4),
     _m("r222_e4_errors_ignored", "an e4-on stage with an error is never reported as only its "
        "by-design FAIL (LL2C-4)", R, 'and not counts.get("errors")', "and True", R222_E4),
     _m("r222_any_refusal_text", "a by-design FAIL counts only on its recorded refusal text "
@@ -174,7 +177,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        status, reason = pytest_verdict(code, counts)\n        rows.append",
        "        status, reason = PASS, \"\"\n        rows.append", KEYED),
     _m("keyed_aux_not_started", "t2i/t2f's ClickHouse/S3 are started for their cases", R,
-       "            started = aux(key)\n", "            started = []\n", KEYED),
+       "            aux(key, started)\n", "            pass\n", KEYED),
+    _m("keyed_aux_failure_leaks", "a container started before a later start fails is removed "
+       "(0-LL3R-1)", R, "        started.append(svc.container)\n", "", KEYED_AUX),
+    _m("keyed_aux_failure_aborts", "a keyed stack that fails to start is an INVALID row, not an "
+       "abort before verdict.json (0-LL3R-1)", R, "        except Exception as error:",
+       "        except KeyError as error:", KEYED_AUX),
     _m("keyed_t2i_stack_unset", "t2i's case reads its ClickHouse only with "
        "INFRX_LAB_API_STACK=1", R, '("t2i", {"INFRX_LAB_API_STACK": "1"})', '("t2i", {})',
        KEYED),
