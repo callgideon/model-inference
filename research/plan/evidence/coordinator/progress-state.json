@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 323,
- "updated": "2026-09-29T22:06:54Z",
+ "revision": 324,
+ "updated": "2026-09-29T22:45:52Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9542,22 +9542,22 @@
   {
    "id": "W5-LAB-ROLLOUT-7",
    "task": "E8L",
-   "slice": "WR-LR6-VERDICT (read-time verdict), WR-LR6-GATE-OUT, WR-LR6-E2E-SHADOW; E8L only k08 NOT RUN (Opus); workflow wf_b5c37c35-1a4",
+   "slice": "WR-LR6-VERDICT (read-time verdict), WR-LR6-GATE-OUT, WR-LR6-E2E-SHADOW; E8L only k08 NOT RUN (Opus); workflow wf_b5c37c35-1a4; REJECT at dc3ba861 with one open = a migration outside its paths (WR-LR7-GRANT) → merged as ACCEPT_WITH_FIXES; make lab-rollout at e65bbecf k01–k07/k09/k10 PASS, no sub-cells, r222 accepted; make lab-e2e 24/24; 86 mutants; E4 2840/0",
    "agent": "opus",
    "branch": "codex/w5-lab-rollout-7",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout-7",
    "base": "33547abd",
-   "head": null,
+   "head": "dc3ba861",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T20:21:25Z",
-   "updated": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T22:45:52Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #62 (WR-LR7-GRANT as 0059, WR-LR7-I-OPT, minors, R259–R260) → E8L at its local floor (k08 only)",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 6,
@@ -9817,6 +9817,44 @@
     "tests/integration/lab-local.sh",
     "research/plan/evidence/e/E4ON-*",
     "research/plan/evidence/i/LAB-LOCAL-2-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-62",
+   "task": null,
+   "slice": "merge batch #62 (Opus): lab-rollout-7 dc3ba861 (+pilot.py/lab_releases conflicts vs #60 kept both sides, 0059 lab_control_grants_2, WR-LR7-I-OPT, minors, R259–R260)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-62",
+   "worktree": ".claude/worktrees/codex-w5-merge-62",
+   "base": "a8bdd22c",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T22:45:52Z",
+   "updated": "2026-09-29T22:45:52Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10; harness pins 0057/0058/0059 in order as they land)",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/app/supabase/migrations/0059_*",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "apps/infrx-api/tests/i/lab_control/",
+    "apps/infrx-api/tests/d/test_code_mutants_lr7.py",
+    "tests/integration/lab_rollout/",
+    "apps/lab/tests/e2e/",
+    "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
   }
