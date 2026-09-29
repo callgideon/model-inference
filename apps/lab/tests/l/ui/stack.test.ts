@@ -13,7 +13,7 @@ import { j01, j02, type JourneyWorld, type Who } from "./journeys.ts";
 
 const REAL = process.env.LAB_L4_REAL === "1";
 const lab = resolve(import.meta.dirname, "../../..");
-type World = { A: string; B: string; name: string; weights: string[]; tokens: Record<Who | "consumer", string> };
+type World = { A: string; B: string; name: string; weights: string[]; tokens: Record<Who | "consumer" | "ops", string> };
 
 async function backend(): Promise<{ url: string; world: World; stop: () => void }> {
   const child = spawn("uv", ["run", "--frozen", "--project", "../infrx-api", "python", "tests/l/ui/backend.py"], { cwd: lab, stdio: ["ignore", "pipe", "inherit"] });
@@ -43,7 +43,11 @@ test("L4-S01..S03 the journeys J01/J02 through the HTTP adapter on the real cont
     port: (who) => httpControl({ baseUrl: url, token: async () => w.tokens[who] }),
     registration: { name: w.name, artifactDigest: w.weights[0], schemaVersion: "chat.v1", runtime: "vllm/vllm-openai@sha256:" + "ab".repeat(32) },
     approve: async (proposalId) => void (await door("POST", "approve", { proposal_id: proposalId })),
-    // no reject: L3 has no rejection of a proposal (E3L-F4), so J02 skips that step here
+    // E3L-F4: the operator's rejection is the control route's own door, on an operator's Lab session
+    reject: async (proposalId) => {
+      const r = await fetch(`${url}/lab/v1/control/proposals/${encodeURIComponent(proposalId)}/reject`, { method: "POST", headers: { authorization: `Bearer ${w.tokens.ops}`, "content-type": "application/json" }, body: JSON.stringify({ reason: "lab journey" }) });
+      assert.equal(r.status, 200, await r.text());
+    },
     rollback: async () => void (await door("POST", "rollback")),
     discoverable: async () => (await door("GET", "discoverable")).deployment_revision_id,
   };

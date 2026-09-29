@@ -166,3 +166,5 @@ created and removed by pgharness; none left. Foreign containers seen and not tou
 - basis: both findings implemented with red-first seams, 0 survivors across the L3 (117) and
   l3sql (77) lists, E3L layer 1 green; what remains is one verify round (47-234 min per
   session-03) and the lab-app owner applying WR-LC2-1/2.
+
+Rulings: numbered R231 (1), R232 (2), R233 (3) in `research/plan/08-contracts-v1-encoding.md` §10 at the lab-control-2 merge on `codex/w5-merge-43` (2026-09-29); R226–R230 numbered on codex/w5-merge-42.
