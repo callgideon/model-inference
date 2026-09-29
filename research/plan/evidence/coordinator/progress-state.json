@@ -9409,7 +9409,7 @@
   {
    "id": "W5-MERGE-57",
    "task": null,
-   "slice": "merge batch #57 (Opus): lab-observe-3 7c675167 (+RV-2/3/4 cases, evidence minors, R253); E5L flips at integration",
+   "slice": "merge batch #57 (Opus): lab-observe-3 7c675167 (+RV-2/3/4 cases, evidence minors, R253); E5L flips at integration; workflow wf_a4a0a29a-264",
    "agent": "opus",
    "branch": "codex/w5-merge-57",
    "worktree": ".claude/worktrees/codex-w5-merge-57",
@@ -9442,7 +9442,7 @@
   {
    "id": "W5-LAB-LOCAL-2",
    "task": "I2L",
-   "slice": "`make lab-local` for real after #47/#51/#54/#55: o04 login PASS, o05 control-factory families equal to the owner (0056), e4-on pins green, an R222 machine check; stack mutants (Opus)",
+   "slice": "`make lab-local` for real after #47/#51/#54/#55: o04 login PASS, o05 control-factory families equal to the owner (0056), e4-on pins green, an R222 machine check; stack mutants (Opus); workflow wf_c7e132a4-c28",
    "agent": "opus",
    "branch": "codex/w5-lab-local-2",
    "worktree": ".claude/worktrees/codex-w5-lab-local-2",
