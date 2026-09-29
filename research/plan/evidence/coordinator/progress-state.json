@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 321,
- "updated": "2026-09-29T21:46:32Z",
+ "revision": 322,
+ "updated": "2026-09-29T21:57:57Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9453,11 +9453,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T18:45:40Z",
-   "updated": "2026-09-29T21:38:55Z",
+   "updated": "2026-09-29T21:57:57Z",
    "blocker": null,
-   "next_action": "merge batch #61 (WR-LL2-1/2/4, minors, R257–R258) → lab-local-3 rerun flips the pipelines/traces journeys",
+   "next_action": "lab-local-3: the composition rerun (pipelines/traces journeys, pinned control-factory expectations) + the 12 stack mutants",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9753,22 +9753,22 @@
   {
    "id": "W5-MERGE-61",
    "task": null,
-   "slice": "merge batch #61 (Opus): lab-local-2 44a19b71 (+WR-LL2-1/2 test-backend ports, WR-LL2-4, minors, R257–R258); workflow wf_6480cc4a-e86",
+   "slice": "merge batch #61 (Opus): lab-local-2 44a19b71 (+WR-LL2-1/2 test-backend ports, WR-LL2-4, minors, R257–R258); workflow wf_6480cc4a-e86; integrated (R257–R258 on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-61",
    "worktree": ".claude/worktrees/codex-w5-merge-61",
    "base": "1b19a1f4",
-   "head": null,
+   "head": "87b2d5d3",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T21:38:55Z",
-   "updated": "2026-09-29T21:38:55Z",
+   "updated": "2026-09-29T21:57:57Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → lab-local-3",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9783,6 +9783,40 @@
     "apps/lab/tests/v/list/backend.py",
     "research/plan/08-contracts-v1-encoding.md",
     "research/plan/evidence/e/E4ON-fd0aba04.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-LOCAL-3",
+   "task": "I2L",
+   "slice": "`GATE_ARGS=--keep make lab-local` after #61: the pipelines/traces journeys run in the composition, o05 judged against CONTROL_EXPECTED, the 14 e4-on skips on other keys run inside the composition or ruled; the 12 stack mutants on the kept stack (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-local-3",
+   "worktree": ".claude/worktrees/codex-w5-lab-local-3",
+   "base": "HEAD",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T21:57:57Z",
+   "updated": "2026-09-29T21:57:57Z",
+   "blocker": null,
+   "next_action": "handback → merge → E4-ON accepted under R257 → the runbook proof table",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_local/",
+    "tests/integration/lab-local.sh",
+    "research/plan/evidence/e/E4ON-*",
+    "research/plan/evidence/i/LAB-LOCAL-2-*"
    ],
    "wiring_requests": []
   }
