@@ -1,0 +1,50 @@
+diff --git a/apps/lab/tests/l/ui/backend.py b/apps/lab/tests/l/ui/backend.py
+index e3594c65..6b004547 100644
+--- a/apps/lab/tests/l/ui/backend.py
++++ b/apps/lab/tests/l/ui/backend.py
+@@ -47,7 +47,7 @@ def main() -> None:
+     w = worlds.PgWorld(conn, pgharness.dsn(db))   # the operator's and the App's side, same rows
+ 
+     users = {"admin": w.ADMIN_A, "dev": w.DEV_A, "viewer": w.VIEWER_A, "rival": w.ADMIN_B,
+-             "rival_dev": w.DEV_B, "consumer": w.CONSUMER_ONLY}
++             "rival_dev": w.DEV_B, "consumer": w.CONSUMER_ONLY, "ops": w.OPS_USER}
+     os.environ.update({control_app.DATABASE_URL: pgharness.dsn(db),
+                        control_app.SUPABASE_URL: "http://127.0.0.1:9",
+                        control_app.SUPABASE_KEY: "anon"})
+@@ -65,8 +65,8 @@ def main() -> None:
+ 
+     @app.post("/_test/approve")
+     def approve(body: dict):
+-        """The operator approves a proposal at a fresh card, at the current listing version. L3
+-        has no rejection (E3L-F4: retiring a public proposal breaks the listings), so no door."""
++        """The operator approves a proposal at a fresh card, at the current listing version (the
++        rejection is the route's own operator door, E3L-F4)."""
+         n = listed()
+         asyncio.run(w.control.approve(worlds.OPERATOR, body["proposal_id"],
+                                       rate_card_version=f"rc_lab_{n + 1}", input_rate="3",
+diff --git a/apps/lab/tests/l/ui/stack.test.ts b/apps/lab/tests/l/ui/stack.test.ts
+index 190900de..dc049963 100644
+--- a/apps/lab/tests/l/ui/stack.test.ts
++++ b/apps/lab/tests/l/ui/stack.test.ts
+@@ -13,7 +13,7 @@ import { j01, j02, type JourneyWorld, type Who } from "./journeys.ts";
+ 
+ const REAL = process.env.LAB_L4_REAL === "1";
+ const lab = resolve(import.meta.dirname, "../../..");
+-type World = { A: string; B: string; name: string; weights: string[]; tokens: Record<Who | "consumer", string> };
++type World = { A: string; B: string; name: string; weights: string[]; tokens: Record<Who | "consumer" | "ops", string> };
+ 
+ async function backend(): Promise<{ url: string; world: World; stop: () => void }> {
+   const child = spawn("uv", ["run", "--frozen", "--project", "../infrx-api", "python", "tests/l/ui/backend.py"], { cwd: lab, stdio: ["ignore", "pipe", "inherit"] });
+@@ -43,7 +43,11 @@ test("L4-S01..S03 the journeys J01/J02 through the HTTP adapter on the real cont
+     port: (who) => httpControl({ baseUrl: url, token: async () => w.tokens[who] }),
+     registration: { name: w.name, artifactDigest: w.weights[0], schemaVersion: "chat.v1", runtime: "vllm/vllm-openai@sha256:" + "ab".repeat(32) },
+     approve: async (proposalId) => void (await door("POST", "approve", { proposal_id: proposalId })),
+-    // no reject: L3 has no rejection of a proposal (E3L-F4), so J02 skips that step here
++    // E3L-F4: the operator's rejection is the control route's own door, on an operator's Lab session
++    reject: async (proposalId) => {
++      const r = await fetch(`${url}/lab/v1/control/proposals/${encodeURIComponent(proposalId)}/reject`, { method: "POST", headers: { authorization: `Bearer ${w.tokens.ops}`, "content-type": "application/json" }, body: JSON.stringify({ reason: "lab journey" }) });
++      assert.equal(r.status, 200, await r.text());
++    },
+     rollback: async () => void (await door("POST", "rollback")),
+     discoverable: async () => (await door("GET", "discoverable")).deployment_revision_id,
+   };
