@@ -147,11 +147,11 @@ def test_lab_local_the_key_is_tasklocal_in_the_lab_band_and_the_block_is_e3ls_lo
     borrows E3L's block only under E3L's own runner lock (one user of the block at a time)."""
     from infrx.contracts import tasklocal
     services = tasklocal.local_services(runner.KEY)
-    assert set(services) == {"postgres", "valkey"}
+    assert set(services) == {"postgres", "valkey", "valkey-q"}
     assert all(57500 <= s.host_port <= 57599 for s in services.values())
     reserved = tasklocal.all_host_ports()
     assert {reserved[s.host_port] for s in services.values()} == \
-        {f"{runner.KEY}/postgres", f"{runner.KEY}/valkey"}
+        {f"{runner.KEY}/{name}" for name in services}
     assert runner.NAMESPACE == "e3l" and runner.LOCK.name == "infrx-e3l.runner.lock"
 
 

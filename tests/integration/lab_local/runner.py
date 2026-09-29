@@ -225,6 +225,7 @@ def e4_on(out: Path, lab_world) -> dict:
     env = {**os.environ, **lab_world.switch_env(spool), **lab_world.stack.s3_env(),
            "INFRX_D_TASK": KEY, "INFRX_D2_VALKEY_PORT": str(own["valkey"].host_port),
            "INFRX_D2_VALKEY_CONTAINER": own["valkey"].container,
+           "INFRX_Q_VALKEY_PORT": str(own["valkey-q"].host_port),
            "INFRX_M_S3_ENDPOINT": lab_world.harness.s3_endpoint(), "INFRX_M_S3_LOCAL_CREDS": "1"}
     env.pop("INFRX_E2_NAMESPACE", None)          # the suites use their own harnesses
     argv = [str(PY), "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider", *E4_SUITES,
