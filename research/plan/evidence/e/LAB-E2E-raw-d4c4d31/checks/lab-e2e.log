@@ -1,0 +1,227 @@
+cd apps/lab && pnpm build && LAB_E2E_BUILT=1 LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test --test-concurrency=1 tests/e2e/observe/stack.test.ts tests/e2e/evaluate/stack.test.ts tests/e2e/improve/stack.test.ts tests/e2e/rollout/stack.test.ts
+
+> infrx-lab@0.1.0 build /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab
+> next build
+
+▲ Next.js 16.3.5 (Turbopack)
+✓ Running next.config.ts took 24ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 217ms
+  Running TypeScript ...
+  Finished TypeScript in 1814ms ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/3) ...
+✓ Generating static pages using 15 workers (3/3) in 196ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /annotations
+├ ƒ /auth/callback
+├ ƒ /datasets
+├ ƒ /datasets/[ref]
+├ ƒ /datasets/exports/[id]/[part]
+├ ƒ /datasets/imports/[id]
+├ ƒ /datasets/imports/[id]/rejected
+├ ƒ /deployments
+├ ƒ /evaluations
+├ ƒ /evaluations/checkpoints
+├ ƒ /experiments/[id]
+├ ƒ /experiments/[id]/report
+├ ƒ /judge
+├ ƒ /models
+├ ƒ /optimizations
+├ ƒ /overview
+├ ƒ /releases
+├ ƒ /requests
+├ ƒ /requests/[id]
+├ ƒ /settings
+└ ƒ /training
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+TAP version 13
+# (node:3257152) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/evaluate/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+#   from starlette.testclient import TestClient as TestClient  \# noqa
+# Subtest: E2E-E j10 the provider UI launches, compares and cancels
+    # Subtest: E2E-E01 as the gateway composes LAB_EVALS today, the page fails closed: nothing listed, nothing to launch
+    ok 1 - E2E-E01 as the gateway composes LAB_EVALS today, the page fails closed: nothing listed, nothing to launch
+      ---
+      duration_ms: 208.358876
+      type: 'test'
+      ...
+    # Subtest: E2E-E02 a launch through the page's form lands on the experiment: its declared protocol and two queued runs
+    ok 2 - E2E-E02 a launch through the page's form lands on the experiment: its declared protocol and two queued runs
+      ---
+      duration_ms: 680.369928
+      type: 'test'
+      ...
+    # Subtest: E2E-E03 progress and a cancel come from the records: a running run is cancelled once, a finished run offers none
+    ok 3 - E2E-E03 progress and a cancel come from the records: a running run is cancelled once, a finished run offers none
+      ---
+      duration_ms: 847.324722
+      type: 'test'
+      ...
+    # Subtest: E2E-E04 the comparison is B2's stored report as the view reads it: outcome, reasons, every estimate with its interval
+    ok 4 - E2E-E04 the comparison is B2's stored report as the view reads it: outcome, reasons, every estimate with its interval
+      ---
+      duration_ms: 368.525316
+      type: 'test'
+      ...
+    # Subtest: E2E-E05 a viewer, another provider and a consumer-only account see and launch nothing that is not theirs
+    ok 5 - E2E-E05 a viewer, another provider and a consumer-only account see and launch nothing that is not theirs
+      ---
+      duration_ms: 1453.485327
+      type: 'test'
+      ...
+    1..5
+ok 1 - E2E-E j10 the provider UI launches, compares and cancels
+  ---
+  duration_ms: 9683.243704
+  type: 'test'
+  ...
+# (node:3260809) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/improve/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: E2E-I i08 the pipeline surface drives labels to a checkpoint through the provider UI
+    # Subtest: E2E-I01 as the gateway composes LAB_PIPELINES today: the annotations page reads, the training page fails closed
+    ok 1 - E2E-I01 as the gateway composes LAB_PIPELINES today: the annotations page reads, the training page fails closed
+      ---
+      duration_ms: 401.706804
+      type: 'test'
+      ...
+    # Subtest: E2E-I02 labels imported through the page's form: accepted rows listed as not ground truth, rejected rows with their reason
+    ok 2 - E2E-I02 labels imported through the page's form: accepted rows listed as not ground truth, rejected rows with their reason
+      ---
+      duration_ms: 760.76308
+      type: 'test'
+      ...
+    # Subtest: E2E-I03 an administrator assigns the reviewer, the developer accepts each label: an accepted import is still not ground truth
+    ok 3 - E2E-I03 an administrator assigns the reviewer, the developer accepts each label: an accepted import is still not ground truth
+      ---
+      duration_ms: 4377.139794
+      type: 'test'
+      ...
+    # Subtest: E2E-I04 a train-only export through the page's form: train samples in its lineage, the held-out label omitted with its reason
+    ok 4 - E2E-I04 a train-only export through the page's form: train samples in its lineage, the held-out label omitted with its reason
+      ---
+      duration_ms: 700.465043
+      type: 'test'
+      ...
+    # Subtest: E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation
+    ok 5 - E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation
+      ---
+      duration_ms: 1860.330147
+      type: 'test'
+      ...
+    # Subtest: E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels
+    ok 6 - E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels
+      ---
+      duration_ms: 1100.514454
+      type: 'test'
+      ...
+    1..6
+ok 2 - E2E-I i08 the pipeline surface drives labels to a checkpoint through the provider UI
+  ---
+  duration_ms: 13731.494624
+  type: 'test'
+  ...
+# (node:3266325) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/observe/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+#   from starlette.testclient import TestClient as TestClient  \# noqa
+# Subtest: E2E-O o10 the Lab review panel renders the provider trace route's answer
+    # Subtest: E2E-O01 a developer's list shows its own deployment's requests with each one's content state, and nothing else
+    ok 1 - E2E-O01 a developer's list shows its own deployment's requests with each one's content state, and nothing else
+      ---
+      duration_ms: 275.849871
+      type: 'test'
+      ...
+    # Subtest: E2E-O02 the review page shows the record, then each panel's own answer: content on request, the feedback door, the judge door
+    ok 2 - E2E-O02 the review page shows the record, then each panel's own answer: content on request, the feedback door, the judge door
+      ---
+      duration_ms: 839.507962
+      type: 'test'
+      ...
+    # Subtest: E2E-O03 a viewer, another provider, a consumer-only account and a signed-out visitor see no request
+    ok 3 - E2E-O03 a viewer, another provider, a consumer-only account and a signed-out visitor see no request
+      ---
+      duration_ms: 788.196816
+      type: 'test'
+      ...
+    # Subtest: E2E-O04 the grantor revokes: the same request reads as metadata only, with no organization or content offer
+    ok 4 - E2E-O04 the grantor revokes: the same request reads as metadata only, with no organization or content offer
+      ---
+      duration_ms: 348.609363
+      type: 'test'
+      ...
+    1..4
+ok 3 - E2E-O o10 the Lab review panel renders the provider trace route's answer
+  ---
+  duration_ms: 7977.553975
+  type: 'test'
+  ...
+# (node:3270004) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/rollout/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+    # Subtest: E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success
+    ok 1 - E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success
+      ---
+      duration_ms: 460.235634
+      type: 'test'
+      ...
+    # Subtest: E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose
+    ok 2 - E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose
+      ---
+      duration_ms: 209.763663
+      type: 'test'
+      ...
+    # Subtest: E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence
+    ok 3 - E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence
+      ---
+      duration_ms: 870.258446
+      type: 'test'
+      ...
+    # Subtest: E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once
+    ok 4 - E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once
+      ---
+      duration_ms: 726.264215
+      type: 'test'
+      ...
+    # Subtest: E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing
+    ok 5 - E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing
+      ---
+      duration_ms: 2205.484848
+      type: 'test'
+      ...
+    1..5
+ok 4 - E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+  ---
+  duration_ms: 9439.76812
+  type: 'test'
+  ...
+1..4
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 45113.426967
+EXIT=0

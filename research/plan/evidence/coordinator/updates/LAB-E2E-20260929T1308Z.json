@@ -1,0 +1,70 @@
+{
+ "task": "LAB-E2E",
+ "activity": "review",
+ "head": "4f9e090",
+ "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+ "branch": "codex/w5-lab-e2e",
+ "owned_paths": [
+  "apps/lab/tests/e2e/**",
+  "Makefile (lab-e2e target + .PHONY)",
+  "tests/integration/lab_{observe,evaluate,improve,rollout}/ (UI cell binds)",
+  "research/plan/evidence/e/LAB-E2E-*"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/LAB-E2E-2299b82.md",
+  "research/plan/evidence/e/LAB-E2E-raw-d4c4d31",
+  "research/plan/evidence/e/LAB-E2E-raw-2299b82"
+ ],
+ "slice": "(LW6 lab-e2e) one Lab e2e harness under apps/lab/tests/e2e binding E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; make lab-e2e",
+ "commands": [
+  {
+   "cmd": "git merge claude/consumer-v1 (e1bc9305) -> fce73158",
+   "exit": 0,
+   "summary": "1-LE2E-R1 conflicts resolved (lab_evaluate x3, lab_rollout x2); scenarios_pending.py (lab_evaluate) deleted"
+  },
+  {
+   "cmd": "make lab-e2e",
+   "exit": 0,
+   "summary": "24/24 on l4 (merged tree)"
+  },
+  {
+   "cmd": "runner.py --only i01,i08 (E7L)",
+   "exit": 3,
+   "summary": "i01 PASS, i08 PASS (API + UI half over production_suites); others not selected"
+  },
+  {
+   "cmd": "LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs --only E2E-S18..S24, then --only E2E-S23",
+   "exit": 0,
+   "summary": "S23 survived on the composed branch, re-cut, killed; 7/7 improve stack mutants killed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_{evaluate,observe,rollout,improve}/test_mutants.py",
+   "exit": 0,
+   "summary": "0 survivors; +5 gate.py mutants in E5L layer 1 (0-F2)"
+  },
+  {
+   "cmd": "make lab-test / lab-lint / lab-typecheck / lab-build / lab-mutants",
+   "exit": 0,
+   "summary": "248 pass 0 fail; clean; clean; ok; 0 survivors"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "one verify round; this round's run times",
+  "at": "2026-09-29T13:08:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LE2E-1 Makefile lab-mutants: + cd apps/lab && node tests/e2e/run-mutants.mjs",
+  "WR-LE2E-2 lab_improve scenarios_surface i08 API half: warm lab.benchmark (F1: --only i08 FAILs alone)"
+ ],
+ "fix_round": {
+  "0-F1": true,
+  "0-F2": true,
+  "1-LE2E-R1": true,
+  "1-LE2E-R2": true
+ }
+}

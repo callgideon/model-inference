@@ -1,0 +1,41 @@
+{
+ "task": "E7L",
+ "activity": "review",
+ "head": "4f9e090",
+ "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+ "branch": "codex/w5-lab-e2e",
+ "owned_paths": [
+  "apps/lab/tests/e2e/**",
+  "Makefile (lab-e2e target + .PHONY)",
+  "tests/integration/lab_{observe,evaluate,improve,rollout}/ (UI cell binds)",
+  "research/plan/evidence/e/LAB-E2E-*"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/LAB-E2E-2299b82.md",
+  "research/plan/evidence/e/LAB-E2E-raw-d4c4d31",
+  "research/plan/evidence/e/LAB-E2E-raw-2299b82"
+ ],
+ "slice": "i08's provider-UI half (WR-C4-UI) bound to apps/lab/tests/e2e/improve over the composed production suites",
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out research/plan/evidence/e/LAB-E2E-raw-d4c4d31/e7l-i01-i08 --only i01,i08",
+   "exit": 3,
+   "summary": "i01 PASS; i08 PASS (API half + UI half 7/7, composed {listings:false (WR-LAB2-4 stand-in), suites:true}); i08 lanes []"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1,
+  "confidence": "medium",
+  "basis": "verify only",
+  "at": "2026-09-29T13:08:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LE2E-2 lab_improve scenarios_surface i08 API half: warm lab.benchmark (F1: --only i08 FAILs alone)"
+ ],
+ "ui_cell": {
+  "i08-UI": "PASS"
+ }
+}

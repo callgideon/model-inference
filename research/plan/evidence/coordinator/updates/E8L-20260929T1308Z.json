@@ -1,0 +1,46 @@
+{
+ "task": "E8L",
+ "activity": "review",
+ "head": "4f9e090",
+ "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+ "branch": "codex/w5-lab-e2e",
+ "owned_paths": [
+  "apps/lab/tests/e2e/**",
+  "Makefile (lab-e2e target + .PHONY)",
+  "tests/integration/lab_{observe,evaluate,improve,rollout}/ (UI cell binds)",
+  "research/plan/evidence/e/LAB-E2E-*"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/LAB-E2E-2299b82.md",
+  "research/plan/evidence/e/LAB-E2E-raw-d4c4d31",
+  "research/plan/evidence/e/LAB-E2E-raw-2299b82"
+ ],
+ "slice": "k10's UI half bound to apps/lab/tests/e2e/rollout (LAB-E2E)",
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --only k10 --out research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e8l-k10",
+   "exit": 3,
+   "summary": "k10 read half PASS; UI NOT RUN[WR-R4-2]: suite 6/6 passed; pilot._lab_2 composes LabReleases without proposals, records, store; same at 2299b82"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest tests/integration/lab_rollout/test_mutants.py -k st_releases_route_drops_the_proposals (kept e8l)",
+   "exit": 0,
+   "summary": "killed at 2299b82 (the first cut, the route's fence check, is backstopped by 0043's: misdeclared, re-cut)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "k10-UI flips when WR-R4-2 (+ WR-R4-1 lab-sql records) compose; rerun --only k10",
+  "at": "2026-09-29T13:08:00Z"
+ },
+ "blockers": [
+  "WR-R4-2"
+ ],
+ "wiring_requests": [],
+ "ui_cell": {
+  "k10-UI": "NOT RUN[WR-R4-2] (not rerun)"
+ }
+}
