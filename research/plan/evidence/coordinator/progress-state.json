@@ -9191,7 +9191,7 @@
   {
    "id": "W5-LAB-ROLLOUT-6",
    "task": "E8L",
-   "slice": "WR-LIVE-K09 (the k09 breach half over 0054 Live) + WR-LR5-1 (the e2e rollout suite drops its journey stand-ins → k10-ui-composed) + the RV-3 real-stack run; make lab-rollout: only k08 NOT RUN (Opus)",
+   "slice": "WR-LIVE-K09 (the k09 breach half over 0054 Live) + WR-LR5-1 (the e2e rollout suite drops its journey stand-ins → k10-ui-composed) + the RV-3 real-stack run; make lab-rollout: only k08 NOT RUN (Opus); workflow wf_7177bd89-c1c",
    "agent": "opus",
    "branch": "codex/w5-lab-rollout-6",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout-6",
@@ -9224,7 +9224,7 @@
   {
    "id": "W5-COMPOSITION-7",
    "task": "I7",
-   "slice": "WR-LIVE-DECIDE (expansion approval on R2's expand verdict), WR-LIVE-PAGE (/lab/v1/releases progress from Live), WR-LR5-3 refusal (one plan location), WR-LEM-R3 (media refusal names into D7); every switch OFF; E4 (Opus)",
+   "slice": "WR-LIVE-DECIDE (expansion approval on R2's expand verdict), WR-LIVE-PAGE (/lab/v1/releases progress from Live), WR-LR5-3 refusal (one plan location), WR-LEM-R3 (media refusal names into D7); every switch OFF; E4 (Opus); workflow wf_d4007792-524",
    "agent": "opus",
    "branch": "codex/w5-composition-7",
    "worktree": ".claude/worktrees/codex-w5-composition-7",
