@@ -7,10 +7,11 @@ engine smoke is `lab_world.EngineSmoke` (WR-L3-2 is not wired: the factory's smo
 
 04 LAB-PUBLISH: register -> dev validation -> publication -> App call -> rollback during a
 queued request; dev stays private, public approval and rate audited, old requests pinned, new
-routing correct. Not bound here, and why: the route halves of register/smoke and the
-Operations list reads (`models`, `deployments`) need lab-sql's `ControlReads` (WR-LSQ-9, not
-merged) and the engine smoke adapter (WR-L3-2); the Lab App journey J01/J02 needs WR-LAB-API-2's
-composition (codex/w5-composition-2, not merged).
+routing correct. The route halves (register, smoke, the models/deployments listings) run on
+the factory over `pilot.lab_operations`' real `ControlReads` (WR-LAB-API-2c, WR-LSQ-9-C); its
+smoke is `control_box`'s `E3L_ENGINE_URL` stand-in (R203, until WR-L3-2). Not bound here: the
+Lab App's own journey J01/J02 (apps/lab/tests/l/ui) - the Lab has no HTTP adapter for its
+control port yet (`controlPort` is the fake or `unavailable`).
 """
 from __future__ import annotations
 
@@ -198,6 +199,157 @@ def test_l04_publication_needs_operator_approval_and_snapshots_the_rate(workdir,
             ("lab_publish", lab.OPERATOR, stack.CREDIT_ALIAS, seed[0], seed[0] + 1,
              "rc_e3l_l04")], events
         assert [float(r) for r in seed_card] == [400, 1200], seed_card
+
+
+RUNTIME = "vllm/vllm-openai@sha256:" + "c" * 64
+
+
+def registration(ctl) -> dict:
+    """The Lab form's registration of A's Marlin over one of its imported weight digests."""
+    digest = lab.call(ctl.catalog.serving_revision(stack.SEED_SERVING)).weight_shard_digests[0]
+    return {"name": stack.CREDIT_ALIAS.rpartition("/")[2], "artifact_digest": digest,
+            "schema_version": "chat.v1", "runtime": RUNTIME}
+
+
+def answered(answer) -> tuple:
+    return answer.status_code, answer.json().get("refusal")
+
+
+def test_l03_registration_and_the_listings_through_the_control_service(workdir,
+                                                                       record_property):
+    """Oracle: on the running control service (R186's factory over `lab_operations`' real
+    ControlReads), DEV_A's registration of A's model over one of its imported weight digests
+    is one serving revision and one private dev revision (201: smoke none, no card), which A's
+    viewer then reads in the models and deployments listings; a digest that is not one of the
+    model's weights, a moving tag, a custom schema (422 invalid) and an unknown model name
+    (404) are refused with nothing written, as are A's viewer (403) and DEV_A in B's workspace
+    (404); B's listings name none of A's rows and B's developer reads nothing of A (404)."""
+    with world.composed(workdir, start=()) as trip:
+        lab.seed_lab(trip)
+        ctl = lab.control(trip)
+        good = registration(ctl)
+        bad = {"foreign_digest": {**good, "artifact_digest": "sha256:" + "e" * 64},
+               "moving_tag": {**good, "runtime": "vllm/vllm-openai:latest"},
+               "custom_schema": {**good, "schema_version": "custom.v9"},
+               "unknown_model": {**good, "name": "no-such-model"}}
+        rows = lambda: trip.one("select (select count(*) from infrx.serving_versions), "  # noqa: E731
+                                "(select count(*) from infrx.deployment_revisions)")
+        with lab.control_service(trip, workdir) as (service, _):
+            service.start()
+            before = rows()
+            refused = {name: answered(service.call("POST", "register", lab.session(DEV_A),
+                                                   body=body)) for name, body in bad.items()}
+            refused["viewer"] = answered(service.call("POST", "register",
+                                                      lab.session(lab.VIEWER_A), body=good))
+            refused["other_workspace"] = answered(service.call(
+                "POST", "register", lab.session(DEV_A), provider=lab.PROVIDER_B, body=good))
+            unwritten = rows()
+            created = service.call("POST", "register", lab.session(DEV_A), body=good)
+            written = rows()
+            viewer = lab.session(lab.VIEWER_A)
+            models = service.call("GET", "models", viewer).json()["data"]
+            deployments = service.call("GET", "deployments", viewer).json()["data"]
+            b_models, b_deployments = (service.call("GET", path, lab.session(lab.ADMIN_B),
+                                                    provider=lab.PROVIDER_B).json()["data"]
+                                       for path in ("models", "deployments"))
+            b_reads_a = answered(service.call("GET", "deployments", lab.session(lab.DEV_B)))
+        record_property("register", {"refused": refused, "rows": [before, unwritten, written],
+                                     "created": created.json(), "models": models,
+                                     "deployments": deployments, "b_models": b_models,
+                                     "b_deployments": b_deployments, "b_reads_a": b_reads_a})
+        assert refused == {"foreign_digest": (422, "invalid"), "moving_tag": (422, "invalid"),
+                           "custom_schema": (422, "invalid"), "unknown_model": (404, "not_found"),
+                           "viewer": (403, "denied"), "other_workspace": (404, "not_found")}, \
+            refused
+        assert unwritten == before, (before, unwritten)
+        assert created.status_code == 201, created.text[:300]
+        dev = created.json()
+        assert (dev["model_id"], dev["environment"], dev["visibility"], dev["state"],
+                dev["smoke"], dev["rate_card_version"], dev["runtime"], dev["schema_version"]) \
+            == (stack.CREDIT_ALIAS, "dev", "private", "active", "none", None, RUNTIME, "chat.v1")
+        assert written == (before[0] + 1, before[1] + 1), (before, written)
+        assert [(m["model_id"], m["artifact_digest"], m["schema_version"]) for m in models
+                if m["revision_label"] == dev["revision_label"]] == [
+            (stack.CREDIT_ALIAS, good["artifact_digest"], "chat.v1")], models
+        assert [d for d in deployments
+                if d["deployment_revision_id"] == dev["deployment_revision_id"]] == [dev]
+        assert [(d["environment"], d["visibility"], d["rate_card_version"]) for d in deployments
+                if d["deployment_revision_id"] == stack.SEED_PUBLIC_DEPLOYMENT] == [
+            ("prod", "public", stack.SEED_CARD)], deployments
+        assert not [m for m in b_models if m["model_id"] == stack.CREDIT_ALIAS], b_models
+        assert not {d["deployment_revision_id"] for d in b_deployments} & {
+            dev["deployment_revision_id"], stack.SEED_PUBLIC_DEPLOYMENT}, b_deployments
+        assert b_reads_a == (404, "not_found"), b_reads_a
+
+
+def test_l04_the_lab_journey_through_the_control_service(workdir, record_property):
+    """Oracle (J01/J02's route half on the real L3): through the running control service, a
+    registered dev revision is not proposed before its smoke (409 conflict); A's viewer may not
+    smoke it (403) nor B's administrator (404); DEV_A's smoke (the engine stand-in, R203) marks
+    it passed; a developer's proposal is 403, B's administrator's 404, and a provider rollback
+    proposal 422 (a rollback is the operator's); ADMIN_A's proposal is 201 and moves no listing,
+    and its retry answers the same proposal (R205); the operator's approval publishes it, and
+    the Lab's listings then show the proposal approved and its public prod revision on the
+    approved card."""
+    with world.composed(workdir, start=()) as trip:
+        lab.seed_lab(trip)
+        ctl = lab.control(trip)
+        admin, card = lab.session(ADMIN_A), lab.card_of("l04-journey")
+        with lab.control_service(trip, workdir) as (service, _):
+            service.start(E3L_ENGINE_URL=trip.engine.base_url)
+            dev = service.call("POST", "register", lab.session(DEV_A),
+                               body=registration(ctl)).json()
+            source = dev["deployment_revision_id"]
+            publish = {"kind": "publish", "deployment_revision_id": source}
+            early = answered(service.call("POST", "proposals", admin, body=publish))
+            smoke = f"deployments/{source}/smoke"
+            refused = {"viewer_smokes": answered(service.call("POST", smoke,
+                                                              lab.session(lab.VIEWER_A))),
+                       "rival_smokes": answered(service.call("POST", smoke,
+                                                             lab.session(lab.ADMIN_B),
+                                                             provider=lab.PROVIDER_B))}
+            tested = service.call("POST", smoke, lab.session(DEV_A))
+            refused |= {"developer_proposes": answered(service.call(
+                            "POST", "proposals", lab.session(DEV_A), body=publish)),
+                        "rival_proposes": answered(service.call(
+                            "POST", "proposals", lab.session(lab.ADMIN_B),
+                            provider=lab.PROVIDER_B, body=publish)),
+                        "rollback_proposed": answered(service.call(
+                            "POST", "proposals", admin, body={**publish, "kind": "rollback"}))}
+            seed = lab.listing(trip)
+            first = service.call("POST", "proposals", admin, body=publish)
+            retry = service.call("POST", "proposals", admin, body=publish)
+            unmoved = lab.listing(trip)
+            proposal_id = first.json().get("proposal_id")
+            approved = lab.call(ctl.approve(lab.operator(), proposal_id, rate_card_version=card,
+                                            input_rate="300", output_rate="900",
+                                            expected_version=seed[0], reason="e3l journey"))
+            viewer = lab.session(lab.VIEWER_A)
+            proposals = service.call("GET", "proposals", viewer).json()["data"]
+            deployments = service.call("GET", "deployments", viewer).json()["data"]
+        record_property("journey", {"early": early, "refused": refused,
+                                    "tested": tested.json(), "first": first.json(),
+                                    "retry": retry.json(), "seed": seed, "unmoved": unmoved,
+                                    "approved": vars(approved), "proposals": proposals,
+                                    "deployments": deployments})
+        assert early == (409, "conflict"), early
+        assert tested.status_code == 200 and tested.json()["smoke"] == "passed", tested.text
+        assert refused == {"viewer_smokes": (403, "denied"), "rival_smokes": (404, "not_found"),
+                           "developer_proposes": (403, "denied"),
+                           "rival_proposes": (404, "not_found"),
+                           "rollback_proposed": (422, "invalid")}, refused
+        assert first.status_code == 201 and (first.json()["kind"], first.json()["state"],
+                                             first.json()["deployment_revision_id"]) == (
+            "publish", "proposed", source), first.text[:300]
+        assert retry.status_code == 201 and retry.json()["proposal_id"] == proposal_id, \
+            retry.text[:300]
+        assert unmoved == seed, (seed, unmoved)
+        assert (approved.version, approved.deployment_revision_id) == (seed[0] + 1, proposal_id)
+        assert [(p["proposal_id"], p["deployment_revision_id"], p["state"]) for p in proposals] \
+            == [(proposal_id, source, "approved")], proposals
+        assert [(d["environment"], d["visibility"], d["state"], d["rate_card_version"])
+                for d in deployments if d["deployment_revision_id"] == proposal_id] == [
+            ("prod", "public", "active", card)], deployments
 
 
 def published_l05(trip):
