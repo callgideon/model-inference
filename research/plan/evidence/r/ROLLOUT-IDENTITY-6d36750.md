@@ -128,3 +128,68 @@ Merge this lane with #33, then apply WR-E8L-9/10 and run one E8L rerun: 1 / 2 / 
 medium. Basis: session-03 merge-lane analogues and this lane's measured rerun (57.1 s for the full
 runner on a reused stack, from its verdict.json). The E8L gate stays NOT RUN until k08 (P-08 GPU),
 k09 (WR-R2-3) and k10 (the lab-ui-swap e2e suite) land. Those are outside this lane.
+
+## Fix round (0-RI-1), code head 7a5161ad (commits 39de8f0c, 59576dad, 7a5161ad)
+**Finding 0-RI-1 (major):** identity membership let a pass over a rolled-back release revert a
+later, deliberate listing of the same serving version (a re-promotion under a fresh deployment
+revision; for a deployment-only rollout, any later redeploy of the baseline's serving version).
+The docstring claimed "left alone", and the proposed ruling did not mention the case.
+
+**Chosen scope:** identity membership belongs to the rollback *decision*. A pass over the stored
+`rolled_back` row matches the policy's named candidate refs only. The decision path covers a
+rollback verdict in `step`, the lost race that rereads one, and `emergency_rollback`, including
+an operator's repeat on an already rolled-back row. The fence-bound option ("converge by identity
+up to the alias fence seen at the decision") was not taken: it needs the alias fence stored on
+D9's row, which is outside this lane (`infrx/state/lab_*.py`, 0039). The stopped-pass-loop option
+was not taken either: the loop cannot know "converged" across a restart without storage.
+Consequence, stated in the docstring: a controller killed between D9 and L3 on a *promoted*
+listing is not finished by the pass. The operator's stop finishes it (pinned). On a named ref
+the restart still converges (the k04 path is unchanged).
+
+- `infrx/rollouts/control/__init__.py`: `_converge(..., decided=False)` picks the key
+  (`serving_identity` or the full ref). The two decision call sites pass `decided=True`: the
+  rollback verdict in `step`, and `emergency_rollback`. The restart line in `step` keeps its
+  original text, so I7's `i7_restart_does_not_converge` anchor
+  (`tests/i/lab_rollout/mutants.py`) still holds. At 59576dad the flag ran the other way, that
+  anchor was lost, and `api-test` caught it (below).
+  The module docstring is rewritten to name the behaviour.
+- Fail-first `39de8f0c` (red):
+  `test_r2_a_later_listing_of_the_same_serving_version_is_left_alone_after_a_rollback` covers
+  re-promotion, the deployment-only redeploy, and a crash on a promoted listing finished by the
+  operator's stop. Its r2 PG twin is `test_r2_pg_a_later_listing_of_the_same_serving_version_is_left_alone`.
+  Both failed at `ca6e635e` (alias moved back, 2 rollbacks) and pass at `59576dad`.
+- The deployment-only case now also repeats the operator's stop. Without that repeat, the
+  baseline guard (`r2_converge_relists_baseline`) survived, because the pass path no longer
+  reaches identity.
+- Mutants: three are new. `r2_restart_converges_by_identity` adds `decided=True` to the restart
+  pass (kills LATER). `r2_breach_converges_by_full_ref` drops `decided=True` from the verdict path
+  (kills PROMO). `r2_emergency_converges_by_full_ref` drops it from the operator's stop (kills
+  PROMO and LATER). `r2_converge_full_ref_membership` is now
+  `key = serving_identity if decided else str` -> `key = str`: the full-ref comparison put back
+  (kills PROMO).
+  `r2_no_converge_on_restart`, `r2_converge_any_alias` and `r2_converge_relists_baseline` were
+  re-anchored on the new text.
+
+| command | exit | result |
+|---|---|---|
+| `pytest -q tests/r/control/test_control.py` (fail-first, 39de8f0c) | 1 | 1 failed, 25 passed |
+| `INFRX_D_TASK=r2 pytest -q tests/r/control/test_control_pg.py` (fail-first) | 1 | 1 failed, 4 passed |
+| `INFRX_D_TASK=r2 make api-test` at 59576dad | 2 | 6618 passed, 8 failed, 153 skipped, 9 xfailed (82 min). 7 of the failures are `tests/d/test_outbox_relay [valkey]` (the foreign `infrx-d2-valkey` leftover, the same as at 6d36750, not touched). 1 is `tests/i/lab_rollout::i7_restart_does_not_converge`, misdeclared because its anchor was lost; fixed at 7a5161ad |
+| `pytest -q tests/r/control/test_control.py` at 7a5161ad | 0 | 26 passed |
+| `INFRX_D_TASK=r2 pytest -q tests/r/control/test_control_pg.py` at 7a5161ad | 0 | 5 passed |
+| `INFRX_MUTANTS=all pytest -q tests/r/control/test_mutants.py` at 7a5161ad | 0 | 73 passed: 71 mutants killed, 0 survivors |
+| `INFRX_MUTANTS=all pytest -q tests/i/lab_rollout/test_mutants.py` + `tests/i/lab_rollout` at 7a5161ad | 0 | 17 passed; 9 passed |
+| E8L full runner (fresh stack, torn down) on a clone of 7a5161ad + `codex/w5-lab-rollout-2` f6c074f6 + the WR-E8L-9 patch | 3 | k01-k07 PASS (k06 PASS); k08/k09/k10 NOT RUN; gate NOT RUN. `E8L-raw-rollout-identity-7a5161a/full/verdict.json`. The same result at 59576dad (75.8 s) |
+
+The full `api-test` was not repeated at 7a5161ad (82 min). The delta from 59576dad inverts the
+flag's default only, and every api-test suite that names `infrx/rollouts/control` was rerun green above. (The E8L stack mutant list was not run.)
+
+**Proposed ruling, revised (unnumbered; this supersedes the text above):** "R2's candidate-set
+membership compares by serving identity (the R188 ref without its `deployment_revision_id`), but
+only when the rollback is decided: a rollback verdict, the lost race that rereads one, or the
+operator's `emergency_rollback`. So L3's promotion of a candidate under a fresh deployment
+revision is rolled back. A later pass over a `rolled_back` release matches the policy's named
+candidate refs only, and leaves alone any later listing of the same serving version under
+another deployment revision (a deliberate re-promotion or redeploy). An interrupted rollback of a
+promoted listing is finished by the operator's stop. An alias exactly on `baseline_ref` is never
+re-listed. The ref format is unchanged (R188/R191/R208)."
