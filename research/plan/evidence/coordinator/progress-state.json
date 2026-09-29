@@ -7786,7 +7786,7 @@
   {
    "id": "W5-MERGE-35",
    "task": null,
-   "slice": "merge batch #35 (Opus): rollout-identity 9aacd8f0 (+WR-E8L-9 k06 world patch, WR-E8L-10, R216)",
+   "slice": "merge batch #35 (Opus): rollout-identity 9aacd8f0 (+WR-E8L-9 k06 world patch, WR-E8L-10, R216); workflow wf_5ed91a10-b9a",
    "agent": "opus",
    "branch": "codex/w5-merge-35",
    "worktree": ".claude/worktrees/codex-w5-merge-35",
