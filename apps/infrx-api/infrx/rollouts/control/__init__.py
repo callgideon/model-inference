@@ -23,8 +23,16 @@ serving alias only through L3's CAS. The controller never expands by itself: `ap
 records an operator's expansion, and only on an `expand` verdict. A rollback is one D9
 transition (a lost race rereads and accepts a rollback that another controller made, so a
 breach rolls back exactly once) followed by `_converge`: while the endpoint's alias is a
-candidate of this policy, CAS it back to the baseline. A controller killed between the two
-steps converges on restart; a rolled-back release stays rolled back whatever the metrics
+candidate of this policy, CAS it back to the baseline; an alias exactly on the baseline ref is
+never re-listed. At the decision (a rollback verdict, the lost race that rereads one, the
+operator's stop) the alias is a candidate by serving identity (`serving_identity`: provider +
+the serving revision's digest, the R188 ref without its deployment_revision_id), since L3's
+promotion lists the candidate's serving revision under a fresh deployment revision. A later
+pass over the rolled-back row converges only an alias on a candidate ref the policy names:
+it cannot tell the promotion it rolled back from a later deliberate listing of the same
+serving version, so it leaves that one alone (0-RI-1). A controller killed between the two
+steps converges on restart when the alias is on a named candidate ref; on a promoted listing
+the operator's stop finishes it. A rolled-back release stays rolled back whatever the metrics
 do later, and an alias someone else moved on is left alone (no flapping). Queued and
 running jobs keep the serving and rate pins they were admitted with (R1/L3); only future
 admissions follow the policy and alias. `emergency_rollback` is the operator's, from any
@@ -183,6 +191,13 @@ class ServingControl(Protocol):
         """CAS on the endpoint's alias: `StateConflict` unless it is still at `fence`."""
 
 
+def serving_identity(ref: str) -> str:
+    """`lab:serving:<provider>@sha256:<digest>`: R188's serving ref without the deployment
+    revision it is listed under (E8L-F2); the digest covers the serving version and provider."""
+    head, _, digest = ref.partition("@")
+    return f"{head.rpartition(':')[0]}@{digest}"
+
+
 CONVERGE_TRIES = 3
 
 
@@ -217,11 +232,15 @@ class Controller:
             if (await self._store.release(policy_ref)).state != to:
                 raise                  # lost to a different decision: never overwrite it
 
-    async def _converge(self, policy: lab.RolloutPolicy, policy_ref: str) -> None:
-        candidates = {c.serving_ref for c in policy.candidates}
+    async def _converge(self, policy: lab.RolloutPolicy, policy_ref: str, *,
+                        decided: bool = False) -> None:
+        # `decided`: this call recorded (or reread) the rollback, so a promoted listing is the
+        # one being rolled back; a later pass matches the named refs only (0-RI-1).
+        key = serving_identity if decided else str
+        candidates = {key(c.serving_ref) for c in policy.candidates}
         for _ in range(CONVERGE_TRIES):
             current, fence = await self._serving.serving(policy.endpoint_id)
-            if current not in candidates:
+            if current == policy.baseline_ref or key(current) not in candidates:
                 return
             try:
                 await self._serving.rollback(policy.endpoint_id, fence=fence,
@@ -246,7 +265,7 @@ class Controller:
                            report=report, runs=runs)
         if verdict.action == "rollback":
             await self._decide(policy, policy_ref, release, "rolled_back", verdict, self._actor, now)
-            await self._converge(policy, policy_ref)
+            await self._converge(policy, policy_ref, decided=True)
         return verdict
 
     async def approve(self, operator_id: str, policy: lab.RolloutPolicy, policy_ref: str,
@@ -270,4 +289,4 @@ class Controller:
         release = await self._release(policy, policy_ref, None)
         await self._decide(policy, policy_ref, release, "rolled_back",
                            Verdict("rollback", (f"operator:{reason}",)), operator_id, now)
-        await self._converge(policy, policy_ref)
+        await self._converge(policy, policy_ref, decided=True)

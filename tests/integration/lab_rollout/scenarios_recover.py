@@ -248,16 +248,21 @@ def test_k06_an_emergency_rollback_moves_a_promoted_alias_back(lab, workdir):
     L3's CAS. The policy is the one R1 routes: its candidate ref must be what L3's alias reads
     as the candidate, or the rollback leaves the alias on it.
 
-    E8L-F2 (KNOWN_FAIL, still open after WR-E8L-2b): the candidate's own ref (`lab.CAND`, a
-    real private/dev deployment revision, correctly resolved through 0045's `release_active`
-    since R208) and the promoted deployment's ref (`lab.promote`'s own fresh
-    `deployment_revision_id`, mirroring `operations.py`'s real `propose()`, which always mints
-    `str(uuid.uuid4())`) share the same servingVersion and digest but never the same deployment
-    id - so `Controller._converge`'s `current not in candidates` (a full-ref set membership
-    test) can never see the promoted alias as "this policy's candidate", whatever identity
-    scheme the ref uses. See `mutants.py`'s `KNOWN_FAIL` comment for the proposed direction."""
-    policy, ref, r, runs = launched(lab, 0x6a)
+    E8L-F2, fixed by ROLLOUT-IDENTITY (R216): the candidate's own ref (`lab.CAND`) and the
+    promoted deployment's ref (`lab.promote`'s fresh `deployment_revision_id`, mirroring
+    `operations.py`'s `propose()`) share the servingVersion and digest but never the deployment
+    id; `Controller._converge` now compares by serving identity when the rollback is decided
+    (killed by `mutants.py`'s `st_converge_by_full_ref`). The policy's baseline is the alias's
+    listed deployment in L3's own ref form (WR-E8L-9, E8L-F4), which L3's rollback resolves."""
     listed = lab.listing()
+    # the baseline R2 rolls back to is the alias's listed deployment in L3's own ref form
+    # (R188/R208), not the opaque stand-in: L3's rollback resolves it against its listings
+    base = lab.sql("select infrx.lab_serving_ref(%s)", listed[1])[0][0]
+    policy, ref = lab.launch({**lab.policy(weights=(5_000,), candidates=(lab.CAND,)),
+                              "baseline_ref": base}, lw.plan())
+    r = router(lab)
+    traffic(lab, r, 40, 2, 0x6a)
+    runs = lab.runs(0x6a, base, lab.CAND)
     at = horizon(lab, ref)
     report = lab.report(runs, "improving", lw.PROTOCOL)
     run(lab.controller().approve(lw.OPERATOR, policy, ref, lw.plan(),

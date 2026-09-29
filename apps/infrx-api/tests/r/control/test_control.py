@@ -399,3 +399,96 @@ def test_r2_a_policy_other_than_the_stored_revision_is_refused():
     assert store.decisions == [] and serving.rollbacks == [] and serving.current == CAND
     asyncio.run(ctl.step(POLICY, POLICY_REF, plan(), live(errors_=21), now=HORIZON))
     assert serving.current == BASE and len(store.decisions) == 1
+
+
+# E8L-F2: L3's promotion (`operations.propose`) lists the candidate's serving revision under a
+# fresh deployment revision: the same provider and digest, another deployment_revision_id.
+PROMOTED = CAND.replace("00000029-0000-4000-8000-000000000029",
+                        "0000002a-0000-4000-8000-00000000002a")
+BASE_ELSEWHERE = BASE.replace("00000028-0000-4000-8000-000000000028",
+                              "0000002b-0000-4000-8000-00000000002b")
+
+
+def test_r2_a_promoted_candidate_is_recognised_by_its_serving_identity():
+    """The alias on the candidate's serving revision under another deployment revision is
+    this policy's candidate: a breach and the operator's stop both move it back. The same
+    digest under another provider, or another digest, is not, and is left alone."""
+    store, serving = FakeReleases(), FakeServing(current=PROMOTED)
+    asyncio.run(step(controller(store, serving), live(errors_=21)))
+    assert serving.current == BASE and len(serving.rollbacks) == 1
+    store, serving = FakeReleases(), FakeServing(current=PROMOTED)
+    asyncio.run(controller(store, serving).emergency_rollback(OPERATOR, POLICY, POLICY_REF,
+                                                              now=START, reason="pager"))
+    assert serving.current == BASE and len(serving.rollbacks) == 1
+    other_provider = PROMOTED.replace(P, "22222222-2222-4222-8222-222222222222")
+    other_digest = PROMOTED.replace("b" * 64, "e" * 64)
+    for foreign in (other_provider, other_digest):
+        serving = FakeServing(current=foreign)
+        asyncio.run(step(controller(FakeReleases(), serving), live(errors_=21)))
+        assert serving.current == foreign and serving.rollbacks == [], foreign
+
+
+
+def test_r2_a_deployment_only_candidate_rolls_back_once_and_never_relists_the_baseline():
+    """A candidate that is the baseline's serving revision on another deployment revision
+    shares the baseline's serving identity: it is rolled back, and the alias on the baseline
+    itself is never re-listed on a later pass (no flapping)."""
+    body = {**POLICY.model_dump(mode="json", by_alias=True),
+            "candidates": [{"serving_ref": BASE_ELSEWHERE, "weight_bp": 1_000}]}
+    policy, ref = lab.parse(body), lab.ref_of(body)
+    store, serving = FakeReleases(), FakeServing(current=BASE_ELSEWHERE)
+    store.release = lambda _ref: asyncio.sleep(0, store.row)
+    ctl = controller(store, serving)
+    asyncio.run(ctl.emergency_rollback(OPERATOR, policy, ref, now=START, reason="pager"))
+    assert serving.current == BASE and len(serving.rollbacks) == 1
+    verdict = asyncio.run(ctl.step(policy, ref, plan(), live(), now=HORIZON))
+    assert verdict.action == "rolled_back" and len(serving.rollbacks) == 1
+    asyncio.run(ctl.emergency_rollback(OPERATOR, policy, ref, now=START, reason="again"))
+    assert serving.current == BASE and len(serving.rollbacks) == 1
+
+
+# 0-RI-1: identity membership is the decision's, not the pass loop's. A later deliberate
+# listing of the same serving version (another fresh deployment revision) after the release
+# was rolled back and converged is left alone by every later pass.
+REPROMOTED = CAND.replace("00000029-0000-4000-8000-000000000029",
+                          "0000003c-0000-4000-8000-00000000003c")
+BASE_REDEPLOYED = BASE.replace("00000028-0000-4000-8000-000000000028",
+                               "0000003d-0000-4000-8000-00000000003d")
+
+
+def test_r2_a_later_listing_of_the_same_serving_version_is_left_alone_after_a_rollback():
+    """The rollback decision (a breach, the operator's stop) recognises a promoted candidate by
+    serving identity; a pass over the rolled-back release converges only an alias on a
+    candidate ref the policy names. So a re-promotion under a fresh deployment revision, and a
+    redeploy of a deployment-only candidate's (the baseline's) serving version, stay; an
+    interrupted rollback of a promoted listing is finished by the operator's stop."""
+    store, serving = FakeReleases(), FakeServing(current=PROMOTED)
+    ctl = controller(store, serving)
+    asyncio.run(ctl.emergency_rollback(OPERATOR, POLICY, POLICY_REF, now=START, reason="pager"))
+    assert serving.current == BASE and len(serving.rollbacks) == 1
+    serving.current, serving.fence = REPROMOTED, serving.fence + 1    # a deliberate re-promotion
+    for _ in range(2):
+        assert asyncio.run(step(ctl, live())).action == "rolled_back"
+    assert serving.current == REPROMOTED and len(serving.rollbacks) == 1
+    # deployment-only: the candidate is the baseline's serving version; a later redeploy stays
+    body = {**POLICY.model_dump(mode="json", by_alias=True),
+            "candidates": [{"serving_ref": BASE_ELSEWHERE, "weight_bp": 1_000}]}
+    policy, ref = lab.parse(body), lab.ref_of(body)
+    store, serving = FakeReleases(), FakeServing(current=BASE_ELSEWHERE)
+    store.release = lambda _ref: asyncio.sleep(0, store.row)
+    ctl = controller(store, serving)
+    asyncio.run(ctl.emergency_rollback(OPERATOR, policy, ref, now=START, reason="pager"))
+    serving.current, serving.fence = BASE_REDEPLOYED, serving.fence + 1
+    asyncio.run(ctl.step(policy, ref, plan(), live(), now=HORIZON))
+    assert serving.current == BASE_REDEPLOYED and len(serving.rollbacks) == 1
+    # killed between D9 and L3 on a promoted listing: the pass leaves it, the operator's stop
+    # (a refused second decision) converges it
+    store, serving = FakeReleases(), FakeServing(current=PROMOTED, fail=1)
+    with pytest.raises(ConnectionError):
+        asyncio.run(step(controller(store, serving), live(errors_=21)))
+    restarted = controller(store, serving)
+    asyncio.run(step(restarted, live()))
+    assert serving.current == PROMOTED and serving.rollbacks == []
+    asyncio.run(restarted.emergency_rollback(OPERATOR, POLICY, POLICY_REF, now=HORIZON,
+                                             reason="finish"))
+    assert serving.current == BASE and len(serving.rollbacks) == 1 and len(store.decisions) == 1

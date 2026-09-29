@@ -147,6 +147,7 @@ K05_HOLD = "test_k05_an_inconclusive_report_blocks_promotion"
 K05_SLICE = "test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back"
 K05_GAPS = "test_k05_missing_or_stale_evidence_never_expands"
 K05_SPEND = "test_k05_overspend_rolls_back_and_units_never_mix"
+K06_PROMOTED = "test_k06_an_emergency_rollback_moves_a_promoted_alias_back"
 K07_STORED = "test_k07_a_variant_is_probed_compared_and_stored"
 K07_REFUSED = "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"
 
@@ -203,6 +204,9 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_lost_race_raises", "a lost CAS race rereads and accepts the same rollback", R2,
        "            if (await self._store.release(policy_ref)).state != to:",
        "            if True:", K04_ONCE, K09_PROCESS),
+    _m("st_converge_by_full_ref", "R2 recognises a promoted candidate by serving identity "
+       "(R216, E8L-F2): L3's promotion mints a fresh deployment revision", R2,
+       "    return f\"{head.rpartition(':')[0]}@{digest}\"", "    return ref", K06_PROMOTED),
     _m("st_error_rate_ignored", "an error-rate breach rolls back", R2,
        "    if cand.errors > plan.max_error_rate * cand.requests:", "    if False:", K04_ONCE),
     _m("st_latency_ignored", "a p99 breach rolls back", R2,
@@ -264,18 +268,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_route.py", "scenarios_recover.py", "scenarios_parity.py")
-#: FAIL on this base - E8L-F2 (WR-E8L-2b re-derived E8L-F1 as fixed: 0045/R208 makes
-#: `release_active` and L3's `operations.serving_ref` agree, k01-k05/k07 now resolve a real
-#: candidate ref cleanly). k06 itself surfaces a SEPARATE, deeper gap: `Controller._converge`
-#: (infrx/rollouts/control) tests membership by the CANDIDATE'S OWN full ref (deployment
-#: id + digest), but L3's real promotion (`operations.py`'s `propose`, and this world's
-#: `promote()` mirroring it) always mints a FRESH deployment_revision_id for the newly public
-#: deployment - same servingVersion, same digest, different id. `current not in candidates`
-#: can then never be true for a real promotion, however correct the identity scheme is, so
-#: the alias never converges. No mutant can be judged on a case that fails by construction;
-#: bound once `_converge` compares by serving identity (servingVersion + digest) rather than
-#: the full ref, or a lane fixes the seam another way (product code, outside this lane).
-KNOWN_FAIL = {"test_k06_an_emergency_rollback_moves_a_promoted_alias_back"}
+#: FAIL on this base: none. k06 (E8L-F2) is fixed by ROLLOUT-IDENTITY (R216: R2's
+#: `_converge` compares by serving identity when the rollback is decided) with its
+#: world baseline (WR-E8L-9); `st_converge_by_full_ref` names it.
+KNOWN_FAIL: set[str] = set()
 
 
 def case_names() -> set[str]:
