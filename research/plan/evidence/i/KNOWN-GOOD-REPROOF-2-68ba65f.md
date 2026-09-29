@@ -259,3 +259,20 @@ The run behind that claim was made at `a71f0029`, before the WR text existed.
   `INFRX_D_TASK=d10 pytest -q tests/i/test_known_good_proof.py` 8 passed;
   `INFRX_D_TASK=d10 INFRX_MUTANTS=all pytest -q -rs tests/i/test_mutants.py -k "known_good or schema_proof"`
   29 passed (29/29 killed), 167 s. No code, test, mutant or record changed, only this file and the update JSON.
+
+## Lens minors carried (coordinator, merge #46)
+
+- **RV-3/RV-4:** the stand-in and runner scripts (`standin.sh`, `run.sh`, `rerun.sh`) live in the
+  lane's scratchpad and are recorded here by sha256 only. Carried as a note, not reproduced.
+- **WR-KGR2-RV2** (applied at merge #46): R224's word-for-word supersession is now held by
+  `tests/i/test_known_good_proof.py::test_ops_recover__the_superseded_0051_proof_is_the_recorded_one_word_for_word`.
+  Its oracle is a literal copied from the git blob `infra/rollout/known-good.json` at `ac8bc06d`
+  (the cheaper stable source: the mutation copies are not git checkouts, and the fca3ea3 evidence
+  does not quote the record). Mutants `known_good_record_rewords_the_0051_proof` and
+  `known_good_record_drops_the_0051_candidate` are both killed.
+
+## Open issue 1 (coordinator note for P-21)
+
+The host ephemeral range 32768-60999 overlaps the task-local port registry. The operator reserved
+57000-57599 (`net.ipv4.ip_local_reserved_ports`) on 2026-09-29. Registry ports below 57000, such as
+55468, remain exposed.

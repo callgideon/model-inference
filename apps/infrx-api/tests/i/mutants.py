@@ -1266,6 +1266,13 @@ MUTANTS += (
 # --- KNOWN-GOOD-PROOF: a schema proof reaches its `through` and no further ---------------
 PROOF_PY = "../../infra/runbooks/schema_proof.py"
 LAB = "test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0052"
+KGR_0051_HEAD = ('"superseded": [{"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 '
+                 'passed, 14 SHAPE cases skipped by name, 5 xfailed) + the result-read probe PASS on 0001-0051, '
+                 'on plain PostgreSQL + shim AND on the Supabase image; migrate.py history check PASS on both '
+                 '(the committed driver at fca3ea3, candidate 72dc76ad)",')
+KGR_0051_CANDIDATE = (' "candidate": "72dc76ad (0001-0026 as proven at 0026 by KNOWN-GOOD-PROOF-3, 0027-0051 '
+                      'the Lab migrations the R151/R201 window of 2026-09-29 applies); supersedes the '
+                      'through-0026 proof, rerun whole",')
 MUTANTS += (
     _m("known_good_proof_ignores_through", "a schema_proof proves the schema only through its `through`",
        KG, 'proven = (proof.get("through", "0000") >= applied and bool(proof.get("evidence"))',
@@ -1376,6 +1383,15 @@ MUTANTS += (
     _m("known_good_record_drops_the_0051_proof", "a re-proof keeps the proof it replaces (R224)",
        "../../infra/rollout/known-good.json", '"superseded": [{"through": "0051", "result": "4226315',
        '"superseded": [{"through": "0026", "result": "4226315', LAB),
+    # WR-KGR2-RV2 (R224 word for word): superseded[0] equals the through-0051 record at ac8bc06d
+    _m("known_good_record_rewords_the_0051_proof", "the kept through-0051 proof is word for word",
+       "../../infra/rollout/known-good.json",
+       '"superseded": [{"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 passed',
+       '"superseded": [{"through": "0051", "result": "4226315: its own tests/d (26 suites, 384 passed',
+       "test_ops_recover__the_superseded_0051_proof_is_the_recorded_one_word_for_word"),
+    _m("known_good_record_drops_the_0051_candidate", "the kept through-0051 proof keeps every field",
+       "../../infra/rollout/known-good.json", KGR_0051_HEAD + KGR_0051_CANDIDATE, KGR_0051_HEAD,
+       "test_ops_recover__the_superseded_0051_proof_is_the_recorded_one_word_for_word"),
 )
 
 # --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------

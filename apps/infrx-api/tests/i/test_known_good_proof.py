@@ -99,6 +99,36 @@ def test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_
         assert "KNOWN-GOOD-REPROOF-fca3ea3" in proof["superseded"][0]["evidence"][0], sha
 
 
+# WR-KGR2-RV2 (R224, word for word): the through-0051 proof as the record held it before the
+# re-proof, copied from the git blob infra/rollout/known-good.json at ac8bc06d (merge #40).
+# A literal, not `git show`, because the mutation copies are not git checkouts.
+THROUGH_0051 = {sha: {
+    "through": "0051",
+    "result": f"{sha}: its own tests/d (26 suites, 383 passed, 14 SHAPE cases skipped by name, "
+              "5 xfailed) + the result-read probe PASS on 0001-0051, on plain PostgreSQL + shim AND on "
+              "the Supabase image; migrate.py history check PASS on both (the committed driver at "
+              "fca3ea3, candidate 72dc76ad)",
+    "candidate": "72dc76ad (0001-0026 as proven at 0026 by KNOWN-GOOD-PROOF-3, 0027-0051 the Lab "
+                 "migrations the R151/R201 window of 2026-09-29 applies); supersedes the through-0026 "
+                 "proof, rerun whole",
+    "evidence": ["research/plan/evidence/i/KNOWN-GOOD-REPROOF-fca3ea3.md",
+                 "research/plan/evidence/i/KNOWN-GOOD-PROOF-3-af552ed.md",
+                 "research/plan/evidence/i/KNOWN-GOOD-PROOF-2-3f7df77.md",
+                 "research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md"],
+} for sha in ("4226315", "bda1586")}
+
+
+def test_ops_recover__the_superseded_0051_proof_is_the_recorded_one_word_for_word():
+    """R224: a re-proof moves the proof it replaces into `superseded` word for word.
+    Failure oracle: superseded[0] reworded, or a field dropped, differs from the through-0051
+    record at ac8bc06d."""
+    record = json.loads(RECORD.read_text())
+    proven = {r["sha"][:7]: r["schema_proof"] for r in record["releases"]
+              if r.get("known_good") and r.get("schema_proof")}
+    assert set(proven) == set(THROUGH_0051)
+    for sha, proof in proven.items():
+        assert proof["superseded"][0] == THROUGH_0051[sha], sha
+
 # The 14 SHAPE cases the record's runs deselected (KNOWN-GOOD-REPROOF-fca3ea3; KGR-RV-1): the
 # count alone lets a real SQL case replace one of them unnoticed.
 RECORDED_SHAPE = {
