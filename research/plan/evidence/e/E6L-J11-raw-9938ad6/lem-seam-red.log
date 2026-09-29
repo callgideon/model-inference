@@ -1,0 +1,147 @@
+..................FFFF                                                   [100%]
+=================================== FAILURES ===================================
+_ test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_card _
+
+    def test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_card() -> None:
+        """The L3 stand-in adapter: bearer credential, Idempotency-Key, seed; the charge is the
+        frozen dev rate card's debit of the reported usage; 402 is `InsufficientCredit`, 429/5xx
+        retryable, any other refusal final."""
+        seen = []
+    
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            body = json.loads(request.content)
+            if body["messages"][0]["content"] == "poor":
+                return httpx.Response(402, json={"error": {"code": "insufficient_credit"}})
+            if body["messages"][0]["content"] == "busy":
+                return httpx.Response(503, json={})
+            if body["messages"][0]["content"] == "slow":
+                return httpx.Response(429, json={})
+            if body["messages"][0]["content"] == "lost":
+                raise httpx.RemoteProtocolError("closed", request=request)
+            if body["messages"][0]["content"] == "bad":
+                return httpx.Response(400, json={})
+            return httpx.Response(200, json={
+                "choices": [{"message": {"content": "hi", "tool_calls": [{"function": {
+                    "name": "look", "arguments": "{\"x\": 1}"}}]}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20}})
+    
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        port = HttpDevEndpoint("http://dev", api_key="k", model="m", rate_card=RATE_CARD,
+                               client=client)
+        got = run(port.complete(prompt="p", media=[], tool_results=[], seed=7,
+                                idempotency_key="attempt:x"))
+        assert (got.text, got.tool_calls) == ("hi", [{"name": "look", "arguments": {"x": 1}}])
+        assert got.charged == RATE_CARD.debit(10, 20)
+        assert (got.prompt_tokens, got.completion_tokens) == (10, 20)
+        sent = seen[0]
+        assert str(sent.url) == "http://dev/v1/chat/completions"
+        assert sent.headers["Authorization"] == "Bearer k"
+        assert sent.headers["Idempotency-Key"] == "attempt:x"
+        assert json.loads(sent.content) == {"model": "m", "seed": 7, "messages": [
+            {"role": "user", "content": "p"}]}
+        for prompt, error in (("poor", errors.InsufficientCredit),
+                              ("busy", errors.DependencyUnavailable),
+                              ("slow", errors.DependencyUnavailable),
+                              ("lost", errors.DependencyUnavailable),
+                              ("bad", errors.InvalidRequest)):
+            with pytest.raises(error):
+                run(port.complete(prompt=prompt, media=[], tool_results=[], seed=0,
+                                  idempotency_key="k"))
+        # WR-E6L-J11: a clip URL is the one `video_url` part after the text, exactly `{url}`
+        # (R58) - the gateway's own validator takes the body as sent.
+>       run(port.complete(prompt="p", media=["https://o.test/k?s=1#t=0,1"], tool_results=[],
+                          seed=0, idempotency_key="k"))
+
+tests/b/runner/test_runner.py:517: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/b/runner/test_runner.py:36: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <infrx.evaluation.runner.HttpDevEndpoint object at 0x733d11fa8470>
+prompt = 'p', media = ['https://o.test/k?s=1#t=0,1'], tool_results = []
+seed = 0, idempotency_key = 'k'
+
+    async def complete(self, *, prompt: str, media: list[str],
+                       tool_results: list[dict[str, Any]], seed: int,
+                       idempotency_key: str) -> Completion:
+        if media:
+>           raise errors.InvalidRequest("finite video dispatch waits on L3's media path")
+E           infrx.contracts.errors.InvalidRequest: invalid_request: finite video dispatch waits on L3's media path
+
+infrx/evaluation/runner/__init__.py:387: InvalidRequest
+___ test_b1_a_finite_video_case_is_sent_as_its_presigned_clip_with_its_span ____
+
+    def test_b1_a_finite_video_case_is_sent_as_its_presigned_clip_with_its_span() -> None:
+        """N1's clip (`media_digest`, `span_ms`) reaches the dev endpoint as one URL: a presigned
+        GET of this provider's Lab media object, 600 s at most, the span as a media fragment -
+        two cases cut from one clip are two requests, never the same one."""
+        w = World(n=1, harness={"adapter": "finite_video", "prompt_template": "label {{media_ref}}",
+                                "input_mapping": {}})
+        w.objects = Presigning()
+        run(w.objects.put_if_absent(sample_key(NEMO, w.manifest["samples"][0]["content_digest"]),
+                                    records.canonical({
+                                        "modality": "finite_video", "content": {"action": "run"},
+                                        "media_digest": f"sha256:{CLIP}", "span_ms": [30_000, 61_500],
+                                        "original": {"answer": "run"}}), "application/json"))
+        w.wallet.answer = lambda prompt: "run"
+        report = run(w.runner().run(w.freeze()))
+        assert report["failures"] == {} and report["cases"] == {"done": 1}
+        (call,) = w.wallet.calls
+        assert call["prompt"] == f"label {CLIP_REF}"
+>       assert call["media"] == [f"https://objects.test/{CLIP_REF}?sig=s#t=30,61.5"]
+E       AssertionError: assert ['lab/b000000...cccccccccccc'] == ['https://obj...=s#t=30,61.5']
+E         
+E         At index 0 diff: 'lab/b0000001-0000-4000-8000-000000000001/media/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' != 'https://objects.test/lab/b0000001-0000-4000-8000-000000000001/media/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc?sig=s#t=30,61.5'
+E         Use -v to get more diff
+
+tests/b/runner/test_runner.py:566: AssertionError
+________ test_b1_only_the_runs_providers_clip_within_the_cap_is_signed _________
+
+    def test_b1_only_the_runs_providers_clip_within_the_cap_is_signed() -> None:
+        """R227's rule for media: a run sends only `lab/<its provider>/media/<digest>`; a span is
+        1..82000 ms (MAX_VIDEO_SECONDS 82); each refusal names itself and signs nothing."""
+        objects = Presigning()
+>       assert run(runner.clip_url(objects, NEMO, CLIP_REF, [0, 82_000])).endswith("#t=0,82")
+                   ^^^^^^^^^^^^^^^
+E       AttributeError: module 'infrx.evaluation.runner' has no attribute 'clip_url'
+
+tests/b/runner/test_runner.py:575: AttributeError
+_______ test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object ________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x733d11e3ef60>
+
+    def test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object(monkeypatch) -> None:
+        """The Lab objects' presign (offline: signing needs no network): GET of the prefixed key,
+        SigV4 (a SigV2 URL is refused by buckets created after 2020), expiring as asked."""
+        from urllib.parse import parse_qs, urlsplit
+        for name in ("AWS_SESSION_TOKEN", "AWS_PROFILE"):
+            monkeypatch.delenv(name, raising=False)
+        for name, value in (("AWS_ACCESS_KEY_ID", "k"), ("AWS_SECRET_ACCESS_KEY", "s"),
+                            ("AWS_DEFAULT_REGION", "us-east-1"),
+                            ("AWS_CONFIG_FILE", "/nonexistent"),
+                            ("AWS_SHARED_CREDENTIALS_FILE", "/nonexistent")):
+            monkeypatch.setenv(name, value)
+        store = S3ObjectStore.connect("b", "lab/", "http://127.0.0.1:9")
+>       url = urlsplit(run(store.presign("x/y", expires_s=600)))
+                           ^^^^^^^^^^^^^
+E       AttributeError: 'S3ObjectStore' object has no attribute 'presign'
+
+tests/b/runner/test_runner.py:602: AttributeError
+=========================== short test summary info ============================
+FAILED tests/b/runner/test_runner.py::test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_card
+FAILED tests/b/runner/test_runner.py::test_b1_a_finite_video_case_is_sent_as_its_presigned_clip_with_its_span
+FAILED tests/b/runner/test_runner.py::test_b1_only_the_runs_providers_clip_within_the_cap_is_signed
+FAILED tests/b/runner/test_runner.py::test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object
+4 failed, 18 passed in 0.76s
