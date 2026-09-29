@@ -2,7 +2,7 @@
   "task": "I8",
   "slice": "KNOWN-GOOD-PROOF (KNOWN-GOOD-REPROOF-2: R151 condition 1 for the window that applies 0052)",
   "activity": "review",
-  "head": "PENDING",
+  "head": "a71f0029",
   "worktree": ".claude/worktrees/codex-w5-known-good-reproof-2",
   "branch": "codex/w5-known-good-reproof-2",
   "owned_paths": [
