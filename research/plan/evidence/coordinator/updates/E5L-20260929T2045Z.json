@@ -1,0 +1,28 @@
+{
+ "task": "E5L",
+ "slice": "lab-observe-4: o01 bound over the capture seam (WR-LC-O01), stack mutants, final make lab-observe",
+ "activity": "review",
+ "head": "c25405cc",
+ "worktree": ".claude/worktrees/codex-w5-lab-observe-4",
+ "branch": "codex/w5-lab-observe-4",
+ "owned_paths": ["tests/integration/lab_observe/**", "research/plan/evidence/e/E5L-*"],
+ "commands": [
+  {"cmd": "pytest tests/integration/lab_observe/test_e5l_runner.py (base be6b2fde + new tests)", "exit": 1, "summary": "RED: 3 failed / 16 passed"},
+  {"cmd": "pytest tests/integration/lab_observe/test_e5l_runner.py test_i2l_obs.py", "exit": 0, "summary": "32 passed"},
+  {"cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py -k 'not stack_mutant'", "exit": 0, "summary": "73 passed (layer-1 mutants killed + well_formed + every_case + self-tests)"},
+  {"cmd": "runner.py --out <dir> --only o01", "exit": 3, "summary": "o01 PASS 3/3 (46.6 s); others not selected"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e5l pytest test_mutants.py -k stack_mutant (kept e5l)", "exit": 0, "summary": "22/22 stack mutants killed incl. st_capture_on_in_the_box, st_capture_switch_ignored, st_capture_key_opt_in_ignored; stack torn down"},
+  {"cmd": "make lab-observe", "exit": 0, "summary": "gate PASS: 18 PASS / 0 FAIL / 0 NOT RUN; o01..o10 PASS; r222 accepted, open {}"}
+ ],
+ "gate": {
+  "verdict": "PASS", "exit": 0, "head": "c25405cc",
+  "tally": {"PASS": 18, "FAIL": 0, "NOT RUN": 0},
+  "cells": {"TRACE-BOUNDS": "PASS", "TRACE-RECOVER": "PASS", "TRACE-TENANT": "PASS", "FEEDBACK-ACK": "PASS", "JUDGE-BUDGET": "PASS", "JUDGE-SCORES": "PASS", "LAB-ACCESS": "PASS", "CONSOLE-FLOWS": "PASS"},
+  "r222": {"accepted": true, "open": {}}
+ },
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "high", "basis": "lab-observe-3 verify round: gate 10 min, stack list 9-16 min + keep/teardown 5 min", "at": "2026-09-29T20:45Z"},
+ "blockers": [],
+ "wiring_requests": [],
+ "open_issues": ["R8 (async job spool holds an echoed caller token) and R7 (lost-ack retry untraced) stay with lab-capture-2; o01 exercises neither"],
+ "evidence": ["research/plan/evidence/e/E5L-c25405c.md", "research/plan/evidence/e/E5L-raw-c25405cc/", "research/plan/evidence/e/E5L-raw-lo4/"]
+}
