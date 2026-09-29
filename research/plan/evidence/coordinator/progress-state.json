@@ -9823,7 +9823,7 @@
   {
    "id": "W5-MERGE-62",
    "task": null,
-   "slice": "merge batch #62 (Opus): lab-rollout-7 dc3ba861 (+pilot.py/lab_releases conflicts vs #60 kept both sides, 0059 lab_control_grants_2, WR-LR7-I-OPT, minors, R259–R260)",
+   "slice": "merge batch #62 (Opus): lab-rollout-7 dc3ba861 (+pilot.py/lab_releases conflicts vs #60 kept both sides, 0059 lab_control_grants_2, WR-LR7-I-OPT, minors, R259–R260); workflow wf_daf503a9-854",
    "agent": "opus",
    "branch": "codex/w5-merge-62",
    "worktree": ".claude/worktrees/codex-w5-merge-62",
