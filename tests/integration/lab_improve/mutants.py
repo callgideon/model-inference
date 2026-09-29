@@ -238,9 +238,18 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_corrections_dropped", "the grantor's D6F feedback rides beside the original as "
        "corrections", N3, "for f in await feedback(grantor_org_id, request)] if joined else []",
        "for f in await feedback(grantor_org_id, request)] if False else []", I03_TRACES),
+    # WR-N3-5 (datasets-lw5) holds the tombstone twice: 0041's lab_permitted_samples and the
+    # object records `blocked` reads; ignoring it means the gate skips both, keeping expiry.
     _m("st_tombstones_ignored", "a tombstone is permanent: a re-grant resurrects nothing",
-       N3, '    stones = {_id(k) for k in await objects.keys(f"{base}/tombstones/")} & wanted',
-       "    stones = set()", I04_GATE),
+       N3, "    allowed = set(await (store.accessible_samples if restrictions is None\n"
+       "                         else restrictions.permitted)(\n"
+       "        dataset_ref, provider_org_id=provider_org_id, purpose=purpose))\n"
+       "    return allowed - set(await blocked(objects, provider_org_id=provider_org_id,\n"
+       "                                       sample_ids=allowed, now=now))",
+       "    allowed = set(await store.accessible_samples(\n"
+       "        dataset_ref, provider_org_id=provider_org_id, purpose=purpose))\n"
+       "    return allowed - set(await _expired(objects, provider_org_id, allowed, now))",
+       I04_GATE),
     _m("st_pipelines_read_d7_gate", "R193: a P1 export gates on N3's permitted, never D7's "
        "grant read alone (missing transitive revocation)", P1,
        "allowed = await permitted(store, objects, dataset_ref, now=now,\n"
