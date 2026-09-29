@@ -128,17 +128,24 @@ L08_GRANT = "test_l08_no_grant_no_content"
 L08_PURPOSE = "test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call"
 L08_DIRECT = "test_l08_a_provider_session_reads_no_consumer_rows_directly"
 L03 = "test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership"
+L03_ROUTE = "test_l03_registration_and_the_listings_through_the_control_service"
 L04 = "test_l04_publication_needs_operator_approval_and_snapshots_the_rate"
+L04_ROUTE = "test_l04_the_lab_journey_through_the_control_service"
 L05 = "test_l05_app_discovers_and_serves_the_published_revision"
+L05_VERSION = "test_l05_discovery_reports_the_listing_version_it_serves"
 L06 = "test_l06_rollback_during_a_queued_request_keeps_its_serving_and_rate_pins"
 L09 = "test_l09_publish_and_rollback_cas_under_injected_faults"
 L10 = "test_l10_a_control_service_restart_mid_operation_loses_nothing"
+L10_RETRY = "test_l10_a_retry_after_a_lost_answer_proposes_once"
 L12 = "test_l12_a_consumer_key_is_refused_by_every_control_operation"
 L3 = "infrx/lab/control/__init__.py"
 LAB_AUTH = "infrx/gateway/lab_auth.py"
 OPS = "infrx/lab/control/operations.py"
 PUBLISH = "../../tests/integration/lab_operate/scenarios_publish.py"
+BOX = "../../tests/integration/lab_operate/control_box.py"
+CONTROL_STORE = "infrx/state/lab_control.py"
 M32 = M + "0032_lab_control.sql"
+M47 = M + "0047_lab_control_propose_idempotent.sql"
 L11_DOWN = "test_l11_the_lab_down_mid_traffic_leaves_app_inference_serving"
 L11_BAD = "test_l11_a_bad_lab_release_and_its_rollback_leave_every_accepted_job_finished_once"
 
@@ -247,11 +254,39 @@ STACK_MUTANTS += (
     _m("st_control_never_crashed", "the restart drill judges only a service really killed",
        PUBLISH, "    service.kill()\n    thread.join(60)", "    service.kill\n    thread.join(60)",
        L10),
+    # lab-operate-2: the fixed findings are plain cells (E3L-F1 merge #31, E3L-F2 merge #34)
+    _m("st_listing_version_constant", "discovery reports the listing it resolved (E3L-F1)",
+       MODELS, "        if resolved is not None:\n            listing_version = resolved",
+       "        if False:\n            listing_version = resolved", L05_VERSION),
+    _m("st_retry_proposes_again", "a retried proposal answers the open one (E3L-F2, R214)",
+       M47, "  if found then\n    return to_jsonb(existing);",
+       "  if false then\n    return to_jsonb(existing);", L10_RETRY),
+    # lab-operate-2: the route halves on the factory over the real ControlReads (WR-LSQ-9-C)
+    _m("st_register_any_digest", "a Lab registration names one of the model's imported "
+       "weights, never declares one", OPS,
+       "                    if registration.artifact_digest in s.weight_shard_digests]",
+       "                    if True]", L03_ROUTE),
+    _m("st_register_any_name", "a Lab registration is of a model of this workspace", OPS,
+       '                    if s.public_model_id.rpartition("/")[2] == registration.name]',
+       "                    if True]", L03_ROUTE),
+    _m("st_servings_of_every_provider", "the models listing is the workspace's own",
+       CONTROL_STORE, '"where s.provider_org_id = %s "', '"where s.provider_org_id = %s or true "',
+       L03_ROUTE),
+    _m("st_deployments_of_every_provider", "the deployments listing is the workspace's own",
+       CONTROL_STORE, '"where provider_org_id = %s "', '"where provider_org_id = %s or true "',
+       L03_ROUTE),
+    _m("st_smoke_never_reported", "a validated revision's smoke reads passed", OPS,
+       'else "passed")', 'else "none")', L04_ROUTE),
+    _m("st_provider_rollback_proposal", "a rollback is the operator's, never a provider "
+       "proposal", OPS, '        if kind != "publish":', "        if False:", L04_ROUTE),
+    _m("st_factory_smoke_unwired", "the journey's smoke runs on the engine stand-in (R203)",
+       BOX, '    if os.environ.get("E3L_ENGINE_URL"):\n        install_engine(',
+       "    if False:\n        install_engine(", L04_ROUTE),
 )
-#: Cases whose FAIL is a recorded cross-lane finding (evidence E3L-BIND): kept out of the
-#: stack list's pristine baseline until the owning lane fixes it (as E8L's KNOWN_FAIL).
-KNOWN_FAIL = {"test_l05_discovery_reports_the_listing_version_it_serves",      # E3L-F1
-              "test_l10_a_retry_after_a_lost_answer_proposes_once"}             # E3L-F2
+#: Cases whose FAIL is a recorded cross-lane finding, kept out of the stack list's pristine
+#: baseline until the owning lane fixes it (as E8L's KNOWN_FAIL). Empty: E3L-F1 (merge #31)
+#: and E3L-F2 (merge #34, 0047) are fixed, so l05b and l10b are plain cells.
+KNOWN_FAIL: set[str] = set()
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 
 

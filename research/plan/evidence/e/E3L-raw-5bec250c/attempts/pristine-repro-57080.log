@@ -1,0 +1,32 @@
+None
+1
+....FFFFFFFF............                                                 [100%]
+=================================== FAILURES ===================================
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-za6trx3a/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-za6trx3a/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-za6trx3a/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-za6trx3a/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-za6trx3a/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-za6trx3a/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-za6trx3a/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+E   RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+/tmp/e3l-dbg-za6trx3a/tests/integration/fake_vllm.py:484: RuntimeError: fake vLLM exited 3 during startup on port 57080: ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 57080): [errno 98] address already in use
+=========================== short test summary info ============================
+FAILED ../../tests/integration/lab_operate/scenarios_access.py::test_l07_a_consumer_key_is_no_lab_session
+FAILED ../../tests/integration/lab_operate/scenarios_access.py::test_l07_a_consumer_owner_has_no_provider_workspace
+FAILED ../../tests/integration/lab_operate/scenarios_access.py::test_l08_no_grant_no_content
+FAILED ../../tests/integration/lab_operate/scenarios_access.py::test_l08_a_grant_is_purpose_bound_and_its_revocation_denies_the_next_call
+FAILED ../../tests/integration/lab_operate/scenarios_access.py::test_l08_a_provider_session_reads_no_consumer_rows_directly
+FAILED ../../tests/integration/lab_operate/scenarios_publish.py::test_l02_the_seeded_private_dev_deployment_is_not_discoverable_or_admissible
+FAILED ../../tests/integration/lab_operate/scenarios_publish.py::test_l02_a_provider_created_dev_revision_never_reaches_app_discovery
+FAILED ../../tests/integration/lab_operate/scenarios_publish.py::test_l03_registry_validation_refuses_bad_artifacts_and_foreign_ownership
+8 failed, 16 passed in 306.76s (0:05:06)
+
+

@@ -7,6 +7,10 @@ its own `INFRX_LAB_*` settings only.
 `E3L_HOLD=<PgControlStore method>` (l10's fault point): that store call runs and commits, then
 `E3L_HOLD_MARKER` is written and the request never answers - the process is SIGKILLed there,
 between committing an operation and answering it.
+
+`E3L_ENGINE_URL=<the controlled engine>` (R203): the factory's dev smoke is `EngineSmoke`'s
+rule - the engine answers its model list - in place of `NoEngine`'s 503, because WR-L3-2's
+engine smoke adapter is not wired.
 """
 from __future__ import annotations
 
@@ -29,7 +33,20 @@ def install_hold(method: str, marker: Path) -> None:
     setattr(PgControlStore, method, held)
 
 
+def install_engine(url: str) -> None:
+    import httpx
+
+    from infrx.lab.control.app import NoEngine
+
+    async def smoke(self, serving, deployment) -> bool:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            return (await client.get(f"{url.rstrip('/')}/v1/models")).status_code == 200
+    NoEngine.smoke = smoke
+
+
 def main(argv: list[str]) -> int:
+    if os.environ.get("E3L_ENGINE_URL"):
+        install_engine(os.environ["E3L_ENGINE_URL"])
     if os.environ.get("E3L_HOLD"):
         install_hold(os.environ["E3L_HOLD"], Path(os.environ["E3L_HOLD_MARKER"]))
     import uvicorn

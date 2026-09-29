@@ -1,0 +1,476 @@
+..F..F..F..F.F..F..F                                                     [100%]
+=================================== FAILURES ===================================
+__ test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged[valkey] __
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            relay = OutboxRelay(h.extra["store"], q, redelivery_s=REDELIVERY_S)
+            a, c = await admitted(h, 2)
+            first = await relay.pump()
+            assert first == {"read": 2, "indexed": 2, "acknowledged": 2, "deferred": 0}, first
+            prep = await drain(q, OutboxKind.prepare_dispatch)
+            assert sorted(e.job_id for e in prep) == sorted([a.request_id, c.request_id])
+            lease = await h.port.claim_preparation(a.request_id, "prep-a")
+            await h.port.prepared(lease, ())
+            h.clock.advance(REDELIVERY_S)
+            second = await relay.pump()
+            assert second["read"] == 1 and second["acknowledged"] == 1, second
+            inference = await drain(q, OutboxKind.inference_dispatch)
+            assert [(e.job_id, e.kind) for e in inference] == \
+                [(a.request_id, OutboxKind.inference_dispatch)]
+            h.clock.advance(REDELIVERY_S)
+            assert (await relay.pump())["read"] == 0, "an acknowledged row was delivered again"
+>       run(body)
+
+tests/d/test_outbox_relay.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:80: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+_ test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate[valkey] _
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            # the relay reads and indexes, then dies before `acknowledge_dispatch`
+            [event] = await store.dispatch_pending(worker_id="relay-dead",
+                                                   redelivery_s=REDELIVERY_S)
+            assert await q.enqueue(event) is True
+            relay = OutboxRelay(store, q, redelivery_s=REDELIVERY_S)     # a restarted relay
+            assert (await relay.pump())["read"] == 0, "redelivered inside the window"
+            h.clock.advance(REDELIVERY_S)
+            again = await relay.pump()
+            assert again == {"read": 1, "indexed": 1, "acknowledged": 1, "deferred": 0}, again
+            got = await drain(q)
+            assert [(e.event_id, e.job_id) for e in got] == [(event.event_id, a.request_id)], \
+                "a redelivery indexed a second candidate"
+>       run(body)
+
+tests/d/test_outbox_relay.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:106: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+____ test_outbox__a_duplicate_delivery_never_makes_a_second_attempt[valkey] ____
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_duplicate_delivery_never_makes_a_second_attempt(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()
+            [event] = await store.dispatch_snapshot()
+            assert await q.enqueue(event) is False, "a replayed event indexed a second candidate"
+            mine = await q.claim_candidate("w1", kind=OutboxKind.prepare_dispatch)
+            # the index loses w1's claim and is rebuilt from PostgreSQL: the job reappears
+            await OutboxRelay(store, q).rebuild()
+            theirs = await q.claim_candidate("w2", kind=OutboxKind.prepare_dispatch)
+            assert mine.job_id == theirs.job_id == a.request_id
+            results = await asyncio.gather(h.port.claim_preparation(a.request_id, "w1"),
+                                           h.port.claim_preparation(a.request_id, "w2"),
+                                           return_exceptions=True)
+            leases = [r for r in results if not isinstance(r, BaseException)]
+            refused = [r for r in results if isinstance(r, errors.NotClaimable)]
+            assert len(leases) == 1 and len(refused) == 1, results
+            loser = "w2" if leases[0].worker_id == "w1" else "w1"
+            forged = leases[0].model_copy(update={"worker_id": loser})
+            with pytest.raises(errors.StaleLease):
+                await h.port.prepared(forged, ())
+            queued = await h.port.prepared(leases[0], ())
+            assert queued.state.value == "queued"
+            kinds = h.extra["outbox_kinds"](a.request_id)
+            assert kinds.count(OutboxKind.inference_dispatch) == 1, kinds
+>       run(body)
+
+tests/d/test_outbox_relay.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:130: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+_ test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job[valkey] _
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            jobs = await admitted(h, 4)
+            await OutboxRelay(store, q).pump()
+            await h.port.prepared(await h.port.claim_preparation(jobs[0].request_id, "p"), ())
+            busy = await h.port.claim_preparation(jobs[1].request_id, "p")   # being prepared
+            # the index loses everything (a Valkey restart) and the relay process restarts
+            fresh = index(backend, h)
+            rebuilt = await OutboxRelay(store, fresh).rebuild()
+            got = {(e.job_id, e.kind) for e in await drain(fresh)}
+            want = {(jobs[0].request_id, OutboxKind.inference_dispatch),
+                    (jobs[2].request_id, OutboxKind.prepare_dispatch),
+                    (jobs[3].request_id, OutboxKind.prepare_dispatch)}
+            assert rebuilt == 3 and got == want, (rebuilt, got)
+            # the job under a live preparation lease comes back once that lease is lost
+            h.clock.advance(busy.expires_at.timestamp() - h.clock.now().timestamp())
+            again = await OutboxRelay(store, fresh).rebuild()
+            assert again == 4 and (jobs[1].request_id, OutboxKind.prepare_dispatch) in \
+                {(e.job_id, e.kind) for e in await drain(fresh)}
+>       run(body)
+
+tests/d/test_outbox_relay.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:164: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+______ test_outbox__a_full_index_defers_rows_and_never_drops_them[valkey] ______
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", ("memory", "valkey"))
+    def test_outbox__a_full_index_defers_rows_and_never_drops_them(backend) -> None:
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h, max_items=1)
+            store = h.extra["store"]
+            jobs = await admitted(h, 3)
+            relay = OutboxRelay(store, q, redelivery_s=REDELIVERY_S)
+            first = await relay.pump()
+            assert (first["indexed"], first["deferred"]) == (1, 2), first
+            seen = set()
+            for _ in range(3):                  # no clock movement: deferred rows are released
+                seen |= {e.job_id for e in await drain(q)}
+                await relay.pump()
+            seen |= {e.job_id for e in await drain(q)}
+            assert seen == {j.request_id for j in jobs}, "a deferred row was lost"
+>       run(body)
+
+tests/d/test_outbox_relay.py:204: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:192: in body
+    q = index(backend, h, max_items=1)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+___ test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[valkey] ___
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job(backend) -> None:
+        """OB-1: a acknowledged; the rebuild snapshots; c is admitted; a second relay pumps
+        (indexes + acknowledges) c; the rebuild lands on the snapshot, which lacks c. Without
+        the reopen fence c sat queued with its row "delivered" until its queue deadline."""
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+            late = {}
+    
+            async def race():
+                [late["c"]] = await admitted(h)
+                report = await OutboxRelay(store, q, worker_id="relay-b").pump()
+                assert report["acknowledged"] == 1, report        # c delivered and acked
+                # OB-1c: the store clock moves on after B's ack, so a fence read AFTER the
+                # snapshot (a later `since`) would miss that ack and measurably strand c
+                h.clock.advance(1)
+    
+            await OutboxRelay(_SnapshotThenRace(store, race), q).rebuild()
+            got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+            assert got == {a.request_id, late["c"].request_id}, \
+                f"the rebuild stranded a pumped job: dispatchable {got}"
+>       run(body)
+
+tests/d/test_outbox_relay.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:233: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+__ test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job[valkey] __
+
+backend = 'valkey'
+
+    @pytest.mark.parametrize("backend", BACKENDS)
+    def test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job(backend) -> None:
+        """OB-1b: B's index write is wiped by A's rebuild; B's ack arrives after A reopened the
+        row. The ack must be refused (the reopen cleared B's claim), so A's pump re-sends c."""
+        h = pgstore.factory()
+        h.extra["grant"](b.ORG_A, "25.00")
+    
+        async def body():
+            q = index(backend, h)
+            store = h.extra["store"]
+            [a] = await admitted(h)
+            await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+            seen: dict = {}
+    
+            async def relay_b_reads_and_indexes():
+                [seen["c"]] = await admitted(h)
+                events = await store.dispatch_pending(worker_id="relay-b",
+                                                      redelivery_s=REDELIVERY_S)
+                for event in events:
+                    await q.enqueue(event)
+                seen["ids"] = [event.event_id for event in events]
+    
+            async def relay_b_acknowledges_late():
+                seen["late_ack"] = await store.acknowledge_dispatch(seen["ids"],
+                                                                    worker_id="relay-b")
+    
+            await OutboxRelay(_AckAfterReopen(store, relay_b_reads_and_indexes,
+                                              relay_b_acknowledges_late), q).rebuild()
+            assert seen["late_ack"] == 0, \
+                f"relay B's late acknowledgment landed after the reopen: {seen['late_ack']}"
+            got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+            assert got == {a.request_id, seen["c"].request_id}, \
+                f"the late acknowledgment stranded a job: dispatchable {got}"
+>       run(body)
+
+tests/d/test_outbox_relay.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/d/test_outbox_relay.py:55: in run
+    asyncio.run(body())
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:283: in body
+    q = index(backend, h)
+        ^^^^^^^^^^^^^^^^^
+tests/d/test_outbox_relay.py:50: in index
+    return ValkeyScheduler(vkstore.client(), harness.clock.now, namespace=vkstore.namespace(),
+                           ^^^^^^^^^^^^^^^^
+tests/d/vkstore.py:112: in client
+    ensure()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def ensure() -> None:
+        global _created
+        if _created:
+            return
+        _lock()
+        probe = _docker("inspect", "-f", "{{json .Config.Labels}}", CONTAINER)
+        if probe.returncode == 0:
+            if f'"{LABEL}":"{pgharness.checkout()}"' not in probe.stdout.replace(" ", ""):
+>               raise pgharness.ForeignContainer(f"{CONTAINER} exists and is not this checkout's")
+E               tests.d.pgharness.ForeignContainer: infrx-d2-valkey exists and is not this checkout's
+
+tests/d/vkstore.py:77: ForeignContainer
+=========================== short test summary info ============================
+FAILED tests/d/test_outbox_relay.py::test_outbox__both_dispatch_kinds_are_indexed_once_and_acknowledged[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_duplicate_delivery_never_makes_a_second_attempt[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__losing_the_index_and_the_dispatcher_loses_no_accepted_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_full_index_defers_rows_and_never_drops_them[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[valkey]
+FAILED tests/d/test_outbox_relay.py::test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job[valkey]
+7 failed, 13 passed in 18.17s
