@@ -1,0 +1,11 @@
+{
+ "asked": [
+  "active",
+  "eligible"
+ ],
+ "on": [
+  400,
+  "invalid_request",
+  0
+ ]
+}
