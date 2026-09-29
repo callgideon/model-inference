@@ -271,3 +271,15 @@ Optimistic 0.5 h, likely 1.5 h, pessimistic 4 h; confidence medium. Basis:
 - composition-3/-4/-5 each needed one fix round (about 1-2 h);
 - what remains is one verify round.
 - WR-COMP-4 (a T/G lane, about 1-2 days once the consent and async-capture rulings exist) and WR-C5-LIVE (0.5-1 day after its ruling) are outside this estimate.
+
+## Fix round (code head 2f64c658)
+
+Logs: lane scratch `c6/fix-*.log`.
+
+- **0-F1 / 1-C6-RSI-1 (fixed, 1ee467bc).** `tests/integration/test_harness.py` now pins `0053_lab_composition_reads.sql` after 0052 under `# Lab (local-only, R151/R201): composition-6 (WR-R4-2, WR-C5-RECEIPT, WR-C5-PROVIDERS)`. This was a gap in the handback: the harness pin is a §5 COMMON wiring item, and earlier migration lanes (ce9575ce for 0052) pinned their own migration. The existing test was the fail-first. `pytest tests/integration/test_harness.py -k migration_set` failed at 7ca72891 (`fix-harness-red.log`: "Left contains one more item: 0053…") and gives 1 passed now. The whole file gives 46 passed and 1 failed. That failure is `test_nothing_in_this_directory_points_at_production`, which also fails at base 8949ffb1, so it is not this lane's.
+- **1-C6-RSI-2 (fixed in the branch, 2f64c658).** The tip's E8L mutant `st_pass_skips_the_rolled_back` anchors on `releases.releases_in(("running", "rolled_back"),`. The rollout pass now spells that tuple out, in the tip's two-line shape (== `ROLLOUT_STATES`, which `providers_in` still uses), so the anchor holds after merge and nothing needs re-cutting. This lane's own `lw_rollout_every_state` was re-cut onto the same text.
+  - Merged-tree check: `git merge-tree --write-tree origin/claude/consumer-v1 <c>`, archived to scratch, then `pytest tests/integration/lab_rollout/test_mutants.py -k well_formed`. At 7ca72891 it gives 1 failed. At this head it gives 1 passed. The harness `migration_set` case on the same merged tree also moves from 1 failed to 1 passed.
+  - `INFRX_D_TASK=r2 INFRX_MUTANTS=all pytest tests/w/test_lab_workers_mutants.py -k rollout` gives 12 passed, 0 survivors, `lw_rollout_every_state` included.
+  - `INFRX_D_TASK=r2 pytest tests/w tests/r/control` gives 436 passed, 17 skipped, 0 failed.
+  - **NOT RUN:** the merged-tree k09 kill of `st_pass_skips_the_rolled_back`. It needs a kept e8l stack (`runner.py --keep`), and this lane may not touch e8l. At merge: `INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l … tests/integration/lab_rollout/test_mutants.py -k st_pass_skips_the_rolled_back`.
+- E4 was not re-run. The fix round's production change is a same-value spelling of one argument in the rollout pass, which is covered by the tests/w run above.
