@@ -1,0 +1,6 @@
+..                                                                       [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_releases_route_drops_the_proposals]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_records_verdict_dropped]
+2 passed, 80 deselected in 110.68s (0:01:50)

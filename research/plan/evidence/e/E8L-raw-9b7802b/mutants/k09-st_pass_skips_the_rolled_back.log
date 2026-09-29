@@ -1,0 +1,5 @@
+.                                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_skips_the_rolled_back]
+1 passed, 81 deselected in 118.10s (0:01:58)

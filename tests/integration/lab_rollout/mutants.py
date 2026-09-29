@@ -77,6 +77,8 @@ NO_STACK = "test_e8l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e8l_the_namespace_is_the_reserved_block"
 RERUN = "test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 SUB_CELL = "test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun"
+K10_UI = "test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun"
+R222 = "test_e8l_r222_accepts_only_a_not_run_out_of_local_scope"
 UNBOUND = tuple(re.findall(r"^def (test_k\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -103,9 +105,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("a_manifest_test_id_dropped", "the cells are the manifest's test ids", R,
        'TEST_IDS = ("ROLLOUT-PIN", "ROLLOUT-RECOVER", "OPT-PARITY")',
        'TEST_IDS = ("ROLLOUT-PIN", "ROLLOUT-RECOVER")', MATRIX),
-    _m("a_waiting_leg_claimed_merged", "the UI leg waits on WR-R4-2's composition", R,
-       '"test_ids": ["ROLLOUT-PIN"], "lanes": ["WR-R4-2"]},',
-       '"test_ids": ["ROLLOUT-PIN"], "lanes": []},', MATRIX),
+    _m("k10_claimed_waiting", "k10 runs for real since WR-R4-2 is composed (merge #50)", R,
+       'emergency rollback",\n            "test_ids": ["ROLLOUT-PIN"], "lanes": []},',
+       'emergency rollback",\n            "test_ids": ["ROLLOUT-PIN"], "lanes": ["WR-R4-2"]},',
+       MATRIX),
+    _m("k10_port_half_optional", "k10's port half (WR-C6-K10) is a required case", R,
+       '            "test_k10_the_composed_releases_route_proposes_and_the_operator_decides"),',
+       "            ),", MATRIX, REQUIRED),
     _m("a_required_case_renamed", "the required cases are the modules' cases", R,
        '    "k10": ("test_k10_the_releases_ui_over_the_real_route",\n',
        '    "k10": ("test_k10_the_releases_ui",\n', REQUIRED),
@@ -121,8 +127,35 @@ MUTANTS: tuple[Mutant, ...] = (
        '"parent_status": result[spec["parent"]]["status"],\n             "status": NOT_RUN,',
        '"parent_status": result[spec["parent"]]["status"],\n             "status": PASS,',
        SUB_CELL),
-    _m("sub_cell_without_its_lane", "the breach sub-cell names WR-C5-LIVE", R,
-       '"parent": "k09", "lanes": ["WR-C5-LIVE"],', '"parent": "k09", "lanes": [],', SUB_CELL),
+    _m("sub_cell_without_its_lane", "the breach sub-cell names WR-C6-LIVE", R,
+       '"parent": "k09", "lanes": ["WR-C6-LIVE"],', '"parent": "k09", "lanes": [],', SUB_CELL),
+    _m("k10_ui_sub_cell_without_its_lane", "k10's UI journey sub-cell names WR-C6-LIVE", R,
+       '"parent": "k10", "lanes": ["WR-C6-LIVE"],', '"parent": "k10", "lanes": [],', K10_UI),
+    _m("k10_ui_sub_cell_dropped", "k10's UI journey over stand-ins is recorded, never prose-only",
+       R, '    "k10-ui-composed": {\n        "parent": "k10",',
+       '    "k09-breach-copy": {\n        "parent": "k09",', K10_UI),
+    # R222/R235: the runner's machine check (lab_evaluate's shape, with the sub-cells)
+    _m("r222_in_scope_lane_excused", "a NOT RUN on a lane not ruled out of scope stays open", R,
+       'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       'return bool(entry["cases"]) and', R222),
+    _m("r222_never_run_excused", "a scenario with no case run is open", R,
+       'set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       "set(lanes) <= set(OUT_OF_SCOPE) and", R222),
+    _m("r222_any_reason_excuses", "every reason must be the scenario's own wait", R,
+       "            all(f\"NOT RUN[{','.join(lanes)}]\" in reason",
+       "            any(f\"NOT RUN[{','.join(lanes)}]\" in reason", R222),
+    _m("r222_fail_excused_by_its_message", "an in-scope FAIL is never excused, whatever its "
+       "message says (R234)", R,
+       "        if entry[\"status\"] != NOT_RUN:        # R234", "        if False:        # R234",
+       R222),
+    _m("r222_pass_is_open", "a PASS never keeps the gate from acceptance", R,
+       'if entry["status"] != PASS and not excused(sid, entry)}',
+       "if not excused(sid, entry)}", R222),
+    _m("r222_sub_cells_ignored", "a sub-cell's NOT RUN is judged like a scenario's", R,
+       "                  if not set(cell[\"lanes\"]) <= set(OUT_OF_SCOPE)})",
+       "                  if False})", R222),
+    _m("r222_gpu_in_scope", "k08's GPU target is ruled out of local scope (R222)", R,
+       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)", ', "OUT_OF_SCOPE = {", R222),
     _m("unbound_case_runs", "a case waiting on P-08 is never a pass",
        P, "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )
@@ -164,6 +197,7 @@ K06_PROMOTED = "test_k06_an_emergency_rollback_moves_a_promoted_alias_back"
 K06_READS = "test_k06_the_worlds_alias_read_is_the_real_control_store_on_its_login"
 K10_LISTING = "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict"
 K10_UI = "test_k10_the_releases_ui_over_the_real_route"                 # LAB-E2E
+K10_PORT = "test_k10_the_composed_releases_route_proposes_and_the_operator_decides"
 LR = "infrx/gateway/routes/lab_releases.py"
 K07_STORED = "test_k07_a_variant_is_probed_compared_and_stored"
 K07_REFUSED = "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"
@@ -316,6 +350,26 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "proposals (the page shows the pending one)", LR,
        '"proposals": list(await x.port("proposals").proposals(provider))}',
        '"proposals": []}', K10_UI),
+    # WR-C6-K10: k10's port half over pilot.lab_releases and `rollout launch|decide` (R240/R241)
+    _m("st_propose_any_role", "only an administrator proposes", LR,
+       "    require(who, Cap.propose_publication)\n", "", K10_PORT),
+    _m("st_records_verdict_dropped", "the page's verdict is D9's latest decision", G,
+       '"verdict": None if d is None else {', '"verdict": None if True else {', K10_PORT),
+    _m("st_records_decisions_dropped", "the page lists 0053's decisions", G,
+       "for d in await self.d9.decisions(provider_org_id=provider_org_id)]", "for d in []]",
+       K10_PORT),
+    _m("st_launch_without_the_plan", "the launcher stores the plan before D9 starts the release "
+       "(R241): the page lists it with that plan", LW,
+       "        await write_once(lab_objects(mode, env), plan_key(provider, policy.policy_id),\n"
+       "                         plan.model_dump_json().encode())\n", "", K10_PORT),
+    _m("st_decide_reasons_unnamed", "an approved proposal's decision names the operator's "
+       "reason and the proposal", LW,
+       'reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))',
+       'reasons=(f"operator:{reason}",))', K10_PORT),
+    _m("st_decide_leaves_the_alias", "an approved rollback converges the alias through R2's stop "
+       "(R240)", LW,
+       "        await controller.emergency_rollback(operator, policy, policy_ref, now=now, "
+       "reason=reason)\n", "", K10_PORT),
     _m("st_claim_unmeasured", "an optimization is claimed only with measurements", R3,
        '"optimization_claimed": outcome == "equivalent" and performance is not None}',
        '"optimization_claimed": outcome == "equivalent"}', K07_STORED),

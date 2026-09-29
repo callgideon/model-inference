@@ -1,0 +1,25 @@
+{
+ "cancelled": 0,
+ "command": "cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts",
+ "exit": 0,
+ "fail": 0,
+ "harness": null,
+ "pass": 6,
+ "record": {
+  "cell": "E8L k10",
+  "composed": {
+   "proposals": true,
+   "records": true,
+   "store": true
+  },
+  "stand_ins": [
+   "session verifier and PostgREST RPC door (stack.door)",
+   "the journey's records/proposals adapters over D9 + 0043: R2's verdicts and R1's progress have no composed read (WR-C6-LIVE)",
+   "the Lab objects in memory (l4 has no S3)",
+   "R1 aggregates and R2 verdict as last seen (no table yet)",
+   "L3's serving alias (R2's FakeServing)"
+  ],
+  "suite": "rollout"
+ },
+ "skipped": 0
+}

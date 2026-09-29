@@ -1,0 +1,10 @@
+{
+ "cancelled": 0,
+ "command": "cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts",
+ "exit": 1,
+ "fail": 1,
+ "harness": "HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 3343863 checkout /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-sql-lw8); refusing to touch port 57503 or infrx-l4-postgres. Nothing was altered - wait for it, or run the two suites in sequence (08 \u00a78 ",
+ "pass": 0,
+ "record": null,
+ "skipped": 0
+}

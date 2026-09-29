@@ -1,0 +1,54 @@
+{
+ "task": "E8L",
+ "lane": "lab-rollout-5",
+ "slice": "WR-C6-K10: k10's port half bound to pilot.lab_releases + `rollout launch|decide`; k10-UI over the composed route (R238); k09 stack mutant killed; R222 machine check in the runner; make lab-rollout for real",
+ "activity": "review",
+ "head": "d4b4f297",
+ "base": "993d481c",
+ "worktree": ".claude/worktrees/codex-w5-lab-rollout-5",
+ "branch": "codex/w5-lab-rollout-5",
+ "owned_paths": [
+  "tests/integration/lab_rollout/",
+  "apps/lab/tests/e2e/rollout/",
+  "research/plan/evidence/e/E8L-*"
+ ],
+ "gate": {
+  "verdict": "NOT RUN (exit 3)",
+  "cells": {"ROLLOUT-PIN": "PASS", "ROLLOUT-RECOVER": "PASS", "OPT-PARITY": "NOT RUN"},
+  "r222": {"accepted": true, "open": {}},
+  "tally": "k01-k07, k09, k10 PASS; k08 NOT RUN[P-08] (GPU); k09-breach NOT RUN[product WR: WR-C6-LIVE] (sub-cell); no FAIL",
+  "verdict_json": "research/plan/evidence/e/E8L-raw-93f41299/verdict.json"
+ },
+ "commands": [
+  {"cmd": "apps/infrx-api/.venv/bin/python -m pytest tests/integration/lab_rollout/test_e8l_runner.py -k matrix (old runner)", "exit": 1, "summary": "red first: the stale k10 tripwire (lanes [\"WR-R4-2\"])"},
+  {"cmd": "apps/infrx-api/.venv/bin/python -m pytest tests/integration/lab_rollout/test_e8l_runner.py (before r222)", "exit": 1, "summary": "red first: r222 absent, sub-cell lane"},
+  {"cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --reuse --keep --only k10", "exit": 3, "summary": "k10 PASS: listing + composed port half + UI suite 6/6 (two earlier red runs: stale E2E-R01, composition without objects)"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest tests/integration/lab_rollout/test_mutants.py -k st_pass_skips_the_rolled_back", "exit": 0, "summary": "killed (118 s)"},
+  {"cmd": "make lab-rollout (c581c59a)", "exit": 2, "summary": "k10 INVALID[harness]: l4 held by codex-w5-lab-sql-lw7; everything else as below"},
+  {"cmd": "make lab-rollout (93f41299)", "exit": 2, "summary": "runner exit 3: k01-k07, k09, k10 PASS; k08 NOT RUN[P-08]; r222 accepted"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest tests/integration/lab_rollout/test_mutants.py (+ rerun of 2 on a free l4)", "exit": 0, "summary": "82/82: 26 layer-1 + 52 stack killed, 0 survivors"},
+  {"cmd": "cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs --only E2E-S07..S12", "exit": 0, "summary": "6/6 killed (S10/S11 retried after l4 contention)"},
+  {"cmd": "make lab-lint / lab-typecheck / lab-test", "exit": 0, "summary": "0 problems / clean / 262 tests 248 pass 0 fail 14 skipped"},
+  {"cmd": "pytest tests/integration/lab_rollout/test_e8l_runner.py tests/integration/test_lab_package_isolation.py; test_mutants -k 'well_formed or every_case'; --co tests/integration", "exit": 0, "summary": "15 passed; 2 passed; 678 collected"},
+  {"cmd": "make api-test", "exit": null, "summary": "not run: no file under apps/infrx-api changed"}
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "remaining: k09's breach half (one binding + rerun once WR-C6-LIVE lands; WR-C5-K09 took 1.3 h) and k08 (P-08 GPU operator work); nothing else open locally",
+  "at": "2026-09-29T16:25:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LR5-1 (lab-e2e owner, after WR-C6-LIVE): journey = gateway composition in apps/lab/tests/e2e/rollout/backend.py; launch via rollout launch, decide via rollout decide",
+  "WR-LR5-2 (coordinator, acceptance read): E8L OUT_OF_SCOPE = P-08 (GPU) + WR-C6-LIVE (product WR, R234 ii)"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E8L-c581c59.md",
+  "research/plan/evidence/e/E8L-raw-93f41299/verdict.json",
+  "research/plan/evidence/e/E8L-raw-c581c59a/verdict.json",
+  "research/plan/evidence/e/E8L-raw-9b7802b/"
+ ]
+}

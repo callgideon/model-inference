@@ -289,8 +289,8 @@ def test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict(lab, work
     """k10's read half as this tip supports it (0048's `lab_releases_in`, merge #34):
     `PgReleaseStore.releases_in` - the listing WR-R4-1's records port and WR-R2-3's pass loop
     read - answers a launched release, then its rollback with R2's latest decision, narrowed
-    by state. `pilot._lab_2` still composes `LabReleases` with no records port (WR-R4-2): the
-    UI half stays NOT RUN (`scenarios_pending`)."""
+    by state. The composed route over it is the next case (WR-C6-K10); the UI half is
+    LAB-E2E's (`test_k10_the_releases_ui_over_the_real_route`)."""
     policy, ref = lab.launch(lab.policy(weights=(5_000,), candidates=(lab.CAND,)), lw.plan())
     store = lab.releases()
 
@@ -325,6 +325,126 @@ def test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict(lab, work
     assert every == rolled
 
 
+def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, workdir):
+    """k10's port half (WR-C6-K10, R240/R241): `/lab/v1/releases` as `LAB_RELEASES` composes
+    it (`pilot.lab_releases`: D9's listing and decisions, D7's policy, the plan the launcher
+    stored, 0043's proposals, L2's access) on the e8l stack. The release is launched by the
+    real `rollout launch` process (plan stored on MinIO first); the operator promoted its
+    candidate (L3: a fresh listing). The page lists it running with its stored plan and no
+    verdict; a developer cannot propose, an expansion without an expand verdict is a 409, a
+    rollback proposal is stored once. The real `rollout decide --approve` process is ONE D9
+    decision by the operator at the proposal's fence, and R2's stop moves the alias back to
+    the baseline; the page then shows it rolled back with that decision and the proposal
+    approved; a second decide is exit 1 with no second decision. Only the session verifier
+    is a stand-in (a token per user, as the r2 PG proof)."""
+    import os
+    import subprocess
+    import sys
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from infrx.gateway import pilot
+    from infrx.gateway.routes import lab_releases as lr
+    from infrx.lab.access import LabAccess
+    from infrx.rollouts import control as r2
+    from infrx.state.jobstore import connector
+    from infrx.state.lab_access import PgAccessStore
+    from tests.g import support
+    from tests.g.lab_releases.test_lab_releases import Sessions, token
+    harness = lw.harness
+    listed = lab.listing()
+    base = lab.sql("select infrx.lab_serving_ref(%s)", listed[1])[0][0]
+    promoted = lab.promote(lab.q8.W["serving_2"], 0x10c)
+    candidate = lab.sql("select infrx.lab_serving_ref(%s)", promoted)[0][0]
+    body = {**lab.policy(weights=(5_000,), candidates=(candidate,)), "baseline_ref": base}
+    stored = workdir / "plan.json"
+    stored.write_text(lw.plan().model_dump_json())
+    lab.objects                                         # the world's prefix, made once
+    env = {**{k: v for k, v in os.environ.items()
+              if not k.startswith(("AWS_", "LAB_", "DATABASE_", "S3_", "INFRX_"))},
+           **lw.stack.s3_env(), "LAB_DATABASE_URL": lab.dsn, "LAB_OPERATOR_ID": lw.OPERATOR,
+           "LAB_S3_BUCKET": harness.S3_BUCKET, "LAB_S3_ENDPOINT": harness.s3_endpoint(),
+           "LAB_S3_PREFIX": lab.prefix}
+
+    def worker(*argv: str):
+        return subprocess.run([sys.executable, "-m", "infrx.lab.workers", "rollout", *argv],
+                              cwd=lw.API, env=env, capture_output=True, text=True, timeout=60)
+    try:
+        lab.quiesce()
+        ref = lab.d7.publish(lab.conn, body)
+        launched = worker("launch", "--policy-ref", ref, "--plan", str(stored), "--reason",
+                          "e8l k10 canary")
+        assert launched.returncode == 0, launched.stderr[-1500:]
+        connect = connector(lab.dsn)
+        users = (lab.q8.ADMIN, lab.q8.DEV, lab.q8.VIEWER)
+        app = FastAPI()
+        lr.register(app, support.runtime(), pilot.lab_releases(
+            connect, Sessions(users), LabAccess(PgAccessStore(connect)), lab.objects))
+        c = TestClient(app, raise_server_exceptions=False)
+
+        def page(user=lab.q8.VIEWER) -> dict:
+            got = c.get(lr.RELEASES_PATH, params={"provider_org_id": lab.NEMO},
+                        headers={"authorization": f"Bearer {token(user)}"})
+            assert got.status_code == 200, got.text
+            return got.json()["data"]
+
+        def mine(data: dict, key: str) -> list[dict]:
+            return [x for x in data[key] if x["policy_ref"] == ref]
+
+        def propose(user, kind: str):
+            return c.post(lr.RELEASES_PATH + "/proposals", params={"provider_org_id": lab.NEMO},
+                          json={"kind": kind, "policy_ref": ref, "fence": 1},
+                          headers={"authorization": f"Bearer {token(user)}"})
+
+        before = page()
+        [row] = mine(before, "releases")
+        assert (row["state"], row["fence"], row["progress"], row["verdict"]) == \
+            ("running", 1, None, None), row
+        assert (row["baseline_ref"], row["candidates"]) == (base, body["candidates"]), row
+        assert row["plan_digest"] == r2.plan_digest(lw.plan()) and \
+            row["plan"]["budget"] == {"amount": lw.PLAN["budget"]["value"], "unit": "CREDIT"}
+        assert mine(before, "decisions") == [] and mine(before, "proposals") == []
+        refused = propose(lab.q8.DEV, "rollback").status_code, \
+            propose(lab.q8.ADMIN, "expand").status_code
+        assert refused == (403, 409), f"developer / expansion without a verdict: {refused}"
+        made = propose(lab.q8.ADMIN, "rollback")
+        assert made.status_code == 201, made.text
+        proposal = made.json()
+        assert (proposal["kind"], proposal["fence"], proposal["state"]) == \
+            ("rollback", 1, "proposed"), proposal
+        assert propose(lab.q8.ADMIN, "rollback").status_code == 409, "one pending per revision"
+        assert lab.listing()[1] == promoted, "the proposal moved the alias"
+        first = worker("decide", "--policy-ref", ref, "--proposal-id",
+                       proposal["proposal_id"], "--approve", "--reason", "pager")
+        after, listing = page(), lab.listing()
+        second = worker("decide", "--policy-ref", ref, "--proposal-id",
+                        proposal["proposal_id"], "--approve", "--reason", "pager")
+        lw.save(workdir, "k10-port.json", {
+            "launch": launched.returncode, "before": mine(before, "releases"),
+            "proposal": proposal, "refused": refused,
+            "decide": [first.returncode, first.stderr[-1500:]],
+            "decide_again": [second.returncode, second.stderr[-1500:]],
+            "after": {k: mine(after, k) for k in ("releases", "decisions", "proposals")},
+            "listing_before": listed, "promoted": promoted, "listing_after": listing,
+            "d9": lab.decisions(ref)})
+        assert first.returncode == 0, first.stderr[-1500:]
+        reasons = ["operator:pager", f"proposal:{proposal['proposal_id']}"]
+        [row] = mine(after, "releases")
+        verdict = row["verdict"] or {}
+        assert (row["state"], row["fence"], verdict.get("action"), verdict.get("reasons")) == \
+            ("rolled_back", 2, "rollback", reasons), row
+        assert [(d["decision"], d["reasons"], d["decided_by"])
+                for d in mine(after, "decisions")] == [("rollback", reasons, lw.OPERATOR)]
+        assert [(p["proposal_id"], p["state"]) for p in mine(after, "proposals")] == \
+            [(proposal["proposal_id"], "approved")]
+        assert listing[1] == listed[1], f"R2's stop left the alias on {listing}, not {listed}"
+        assert second.returncode == 1, "a decided proposal was decided again"
+        assert lab.decisions(ref) == [("rollback", "rolled_back", lw.OPERATOR, reasons)]
+    finally:
+        lab.quiesce()
+        lab.restore_alias(listed[0])
+
+
 def _e2e():
     """LAB-E2E's gate half (`apps/lab/tests/e2e/gate.py`), by path under this package's name
     (R213); a mutant copy has no apps/lab, so INFRX_LAB_DIR names the checkout's."""
@@ -346,12 +466,13 @@ def test_k10_the_releases_ui_over_the_real_route(workdir):
     proposal store show R2's verdict, take a proposal at the fence the page showed through its
     server action, the operator's approval and an emergency rollback, and refuse the unsafe
     variants. A red suite fails this case; a green one is NOT RUN while the gateway's own
-    composition lacks the records/proposal ports (WR-R4-1 lab-sql half, WR-R4-2)."""
+    composition lacks a port (R238: a product WR naming it; WR-R4-2 composed all three at
+    merge #50)."""
     e2e = _e2e()
     got = e2e.run("rollout", workdir)
     lw.save(workdir, "k10-ui.json", {k: v for k, v in got.items() if k != "tail"})
     absent = e2e.missing(got)
     if absent:
-        lw.not_run("k10", "WR-R4-2", why=f"{e2e.command('rollout')} passed "
-                   f"({got['pass']} cases) over D9 and 0043 with test-local records/proposal "
-                   f"adapters, but pilot._lab_2 composes LabReleases without {absent}")
+        lw.not_run("k10", *(f"WR-R4-2:{port}" for port in absent),
+                   why=f"{e2e.command('rollout')} passed ({got['pass']} cases), but "
+                       f"pilot._lab_2 composes LabReleases without {absent}")

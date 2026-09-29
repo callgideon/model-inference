@@ -1,0 +1,4 @@
+NOT KILLED E2E-S10 an inconclusive verdict offers an expansion — SURVIVED (failed only: E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback)
+killed  E2E-S11 a viewer is offered the proposal forms — killed by "E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing"
+
+stack: 20 cases named; 2 mutants, 1 killed, 1 not killed
