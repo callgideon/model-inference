@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 248,
- "updated": "2026-09-29T00:04:39Z",
+ "revision": 249,
+ "updated": "2026-09-29T00:21:06Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6882,31 +6882,39 @@
    "branch": "codex/w5-datasets-lw5",
    "worktree": ".claude/worktrees/codex-w5-datasets-lw5",
    "base": "1b2fab07",
-   "head": null,
+   "head": "9c060f30",
    "isolation": {
     "ports": "n3 57518/57519; n2 57516/57517",
     "prefix": "infrx-n3-",
     "db": "n3"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T20:59:01Z",
-   "updated": "2026-09-28T20:59:01Z",
+   "updated": "2026-09-29T00:21:06Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "merge batch #27 (wf_cfdc5ca7-4a4, Sonnet; R206)",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "medium",
-    "basis": "lab-sql-integration-2's estimate for WR-N3-5"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT_WITH_FIXES 9c060f30; merge running",
+    "at": "2026-09-29T00:21:06Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/DATASETS-LW5-92d0f9e.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/datasets/**",
     "tests/n/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-DS5-1",
+    "WR-DS5-2",
+    "WR-DS5-3",
+    "WR-DS5-5"
+   ]
   },
   {
    "id": "W5-MERGE-21",
@@ -7012,25 +7020,30 @@
    "branch": "codex/w5-pipelines-lineage",
    "worktree": ".claude/worktrees/codex-w5-pipelines-lineage",
    "base": "21ee48de",
-   "head": null,
+   "head": "5766c1d9",
    "isolation": {
     "ports": "p1 57527; p2 57528/57529; p3 57530/57531; e7l 57300-57399",
     "prefix": "infrx-p3-",
     "db": "p3"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T21:06:01Z",
-   "updated": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-29T00:21:06Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge → LAB-IMPROVE-LOCAL rerun",
+   "next_action": "merge batch #26 (wf_b6de304a-294, Sonnet; WR-PL-1 applied as a wiring) → E7L has no FAIL cell; LAB-IMPROVE-LOCAL after i07/i08 binds + WR-E7L-1/4",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "six reads re-gated + one gate rerun"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "REJECT overridden: the one major is the unowned route call, applied at the merge",
+    "at": "2026-09-29T00:21:06Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E7L-a609f36.md",
+    "research/plan/evidence/e/E7L-raw-a609f36/",
+    "research/plan/evidence/e/E7L-raw-1fbc48a/WR-PL-1.patch"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/pipelines/**",
@@ -7038,7 +7051,10 @@
     "tests/integration/lab_improve/**",
     "research/plan/evidence/e/E7L-*"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-PL-1",
+    "WR-E7L-4"
+   ]
   },
   {
    "id": "W5-COMPOSITION-3",
@@ -7211,6 +7227,70 @@
     "infrx/state/catalog.py",
     "tests/g/**"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-26",
+   "task": null,
+   "slice": "merge batch #26 (Sonnet): pipelines-lineage 5766c1d9 (+WR-PL-1 route call); workflow wf_b6de304a-294",
+   "agent": "sonnet",
+   "branch": "codex/w5-merge-26",
+   "worktree": ".claude/worktrees/codex-w5-merge-26",
+   "base": "b85262d9",
+   "head": null,
+   "isolation": {
+    "ports": "p2 57528/57529",
+    "prefix": "infrx-p2-",
+    "db": "p2"
+   },
+   "activity": "running",
+   "started": "2026-09-29T00:21:06Z",
+   "updated": "2026-09-29T00:21:06Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T00:21:06Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-27",
+   "task": null,
+   "slice": "merge batch #27 (Sonnet): datasets-lw5 9c060f30 (+R206); workflow wf_cfdc5ca7-4a4",
+   "agent": "sonnet",
+   "branch": "codex/w5-merge-27",
+   "worktree": ".claude/worktrees/codex-w5-merge-27",
+   "base": "b85262d9",
+   "head": null,
+   "isolation": {
+    "ports": "n3 57518/57519",
+    "prefix": "infrx-n3-",
+    "db": "n3"
+   },
+   "activity": "running",
+   "started": "2026-09-29T00:21:06Z",
+   "updated": "2026-09-29T00:21:06Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T00:21:06Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
