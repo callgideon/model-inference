@@ -136,8 +136,10 @@ MUTANTS: tuple[Mutant, ...] = (
        'SUB_CELLS = {\n    "k10-ui-composed": {',
        'SUB_CELLS = {\n    "k09-breach": {"parent": "k09", "lanes": ["WR-C6-LIVE"], "title": "",'
        ' "note": ""},\n    "k10-ui-composed": {', K09_BOUND),
-    _m("k10_ui_sub_cell_without_its_lane", "k10's UI journey sub-cell names WR-C6-LIVE", R,
-       '"parent": "k10", "lanes": ["WR-C6-LIVE"],', '"parent": "k10", "lanes": [],', K10_UI),
+    _m("k10_ui_sub_cell_without_its_lane", "k10's UI journey sub-cell names the product WRs "
+       "its stand-ins wait on", R,
+       '"parent": "k10", "lanes": ["WR-LIVE-DECIDE", "WR-LR6-VERDICT"],',
+       '"parent": "k10", "lanes": ["WR-LIVE-DECIDE"],', K10_UI),
     _m("k10_ui_sub_cell_dropped", "k10's UI journey over stand-ins is recorded, never prose-only",
        R, '    "k10-ui-composed": {\n        "parent": "k10",',
        '    "k09-breach-copy": {\n        "parent": "k09",', K10_UI),
@@ -162,7 +164,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "                  if not set(cell[\"lanes\"]) <= set(OUT_OF_SCOPE)})",
        "                  if False})", R222),
     _m("r222_gpu_in_scope", "k08's GPU target is ruled out of local scope (R222)", R,
-       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)", ', "OUT_OF_SCOPE = {", R222),
+       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)",\n', "OUT_OF_SCOPE = {\n", R222),
+    _m("r222_landed_wr_still_excused", "a landed product WR (WR-C6-LIVE, merge #52) excuses "
+       "nothing", R, '                "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT"}',
+       '                "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT",\n'
+       '                "WR-C6-LIVE": "product WR: WR-C6-LIVE"}', R222),
     _m("k10_plan_path_relative", "the plan path handed to `rollout launch` (cwd=API) is "
        "absolute (WR-LR5-RV2)", W, '    return workdir.resolve() / "plan.json"',
        '    return workdir / "plan.json"', PLAN_PATH),

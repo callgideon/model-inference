@@ -181,21 +181,20 @@ def test_e8l_a_sub_cell_is_not_run_naming_its_lanes_and_its_parents_rerun(monkey
 
 
 def test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun():
-    """0-E8L-RV-1 / 1-LR5-F1: k10 PASS is the port half and the UI failing closed over the
-    gateway's own composition (E2E-R01); the page's proposal/approval journey (E2E-R02..R05)
-    runs over test-local adapters until R2's verdicts and R1's progress have a composed read,
-    so it is a NOT RUN sub-cell naming WR-C6-LIVE in verdict.json, never prose-only."""
+    """WR-LR5-1 (lab-rollout-6): the page's journey runs over the gateway's own composition
+    (records, 0043's proposals, D9; `rollout launch|decide`), except R2's hold/expand verdict of
+    a release D9 holds no decision for (no composed read: WR-LR6-VERDICT) and an expansion's
+    approval (`rollout decide` refuses it: WR-LIVE-DECIDE). Until both land, the journey is a
+    NOT RUN sub-cell naming them in verdict.json, never prose-only."""
     result = runner.classify(junit(*everything("k10")))
     assert result["k10"]["status"] == "PASS", "the sub-cell never lowers its parent"
     cells = {c["id"]: c for c in runner.sub_cells(result)}
     assert set(cells) == {"k10-ui-composed"}
     cell = cells["k10-ui-composed"]
     assert (cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
-        == ("k10", "PASS", "NOT RUN", "NOT RUN[WR-C6-LIVE]")
-    assert cell["lanes"] == ["WR-C6-LIVE"]
+        == ("k10", "PASS", "NOT RUN", "NOT RUN[WR-LIVE-DECIDE,WR-LR6-VERDICT]")
     assert cell["reproduce"] == f"{runner.PY} {runner.RUNNER} --out <dir> --only k10"
-    assert "E2E-R02..R05 run over the journey adapters" in cell["note"]
-    assert "WR-LR5-1" in cell["note"]
+    assert "WR-C6-LIVE" not in cell["lanes"], "0054's Live landed at merge #52"
 
 
 def test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute(tmp_path, monkeypatch):
@@ -215,7 +214,8 @@ def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     (k10, composed since merge #50), a FAIL, or a scenario NOT RUN for another reason
     (deselected, never run) stays open."""
     assert runner.OUT_OF_SCOPE == {"P-08": "GPU (P-08 staging target)",
-                                   "WR-C6-LIVE": "product WR: WR-C6-LIVE"}
+                                   "WR-LIVE-DECIDE": "product WR: WR-LIVE-DECIDE",
+                                   "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT"}
     k08 = "NOT RUN[P-08] no allocated GPU; rerun after the merge: x --only k08"
     others = [c for sid in runner.SCENARIOS if sid != "k08" for c in everything(sid)]
     accepted = runner.classify(junit(*others, *everything("k08", "skipped", k08)))
@@ -225,7 +225,7 @@ def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
         patch.delitem(runner.OUT_OF_SCOPE, "P-08")
         assert runner.r222(accepted) == {"accepted": False, "open": {"k08": "NOT RUN"}}
     with monkeypatch.context() as patch:            # the sub-cell is judged too
-        patch.delitem(runner.OUT_OF_SCOPE, "WR-C6-LIVE")
+        patch.delitem(runner.OUT_OF_SCOPE, "WR-LR6-VERDICT")
         assert runner.r222(accepted) == {"accepted": False, "open": {
             "k10-ui-composed": "NOT RUN"}}
     failed = runner.classify(junit(*others, *everything("k08", "failure", k08)))

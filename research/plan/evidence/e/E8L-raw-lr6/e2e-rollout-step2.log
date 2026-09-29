@@ -1,0 +1,119 @@
+TAP version 13
+# (node:1298149) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+    # Subtest: E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success
+    ok 1 - E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success
+      ---
+      duration_ms: 521.073429
+      type: 'test'
+      ...
+    # Subtest: E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose
+    not ok 2 - E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose
+      ---
+      duration_ms: 228.637878
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:57:11'
+      failureType: 'testCodeFailure'
+      error: 'the page shows lab:policy:b0000001-0000-4000-8000-000000000001:000000b0-0000-4000-8000-000000000001@sha256:5030776c91ad4306336252ff7db9bdd2035ef4849649718657a418f48ecb8f22'
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        shown (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:32:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:60:17)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:57:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence
+    not ok 3 - E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence
+      ---
+      duration_ms: 166.842045
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:66:11'
+      failureType: 'testCodeFailure'
+      error: 'the page shows lab:policy:b0000001-0000-4000-8000-000000000001:000000b0-0000-4000-8000-000000000002@sha256:770e11665f6d7650e63ba6525fed39af828da40cdfdaa4c4f63a55508952e36a'
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        shown (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:32:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:69:20)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:66:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once
+    not ok 4 - E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once
+      ---
+      duration_ms: 170.322987
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:84:11'
+      failureType: 'testCodeFailure'
+      error: 'the page shows lab:policy:b0000001-0000-4000-8000-000000000001:000000b0-0000-4000-8000-000000000003@sha256:f54809cb3204c3acc3105539f6fe583f379eca986a4865a63c62ae0b93b24d80'
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        shown (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:32:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:87:18)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:84:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing
+    not ok 5 - E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing
+      ---
+      duration_ms: 226.685094
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:97:11'
+      failureType: 'testCodeFailure'
+      error: 'the page shows lab:policy:b0000001-0000-4000-8000-000000000001:000000b0-0000-4000-8000-000000000004@sha256:c96925b011bfe2dfe60d0b68b4fa5910ead3d50e7bec354c20afac85b5932e01'
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        shown (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:32:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:101:23)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:97:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    1..5
+not ok 1 - E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+  ---
+  duration_ms: 10306.484744
+  type: 'test'
+  location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:16:1'
+  failureType: 'subtestsFailed'
+  error: '4 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 6
+# suites 0
+# pass 1
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11266.74882

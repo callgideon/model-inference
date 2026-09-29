@@ -1,8 +1,9 @@
 // LAB-E2E rollout = E8L k10's UI half: the Lab's releases page, served by the built Lab app and signed in
-// through its own form, over lab-api's /lab/v1/releases (LAB_RELEASES as the gateway composes it) on D9's
-// real store and 0043's real proposal store (backend.py, key l4): the verdict shown, a proposal at the
-// fence the page showed through the page's own server action, the operator's approval, a guardrail and an
-// emergency rollback, and the unsafe variants. Skipped unless LAB_E2E_REAL=1 (Docker, l4):
+// through its own form, over lab-api's /lab/v1/releases as the gateway composes it (LAB_RELEASES: D9's
+// real store, 0043's real proposal store, 0053's decisions; releases launched and decided by `rollout
+// launch|decide`'s own code - backend.py, key l4): the verdict shown, a proposal at the fence the page
+// showed through the page's own server action, the operator's approval, a guardrail and an emergency
+// rollback, and the unsafe variants. Skipped unless LAB_E2E_REAL=1 (Docker, l4):
 //   cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -39,7 +40,7 @@ test("E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollb
     // WR-R4-2 composed records, proposals and store (merge #50): the records refuse a release D9
     // started without the plan its launcher stores first (R241, a 503 naming WR-C5-PLAN), and
     // R3's variant listing is not composed (WR-C6-VARIANTS)
-    await launch(9);
+    const planless = (await door(s.api, "launch", { tag: 9, planless: true })).policy_ref as string;
     // the refusal is WR-C5-PLAN's own, not any 503: the gateway's records port itself names it
     assert.match(String((await door(s.api, "probe")).refusal), /is not stored \(WR-C5-PLAN\)/);
     for (const path of ["/releases", "/optimizations"]) {
@@ -48,6 +49,8 @@ test("E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollb
     }
     const consumer = await as("consumer");
     assert.ok((await consumer.get("/releases")).text.includes(ACCESS_COPY.denied));
+    // the operator stops it: every later release is launched by `rollout launch`, its plan stored
+    await door(s.api, "stop", { policy_ref: planless });
     await door(s.api, "composition", { as: "journey" });
   });
 
