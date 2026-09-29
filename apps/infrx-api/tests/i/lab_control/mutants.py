@@ -28,6 +28,7 @@ KEYS = C + "the_checkpoint_receiver_is_mounted_with_its_key_directory"
 OBJECTS = C + "the_lab_objects_are_the_workers_bucket_or_a_typed_503"
 AUTH = C + "the_families_verify_sessions_with_the_labs_own_auth_settings"
 PG = "test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_a_500"
+PRESENT = "test_control_routes_pg__present_records_answer_alike_on_both_logins"
 FAMILIES = "(lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints)"
 
 
@@ -62,7 +63,7 @@ MUTANTS: tuple[Mutant, ...] = (
        LOGIN),
     _m("families_set_role", "the Lab login never sets role service_role (LDP-F7)", APP,
        "connector(lab[DATABASE_URL], set_role=False)", "connector(lab[DATABASE_URL])",
-       LOGIN, PG),
+       LOGIN, PG, PRESENT),
     _m("readiness_sets_role", "readiness on the Lab login never sets a role (LDP-F7)", APP,
        "connector(os.environ[DATABASE_URL], set_role=False)",
        "connector(os.environ[DATABASE_URL])", LOGIN, PG),

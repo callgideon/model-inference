@@ -31,7 +31,7 @@ what works. On this base, **with no gateway switch turned on** (§5 rule 1):
 | `/judge` (configure, budget, calibration, dry-run request) | the Lab web + 0036/0037 RPC doors | **yes** (dry_run only, §5 rule 4) |
 | `/lab/v1/control` API (register, listings, smoke, proposals) | the control service (`infrx-lab-control`, :8003) | **yes, API only**; the Lab web's control pages (`/overview`, `/models`, `/deployments`) say "unavailable" until WR-E3L-J (lab-app-control lane) gives apps/lab an HTTP control adapter |
 | `/requests` (traces) | the control service with `CLICKHOUSE_URL` + `S3_TRACE_BUCKET` | **no** until the trace projection is deployed (T2I/T3; not on the box) |
-| `/datasets`, `/annotations`, `/training`, `/evaluations`, `/releases`, `/optimizations` | the control service (`infrx-lab-control`, :8003) - every family, WR-LDP-2 (lab-control-routes, R245); the App gateway's Lab switches stay OFF (NOT_SETTABLE, `deploy/preflight.py`) | **no**: datasets/annotations/training/evaluations/releases answer "unavailable" on the box until SR-LCR-1 (lane lab-sql-lw8) grants `infrx_lab_control` their D7/D8/D9 functions (LCR-F1), and evals/pipelines/releases further until WR-B4-2 / WR-LAB2-4 / WR-R4-1/2 / WR-P4B-1; never a 500 (LDP-F3 fixed). Proof: `make lab-local` o05's control-factory case (E4-ON o05/o07) |
+| `/datasets`, `/annotations`, `/training`, `/evaluations`, `/releases`, `/optimizations` | the control service (`infrx-lab-control`, :8003) - every family, WR-LDP-2 (lab-control-routes, R245); the App gateway's Lab switches stay OFF (NOT_SETTABLE, `deploy/preflight.py`) | **yes on the unit** (SR-LCR-1, 0056, lab-sql-lw8, R251: `infrx_lab_control` executes the families' 32 route halves and the teacher approval's 6 ledger functions; datasets/pipelines/releases answer as on the owner login, present records included, LCR-F1 closed); evals/pipelines/releases ports still typed-unavailable until WR-B4-2 / WR-LAB2-4 / WR-R4-1/2 / WR-P4B-1; never a 500 (LDP-F3 fixed). 0056 is LOCAL-ONLY: on the box the grant exists only after a hosted apply under R151/R201's three conditions, and R236 applies per family. Proof: the tests/i/lab_control PG matrix (l4) + `make lab-local` o05's control-factory case (rerun WR-LW8-2) |
 | Worker role `eval` | `infrx-lab-eval` | starts ready locally (E4-ON o03) — **on the owner login only**; on the box it needs its own login (WR-LDP-7, §3) |
 | Worker roles `judge`, `datasets` | `infrx-lab-{judge,datasets}` | **no on this box**: each requires `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` (`infrx.lab.workers` NEEDS) and the trace projection is not deployed; without them the entry point refuses (exit 2), so 50-lab-role.sh refuses the SPEC first. They start locally (o03) only because the composition gives every role a ClickHouse |
 | Worker role `annotation` | `infrx-lab-annotation` | has its teacher-collect pass on this base (needs `LAB_S3_BUCKET` + `LAB_TEACHER_URL` = the local teacher fake only, P-10); not for internal testing (§5 rule 3) |
@@ -41,8 +41,9 @@ The gateway's Lab switches are never turned on (R237/R245): **LDP-F1** is resolv
 (option (b), lab-control-routes) — the App gateway never serves the Lab; `infrx_runtime` holds no
 `infrx.lab_*` grant and gets none, and the control unit serves every family on its own login.
 **LDP-F3** is fixed (a datasets store fault is the typed 503, never a 500) and **LDP-F7** too
-(`set_role=False`). Evidence: `research/plan/evidence/i/LAB-DEPLOY-PREP-<head7>.md`,
-`research/plan/evidence/l/LAB-CONTROL-ROUTES-79537d3.md`.
+(`set_role=False`). The families are served on the unit's login after SR-LCR-1 (0056,
+local-only until a hosted apply). Evidence: `research/plan/evidence/i/LAB-DEPLOY-PREP-<head7>.md`,
+`research/plan/evidence/l/LAB-CONTROL-ROUTES-79537d3.md`, `research/plan/evidence/l/LAB-SQL-LW8-6f28a64.md`.
 
 ## 1. Go / no-go (all local, at `RELEASE`, before any AWS call)
 
@@ -293,9 +294,10 @@ reversal of Lab tables is never part of this runbook.
   `INFRX_LAB_DATABASE_URL`; the App gateway keeps every Lab switch OFF. **WR-LCR-2** (done at
   the same merge): `lab-control.caddy` bounds dataset paths at 64 MiB, every other `/lab/v1/*`
   call at 1 MiB.
-- **SR-LCR-1** (lane lab-sql-lw8, **LCR-F1**): on `infrx_lab_control` every family but control
-  answers its typed 503 until a Lab-only migration grants that login EXECUTE on the families'
-  D7/D8/D9 route-half functions; then rerun `make lab-local` (o05's control-factory case).
+- **SR-LCR-1** — **done** (lab-sql-lw8, **LCR-F1** closed, R251): 0056 (local-only) grants
+  `infrx_lab_control` EXECUTE on the functions the families' route handlers call, the teacher
+  approval's in-request submission included; rerun `make lab-local` (o05's control-factory
+  case; WR-LW8-2, lane lab-local-2).
 - **WR-LDP-3** (I2L owner): declare in `infra/lab/app/lab.json` `lab-workers` the names the
   entry point reads that are not listed there (`LAB_S3_PREFIX`, `LAB_EVAL_ENDPOINT_URL`,
   `LAB_EVAL_ENDPOINT_KEY`, `LAB_EVAL_CONCURRENCY`, `LAB_CHECKPOINTS_CONCURRENCY`,
@@ -328,7 +330,7 @@ reversal of Lab tables is never part of this runbook.
 | §2 (3) | the window entry | coordinator log |
 | §2 a/b | `W6b PASS: COPY_DIGEST=…`, `W7 PASS: hosted 0001-0051` | `~/infrx-backups/migrate-*.log` + coordinator log |
 | §3 | `describe-parameters` name/type/version | coordinator log |
-| L5 | E4-ON o04 (both cases PASS; LDP-F7 fixed) + o05's control-factory case (NOT RUN[SR-LCR-1] until lab-sql-lw8) + L5's printed lines | verdict.json + coordinator log |
+| L5 | E4-ON o04 (both cases PASS; LDP-F7 fixed) + o05's control-factory case (expected PASS for datasets, pipelines, releases after lab-sql-lw8 (0056); evaluations/teachers/optimizations as their ports) + L5's printed lines | verdict.json + coordinator log |
 | L7 | WR-LDP-7 merged + E4-ON o03 PASS on the per-role logins (NOT RUN today) | verdict.json |
 | L1–L7 | each step's printed lines (names only) + `60-lab-smoke.sh` after each | `/var/log/infrx-lab-rollout.log` + coordinator log |
 | §6 | Vercel deployment id, domain, Redirect URLs | P-08 record |
@@ -361,3 +363,9 @@ reversal of Lab tables is never part of this runbook.
   `LAB_S3_BUCKET`/`LAB_S3_PREFIX` name the same bucket and prefix, else every release is a 503
   (R241, R249); the worker's refusal is carried to composition-7. Nothing was run against the
   box, AWS, SSM, Vercel or hosted Supabase.
+- 2026-09-29 (lab-sql-lw8 merge, codex/w5-merge-55, WR-LW8-1): §0 families row, §0 closing
+  paragraph, §10 SR-LCR-1 (done), §11 L5 — SR-LCR-1: 0056 (LOCAL-ONLY) grants
+  `infrx_lab_control` the families' route halves and the teacher approval's ledger functions
+  (R251); the tests/i/lab_control PG matrix shows the Lab login equal to the owner's, present
+  records included; on the box only after a hosted apply (R151/R201). Nothing was run against
+  the box, AWS, SSM, Vercel or hosted Supabase.

@@ -9,32 +9,99 @@ family's read runs as provider A's administrator.
     INFRX_D_TASK=l4 uv run --frozen pytest -q -s -m pg tests/i/lab_control
 
 Failure oracles: the unit not ready on its own login (LDP-F7); a member refused (401/404) or a
-family missing on it; any 500 (LDP-F3). A family the Lab login holds no grant for answers its
-typed 503 - recorded in the printed matrix, never excused as a pass of the family.
+family missing on it; any 500 (LDP-F3). SR-LCR-1 (0056, lab-sql-lw8): the Lab column equals the
+owner column for every family (LCR-F1 closed), each pinned in `EXPECTED`; a worker-only claim
+stays refused to the Lab login (42501); 0041's sample reads the families' lineage calls run on
+it (0-LW8-R1).
 """
 from __future__ import annotations
 
+import json
 import os
+import socket
 
 import pytest
 from fastapi.testclient import TestClient
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from psycopg.types.json import Jsonb
 
 from infrx.contracts import errors
+from infrx.datasets import imports
 from infrx.gateway import lab_auth
+from infrx.judge import cost
 from infrx.lab.control import app as control_app
+from infrx.lab.workers.__main__ import plan_key
+from infrx.media.store import InMemoryObjectStore
+from infrx.state.jobstore import connector
+from infrx.state.lab_data import PgLabDataStore
 
 from ...d import pgharness
+from ...d import test_d7_lab_data as d7
+from ...d import test_d8_ledgers as d8
+from ...d import test_d9_rollout as d9
+from ...j import fakes as j1
+from ...j.submit.judge_fake import JudgeFake
 from ...l.control import worlds
+from ...n.imports.world import chunks, fixture, run
+from ...n.versions.test_versions import uid
+from ...p.annotations.world import RUBRIC, rows
+from ...r.control.test_control import plan
 from .test_control_routes import FAMILIES, PROVIDER, SWITCHES, TOKEN
 
 pytestmark = pytest.mark.pg
 _reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") == "l4" else \
     "PostgreSQL only on the l4 task-local key (INFRX_D_TASK=l4)"
 DB, LAB_PASSWORD = f"{pgharness.DATABASE}_lcr", "infrx-l4-lab-control"
+PRESENT_DB = f"{pgharness.DATABASE}_lcrp"
+#: one teacher batch per login, so each login runs the approval's whole submission
+BATCHES = {"owner": uid(1, 0x7b), "lab": uid(1, 0x7c)}
 A, ADMIN_A = worlds.PgWorld.A, worlds.PgWorld.ADMIN_A
-#: LCR-F1: every family but control is its typed 503 on the Lab login until SR-LCR-1.
-NOT_RUN_SR_LCR_1 = frozenset(FAMILIES) - {"control"}
+#: family -> (status, body prefix) on BOTH logins after 0056. A 503 here is a port the unit does
+#: not compose yet (evaluations' experiments: WR-B4-2; teachers off: P-10; R3's variants:
+#: WR-C6-VARIANTS), the same on the owner login - never a grant the Lab login lacks.
+EXPECTED = {
+    "control": (200, '{"data":[{"model_id":"nemostation/marlin-2b"'),
+    "datasets": (404, '{"detail":"not_found: no such Lab record for this provider"}'),
+    "evaluations": (503, '{"refusal":"unavailable"}'),
+    "pipelines": (404, '{"refusal":"not_found"}'),
+    "teacher-batches": (503, '{"refusal":"unavailable"}'),
+    "releases": (200, '{"data":{"releases":[],"decisions":[],"proposals":[]}}'),
+    "optimizations": (503, '{"refusal":"unavailable"}'),
+}
+
+
+@pytest.fixture(scope="module")
+def present():
+    """WR-LW8-R2/R3: PRESENT records, seeded through the owner login - D8's world (D7's
+    grants, the payer's budget, the teacher grant) with a dataset version (N2's importer; the
+    objects in memory, shared with the unit), a running release (D7's policy, D9's start, its
+    launcher's plan) -
+    so a missing grant past the first `lab_resolve` shows."""
+    if _reason is not None:
+        pytest.skip(f"task-local PostgreSQL unavailable: {_reason}")
+    from infrx.state import migrations
+    pgharness.ensure()
+    pgharness.recreate(PRESENT_DB)
+    pgharness.apply(PRESENT_DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+    owner, objects = pgharness.dsn(PRESENT_DB), InMemoryObjectStore()
+    with pgharness.connect(PRESENT_DB) as conn:
+        d8.seed(conn)
+        conn.execute(f"alter role infrx_lab_control password '{LAB_PASSWORD}'")
+        spec, _ = fixture("benchmark")
+        spec = {**spec, "import_id": uid(2, 0x1c), "dataset_id": uid(2, 0xdc),
+                "grant_ref": d7.W["grant"], "fields": {"content": "q", "group": "g",
+                                                       "split": "split"}}
+        data = b"".join(json.dumps(i).encode() + b"\n"
+                        for i in rows(8, splits=("train", "train", "holdout", "validation")))
+        ref = run(imports.Importer(PgLabDataStore(connector(owner)), objects).run(
+            spec, chunks(data, 64), provider_org_id=A, actor="dev@nemo")).dataset_ref
+        policy_id = d9.uid(41, 0xb0)
+        policy = d7.publish(conn, d9.policy(policy_id, weights=(1_000,)))
+        d9.start(conn, policy)
+        run(imports.write_once(objects, plan_key(A, policy_id),      # the launcher's plan
+                               plan().model_dump_json().encode()))
+    lab = make_conninfo(owner, user="infrx_lab_control", password=LAB_PASSWORD)
+    return {"lab": lab, "owner": owner}, objects, ref, policy
 
 
 @pytest.fixture(scope="module")
@@ -54,13 +121,15 @@ def database():
     return {"lab": lab, "owner": owner}
 
 
-def unit(monkeypatch, dsn: str) -> TestClient:
+def unit(monkeypatch, dsn: str, **env: str) -> TestClient:
     for name, value in {control_app.DATABASE_URL: dsn,
                         control_app.SUPABASE_URL: "http://127.0.0.1:1",
                         control_app.SUPABASE_KEY: "anon"}.items():
         monkeypatch.setenv(name, value)
     for name in SWITCHES:
         monkeypatch.setenv(name, "0")
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
     for name in ("DATABASE_URL", "CLICKHOUSE_URL", "S3_TRACE_BUCKET", "LAB_S3_BUCKET",
                  "LAB_CHECKPOINT_KEYS"):
         monkeypatch.delenv(name, raising=False)
@@ -97,10 +166,77 @@ def test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_
             assert text in ('{"refusal":"unavailable"}',
                             '{"detail":"the datasets service failed"}'), (login, family, text)
     assert matrix["lab", "control"][0] == 200 and matrix["owner", "control"][0] == 200
-    # LCR-R2/R3: the matrix pinned. The owner column reaches the datasets and pipelines
-    # handlers (the probe's `ds@1` is absent: 404). The lab column's typed 503s are LCR-F1's
-    # (infrx_lab_control holds none of the families' D7/D8/D9 grants): NOT RUN[SR-LCR-1] - the
-    # SR-LCR-1 merge (lane lab-sql-lw8) flips this set to the owner column explicitly.
-    assert (matrix["owner", "datasets"][0], matrix["owner", "pipelines"][0]) == (404, 404)
-    assert {f for f in FAMILIES if matrix["lab", f][0] == 503} == NOT_RUN_SR_LCR_1
-    print("\nNOT RUN[SR-LCR-1]:", sorted(NOT_RUN_SR_LCR_1))
+    got = {(login, f): (status, text[:len(EXPECTED[f][1])])
+           for (login, f), (status, text) in matrix.items()}
+    assert got == {(login, f): EXPECTED[f] for login in database for f in FAMILIES}, got
+    import psycopg
+    with psycopg.connect(database["lab"], autocommit=True) as lab:     # SR-LCR-1: routes only
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            lab.execute("select infrx.lab_import_job_claim('{}'::jsonb)")
+        # 0-LW8-R1: lineage.status / lineage.permitted (a version's page, derive, export,
+        # read_part; label imports, select, export; training prepare) run 0041's reads on the
+        # unit's login once a record exists - the absent `ds@1` above never reaches them.
+        for function in ("lab_blocked_samples", "lab_permitted_samples"):
+            args = {"provider_org_id": A, "dataset_ref": "lab:dataset:none"}
+            try:
+                lab.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
+            except psycopg.errors.InsufficientPrivilege as refused:
+                pytest.fail(f"{function}: {refused.sqlstate} on the Lab login")
+            except psycopg.Error:
+                pass            # the function ran and refused its arguments: granted
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def test_control_routes_pg__present_records_answer_alike_on_both_logins(present, monkeypatch):
+    """WR-LW8-R2/R3: a PRESENT dataset version (its page: lineage's 0041 reads), its
+    disagreements (the pipeline's label log), a running release and - with LAB_TEACHERS on and
+    JUDGE_MODE live - a teacher batch planned then approved by the administrator (the
+    approval's in-request submission: D8's teacher reserve/record_sent, J2's begin_submit and
+    record_submission, to a local teacher fake) answer the same on the Lab login as on the
+    owner's. A grant missing past `lab_resolve` is a 503 in the lab column only."""
+    logins, objects, ref, policy = present
+    fake = JudgeFake(port=_free_port())
+    got = {}
+    try:
+        for login, dsn in logins.items():
+            with monkeypatch.context() as m:
+                m.setattr(control_app, "NoObjects", lambda: objects)
+                m.setattr(cost, "APPROVED_RATES", j1.TEST_RATES)   # the approved table is empty
+                c = unit(m, dsn, LAB_TEACHERS="1", LAB_TEACHER_URL=fake.url, JUDGE_MODE="live",
+                         JUDGE_LIVE_BUDGET_USD="5")
+                auth, q = {"authorization": f"Bearer {TOKEN}"}, {"provider_org_id": A}
+                batch = {"batch_id": BATCHES[login], "dataset_ref": ref, "rubric_ref": RUBRIC,
+                         "teacher_model": j1.JUDGE_MODEL, "prompt_version": "teach-v1",
+                         "payer_ref": d7.PAYER, "budget_usd": "1.00000000", "chunk_size": 4}
+                answers = {
+                    "version": c.get(f"/lab/v1/providers/{A}/datasets/versions/{ref}",
+                                     headers=auth),
+                    "disagreements": c.get("/lab/v1/pipelines/disagreements", headers=auth,
+                                           params={**q, "dataset_ref": ref}),
+                    "releases": c.get("/lab/v1/releases", params=q, headers=auth),
+                    "plan": c.post("/lab/v1/pipelines/teacher-batches", params=q,
+                                   json=batch, headers=auth),
+                    "approve": c.post(f"/lab/v1/pipelines/teacher-batches/{BATCHES[login]}"
+                                      "/approve", params=q, headers=auth)}
+                for probe, answer in answers.items():
+                    got[login, probe] = (answer.status_code, answer.json())
+    finally:
+        fake.close()
+    for key, (status, _) in sorted(got.items()):
+        print(f"\n{key}: {status}")
+    status = {key: answer[0] for key, answer in got.items()}
+    assert status == {(login, probe): code for login in logins for probe, code in (
+        ("version", 200), ("disagreements", 200), ("releases", 200), ("plan", 201),
+        ("approve", 200))}, got
+    for login in logins:
+        assert got[login, "version"][1] == got["owner", "version"][1], login
+        assert policy in {r["policy_ref"] for r in got[login, "releases"][1]["data"]["releases"]}
+        chunks = got[login, "approve"][1]["chunks"]
+        assert [(x["state"], x["sent"]) for x in chunks] == [("submitted", 4), ("submitted", 2)], \
+            (login, chunks)
+    assert len(fake.posts) == 4                   # two chunks per login, each sent once
