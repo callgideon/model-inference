@@ -89,7 +89,8 @@ SCENARIOS = {
 REQUIRED = {
     "o01": ("test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace",
             "test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it",
-            "test_o01_capture_turned_on_through_the_composition_switch"),
+            "test_o01_capture_turned_on_through_the_composition_switch",
+            "test_o01_an_async_jobs_shipped_record_holds_no_caller_token"),
     "o02": ("test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once",),
     "o03": ("test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant",
             "test_o03_the_lab_traces_route_through_the_real_gateway"),

@@ -108,7 +108,8 @@ def test_e5l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
                                        "tests/integration/lab_observe/runner.py --out <dir> --only o01")
     wait = "NOT RUN[WR-C6-CAPTURE] no seam; rerun after the merge: x --only o01"
     others = [c for sid in runner.SCENARIOS if sid != "o01" for c in everything(sid)]
-    o01 = [*everything("o01")[:2], (runner.REQUIRED["o01"][2], "skipped", wait)]
+    o01 = [*everything("o01")[:2], (runner.REQUIRED["o01"][2], "skipped", wait),
+           *everything("o01")[3:]]
     result = runner.classify(junit(*others, *o01))
     assert runner.gate(result) == "NOT RUN"
     assert runner.r222(result) == {"accepted": False, "open": {"o01": "NOT RUN"}}, \
@@ -164,7 +165,7 @@ def test_e5l_o01s_recorded_reason_keeps_its_rerun_inside_the_cut():
     status, reason = runner.case_status(case)
     assert status == "NOT RUN" and runner.reproduce("o01") in reason, reason
     others = [c for sid in runner.SCENARIOS if sid != "o01" for c in everything(sid)]
-    suites = ET.fromstring(junit(*others, *everything("o01")[:2]))
+    suites = ET.fromstring(junit(*others, *everything("o01")[:2], *everything("o01")[3:]))
     suites.find("testsuite").append(case)
     result = runner.classify(ET.tostring(suites, encoding="unicode"))
     [recorded_reason] = result["o01"]["reasons"]

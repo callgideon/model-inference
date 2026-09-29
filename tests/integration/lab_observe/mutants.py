@@ -189,9 +189,9 @@ MUTANTS: tuple[Mutant, ...] = (
        '"TRACE-TENANT"], "lanes": []}', '"TRACE-TENANT"], "lanes": ["WR-C6-CAPTURE"]}',
        R222, LANES),
     _m("o01_rebound_to_a_not_run", "o01's switch case runs on the stack, never skips", TRACE_L1,
-       '    with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:',
-       '    ow.not_run("o01", "WR-C6-CAPTURE", why="x")\n'
-       '    with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:',
+       "        spool = capture_on(trip, workdir)",
+       '        ow.not_run("o01", "WR-C6-CAPTURE", why="x")\n'
+       "        spool = capture_on(trip, workdir)",
        UNBOUND, LANES),
     _m("another_namespace", "e5l runs in its own reserved block", R,
        'NAMESPACE = "e5l"', 'NAMESPACE = "e3l"', NAMESPACE),
@@ -310,7 +310,12 @@ J3 = "infrx/judge/calibration/report.py"
 #: Cases that FAIL on this base (a product finding, recorded in the evidence): no mutant can
 #: name them (the pristine baseline refuses a failing case), so coverage lists them here and
 #: `test_every_case_is_covered_by_a_mutant` holds the list to exactly the failing ones.
-KNOWN_FAIL: dict[str, str] = {}   # E5L-F1 fixed by WR-OBS-3 (J2 reads through Retention)
+# E5L-F1 fixed by WR-OBS-3 (J2 reads through Retention)
+KNOWN_FAIL: dict[str, str] = {
+    "test_o01_an_async_jobs_shipped_record_holds_no_caller_token":
+        "R8 (lab-capture-2): JobCapture.spool writes request_line(request) without the "
+        "caller's token, so an echoed bearer token reaches the shipped async record "
+        "(WR-LO4-RV1)"}
 
 STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_capture_on_in_the_box", "the drill judges capture off with the box at its defaults",
@@ -323,6 +328,9 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_capture_key_opt_in_ignored", "a key that never opted in leaves no trace", CAPTURE,
        "    mode = min(TraceMode(key_mode or TraceMode.off), TraceMode(org_mode), key=ORDER.index)",
        "    mode = TraceMode(org_mode)", O01_ON),
+    _m("st_capture_scrub_off", "an echoed bearer token is redacted in the shipped sync record "
+       "(WR-LO4-RV1; HM1)", CAPTURE,
+       "    return data.replace(token, REDACTED) if token else data", "    return data", O01_ON),
     _m("st_ship_without_pins", "a shipped row carries the pins PostgreSQL admitted", SHIP,
        "serving_version_id=pins.serving_version_id if pins else None,",
        "serving_version_id=None,", O01_SHIP),

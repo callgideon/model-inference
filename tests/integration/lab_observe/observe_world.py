@@ -266,9 +266,10 @@ def access(trip):
 
 # ------------------------------------------------------------------ App traffic and traces
 
-def served(trip, tenant, tag: str) -> str:
+def served(trip, tenant, tag: str, messages=None) -> str:
     """One async App request, finished and settled once: its durable request id."""
-    accepted = trip.send(tenant, "async", world.TEXT, f"e5l-{tag}-{uuid.uuid4().hex[:6]}")
+    accepted = trip.send(tenant, "async", messages or world.TEXT,
+                         f"e5l-{tag}-{uuid.uuid4().hex[:6]}")
     assert accepted.status_code == 202, f"{tag}: {accepted.status_code} {accepted.text[:200]}"
     request_id = accepted.json()["request_id"]
     assert world.terminal(trip, request_id, timeout=90.0) == "succeeded", request_id
