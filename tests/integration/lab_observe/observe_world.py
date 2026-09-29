@@ -287,7 +287,7 @@ def app_serves(trip, tenant, tag: str) -> str:
 
 def captured(trip, tenant, request_ids, content: bytes = b'{"q":"Describe the van."}') -> None:
     """Each request's trace, written durably by the spool's one writer and its segment sealed
-    for the shipper (the gateway builds no sink on this base; WR-COMP-4)."""
+    for the shipper (the gateway builds no sink on this base; WR-C6-CAPTURE)."""
     from datetime import timedelta
 
     from infrx.contracts.records import TraceEnvelope, TraceMode

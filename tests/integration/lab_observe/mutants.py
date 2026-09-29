@@ -81,6 +81,9 @@ NAMESPACE = "test_e5l_the_namespace_is_the_reserved_block_and_the_judge_fake_por
 RERUN = "test_e5l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 DRY_RUN = "test_e5l_the_judge_is_labelled_a_dry_run_never_a_live_run"
 PROJECT = "test_e5l_a_compose_project_override_moves_only_the_compose_names"
+R222 = "test_e5l_r222_accepts_only_a_not_run_out_of_local_scope"
+#: the recorded bd13f72 verdict the R222 case reads (o10 NOT RUN[LAB-E2E], o01 on COMPOSITION)
+RECORDED = "research/plan/evidence/e/E5L-raw-bd13f72/gate/verdict.json"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- I2L-OBS packaging
@@ -176,7 +179,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '    "o08": ("test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled",),',
        '    "o08": ("test_o08_a_timed_out_submit",),', REQUIRED),
     _m("a_lane_undeclared", "a scenario waiting on a lane declares it", R,
-       '"lanes": ["COMPOSITION"]}', '"lanes": []}', LANES),
+       '"lanes": ["WR-C6-CAPTURE"]}', '"lanes": []}', LANES),
     _m("another_namespace", "e5l runs in its own reserved block", R,
        'NAMESPACE = "e5l"', 'NAMESPACE = "e3l"', NAMESPACE),
     _m("judge_fake_on_the_gateway_port", "the judge fake has a port of its own", W,
@@ -211,6 +214,37 @@ MUTANTS: tuple[Mutant, ...] = (
        '    if got["exit"] != 0 and got.get("harness"):', "    if False:", E2E_GATE),
     _m("e2e_composed_ports_inverted", "the cell names the ports the gateway does NOT carry",
        E2E, "if not carried)", "if carried)", E2E_GATE),
+    # --- lab-observe-3: R222's machine check (R234/R235), as lab_evaluate's runner
+    _m("r222_in_scope_lane_excused", "a NOT RUN on in-scope work stays open", R,
+       'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       'return bool(entry["cases"]) and', R222),
+    _m("r222_out_of_scope_widened", "only R234's ruled classes are out of scope for E5L", R,
+       '"WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}',
+       '"WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE", "COMPOSITION": "product WR"}', R222),
+    _m("r222_product_wr_dropped", "R234 (ii): o01 waiting on WR-C6-CAPTURE is out of scope", R,
+       '"LAB-E2E": "lab-e2e UI", "WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}',
+       '"LAB-E2E": "lab-e2e UI"}', R222),
+    _m("r222_lab_e2e_dropped", "R234 (i): a UI cell waiting on the lab-e2e harness is out of "
+       "scope", R, 'OUT_OF_SCOPE = {"LAB-E2E": "lab-e2e UI", ', "OUT_OF_SCOPE = {", R222),
+    _m("r222_never_run_excused", "a scenario with no case run is open", R,
+       'set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       "set(lanes) <= set(OUT_OF_SCOPE) and", R222),
+    _m("r222_any_reason_excuses", "every reason must be the scenario's own wait", R,
+       "    all(f\"NOT RUN[{','.join(lanes)}]\" in reason for reason in entry[\"reasons\"])",
+       "    any(f\"NOT RUN[{','.join(lanes)}]\" in reason for reason in entry[\"reasons\"])",
+       R222),
+    _m("r222_pass_is_open", "a PASS never keeps the gate from acceptance", R,
+       'if entry["status"] != PASS and not excused(sid, entry)}',
+       "if not excused(sid, entry)}", R222),
+    _m("r222_fail_excused_by_its_message", "an in-scope FAIL is never excused, whatever its "
+       "message says (R234)", R, '        if entry["status"] != NOT_RUN:', "        if False:",
+       R222),
+    _m("r222_recorded_lanes_ignored", "a recorded verdict is judged on its own lanes", R,
+       'lanes = entry.get("lanes") or SCENARIOS[sid]["lanes"]', 'lanes = SCENARIOS[sid]["lanes"]',
+       R222),
+    _m("o01_rerun_elsewhere", "o01's NOT RUN names the exact rerun `--only o01`", R,
+       'return f"{PY} {RUNNER} --out <dir>" + (f" --only {sid}" if sid else "")',
+       'return f"{PY} {RUNNER} --out <dir>"', R222),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -353,6 +387,8 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(REPO / wiring, root / wiring)
     (root / "research" / "plan").mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO / "research" / "plan" / "tasks.json", root / "research" / "plan" / "tasks.json")
+    (root / RECORDED).parent.mkdir(parents=True)
+    shutil.copy2(REPO / RECORDED, root / RECORDED)
     return root
 
 
