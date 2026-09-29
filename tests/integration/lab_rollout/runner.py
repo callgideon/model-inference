@@ -158,6 +158,8 @@ SUB_CELLS: dict[str, dict] = {}     # k10's journey is bound (WR-LR6-VERDICT, WR
 #: WR is excused. The gate is re-run when a dependency lands and the cell must then PASS.
 OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)"}
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
+#: RV-4: an environment ENOENT (LAB-E2E's gate: apps/lab/node_modules or node absent)
+ENVIRONMENT = re.compile(r"^(?:[\w.]*\.)?EnvironmentBlocked\b")
 CASE = re.compile(r"test_(?P<sid>k\d\d)_")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[")
 LOCK = Path("/tmp") / f"infrx-{NAMESPACE}.runner.lock"
@@ -174,6 +176,8 @@ def case_status(case) -> tuple[str, str]:
         node = case.find(tag)
         if node is not None:
             message = (node.get("message") or node.text or "")[:400]
+            if ENVIRONMENT.search(message):
+                return BLOCKED, "BLOCKED[harness] " + message
             return (INVALID, "INVALID[harness] " + message) if HARNESS.search(message) \
                 else (FAIL, message)
     node = case.find("skipped")

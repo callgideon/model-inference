@@ -28,6 +28,12 @@ class HarnessError(Exception):
     INVALID[harness] (its HARNESS pattern), never a product FAIL - and never a mutant's kill."""
 
 
+class EnvironmentBlocked(Exception):
+    """RV-4 (merge #62): the checkout's environment is missing a file the suite needs (an
+    ENOENT: apps/lab/node_modules not installed, no `node` on PATH) - a gate runner's
+    BLOCKED[harness], never a product FAIL."""
+
+
 def command(suite: str) -> str:
     return (f"cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test "
             f"tests/e2e/{suite}/stack.test.ts")
@@ -42,10 +48,15 @@ def run(suite: str, out: Path) -> dict:
     env.update(LAB_E2E_REAL="1", INFRX_D_TASK="l4", LAB_E2E_OUT=str(out),
                INFRX_API_DIR=str(Path(infrx.__file__).resolve().parents[1]),
                INFRX_PYTHON=sys.executable, PATH=env.get("PATH", "") + ":/usr/bin:/bin")
+    if not (LAB / "node_modules").is_dir():
+        raise EnvironmentBlocked(f"ENOENT {LAB / 'node_modules'}: run pnpm install "
+                                 "--frozen-lockfile in apps/lab")
     try:
         done = subprocess.run(["node", "--test", f"tests/e2e/{suite}/stack.test.ts"], cwd=LAB,
                               env=env, capture_output=True, text=True, timeout=TIMEOUT_S)
         code, stdout = done.returncode, done.stdout + done.stderr
+    except FileNotFoundError as absent:                 # ENOENT: no node on PATH
+        raise EnvironmentBlocked(f"ENOENT {absent}") from absent
     except subprocess.TimeoutExpired as late:
         code, stdout = 124, f"timed out after {TIMEOUT_S}s: {late.stdout or ''}"
     counts = {k: int(v) for k, v in

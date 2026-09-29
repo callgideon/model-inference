@@ -438,3 +438,68 @@ for R244 and R248.
 - Coordinator: keep `LAB_RELEASES` OFF on the unit until `INFRX_D_TASK=l4 pytest
   tests/i/lab_control/test_control_routes_pg.py` is 2/2 and this case's marker is dropped.
 - No new mutant: the seam is a grant (SQL), not code in `pilot.py`. The strict XPASS is the kill.
+
+## Merge #62 (codex/w5-merge-62, coordinator)
+
+Lane head `dc3ba861` merged onto `a8bdd22c`. Three expected conflicts (`pilot.py`,
+`tests/g/lab_releases/{mutants.py,test_lab_releases.py}`) are resolved keeping both sides:
+merge #60's unit-refused row (R255) and this lane's read-time verdict. The Live is read once,
+inside R255's guard; a unit refusal lists `progress: null`, `verdict: null`,
+`refused: "unit_refused"`; otherwise the verdict is D9's latest decision, else R2's evaluate
+over that Live and the B2 report.
+
+### Coordinator rulings
+
+- **R259** (this lane's proposal). The Lab page's verdict for a release is D9's latest
+  decision. Otherwise, for a running release, it is R2's evaluate at read time over D9's Live
+  (read once per release, shared with progress) and the release's B2 report. It is read-only
+  and never recorded. It is null while nothing is assigned, while R2 refuses the plan's unit
+  (R248/R255), or when the release is neither running nor decided. The control unit's login
+  executes `lab_release_live` and `lab_experiments` (0059, R251).
+- **R260** (COORDINATOR DECISION, 1-LR7-RV-3). A release whose B2 report cannot be read
+  degrades only its own row: verdict null with `refused: "report_unavailable"`. The listing
+  stands, and an outage still fails it.
+
+### Applied at merge
+
+- **WR-LR7-GRANT** landed as `0059_lab_control_grants_2.sql`, LOCAL-ONLY:
+  - `grant execute on function infrx.lab_release_live(jsonb), infrx.lab_experiments(jsonb) to
+    infrx_lab_control`;
+  - the harness pin follows 0056 (0057/0058 are inserted before it with their lanes);
+  - `tests/d/test_code_mutants_lw8.py` GRANTED gains both names (R251);
+  - the new D list `tests/d/test_code_mutants_lr7.py` has 3 mutants (either grant dropped, a
+    grant to the runtime) and its own `make api-mutants` line;
+  - the fix-round case's strict xfail is dropped: it now passes on the unit's login;
+  - tests/i on l4: a new case where, on `infrx_lab_control`, an assigned running release lists
+    progress and a `hold`/`no_report` verdict equal to the owner login's.
+- **WR-LR7-I-OPT**: `optimizations` now expects `(200, '{"data":[]}')`, and WR-C6-VARIANTS is
+  dropped from the comment.
+- **The minors:**
+  - RV-2: the fake B4 is provider-scoped, and `verdict_report_of_any_provider` is killed by the
+    expand case.
+  - 1-LR7-RV-2: `ReleaseRecords(reads=None)` raises a typed `DependencyUnavailable` on the first
+    undecided running release, where it used to crash with an AttributeError. Mutant:
+    `verdict_unwired_reads_crash`.
+  - 1-LR7-RV-3 / R260: `ReportUnavailable` wraps `NotFound`/`KeyError`/`TypeError`/`ValueError`
+    from `release_report`. Case: a body that is not JSON, a row without its candidate, and a B4
+    outage that still fails the listing. Four mutants.
+  - RV-4: LAB-E2E's gate raises `EnvironmentBlocked` (ENOENT) when `apps/lab/node_modules` is
+    missing or `node` is absent, and E8L's runner classifies that as `BLOCKED[harness]`. Layer-1
+    case, plus 3 layer-1 mutants.
+  - 1-LR7-RV-5: the r2 composition verdict case joins the lab_releases list as an opt-in PG half
+    (`INFRX_LAB_RELEASES_PG=1 INFRX_D_TASK=r2`), with 2 PG mutants.
+- **WR-LR7-DOC**: 08 §5's `LAB_RELEASES` row.
+
+### Cells on the tip
+
+- k01–k07, k09 and k10 PASS; k08 is NOT RUN[P-08 GPU]; there are no sub-cells.
+- r222 is accepted, so E8L is at its local floor. This is the lane's `make lab-rollout` at
+  `e65bbecf`; the merge did not rerun the stack.
+
+### Carried
+
+- **1-LR7-RV-4**: an e2e run on the unit's own login is still owed. The l4 PG matrix case above
+  covers the grant seam.
+- **make lab-local's o05 expectation for releases on the unit**: lab-local-3, still in flight,
+  reads `CONTROL_EXPECTED`. With 0059, the lab login's `/lab/v1/releases` answers 200 for a
+  listed release. Its merge must expect that.

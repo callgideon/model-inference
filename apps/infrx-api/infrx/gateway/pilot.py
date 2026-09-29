@@ -434,15 +434,21 @@ def _progress(live) -> dict | None:
             "candidate_healthy": live.candidate_healthy, "assignments": []}
 
 
+class ReportUnavailable(Exception):
+    """R260 (1-LR7-RV-3): one B4 experiment row the B2 report cannot be read from (its runs,
+    its body): that release's verdict only, never the listing."""
+
+
 class ReleaseRecords:
     """WR-R4-2: `/lab/v1/releases`' read models (port.ts, snake_case). Each D9 release (0048)
     with D7's policy revision and the plan its launcher stored (WR-C5-PLAN; none stored: a
     503 naming it, never a guessed plan); `progress` is D9's Live of the revision (0054, R244;
     WR-LIVE-PAGE), null only while nothing is assigned - no per-serving tally is readable yet,
-    so `assignments` is empty; the verdict is `verdict`'s (WR-LR6-VERDICT). A Live R248
-    refuses (legacy USD) nulls that row's progress and verdict with `refused: "unit_refused"`;
-    the rest list (C7-RV-6). Decisions are 0053's. R3's variants are 0055's listing
-    (WR-C6-VARIANTS): none is [], never a 503."""
+    so `assignments` is empty; the verdict is `verdict`'s (WR-LR6-VERDICT, R259). A Live R248
+    refuses (legacy USD) nulls that row's progress and verdict with `refused: "unit_refused"`
+    (C7-RV-6, R255); a B2 report that cannot be read nulls that row's verdict with
+    `refused: "report_unavailable"` (R260); the rest list. Decisions are 0053's. R3's variants
+    are 0055's listing (WR-C6-VARIANTS): none is [], never a 503."""
 
     def __init__(self, d9, store, objects, variants, reads=None) -> None:
         self.d9, self.store, self.objects, self.lab_variants = d9, store, objects, variants
@@ -452,7 +458,9 @@ class ReleaseRecords:
         """WR-LR6-VERDICT: D9's latest decision; else, for a running release, R2's `evaluate`
         at read time over the Live its progress shows (0054, at the database clock of that
         read) and its B2 report (`release_report`, WR-C5-REPORT) - read-only, never recorded.
-        Null while nothing is assigned (R244) or R2 refuses the plan's unit (R248)."""
+        Null while nothing is assigned (R244) or R2 refuses the plan's unit (R248). Unwired
+        B4 (`reads=None`) is a typed 503 (1-LR7-RV-2); an unreadable B4 row is
+        `ReportUnavailable` (R260); an outage still fails the listing."""
         from ..lab.workers.__main__ import release_report
         from ..rollouts.control import evaluate
         d = item.latest_decision
@@ -461,8 +469,13 @@ class ReleaseRecords:
                     "evidence_refs": list(d.evidence_refs), "evaluated_at": _z(d.at)}
         if item.release.state != "running" or live is None:
             return None
-        report, runs = await release_report(self.reads, self.store, provider_org_id, policy,
-                                            plan)
+        if self.reads is None:                      # 1-LR7-RV-2: never an AttributeError
+            raise errors.DependencyUnavailable("B4's experiments are not wired (WR-LR6-VERDICT)")
+        try:
+            report, runs = await release_report(self.reads, self.store, provider_org_id,
+                                                policy, plan)
+        except (errors.NotFound, KeyError, TypeError, ValueError) as bad:   # R260: a bad row
+            raise ReportUnavailable(str(bad)) from bad
         try:
             v = evaluate(plan, policy, live, started_at=item.release.started_at,
                          now=live.observed_until, report=report, runs=runs)
@@ -488,6 +501,10 @@ class ReleaseRecords:
                 live, refused = await self.d9.live(item.policy_ref), None
             except errors.InvalidRequest:     # R248, C7-RV-6: this row only, typed
                 live, refused = None, "unit_refused"
+            try:
+                verdict = await self.verdict(provider_org_id, item, policy, full, live)
+            except ReportUnavailable:         # R260, 1-LR7-RV-3: this row only, typed
+                verdict, refused = None, "report_unavailable"
             out.append({
                 "policy_ref": item.policy_ref, "endpoint_id": policy.endpoint_id,
                 "version": policy.version, "baseline_ref": policy.baseline_ref,
@@ -503,7 +520,7 @@ class ReleaseRecords:
                                     "unit": plan["budget"]["unit"]}},
                 "started_at": _z(release.started_at),
                 "progress": _progress(live),
-                "verdict": await self.verdict(provider_org_id, item, policy, full, live)})
+                "verdict": verdict})
             if refused:
                 out[-1].update(verdict=None, refused=refused)
         return out

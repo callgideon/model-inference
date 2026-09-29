@@ -42,7 +42,9 @@ GRANTED = frozenset({
     "lab_blocked_samples", "lab_permitted_samples",
     # WR-LW8-R3: the teacher-batch approval's in-request submission (LAB_TEACHERS on)
     "lab_teacher_reserve", "lab_judge_begin_submit", "lab_teacher_record_sent",
-    "lab_judge_release", "lab_judge_quarantine", "lab_judge_record_submission"})
+    "lab_judge_release", "lab_judge_quarantine", "lab_judge_record_submission",
+    # WR-LR7-GRANT (0059, R251/R259): the release page's Live (0054) and read-time verdict (0043)
+    "lab_release_live", "lab_experiments"})
 #: One worker-only claim: an import job is claimed by the I5 datasets pool, never a route.
 WORKER_CLAIM = "lab_import_job_claim"
 

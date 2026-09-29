@@ -83,6 +83,7 @@ R222 = "test_e8l_r222_accepts_only_a_not_run_out_of_local_scope"
 PLAN_PATH = "test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute"
 GATE_OUT = "test_e8l_the_ui_suites_record_is_read_back_from_a_relative_out"
 E2E = "apps/lab/tests/e2e/gate.py"
+ENOENT = "test_e8l_an_environment_enoent_is_blocked_harness_not_a_product_fail"
 UNBOUND = tuple(re.findall(r"^def (test_k\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -176,6 +177,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("gate_out_relative", "the suite's record directory reaches node absolute "
        "(WR-LR6-GATE-OUT)", E2E, '    out = Path(out).resolve() / f"e2e-{suite}"',
        '    out = Path(out) / f"e2e-{suite}"', GATE_OUT),
+    # RV-4 (merge #62): an environment ENOENT is BLOCKED[harness], never a product FAIL
+    _m("gate_runs_without_node_modules", "no suite runs without apps/lab/node_modules", E2E,
+       '    if not (LAB / "node_modules").is_dir():', "    if False:", ENOENT),
+    _m("gate_no_node_is_a_crash", "no node on PATH is EnvironmentBlocked", E2E,
+       "    except FileNotFoundError as absent:", "    except NotADirectoryError as absent:",
+       ENOENT),
+    _m("environment_enoent_is_a_fail", "an environment ENOENT is BLOCKED[harness]", R,
+       "            if ENVIRONMENT.search(message):", "            if False:", ENOENT),
     _m("unbound_case_runs", "a case waiting on P-08 is never a pass",
        P, "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )

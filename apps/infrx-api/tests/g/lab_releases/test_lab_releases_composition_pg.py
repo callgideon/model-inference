@@ -290,15 +290,13 @@ def test_lab_releases_composition_pg__a_running_releases_verdict_is_r2s_evaluate
 LAB_PASSWORD = "infrx-r2-lab-control"
 
 
-@pytest.mark.xfail(strict=True, reason="WR-LR7-GRANT (lab-sql): 0056 grants infrx_lab_control "
-                   "no execute on lab_release_live / lab_experiments; strict - once the grant "
-                   "lands this XPASSes and fails: drop the marker")
 def test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict(
         world, monkeypatch, tmp_path):
     """0-LR7-RV-1: the verdict's grant seam. The page composed on the Lab control unit's own
     login (0043's `infrx_lab_control`, as the unit runs it) lists a running release with one
     healthy assigned job: progress is D9's Live (0054's `lab_release_live`) and the verdict
-    R2's hold read at request time (B4's `lab_experiments`) - the same answer as the owner login."""
+    R2's hold read at request time (B4's `lab_experiments`) - the same answer as the owner login.
+    WR-LR7-GRANT (0059, merge #62) grants the login both; the strict xfail it carried is gone."""
     owner = pgharness.dsn(DB)
     world.execute(f"alter role infrx_lab_control password '{LAB_PASSWORD}'")
     lab = make_conninfo(owner, user="infrx_lab_control", password=LAB_PASSWORD)

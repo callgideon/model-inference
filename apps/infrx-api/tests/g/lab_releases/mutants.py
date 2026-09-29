@@ -37,6 +37,9 @@ V_NOW = C + "a_running_releases_verdict_is_r2s_evaluate_now_when_d9_holds_none"
 V_NULL = C + "nothing_assigned_or_a_refused_unit_reads_no_verdict"
 V_D9 = C + "a_decided_release_reads_d9s_decision_never_a_fresh_evaluation"
 V_POOL = C + "the_composed_records_read_b4s_experiments_on_the_pool"
+V_UNWIRED = C + "unwired_b4_is_a_typed_refusal_on_an_undecided_running_release"
+V_BAD_ROW = C + "an_unreadable_b2_report_nulls_only_its_rows_verdict"
+BAD_ROW = "        except (errors.NotFound, KeyError, TypeError, ValueError) as bad:   # R260"
 NOT_RUNNING = '        if item.release.state != "running" or live is None:\n            return None\n'
 ADMIN = ("        who = await lab_actor(request, x.sessions, x.access,\n"
          "                              Cap.read_aggregate_health)"
@@ -200,12 +203,30 @@ MUTANTS: tuple[Mutant, ...] = (
        '"evidence_refs": list(v.evidence_refs), "evaluated_at": _z(item.release.started_at)}',
        V_NOW, file=P),
     _m("verdict_reads_another_live", "the verdict is judged on the Live the progress shows",
-       '"verdict": await self.verdict(provider_org_id, item, policy, full, live)',
-       '"verdict": await self.verdict(provider_org_id, item, policy, full,\n'
-       '                                              await self.d9.live(item.policy_ref))',
+       "verdict = await self.verdict(provider_org_id, item, policy, full, live)",
+       "verdict = await self.verdict(provider_org_id, item, policy, full,\n"
+       "                                              await self.d9.live(item.policy_ref))",
        V_NOW, file=P),
     _m("verdict_reads_absent", "LAB_RELEASES reads B4's experiments (0043)",
        "PgLabReads(connect)),", "None),", V_POOL, file=P),
+    # merge #62 minors: RV-2, 1-LR7-RV-2, 1-LR7-RV-3 (R260)
+    _m("verdict_report_of_any_provider", "B2's report is read for the listed provider only "
+       "(RV-2)", "release_report(self.reads, self.store, provider_org_id,",
+       'release_report(self.reads, self.store, "",', V_NOW, file=P),
+    _m("verdict_unwired_reads_crash", "unwired B4 is a typed 503, never an AttributeError "
+       "(1-LR7-RV-2)", "        if self.reads is None:", "        if False:", V_UNWIRED,
+       file=P),
+    _m("report_unavailable_fails_the_listing", "an unreadable B2 report degrades its row "
+       "only (R260)", "            except ReportUnavailable:", "            except errors.Conflict:",
+       V_BAD_ROW, file=P),
+    _m("report_unavailable_untyped", "a report-unavailable row names its typed reason (R260)",
+       'verdict, refused = None, "report_unavailable"', "verdict, refused = None, None",
+       V_BAD_ROW, file=P),
+    _m("report_bad_body_fails_the_listing", "a body that is not JSON is a bad row (R260)",
+       BAD_ROW, BAD_ROW.replace(", ValueError)", ")"), V_BAD_ROW, file=P),
+    _m("report_outage_is_a_bad_row", "a B4 outage still fails the listing (R260)",
+       BAD_ROW, BAD_ROW.replace("(errors.NotFound, KeyError, TypeError, ValueError)",
+                                "Exception"), V_BAD_ROW, file=P),
     _m("verdict_reads_off_the_pool", "the experiments are read on the gateway's pool",
        "PgLabReads(connect)),", "PgLabReads(None)),", V_POOL, file=P),
 )
@@ -222,16 +243,36 @@ PG_FILE = "tests/g/lab_releases/test_lab_releases_unit_refused_pg.py"
 PG_CASE = "test_lab_releases_unit_refused_pg__a_legacy_usd_release_nulls_only_its_own_row"
 PG_RUNNER = Runner(name="lab-releases-pg", targets=(PG_FILE,), layout=_layout,
                    env=("INFRX_D_TASK",))
+# 1-LR7-RV-5: WR-LR6-VERDICT's composition case on real 0054/0043/D7 (the r2 key), the same
+# opt-in (`INFRX_LAB_RELEASES_PG=1`, `INFRX_D_TASK=r2`)
+COMP_PG_FILE = "tests/g/lab_releases/test_lab_releases_composition_pg.py"
+COMP_PG_CASE = ("test_lab_releases_composition_pg__a_running_releases_verdict_is_r2s_evaluate_"
+                "at_read_time")
+COMP_PG_RUNNER = Runner(name="lab-releases-pg-r2", targets=(COMP_PG_FILE,), layout=_layout,
+                        env=("INFRX_D_TASK",))
+#: each PostgreSQL case -> (its task-local key, its runner)
+PG_KEYS = {PG_CASE: ("p3", PG_RUNNER), COMP_PG_CASE: ("r2", COMP_PG_RUNNER)}
 PG_MUTANTS: tuple[Mutant, ...] = (
     _m("page_unit_refusal_fails_listing_pg", "a legacy-USD release on real 0054 never fails "
        "the listing", "            except errors.InvalidRequest:     # R248",
        "            except errors.Conflict:     # R248", PG_CASE, file=P),
+    _m("verdict_never_evaluated_pg", "a running release's verdict is R2's evaluate over real "
+       "0054 and B4's experiments, not null", NOT_RUNNING,
+       "        if True:\n            return None\n", COMP_PG_CASE, file=P),
+    _m("verdict_reads_absent_pg", "LAB_RELEASES composes B4's experiments (0043) on real "
+       "PostgreSQL", "PgLabReads(connect)),", "None),", COMP_PG_CASE, file=P),
 )
+
+
+def pg_key(mutant) -> str:
+    """The task-local key a PostgreSQL mutant's case runs on."""
+    return PG_KEYS[mutant.cases[0]][0]
 
 
 def run_mutant(mutant) -> Result:
     if mutant in PG_MUTANTS:
-        return shared.pristine((PG_CASE,), PG_RUNNER) or shared.run_mutant(mutant, PG_RUNNER)
+        runner = PG_KEYS[mutant.cases[0]][1]
+        return shared.pristine(mutant.cases, runner) or shared.run_mutant(mutant, runner)
     return shared.run_mutant(mutant, RUNNER)
 
 

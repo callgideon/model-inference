@@ -523,10 +523,12 @@ def _verdict_world(state="running", decision=None, *, live=None, experiments=(),
         async def resolve(self, ref, *, provider_org_id):
             return lab.parse(runs[ref]) if ref in runs else r2w.POLICY
 
-    class Reads:
+    class Reads:                   # B4 is provider-scoped (0043): another's reads nothing
         async def experiments(self, *, provider_org_id):
             read["experiments"] += 1
-            return list(experiments)
+            if isinstance(experiments, Exception):
+                raise experiments
+            return list(experiments) if provider_org_id == r2w.P else []
 
     return pilot.ReleaseRecords(D9(), D7(), objects, None, Reads()), read
 
@@ -622,3 +624,49 @@ def test_lab_releases__the_composed_records_read_b4s_experiments_on_the_pool():
                                                                lab_releases=True))
     x = pilot._lab(settings, connect="pool", objects=object())["lab_releases"]
     assert type(x.records.reads) is PgLabReads and x.records.reads._connect == "pool"
+
+
+def test_lab_releases__unwired_b4_is_a_typed_refusal_on_an_undecided_running_release():
+    """1-LR7-RV-2: records composed without B4's experiments (`reads=None`) answer a typed
+    503 (`DependencyUnavailable`) on the first running release D9 holds no decision for -
+    never an AttributeError (a 500); nothing assigned still reads a null verdict."""
+    import asyncio
+
+    from infrx.contracts import errors
+    from tests.r.control import test_control as r2w
+
+    records, _ = _verdict_world()
+    records.reads = None
+    assert [r["verdict"] for r in asyncio.run(records.releases(r2w.P))] == [None]
+    records, _ = _verdict_world(live=r2w.live(lag_s=0))
+    records.reads = None
+    with pytest.raises(errors.DependencyUnavailable):
+        asyncio.run(records.releases(r2w.P))
+
+
+def test_lab_releases__an_unreadable_b2_report_nulls_only_its_rows_verdict():
+    """R260 (1-LR7-RV-3, COORDINATOR DECISION): a B4 experiment row the B2 report cannot be
+    read from (a body that is not JSON, a row without its candidate run) degrades that
+    release's verdict alone - null with `refused: "report_unavailable"`, its progress still
+    shown - and the listing stands; a B4 outage still fails the listing (never hidden as a
+    bad row)."""
+    import asyncio
+
+    from infrx.contracts import errors
+    from tests.r.control import test_control as r2w
+
+    not_json = {**_experiment("accept")}
+    not_json["report"] = {**not_json["report"], "body": "{not json"}
+    no_candidate = {k: v for k, v in _experiment("accept").items() if k != "candidate"}
+    for bad in (not_json, no_candidate):
+        records, _ = _verdict_world(live=r2w.live(lag_s=0), experiments=[bad])
+        [row] = asyncio.run(records.releases(r2w.P))
+        assert (row["verdict"], row.get("refused")) == (None, "report_unavailable"), row
+        assert row["progress"]["candidate"]["requests"] == 1_000, row["progress"]
+    records, _ = _verdict_world(live=r2w.live(lag_s=0), experiments=[_experiment("accept")])
+    [row] = asyncio.run(records.releases(r2w.P))
+    assert "refused" not in row and row["verdict"]["action"] == "expand", row
+    records, _ = _verdict_world(live=r2w.live(lag_s=0),
+                                experiments=errors.DependencyUnavailable("B4 did not answer"))
+    with pytest.raises(errors.DependencyUnavailable):
+        asyncio.run(records.releases(r2w.P))

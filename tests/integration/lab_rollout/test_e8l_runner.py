@@ -248,7 +248,7 @@ def test_e8l_the_ui_suites_record_is_read_back_from_a_relative_out(tmp_path, mon
     gate = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gate)
     lab = tmp_path / "lab"
-    lab.mkdir()
+    (lab / "node_modules").mkdir(parents=True)          # an installed checkout (RV-4)
     monkeypatch.setattr(gate, "LAB", lab)
     monkeypatch.syspath_prepend(str(REPO / "apps" / "infrx-api"))    # the gate reads infrx's path
     monkeypatch.chdir(tmp_path)
@@ -265,3 +265,34 @@ def test_e8l_the_ui_suites_record_is_read_back_from_a_relative_out(tmp_path, mon
     assert got["record"] == {"composed": {"records": True}}, got
     assert gate.missing(got) == []
 
+
+def test_e8l_an_environment_enoent_is_blocked_harness_not_a_product_fail(tmp_path, monkeypatch):
+    """RV-4 (merge #62): an environment ENOENT - apps/lab/node_modules not installed, or no
+    `node` on PATH - is LAB-E2E's `EnvironmentBlocked` before any suite runs, and the runner
+    classifies a case failing on it BLOCKED[harness], never a product FAIL (nor a pass)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "e8l_e2e_gate_env", REPO / "apps" / "lab" / "tests" / "e2e" / "gate.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    lab = tmp_path / "lab"
+    lab.mkdir()
+    monkeypatch.setattr(gate, "LAB", lab)
+    monkeypatch.syspath_prepend(str(REPO / "apps" / "infrx-api"))
+    ran = []
+    monkeypatch.setattr(gate.subprocess, "run", lambda *a, **k: ran.append(a))
+    with pytest.raises(gate.EnvironmentBlocked, match="ENOENT .*node_modules"):
+        gate.run("rollout", tmp_path / "out")
+    assert ran == [], "no suite runs without apps/lab/node_modules"
+    (lab / "node_modules").mkdir()
+
+    def no_node(*_, **__):
+        raise FileNotFoundError(2, "No such file or directory", "node")
+    monkeypatch.setattr(gate.subprocess, "run", no_node)
+    with pytest.raises(gate.EnvironmentBlocked, match="ENOENT"):
+        gate.run("rollout", tmp_path / "out")
+    cases = everything("k10")
+    cases[0] = (cases[0][0], "failure",
+                "lab_rollout.lab_e2e_gate.EnvironmentBlocked: ENOENT /x/apps/lab/node_modules")
+    k10 = runner.classify(junit(*cases))["k10"]
+    assert k10["status"] == "BLOCKED" and "BLOCKED[harness] " in k10["reasons"][0], k10
