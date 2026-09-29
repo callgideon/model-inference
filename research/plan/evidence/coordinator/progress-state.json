@@ -9261,7 +9261,7 @@
   {
    "id": "W5-MERGE-54",
    "task": null,
-   "slice": "merge batch #54 (Opus): lab-capture fea8a4fd (+ratification, WR-LC-LOCAL/MAKE/DOC, minors, R250)",
+   "slice": "merge batch #54 (Opus): lab-capture fea8a4fd (+ratification, WR-LC-LOCAL/MAKE/DOC, minors, R250); workflow wf_6c7820c0-ce9",
    "agent": "opus",
    "branch": "codex/w5-merge-54",
    "worktree": ".claude/worktrees/codex-w5-merge-54",
