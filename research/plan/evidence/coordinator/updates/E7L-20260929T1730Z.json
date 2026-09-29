@@ -32,7 +32,7 @@
     {"cmd": "pytest tests/integration/lab_{evaluate,observe,operate,rollout,improve} -q, each alone", "exit": "0/0/0/1/1", "summary": "counts unchanged (18/36/18/18/19); the two non-zero exits are the same pre-existing baseline defects in both, confirmed identical at base 1d26fd59"},
     {"cmd": "cd apps/infrx-api && .venv/bin/python -m pytest -q tests/p", "exit": 0, "summary": "82 passed, 7 skipped"},
     {"cmd": "uvx ruff check --line-length 100 (every touched file)", "exit": 0, "summary": "clean; the two ruff findings inside these packages are in untouched files"},
-    {"cmd": "tests/integration/lab_improve/runner.py --keep --out .../E7L-raw-a8e1d1f/run (real e7l stack, code head a8e1d1f9)", "exit": 3, "summary": "gate NOT RUN (i07-i09 unbound, as before); 19 PASS / 0 FAIL / 6 NOT RUN - one case ahead of the E7L-a609f36.md baseline's 17 PASS / 0 FAIL / 4 NOT RUN"},
+    {"cmd": "tests/integration/lab_improve/runner.py --keep --out .../E7L-raw-a8e1d1f/run (real e7l stack, code head a8e1d1f9)", "exit": 3, "summary": "gate NOT RUN (i07-i09 unbound, as before); 18 PASS / 0 FAIL / 4 NOT RUN - one case ahead of the E7L-a609f36.md baseline's 17 PASS / 0 FAIL / 4 NOT RUN"},
     {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l pytest -q tests/integration/lab_improve/test_mutants.py (kept stack)", "exit": 1, "summary": "45 passed, 2 failed - both the pre-existing st_tombstones_ignored anchor mismatch (datasets-lw5 moved the line), confirmed identical at base 1d26fd59; both new WR-P3-R184/R192 mutants pass; 0 survivors among this item's own mutants"},
     {"cmd": "runner.py --reuse --only i09 (teardown)", "exit": 3, "summary": "docker ps/volume ls confirm no infrx-e7l-* container or volume remains"}
   ],

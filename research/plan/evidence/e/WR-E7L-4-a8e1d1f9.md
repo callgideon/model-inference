@@ -107,7 +107,7 @@ evidence head).
 | PIPELINE-BUDGET | NOT RUN | i03, i05, **i06 PASS (both cases, incl. the new confirmation case)** |
 | TRAIN-RECOVER | NOT RUN | i02, **i06 PASS (both cases)**; i07 NOT RUN[composition-2,WR-P2-4] |
 
-**19 PASS / 0 FAIL / 6 NOT RUN** at the scenario-case level (`i01`-`i06`'s 6 scenarios, 19 named
+**18 PASS / 0 FAIL / 4 NOT RUN** at the scenario-case level (`i01`-`i06`'s 6 scenarios, 18 named
 cases, all PASS; `i07`-`i09` stay NOT RUN with their unchanged rerun commands - no regression
 from the E7L-a609f36.md baseline's 17 PASS / 0 FAIL / 4 NOT RUN, and one case ahead of it (the
 new WR-P3-R184/R192 case)). Every cell's NOT RUN is exactly the same unbound-lane reason as
@@ -187,11 +187,61 @@ composition-2 + a P2/P3 worker pass (WR-P2-4), i08 after WR-E7L-1 + LAB_PIPELINE
 allocated staging target, and one coordinator verify round (47-234 min, session-03 basis) - none
 of which this lane's brief asked for.
 
+## Fix round (findings 0-F1 / 1-F1)
+
+Both findings are the same defect, reported twice: the "gate rerun" section (this file, then at
+lines 110 and 195) and the coordinator update
+`research/plan/evidence/coordinator/updates/E7L-20260929T1730Z.json` (`commands[5].summary`)
+transcribed the gate rerun's headline as **19 PASS / 0 FAIL / 6 NOT RUN**, which is arithmetically
+inconsistent with its own "one case ahead of the 17/4 baseline" claim (that would require the
+NOT RUN count to stay at 4, not grow to 6) and, more importantly, does not match the lane's own
+checked-in raw artifact.
+
+Recount directly from the already-committed, unmodified
+`research/plan/evidence/e/E7L-raw-a8e1d1f/run/verdict.json` (no code changed by this fix round,
+so the artifact itself needed no regeneration - only the prose transcribing it was wrong):
+
+```
+$ python3 -c "
+import json
+from collections import Counter
+d = json.load(open('research/plan/evidence/e/E7L-raw-a8e1d1f/run/verdict.json'))
+c = Counter(st for s in d['scenarios'] for st in s['cases'].values())
+print(c)"
+Counter({'PASS': 18, 'NOT RUN': 4})
+```
+
+18 named PASS cases across i01-i06 (2+5+3+3+3+2), 4 NOT RUN across i07-i09 (2+1+1) - exactly one
+case ahead of the E7L-a609f36.md baseline's 17 PASS / 0 FAIL / 4 NOT RUN, as the surrounding
+prose already correctly said. Corrected **19 PASS / 0 FAIL / 6 NOT RUN** to **18 PASS / 0 FAIL /
+4 NOT RUN** at lines 110 and 195 of this file, and in
+`E7L-20260929T1730Z.json`'s `commands[5].summary`; no other file repeats the wrong figure
+(`grep -rn "19 PASS\|6 NOT RUN" research/plan/evidence/e/WR-E7L-4-a8e1d1f9.md
+research/plan/evidence/coordinator/updates/E7L-2026092*.json` shows nothing left after the fix).
+
+No product, test or scenario code changed - this is a transcription-only correction, so the
+owned-path fast suites were rerun to confirm the correction touched nothing else (no e7l stack
+was reprovisioned; the live gate/mutant artifacts already committed under `E7L-raw-a8e1d1f/` are
+the same run this section recounts, and remain valid evidence for the code head):
+
+| command | exit | result |
+|---|---|---|
+| `pytest tests/integration --co -q` | 0 | 652 collected (unchanged) |
+| `pytest tests/integration/lab_improve -q` (no stack) | 1 | 17 passed, 1 failed (`st_tombstones_ignored`, same pre-existing baseline), 1 skipped |
+| `pytest tests/integration/lab_rollout tests/integration/lab_improve -q` (no stack, together) | 1 | 32 passed, 3 failed (`st_tombstones_ignored` + two `not_run_is_a_pass`/`unbound_case_runs` cases already recorded in WR-E7L-5's evidence), 2 skipped |
+
+All three match the pre-fix baselines exactly (0 regressions from this fix round).
+
 ## Audit log
 
 - 2026-09-29: created at code head `a8e1d1f9` (WR-E7L-4: D8's real PgLabelLog/PgRunLedger/
   PgTeacherLedger composed into `lab_world.py`; three scenario assertions rebound to D8's real
   tables; the new WR-P3-R184/R192 case and its two stack mutants; a WR-E7L-5 regression across
-  all five packages' `runner.py` found and fixed; gate rerun 19 PASS / 0 FAIL / 6 NOT RUN, ahead
+  all five packages' `runner.py` found and fixed; gate rerun 18 PASS / 0 FAIL / 4 NOT RUN, ahead
   of the E7L-a609f36.md baseline by one case; stack mutants 45 passed / 2 failed, both the
   pre-existing `st_tombstones_ignored` defect, 0 survivors among this item's own mutants).
+- 2026-09-29: fix round (findings 0-F1/1-F1) - corrected the gate rerun headline from the
+  mistranscribed "19 PASS / 0 FAIL / 6 NOT RUN" to the actual "18 PASS / 0 FAIL / 4 NOT RUN"
+  (verified against the unmodified, already-committed `E7L-raw-a8e1d1f/run/verdict.json`) at
+  lines 110 and 195 here, and in `E7L-20260929T1730Z.json`'s `commands[5].summary`; no code
+  changed; owned-path fast suites rerun with 0 regressions.
