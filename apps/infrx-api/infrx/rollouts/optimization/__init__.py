@@ -161,14 +161,25 @@ def compare(variant: dict[str, Any], base: Identity, candidate: Identity, *,
 
 
 async def store(data, variant: dict[str, Any], comparison: dict[str, Any],
-                report: dict[str, Any], *, provider_org_id: str, actor: str) -> str:
+                report: dict[str, Any], *, provider_org_id: str, actor: str,
+                identities: tuple[Identity, Identity] | None = None, variants=None) -> str:
     """Store `comparison` (from `compare`) beside its variant and B2 report, in that order,
     through D7 (`PgLabDataStore`); its digest. A comparison of another variant or resting on
-    another report is refused before anything is written."""
+    another report is refused before anything is written. With `identities` (base, variant)
+    R3 also stores both revision identities as the variant is created, through `variants`
+    (`PgLabVariants.put_identities`, 0058, WR-LW7-3a); identities other than the registered
+    ones are refused before anything is written."""
     if comparison["variant_ref"] != lab.ref_of(variant) or \
             comparison["report_digest"] != report.get("report_digest"):
         raise errors.InvalidRequest("the comparison is not of this variant and report")
+    if identities is not None and tuple(serving_ref(provider_org_id, i) for i in identities) \
+            != (variant["base_serving_ref"], variant["variant_serving_ref"]):
+        raise errors.InvalidRequest("the identities are not the registered ones")
     await data.publish(variant, provider_org_id=provider_org_id, actor=actor)
+    if identities is not None:
+        base, candidate = (i.model_dump(mode="json") for i in identities)
+        await variants.put_identities(lab.ref_of(variant), base=base, variant=candidate,
+                                      provider_org_id=provider_org_id, actor=actor)
     await data.put_eval_report(report, provider_org_id=provider_org_id, actor=actor)
     return await data.put_variant_comparison(comparison, provider_org_id=provider_org_id,
                                              actor=actor)
