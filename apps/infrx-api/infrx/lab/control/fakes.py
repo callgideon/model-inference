@@ -171,6 +171,16 @@ class FakeControl:
             raise errors.StateConflict("only a validated dev revision's serving is proposed")
         if proposal.state is not S.proposed_public:
             raise errors.InvalidRequest("a proposal is a proposed_public revision")
+        # E3L-F2/R205: one open proposal per SOURCE dev revision (never (endpoint, serving
+        # version) alone: unrelated proposals of the same serving version may coexist, e.g.
+        # seeded directly to exercise a publish-CAS race) - a retry of a lost answer (a
+        # fresh, server-minted id) answers the one already open, never a second.
+        for event in reversed(self.audit):
+            if event.action == "lab_propose" and event.after.get("source") == source_revision_id:
+                existing = self.deployments.get(event.subject)
+                if existing is not None and existing.state is S.proposed_public:
+                    return existing
+                break
         self.put_now(proposal)
         self._event("lab_propose", actor, proposal.provider_org_id,
                     proposal.deployment_revision_id, {"source": source_revision_id})

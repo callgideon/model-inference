@@ -113,3 +113,16 @@ def test_judge__sends_the_ports_fields_and_types_the_answers() -> None:
         ("lab_judge_settle", {"run_id": "r", "actual": "41.00000000"}),
         ("lab_judge_settle", {"run_id": "r", "actual": "1.00000000"}),
         ("lab_judge_run", {"run_id": "x"})]
+
+
+def test_judge__runs_in_sends_the_providers_states_and_limit() -> None:
+    from infrx.state.lab_consent import PgJudgeLedger
+    conn = _Conn([[RUN]])
+
+    async def connect():
+        return conn
+    runs = _ok(PgJudgeLedger(connect).runs_in(("submitted", "ambiguous"), 5,
+                                              provider_org_id=NEMO))
+    assert [(r.run_id, r.state) for r in runs] == [("r", "submitted")]
+    assert _sent(conn, 0) == ("lab_judge_runs_in", {
+        "provider_org_id": NEMO, "states": ["submitted", "ambiguous"], "limit": 5})

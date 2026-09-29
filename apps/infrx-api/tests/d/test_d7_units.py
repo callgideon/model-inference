@@ -15,7 +15,7 @@ from infrx.contracts import errors
 from infrx.contracts.lab import records
 from infrx.contracts.v2.records import AccessGrant
 from infrx.lab.access import DatasetUse
-from infrx.state.lab_data import LabEvent, PgLabDataStore, grant_ref
+from infrx.state.lab_data import LabEvent, PgLabDataStore, PgLabImportJobs, grant_ref
 
 from .test_adapter_units import _Conn, _db_error, _refused
 
@@ -118,17 +118,53 @@ def test_calls__carry_the_callers_provider_the_lease_and_the_cost() -> None:
 def test_outbox__is_the_relays_store_half_with_the_claimant_on_every_ack() -> None:
     event = {"event_id": "e1", "kind": "eval_run", "provider_org_id": NEMO,
              "payload": {"run_id": "r"}}
-    store, conn = _store([event], 1, None, None)
+    store, conn = _store([event], [event], 1, None, None)
     got = _ok(store.dispatch_pending(limit=5, worker_id="relay-1", redelivery_s=30))
     assert got == [LabEvent("e1", "eval_run", NEMO, {"run_id": "r"})] and got[0].event_id == "e1"
+    # WR-LSQ-C2B: `kinds` narrows the claim (empty/omitted: every kind, unchanged).
+    scoped = _ok(store.dispatch_pending(limit=5, worker_id="eval-role", redelivery_s=30,
+                                        kinds=["eval_run"]))
+    assert scoped == got
     assert _ok(store.acknowledge_dispatch(("e1",), worker_id="relay-1")) == 1
     _ok(store.release_dispatch(["e2"]))
     _ok(store.record_dispatch_error("e3", "boom"))
-    assert [_sent(conn, n) for n in range(4)] == [
-        ("lab_outbox_pending", {"limit": 5, "worker_id": "relay-1", "redelivery_s": 30}),
+    assert [_sent(conn, n) for n in range(5)] == [
+        ("lab_outbox_pending", {"limit": 5, "worker_id": "relay-1", "redelivery_s": 30,
+                               "kinds": []}),
+        ("lab_outbox_pending", {"limit": 5, "worker_id": "eval-role", "redelivery_s": 30,
+                               "kinds": ["eval_run"]}),
         ("lab_outbox_ack", {"event_ids": ["e1"], "worker_id": "relay-1"}),
         ("lab_outbox_release", {"event_ids": ["e2"]}),
         ("lab_outbox_error", {"event_id": "e3", "error": "boom"})]
+
+
+def test_import_jobs__is_a_durable_lease_queue_scoped_to_its_provider() -> None:
+    """WR-N4-3: `PgLabImportJobs` sends the provider, id and spec on enqueue, the worker on
+    every claim/heartbeat/finish, and reads scoped to the caller's provider."""
+    job = {"job_id": "j1", "provider_org_id": NEMO, "state": "queued", "spec": {"a": 1}}
+    store, conn = _jobs(job, [job], job, {**job, "state": "succeeded"}, job)
+    assert _ok(store.enqueue("j1", {"a": 1}, provider_org_id=NEMO, actor="dev")) == job
+    assert _ok(store.claim(limit=5, worker_id="i5-1", redelivery_s=30)) == [job]
+    assert _ok(store.heartbeat("j1", worker_id="i5-1")) == job
+    assert _ok(store.finish("j1", "succeeded", worker_id="i5-1",
+                            result={"n": 1})) == {**job, "state": "succeeded"}
+    assert _ok(store.job("j1", provider_org_id=NEMO)) == job
+    assert [_sent(conn, n) for n in range(5)] == [
+        ("lab_import_job_enqueue", {"job_id": "j1", "provider_org_id": NEMO, "spec": {"a": 1},
+                                    "actor": "dev"}),
+        ("lab_import_job_claim", {"limit": 5, "worker_id": "i5-1", "redelivery_s": 30}),
+        ("lab_import_job_heartbeat", {"job_id": "j1", "worker_id": "i5-1"}),
+        ("lab_import_job_finish", {"job_id": "j1", "worker_id": "i5-1", "state": "succeeded",
+                                   "result": {"n": 1}, "error": None}),
+        ("lab_import_job", {"job_id": "j1", "provider_org_id": NEMO})]
+
+
+def _jobs(*answers):
+    conn = _Conn(list(answers))
+
+    async def connect():
+        return conn
+    return PgLabImportJobs(connect), conn
 
 
 def test_followup__error_release_results_evaluators_reports_and_uses() -> None:

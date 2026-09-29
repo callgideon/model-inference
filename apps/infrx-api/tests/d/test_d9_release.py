@@ -34,7 +34,7 @@ DB = f"{pgharness.DATABASE}_d9r"
 t, NEMO, OTHER, uid = d9.t, d9.NEMO, d9.OTHER, d9.uid
 ok, refusal, rolled_back, call = d9.ok, d9.refusal, d9.rolled_back, d9.call
 USER = d9.USER
-RPCS = ("lab_release_start", "lab_release", "lab_release_transition")
+RPCS = ("lab_release_start", "lab_release", "lab_release_transition", "lab_releases_in")
 PLAN = "sha256:" + "a1" * 32
 seed = d9.seed
 
@@ -204,6 +204,46 @@ def check_two_controllers_racing_decide_once(conn) -> str:
     return f"racing rollbacks: {sorted(map(str, answers))}"
 
 
+def check_releases_in_lists_the_providers_releases_with_r2s_latest_verdict(conn) -> str:
+    """WR-R4-1/WR-R2-3: `lab_releases_in` lists a provider's own releases (another's, e.g.
+    OTHER's, never leaks in), each with R2's latest verdict - null before a decision, the
+    stored one after; `states` narrows the listing. (Ordering is by `updated_at desc`, not
+    pinned here: this harness's clock does not tick between statements in one case.)"""
+    running = launch(conn, 30, endpoint=uid(30, 0xe0))
+    rolled = launch(conn, 31, endpoint=uid(31, 0xe1))
+    ok(conn, "lab_release_transition", move(rolled, 1, "rolled_back",
+                                            decision(rolled, "rollback", ["run:x"])))
+    with conn.transaction():
+        other_ref = t.publish(conn, d9.policy(uid(32, 0xb0), endpoint=uid(32, 0xe2),
+                                              provider=OTHER), provider=OTHER)
+    ok(conn, "lab_release_start", {"provider_org_id": OTHER, "policy_ref": other_ref,
+                                   "plan_digest": PLAN, "decided_by": USER, "reason": "x"})
+    rows = ok(conn, "lab_releases_in", {"provider_org_id": NEMO})
+    by_ref = {r["policy_ref"]: r for r in rows}
+    # This module's other (non-rolled-back) checks commit real NEMO releases of their own
+    # (in whatever order the parametrized cases run), so only a SUPERSET is asserted here;
+    # OTHER's is never among them, at any position.
+    assert {running, rolled} <= set(by_ref), f"NEMO's own two are missing: {sorted(by_ref)}"
+    assert other_ref not in by_ref, "another provider's release leaked into the listing"
+    assert by_ref[rolled]["state"] == "rolled_back"
+    verdict = by_ref[rolled]["latest_decision"] or {}
+    assert verdict.get("decision") == "rollback", verdict
+    assert verdict.get("evidence_refs") == ["run:x"], verdict
+    assert by_ref[running]["latest_decision"] is None, "a fresh launch has no verdict yet"
+    narrowed = [r["policy_ref"] for r in
+               ok(conn, "lab_releases_in", {"provider_org_id": NEMO, "states": ["running"]})]
+    assert running in narrowed and rolled not in narrowed, (running, rolled, narrowed)
+
+    async def go():
+        store = PgReleaseStore(connector(pgharness.dsn(conn.info.dbname)))
+        return await store.releases_in(["rolled_back"], provider_org_id=NEMO)
+    typed = {row.policy_ref: row for row in asyncio.run(go())}
+    listing = typed[rolled]
+    assert (listing.release.state, listing.latest_decision.decision) == \
+        ("rolled_back", "rollback")
+    return "own provider only, newest-updated first, verdict null then filled, states narrows"
+
+
 def check_the_store_composes(conn) -> str:
     """`PgReleaseStore` is R2's `ReleaseStore`: a typed release, the new fence, a stale fence
     as `StateConflict`, a malformed decision refused by the contract before any SQL."""
@@ -240,7 +280,9 @@ CHECKS = {c.__name__: c for c in (
     check_r2_moves_are_a_cas_on_the_fence,
     check_a_decision_is_this_revisions_and_matches_the_move,
     check_approved_is_live_routes_to_the_baseline_and_expands_in_d9,
-    check_two_controllers_racing_decide_once, check_the_store_composes)}
+    check_two_controllers_racing_decide_once,
+    check_releases_in_lists_the_providers_releases_with_r2s_latest_verdict,
+    check_the_store_composes)}
 
 
 # ----------------------------------------------------------------------------- tests

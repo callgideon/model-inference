@@ -514,6 +514,97 @@ def check_the_relay_redelivers_a_lost_acknowledgment(conn) -> str:
     return f"claimed {len(dead)}; redelivered {len(seen)} once after the window; late ack refused"
 
 
+def check_a_roles_relay_claims_only_its_own_kinds(conn) -> str:
+    """WR-LSQ-C2B: an eval role's relay (kinds=['eval_run']) never claims, times out on and
+    redelivers a checkpoints-role event (or the reverse); no `kinds` at all is every kind,
+    unchanged (commits its own run and checkpoint)."""
+    _, run = a_run(conn, n=1, tag=0xb6)
+    ok(conn, "lab_receive_checkpoint", {
+        "provider_org_id": NEMO, "checkpoint_id": uid(9, 0xb6),
+        "external_run_ref": publish(conn, external_run(uid(8, 0xb6), run["dataset_ref"])),
+        "artifact_digest": f"sha256:{'9' * 64}"})
+    store = PgLabDataStore(connector(pgharness.dsn(conn.info.dbname)))
+
+    async def drill():
+        only_eval = await store.dispatch_pending(limit=100, worker_id="eval-role",
+                                                  redelivery_s=30, kinds=["eval_run"])
+        only_checkpoints = await store.dispatch_pending(limit=100, worker_id="checkpoint-role",
+                                                         redelivery_s=30,
+                                                         kinds=["checkpoint_received"])
+        await store.acknowledge_dispatch([e.event_id for e in only_eval], worker_id="eval-role")
+        await store.acknowledge_dispatch([e.event_id for e in only_checkpoints],
+                                         worker_id="checkpoint-role")
+        return only_eval, only_checkpoints
+    only_eval, only_checkpoints = asyncio.run(drill())
+    assert {e.kind for e in only_eval} <= {"eval_run"}, only_eval
+    assert {e.kind for e in only_checkpoints} <= {"checkpoint_received"}, only_checkpoints
+    assert run["run_id"] in {e.payload.get("run_id") for e in only_eval}
+    assert run["run_id"] not in {e.payload.get("run_id") for e in only_checkpoints}
+    assert uid(9, 0xb6) in {e.payload.get("checkpoint_id") for e in only_checkpoints}
+    assert uid(9, 0xb6) not in {e.payload.get("checkpoint_id") for e in only_eval}
+    return f"eval role: {[e.kind for e in only_eval]}; checkpoint role: " \
+        f"{[e.kind for e in only_checkpoints]}"
+
+
+@rolled_back
+def check_import_jobs_are_a_durable_claim_and_lease_queue(conn) -> str:
+    """WR-N4-3: an import job is durable (a gateway crash after `POST imports` loses nothing:
+    a replayed enqueue answers the SAME row), claimed by an I5 worker pool with a lease
+    (redelivered after a timeout, exactly the outbox's pattern), finished once by the worker
+    holding it, and read only by its own provider."""
+    job = uid(1, 0xc1)
+    spec = {"format": "infrx.dataset_import.1", "dataset_id": "d1"}
+    enqueued = ok(conn, "lab_import_job_enqueue", {"job_id": job, "provider_org_id": NEMO,
+                                                   "spec": spec, "actor": "dev@nemo"})
+    assert (enqueued["state"], enqueued["spec"]) == ("queued", spec)
+    assert ok(conn, "lab_import_job_enqueue", {"job_id": job, "provider_org_id": NEMO,
+                                               "spec": {"different": True},
+                                               "actor": "dev@nemo"}) == enqueued, \
+        "a replayed enqueue changed the job, or opened a second one"
+    assert refusal(conn, "lab_import_job_enqueue", {"job_id": job, "provider_org_id": OTHER,
+                                                    "spec": spec, "actor": "x"}) == "not_found"
+    [claimed] = ok(conn, "lab_import_job_claim", {"worker_id": "i5-1", "limit": 10,
+                                                  "redelivery_s": 30})
+    assert claimed["job_id"] == job and claimed["state"] == "running"
+    assert ok(conn, "lab_import_job_claim", {"worker_id": "i5-2", "limit": 10,
+                                             "redelivery_s": 30}) == [], \
+        "a second worker claimed the same job before its lease expired"
+    assert refusal(conn, "lab_import_job_heartbeat", {"job_id": job,
+                                                      "worker_id": "i5-2"}) == "state_conflict", \
+        "a worker that never claimed the job extended its lease"
+    ok(conn, "lab_import_job_heartbeat", {"job_id": job, "worker_id": "i5-1"})
+    assert refusal(conn, "lab_import_job_finish", {"job_id": job, "worker_id": "i5-2",
+                                                   "state": "succeeded",
+                                                   "result": {"samples": 1}}) == \
+        "state_conflict", "a worker that does not hold the job finished it"
+    finished = ok(conn, "lab_import_job_finish", {"job_id": job, "worker_id": "i5-1",
+                                                  "state": "succeeded",
+                                                  "result": {"samples": 1}})
+    assert (finished["state"], finished["result"]) == ("succeeded", {"samples": 1})
+    assert ok(conn, "lab_import_job_finish", {"job_id": job, "worker_id": "i5-1",
+                                              "state": "succeeded",
+                                              "result": {"samples": 1}}) == finished, \
+        "a retried ack of the same terminal state is not idempotent"
+    assert refusal(conn, "lab_import_job_finish", {"job_id": job, "worker_id": "i5-1",
+                                                   "state": "failed",
+                                                   "error": "x"}) == "state_conflict", \
+        "a finished job finishes again at a different state"
+    assert ok(conn, "lab_import_job", {"job_id": job, "provider_org_id": NEMO}) == finished
+    assert refusal(conn, "lab_import_job", {"job_id": job,
+                                            "provider_org_id": OTHER}) == "not_found"
+    stuck = uid(2, 0xc1)
+    ok(conn, "lab_import_job_enqueue", {"job_id": stuck, "provider_org_id": NEMO,
+                                        "spec": spec, "actor": "dev@nemo"})
+    ok(conn, "lab_import_job_claim", {"worker_id": "dead", "limit": 10, "redelivery_s": 30})
+    conn.execute("update infrx.lab_import_jobs set updated_at = infrx.now() - interval '31 s' "
+                "where job_id = %s", (stuck,))
+    redelivered = ok(conn, "lab_import_job_claim", {"worker_id": "i5-1", "limit": 10,
+                                                    "redelivery_s": 30})
+    assert [r["job_id"] for r in redelivered] == [stuck], \
+        f"a dead worker's lease was never redelivered: {redelivered}"
+    return "durable, idempotent enqueue, leased, redelivered on timeout, own provider only"
+
+
 def check_two_publishers_race_to_one_version(conn) -> str:
     """DATA-IMMUTABLE race: two publishers of the same dataset version at once - the second
     waits for the first; with other bytes it is `state_conflict`, with the same bytes it is
@@ -652,6 +743,8 @@ CHECKS = {c.__name__: c for c in (
     check_leases_are_fenced_and_one_result_per_case,
     check_run_and_checkpoint_states_follow_the_contract,
     check_checkpoint_delivery_is_received_once, check_the_relay_redelivers_a_lost_acknowledgment,
+    check_a_roles_relay_claims_only_its_own_kinds,
+    check_import_jobs_are_a_durable_claim_and_lease_queue,
     check_two_publishers_race_to_one_version, check_a_kill_around_commit_recovers_once,
     check_large_fixture_queries_use_their_indexes)}
 

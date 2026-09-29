@@ -23,11 +23,18 @@ from . import test_l3sql_control as t
 from . import test_l3sql_reads as r
 
 FILE = "0032_lab_control.sql"
+#: E3L-F2/R205 (lane lab-sql-lw6): `lab_control_propose`'s body moved here in full (a
+#: `create or replace`), so every mutant of its pre-existing guards moved with it - a mutant
+#: of the old text in 0032 would be silently overwritten by this file's `create or replace`
+#: and never actually run.
+PROPOSE_FILE = "0047_lab_control_propose_idempotent.sql"
 DB = f"{pgharness.DATABASE}_l3mut"
 
 ROLES = "check_browser_roles_reach_nothing"
 MOVES = "check_transitions_are_a_cas_on_the_providers_own_private_revisions"
 PROPOSE = "check_a_proposal_comes_from_a_validated_dev_source"
+RETRY = "check_a_proposal_retried_after_a_lost_answer_proposes_once"
+RETRY_RACE = "check_a_proposal_retry_race_of_the_same_source_proposes_once"
 KEYS = "check_dev_keys_are_scoped_to_the_providers_dev_endpoint"
 PUBLISH = "check_publication_is_a_cas_on_the_listing_version"
 DEV = "check_dev_revisions_never_reach_app_discovery"
@@ -37,8 +44,8 @@ RACE = "check_two_operators_racing_publish_once"
 STORE = "check_the_store_composes"
 
 
-def _s(name, old, new, check, why, **kw):
-    return _d.Mutant(name, FILE, old, new, "lab", check, why, **kw)
+def _s(name, old, new, check, why, file=FILE, **kw):
+    return _d.Mutant(name, file, old, new, "lab", check, why, **kw)
 
 
 SQL_MUTANTS = (
@@ -76,21 +83,32 @@ SQL_MUTANTS = (
        "an unattributed move is a server error instead of a 400"),
     _s("l3_events_any_provider", "   where e.provider_org_id = (p_args->>'provider_org_id')"
        "::uuid", "   where true", MOVES, "a provider reads another's control history"),
-    # --- LAB-PUBLISH: proposals
+    # --- LAB-PUBLISH: proposals (0047's body now, E3L-F2/R205 - see PROPOSE_FILE above)
     _s("l3_propose_foreign_source", "  if not found or s.provider_org_id is distinct from "
        "(p->>'provider_org_id')::uuid then", "  if not found then", PROPOSE,
-       "a proposal filed by one provider publishes another's validated serving"),
+       "a proposal filed by one provider publishes another's validated serving",
+       file=PROPOSE_FILE),
     _s("l3_propose_unvalidated", "  if (s.environment, s.visibility, s.state) <> ('dev', "
        "'private', 'ready_private')\n     or", "  if false\n     or", PROPOSE,
-       "a serving version no dev smoke validated is proposed"),
+       "a serving version no dev smoke validated is proposed", file=PROPOSE_FILE),
     _s("l3_propose_other_serving", "     or s.serving_version_id is distinct from "
        "(p->>'serving_version_id')::uuid then", "     or false then", PROPOSE,
-       "a proposal silently swaps in the source's serving version"),
+       "a proposal silently swaps in the source's serving version", file=PROPOSE_FILE),
     _s("l3_propose_any_state", "  if p->>'state' is distinct from 'proposed_public' then",
-       "  if false then", PROPOSE, "a malformed proposal is accepted as another"),
+       "  if false then", PROPOSE, "a malformed proposal is accepted as another",
+       file=PROPOSE_FILE),
     _s("l3_propose_unaudited", "  perform infrx.lab_control_audit(s.provider_org_id, "
        "'lab_propose',", "  perform infrx.lab_control_audit(s.provider_org_id, "
-       "'lab_transition',", PROPOSE, "the audit does not say a publication was proposed"),
+       "'lab_transition',", PROPOSE, "the audit does not say a publication was proposed",
+       file=PROPOSE_FILE),
+    _s("l3_propose_no_idempotent_lock", "  perform pg_advisory_xact_lock"
+       "(hashtextextended('lab_control_propose/'\n                                                 "
+       "|| (p_args->>'source_revision_id'), 0));\n", "", RETRY_RACE, "two racing retries of "
+       "the same source both pass the open-proposal check and both insert", file=PROPOSE_FILE),
+    _s("l3_propose_ignores_the_open_one", "  if found then\n    return to_jsonb(existing);"
+       "                 -- a retry of a lost answer: the open proposal\n  end if;\n", "",
+       RETRY, "a retry after a lost answer opens a second proposal of the same source",
+       file=PROPOSE_FILE),
     # --- LAB-ACCESS: dev credentials
     _s("l3_key_any_environment", "     and provider_org_id = v_provider and environment = "
        "'dev';", "     and provider_org_id = v_provider;", KEYS,

@@ -22,6 +22,15 @@ class PgAccessStore:
     def __init__(self, connect: Connect) -> None:
         self._connect = connect
 
+    @property
+    def restrictions(self):
+        """WR-DS5-1: N3's `lineage.reconcile` passes this store as its `directory`; give it
+        the same `restrictions` port `PgLabDataStore` carries, over the same connection, so
+        `lineage.restrictions_of` (which no longer reaches into a store's `_connect`) still
+        finds 0041 here without a composition-side patch."""
+        from .lab_content import PgSampleRestrictions
+        return PgSampleRestrictions(self._connect)
+
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
         from psycopg import Error
         from psycopg.types.json import Jsonb
