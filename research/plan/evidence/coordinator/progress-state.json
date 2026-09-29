@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 300,
- "updated": "2026-09-29T14:59:31Z",
+ "revision": 301,
+ "updated": "2026-09-29T15:49:26Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8747,22 +8747,22 @@
   {
    "id": "W5-LAB-CONTROL-ROUTES",
    "task": "I2L",
-   "slice": "WR-LDP-2 + LDP-F1 + LDP-F3: every Lab route family mounted in the control unit (R237), typed 503s (Opus); workflow wf_ea4325ae-44f",
+   "slice": "WR-LDP-2 + LDP-F1 + LDP-F3: every Lab route family mounted in the control unit (R237), typed 503s (Opus); workflow wf_ea4325ae-44f; ACCEPT at a01c0a91 (every family mounted on the control unit via pilot._lab; LDP-F1 option (b); LDP-F3/F7 fixed; 19 mutants; E4 2822/0; api-test 6714/0; LCR-F1: families typed-503 on the Lab login until SR-LCR-1)",
    "agent": "opus",
    "branch": "codex/w5-lab-control-routes",
    "worktree": ".claude/worktrees/codex-w5-lab-control-routes",
    "base": "046f4322",
-   "head": null,
+   "head": "a01c0a91",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T13:12:28Z",
-   "updated": "2026-09-29T13:12:28Z",
+   "updated": "2026-09-29T15:49:26Z",
    "blocker": null,
-   "next_action": "handback → merge batch → runbook L-steps updated",
+   "next_action": "merge batch #51 (WR-LCR-1..5, minors, R245) → SR-LCR-1 via lab-sql-lw8 (0056)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9046,6 +9046,77 @@
     "apps/infrx-api/infrx/gateway/routes/lab_optimizations.py",
     "apps/infrx-api/tests/l3sql/",
     "research/plan/evidence/l/LAB-SQL-LW7-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-51",
+   "task": null,
+   "slice": "merge batch #51 (Opus): lab-control-routes a01c0a91 (+WR-LCR-1..5, lens minors, R245)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-51",
+   "worktree": ".claude/worktrees/codex-w5-merge-51",
+   "base": "3f2ff579",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T15:49:26Z",
+   "updated": "2026-09-29T15:49:26Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → the control unit serves every family (typed-503 until 0056)",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "Makefile",
+    "infra/lab/app/lab.json",
+    "apps/infrx-api/deploy/lab/app/lab-control.caddy",
+    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+    "tests/integration/lab_local/",
+    "apps/infrx-api/tests/i/lab_control/",
+    "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-SQL-LW8",
+   "task": "L3",
+   "slice": "SR-LCR-1: 0056 lab_control_grants LOCAL-ONLY — infrx_lab_control EXECUTE on the families' route-half functions; the PG matrix lab column = owner column (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-sql-lw8",
+   "worktree": ".claude/worktrees/codex-w5-lab-sql-lw8",
+   "base": "3f2ff579",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T15:49:26Z",
+   "updated": "2026-09-29T15:49:26Z",
+   "blocker": null,
+   "next_action": "handback → merge → LCR-F1 closed",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 3,
+    "pessimistic_h": 6
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0056_*",
+    "apps/infrx-api/tests/d/test_code_mutants_lw8.py",
+    "apps/infrx-api/tests/i/lab_control/test_control_routes_pg.py",
+    "research/plan/evidence/l/LAB-SQL-LW8-*"
    ],
    "wiring_requests": []
   }
