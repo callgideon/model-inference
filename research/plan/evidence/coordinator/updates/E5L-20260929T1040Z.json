@@ -1,0 +1,94 @@
+{
+ "task": "E5L",
+ "slice": "lab-observe-2: compose project override + rebind on the tip + full e5l2 run",
+ "activity": "review",
+ "head": "1d626781",
+ "worktree": ".claude/worktrees/codex-w5-lab-observe-2",
+ "branch": "codex/w5-lab-observe-2",
+ "owned_paths": [
+  "tests/integration/lab_observe/**",
+  "research/plan/evidence/e/E5L-*"
+ ],
+ "commands": [
+  {
+   "cmd": "pytest tests/integration/lab_observe/test_e5l_runner.py -k compose_project (test only)",
+   "exit": 1,
+   "summary": "RED: infrx-e5l != infrx-e5l2"
+  },
+  {
+   "cmd": "pytest -q tests/integration/lab_observe",
+   "exit": 0,
+   "summary": "36 passed, 1 skipped"
+  },
+  {
+   "cmd": "INFRX_E5L_PROJECT=e5l2 runner.py --keep --out research/plan/evidence/e/E5L-raw-bd13f72/gate",
+   "exit": 3,
+   "summary": "gate NOT RUN: 16 PASS / 0 FAIL / 2 NOT RUN; cells TRACE-RECOVER, FEEDBACK-ACK, JUDGE-BUDGET, JUDGE-SCORES, LAB-ACCESS PASS; TRACE-BOUNDS, TRACE-TENANT NOT RUN[COMPOSITION: WR-COMP-4]; CONSOLE-FLOWS NOT RUN[LAB-E2E]"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e5l INFRX_E5L_PROJECT=e5l2 pytest test_mutants.py -k stack_mutant (+ re-cut rerun)",
+   "exit": 0,
+   "summary": "19/19 stack mutants killed (one re-cut after a harness death)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py",
+   "exit": 0,
+   "summary": "50 passed (45/45 layer-1 killed), 19 stack skipped visibly"
+  },
+  {
+   "cmd": "INFRX_E5L_PROJECT=e5l2 runner.py --reuse --only o10 (teardown)",
+   "exit": 3,
+   "summary": "e5l2 containers/volumes/network removed; foreign infrx-e5l_* volumes untouched"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q tests/i/lab",
+   "exit": 0,
+   "summary": "19 passed"
+  },
+  {
+   "cmd": "pytest tests/integration/test_lab_package_isolation.py",
+   "exit": 0,
+   "summary": "2 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=t3 make api-test",
+   "exit": 2,
+   "summary": "t3 has no PostgreSQL row: 110 collection KeyErrors (key unusable)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 make api-test",
+   "exit": 0,
+   "summary": "6657 passed, 167 skipped, 9 xfailed"
+  },
+  {
+   "cmd": "make -n lab-observe",
+   "exit": 2,
+   "summary": "no target: WR-OBS-6"
+  },
+  {
+   "cmd": "ruff check tests/integration/lab_observe",
+   "exit": 0,
+   "summary": "clean"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "lane ~2.5 h; remaining = one verify round, then --only o01|o10 reruns (~2 min) + affected stack mutants (~12 min) after WR-COMP-4 / a Lab e2e harness",
+  "at": "2026-09-29T10:40Z"
+ },
+ "blockers": [
+  "TRACE-BOUNDS/TRACE-TENANT: WR-COMP-4 (gateway spool sink) unmerged",
+  "CONSOLE-FLOWS: no Lab browser e2e harness (LAB-E2E)"
+ ],
+ "wiring_requests": [
+  "WR-OBS-6: Makefile lab-observe target (E5L-raw-bd13f72/WR-OBS-6.diff)"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E5L-1d62678.md",
+  "research/plan/evidence/e/E5L-raw-bd13f72/",
+  "research/plan/evidence/e/E5L-raw-lo2/"
+ ]
+}
