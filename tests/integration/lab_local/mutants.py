@@ -149,7 +149,7 @@ O02_SEAM = "test_o02_the_consumer_workers_lab_seam_refuses_by_name"
 O03 = {role: f"test_o03_the_{role}_role_starts" for role in
        ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets")}
 O04 = "test_o04_the_control_factory_serves_a_lab_session"
-#: LDP-F5: the factory on infrx_lab_control refuses /readyz off the pooler (set role).
+#: LDP-F7: the factory on infrx_lab_control refuses /readyz off the pooler (set role).
 O04_LOGIN = "test_o04_the_control_factory_is_ready_on_its_own_login"
 O05_ALL = "test_o05_every_lab_route_family_answers_a_lab_session"
 O05_LAB = "test_o05_the_lab_routes_gateway_serves_every_family"

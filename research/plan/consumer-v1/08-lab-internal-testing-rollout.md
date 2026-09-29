@@ -139,7 +139,7 @@ The role logins: one per role, created by the lab-sql lane's role migration or t
 (`grant` shape as 0021's dedicated logins); until a role has its own login, **do not** switch it
 on with the owner DSN. **No such login exists yet** (WR-LDP-7): E4-ON proves the roles only on the
 owner login (o03), and the control factory on `infrx_lab_control` (0043/0044) in o04's login
-case since the fix round — which FAILs locally (**LDP-F5**: `infrx.lab.control.app` composes
+case since the fix round — which FAILs locally (**LDP-F7**: `infrx.lab.control.app` composes
 `connector(INFRX_LAB_DATABASE_URL)` with I8's port rule, so off the transaction pooler it runs
 `set role service_role`, which `infrx_lab_control` is refused, and `/readyz` answers 503; on
 :6543 it sets nothing). So `control_database_url` **must** be the :6543 pooler DSN, and L5's
@@ -291,7 +291,7 @@ reversal of Lab tables is never part of this runbook.
   **landed on the tip** (bcb73cc1; its post-check is `*"0051 lab_import_jobs"$'\n'"nothing
   pending"`, the form `lab-migrate.sh` checks) — and its W7 maintenance precondition for an
   additive Lab-only window (open).
-- **LDP-F5** (I2L owner, WR-I2L-4b): `infrx.lab.control.app` `_store()`/`_compose()` build
+- **LDP-F7** (I2L owner, WR-I2L-4b): `infrx.lab.control.app` `_store()`/`_compose()` build
   `connector(dsn)` without `set_role=False`, so on a direct (non-:6543) DSN the factory sets
   `service_role`, which `infrx_lab_control` (a member of no role) is refused: `/readyz` 503.
   E4-ON o04's login case (KNOWN_FAIL until fixed).
@@ -318,7 +318,7 @@ reversal of Lab tables is never part of this runbook.
 | §2 (3) | the window entry | coordinator log |
 | §2 a/b | `W6b PASS: COPY_DIGEST=…`, `W7 PASS: hosted 0001-0051` | `~/infrx-backups/migrate-*.log` + coordinator log |
 | §3 | `describe-parameters` name/type/version | coordinator log |
-| L5 | E4-ON o04 (owner-login case PASS; `infrx_lab_control` case FAIL = LDP-F5 until WR-I2L-4b) + L5's printed lines on the :6543 DSN | verdict.json + coordinator log |
+| L5 | E4-ON o04 (owner-login case PASS; `infrx_lab_control` case FAIL = LDP-F7 until WR-I2L-4b) + L5's printed lines on the :6543 DSN | verdict.json + coordinator log |
 | L7 | WR-LDP-7 merged + E4-ON o03 PASS on the per-role logins (NOT RUN today) | verdict.json |
 | L1–L7 | each step's printed lines (names only) + `60-lab-smoke.sh` after each | `/var/log/infrx-lab-rollout.log` + coordinator log |
 | §6 | Vercel deployment id, domain, Redirect URLs | P-08 record |

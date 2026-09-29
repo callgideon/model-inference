@@ -400,7 +400,7 @@ def composition(workdir: Path):
                 # LDP-R4: the same factory on its own login, 0043's infrx_lab_control, FIRST
                 # and alone (a later start would find the owner-login factory answering on
                 # the port it could not bind); killed, then the owner-login one below serves
-                # the families, judged apart from LDP-F5. o04's login case reads it.
+                # the families, judged apart from LDP-F7. o04's login case reads it.
                 (workdir / "control-login").mkdir(exist_ok=True)
                 own = operate.ControlService(trip, workdir / "control-login", standin.url)
                 own.env.update(control.env, INFRX_LAB_DATABASE_URL=lab_control_dsn(trip.world.database))
