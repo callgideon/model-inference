@@ -4,7 +4,7 @@ real process, and the provider's journey through `/lab/v1/pipelines` as the gate
 own datasets and payers, so the other scenarios' numbers are untouched. Stand-ins (named in the
 verdict): the session verifier, the checkpoint listing (WR-LAB2-4), B3's suite source and dev
 deployer (WR-B3-3) and the teacher rate table. The provider UI over this surface
-(`apps/lab/tests/e2e/improve/`) is the Lab app's, not bound here.
+(`apps/lab/tests/e2e/improve/`, over the gateway's own production suites) is bound below.
 """
 from __future__ import annotations
 
@@ -209,8 +209,10 @@ def test_i08_the_provider_ui_drives_labels_to_a_checkpoint(workdir):
     sample refused with their reasons), assigned and reviewed, a train-only export, the manual
     bundle prepared, submitted and finished, a checkpoint returned and never eligible without
     its held-out evaluation, and the unsafe variants. The run and checkpoint listings are
-    WR-LAB2-4's stand-in, as the API half's (`Listing`); a red suite fails this case, a green
-    one is NOT RUN while P3's evaluation port has no B3 suite source composed (WR-B3-3)."""
+    WR-LAB2-4's stand-in, as the API half's (`Listing`); a red suite fails this case. With
+    `checkpoints.production_suites` composed (composition-5) the suite's backend seeds D8's
+    subscription and L3's dev revision and the page shows the held-out evaluation queued; a
+    green suite without them composed is NOT RUN (WR-B3-3)."""
     e2e = _e2e()
     got = e2e.run("improve", workdir)
     lw.save(workdir, "i08-ui.json", {k: v for k, v in got.items() if k != "tail"})

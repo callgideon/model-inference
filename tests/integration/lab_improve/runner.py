@@ -123,7 +123,7 @@ SCENARIOS = {
     "i08": {"title": "labels, review, export, bundle, checkpoint and eligibility over "
                      "/lab/v1/pipelines as the gateway composes it (LAB_PIPELINES: D8's "
                      "ledgers, P3's evaluation port over B3/B1) and through the provider UI",
-            "test_ids": ["PIPELINE-LINEAGE"], "lanes": ["WR-B3-3"]},
+            "test_ids": ["PIPELINE-LINEAGE"], "lanes": []},
     "i09": {"title": "the candidate proposed and approved through L3/L4 into a private or "
                      "allocated staging deployment, its traces pinned to that serving version",
             "test_ids": ["DATA-LINEAGE"], "lanes": ["staging-target"]},

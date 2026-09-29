@@ -11,7 +11,12 @@ reads (`pilot.RunLedger`, WR-LAB2-4): `/_test/composition {"as": "gateway"}` ser
 `{"as": "journey"}` adds those two listings over the same D8/D7 rows (`Listing`, E7L's i08
 stand-in, plus the run listing over `lab_external_runs`). `world.composed` says whether the
 gateway's own composition lists them. Test-only door: `/_test/artifact` (the provider uploads a
-trained checkpoint descriptor under its run's prefix).
+trained checkpoint descriptor under its run's prefix; with B3's production suites composed
+(`checkpoints.production_suites`, `world.composed.suites`) it also seeds what they read: D8's
+subscription of the run (0042, through B3's `subscribe` as the developer, over a published H1
+harness and B1's registered evaluator) and L3's READY private dev revision pinning the
+descriptor's digest (A3's registry rows, as `tests/b/checkpoints/test_checkpoints_sources_pg.py`
+writes them) - without them the page's import is P3's typed 503, 0-F1).
 
     INFRX_D_TASK=l4 uv run --frozen --project apps/infrx-api python apps/lab/tests/e2e/improve/backend.py
 """
@@ -30,7 +35,17 @@ import stack  # noqa: E402
 def main() -> None:
     from infrx.contracts import errors
     from infrx.datasets import imports
+    from infrx.contracts.v2 import fixtures as v2fix
+    from infrx.evaluation import checkpoints
+    from infrx.evaluation.runner import evaluator_ref
     from infrx.gateway.routes import lab_pipelines as lp
+    from infrx.lab.access import LabAccess
+    from infrx.lab.control.operations import serving_ref
+    from infrx.pipelines import training
+    from infrx.state.lab_access import PgAccessStore
+    from infrx.state.lab_pipeline import PgCheckpointLedger
+    from infrx.state.operations import PgRegistry
+    from tests.b.runner.world import EVALUATOR_ID, SPEC, harness
     from infrx.media.store import InMemoryObjectStore
     from infrx.state.jobstore import connector
     from infrx.state.lab_data import PgLabDataStore
@@ -119,13 +134,41 @@ def main() -> None:
         switch.current = {"gateway": gateway, "journey": journey}[body["as"]]
         return {"as": body["as"]}
 
+    async def suite(external_run_id: str, digest: str) -> str:
+        """B3's pinned suite on the run and L3's dev revision serving `digest`: its serving ref."""
+        await store.put_evaluator(SPEC, provider_org_id=NEMO, evaluator_id=EVALUATOR_ID,
+                                  actor=l2.DEV)
+        pinned = await store.publish(harness(harness_id=uid(1, 0xe7a)), provider_org_id=NEMO,
+                                     actor=l2.DEV)
+        bundle = await training._bundle(objects, NEMO, external_run_id)
+        await checkpoints.subscribe(PgCheckpointLedger(connector(dsn)), store, {
+            "subscription_id": uid(1, 0xe75), "provider_org_id": NEMO,
+            "external_run_ref": bundle["external_run_ref"], "dataset_ref": ref,
+            "harness_ref": pinned, "evaluator": SPEC, "seed": 7, "max_cases": 100,
+            "evaluator_ref": evaluator_ref(SPEC, provider_org_id=NEMO, evaluator_id=EVALUATOR_ID),
+            "run_limit": {"unit": "CREDIT", "value": "10.00000000"},
+            "limit": {"unit": "CREDIT", "value": "100.00000000"}, "max_active": 5,
+            "policy": "every"}, access=LabAccess(PgAccessStore(connector(dsn))), user_id=l2.DEV)
+        registry = PgRegistry(connector(dsn))
+        serving = v2fix.model("serving_revision.json").model_copy(update={
+            "serving_version_id": uid(1, 0xe5), "model_version_id": uid(1, 0xe6),
+            "weight_shard_digests": (digest,), "revision_label": "e2e-ckpt"})
+        dev = v2fix.model("deployment_revision_private_dev.json").model_copy(update={
+            "deployment_revision_id": uid(1, 0xed), "serving_version_id": serving.serving_version_id})
+        await registry.put(serving)
+        await registry.put(dev)
+        return serving_ref(dev, serving)
+
     @app.post("/_test/artifact")
     async def artifact(body: dict):
-        """The provider uploads a trained checkpoint descriptor under the run's prefix."""
+        """The provider uploads a trained checkpoint descriptor under the run's prefix (and,
+        with the production suites composed, B3's suite and L3's revision serve it)."""
         blob = p3w.descriptor()
         key = f"lab/{NEMO}/training/{body['external_run_id']}/{body['name']}"
         await objects.put_if_absent(key, blob, "application/json")
-        return {"key": key, "digest": p3w.digest(blob)}
+        served = await suite(body["external_run_id"], p3w.digest(blob)) \
+            if composed["suites"] else None
+        return {"key": key, "digest": p3w.digest(blob), "serving_ref": served}
 
     world = {"A": NEMO, "B": l2.OTHER, "dataset": ref, "rubric": RUBRIC, "payer": p3w.PAYER,
              "train": sorted(splits.train), "holdout": sorted(splits.holdout),
@@ -133,6 +176,9 @@ def main() -> None:
              "stand_ins": ["session verifier and PostgREST RPC door (stack.door)",
                            "Lab objects in memory (no S3 on l4)",
                            "run and checkpoint listings over D8/D7 rows (WR-LAB2-4 to compose)",
+                           "B3's suite subscription and L3's ready private dev revision seeded "
+                           "by /_test/artifact when the production suites are composed"
+                           if composed["suites"] else
                            "no B3 suite source in P3's evaluation port unless composed (WR-B3-3)"]}
     stack.serve(app, sock, world, conn.close)
 

@@ -59,9 +59,9 @@ def test_e7l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 9
     assert runner.SCENARIOS["i07"]["lanes"] == ["P-11"]        # the annotation half is bound
-    assert runner.SCENARIOS["i08"]["lanes"] == ["WR-B3-3"], (  # composition-4 + LAB-E2E
-        "i08's provider-UI half runs apps/lab/tests/e2e/improve; NOT RUN until P3's evaluation "
-        "port has a B3 suite source composed")
+    assert runner.SCENARIOS["i08"]["lanes"] == [], (  # composition-5 + LAB-E2E fix round
+        "i08's provider-UI half runs apps/lab/tests/e2e/improve over the production suites "
+        "(checkpoints.production_suites, composed in pilot._lab_2): it waits on no lane")
     assert runner.SCENARIOS["i09"]["lanes"] == ["staging-target"]
     assert not [sid for sid in ("i01", "i02", "i03", "i04", "i05", "i06")
                 if runner.SCENARIOS[sid]["lanes"]], "a merged-code cell waits on a lane"
