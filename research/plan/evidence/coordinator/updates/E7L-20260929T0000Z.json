@@ -1,0 +1,102 @@
+{
+ "task": "E7L",
+ "slice": "WR-E7L-3 (0-E7L-1 under R193): P1/P2/P3 reads gate on lineage.permitted; E7L rerun (lane pipelines-lineage, LW6); fix round on 1fbc48aa (0-PL-1, 1-PL-R1)",
+ "activity": "review",
+ "head": "a609f368",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage",
+ "branch": "codex/w5-pipelines-lineage",
+ "owned_paths": [
+  "apps/infrx-api/infrx/pipelines/",
+  "apps/infrx-api/tests/p/",
+  "tests/integration/lab_improve/",
+  "research/plan/evidence/e/E7L-*"
+ ],
+ "commands": [
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/p (red a480b075, old code with new kwargs tolerated)",
+   "exit": 1,
+   "summary": "fail-first: exactly the 8 new re-grant cases fail on their assertions, 44 existing pass (as committed: TypeError, 19 / 15 failed)"
+  },
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q -rs tests/p",
+   "exit": 0,
+   "summary": "82 passed, 7 skipped (PG/service reruns without their key)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/p/{annotations,teachers,training}/test_mutants.py",
+   "exit": 0,
+   "summary": "77/77, 42/42, 80/80 killed; 7 new R193 mutants (D7-only regression per read) each name a new case"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p1|p2|p3 real-service reruns (test_annotations_pg, test_teachers_pg, test_training_services)",
+   "exit": 0,
+   "summary": "2 + 2 + 3 passed"
+  },
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --keep --out <abs>/research/plan/evidence/e/E7L-raw-a609f36/run",
+   "exit": 3,
+   "summary": "gate NOT RUN: 17 passed, 0 failed, 4 NOT RUN (i07/i08/i09 unchanged); i04 re-grant PASS, leaks []; DATA-LINEAGE FAIL -> NOT RUN. Earlier attempts: BLOCKED port bind (transient), FAIL 15 on a base defect (FakeJudgeLedger lacks record_failures since d91cce76) fixed in a609f368"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l apps/infrx-api/.venv/bin/python -m pytest -q -rA tests/integration/lab_improve/test_mutants.py (kept stack)",
+   "exit": 0,
+   "summary": "45 passed: 18 layer-1 + 23/23 stack killed incl. st_pipelines_read_d7_gate, st_submit_reads_d7_gate, st_queue_reads_d7_gate; FAILING empty; stack torn down"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p3 INFRX_D2_VALKEY_CONTAINER=infrx-p1-d2-valkey INFRX_D2_VALKEY_PORT=57527 make api-test",
+   "exit": 2,
+   "summary": "20 failed, 6469 passed, 154 skipped, 9 xfailed: 17 = tests/g/lab_pipelines awaiting WR-PL-1 (composed: 17 passed + 42 mutants passed); 3 = tests/i/lab e3l port contention (rerun alone 17 passed)"
+  },
+  {
+   "cmd": "uvx ruff check --line-length 100 infrx/pipelines tests/p tests/integration/lab_improve",
+   "exit": 0,
+   "summary": "all checks passed"
+  },
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/g/lab_pipelines/test_lab_pipelines.py (1fbc48aa, branch alone)",
+   "exit": 1,
+   "summary": "8 failed, 9 passed: the route's import_labels lacks objects/now (WR-PL-1)"
+  },
+  {
+   "cmd": "same + INFRX_MUTANTS=all tests/g/lab_pipelines/test_mutants.py in a scratch worktree at 1fbc48aa with E7L-raw-1fbc48a/WR-PL-1.patch applied",
+   "exit": 0,
+   "summary": "17 passed; 42 passed"
+  },
+  {
+   "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/p (1fbc48aa)",
+   "exit": 0,
+   "summary": "82 passed, 7 skipped"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 2,
+  "likely_h": 4,
+  "pessimistic_h": 8,
+  "confidence": "medium",
+  "basis": "plan 3/6/12; this lane ~2.5 h (fix, 3 gate attempts, 4 mutant rounds, one 131-min api-test); WR-E7L-3 done; remaining: i07 after composition-2 + WR-P2-4, i08 after WR-E7L-1 + LAB_PIPELINES (1-3 h each), i09 staging target, WR-E7L-4 D8 rebind ~1 h, one verify round 47-234 min",
+  "at": "2026-09-28T23:47Z"
+ },
+ "blockers": [
+  "MERGE RULE: apply research/plan/evidence/e/E7L-raw-1fbc48a/WR-PL-1.patch in the same merge lane as codex/w5-pipelines-lineage; never land the branch without it (branch alone: tests/g/lab_pipelines 8 failed; composed 17 passed + 42 mutants)",
+  "i07 waits on composition-2 + a P2/P3 worker pass (WR-P2-4); i08 on WR-E7L-1 + LAB_PIPELINES; i09 on a staging target"
+ ],
+ "wiring_requests": [
+  "WR-PL-1 infrx/gateway/routes/lab_pipelines.py import_labels: p1.import_labels(x.port(\"store\"), x.port(\"log\"), objects=objects, now=await _now(x), provider_org_id=provider, ...); test: tests/g/lab_pipelines 17 passed + INFRX_MUTANTS=all test_mutants 42 passed with it; patch file research/plan/evidence/e/E7L-raw-1fbc48a/WR-PL-1.patch",
+  "WR-E7L-4 (open) rebind lab_world to PgLabelLog/PgRunLedger/PgTeacherLedger",
+  "keys: p1/p2 each reused by another checkout this session (codex-w5-pipeline-ui-2 on p2, scratchpad/rv-p4b on p1): give each key one owner"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E7L-a609f36.md",
+  "research/plan/evidence/e/E7L-raw-a609f36/",
+  "research/plan/evidence/e/E7L-raw-861cc7d/",
+  "research/plan/evidence/e/E7L-raw-1fbc48a/"
+ ],
+ "fix_round": {
+  "head_reviewed": "1fbc48aa",
+  "findings": {
+   "0-PL-1": "not fixable in owned paths; coordinator applies WR-PL-1 in the same merge",
+   "1-PL-R1": "same"
+  },
+  "at": "2026-09-29"
+ }
+}
