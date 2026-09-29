@@ -157,6 +157,11 @@ def check_live_is_read_per_arm_from_the_assigned_terminal_jobs(conn) -> str:
     assert datetime.fromisoformat(c["observed_until"]) == now == \
         datetime.fromisoformat(b["observed_until"]), (rows, now)
     assert live(conn, other)[1]["requests"] == 1, "another revision's jobs leaked"
+    got = asyncio.run(store(conn).live(ref))
+    assert (got.candidate.requests, got.candidate.errors, got.candidate.p99_ms,
+            got.baseline.requests, got.quality_covered, got.candidate_healthy,
+            got.spent.unit, got.spent.value, got.observed_until) == \
+        (100, 4, 99, 2, 2, True, "CREDIT", "3.75000000", now), got
     return "per arm: 100/4/p99 99 ms, 3.75 CREDIT, 2 covered; baseline 2/0/40; the store reads it"
 
 
@@ -166,6 +171,7 @@ def check_a_revision_without_assigned_jobs_is_empty(conn) -> str:
     `not_found`. Commits (tag 0x43)."""
     ref, _ = launch(conn, 0x43, ref_of(conn, cc.DEV_DEPLOYMENT))
     assert live(conn, ref) == [], live(conn, ref)
+    assert asyncio.run(store(conn).live(ref)) is None
     unknown = d9.BASE.replace("serving", "policy")
     assert d9.refusal(conn, "lab_release_live", {"policy_ref": unknown}) == "not_found"
     return "empty for no assigned job; unknown revision not_found"
@@ -186,6 +192,8 @@ def check_units_never_mix(conn) -> str:
         regime="legacy_usd")
     assert [r["spent"] for r in live(conn, usd)] == [
         {"unit": "USD", "value": "0.00000000"}, {"unit": "USD", "value": "2.00000000"}]
+    with pytest.raises(errors.InvalidRequest, match="USD"):
+        asyncio.run(store(conn).live(usd))
     return "CREDIT + USD refused; USD alone read as USD and refused by the store"
 
 
