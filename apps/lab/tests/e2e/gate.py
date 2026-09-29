@@ -19,6 +19,13 @@ from pathlib import Path
 
 LAB = Path(os.environ.get("INFRX_LAB_DIR") or Path(__file__).resolve().parents[2])
 TIMEOUT_S = 1200
+#: what a suite prints when its harness, not the Lab, broke (pgharness's l4 lock, Docker)
+HARNESS = re.compile(r"HarnessBusy: [^\n]*|Cannot connect to the Docker daemon[^\n]*")
+
+
+class HarnessError(Exception):
+    """The l4 key was held by another run or Docker did not answer: a gate runner's
+    INVALID[harness] (its HARNESS pattern), never a product FAIL - and never a mutant's kill."""
 
 
 def command(suite: str) -> str:
@@ -46,13 +53,16 @@ def run(suite: str, out: Path) -> dict:
     found = out / f"{suite}.json"
     record = json.loads(found.read_text()) if found.exists() else None
     (out / "stack.log").write_text(stdout)
+    broke = HARNESS.search(stdout)
     return {"command": command(suite), "exit": code, **counts, "record": record,
-            "tail": stdout[-2000:]}
+            "harness": broke.group(0)[:300] if broke else None, "tail": stdout[-2000:]}
 
 
 def missing(got: dict) -> list[str]:
     """Asserts the suite passed as a whole - every case ran and none failed - and answers the
     ports the gateway's own composition does not carry yet (empty: the cell is bound for real)."""
+    if got["exit"] != 0 and got.get("harness"):
+        raise HarnessError(f"{got['command']}: {got['harness']}")
     assert (got["exit"], got.get("fail"), got.get("cancelled", 0), got.get("skipped")) == \
         (0, 0, 0, 0) and got.get("pass", 0) > 1 and got["record"] is not None, \
         f"the e2e suite did not pass: {({k: v for k, v in got.items() if k != 'tail'})}\n{got['tail']}"

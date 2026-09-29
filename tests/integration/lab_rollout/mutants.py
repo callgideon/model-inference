@@ -277,10 +277,12 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "(0048's lab_releases_in)", D48,
        "       order by e.fence desc limit 1) d on true",
        "       order by e.fence asc limit 1) d on true", K10_LISTING),
-    # LAB-E2E: k10's UI half - the releases page's stale proposal must come back refused
-    _m("st_releases_route_ignores_the_fence", "a proposal names the revision D9 holds now "
-       "(the page's stale form is refused)", LR,
-       "    if live.fence != wanted.fence:", "    if False:", K10_UI),
+    # LAB-E2E: k10's UI half - the page shows a pending proposal from the route's records
+    # (the route's own fence check is backstopped by 0043's, so the page cannot see it drop)
+    _m("st_releases_route_drops_the_proposals", "the releases answer carries the provider's "
+       "proposals (the page shows the pending one)", LR,
+       '"proposals": list(await x.port("proposals").proposals(provider))}',
+       '"proposals": []}', K10_UI),
     _m("st_claim_unmeasured", "an optimization is claimed only with measurements", R3,
        '"optimization_claimed": outcome == "equivalent" and performance is not None}',
        '"optimization_claimed": outcome == "equivalent"}', K07_STORED),
