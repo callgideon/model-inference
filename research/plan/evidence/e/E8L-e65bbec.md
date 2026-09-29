@@ -302,7 +302,7 @@ accepted.
 - `tests/integration/lab_rollout/{runner.py, mutants.py, test_e8l_runner.py}`
 - `apps/lab/tests/e2e/{stack.py, gate.py, rollout/backend.py, rollout/stack.test.ts, evaluate/backend.py, improve/backend.py}`
 - `research/plan/evidence/e/E8L-e65bbec.md`, `E8L-raw-lr7/`, `E8L-raw-e65bbecf/`
-- `research/plan/evidence/coordinator/updates/E8L-20260929T2330Z.json`
+- `research/plan/evidence/coordinator/updates/E8L-20260929T2355Z.json`
 
 ## Wiring requests / WR texts (outside this lane's ownership; none applied)
 
