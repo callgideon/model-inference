@@ -1,0 +1,59 @@
+diff --git a/apps/infrx-api/tests/i/lab_pipeline/mutants.py b/apps/infrx-api/tests/i/lab_pipeline/mutants.py
+index b5af3080..d6109b19 100644
+--- a/apps/infrx-api/tests/i/lab_pipeline/mutants.py
++++ b/apps/infrx-api/tests/i/lab_pipeline/mutants.py
+@@ -25,6 +25,7 @@ APPROVALS = "../../infra/lab/workers/training/egress.json"
+ 
+ BOUNDED = "test_i6_each_role_is_bounded_off_by_default_and_gated_by_the_preflight"
+ OPERATOR = "test_i6_only_the_rollout_role_names_its_operator_principal"
++LOCATION = "test_i6_only_the_rollout_role_names_the_gateways_plan_location"
+ FLAGS = "test_i6_egress_is_denied_by_default_through_a_dead_proxy_the_env_file_cannot_override"
+ SHIPPED = "test_i6_the_shipped_approvals_are_empty_so_every_role_is_local_or_manual_only"
+ PAID = "test_i6_an_approved_paid_adapter_needs_its_budget_payer_host_and_secret"
+@@ -127,6 +128,9 @@ MUTANTS: tuple[Mutant, ...] = (
+       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY"}',
+       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY", "LAB_EVAL_CONCURRENCY"}', NAMES),
+     # --- the preflight: WR-C5-PREFLIGHT, the rollout role's operator principal (composition-6)
++    m("i6_pf_plan_location_refused", "the rollout role names the gateway's plan location "
++      "(R249)", PF, '        names |= {"LAB_S3_PREFIX", "S3_MEDIA_BUCKET", "S3_MEDIA_PREFIX"}\n',
++      "        pass\n", LOCATION),
+     m("i6_pf_operator_refused", "the rollout role names its operator principal", PF,
+       '        names.add("LAB_OPERATOR_ID")\n', "        pass\n", OPERATOR),
+     m("i6_pf_operator_any_role", "only the rollout role names an operator principal", PF,
+diff --git a/apps/infrx-api/tests/i/lab_pipeline/test_preflight.py b/apps/infrx-api/tests/i/lab_pipeline/test_preflight.py
+index 240757f4..66547464 100644
+--- a/apps/infrx-api/tests/i/lab_pipeline/test_preflight.py
++++ b/apps/infrx-api/tests/i/lab_pipeline/test_preflight.py
+@@ -189,6 +189,19 @@ def test_i6_only_the_rollout_role_names_its_operator_principal() -> None:
+             [f"LAB_OPERATOR_ID: not a {role} setting"], role
+ 
+ 
++def test_i6_only_the_rollout_role_names_the_gateways_plan_location() -> None:
++    """WR-C7G-PREFLIGHT (R249, C7-RV-5): the rollout role's env names the gateway's
++    `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` and its own `LAB_S3_PREFIX`, so `lab_objects` compares
++    the two plan locations at the role's start; the training and annotation roles never hold
++    the media location. Failure oracle: the rollout unit refusing the names R249's refusal
++    reads (the check never fires on the box), or another role accepting them."""
++    location = {"LAB_S3_PREFIX": "infrx/", "S3_MEDIA_BUCKET": "media", "S3_MEDIA_PREFIX": "infrx/"}
++    assert check("rollout", {**BASE, **location}) == []
++    for role in ("training", "annotation"):
++        assert check(role, {**BASE, "S3_MEDIA_BUCKET": "media"}) == \
++            [f"S3_MEDIA_BUCKET: not a {role} setting"], role
++
++
+ def test_i6_the_image_is_a_local_content_addressed_id_never_a_flag_or_a_pull() -> None:
+     """`${INFRX_IMAGE}` is one argv word of `docker run`, before the command. Failure oracle:
+     a docker flag there (`--privileged` and the image becomes `python`), an absent or empty
+diff --git a/infra/lab/workers/training/preflight.py b/infra/lab/workers/training/preflight.py
+index 462b455e..bd8b979d 100644
+--- a/infra/lab/workers/training/preflight.py
++++ b/infra/lab/workers/training/preflight.py
+@@ -87,6 +87,8 @@ def allowed_names(role: str) -> set[str]:
+         names.add("LAB_TEACHER_URL")
+     if role == "rollout":                  # WR-C5-PREFLIGHT: R2's pass acts as this principal
+         names.add("LAB_OPERATOR_ID")
++        # WR-C7G-PREFLIGHT (R249): the plan location, compared at the role's start
++        names |= {"LAB_S3_PREFIX", "S3_MEDIA_BUCKET", "S3_MEDIA_PREFIX"}
+     return names
+ 
+ 
