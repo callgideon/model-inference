@@ -2267,7 +2267,7 @@
         "CONSOLE-FLOWS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "E3",
       "amendment_status": "awaits-product-v2-contract",

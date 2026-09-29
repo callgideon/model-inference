@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 311,
- "updated": "2026-09-29T18:45:40Z",
+ "revision": 312,
+ "updated": "2026-09-29T18:59:00Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8894,11 +8894,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T13:59:28Z",
-   "updated": "2026-09-29T18:45:40Z",
+   "updated": "2026-09-29T18:59:00Z",
    "blocker": null,
-   "next_action": "merge batch #57 (RV-2/3/4, R253) → E5L implemented → COMPLETE-LOCAL",
+   "next_action": "lab-observe-4: o01 PASS over the capture seam (WR-LC-O01)",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9409,22 +9409,22 @@
   {
    "id": "W5-MERGE-57",
    "task": null,
-   "slice": "merge batch #57 (Opus): lab-observe-3 7c675167 (+RV-2/3/4 cases, evidence minors, R253); E5L flips at integration; workflow wf_a4a0a29a-264",
+   "slice": "merge batch #57 (Opus): lab-observe-3 7c675167 (+RV-2/3/4 cases, evidence minors, R253); E5L flips at integration; workflow wf_a4a0a29a-264; integrated (R253 on the tip; E5L implemented → COMPLETE-LOCAL)",
    "agent": "opus",
    "branch": "codex/w5-merge-57",
    "worktree": ".claude/worktrees/codex-w5-merge-57",
    "base": "c77e75ac",
-   "head": null,
+   "head": "b754ff80",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T18:45:40Z",
-   "updated": "2026-09-29T18:45:40Z",
+   "updated": "2026-09-29T18:59:00Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → E5L implemented → COMPLETE-LOCAL",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,

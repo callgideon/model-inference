@@ -18,9 +18,23 @@ Written 2026-09-29T07:35Z by the coordinator at tip `b0504b44` (merge batches #1
 | composition-5 | WR-B3-3/suites, the rollout pass loop (WR-R2-3), the judge/outbox/import-job passes (0049–0051); E6L j09 checkpoint half | dispatched | +7 h |
 | lab-deploy-prep | `make lab-local` = every switch ON locally (the E4-ON regression), the box runbook, the Lab rollout step scripts + tests | dispatched | +8 h |
 | lab-evaluate-2 | E6L final run after composition-5 | after composition-5 | +10 h |
-| COMPLETE-LOCAL | all five gates accepted at one SHA; the manifest flips E5L/E6L/E7L/E8L | after the above | +16 h |
+| COMPLETE-LOCAL | all five gates accepted at one SHA; the manifest flips E5L/E6L/E7L/E8L | **accepted 2026-09-29T19:00Z at be6b2fde** | done |
 
 Cells that stay NOT RUN by design: E7L i07 training half (P-11, an external training provider), E7L i09 / E8L k08 (a staging GPU target), E8L k10's provider-UI e2e (tracked as WR-C4-UI, not a gate cell).
+
+## COMPLETE-LOCAL accepted — 2026-09-29T19:00Z at tip `be6b2fde`
+
+Every Lab gate runner has run for real on its stack with no FAIL cell; every NOT RUN is out of local scope under R222/R234 with its rerun command. The manifest has E3L, E5L, E6L, E7L, E8L implemented (108 of 133 tasks).
+
+| Gate | Run | Cells | NOT RUN (class → rerun) | Ruling |
+|---|---|---|---|---|
+| E3L LAB-OPERATE | 24/24 on the real stores | all PASS | — | R220 |
+| E5L LAB-OBSERVE | `make lab-observe` at df837faf (merge #57) | 17 PASS / 0 FAIL / 1 NOT RUN | o01 switch case → product WR WR-C6-CAPTURE (seam on the tip since #54; lab-observe-4 binds it) | R222/R234/R253 |
+| E6L LAB-EVALUATE | `make lab-evaluate` at 24a7a065 (merge #45) + j11 at 9938ad6c (#49) | j01–j09, j11 PASS | j10 → product WR (WR-B4-2, WR-LAB2-2, WR-B3-1); j11 labelled "reaches the endpoint; span/cap not enforced at the gateway" (WR-LEM-SPAN) | R222/R234/R239 |
+| E7L LAB-IMPROVE | composition-4 (merge #36) + i08-UI (#48) | 20 PASS / 0 FAIL / 2 NOT RUN | i07 training → external provider (P-11); i09 → staging GPU | R222 |
+| E8L LAB-ROLLOUT | `make lab-rollout` at 93f41299 (merge #53) | k01–k07, k09, k10 PASS | k08 → staging GPU (P-08); k09-breach + k10-ui-composed → product WR WR-C6-LIVE (0054 on the tip since #52; lab-rollout-6 binds both) | R222/R234/R238/R249 |
+
+Still running to turn the product-WR cells into PASS (not gating COMPLETE-LOCAL): lab-observe-4 (o01), lab-rollout-6 (k09 breach, k10-ui-composed), lab-capture-2 (the async-spool scrub and the lost-ack retry before any TRACE_PUMPS enable), composition-7, lab-local-2 (the all-switches-on gate after 0056), merge #56 (0055 variants + requeue).
 
 ## Phase B — internal-testing deployment (needs the operator's inputs; ETA within 24 h of the inputs)
 
@@ -57,3 +71,4 @@ G5 (callbacks, C1), I4 (fleet, C2), X1–X6 (expansion, C3): conditional waves p
 - 2026-09-29T07:35Z: written at tip b0504b44; three lanes dispatched (composition-5, lab-observe-2, lab-deploy-prep) alongside the three in flight.
 - 2026-09-29T08:50Z: sandbox limits recorded; Phase A continues unchanged (lens rounds kept); Phase B is the operator's or needs an allow rule.
 - 2026-09-29T09:50Z: **Phase B half done by the coordinator under the operator's permission (auto mode off)**: host cleanup + port band; Supabase redirects; Route 53 lab/lab-control; SSM infrx_lab_control_password; main → 41693d5d; the R151 window applied 0027–0051 hosted (digest 11eecd1d…) and the box cut over to 41693d5d (window 08:23–08:31Z, health 200). Still open: the Lab units + switches on the box (runbook lane), the Lab app on Vercel (the SSM token is invalid — a fresh token or the dashboard project `infrx-lab`, root apps/lab, domain lab.callbill.ai), E4C certify on 41693d5d, tester onboarding.
+- 2026-09-29T19:00Z: **COMPLETE-LOCAL accepted at be6b2fde** (merge #57 flipped E5L; five gates implemented). Phase B state: hosted 0001–0051 + box at 41693d5d (2026-09-29 window); 0052–0054 and 0056 LOCAL-ONLY on the tip (0055 with merge #56); R151 condition 1 for 0052 met (#46; a re-proof through 0056 is due before the next window); the reviewed `EXPECTED_PENDING` patch, the hosted apply, the box Lab units (runbook 08-lab-internal-testing-rollout.md) and the Vercel Lab app remain operator-held (classifier denials in auto mode).
