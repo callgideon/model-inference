@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 258,
- "updated": "2026-09-29T02:06:28Z",
+ "revision": 259,
+ "updated": "2026-09-29T02:27:50Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7326,25 +7326,30 @@
    "branch": "codex/w5-lab-improve-2",
    "worktree": ".claude/worktrees/codex-w5-lab-improve-2",
    "base": "1d26fd59",
-   "head": null,
+   "head": "c3be7132",
    "isolation": {
     "ports": "e7l 57300-57399",
     "prefix": "infrx-e7l-",
     "db": "e7l"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T00:53:17Z",
-   "updated": "2026-09-29T00:53:17Z",
+   "updated": "2026-09-29T02:27:50Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge",
+   "next_action": "merge batch #32 (Opus; R213; st_tombstones_ignored re-anchor) → LAB-IMPROVE-LOCAL after i07/i08 (composition-4) ",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "two harness items + one gate rerun"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT_WITH_FIXES c3be7132; merge running",
+    "at": "2026-09-29T02:27:50Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/WR-E7L-5-8609d0a2.md",
+    "research/plan/evidence/e/WR-E7L-4-a8e1d1f9.md",
+    "research/plan/evidence/e/E7L-raw-a8e1d1f/"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/**",
@@ -7543,6 +7548,38 @@
     "confidence": "high",
     "basis": "single-lane batch; the G list takes ~25 min",
     "at": "2026-09-29T02:06:28Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-32",
+   "task": null,
+   "slice": "merge batch #32 (Opus): lab-improve-2 c3be7132 (+R213, the st_tombstones_ignored re-anchor)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-32",
+   "worktree": ".claude/worktrees/codex-w5-merge-32",
+   "base": "4f25e232",
+   "head": null,
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-29T02:27:50Z",
+   "updated": "2026-09-29T02:27:50Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R210–R212 before R213 at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch, layer-1 only",
+    "at": "2026-09-29T02:27:50Z"
    },
    "evidence": [],
    "commands": [],
