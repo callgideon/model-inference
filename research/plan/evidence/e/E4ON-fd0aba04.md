@@ -74,8 +74,13 @@ Scenario cells:
 
 `accepted: false`; `open: {journey:pipelines: NOT RUN, journey:traces: NOT RUN}`;
 `by_design`: the R198 e4-on case and the R237 o05 case. Every other non-PASS cell names only
-out-of-scope classes (product WR per port, P-11). **The gate is acceptable under R222 once
-WR-LL2-1/2 land (or once the coordinator rules LL2-SCOPE, below).** No in-scope FAIL remains.
+out-of-scope classes (product WR per port, P-11). ~~The gate is acceptable under R222 once
+WR-LL2-1/2 land (or once the coordinator rules LL2-SCOPE, below).~~ **Corrected in the fix
+round (§7): that overclaimed.** Recomputed at 04a48a2c: `open` also holds `o05: FAIL` and
+`e4-on: FAIL` (R222 allows no FAIL cell, R234 excuses none; the by-design FAILs are only
+reported until ruled, LL2-BY-DESIGN in §6), and the e4-on stage's 14 skipped cases (other
+keys' PostgreSQL b1/b3/p1/p2/r2/j2, t2i's ClickHouse, t2f) keep it open until they are ruled
+or run. No in-scope product FAIL remains.
 
 ## 3. Step 3: the mutants on the kept stack (fd0aba04)
 
@@ -147,3 +152,43 @@ A Lab gate cell NOT RUN only because another lane's *test backend* hard-codes an
 key's port is a harness wiring request: it stays in `r222.open` (the runner does not excuse it)
 until the WR lands — or the coordinator rules it out of local scope under R234 (ii), and this
 lane adds WR-LL2-1/2 to `OUT_OF_SCOPE`.
+
+### Proposed ruling (propose, never number): LL2-BY-DESIGN
+
+R198's pilot-box worker case (`tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it`,
+refusing by name: `LAB_EVAL_WORKER needs an evaluator source (WR-B-2(b)) and a dev target
+source (WR-B-3)`, e4-on.log:73) and R237/R245's all-switches App-gateway case
+(`test_o05_every_lab_route_family_answers_a_lab_session`) FAIL by the rulings' design. Proposal:
+the coordinator may excuse exactly these two cases, and only on their recorded refusal text
+(the junit failure message pinned, a crash or traceback in the same case stays open), with the
+e4-on stage excused only when it also has no skipped or quarantined case. Until ruled, the
+runner keeps them in `r222.open` and lists them under `r222.by_design`.
+
+## 7. Fix round (review 0-LL2C-1/2, head 04a48a2c)
+
+- **0-LL2C-2** (fixed): `runner.r222` no longer excuses any FAIL. A scenario or e4-on FAIL that
+  is exactly a `BY_DESIGN` case stays in `open` and is only reported under `by_design`
+  (option (a) of the finding; LL2-BY-DESIGN above is the proposal that would excuse them).
+  The test that accepted an o05 FAIL with any message now asserts `open == {o05: FAIL}`.
+- **0-LL2C-1** (fixed): the e4-on stage is reported under `by_design` only when every failed
+  id is R198's **and** it has no error, skipped or xfailed case; with skips it stays open with
+  an empty `by_design` (new cases in `test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case`).
+  The dead `failed and` guard is gone with its mutant (`set() <= BY_DESIGN` adds nothing).
+- New `test_lab_local_r222_the_fd0aba04_verdict_stays_open_after_the_journeys_land`: over
+  `E4ON-raw-fd0aba04/verdict.json`, r222 is open on {o05, e4-on, journey:pipelines,
+  journey:traces}; with the journeys set PASS (WR-LL2-1/2 landed) still not accepted, open
+  {o05, e4-on}. The reviewer's repro (`ll2c_repro.py`) now prints `accepted: False`.
+- Recomputed `r222` over the recorded fd0aba04 verdict (the raw `verdict.json` is left as
+  recorded): `accepted: false`, `open: {o05: FAIL, e4-on: FAIL, journey:pipelines: NOT RUN,
+  journey:traces: NOT RUN}`, `by_design: {test_o05_every_lab_route_family_answers_a_lab_session}`
+  (R198 not listed: the stage has 14 skips).
+- Tests first: the three r222 tests failed against 6f784b3d's runner (3 failed, 1 passed),
+  then `pytest tests/integration/lab_local/test_lab_local_runner.py` 22 passed.
+- Mutants: `INFRX_MUTANTS=all pytest tests/integration/lab_local/test_mutants.py` 46 passed,
+  12 skipped: 42 layer-1 mutants killed, 0 survivors (new: `r222_e4_skips_ignored`,
+  `r222_by_design_accepted`, `r222_e4_by_design_accepted`; removed: `r222_e4_no_failure_excused`,
+  now equivalent). The 12 stack mutants were not rerun (stack torn down after step 3; the fix
+  touches only `r222`, which no stack mutant exercises; last run 12/12 killed at fd0aba04).
+  The layer-1 copy now also carries the fd0aba04 verdict.
+- Not rerun: `make lab-local` (r222 is a pure function over the recorded verdict; the raw run
+  is unchanged).

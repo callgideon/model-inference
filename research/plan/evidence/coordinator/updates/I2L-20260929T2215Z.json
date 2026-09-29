@@ -4,26 +4,103 @@
   "slice": "LAB-INTERNAL-TESTING-PREP: WR-LW8-2 + WR-LCR-5's rerun (E4-ON, every switch ON, after merges #47/#51/#54/#55)",
   "activity": "review",
   "at": "2026-09-29T22:15:00Z",
-  "head": "4031dc12",
+  "head": "04a48a2c",
   "base": "c77e75ac",
   "worktree": ".claude/worktrees/codex-w5-lab-local-2",
   "branch": "codex/w5-lab-local-2",
-  "owned_paths": ["tests/integration/lab_local/", "research/plan/evidence/e/E4ON-fd0aba04.md", "research/plan/evidence/e/E4ON-raw-1a5be321/", "research/plan/evidence/e/E4ON-raw-fd0aba04/", "research/plan/consumer-v1/08-lab-internal-testing-rollout.md (§11 G1-G6/L5 rows + log line)", "research/plan/evidence/coordinator/updates/I2L-20260929T2215Z.json"],
-  "commands": [
-    {"cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py (r222 vs recorded 28c9c2cc; TLS origin wait; clean pin)", "exit": 1, "summary": "seam failures recorded first (accepted on 28c9c2cc; only loopback waited; dirty True)"},
-    {"cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py", "exit": 0, "summary": "21 passed"},
-    {"cmd": "make lab-local (1a5be321)", "exit": 2, "summary": "runner FAIL: o07 ConnectError (TLS terminator race, fixed in fd0aba04)"},
-    {"cmd": "GATE_ARGS=--keep make lab-local (fd0aba04)", "exit": 2, "summary": "runner exit 1: e4-on 2838/2853 (1 FAIL R198 by design), o01/o02/o04/o06 PASS, o05 R237 by design + control login == owner, o03/o07 NOT RUN (P-11 / product WRs), journeys datasets/releases/evaluations PASS; r222.accepted false, open = journey:pipelines, journey:traces (WR-LL2-1/2); pins clean"},
-    {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l pytest tests/integration/lab_local/test_mutants.py", "exit": 0, "summary": "56 passed: 40 layer-1 + 12 stack mutants killed, 0 survivors, 0 skipped"},
-    {"cmd": "pytest tests/integration/test_harness.py", "exit": 1, "summary": "base red at c77e75ac, not this lane: production guard on backend/test_certify.py and ops/test_create_test_user.py (WR-LL2-4)"}
+  "owned_paths": [
+    "tests/integration/lab_local/",
+    "research/plan/evidence/e/E4ON-fd0aba04.md",
+    "research/plan/evidence/e/E4ON-raw-1a5be321/",
+    "research/plan/evidence/e/E4ON-raw-fd0aba04/",
+    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md (\u00a711 G1-G6/L5 rows + log line)",
+    "research/plan/evidence/coordinator/updates/I2L-20260929T2215Z.json"
   ],
-  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 3, "confidence": "medium", "basis": "remaining: WR-LL2-1/2 land in their owners' lanes (two small env overrides), then this lane flips two JOURNEYS rows and reruns make lab-local (35 min on a loaded host) + the stack mutants (14 min)", "at": "2026-09-29T22:15:00Z"},
-  "blockers": ["R222 acceptance of E4-ON waits on WR-LL2-1/2 (or a ruling on LL2-SCOPE)"],
+  "commands": [
+    {
+      "cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py (r222 vs recorded 28c9c2cc; TLS origin wait; clean pin)",
+      "exit": 1,
+      "summary": "seam failures recorded first (accepted on 28c9c2cc; only loopback waited; dirty True)"
+    },
+    {
+      "cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py",
+      "exit": 0,
+      "summary": "21 passed"
+    },
+    {
+      "cmd": "make lab-local (1a5be321)",
+      "exit": 2,
+      "summary": "runner FAIL: o07 ConnectError (TLS terminator race, fixed in fd0aba04)"
+    },
+    {
+      "cmd": "GATE_ARGS=--keep make lab-local (fd0aba04)",
+      "exit": 2,
+      "summary": "runner exit 1: e4-on 2838/2853 (1 FAIL R198 by design), o01/o02/o04/o06 PASS, o05 R237 by design + control login == owner, o03/o07 NOT RUN (P-11 / product WRs), journeys datasets/releases/evaluations PASS; r222.accepted false, open = journey:pipelines, journey:traces (WR-LL2-1/2); pins clean"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l pytest tests/integration/lab_local/test_mutants.py",
+      "exit": 0,
+      "summary": "56 passed: 40 layer-1 + 12 stack mutants killed, 0 survivors, 0 skipped"
+    },
+    {
+      "cmd": "pytest tests/integration/test_harness.py",
+      "exit": 1,
+      "summary": "base red at c77e75ac, not this lane: production guard on backend/test_certify.py and ops/test_create_test_user.py (WR-LL2-4)"
+    },
+    {
+      "cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py -k r222 (6f784b3d runner)",
+      "exit": 1,
+      "summary": "3 failed, 1 passed (fail-first)"
+    },
+    {
+      "cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py",
+      "exit": 0,
+      "summary": "22 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_local/test_mutants.py",
+      "exit": 0,
+      "summary": "46 passed, 12 skipped: 42 layer-1 killed, 0 survivors; stack list not rerun (stack torn down; r222 only)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "remaining: WR-LL2-1/2 land in their owners' lanes (two small env overrides), then this lane flips two JOURNEYS rows and reruns make lab-local (35 min on a loaded host) + the stack mutants (14 min); plus a coordinator ruling on LL2-BY-DESIGN and the 14 e4-on other-key skips (ruled or run on their keys)",
+    "at": "2026-09-29T22:15:00Z"
+  },
+  "blockers": [
+    "R222 acceptance of E4-ON waits on WR-LL2-1/2 (or LL2-SCOPE), a ruling on LL2-BY-DESIGN (R198 + R237 cases), and the e4-on stage's 14 other-key skips being ruled or run"
+  ],
   "wiring_requests": [
     "WR-LL2-1: apps/lab/tests/p/backend.py:109 teacher-fake port from LAB_P4_TEACHER_PORT (default p2's)",
     "WR-LL2-2: apps/lab/tests/v/list/backend.py:76-78 ClickHouse from LAB_V1M_CLICKHOUSE_URL (default t2i's)",
     "WR-LL2-4: tests/integration/test_harness.py production guard red on backend/test_certify.py + ops/test_create_test_user.py (base)",
-    "ruling proposal LL2-SCOPE (harness-port NOT RUN stays open unless ruled under R234 ii)"
+    "ruling proposal LL2-SCOPE (harness-port NOT RUN stays open unless ruled under R234 ii)",
+    "ruling proposal LL2-BY-DESIGN (excuse R198's and R237's cases only on their pinned refusal text, e4-on only with no skip)"
   ],
-  "evidence": ["research/plan/evidence/e/E4ON-fd0aba04.md", "research/plan/evidence/e/E4ON-raw-fd0aba04/", "research/plan/evidence/e/E4ON-raw-1a5be321/"]
+  "evidence": [
+    "research/plan/evidence/e/E4ON-fd0aba04.md",
+    "research/plan/evidence/e/E4ON-raw-fd0aba04/",
+    "research/plan/evidence/e/E4ON-raw-1a5be321/"
+  ],
+  "fix_round": {
+    "review": "0-LL2C-1/2",
+    "at": "2026-09-29T23:00:00Z",
+    "code_head": "04a48a2c",
+    "results": [
+      {
+        "id": "0-LL2C-1",
+        "fixed": true,
+        "note": "an e4-on stage with skipped/xfailed cases is never labelled only-by-design; stays open"
+      },
+      {
+        "id": "0-LL2C-2",
+        "fixed": true,
+        "note": "r222 excuses no FAIL; BY_DESIGN FAILs stay in open and are only reported under by_design; ruling proposal LL2-BY-DESIGN"
+      }
+    ]
+  }
 }
