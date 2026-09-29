@@ -54,6 +54,16 @@ plain `python3 preflight.py` refuses, since its environment is not the unit's), 
 `/etc/infrx-lab/enabled` exists, `enable --now` the unit, then
 `curl -fsS 127.0.0.1:8016/readyz`.
 
+The plan location (R249, C7-RV-5): the same file also holds `LAB_S3_BUCKET`, `LAB_OPERATOR_ID`
+and `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` copied from the App's gateway env (the location
+`/lab/v1/releases` reads a stored plan from), with `LAB_S3_PREFIX` when that prefix is not
+`infrx/`; export the same names in the shell that runs `rollout launch` or `rollout decide`.
+When they name another bucket or prefix the role exits 2 naming both settings and WR-C5-PLAN
+(no restart loop) before any bucket is asked; fix the env file, never the gateway's. The
+rollout unit's preflight allows these names (WR-C7G-PREFLIGHT), so the unit's file names
+`S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` equal to the gateway's and the check fires at the
+role's start (R249); the training and annotation roles still refuse them.
+
 Emergency controls, in order:
 1. **Roll one release back**: `emergency-rollback` above (no evidence needed, any live state,
    once; a repeat only converges).
@@ -112,3 +122,8 @@ route to it. A new hardware row needs a measured `results/` commit first.
   and compares with the unit's own environment; the manual preflight runs under
   `systemd-run`; `169.254.169.254` may be allowlisted for the instance role (training
   runbook §2). Local only.
+- 2026-09-29 (lab-c7-gaps, C7-RV-5): §3 names the plan location's settings (R249) and the
+  preflight wiring they wait on (WR-C7G-PREFLIGHT). Local only.
+- 2026-09-29 (lab-c7-gaps merge, 1-C7G-RV-B): WR-C7G-PREFLIGHT applied; §3 no longer says to
+  leave the plan location's names out: the rollout unit's file names them equal to the
+  gateway's (R249, R256). Local only.

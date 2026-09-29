@@ -20,6 +20,8 @@ test("R4-V02 progress shows traffic, errors, p99, quality coverage, spend and as
   assert.deepEqual(r.assignments, [`${BASE}: 2280 (cohort)`, `${CAND}: 3 (explicit)`]);
   const none = row(release({ progress: null }));
   assert.deepEqual([none.traffic, none.errors, none.p99, none.quality, none.spend, none.assignments], ["no traffic observed", "—", "—", "—", "—", []]);
+  const refused = row(release({ progress: null, verdict: null, refused: "unit_refused" })); // R255: not "nothing observed"
+  assert.deepEqual([refused.traffic, refused.spend, refused.assignments], ["progress unavailable: settled in another unit", "—", []]);
   const idle = row(release({ progress: { ...release().progress!, candidate: { requests: 0, errors: 0, p99Ms: null }, qualityCovered: 0 } }));
   assert.deepEqual([idle.errors, idle.p99, idle.quality], ["—", "—", "—"]);
 });

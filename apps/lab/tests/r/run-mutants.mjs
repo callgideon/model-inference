@@ -59,6 +59,7 @@ const MUTANTS = [
   m("R4-X07", "an idle window divides errors by zero", VIEW, "errors: cand && cand.requests > 0 ?", "errors: cand ?", [C.v02]),
   m("R4-X08", "an idle window divides quality coverage by zero", VIEW, "quality: cand && cand.requests > 0 ?", "quality: cand ?", [C.v02]),
   m("R4-X09", "no progress reads as zero traffic", VIEW, ': "no traffic observed"', ': "candidate 0 · baseline 0 requests"', [C.v02]),
+  m("R4-X122", "a unit-refused row reads as nothing observed (R255)", VIEW, ' : r.refused === "unit_refused" ? "progress unavailable: settled in another unit"', "", [C.v02]),
   m("R4-X10", "a missing p99 renders as a number", VIEW, 'p99: cand?.p99Ms == null ? "—"', 'p99: cand === undefined ? "—"', [C.v02]),
   m("R4-X11", "assignments lose how they were pinned", VIEW, "${a.requests} (${a.pinnedBy})", "${a.requests}", [C.v02]),
   m("R4-X12", "spend in another unit is shown against the budget", VIEW, "live.spent.unit !== p.budget.unit", "false", [C.v03]),

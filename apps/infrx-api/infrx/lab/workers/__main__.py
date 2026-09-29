@@ -138,14 +138,16 @@ def lab_sql(mode: str, module: str, name: str):
 
 def lab_objects(mode: str, env):
     """The Lab objects, answering HeadBucket before anything is served; at the gateway's media
-    location when the unit names it (R249, WR-LR5-3), else refused before any bucket."""
+    location when the unit names it (R249, WR-LR5-3), else refused before any bucket. An unset
+    LAB_S3_BUCKET is refused by name first (C7-RV-4: `rollout decide` reads no role's NEEDS)."""
     from ...media.s3 import S3ObjectStore, reason
+    bucket = settings(mode, env, (BUCKET,))[BUCKET]      # stripped: compared and connected (0-F3)
     media = ((env.get("S3_MEDIA_BUCKET") or "").strip(), env.get("S3_MEDIA_PREFIX") or LAB_PREFIX)
-    if media[0] and media != (env.get(BUCKET), env.get("LAB_S3_PREFIX") or LAB_PREFIX):
+    if media[0] and media != (bucket, env.get("LAB_S3_PREFIX") or LAB_PREFIX):
         raise RuntimeMisconfigured(mode, detail=f"{BUCKET}/LAB_S3_PREFIX must be the gateway's "
                                                 "S3_MEDIA_BUCKET/S3_MEDIA_PREFIX (WR-C5-PLAN)")
     try:
-        objects = S3ObjectStore.connect(env[BUCKET], env.get("LAB_S3_PREFIX") or LAB_PREFIX,
+        objects = S3ObjectStore.connect(bucket, env.get("LAB_S3_PREFIX") or LAB_PREFIX,
                                         env.get("LAB_S3_ENDPOINT", ""))
         objects.probe()
     except Exception as failure:          # noqa: BLE001 - every failure refuses startup

@@ -836,7 +836,8 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
     the proposal's state in one transaction - carrying R2's `lab.rollout_decision.1` by the
     operator, then R2's operator stop converges the alias (its CAS finds the release already
     rolled back). An approved expansion reads the release's stored plan, so without
-    LAB_S3_BUCKET it refuses to start, nothing decided (its verdict: the next case). A refused
+    LAB_S3_BUCKET it refuses to start naming that setting (C7-RV-4, never a HeadBucket
+    failure), nothing decided (its verdict: the next case). A refused
     CAS (a stale fence) is exit 1."""
     from infrx.rollouts import control
     from infrx.state.lab_data import PgLabDataStore
@@ -882,8 +883,11 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
     assert decide_("p-rb", "reject") == 0
     assert decided == [("p-rb", False, operator, None, ())] and rolled == []
     decided.clear()
+    capsys.readouterr()
     assert decide_("p-ex", "approve") == 2                            # no LAB_S3_BUCKET
     assert (decided, rolled) == ([], [])
+    err = capsys.readouterr().err                                     # C7-RV-4: named
+    assert "requires LAB_S3_BUCKET" in err and "HeadBucket" not in err, err
     assert decide_("p-rb", "approve") == 0
     [(pid, approve, by, doc, reasons)] = decided
     assert (pid, approve, by, reasons) == ("p-rb", True, operator,
@@ -922,8 +926,10 @@ def test_lab_workers__an_expansion_is_approved_only_on_r2s_expand_verdict_over_l
     (`PgReleaseStore.live`, 0054) and its B2 report (`release_report`, R242) - and only R2's
     `expand` verdict is decided, through 0043 (one CAS: never `Controller.approve`), as R2's
     `lab.rollout_decision.1` 'expand' by the operator with the verdict's evidence; no alias
-    moves. Nothing assigned, a hold verdict (named with its reasons), no stored plan or a plan
-    other than D9's digest refuses by name: exit 1, nothing decided."""
+    moves. Nothing assigned, a hold verdict (named with its reasons), a rollback verdict (the
+    pass rolls it back; C7-RV-1), a release started less than the plan's horizon ago (R2 is
+    evaluated at the release's own `started_at`; C7-RV-2), no stored plan or a plan other than
+    D9's digest refuses by name: exit 1, nothing decided."""
     import dataclasses
     import json as _json
 
@@ -934,7 +940,7 @@ def test_lab_workers__an_expansion_is_approved_only_on_r2s_expand_verdict_over_l
     from tests.r.control import test_control as r2w
     ref, operator = r2w.POLICY_REF, "0e000000-0000-4000-8000-0000000000e0"
     objects, decided, approved, rolled = InMemoryObjectStore(), [], [], []
-    state = {"live": None, "digest": r2.plan_digest(r2w.plan())}
+    state = {"live": None, "digest": r2.plan_digest(r2w.plan()), "started": r2w.START}
     runs = {lab.ref_of(r): r for r in (r2w.BASE_RUN, r2w.CAND_RUN)}
     body = {k: v for k, v in r2w.report().items() if k != "report_digest"}
 
@@ -952,7 +958,7 @@ def test_lab_workers__an_expansion_is_approved_only_on_r2s_expand_verdict_over_l
     async def release(self, policy_ref):
         assert policy_ref == ref
         return r2.Release(state="running", fence=1, plan_digest=state["digest"],
-                          started_at=r2w.START)
+                          started_at=state["started"])
 
     async def live(self, policy_ref):
         assert policy_ref == ref, "the Live read is of another revision"
@@ -998,7 +1004,14 @@ def test_lab_workers__an_expansion_is_approved_only_on_r2s_expand_verdict_over_l
                                         observed_until=fresh)
     code, err = approve_()                                  # R2 holds: refused by name
     assert code == 1 and "hold" in err and "min_requests" in err and decided == [], (code, err)
+    state["live"] = dataclasses.replace(r2w.live(errors_=21), observed_until=fresh)
+    code, err = approve_()                                  # C7-RV-1: R2 rolls back: refused
+    assert code == 1 and "R2's verdict is rollback" in err and decided == [], (code, err)
     state["live"] = dataclasses.replace(r2w.live(), observed_until=fresh)
+    state["started"] = fresh                                # C7-RV-2: launched just now
+    code, err = approve_()                                  # the release's own start: held
+    assert code == 1 and "before_horizon" in err and decided == [], (code, err)
+    state["started"] = r2w.START
     state["digest"] = "sha256:" + "0" * 64
     code, err = approve_()                                  # not the plan D9 froze
     assert code == 1 and "plan changed" in err and decided == [], (code, err)
@@ -1022,7 +1035,8 @@ def test_lab_workers__the_lab_objects_are_the_gateways_media_location_or_refused
     LAB_S3_PREFIX, unset prefix `infrx/`) and read by the page through the gateway's
     `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX`. When the unit names the media location and it
     differs (bucket or prefix), the role refuses at start naming both settings and WR-C5-PLAN,
-    before any bucket is asked; the same location, or none named, connects and probes."""
+    before any bucket is asked; an unset LAB_S3_BUCKET is refused as a missing setting first
+    (C7-RV-4); the same location, or none named, connects and probes."""
     from infrx.media import s3
     connected = []
 
@@ -1043,10 +1057,16 @@ def test_lab_workers__the_lab_objects_are_the_gateways_media_location_or_refused
         assert all(name in str(died) for name in ("LAB_S3_BUCKET", "S3_MEDIA_BUCKET",
                                                     "WR-C5-PLAN")), died
     assert connected == [], "a differing location asked a bucket"
+    for unset in ({"LAB_S3_BUCKET": ""}, {"LAB_S3_BUCKET": " ", "S3_MEDIA_BUCKET": "media"}):
+        died = objects(**unset)                              # C7-RV-4: the name, first
+        assert type(died) is RuntimeMisconfigured and died.missing == ("LAB_S3_BUCKET",), died
+    assert connected == [], "an unset LAB_S3_BUCKET asked a bucket"
     for same in ({}, {"S3_MEDIA_BUCKET": "media"},
-                 {"S3_MEDIA_BUCKET": " media ", "S3_MEDIA_PREFIX": "p/", "LAB_S3_PREFIX": "p/"}):
+                 {"S3_MEDIA_BUCKET": " media ", "S3_MEDIA_PREFIX": "p/", "LAB_S3_PREFIX": "p/"},
+                 {"LAB_S3_BUCKET": " media ", "S3_MEDIA_BUCKET": "media"}):   # 0-F3: one strip
         assert type(objects(**same)) is Store, same
-    assert connected == [("media", "infrx/"), ("media", "infrx/"), ("media", "p/")]
+    assert connected == [("media", "infrx/"), ("media", "infrx/"), ("media", "p/"),
+                         ("media", "infrx/")], "the stripped LAB_S3_BUCKET is compared and used"
 
 
 # ------------------------------------------------------------ annotation / training (WR-I6-3)

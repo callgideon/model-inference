@@ -24,6 +24,7 @@ SUBSET = ("mounted_without_the_switch", "body_before_identity", "developer_propo
           "proposals_withheld", "fence_from_the_read_model", "expand_without_an_expand_verdict",
           "kind_open")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
+PG = mutation_list.PG_MUTANTS
 
 
 def test_the_list_is_well_formed():
@@ -51,6 +52,31 @@ def test_the_named_cases_pass_on_the_pristine_tree():
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
 def test_mutant_is_killed(mutant):
+    result = mutation_list.run_mutant(mutant)
+    assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                           f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                           f"what they claim.")
+
+
+def test_every_pg_case_is_covered_by_a_pg_mutant():
+    """C7-RV-6: the p3 case is named by its own list (never the fake runner's)."""
+    import re
+    pg = set(re.findall(r"^def (test_\w+)\(",
+                        (shared.API_DIR / mutation_list.PG_FILE).read_text(), re.M))
+    assert {case for m in PG for case in m.cases} == pg == {mutation_list.PG_CASE}
+    assert not {m.name for m in PG} & {m.name for m in ALL}
+    assert all(m.file in mutation_list.FILES for m in PG)
+
+
+@pytest.mark.parametrize("mutant", PG if FULL_RUN else (), ids=[m.name for m in PG] if FULL_RUN
+                         else ())
+def test_pg_mutant_is_killed(mutant):
+    """On the p3 key only, and only when asked (`INFRX_LAB_RELEASES_PG=1`): a visible skip."""
+    from ...d import pgharness
+    if os.environ.get("INFRX_LAB_RELEASES_PG") != "1" or \
+            os.environ.get("INFRX_D_TASK") != "p3" or pgharness.unavailable():
+        pytest.skip("the p3 PostgreSQL half runs on request (INFRX_LAB_RELEASES_PG=1, "
+                    "INFRX_D_TASK=p3)")
     result = mutation_list.run_mutant(mutant)
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
                            f"{result.detail}. The cases {list(mutant.cases)} do not prove "

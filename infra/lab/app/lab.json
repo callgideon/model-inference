@@ -69,7 +69,9 @@
       {"name": "LAB_TRAINING_BUDGET_USD", "exposure": "server", "purpose": "the training USD budget, above 0 and within the P-11 approval's cap"},
       {"name": "LAB_TRAINING_PAYER_REF", "exposure": "server", "purpose": "exactly the P-11 approval's named payer"},
       {"name": "LAB_ROLLOUT_CONCURRENCY", "exposure": "server", "purpose": "rollout controller concurrency (pool_budget.py role default 1)"},
-      {"name": "LAB_OPERATOR_ID", "exposure": "server", "purpose": "the rollout role's principal id (a UUID) that R2's pass and emergency-rollback record their decisions under (WR-C5-PREFLIGHT); unset = the rollout role exits 2"}
+      {"name": "LAB_OPERATOR_ID", "exposure": "server", "purpose": "the rollout role's principal id (a UUID) that R2's pass and emergency-rollback record their decisions under (WR-C5-PREFLIGHT); unset = the rollout role exits 2"},
+      {"name": "S3_MEDIA_BUCKET", "exposure": "server", "purpose": "the rollout role (and the launcher's shell) only: the gateway's media bucket, copied from the App env, where the page reads a release's stored plan (R249, C7-RV-5); set and not LAB_S3_BUCKET = every Lab worker role exits 2 naming both, unset = not compared"},
+      {"name": "S3_MEDIA_PREFIX", "exposure": "server", "purpose": "with S3_MEDIA_BUCKET: the gateway's media prefix, copied from the App env (unset = infrx/); not LAB_S3_PREFIX (unset = infrx/) = the role exits 2 (R249)"}
     ],
     "lab-edge": [
       {"name": "INFRX_LAB_CONTROL_SITE", "exposure": "server", "purpose": "the control origin's address in the App edge (default the placeholder above)"},

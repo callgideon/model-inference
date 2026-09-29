@@ -25,6 +25,7 @@ APPROVALS = "../../infra/lab/workers/training/egress.json"
 
 BOUNDED = "test_i6_each_role_is_bounded_off_by_default_and_gated_by_the_preflight"
 OPERATOR = "test_i6_only_the_rollout_role_names_its_operator_principal"
+LOCATION = "test_i6_only_the_rollout_role_names_the_gateways_plan_location"
 FLAGS = "test_i6_egress_is_denied_by_default_through_a_dead_proxy_the_env_file_cannot_override"
 SHIPPED = "test_i6_the_shipped_approvals_are_empty_so_every_role_is_local_or_manual_only"
 PAID = "test_i6_an_approved_paid_adapter_needs_its_budget_payer_host_and_secret"
@@ -127,6 +128,9 @@ MUTANTS: tuple[Mutant, ...] = (
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY"}',
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY", "LAB_EVAL_CONCURRENCY"}', NAMES),
     # --- the preflight: WR-C5-PREFLIGHT, the rollout role's operator principal (composition-6)
+    m("i6_pf_plan_location_refused", "the rollout role names the gateway's plan location "
+      "(R249)", PF, '        names |= {"LAB_S3_PREFIX", "S3_MEDIA_BUCKET", "S3_MEDIA_PREFIX"}\n',
+      "        pass\n", LOCATION),
     m("i6_pf_operator_refused", "the rollout role names its operator principal", PF,
       '        names.add("LAB_OPERATOR_ID")\n', "        pass\n", OPERATOR),
     m("i6_pf_operator_any_role", "only the rollout role names an operator principal", PF,

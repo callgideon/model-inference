@@ -89,6 +89,8 @@ runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
 | `LAB_TRAINING_PAYER_REF` | server | exactly the P-11 approval's named payer |
 | `LAB_ROLLOUT_CONCURRENCY` | server | rollout controller concurrency (pool_budget.py role default 1) |
 | `LAB_OPERATOR_ID` | server | the rollout role's principal id (a UUID) that R2's pass and `emergency-rollback` record their decisions under (WR-C5-PREFLIGHT); unset = the rollout role exits 2 |
+| `S3_MEDIA_BUCKET` | server | the rollout role (and the launcher's shell) only: the gateway's media bucket, copied from the App env, where the page reads a release's stored plan (R249, C7-RV-5); the rollout unit's env file names it equal to the gateway's (its preflight allows it, WR-C7G-PREFLIGHT); set and not `LAB_S3_BUCKET` = every Lab worker role exits 2 naming both, unset = not compared |
+| `S3_MEDIA_PREFIX` | server | with `S3_MEDIA_BUCKET`: the gateway's media prefix, copied from the App env (unset = `infrx/`); not `LAB_S3_PREFIX` (unset = `infrx/`) = the role exits 2 (R249) |
 
 ## 3. Origins and the auth allowlist (P-05 settings, per project) [OP]
 
@@ -165,3 +167,5 @@ The Lab web is taken down in its own Vercel project (pause or remove the product
 ## Verification log
 
 - 2026-09-27: written by the lab-operate lane (I2L); preparation only, nothing hosted run.
+- 2026-09-29 (lab-c7-gaps, C7-RV-5): `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` declared for the rollout role (R249: the plan location the page reads); nothing hosted run.
+- 2026-09-29 (lab-c7-gaps merge, 1-C7G-RV-B): WR-C7G-PREFLIGHT applied: the rollout unit's env file names `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` equal to the gateway's (R249, R256); nothing hosted run.

@@ -23,12 +23,14 @@ export type Progress = {
 };
 /** R2's latest `evaluate` of the release. */
 export type Verdict = { action: "rollback" | "hold" | "expand"; reasons: string[]; evidenceRefs: string[]; evaluatedAt: string };
-/** D9's row for one lab.rollout_policy.1 revision, with its latest progress and verdict (null: none yet). */
+/** D9's row for one lab.rollout_policy.1 revision, with its latest progress and verdict (null: none yet).
+ *  `refused: "unit_refused"` (R255): D9's Live refused this release's units (R248, legacy USD), so its progress
+ *  and verdict are null for that reason, not because nothing is assigned; the key is absent otherwise. */
 export type Release = {
   policyRef: string; endpointId: string; version: number; baselineRef: string; mode: "off" | "shadow" | "canary";
   cohort: "account" | "session"; candidates: { servingRef: string; weightBp: number }[];
   state: "running" | "approved" | "rolled_back"; fence: number; planDigest: string; plan: Plan; startedAt: string;
-  progress: Progress | null; verdict: Verdict | null;
+  progress: Progress | null; verdict: Verdict | null; refused?: "unit_refused";
 };
 /** A D9 transition: lab.rollout_decision.1 plus R2's reasons. */
 export type Decision = {
