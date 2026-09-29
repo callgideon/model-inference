@@ -401,16 +401,13 @@ def test_i2l__lab_rollback_restarts_only_the_lab_on_its_previous_release():
 
 
 def test_i2l__the_control_factory_is_the_gateways_one_lab_operations_composition(monkeypatch):
-    """WR-LAB-API-2c: the I2L control service composes `/lab/v1/control` through
+    """WR-LAB-API-2c / WR-LSQ-9-C: the I2L control service composes `/lab/v1/control` through
     `gateway.pilot.lab_operations` on its own login - the gateway's one composition - so its
-    listings read `NoControlReads` (a typed 503 until WR-LSQ-9) instead of passing the control
-    store as `ControlReads` (an AttributeError logged as a bug). Nothing is dialled."""
-    import asyncio
-
-    from infrx.contracts import errors
-    from infrx.gateway import pilot
+    listings read the real `PgControlStore` on the same login, not a typed-503 stand-in.
+    Nothing is dialled (the connect callable is built but never invoked)."""
     from infrx.lab.control import app as control_app
     from infrx.lab.control.operations import Operations
+    from infrx.state.lab_control import PgControlStore
     for name in control_app.REQUIRED:
         monkeypatch.setenv(name, {control_app.DATABASE_URL: "postgresql://lab@127.0.0.1:1/lab",
                                   control_app.SUPABASE_URL: "http://127.0.0.1:1"}.get(name, "anon"))
@@ -418,15 +415,10 @@ def test_i2l__the_control_factory_is_the_gateways_one_lab_operations_composition
         monkeypatch.delenv(name, raising=False)
     _, control, traces = control_app._compose(control_app._settings(), store=None)
     ops = control.operations
-    assert type(ops) is Operations and type(ops.reads) is pilot.NoControlReads and traces is None
+    assert type(ops) is Operations and type(ops.reads) is PgControlStore and traces is None
     assert ops.control.access is control.access
     assert ops.control.store._connect is control.access.store._connect   # the Lab's own login
-    try:
-        asyncio.run(ops.reads.provider_servings("p"))
-        refused = None
-    except Exception as died:              # noqa: BLE001 - the type is compared
-        refused = died
-    assert type(refused) is errors.DependencyUnavailable, refused
+    assert ops.reads._connect is control.access.store._connect           # same login too
 
 
 def test_i2l__a_lab_worker_that_refuses_to_start_is_not_restarted_in_a_loop():

@@ -327,7 +327,8 @@ def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabl
     from infrx.state.lab_control import PgControlStore
     from infrx.state.operations import PgRegistry
     ops = control.operations
-    assert type(ops) is Operations and type(ops.reads) is pilot.NoControlReads
+    assert type(ops) is Operations and type(ops.reads) is PgControlStore
+    assert ops.reads._connect == "pool"          # WR-LSQ-9-C: the real control reads
     l3 = ops.control
     assert (type(l3.store), type(l3.registry), type(l3.catalog)) \
         == (PgControlStore, PgRegistry, PgCatalogDirectory)

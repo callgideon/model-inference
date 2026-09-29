@@ -360,16 +360,6 @@ def _lab_2(deployment, connect, sessions, access, objects=None) -> dict:
                if deployment.lab_releases else {})}
 
 
-class NoControlReads:
-    """L3's `ControlReads` until lab-sql writes them (WR-LSQ-9, not in 0041-0043): each read
-    is a typed 503, so a listing or an alias read waits instead of failing as a bug."""
-
-    async def _pending(self, *args):
-        raise errors.DependencyUnavailable("L3's control reads are not wired (WR-LSQ-9)")
-
-    provider_servings = provider_deployments = endpoint_alias = listing_versions = _pending
-
-
 def lab_control(connect, access):
     """L3's `LabControl` on this pool: the control store, A3's registry and catalog, and the
     control service's engine stand-in (a smoke is 503 until WR-L3-2)."""
@@ -382,21 +372,26 @@ def lab_control(connect, access):
 
 
 def lab_operations(connect, access):
-    """WR-LAB-API-2: L3's `Operations` for `/lab/v1/control` - the gateway's and the I2L
-    control service's one composition (`infrx.lab.control.app`, WR-LAB-API-2c). Its
-    listings and registration read `ControlReads` and answer 503 until WR-LSQ-9."""
+    """WR-LAB-API-2 / WR-LSQ-9-C: L3's `Operations` for `/lab/v1/control` - the gateway's and
+    the I2L control service's one composition (`infrx.lab.control.app`, WR-LAB-API-2c). Its
+    listings and registration read `PgControlStore` (0044's `infrx_lab_control` reads:
+    provider_servings, provider_deployments, endpoint_alias, listing_versions)."""
     from ..lab.control.operations import Operations
-    return Operations(lab_control(connect, access), NoControlReads())
+    from ..state.lab_control import PgControlStore
+    return Operations(lab_control(connect, access), PgControlStore(connect))
 
 
 def control_serving(connect, principal: str):
     """WR-R2-2's composition: R2's `ServingControl` as L3's `Serving`, acting as
-    `principal` (the audited actor of every alias CAS)."""
+    `principal` (the audited actor of every alias CAS). WR-LSQ-9-C: reads are the real
+    `PgControlStore`, not a typed-503 stand-in."""
     from ..lab.access import LabAccess
     from ..lab.control.operations import Serving
     from ..operations.service import OperatorSession
     from ..state.lab_access import PgAccessStore
-    return Serving(lab_control(connect, LabAccess(PgAccessStore(connect))), NoControlReads(),
+    from ..state.lab_control import PgControlStore
+    return Serving(lab_control(connect, LabAccess(PgAccessStore(connect))),
+                   PgControlStore(connect),
                    OperatorSession(ops=None, principal=principal))
 
 

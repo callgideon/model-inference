@@ -89,8 +89,8 @@ def no_trace_stack(monkeypatch):
     """ClickHouse and the trace bucket are never reached: the retention is recorded."""
     built = {}
 
-    def trace_retention(limits, endpoint_url, objects=None):
-        built.update(limits=limits, endpoint_url=endpoint_url, objects=objects)
+    def trace_retention(limits, endpoint_url, objects=None, connect=None):
+        built.update(limits=limits, endpoint_url=endpoint_url, objects=objects, connect=connect)
         return Retention()
     monkeypatch.setattr(lab_workers, "trace_retention", trace_retention)
     return built
@@ -408,16 +408,12 @@ def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(mo
 
 # ------------------------------------------------------------------ rollout (WR-I7-1)
 def test_lab_workers__the_rollout_pass_refuses_until_its_inputs_exist():
-    """R2's pass needs every running or rolled-back D9 release with its frozen plan, R1's
-    live aggregates and the stored report, and L3's alias reads (WR-LSQ-9): none is readable
-    on this base, so the controller unit refuses rather than report ready and do nothing."""
-    from infrx.gateway import pilot
+    """R2's pass needs every running or rolled-back D9 release with its frozen plan and R1's
+    live aggregates and the stored report: none is readable on this base, so the controller
+    unit refuses rather than report ready and do nothing (WR-LSQ-9-C wires L3's alias reads
+    for the operator surfaces via the real `PgControlStore`; this pass still needs R1/B2)."""
     with pytest.raises(RuntimeMisconfigured, match="WR-LSQ-9"):
         composed("rollout")
-    for read in ("provider_servings", "provider_deployments", "endpoint_alias",
-                 "listing_versions"):
-        waits = outcome(lambda: asyncio.run(getattr(pilot.NoControlReads(), read)("x")))
-        assert type(waits) is errors.DependencyUnavailable, read
 
 
 def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkeypatch):
@@ -451,7 +447,7 @@ def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkey
     assert resolved == [(ref, NEMO)]
     from infrx.lab.control.operations import Serving
     assert rolled == [("ops@infrx", "policy-record", ref, "breach", PgReleaseStore, Serving,
-                       "ops@infrx", "ops@infrx", "NoControlReads")]
+                       "ops@infrx", "ops@infrx", "PgControlStore")]
     assert outcome(lambda: lab_workers.main(argv[:-1] + ["partitioned"], env=env)) == 1
 
 

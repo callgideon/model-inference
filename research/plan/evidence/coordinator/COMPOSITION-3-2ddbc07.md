@@ -82,3 +82,5 @@ optimistic 0.5 h / likely 1.5 h / pessimistic 4 h, confidence medium. Basis: all
 | F5 | `INFRX_MUTANTS=all INFRX_D_TASK=j2 pytest -q tests/w/test_lab_workers_mutants.py` | 1e7d827a | 0 | 65 passed, 0 survivors |
 
 No other code changed, so the E4 rows (2800/0) and the other mutant lists above still hold. No named mutant was added: the finding is a stale fake, and the lw_report_* mutants still guard the seam at the fake level. After the run, no p2/p3/r1/j2 pgharness containers were left behind. Foreign leftovers were not touched.
+
+Rulings: the three proposals above ("Ruling proposals") are numbered R210 (ROLLOUT_ROUTING on the `infrx_runtime` login only), R211 (a Lab worker's exit-2 refusal is final) and R212 (T3's deletion push runs after the tombstone; the datasets role's hourly reconcile is the guarantee) in `research/plan/08-contracts-v1-encoding.md` §10, appended directly after R208 at the merge-30 integration (R209 was numbered separately on the parallel `codex/w5-merge-29` branch; the coordinator restores the order at integration).

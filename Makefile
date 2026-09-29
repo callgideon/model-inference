@@ -163,7 +163,8 @@ lab-compositions:
 	cd $(API) && INFRX_D_TASK=p2 .venv/bin/python -m pytest -q tests/p/teachers/test_teachers_composition_pg.py
 	cd $(API) && INFRX_D_TASK=j2 .venv/bin/python -m pytest -q tests/j/calibration/test_calibration_composition_pg.py
 	cd $(API) && INFRX_D_TASK=r1 .venv/bin/python -m pytest -q tests/r/routing/test_routing_composition_pg.py
-	cd $(API) && INFRX_D_TASK=p3 .venv/bin/python -m pytest -q tests/p/training/test_training_composition_pg.py tests/b/checkpoints/test_checkpoints_composition_pg.py
+	cd $(API) && INFRX_D_TASK=p3 .venv/bin/python -m pytest -q tests/p/training/test_training_composition_pg.py
+	cd $(API) && INFRX_D_TASK=p3 .venv/bin/python -m pytest -q tests/b/checkpoints/test_checkpoints_composition_pg.py
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:

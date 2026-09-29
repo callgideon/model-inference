@@ -1072,10 +1072,9 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "    return LabControl(access, PgControlStore(connect), PgRegistry(connect),",
        "    return LabControl(access, PgControlStore(None), PgRegistry(connect),",
        "test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
-    _m("lab_operations_reads_are_the_store", "unwired ControlReads are a typed 503 stand-in",
-       P, "    return Operations(lab_control(connect, access), NoControlReads())",
-       "    from ..state.lab_control import PgControlStore\n"
-       "    return Operations(lab_control(connect, access), PgControlStore(connect))",
+    _m("lab_operations_off_the_login", "L3's control reads are on the gateway's pool",
+       P, "    return Operations(lab_control(connect, access), PgControlStore(connect))",
+       "    return Operations(lab_control(connect, access), PgControlStore(None))",
        "test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
     # Composition batch 2 (WR-N4-1, WR-B3-2): the datasets and checkpoint receiver switches
     _m("composition_root_drops_lab_datasets", "the composition root mounts lab_datasets",
