@@ -178,7 +178,8 @@ def test_o10_the_lab_review_panel_renders_the_routes_answer(workdir):
     projection is o03's; here T2I/T3 are the in-memory stand-ins (the l4 key has none)."""
     import importlib.util
     import os
-    lab = Path(os.environ.get("INFRX_LAB_DIR") or Path(__file__).resolve().parents[3] / "apps" / "lab")
+    repo = Path(__file__).resolve().parents[3]
+    lab = Path(os.environ.get("INFRX_LAB_DIR") or repo / "apps" / "lab")
     spec = importlib.util.spec_from_file_location("lab_observe.lab_e2e_gate",
                                                   lab / "tests" / "e2e" / "gate.py")
     e2e = importlib.util.module_from_spec(spec)
