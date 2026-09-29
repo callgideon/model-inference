@@ -140,8 +140,131 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
+# --- LAB-DEPLOY-PREP: the Lab's box rollout steps and the R151 gate (test_lab_rollout_steps.py)
+STEPS_FILE = "tests/i/lab/test_lab_rollout_steps.py"
+LR = "../../infra/lab/rollout/"
+LIB, GATE = LR + "lib.sh", LR + "lab-migrate.sh"
+ST = LR + "steps/"
+STRICT = "test_ldp__every_step_is_strict_bash_on_the_releases_own_helpers"
+PREFLIGHT = "test_ldp__preflight_refuses_another_checkout_and_reports_names_never_values"
+IMAGE = "test_ldp__the_image_is_built_once_from_the_release_and_its_id_recorded"
+UNITS = "test_ldp__units_are_installed_and_none_is_enabled"
+CONTROL_ON = "test_ldp__control_on_writes_its_env_by_ssm_name_then_the_switch_then_readiness"
+CONTROL_OFF = "test_ldp__control_off_removes_the_switch_and_not_ready_is_exit_4"
+ROLE = "test_ldp__a_role_env_file_is_its_switch_and_carries_only_its_names"
+STAGED = "test_ldp__a_budget_or_preflight_refusal_replaces_nothing"
+REFUSES = "test_ldp__a_role_that_refuses_by_name_is_exit_5_and_other_unreadiness_exit_4"
+SMOKE = "test_ldp__the_smoke_checks_every_switch_that_is_on_and_the_app"
+REVERT = "test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_app"
+SITE_CASE = "test_ldp__the_site_reaches_the_edge_only_after_it_validates_with_the_apps"
+AGREE = "test_ldp__each_role_the_step_enables_can_start_on_the_names_it_allows"
+R151 = "test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions"
+TODAY = "test_ldp__todays_hosted_migrate_carries_the_reviewed_patch"
+SECRET_CASE = "test_ldp__every_secret_is_refused_as_a_literal"
+NEEDS_CASE = "test_ldp__a_spec_without_a_name_the_role_needs_is_refused_before_any_change"
+
+SECRETS = (" LAB_DATABASE_URL LAB_EVAL_ENDPOINT_KEY LAB_ANNOTATION_TEACHER_TOKEN "
+           "LAB_TRAINING_CONNECTOR_TOKEN CLICKHOUSE_URL")     # 50-lab-role.sh's `secrets=`
+
+STEP_MUTANTS: tuple[Mutant, ...] = (
+    _m("step_not_strict", "every step stops on its first failure", ST + "60-lab-smoke.sh",
+       "\nset -euo pipefail\n", "\nset -uo pipefail\n", STRICT),
+    _m("preflight_any_checkout", "a step runs only on the RELEASE checkout", LIB,
+       '    || die 2 "the checkout $repo is not $RELEASE"', '    || true', PREFLIGHT),
+    _m("preflight_prints_values", "names only, never a value", ST + "10-lab-preflight.sh",
+       '"env $file: $(cut -d= -f1 "$file" | tr \'\\n\' \' \')"', '"env $file: $(cat "$file")"',
+       PREFLIGHT),
+    _m("image_rebuilt_every_time", "an existing Lab image is reused", ST + "20-lab-image.sh",
+       '2>/dev/null) || id=   # absent: build it', '2>/dev/null) && id=   # absent: build it',
+       IMAGE),
+    _m("image_not_recorded", "the image id is what the env files take", ST + "20-lab-image.sh",
+       'mv -f "$tmp" "$IMAGE_FILE"', 'rm -f "${tmp:?}"', IMAGE),
+    _m("units_enabled_on_install", "installing a unit enables nothing", ST + "30-lab-units.sh",
+       "systemctl daemon-reload\n", "systemctl daemon-reload\nsystemctl enable infrx-lab-eval.service\n",
+       UNITS),
+    _m("control_accepts_http", "the control origins are https", ST + "40-lab-control.sh",
+       "https='^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$'", "https='^https?://[A-Za-z0-9./-]+$'",
+       CONTROL_ON),
+    _m("control_secret_as_argument", "a secret is read by NAME on the box, into the file",
+       ST + "40-lab-control.sh", '"INFRX_LAB_DATABASE_URL=$CONTROL_DSN_PARAM"',
+       '"INFRX_LAB_DATABASE_URL:=$CONTROL_DSN_PARAM"', CONTROL_ON),
+    _m("control_without_the_switch", "the control service runs only with its marker",
+       ST + "40-lab-control.sh", 'touch "$MARKER"\n', "", CONTROL_ON),
+    _m("env_file_world_readable", "an env file is 0600", LIB, 'chmod 0600 "$tmp"; echo "$tmp"',
+       'chmod 0644 "$tmp"; echo "$tmp"', CONTROL_ON, ROLE),
+    _m("control_off_keeps_the_marker", "off removes the switch", ST + "40-lab-control.sh",
+       'rm -f "${MARKER:?}"; say', 'say', CONTROL_OFF),
+    _m("control_unready_passes", "an unready control service is exit 4",
+       ST + "40-lab-control.sh", 'ready "$CONTROL_PORT" || die 4', 'ready "$CONTROL_PORT" || true', CONTROL_OFF),
+    _m("role_any_name", "a role's env file carries only the names it reads", ST + "50-lab-role.sh",
+       '  [[ " $names " == *" $name "* ]] || die 2', '  true || die 2', ROLE),
+    _m("role_secret_literal", "a secret is never a literal", ST + "50-lab-role.sh",
+       '  [ -z "$literal" ] || [[ $secrets != *" $name "* ]] || die 2',
+       '  true || die 2', ROLE),
+    _m("role_live_judging", "live judging is not switched on here", ST + "50-lab-role.sh",
+       '[ "${spec#*:=}" = dry_run ] || die 2', 'true || die 2', ROLE),
+    _m("role_without_a_login", "a role needs its own database login", ST + "50-lab-role.sh",
+       '[[ $seen == *" LAB_DATABASE_URL "* ]] || die 2', 'true || die 2', ROLE),
+    _m("role_off_keeps_the_switch", "off removes the role's env file", ST + "50-lab-role.sh",
+       'rm -f "${LAB_ETC:?}/${role:?}.env"; say "$role OFF', 'say "$role OFF', ROLE),
+    _m("role_image_not_the_labs", "INFRX_IMAGE is the Lab image", ST + "50-lab-role.sh",
+       '"INFRX_IMAGE:=$image"', '"INFRX_IMAGE:=infrx-runtime"', ROLE),
+    _m("budget_skipped", "the pooler budget judges every role before its switch",
+       ST + "50-lab-role.sh", '  --lab-env-dir "$budget" || die 3', '  --lab-env-dir "$budget" || true',
+       STAGED),
+    _m("preflight_skipped", "the paid-adapter roles' preflight judges the staged file",
+       ST + "50-lab-role.sh", '"$staged" \\\n    || die 3', '"$staged" \\\n    || true', STAGED),
+    _m("refusal_is_a_generic_failure", "a refusal by name is exit 5, apart from exit 4",
+       ST + "50-lab-role.sh", '    || die 5 "$role refused by name', '    || die 4 "$role refused by name',
+       REFUSES),
+    _m("served_refusal_is_a_pending_lane", "only a pending role's exit 2 is exit 5 (LDP-R3)",
+       ST + "50-lab-role.sh", 'pending=" checkpoints training rollout "',
+       'pending=" checkpoints training rollout eval "', REFUSES),
+    _m("role_needs_unchecked", "a SPEC without a name the role needs is refused (LDP-R3)",
+       ST + "50-lab-role.sh", '  [[ $seen == *" $need "* ]] || die 2', '  true || die 2', NEEDS_CASE),
+    _m("role_needs_drift", "the step's needs are infrx.lab.workers NEEDS (LDP-R3)",
+       ST + "50-lab-role.sh", 'needs="JUDGE_PROVIDER_URL CLICKHOUSE_URL S3_TRACE_BUCKET"',
+       'needs="JUDGE_PROVIDER_URL S3_TRACE_BUCKET"', AGREE, NEEDS_CASE),
+    *(_m(f"secret_literal_{name.lower()}", f"{name} is never a literal (LDP-R2)",
+         ST + "50-lab-role.sh", f'secrets="{SECRETS} "', f'secrets="{SECRETS} "'.replace(
+             f" {name} ", " "), SECRET_CASE) for name in SECRETS.split()),
+    _m("smoke_skips_the_app", "the smoke always checks the App", ST + "60-lab-smoke.sh",
+       'check "App gateway" 8001\n', "", SMOKE),
+    _m("smoke_passes_unready", "an unready switch fails the smoke", ST + "60-lab-smoke.sh",
+       'say "FAIL $1 127.0.0.1:$2/readyz"; bad=1', 'say "FAIL $1 127.0.0.1:$2/readyz"', SMOKE),
+    _m("health_port_guessed", "a role is probed on its unit's port", LIB,
+       "sed -n 's/.*-e LAB_WORKER_HEALTH_PORT=\\([0-9]*\\).*/\\1/p'", "echo 8010 #", SMOKE, ROLE),
+    _m("revert_keeps_a_role_on", "revert turns every role off", ST + "90-lab-revert.sh",
+       '  rm -f "${LAB_ETC:?}/${role:?}.env"\n', "", REVERT),
+    _m("revert_reloads_before_the_switches", "switches off before the edge", ST + "90-lab-revert.sh",
+       'for role in "${ROLES[@]}"; do\n  systemctl disable', 'docker exec caddy caddy reload\n'
+       'for role in "${ROLES[@]}"; do\n  systemctl disable', REVERT),
+    _m("site_installed_unvalidated", "the site reaches the edge only after it validates",
+       ST + "45-lab-site.sh", '  || die 4 "the App\'s Caddyfile with the Lab site',
+       '  || echo 4 "the App\'s Caddyfile with the Lab site', SITE_CASE),
+    _m("site_without_the_import", "the site needs WR-I2L-1's import line", ST + "45-lab-site.sh",
+       "  || die 2 \"the live App Caddyfile has no", "  || true \"the live App Caddyfile has no",
+       SITE_CASE),
+    _m("role_needs_unallowed", "every name a role requires is one the step allows",
+       ST + "50-lab-role.sh", "LAB_EVAL_ENDPOINT_URL LAB_EVAL_ENDPOINT_KEY LAB_EVAL_CONCURRENCY",
+       "LAB_EVAL_ENDPOINT_URL LAB_EVAL_CONCURRENCY", AGREE, ROLE),
+    _m("r151_no_window", "condition 3: an operator window", GATE,
+       'stop "condition 3:', 'true "condition 3:', R151),
+    _m("r151_any_pending", "condition 2: the reviewed EXPECTED_PENDING", GATE,
+       '[ "$current" = "$pending" ] || stop', 'true || stop', R151),
+    _m("r151_no_post_check", "condition 2: the W7 post-check names the newest (LDP-R1)", GATE,
+       'grep -qF "$post" "$HOSTED_MIGRATE" || stop', 'true || stop', R151),
+    _m("r151_post_check_file_name", "the post-check is migrate.py plan's `NNNN name` (LDP-R1)",
+       GATE, 'post="*\\"${stem:0:4} ${stem:5}\\"', 'post="*\\"${stem}\\"', TODAY),
+    _m("r151_no_known_good", "condition 1: a KNOWN-GOOD target at the newest migration", GATE,
+       '  || stop "condition 1:', '  || true "condition 1:', R151),
+)
+MUTANTS = MUTANTS + STEP_MUTANTS
+
+
 def case_names() -> set[str]:
-    return set(re.findall(r"^def (test_\w+)\(", (API_DIR / SUITE_FILE).read_text(), re.M))
+    return {name for file in (SUITE_FILE, STEPS_FILE) for name in
+            re.findall(r"^def (test_\w+)\(", (API_DIR / file).read_text(), re.M)}
 
 
 def _layout(root: pathlib.Path) -> pathlib.Path:
@@ -160,8 +283,27 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
 RUNNER = Runner(name="i2l", targets=(SUITE_FILE,), package="", layout=_layout)
 
 
+def _steps_layout(root: pathlib.Path) -> pathlib.Path:
+    """I2L's copy plus the Lab rollout steps, the role preflight/budget scripts and a git
+    checkout (the steps' RELEASE check reads HEAD): the copy is committed once."""
+    import subprocess
+    api = _layout(root)
+    for part in ("infra/lab/rollout", "infra/lab/workers", "apps/app/supabase/migrations"):
+        shutil.copytree(REPO / part, root / part, ignore=shutil.ignore_patterns("__pycache__"))
+    (root / "infra" / "rollout").mkdir()
+    shutil.copy2(REPO / "infra/rollout/hosted-migrate.sh", root / "infra/rollout/hosted-migrate.sh")
+    git = ["git", "-C", str(root), "-c", "user.name=m", "-c", "user.email=m@x"]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "add", "-A", "infra", "apps/infrx-api/deploy", "apps/app"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "copy"], check=True)
+    return api
+
+
+STEPS_RUNNER = Runner(name="ldp", targets=(STEPS_FILE,), package="", layout=_steps_layout)
+
+
 def run_mutant(mutant) -> Result:
-    return shared.run_mutant(mutant, RUNNER)
+    return shared.run_mutant(mutant, STEPS_RUNNER if mutant in STEP_MUTANTS else RUNNER)
 
 
 if __name__ == "__main__":

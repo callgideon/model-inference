@@ -1,0 +1,2 @@
+2026-09-29 09:15:20,427 INFO botocore.credentials Found credentials in environment variables.
+infrx.lab.workers: refusing to start: INFRX_MODE='lab-annotation': annotation has no worker pass: a dry-run batch is planned by the Lab route and nothing leaves; collecting live batches needs their durable listing and N2's redaction (WR-P2-4)

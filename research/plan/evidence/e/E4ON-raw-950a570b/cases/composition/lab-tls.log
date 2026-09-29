@@ -1,0 +1,5 @@
+{"level":"warn","ts":1790681975.7536552,"logger":"admin","msg":"admin endpoint disabled"}
+{"level":"info","ts":1790681975.7538693,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x25479cc5e180"}
+{"level":"info","ts":1790681975.8240576,"logger":"http.auto_https","msg":"automatic HTTP->HTTPS redirects are disabled","server_name":"proxy"}
+{"level":"info","ts":1790681975.8449175,"logger":"tls","msg":"cleaning storage unit","storage":"FileStorage:/data/caddy"}
+{"level":"info","ts":1790681975.858259,"logger":"tls","msg":"finished cleaning storage units"}

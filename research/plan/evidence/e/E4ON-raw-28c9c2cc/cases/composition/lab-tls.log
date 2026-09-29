@@ -1,0 +1,18 @@
+{"level":"warn","ts":1790687026.5345507,"logger":"admin","msg":"admin endpoint disabled"}
+{"level":"info","ts":1790687026.5348194,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x373731a1ea80"}
+{"level":"info","ts":1790687026.5557787,"logger":"http.auto_https","msg":"automatic HTTP->HTTPS redirects are disabled","server_name":"proxy"}
+{"level":"info","ts":1790687026.5561862,"logger":"http","msg":"enabling HTTP/3 listener","addr":":57061"}
+{"level":"info","ts":1790687026.5563216,"logger":"http.log","msg":"server running","name":"proxy","protocols":["h1","h2","h3"]}
+{"level":"info","ts":1790687026.5563316,"logger":"http","msg":"enabling automatic TLS certificate management","domains":["localhost"]}
+{"level":"info","ts":1790687026.5627382,"logger":"tls.obtain","msg":"acquiring lock","identifier":"localhost"}
+{"level":"info","ts":1790687026.5635006,"logger":"tls","msg":"cleaning storage unit","storage":"FileStorage:/data/caddy"}
+{"level":"info","ts":1790687026.5685558,"logger":"tls.obtain","msg":"lock acquired","identifier":"localhost"}
+{"level":"info","ts":1790687026.568661,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"info","ts":1790687026.5687315,"logger":"tls.obtain","msg":"obtaining certificate","identifier":"localhost"}
+{"level":"warn","ts":1790687026.6186275,"logger":"pki.ca.local","msg":"installing root certificate (you might be prompted for password)","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1790687026.6193912,"msg":"warning: \"certutil\" is not available, install \"certutil\" with \"apt install libnss3-tools\" or \"yum install nss-tools\" and try again"}
+{"level":"info","ts":1790687026.6194074,"msg":"define JAVA_HOME environment variable to use the Java trust"}
+{"level":"info","ts":1790687026.6366122,"logger":"tls.obtain","msg":"certificate obtained successfully","identifier":"localhost","issuer":"local"}
+{"level":"info","ts":1790687026.6367567,"logger":"tls.obtain","msg":"releasing lock","identifier":"localhost"}
+{"level":"info","ts":1790687026.675768,"msg":"certificate installed properly in linux trusts"}
+{"level":"info","ts":1790687026.675892,"msg":"caddy proxying","from":"https://localhost:57061","to":["127.0.0.1:57060"]}

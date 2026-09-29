@@ -1,0 +1,1 @@
+infrx.lab.workers: refusing to start: INFRX_MODE='lab-rollout': the rollout pass needs every running or rolled-back D9 release with its frozen plan, R1's live aggregates, the stored B2 report and L3's alias reads (WR-LSQ-9): none is readable yet; emergency-rollback works
