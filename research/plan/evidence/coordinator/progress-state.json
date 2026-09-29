@@ -9335,7 +9335,7 @@
   {
    "id": "W5-MERGE-56",
    "task": null,
-   "slice": "merge batch #56 (Opus): lab-sql-lw7 a3fe463a (+WR-LW7-1 pilot patch, WR-LW7-2/3b Lab app, 0055 minors, R252)",
+   "slice": "merge batch #56 (Opus): lab-sql-lw7 a3fe463a (+WR-LW7-1 pilot patch, WR-LW7-2/3b Lab app, 0055 minors, R252); workflow wf_91cee1f4-6d7",
    "agent": "opus",
    "branch": "codex/w5-merge-56",
    "worktree": ".claude/worktrees/codex-w5-merge-56",
