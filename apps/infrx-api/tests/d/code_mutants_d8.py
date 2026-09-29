@@ -316,6 +316,16 @@ def _q(name, old, new, check, why, **kw):
     return _d.Mutant(name, REQUESTS_FILE, old, new, "lab", check, why, **kw)
 
 
+#: 0045 (WR-E8L-2/E8L-F1) redefines `infrx.release_active`, so an anchor inside 0043's
+#: body of that function is superseded (`test_no_mutant_anchors_in_a_superseded_function_body`
+#: refuses it) - its mutants move here.
+IDENTITY_FILE = "0045_lab_serving_ref_identity.sql"
+
+
+def _qid(name, old, new, check, why, **kw):
+    return _d.Mutant(name, IDENTITY_FILE, old, new, "lab", check, why, **kw)
+
+
 REQUESTS = (
     _q("q_service_writes", "    execute format('grant select on infrx.%I to service_role', "
        "t);", "    execute format('grant select, update on infrx.%I to service_role', t);",
@@ -412,18 +422,26 @@ REQUESTS = (
        "((c->>'labels')::numeric < (c->>'required')::numeric", "     or (false\n         and "
        "((c->>'labels')::numeric < (c->>'required')::numeric", Q_CALIBRATION,
        "a configuration is claimed calibrated on too few labels"),
-    _q("q_active_any_state", "   where x.endpoint_id = v_endpoint and x.state = 'running';",
+    _qid("q_active_any_state", "   where x.endpoint_id = v_endpoint and x.state = 'running';",
        "   where x.endpoint_id = v_endpoint and x.state in ('running', 'paused');", Q_ACTIVE,
        "a paused experiment keeps routing candidates"),
-    _q("q_active_old_listing", "   order by l.version desc limit 1;", "   order by l.version "
+    _qid("q_active_old_listing", "   order by l.version desc limit 1;", "   order by l.version "
        "limit 1;", Q_ACTIVE, "the alias routes by an outdated catalog listing"),
-    _q("q_active_unpinned", "    if v_label is null then\n      perform "
-       "infrx.refuse('state_conflict', 'candidate ' || (c->>'serving_ref')", "    if false then"
-       "\n      perform infrx.refuse('state_conflict', 'candidate ' || (c->>'serving_ref')",
+    # WR-E8L-2/E8L-F1 (0045): a candidate is resolved by deployment_revision_id and its ref
+    # re-derived and compared whole (identity + digest), not by serving_version_id alone.
+    _qid("q_active_unpinned", "    if v_label is null or v_computed is distinct from "
+       "(c->>'serving_ref') then\n      perform infrx.refuse('state_conflict', 'candidate ' "
+       "|| (c->>'serving_ref')", "    if false then\n      perform infrx.refuse("
+       "'state_conflict', 'candidate ' || (c->>'serving_ref')",
        Q_ACTIVE, "a candidate without a published revision is routed to a null pin"),
-    _q("q_active_foreign_revision", "       and sv.provider_org_id = o.provider_org_id and "
-       "sv.model_id = v_model;", "       and sv.provider_org_id = o.provider_org_id;", Q_ACTIVE,
-       "a candidate pins another model's revision under this alias"),
+    _qid("q_active_foreign_revision", "       and d2.provider_org_id = o.provider_org_id and "
+       "sv.model_id = v_model;", "       and d2.provider_org_id = o.provider_org_id;", Q_ACTIVE,
+       "a candidate pins another model's revision under this alias (same provider, a real "
+       "deployment, a matching digest - only the model check stops it)"),
+    _qid("q_active_digest_ignored", "    if v_label is null or v_computed is distinct from "
+       "(c->>'serving_ref') then", "    if v_label is null then", Q_ACTIVE,
+       "R191: a candidate whose digest is stale (the revision moved on) still routes, keyed "
+       "by deployment id alone"),
     _q("q_active_to_service", "revoke all on function infrx.release_active(text), "
        "infrx.release_eligible(uuid, uuid),\n  infrx.record_rollout_assignment(jsonb) from "
        "public, anon, authenticated, service_role;", "revoke all on function "

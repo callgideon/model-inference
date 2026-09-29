@@ -120,6 +120,68 @@ def check_the_control_login_holds_what_operations_reads(conn) -> str:
     return "reads + the listed card answer on the login; listing writes refused"
 
 
+def check_endpoint_alias_orders_across_aliases_by_time_not_by_either_ones_version(
+        conn) -> str:
+    """LSQ5-m1 (R195): 0007 lets two different aliases' deployments sit on the SAME endpoint
+    over time (nothing FKs an endpoint to one model); `version` is scoped to one alias, so a
+    second alias's v1 listing there - published after the first alias's v2 - is the newer
+    listing and must win, even though 2 > 1. LSQ5-m2: the fake used to compare each alias's
+    OWN latest version number after checking only that ANY of its listings ever touched the
+    endpoint - so it could name an alias whose current listing has since moved elsewhere. This
+    check pins the oracle both stores must agree on."""
+    _published(conn)                                        # ALIAS is now at v2 (still P1)
+    # The test clock is frozen (`infrx.now()` is fixed), so a second row in the same second
+    # needs an explicit later `created_at` to be unambiguously the newer listing - a real
+    # publication a moment later needs none of this.
+    later = conn.execute("select infrx.now() + interval '1 second'").fetchone()[0]
+    other_model = "e0000015-0000-4000-8000-000000000001"
+    other_version = "e0000015-0000-4000-8000-000000000002"
+    other_serving = "e0000015-0000-4000-8000-000000000003"
+    other_dep = "e0000015-0000-4000-8000-000000000004"
+    params = {"m": other_model, "p": NEMO, "v": other_version, "s": other_serving,
+              "d": other_dep, "base": cc.MODEL, "base_s": cc.SERVING, "ep": cc.PROD_ENDPOINT,
+              "later": later}
+    for statement in (
+        "insert into public.models (id, name, provider, description, status, base_url, "
+        "served_model, input_usd_per_m, output_usd_per_m, context_tokens, input_modalities, "
+        "output_modalities, model_uuid, provider_org_id) values ('nemostation/second', 's', "
+        "'s', 's', 'live', 'https://s.example', 's', 1, 1, 1024, '{text}', '{text}', %(m)s, "
+        "%(p)s);"
+        "insert into infrx.model_versions (model_version_id, model_id, provider_org_id, "
+        "model_repo, model_commit, weight_shard_digests, tokenizer_digest, "
+        "chat_template_digest, digest_source, created_by) select %(v)s, %(m)s, %(p)s, "
+        "model_repo, model_commit, weight_shard_digests, tokenizer_digest, "
+        "chat_template_digest, digest_source, 't' from infrx.model_versions "
+        "where model_id = %(base)s limit 1;"
+        "insert into infrx.serving_versions (serving_version_id, model_version_id, model_id, "
+        "provider_org_id, revision_label, prompt_harness_ref, preprocessor_profile_version, "
+        "runtime_image_ref, runtime_image_digest, engine_options_digest, precision, "
+        "capability, created_by) select %(s)s, %(v)s, %(m)s, provider_org_id, 'second-1', "
+        "prompt_harness_ref, preprocessor_profile_version, runtime_image_ref, "
+        "runtime_image_digest, engine_options_digest, precision, capability, 't' "
+        "from infrx.serving_versions where serving_version_id = %(base_s)s;"
+        "insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id, "
+        "provider_org_id, environment, serving_version_id, visibility, state, "
+        "max_input_tokens, max_output_tokens, created_by) values (%(d)s, %(ep)s, %(p)s, "
+        "'prod', %(s)s, 'public', 'active', 1, 1, 't');"
+        "insert into infrx.rate_card_versions (rate_card_version, model_id, "
+        "deployment_revision_id, serving_version_id, input_rate_per_million, "
+        "output_rate_per_million, effective_at, approved_by, provisional) values "
+        "('rc_second_1', %(m)s, %(d)s, %(s)s, 400, 1200, infrx.now(), 't', true);"
+        "insert into infrx.catalog_listings (public_model_id, version, model_id, "
+        "deployment_revision_id, serving_version_id, rate_card_version, effective_at, "
+        "approved_by, created_at) values ('nemostation/second', 1, %(m)s, %(d)s, %(s)s, "
+        "'rc_second_1', infrx.now(), 't', %(later)s)").split(";"):
+        conn.execute(statement, params)
+    store = PgControlStore(connector(pgharness.dsn(conn.info.dbname)))
+    newest = _answered(store.endpoint_alias(cc.PROD_ENDPOINT))
+    assert newest == "nemostation/second", (
+        f"the newest listing on {cc.PROD_ENDPOINT} names 'nemostation/second' (v1, published "
+        f"after ALIAS's v2), got {newest!r}")
+    assert _answered(store.endpoint_alias(cc.DEV_ENDPOINT)) is None, "the dev endpoint is untouched"
+    return "the newer alias's v1 outranks the older alias's v2 on a shared endpoint"
+
+
 def check_the_router_functions_are_the_runtime_logins_alone(conn) -> str:
     """SR-R1-1 against 0043's login roles: R1's adapter (`PgRoutingReleases`) answers on the
     runtime's own session (`infrx_runtime`, no `set role`), and the control service's login
@@ -154,6 +216,7 @@ def check_the_router_functions_are_the_runtime_logins_alone(conn) -> str:
 CHECKS = {c.__name__: c for c in (
     check_the_control_reads_are_the_registrys_rows,
     check_the_control_login_holds_what_operations_reads,
+    check_endpoint_alias_orders_across_aliases_by_time_not_by_either_ones_version,
     check_the_router_functions_are_the_runtime_logins_alone)}
 
 

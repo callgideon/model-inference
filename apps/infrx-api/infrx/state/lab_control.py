@@ -34,9 +34,15 @@ _PROVIDER_SERVINGS = (_SERVING.rpartition("where")[0] + "where s.provider_org_id
                       "order by s.created_at, s.serving_version_id")
 _PROVIDER_DEPLOYMENTS = (_DEPLOYMENT.rpartition("where")[0] + "where provider_org_id = %s "
                          "order by created_at, deployment_revision_id")
+# R195/LSQ5-m1: an endpoint's alias is the newest LISTING that names a deployment on it.
+# `version` is scoped to one alias (0007 lets two different aliases' deployments sit on the
+# same endpoint over time), so ordering by it across aliases is not "newest" - order by
+# `created_at` instead, tie-broken like WR-LSQ-9's other reads (rows one transaction wrote
+# together share `created_at`).
 _ENDPOINT_ALIAS = ("select l.public_model_id from infrx.catalog_listings l "
                    "join infrx.deployment_revisions d using (deployment_revision_id) "
-                   "where d.endpoint_id = %s order by l.version desc limit 1")
+                   "where d.endpoint_id = %s "
+                   "order by l.created_at desc, l.public_model_id desc, l.version desc limit 1")
 _LISTINGS = ("select public_model_id, version, deployment_revision_id::text, rate_card_version "
              "from infrx.catalog_listings where public_model_id = %s order by version")
 

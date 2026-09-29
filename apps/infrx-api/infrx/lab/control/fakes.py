@@ -43,6 +43,11 @@ class FakeControl:
     wallets: dict[str, v2.WalletRef] = dataclasses.field(default_factory=dict)
     ledger: list[v2.CreditLedgerEntry] = dataclasses.field(default_factory=list)
     audit: list[ControlEvent] = dataclasses.field(default_factory=list)
+    # R195/LSQ5-m1: every listing ever published, in the order it was (global, across every
+    # alias - `listings` alone only orders one alias's own versions). `endpoint_alias` walks
+    # this backwards for the newest listing naming a deployment on an endpoint, the fake's
+    # analogue of the SQL read's `order by created_at desc`.
+    _listing_log: list[Listing] = dataclasses.field(default_factory=list, repr=False, compare=False)
 
     # --- seeding (an operator seed; synchronous) -----------------------------------
     def _table(self, row):
@@ -67,6 +72,7 @@ class FakeControl:
         listing = Listing(public_model_id=alias, version=len(versions) + 1,
                           deployment_revision_id=deployment_revision_id, rate_card_version=card)
         versions.append(listing)
+        self._listing_log.append(listing)
         return listing
 
     def _event(self, action, actor, provider, subject, after, before=None) -> None:
@@ -256,10 +262,10 @@ class FakeControl:
         return [d for d in self.deployments.values() if d.provider_org_id == provider_org_id]
 
     async def endpoint_alias(self, endpoint_id: str) -> str | None:
-        named = [(ls[-1].version, alias) for alias, ls in self.listings.items()
-                 if any(self.deployments[x.deployment_revision_id].endpoint_id == endpoint_id
-                        for x in ls)]
-        return max(named, default=(0, None))[1]
+        for listing in reversed(self._listing_log):
+            if self.deployments[listing.deployment_revision_id].endpoint_id == endpoint_id:
+                return listing.public_model_id
+        return None
 
     async def listing_versions(self, public_model_id: str) -> list[Listing]:
         return list(self.listings.get(public_model_id, ()))
