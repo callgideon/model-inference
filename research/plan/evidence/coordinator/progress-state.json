@@ -7597,7 +7597,7 @@
   {
    "id": "W5-MERGE-33",
    "task": null,
-   "slice": "merge batch #33 (Opus): lab-rollout-2 f6c074f6 (WR-E8L-2b, k09/k10 binds, E8L-F3)",
+   "slice": "merge batch #33 (Opus): lab-rollout-2 f6c074f6 (WR-E8L-2b, k09/k10 binds, E8L-F3); workflow wf_ded6bb42-47e",
    "agent": "opus",
    "branch": "codex/w5-merge-33",
    "worktree": ".claude/worktrees/codex-w5-merge-33",
@@ -7629,7 +7629,7 @@
   {
    "id": "W5-ROLLOUT-IDENTITY",
    "task": "E8L",
-   "slice": "(wave5 LW6 lane rollout-identity, Opus) WR-E8L-8 = E8L-F2: Controller._converge compares candidates by serving identity (provider + serving_version_id / the R188 digest sans deployment revision), not the full ref; k06 rerun on e8l; base cd4f6e5b",
+   "slice": "(wave5 LW6 lane rollout-identity, Opus) WR-E8L-8 = E8L-F2: Controller._converge compares candidates by serving identity (provider + serving_version_id / the R188 digest sans deployment revision), not the full ref; k06 rerun on e8l; base cd4f6e5b; workflow wf_70b639c4-971",
    "agent": "opus",
    "branch": "codex/w5-rollout-identity",
    "worktree": ".claude/worktrees/codex-w5-rollout-identity",
