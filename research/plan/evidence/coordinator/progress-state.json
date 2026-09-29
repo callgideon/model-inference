@@ -9374,7 +9374,7 @@
   {
    "id": "W5-LAB-CAPTURE-2",
    "task": "T2",
-   "slice": "R8 (the async job spool scrubbed of the caller's credential), R7 (a lost complete-ack retry is traced once), R9 (off-loop media hashing over 1 MiB), WR-LC-HOSTED (0057 LOCAL-ONLY: a runtime-login consent read) (Opus)",
+   "slice": "R8 (the async job spool scrubbed of the caller's credential), R7 (a lost complete-ack retry is traced once), R9 (off-loop media hashing over 1 MiB), WR-LC-HOSTED (0057 LOCAL-ONLY: a runtime-login consent read) (Opus); workflow wf_363182bc-d75",
    "agent": "opus",
    "branch": "codex/w5-lab-capture-2",
    "worktree": ".claude/worktrees/codex-w5-lab-capture-2",
