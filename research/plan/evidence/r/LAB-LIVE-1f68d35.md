@@ -163,3 +163,18 @@
 
 - optimistic 1 h / likely 2 h / pessimistic 5 h; confidence medium.
 - Basis: one verify/fix round (47-234 min per session-03) on a finished lane. WR-LIVE-K09 is lab-rollout-5's (~1 h plus a k09 rerun). WR-LIVE-DECIDE/PAGE are composition work (~0.5 day), outside this estimate.
+
+## Fix round (2026-09-29, commit aa09059b)
+
+- **0-LIVE-1 (major), fixed.** Nothing pinned `PgReleaseStore.live`'s `candidate_healthy` mapping. Three changes, all tests-only in owned files:
+  - (a) `check_the_candidate_is_healthy_only_on_a_ready_deployment` (`tests/d/test_code_mutants_live.py`) now also asserts `store.live(ref).candidate_healthy` on PG. It is True for the active deployment (0x46) and False for the retired one (0x47) and the unknown one (0x48).
+  - (b) `test_r2_live_is_read_per_arm_from_d9s_release_read` gets an unhealthy row set and asserts `candidate_healthy is False` on the Live.
+  - (c) The new mutant `r2_live_health_invented` in `tests/r/control/mutants.py` (file D9) changes `candidate_healthy=cand["candidate_healthy"]` to `candidate_healthy=True`.
+- **Red first.** I applied the reviewer's hand mutant to `state/lab_rollout.py`. `test_control.py -k live_is_read` gave 1 failed, and `test_code_mutants_live.py` gave 1 failed (the health check, line 217) with 26 passed. The mutant was then reverted with `git checkout` of that one file.
+
+| Command | Exit | Result |
+|---|---|---|
+| `INFRX_D_TASK=r2 uv run --frozen pytest -q tests/r tests/w/test_lab_workers.py tests/d/test_code_mutants_live.py` | 0 | 144 passed, 4 skipped (the r1-only routing PG cases) |
+| `INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/r/control/test_mutants.py` | 0 | 81 passed, 0 survivors (`r2_live_health_invented` killed) |
+
+No production code changed, so the E4 figure of 2830/0 at 1f68d35 still stands.
