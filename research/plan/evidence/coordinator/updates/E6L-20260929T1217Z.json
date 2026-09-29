@@ -87,7 +87,7 @@
   "pessimistic_h": 8,
   "confidence": "low",
   "basis": "0.5 h if the coordinator rules j11 a recorded product dependency (OUT_OF_SCOPE += L3); else WR-E6L-J11 in L3/B1 2-5 h + j11 bind 0.5-1 h + one verify round 47-234 min (session-03); j10 rides the lab-e2e lane",
-  "at": "2026-09-29T13:30:00Z"
+  "at": "2026-09-29T12:17:00Z"
  },
  "blockers": [
   "j11 (EVAL-COMPARE finite video) NOT RUN on L3's media path (in local scope): R222 not met until a ruling or WR-E6L-J11"
