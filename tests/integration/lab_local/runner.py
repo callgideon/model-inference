@@ -108,10 +108,12 @@ OUT_OF_SCOPE = {
     "P-10": "external teacher provider (P-10)", "P-11": "external training provider (P-11)",
     "P-08": "GPU / staging target (P-08)",
 }
-#: FAILs that are the ruled design, not a finding (proposed with R222's check; the coordinator
-#: rules): the e4-on pilot-box worker inherits LAB_EVAL_WORKER=true and refuses by name (R198,
-#: LDP-F4); the all-switches App gateway on infrx_runtime is never on the box (R237/R245,
-#: LDP-F1 option (b)) - mutants.KNOWN_FAIL. Excused only when they are the only failures.
+#: FAILs that follow the rulings' design (R198, R237/R245), not a product finding: the e4-on
+#: pilot-box worker inherits LAB_EVAL_WORKER=true and refuses by name (LDP-F4); the
+#: all-switches App gateway on infrx_runtime is never on the box (LDP-F1 option (b)) -
+#: mutants.KNOWN_FAIL. R222 requires no FAIL cell and R234 never excuses one, so r222 keeps
+#: them open and only reports them under by_design until a ruling excuses them (0-LL2C-2;
+#: proposal LL2-BY-DESIGN in the E4ON evidence).
 BY_DESIGN = {
     "tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_"
     "waits_for_it": "R198 (LDP-F4): a consumer worker with LAB_EVAL_WORKER ON refuses by name",
@@ -217,17 +219,16 @@ def ruled(reason: str) -> bool:
 
 
 def r222(stages: list[dict], scenarios: dict) -> dict:
-    """R222/R235: accepted locally with nothing but PASS, a NOT RUN whose every reason names
-    only out-of-scope lanes, or a FAIL that is only BY_DESIGN cases. `open` = what keeps it
-    from acceptance (an in-scope FAIL is never excused, R234); `by_design` = what was excused
-    as a FAIL, with its ruling."""
+    """R222/R235: accepted locally with nothing but PASS or a NOT RUN whose every reason names
+    only out-of-scope lanes. `open` = what keeps it from acceptance: every FAIL (R222: no FAIL
+    cell; R234), BLOCKED, INVALID or unruled NOT RUN; `by_design` = the open FAILs that are
+    exactly a BY_DESIGN case, with the design they follow - reported, never excused."""
     still, excused = {}, {}
     for sid, entry in scenarios.items():
         def fine(name: str, status: str) -> bool:
             mine = [r for r in entry["reasons"] if r.startswith(f"{name}: ")]
             if status == FAIL and name in BY_DESIGN:
                 excused[name] = BY_DESIGN[name]
-                return True
             return status == PASS or (status == NOT_RUN and bool(mine)
                                       and all(ruled(r) for r in mine))
         cases = entry["cases"]
@@ -238,11 +239,12 @@ def r222(stages: list[dict], scenarios: dict) -> dict:
         name, status = stage["stage"], stage["status"]
         if (name == "scenarios" and scenarios) or status == PASS or (status == NOT_RUN and ruled(stage.get("reason"))):
             continue
-        failed = (stage.get("counts") or {}).get("failed_ids") or []
-        if name == "e4-on" and status == FAIL and failed and set(failed) <= set(BY_DESIGN) \
-                and not stage["counts"].get("errors"):
+        counts = stage.get("counts") or {}
+        failed = counts.get("failed_ids") or []
+        if name == "e4-on" and status == FAIL and set(failed) <= set(BY_DESIGN) \
+                and not counts.get("errors") \
+                and not (counts.get("skipped") or counts.get("xfailed")):   # 0-LL2C-1
             excused.update({case: why for case, why in BY_DESIGN.items() if case in failed})
-            continue
         still[name] = status
     return {"accepted": not still, "open": still, "by_design": excused}
 

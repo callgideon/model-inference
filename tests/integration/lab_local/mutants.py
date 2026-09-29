@@ -67,6 +67,7 @@ CONTROL_LOGIN = "test_lab_local_the_control_factory_runs_on_its_own_login_never_
 R222_RECORDED = "test_lab_local_r222_the_recorded_28c9c2cc_verdict_is_not_accepted"
 R222_CLASSES = "test_lab_local_r222_excuses_only_the_ruled_classes"
 R222_E4 = "test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case"
+R222_FD = "test_lab_local_r222_the_fd0aba04_verdict_stays_open_after_the_journeys_land"
 AS_OWNER = "test_lab_local_the_control_login_answers_as_the_owner_login"
 TLS_READY = "test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers"
 PIN_CLEAN = "test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty"
@@ -117,11 +118,21 @@ MUTANTS: tuple[Mutant, ...] = (
        "(status == NOT_RUN and bool(mine)", "(status == NOT_RUN", R222_CLASSES),
     _m("r222_absent_required_ignored", "a scenario missing a required case stays open", R,
        " or \\\n                set(REQUIRED[sid]) - set(cases):", ":", R222_CLASSES, R222_RECORDED),
-    _m("r222_e4_any_failure_excused", "only the by-design e4-on failure is excused", R,
-       "and failed and set(failed) <= set(BY_DESIGN)", "and failed", R222_E4),
-    _m("r222_e4_no_failure_excused", "an e4-on FAIL with no failed case stays open", R,
-       "and failed and set(failed) <= set(BY_DESIGN)", "and set(failed) <= set(BY_DESIGN)",
-       R222_E4),
+    _m("r222_e4_any_failure_excused", "only the by-design e4-on failure is reported as such", R,
+       "and set(failed) <= set(BY_DESIGN)", "", R222_E4),
+    _m("r222_e4_skips_ignored", "an e4-on stage with skipped cases is never reported as only "
+       "its by-design FAIL (0-LL2C-1)", R,
+       "                and not (counts.get(\"skipped\") or counts.get(\"xfailed\")):",
+       "                and True:", R222_E4),
+    _m("r222_by_design_accepted", "a by-design FAIL stays open until ruled (R222, 0-LL2C-2)",
+       R, "                excused[name] = BY_DESIGN[name]\n",
+       "                excused[name] = BY_DESIGN[name]\n                return True\n",
+       R222_CLASSES, R222_FD),
+    _m("r222_e4_by_design_accepted", "the e4-on by-design FAIL stays open until ruled "
+       "(0-LL2C-2)", R, "            excused.update({case: why for case, why in "
+       "BY_DESIGN.items() if case in failed})\n",
+       "            excused.update({case: why for case, why in BY_DESIGN.items() if case in "
+       "failed})\n            continue\n", R222_E4, R222_FD),
     _m("r222_stages_ignored", "a stage that did not pass keeps the gate open", R,
        "        still[name] = status\n", "        pass\n", R222_E4, R222_RECORDED),
     _m("r222_always_accepted", "accepted is computed, never asserted", R,
@@ -265,9 +276,10 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
     operate._layer1(root)
     (root / "infra" / "lab" / "app").mkdir(parents=True)
     shutil.copy2(REPO / "infra" / "lab" / "app" / "lab.json", root / "infra/lab/app/lab.json")
-    recorded = "research/plan/evidence/e/E4ON-raw-28c9c2cc/verdict.json"    # R222_RECORDED
-    (root / recorded).parent.mkdir(parents=True)
-    shutil.copy2(REPO / recorded, root / recorded)
+    for head in ("28c9c2cc", "fd0aba04"):                         # R222_RECORDED, R222_FD
+        recorded = f"research/plan/evidence/e/E4ON-raw-{head}/verdict.json"
+        (root / recorded).parent.mkdir(parents=True)
+        shutil.copy2(REPO / recorded, root / recorded)
     return root
 
 
