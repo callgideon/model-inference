@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 326,
- "updated": "2026-09-29T23:21:53Z",
+ "revision": 327,
+ "updated": "2026-09-29T23:37:06Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9789,22 +9789,22 @@
   {
    "id": "W5-LAB-LOCAL-3",
    "task": "I2L",
-   "slice": "`GATE_ARGS=--keep make lab-local` after #61: the pipelines/traces journeys run in the composition, o05 judged against CONTROL_EXPECTED, the 14 e4-on skips on other keys run inside the composition or ruled; the 12 stack mutants on the kept stack (Opus); workflow wf_504e9d9d-7c5",
+   "slice": "`GATE_ARGS=--keep make lab-local` after #61: the pipelines/traces journeys run in the composition, o05 judged against CONTROL_EXPECTED, the 14 e4-on skips on other keys run inside the composition or ruled; the 12 stack mutants on the kept stack (Opus); workflow wf_504e9d9d-7c5; ACCEPT_WITH_FIXES at 31d61031 (KEYED reruns of the 15 other-key cases all PASS; journeys 5/5; 79 mutants; the run of record FAILed only on 9 lab_releases cases broken on its base — fixed on the tip)",
    "agent": "opus",
    "branch": "codex/w5-lab-local-3",
    "worktree": ".claude/worktrees/codex-w5-lab-local-3",
    "base": "8ab880a5",
-   "head": null,
+   "head": "31d61031",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T21:57:57Z",
-   "updated": "2026-09-29T21:57:57Z",
+   "updated": "2026-09-29T23:37:06Z",
    "blocker": null,
-   "next_action": "handback → merge → E4-ON accepted under R257 → the runbook proof table",
+   "next_action": "merge batch #64: the acceptance rerun on the merged tree (WR-LL3-1 already on the tip) → E4-ON accepted under R257/R262",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9893,6 +9893,40 @@
     "tests/integration/lab_observe/mutants.py",
     "research/plan/08-contracts-v1-encoding.md",
     "research/plan/evidence/t/LAB-CAPTURE-2-4f87f54.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-64",
+   "task": null,
+   "slice": "merge batch #64 (Opus): lab-local-3 31d61031 (+the acceptance rerun `GATE_ARGS=--keep make lab-local` on the merged tree, minors, R262)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-64",
+   "worktree": ".claude/worktrees/codex-w5-merge-64",
+   "base": "86617819",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T23:37:06Z",
+   "updated": "2026-09-29T23:37:06Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → E4-ON accepted → INTERNAL-TESTING-PREP local half complete",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_local/",
+    "research/plan/evidence/e/E4ON-*",
+    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+    "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
   }
