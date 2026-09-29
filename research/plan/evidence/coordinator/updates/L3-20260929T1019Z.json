@@ -1,0 +1,76 @@
+{
+ "task": "L3",
+ "slice": "lab-control-2 (LW6): E3L-F4 operator rejection (0052 lab_control_reject/lab_control_operator, the route's operator door, terminal-row read) + E3L-F5 (Deployment.visibility = current listing, R207)",
+ "activity": "review",
+ "head": "c1aac903",
+ "worktree": ".claude/worktrees/codex-w5-lab-control-2",
+ "branch": "codex/w5-lab-control-2",
+ "owned_paths": [
+  "apps/infrx-api/infrx/lab/control/**",
+  "apps/infrx-api/infrx/state/lab_control.py",
+  "apps/infrx-api/infrx/gateway/routes/lab_control.py (the control factory's own route module)",
+  "apps/app/supabase/migrations/0052_lab_control_reject.sql",
+  "apps/infrx-api/tests/l/**",
+  "apps/infrx-api/tests/d/{test_l3sql_control,test_l3sql_units,code_mutants_l3sql}.py",
+  "tests/integration/test_harness.py (the pin)",
+  "research/plan/evidence/l/"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=l3 pytest -q tests/l/control/test_operations.py -k 'reject or terminal' (seam first)",
+   "exit": 1,
+   "summary": "5 failed: Operations has no operator; route 404; PG listings ValidationError (E3L-F4 repro)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 pytest -q tests/l/control/test_operations.py -k public_only (F5 seam first)",
+   "exit": 1,
+   "summary": "pending proposal read public/active (fake, PG)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 pytest -q tests/l",
+   "exit": 0,
+   "summary": "95 passed, 2 skipped"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 pytest -q tests/l/control/test_mutants.py",
+   "exit": 0,
+   "summary": "117 passed (83 fake + 29 PG mutants killed), every case named"
+  },
+  {
+   "cmd": "INFRX_D_TASK=dlab pytest -q tests/d/test_code_mutants_l3sql.py tests/d/test_l3sql_{control,units,reads}.py tests/d/test_upgrade_lab.py",
+   "exit": 0,
+   "summary": "106 passed (at c1aac903)"
+  },
+  {
+   "cmd": "pytest -q tests/integration/lab_operate/test_e3l_runner.py tests/integration/lab_operate/test_mutants.py",
+   "exit": 0,
+   "summary": "17 passed, 1 skipped (E3L layer 1)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 make api-test (at d407b006)",
+   "exit": 1,
+   "summary": "6675 passed, 9 failed: 2 new l3sql checks raced on P2 (fixed c1aac903, rerun green), 7 outbox_relay[valkey] HarnessBusy on foreign d2 valkey lock"
+  },
+  {
+   "cmd": "cd apps/lab && LAB_L4_REAL=1 INFRX_D_TASK=l4 node --test tests/l/ui/stack.test.ts (scratch: 62d5130c + this lane + WR-LC2-2, fake unchanged)",
+   "exit": 0,
+   "summary": "4/4: J02's rejection on the real L3"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium-high",
+  "basis": "E3L-F4/F5 implemented red-first with 0 survivors (L3 117, l3sql 77); remaining = one verify round (47-234 min per session-03) and the Lab owner's WR-LC2-1/2",
+  "at": "20260929T1019Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LC2-1 (lab-app owner) apps/lab/lib/services/control/fake.ts: a proposal is a new unlisted prod revision (proposal id, private, unpriced); approval lists it, rejection retires it, rollback restores only a listed revision; exact diff research/plan/evidence/l/LAB-CONTROL-2-raw/WR-LC2-1-lab-fake.diff (journeys 16/16 with it on 62d5130c)",
+  "WR-LC2-2 (lab-app owner) apps/lab/tests/l/ui/stack.test.ts + backend.py: J02's reject through POST /lab/v1/control/proposals/{id}/reject on an operator session (users += ops: w.OPS_USER); exact diff research/plan/evidence/l/LAB-CONTROL-2-raw/WR-LC2-2-lab-stack.diff (stack 4/4 on l4)"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/LAB-CONTROL-2-c1aac90.md"
+ ]
+}

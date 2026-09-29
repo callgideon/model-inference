@@ -10,9 +10,11 @@ trusted. The reads the adapters need (`ControlReads`) are lab-sql's to add to `P
 from __future__ import annotations
 
 import asyncio
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from infrx.config import RuntimeMisconfigured
 from infrx.contracts import errors
@@ -194,6 +196,163 @@ def test_operations__the_lab_apps_registration_shape_registers(world):
     stored = w.control_store.servings[d.serving_version_id]
     assert (d.model_id, d.runtime, stored.runtime_image_ref, stored.weight_shard_digests) == (
         ALIAS, RUNTIME, RUNTIME, SHARD_DIGESTS)
+
+
+def proposed(w, o):
+    """A's registered, smoked dev revision and its administrator's open proposal."""
+    dev_a = actor(w, w.DEV_A, w.A)
+    d = run(o.register(dev_a, reg()))
+    run(o.smoke(dev_a, d.deployment_revision_id))
+    return d, run(o.propose(actor(w, w.ADMIN_A, w.A, v2.ProviderRole.administrator),
+                            "publish", d.deployment_revision_id))
+
+
+def test_operations__an_operator_rejects_a_proposal_and_it_publishes_nothing(world):
+    """Oracle (E3L-F4): only a platform operator (`profiles.is_operator`) rejects - never a
+    provider administrator or a consumer; the rejection takes the proposal out of
+    `proposed_public` (the provider reads `rejected` with its instant, the revision a
+    terminal prod/private/retired row), is audited under the operator with its reason, and
+    publishes nothing; it is not approved afterwards nor rejected twice; an unknown id or a
+    dev revision is no proposal (`not_found`); a blank reason is refused and moves nothing;
+    the dev revision stays dev and may be proposed afresh."""
+    w, o = world, ops(world)
+    seed = pin(w, ALIAS).deployment_revision_id
+    d, p = proposed(w, o)
+    admin_a = actor(w, w.ADMIN_A, w.A, v2.ProviderRole.administrator)
+    for user in (w.ADMIN_A, w.DEV_A, w.CONSUMER_ONLY):
+        with pytest.raises(errors.Forbidden):
+            run(o.operator(user))
+    operator = run(o.operator(w.OPS_USER))
+    assert operator.principal == f"operator:{w.OPS_USER}"
+    with pytest.raises(errors.InvalidRequest):
+        run(o.reject(operator, p.proposal_id, " "))
+    assert [x.state for x in run(o.proposals(admin_a))] == ["proposed"], "a blank reason moved it"
+    rejected = run(o.reject(operator, p.proposal_id, "not ready"))
+    assert (rejected.proposal_id, rejected.kind, rejected.deployment_revision_id,
+            rejected.state) == (p.proposal_id, "publish", d.deployment_revision_id, "rejected")
+    assert rejected.decided_at is not None and rejected.proposed_at == p.proposed_at
+    assert run(o.proposals(admin_a)) == [rejected]
+    assert pin(w, ALIAS).deployment_revision_id == seed, "a rejection published something"
+    rows = {x.deployment_revision_id: x for x in run(o.deployments(admin_a))}
+    assert (rows[p.proposal_id].environment, rows[p.proposal_id].visibility,
+            rows[p.proposal_id].state) == ("prod", "private", "retired")
+    assert (rows[d.deployment_revision_id].environment,
+            rows[d.deployment_revision_id].state) == ("dev", "active")
+    assert run(w.control_store.deployment(p.proposal_id)).visibility is v2.Visibility.private
+    event = run(w.control.events(w.ADMIN_A, w.A))[-1]
+    assert (event.action, event.actor, event.subject, event.before, event.after) == (
+        "lab_transition", operator.principal, p.proposal_id, {"state": "proposed_public"},
+        {"state": "retired", "reason": "not ready"})
+    with pytest.raises(errors.Conflict):
+        run(o.reject(operator, p.proposal_id, "again"))
+    with pytest.raises(errors.Conflict):
+        run(w.control.approve(OPERATOR, p.proposal_id, rate_card_version="rc_rejected",
+                              input_rate="3", output_rate="9", expected_version=1,
+                              reason="late"))
+    for other in ("a5000000-0000-4000-8000-00000000ffff", d.deployment_revision_id,
+                  w.control_store.listings[ALIAS][0].deployment_revision_id):
+        with pytest.raises(errors.NotFound):
+            run(o.reject(operator, other, "no proposal"))
+    assert pin(w, ALIAS).deployment_revision_id == seed
+    again = run(o.propose(admin_a, "publish", d.deployment_revision_id))
+    assert again.proposal_id != p.proposal_id and again.state == "proposed"
+
+
+def test_operations__a_retired_proposal_lists_as_a_terminal_row(world):
+    """Oracle (E3L-F4's repro): a proposal the platform retires outside L3 (0007's service_role
+    UPDATE; its row stays `public`, which no `DeploymentRevision` may hold) leaves the
+    provider's proposals and deployments listings readable - `rejected` with no operator
+    instant, and a prod/private/retired row - never a 503."""
+    w, o = world, ops(world)
+    d, p = proposed(w, o)
+    w.retire(p.proposal_id)
+    viewer = actor(w, w.VIEWER_A, w.A, v2.ProviderRole.viewer)
+
+    def answered(read):
+        try:
+            return run(read(viewer))
+        except ValidationError:                   # what the route renders as a 503
+            return "unavailable"
+    proposals, deployments = answered(o.proposals), answered(o.deployments)
+    assert "unavailable" not in (proposals, deployments), (proposals, deployments)
+    assert [(x.proposal_id, x.state, x.decided_at) for x in proposals] == [
+        (p.proposal_id, "rejected", None)]
+    row = next(x for x in deployments if x.deployment_revision_id == p.proposal_id)
+    assert (row.environment, row.visibility, row.state) == ("prod", "private", "retired")
+    stored = run(w.control_store.deployment(p.proposal_id))
+    assert (stored.visibility, stored.state) == (v2.Visibility.private, v2.DeploymentState.retired)
+
+
+def test_operations__a_revision_reads_public_only_while_it_is_the_listing(world):
+    """Oracle (E3L-F5, R207): the route record's visibility is the listing's truth. A pending
+    proposal's prod revision reads private until the operator's approval lists it (then
+    public); after the operator's rollback the rolled-back revision reads private (still
+    `active`: admitted jobs keep their pins) and the restored one public. At each step the one
+    public prod revision is the one App discovery pins."""
+    w, o = world, ops(world)
+    seed = pin(w, ALIAS).deployment_revision_id
+    _, p = proposed(w, o)
+    viewer = actor(w, w.VIEWER_A, w.A, v2.ProviderRole.viewer)
+
+    def prod():
+        return {x.deployment_revision_id: (x.visibility, x.state)
+                for x in run(o.deployments(viewer)) if x.deployment_revision_id in (seed, p.proposal_id)}
+    assert prod() == {seed: ("public", "active"), p.proposal_id: ("private", "active")}
+    run(w.control.approve(OPERATOR, p.proposal_id, rate_card_version="rc_f5", input_rate="3",
+                          output_rate="9", expected_version=1, reason="launch"))
+    assert prod() == {seed: ("private", "active"), p.proposal_id: ("public", "active")}
+    assert pin(w, ALIAS).deployment_revision_id == p.proposal_id
+    run(w.control.rollback(OPERATOR, ALIAS, to_version=1, expected_version=2, reason="regress"))
+    assert prod() == {seed: ("public", "active"), p.proposal_id: ("private", "active")}
+    assert pin(w, ALIAS).deployment_revision_id == seed
+
+
+class Sessions:
+    """The session verifier (GoTrue's stand-in): `eyJ0.<user id hex>.c2ln` is that user."""
+
+    async def user_id(self, token: str) -> str:
+        return str(uuid.UUID(token.split(".")[1]))
+
+
+def route(w) -> TestClient:
+    """`/lab/v1/control` as R186's factory mounts it, over this world's `Operations`."""
+    from fastapi import FastAPI
+
+    from infrx.gateway.routes import lab_control as lc
+    from tests.g import support
+    app = FastAPI()
+    lc.register(app, support.runtime(), lc.LabControl(Sessions(), w.access, ops(w)))
+    return TestClient(app)
+
+
+def test_control_route__only_an_operator_rejects_a_proposal(world):
+    """Oracle (E3L-F4, R175): `POST /lab/v1/control/proposals/{id}/reject` is the operator's
+    door on the session: no session is 401; a provider administrator and a consumer-only user
+    are 403 `denied` before the body is read; the operator's body without a reason is 422,
+    an unknown id 404; the rejection answers the `rejected` proposal; a second one is 409."""
+    w, o = world, ops(world)
+    _, p = proposed(w, o)
+    client = route(w)
+
+    def post(user, proposal=p.proposal_id, body=b'{"reason": "not ready"}'):
+        head = {"content-type": "application/json"}
+        if user:
+            head["authorization"] = f"Bearer eyJ0.{user.replace('-', '')}.c2ln"
+        return client.post(f"/lab/v1/control/proposals/{proposal}/reject", content=body,
+                           headers=head)
+
+    def answer(r):
+        return r.status_code, r.json().get("refusal")
+    assert answer(post(None)) == (401, "unauthenticated")
+    for user in (w.ADMIN_A, w.CONSUMER_ONLY):
+        assert answer(post(user, body=b"{")) == (403, "denied"), user
+    assert answer(post(w.OPS_USER, body=b"{}")) == (422, "invalid")
+    assert answer(post(w.OPS_USER, "a5000000-0000-4000-8000-00000000ffff")) == (404, "not_found")
+    done = post(w.OPS_USER)
+    assert done.status_code == 200, done.text
+    assert (done.json()["proposal_id"], done.json()["state"]) == (p.proposal_id, "rejected")
+    assert done.json()["decided_at"] is not None
+    assert answer(post(w.OPS_USER)) == (409, "conflict")
 
 
 def test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins(world):

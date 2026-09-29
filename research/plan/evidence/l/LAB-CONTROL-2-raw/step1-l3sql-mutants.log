@@ -1,0 +1,301 @@
+...............................................FF....................... [ 92%]
+......                                                                   [100%]
+=================================== FAILURES ===================================
+______________ test_sql_mutant_is_killed[l3_reject_for_browsers] _______________
+
+mutant = Mutant(name='l3_reject_for_browsers', file='0052_lab_control_reject.sql', old='  to service_role, infrx_lab_control;',...othing', why="a signed-in browser rejects any provider's proposal", occurrences=1, expects='killed', expects_detail='')
+
+    @pytest.mark.skipif(_reason is not None, reason=f"task-local PostgreSQL unavailable: {_reason}")
+    @pytest.mark.parametrize("mutant", SQL, ids=lambda m: m.name)
+    def test_sql_mutant_is_killed(mutant) -> None:
+        outcome, detail = mutation_list.kill(mutant)
+>       assert outcome == _d.KILLED, (f"{mutant.name} was {outcome} by {mutant.check}: {detail}. "
+                                      f"In production: {mutant.why}")
+E       AssertionError: l3_reject_for_browsers was survived by check_browser_roles_reach_nothing: . In production: a signed-in browser rejects any provider's proposal
+E       assert 'survived' == 'killed'
+E         
+E         - killed
+E         + survived
+
+tests/d/test_code_mutants_l3sql.py:62: AssertionError
+____________ test_sql_mutant_is_killed[l3_reject_not_on_the_login] _____________
+
+mutant = Mutant(name='l3_reject_not_on_the_login', file='0052_lab_control_reject.sql', old='  to service_role, infrx_lab_contro...l_login', why='the control service cannot reject on its own login', occurrences=1, expects='killed', expects_detail='')
+
+    @pytest.mark.skipif(_reason is not None, reason=f"task-local PostgreSQL unavailable: {_reason}")
+    @pytest.mark.parametrize("mutant", SQL, ids=lambda m: m.name)
+    def test_sql_mutant_is_killed(mutant) -> None:
+        outcome, detail = mutation_list.kill(mutant)
+>       assert outcome == _d.KILLED, (f"{mutant.name} was {outcome} by {mutant.check}: {detail}. "
+                                      f"In production: {mutant.why}")
+E       AssertionError: l3_reject_not_on_the_login was setup_error by check_the_operator_door_is_the_profiles_bit_on_the_control_login: the check raised instead of asserting: InsufficientPrivilege: permission denied for function lab_control_operator. In production: the control service cannot reject on its own login
+E       assert 'setup_error' == 'killed'
+E         
+E         - killed
+E         + setup_error
+
+tests/d/test_code_mutants_l3sql.py:62: AssertionError
+==================================== PASSES ====================================
+________________________ test_the_lists_are_well_formed ________________________
+----------------------------- Captured stdout call -----------------------------
+L3-SQL mutants: 48 + 5 SQL, 13 + 9 Python
+______________ test_sql_mutant_is_killed[l3_service_edits_audit] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_service_edits_audit: killed -> AssertionError: service edits the audit: None
+________________ test_sql_mutant_is_killed[l3_row_security_off] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_row_security_off: killed -> AssertionError: assert False
+_______________ test_sql_mutant_is_killed[l3_move_any_provider] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_move_any_provider: killed -> AssertionError: assert None == 'not_found'
+__________________ test_sql_mutant_is_killed[l3_move_public] ___________________
+----------------------------- Captured stdout call -----------------------------
+l3_move_public: killed -> AssertionError: {'draining': None, 'retired': 'state_conflict', 'activate_proposal': None}
+________________ test_sql_mutant_is_killed[l3_move_without_cas] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_move_without_cas: killed -> AssertionError: a stale expectation moved the revision
+__________________ test_sql_mutant_is_killed[l3_bad_move_raw] __________________
+----------------------------- Captured stdout call -----------------------------
+l3_bad_move_raw: killed -> AssertionError: a move 0007 forbids
+_______________ test_sql_mutant_is_killed[l3_move_unattributed] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_move_unattributed: killed -> AssertionError: assert None == 'invalid_request'
+________________ test_sql_mutant_is_killed[l3_move_before_lost] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_move_before_lost: killed -> AssertionError: [('lab_transition', 'dev@nemo', 'c0000006-0000-4000-8000-000000000006', None, {'state': 'validating', 'reason': 'journ...ransition', 'dev@nemo', 'c0000006-0000-
+________________ test_sql_mutant_is_killed[l3_audit_actor_raw] _________________
+----------------------------- Captured stdout call -----------------------------
+l3_audit_actor_raw: killed -> AssertionError: assert 'sqlstate 23514' == 'invalid_request'
+______________ test_sql_mutant_is_killed[l3_events_any_provider] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_events_any_provider: killed -> AssertionError: assert [{'at': '2026...sition', ...}] == []
+_____________ test_sql_mutant_is_killed[l3_propose_foreign_source] _____________
+----------------------------- Captured stdout call -----------------------------
+l3_propose_foreign_source: killed -> AssertionError: assert None == 'not_found'
+______________ test_sql_mutant_is_killed[l3_propose_unvalidated] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_propose_unvalidated: killed -> AssertionError: a draft proposed
+_____________ test_sql_mutant_is_killed[l3_propose_other_serving] ______________
+----------------------------- Captured stdout call -----------------------------
+l3_propose_other_serving: killed -> AssertionError: another serving version proposed
+_______________ test_sql_mutant_is_killed[l3_propose_any_state] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_propose_any_state: killed -> AssertionError: assert None == 'invalid_request'
+_______________ test_sql_mutant_is_killed[l3_propose_unaudited] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_propose_unaudited: killed -> AssertionError: lab_control_propose refused: P0001 state_conflict: a revision already holds this id
+___________ test_sql_mutant_is_killed[l3_propose_no_idempotent_lock] ___________
+----------------------------- Captured stdout call -----------------------------
+l3_propose_no_idempotent_lock: killed -> AssertionError: two racing retries of the same source disagreed: ['c000000d-0000-4000-8000-00000000000d', 'c000000e-0000-4000-8000-00000000000e']
+__________ test_sql_mutant_is_killed[l3_propose_ignores_the_open_one] __________
+----------------------------- Captured stdout call -----------------------------
+l3_propose_ignores_the_open_one: killed -> AssertionError: a retry with a fresh id opened a second proposal: {'state': 'proposed_public', 'created_at': '2026-09-20T12:00:00+00:00', 'created_by': 'admin@nemo', 'updated_a
+______________ test_sql_mutant_is_killed[l3_key_any_environment] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_key_any_environment: killed -> AssertionError: assert None == 'not_found'
+________________ test_sql_mutant_is_killed[l3_key_any_provider] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_key_any_provider: killed -> AssertionError: assert 'invalid_request' == 'not_found'
+_____________ test_sql_mutant_is_killed[l3_key_in_the_members_org] _____________
+----------------------------- Captured stdout call -----------------------------
+l3_key_in_the_members_org: killed -> AssertionError: ('5b2d5512-b92b-489e-9de2-6ebac849745c', 'provider_dev', 'b0000001-0000-4000-8000-000000000001', 'c0000001-0000-4000-8000-000000000001', 'hash-l3-dev-1', None)
+________________ test_sql_mutant_is_killed[l3_key_without_org] _________________
+----------------------------- Captured stdout call -----------------------------
+l3_key_without_org: killed -> AssertionError: lab_control_dev_key refused: P0001 invalid_request: a dev credential is a new hash with a name and prefix, issued to a member
+________________ test_sql_mutant_is_killed[l3_key_hash_audited] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_key_hash_audited: killed -> AssertionError: [('lab_dev_key', 'c1000000-0000-4000-8000-000000000006', 'ecd8e1c2-f13f-4b49-9ca4-ccb03846d6c9', {'prefix': 'hash-l3-d...24af-1f40-4e78-b714-19d87daed707', {'pr
+______________ test_sql_mutant_is_killed[l3_publish_without_cas] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_publish_without_cas: killed -> AssertionError: assert None == 'state_conflict'
+____________ test_sql_mutant_is_killed[l3_publish_retires_previous] ____________
+----------------------------- Captured stdout call -----------------------------
+l3_publish_retires_previous: killed -> AssertionError: assert ('active' == 'active'
+______________ test_sql_mutant_is_killed[l3_publish_version_skip] ______________
+----------------------------- Captured stdout call -----------------------------
+l3_publish_version_skip: killed -> AssertionError: {'version': 3, 'public_model_id': 'nemostation/marlin-2b', 'rate_card_version': 'rc_marlin2b_s2', 'deployment_revision_id': 'c0000007-0000-4000-8000-00000000000
+_______________ test_sql_mutant_is_killed[l3_publish_raw_error] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_publish_raw_error: killed -> AssertionError: listed under another model's alias
+_______________ test_sql_mutant_is_killed[l3_publish_unaudited] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_publish_unaudited: killed -> AssertionError: {'at': '2026-09-20T12:00:00+00:00', 'actor': 'ops@infrx', 'after': {'reason': 'P-01 approved', 'version': 2, 'public_model_id': 'nemostation/marlin-2b', 'rate_c
+_______________ test_sql_mutant_is_killed[l3_publish_any_state] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_publish_any_state: killed -> AssertionError: assert 'invalid_request' == 'state_conflict'
+______________ test_sql_mutant_is_killed[l3_rollback_without_cas] ______________
+----------------------------- Captured stdout call -----------------------------
+l3_rollback_without_cas: killed -> AssertionError: assert None == 'state_conflict'
+______________ test_sql_mutant_is_killed[l3_rollback_to_current] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_rollback_to_current: killed -> AssertionError: assert None == 'not_found'
+________________ test_sql_mutant_is_killed[l3_rollback_drained] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_rollback_drained: killed -> AssertionError: rolled back to a draining revision
+_______________ test_sql_mutant_is_killed[l3_rollback_new_card] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_rollback_new_card: killed -> AssertionError: {'version': 3, 'public_model_id': 'nemostation/marlin-2b', 'rate_card_version': 'rc_marlin2b_repriced', 'deployment_revision_id': 'c0000004-0000-4000-8000-00000
+_________________ test_sql_mutant_is_killed[l3_jobs_repinned] __________________
+----------------------------- Captured stdout call -----------------------------
+l3_jobs_repinned: killed -> AssertionError: lab_control_rollback refused: P0001 invalid_request: a rollback names its actor
+________________ test_sql_mutant_is_killed[l3_fund_for_anyone] _________________
+----------------------------- Captured stdout call -----------------------------
+l3_fund_for_anyone: killed -> AssertionError: assert 'sqlstate 23503' == 'not_found'
+_______________ test_sql_mutant_is_killed[l3_fund_audited_twice] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_fund_audited_twice: killed -> AssertionError: assert [('lab_fund',...50.00000000')] == [('lab_fund', '250.00000000')]
+_______________ test_sql_mutant_is_killed[l3_fund_as_adjustment] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_fund_as_adjustment: killed -> AssertionError: lab_control_fund refused: P0001 invalid_request: an operator adjustment corrects a consumer wallet
+_________________ test_sql_mutant_is_killed[l3_fund_unaudited] _________________
+----------------------------- Captured stdout call -----------------------------
+l3_fund_unaudited: killed -> AssertionError: assert [('lab_publis...50.00000000')] == [('lab_fund', '250.00000000')]
+______________ test_sql_mutant_is_killed[l3_publish_unserialized] ______________
+----------------------------- Captured stdout call -----------------------------
+l3_publish_unserialized: killed -> AssertionError: ['2', 'state_conflict: a card of this version already exists']
+_____________ test_sql_mutant_is_killed[l3_rollback_unserialized] ______________
+----------------------------- Captured stdout call -----------------------------
+l3_rollback_unserialized: killed -> AssertionError: ['3', 'duplicate key value violates unique constraint "catalog_listings_pkey"']
+________________ test_sql_mutant_is_killed[l3_reject_any_state] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_reject_any_state: killed -> AssertionError: {'c0000004-0000-4000-8000-000000000004': None, 'c0000006-0000-4000-8000-000000000006': None, 'c000000a-0000-4000-8000-00000000000a': 'not_found'}
+______________ test_sql_mutant_is_killed[l3_reject_blank_reason] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_reject_blank_reason: killed -> AssertionError: {'deployment_revision_id': 'c0000007-0000-4000-8000-000000000007', 'actor': 'operator:ops', 'reason': ' '}
+________________ test_sql_mutant_is_killed[l3_reject_activates] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_reject_activates: killed -> AssertionError: {'state': 'active', 'created_at': '2026-09-20T12:00:00+00:00', 'created_by': 'dev@nemo', 'updated_at': '2026-09-20T12:00:00+00:00', ...}
+______________ test_sql_mutant_is_killed[l3_reject_unattributed] _______________
+----------------------------- Captured stdout call -----------------------------
+l3_reject_unattributed: killed -> AssertionError: {'deployment_revision_id': 'c0000007-0000-4000-8000-000000000007', 'actor': '', 'reason': 'not ready'}
+_______________ test_sql_mutant_is_killed[l3_reject_start_lost] ________________
+----------------------------- Captured stdout call -----------------------------
+l3_reject_start_lost: killed -> AssertionError: {'at': '2026-09-20T12:00:00+00:00', 'actor': 'operator:ops', 'after': {'state': 'retired', 'reason': 'not ready'}, 'action': 'lab_transition', ...}
+________________ test_sql_mutant_is_killed[l3_operator_anyone] _________________
+----------------------------- Captured stdout call -----------------------------
+l3_operator_anyone: killed -> AssertionError: {'e1000000-0000-4000-8000-0000000000f0': True, 'c1000000-0000-4000-8000-000000000007': True, 'c1000000-0000-4000-8000-000000000001': True, '9e000000-0000-4000-8
+__________________ test_sql_mutant_is_killed[l3_events_empty] __________________
+----------------------------- Captured stdout call -----------------------------
+l3_events_empty: killed -> AssertionError: ['b0000001-0000-4000-8000-000000000001', None, None, <DeploymentState.draft: 'draft'>, 'datetime', True, ...]
+____________ test_reads_sql_mutant_is_killed[l3r_login_no_listings] ____________
+----------------------------- Captured stdout call -----------------------------
+l3r_login_no_listings: killed -> AssertionError: refused: InsufficientPrivilege('permission denied for table catalog_listings')
+_____________ test_reads_sql_mutant_is_killed[l3r_login_no_policy] _____________
+----------------------------- Captured stdout call -----------------------------
+l3r_login_no_policy: killed -> AssertionError: {'servings': ['d0000003-0000-4000-8000-000000000003', 'd0000006-0000-4000-8000-000000000006'], 'providers': {'b0000001...006-0000-4000-8000-000000000006', 'c000
+__________ test_reads_sql_mutant_is_killed[l3r_login_writes_listings] __________
+----------------------------- Captured stdout call -----------------------------
+l3r_login_writes_listings: killed -> AssertionError: {'list': None, 'jobs': '42501'}
+________ test_reads_sql_mutant_is_killed[l3r_router_for_the_lab_login] _________
+----------------------------- Captured stdout call -----------------------------
+l3r_router_for_the_lab_login: killed -> AssertionError: {'infrx_runtime': (None, False), 'infrx_lab_control': (None, False)}
+_________ test_reads_sql_mutant_is_killed[l3r_router_not_the_runtimes] _________
+----------------------------- Captured stdout call -----------------------------
+l3r_router_not_the_runtimes: killed -> AssertionError: {'infrx_runtime': 'InsufficientPrivilege', 'infrx_lab_control': 'InsufficientPrivilege'}
+__________ test_reads_py_mutant_is_killed[l3r_servings_any_provider] ___________
+----------------------------- Captured stdout call -----------------------------
+l3r_servings_any_provider: killed -> AssertionError: {'servings': ['d0000003-0000-4000-8000-000000000003', 'd0000006-0000-4000-8000-000000000006'], 'providers': {'b0000001...006-0000-4000-8000-000000000006', 'c000
+__________ test_reads_py_mutant_is_killed[l3r_servings_newest_first] ___________
+----------------------------- Captured stdout call -----------------------------
+l3r_servings_newest_first: killed -> AssertionError: {'servings': ['d0000006-0000-4000-8000-000000000006', 'd0000003-0000-4000-8000-000000000003'], 'providers': {'b0000001...006-0000-4000-8000-000000000006', 'c000
+_________ test_reads_py_mutant_is_killed[l3r_deployments_any_provider] _________
+----------------------------- Captured stdout call -----------------------------
+l3r_deployments_any_provider: killed -> AssertionError: {'servings': ['d0000003-0000-4000-8000-000000000003', 'd0000006-0000-4000-8000-000000000006'], 'providers': {'b0000001...006-0000-4000-8000-000000000006', 'c000
+_________ test_reads_py_mutant_is_killed[l3r_deployments_newest_first] _________
+----------------------------- Captured stdout call -----------------------------
+l3r_deployments_newest_first: killed -> AssertionError: {'servings': ['d0000003-0000-4000-8000-000000000003', 'd0000006-0000-4000-8000-000000000006'], 'providers': {'b0000001...008-0000-4000-8000-000000000008', 'c000
+____________ test_reads_py_mutant_is_killed[l3r_alias_any_endpoint] ____________
+----------------------------- Captured stdout call -----------------------------
+l3r_alias_any_endpoint: killed -> AssertionError: {'servings': ['d0000003-0000-4000-8000-000000000003', 'd0000006-0000-4000-8000-000000000006'], 'providers': {'b0000001...006-0000-4000-8000-000000000006', 'c000
+________ test_reads_py_mutant_is_killed[l3r_alias_by_version_not_time] _________
+----------------------------- Captured stdout call -----------------------------
+l3r_alias_by_version_not_time: killed -> AssertionError: the newest listing on c0000002-0000-4000-8000-000000000002 names 'nemostation/second' (v1, published after ALIAS's v2), got 'nemostation/marlin-2b'
+_________ test_reads_py_mutant_is_killed[l3r_alias_ignores_superseded] _________
+----------------------------- Captured stdout call -----------------------------
+l3r_alias_ignores_superseded: killed -> AssertionError: nemostation/moved's current (v2) listing is on e0000016-0000-4000-8000-000000000005, got None
+____________ test_reads_py_mutant_is_killed[l3r_listings_any_alias] ____________
+----------------------------- Captured stdout call -----------------------------
+l3r_listings_any_alias: killed -> AssertionError: {'servings': ['d0000003-0000-4000-8000-000000000003', 'd0000006-0000-4000-8000-000000000006'], 'providers': {'b0000001...006-0000-4000-8000-000000000006', 'c000
+__________ test_reads_py_mutant_is_killed[l3r_listings_newest_first] ___________
+----------------------------- Captured stdout call -----------------------------
+l3r_listings_newest_first: killed -> AssertionError: {'servings': ['d0000003-0000-4000-8000-000000000003', 'd0000006-0000-4000-8000-000000000006'], 'providers': {'b0000001...006-0000-4000-8000-000000000006', 'c000
+=========================== short test summary info ============================
+PASSED tests/d/test_code_mutants_l3sql.py::test_the_lists_are_well_formed
+PASSED tests/d/test_code_mutants_l3sql.py::test_no_mutant_anchors_in_a_superseded_function_body
+PASSED tests/d/test_code_mutants_l3sql.py::test_every_case_is_covered_by_a_mutant
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_service_edits_audit]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_row_security_off]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_move_any_provider]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_move_public]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_move_without_cas]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_bad_move_raw]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_move_unattributed]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_move_before_lost]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_audit_actor_raw]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_events_any_provider]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_propose_foreign_source]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_propose_unvalidated]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_propose_other_serving]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_propose_any_state]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_propose_unaudited]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_propose_no_idempotent_lock]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_propose_ignores_the_open_one]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_key_any_environment]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_key_any_provider]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_key_in_the_members_org]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_key_without_org]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_key_hash_audited]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_publish_without_cas]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_publish_retires_previous]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_publish_version_skip]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_publish_raw_error]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_publish_unaudited]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_publish_any_state]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_rollback_without_cas]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_rollback_to_current]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_rollback_drained]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_rollback_new_card]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_jobs_repinned]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_fund_for_anyone]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_fund_audited_twice]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_fund_as_adjustment]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_fund_unaudited]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_publish_unserialized]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_rollback_unserialized]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_reject_any_state]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_reject_blank_reason]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_reject_activates]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_reject_unattributed]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_reject_start_lost]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_operator_anyone]
+PASSED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_events_empty]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_sql_mutant_is_killed[l3r_login_no_listings]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_sql_mutant_is_killed[l3r_login_no_policy]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_sql_mutant_is_killed[l3r_login_writes_listings]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_sql_mutant_is_killed[l3r_router_for_the_lab_login]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_sql_mutant_is_killed[l3r_router_not_the_runtimes]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_servings_any_provider]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_servings_newest_first]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_deployments_any_provider]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_deployments_newest_first]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_alias_any_endpoint]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_alias_by_version_not_time]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_alias_ignores_superseded]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_listings_any_alias]
+PASSED tests/d/test_code_mutants_l3sql.py::test_reads_py_mutant_is_killed[l3r_listings_newest_first]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_move_unscoped]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_move_without_expectation]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_publish_wrong_rate]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_publish_without_cas]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_rollback_swapped]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_fund_unscoped]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_key_unattributed]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_malformed_id_queried]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_reject_reason_dropped]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_retired_read_public]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_operator_malformed_queried]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_operator_other_user]
+PASSED tests/d/test_code_mutants_l3sql.py::test_code_mutant_is_killed[l3_py_malformed_endpoint_queried]
+FAILED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_reject_for_browsers]
+FAILED tests/d/test_code_mutants_l3sql.py::test_sql_mutant_is_killed[l3_reject_not_on_the_login]
+2 failed, 76 passed in 157.58s (0:02:37)

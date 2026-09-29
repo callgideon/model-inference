@@ -69,7 +69,7 @@ const MUTANTS = [
   m("L4-X26", "a provider rollback proposal is accepted", FAKE, '    if (kind !== "publish") return no("invalid"); // a rollback is the operator\'s listing decision\n', "", [C.j01, C.j02]),
   m("L4-X27", "publishing leaves the old revision public", FAKE, '    for (const x of live) x.visibility = "private";\n', "", [C.j01]),
   m("L4-X28", "the operator's rollback does not restore the previous revision", FAKE, '    back.visibility = "public";\n', "", [C.j01]),
-  m("L4-X29", "a rejected proposal publishes", FAKE, "    if (!approve) return;\n", "", [C.j02]),
+  m("L4-X29", "a rejected proposal publishes", FAKE, "    if (!approve) {\n", "    if (false) {\n", [C.j02]),
   m("L4-X30", "App discovery lists every prod revision", FAKE, 'd.environment === "prod" && d.visibility === "public" && d.state === "active").map', 'd.environment === "prod").map', [C.j01]),
   m("L4-X31", "a published revision carries no rate card", FAKE, "rateCardVersion: `rc-${this.cards}`", "rateCardVersion: null", [C.j01]),
   m("L4-X32", "register acts as the form's provider", ACTIONS, "controlPort().register(actor(w),", 'controlPort().register({ providerId: String(data.get("providerId")), role: w.role },', [C.a01]),

@@ -1,0 +1,19 @@
+E               AttributeError: 'Operations' object has no attribute 'operator'
+E               AttributeError: 'Operations' object has no attribute 'operator'
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for DeploymentRevision
+E         Value error, a public deployment is in ['active', 'draining', 'proposed_public'], not retired; a failed validation never becomes public [type=value_error, input_value={'deployment_revision_id'...oneInfo(key='Etc/UTC'))}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/value_error
+E       AssertionError: assert (404, None) == (401, 'unauthenticated')
+E         
+E         At index 0 diff: 404 != 401
+E         Use -v to get more diff
+E       AssertionError: assert (404, None) == (401, 'unauthenticated')
+E         
+E         At index 0 diff: 404 != 401
+E         Use -v to get more diff
+FAILED tests/l/control/test_operations.py::test_operations__an_operator_rejects_a_proposal_and_it_publishes_nothing[fake]
+FAILED tests/l/control/test_operations.py::test_operations__an_operator_rejects_a_proposal_and_it_publishes_nothing[pg]
+FAILED tests/l/control/test_operations.py::test_operations__a_retired_proposal_lists_as_a_terminal_row[pg]
+FAILED tests/l/control/test_operations.py::test_control_route__only_an_operator_rejects_a_proposal[fake]
+FAILED tests/l/control/test_operations.py::test_control_route__only_an_operator_rejects_a_proposal[pg]
+5 failed, 1 passed, 18 deselected in 5.56s

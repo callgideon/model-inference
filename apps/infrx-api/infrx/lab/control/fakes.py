@@ -43,6 +43,7 @@ class FakeControl:
     wallets: dict[str, v2.WalletRef] = dataclasses.field(default_factory=dict)
     ledger: list[v2.CreditLedgerEntry] = dataclasses.field(default_factory=list)
     audit: list[ControlEvent] = dataclasses.field(default_factory=list)
+    operators: set[str] = dataclasses.field(default_factory=set)     # profiles.is_operator
     # R195/LSQ5-m1: every listing ever published, in the order it was (global, across every
     # alias - `listings` alone only orders one alias's own versions). `endpoint_alias` walks
     # this backwards for the newest listing naming a deployment on an endpoint, the fake's
@@ -239,6 +240,25 @@ class FakeControl:
         self._event("lab_rollback", actor, d.provider_org_id, public_model_id,
                     listing.model_dump() | {"reason": reason}, current.model_dump())
         return listing
+
+    async def reject(self, deployment_revision_id, *, actor, reason) -> v2.DeploymentRevision:
+        d = self.deployments.get(deployment_revision_id)
+        if d is None:
+            raise errors.NotFound("no such proposal")
+        if d.state is not S.proposed_public:    # never twice, never a listed revision
+            raise errors.StateConflict(f"only an open proposal is rejected, not {d.state}")
+        if not 1 <= len(reason.strip()) <= 500:
+            raise errors.InvalidRequest("a rejection states its reason")
+        rejected = self.deployments[deployment_revision_id] = d.model_copy(update={
+            "state": S.retired, "visibility": v2.Visibility.private})    # PgControlStore's read
+        self._event("lab_transition", actor=actor, provider=d.provider_org_id,
+                    subject=deployment_revision_id,
+                    after={"state": S.retired.value, "reason": reason},
+                    before={"state": S.proposed_public.value})
+        return rejected
+
+    async def operator(self, user_id: str) -> bool:
+        return user_id in self.operators
 
     async def fund_dev_wallet(self, provider_org_id, amount, *, operation_id, actor,
                               reason) -> v2.CreditLedgerEntry:
