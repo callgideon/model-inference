@@ -35,6 +35,7 @@ IMPORTS = C + "the_datasets_role_works_the_durable_import_job_queue"
 ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
 DECIDE = C + "an_operator_decides_a_lab_proposal_through_d9s_cas"
+LAUNCH = C + "a_release_is_launched_with_its_plan_stored_first"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
 ANNOT = C + "the_annotation_role_collects_teacher_batches_with_n2s_redaction"
 COLLECT = C + "the_teacher_pass_collects_every_submitted_run_of_every_approved_batch"
@@ -296,6 +297,29 @@ MUTANTS: tuple[Mutant, ...] = (
        "                   OperatorSession(ops=None, principal=principal))",
        '                   OperatorSession(ops=None, principal="rollout:controller"))', STOP,
        file=P),
+    # --- WR-C5-PLAN (composition-6): the release launcher stores the plan, then D9 starts ------
+    _m("lw_launch_without_bucket", "the launcher needs the Lab bucket the plan is stored in",
+       '    values = settings(mode, env, (DATABASE, BUCKET, "LAB_OPERATOR_ID"))',
+       '    values = settings(mode, env, (DATABASE, "LAB_OPERATOR_ID"))', LAUNCH),
+    _m("lw_launch_plan_unvalidated", "only R2's plan is launched",
+       "            plan = Plan.model_validate_json(stored.read())",
+       "            plan = Plan.model_construct(**json.loads(stored.read()))", LAUNCH),
+    _m("lw_launch_plan_not_stored", "the plan is stored beside the release before D9 starts it",
+       "        await write_once(lab_objects(mode, env), plan_key(provider, policy.policy_id),\n"
+       "                         plan.model_dump_json().encode())\n", "", LAUNCH),
+    _m("lw_launch_plan_elsewhere", "the plan is stored where the pass and the page read it",
+       "plan_key(provider, policy.policy_id),", "plan_key(provider, policy_ref),", LAUNCH),
+    _m("lw_launch_digest_other", "D9 freezes the stored plan's digest",
+       "                                            plan_digest=plan_digest(plan),",
+       '                                            plan_digest="sha256:" + "0" * 64,', LAUNCH),
+    _m("lw_launch_other_actor", "the launch is the operator's decision",
+       'decided_by=values["LAB_OPERATOR_ID"], reason=reason)',
+       'decided_by="launcher", reason=reason)', LAUNCH),
+    _m("lw_launch_refusal_escapes", "a refused launch is a non-zero exit",
+       '        print(f"infrx.lab.workers: the release was not launched: {failed.code}: {failed}",\n'
+       "              file=sys.stderr)\n        return 1\n", "        raise\n", LAUNCH),
+    _m("lw_launch_unparsed", "launch names its plan",
+       '    if args.command == "launch" and not args.plan:\n', "    if False:\n", LAUNCH),
     # --- WR-R4-2 (composition-6): the operator decides a Lab proposal through D9's CAS ---------
     _m("lw_decide_without_operator", "a decision names its operator",
        '    mode, needs = "lab-rollout", (DATABASE, "LAB_OPERATOR_ID")',

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """WR-R4-2 on real PostgreSQL: `/lab/v1/releases` as `LAB_RELEASES` composes it
 (`pilot.lab_releases`) - D9's listing (0048) and decisions (0053), D7's policy revision, the
-plan stored beside the release, 0043's proposals and D9 as the route's store, L2's
+plan the release launcher stored beside it (`rollout launch`, WR-C5-PLAN), 0043's proposals
+and D9 as the route's store, L2's
 `LabAccess` - and the operator's decision of a proposal through D9's CAS
 (`python -m infrx.lab.workers rollout decide`, with L3's serving control over the seed's real
 alias rows). Only the session verifier (a token per user) and the objects (in memory; the
@@ -29,7 +30,6 @@ from infrx.state.catalog import PgCatalogDirectory
 from infrx.state.jobstore import connector
 from infrx.state.lab_access import PgAccessStore
 from infrx.state.lab_control import PgControlStore
-from infrx.state.lab_rollout import PgReleaseStore
 
 from .. import support
 from ...d import checks_credit as cc
@@ -53,7 +53,8 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides_on_d9(world):
+def test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides_on_d9(
+        world, monkeypatch, tmp_path):
     """k10's port half: the release page lists D9's release with the stored plan and D7's
     policy (no progress: R1's aggregates are not readable; no verdict before a decision); a
     developer cannot propose, an expansion without an expand verdict is a 409, a rollback
@@ -66,16 +67,19 @@ def test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides
     public = run(PgControlStore(connect).deployment(cc.PUBLIC_DEPLOYMENT))
     baseline = serving_ref(public, run(PgCatalogDirectory(connect).serving_revision(
         public.serving_version_id)))
-    objects, releases = InMemoryObjectStore(), PgReleaseStore(connect)
+    objects = InMemoryObjectStore()
+    monkeypatch.setattr(lab_workers, "lab_objects", lambda mode, env: objects)
+    stored_plan = tmp_path / "plan.json"
+    stored_plan.write_text(plan().model_dump_json())
     launched = []
     for tag, endpoint in ((31, public.endpoint_id), (32, d9.uid(32, 0xe0))):
         payload = {**d9.policy(d9.uid(tag, 0xb0), weights=(1_000,), endpoint=endpoint),
                    "baseline_ref": baseline}
         ref = d7.publish(world, payload)
-        run(objects.put_if_absent(lab_workers.plan_key(d9.NEMO, payload["policy_id"]),
-                                  plan().model_dump_json().encode(), "application/json"))
-        run(releases.start(ref, provider_org_id=d9.NEMO, plan_digest=r2.plan_digest(plan()),
-                           decided_by=d9.USER, reason="canary 10%"))
+        assert lab_workers.main([                       # WR-C5-PLAN: the release launcher
+            "rollout", "launch", "--policy-ref", ref, "--plan", str(stored_plan), "--reason",
+            "canary 10%"], env={"LAB_DATABASE_URL": dsn, "LAB_S3_BUCKET": "lab",
+                                "LAB_OPERATOR_ID": OPERATOR}) == 0
         launched.append((ref, payload))
     (ref, payload), (quiet, _) = launched
     x = pilot.lab_releases(connect, Sessions((l2.ADMIN, l2.DEV, l2.VIEWER)),

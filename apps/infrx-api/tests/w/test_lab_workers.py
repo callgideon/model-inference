@@ -673,6 +673,64 @@ def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkey
     assert outcome(lambda: lab_workers.main(argv[:-1] + ["partitioned"], env=env)) == 1
 
 
+def test_lab_workers__a_release_is_launched_with_its_plan_stored_first(monkeypatch, tmp_path):
+    """WR-C5-PLAN: `rollout launch --policy-ref --plan <file> --reason`, as `LAB_OPERATOR_ID`,
+    over the Lab bucket: R2's `Plan` from the file (refused before anything if it is not
+    one) is stored write-once beside the release (`plan_key` of the ref's provider and D7's
+    policy id), THEN D9 starts the revision with that plan's digest - so the pass and the
+    page never see a started release without its plan. A replay stores the same bytes; a
+    different plan for a stored one is a conflict and D9 is not asked; D9's refusal is exit 1."""
+    from infrx.rollouts import control as r2
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_rollout import PgReleaseStore
+    from tests.r.control.test_control import plan
+    ref = f"lab:policy:{NEMO}:a0000000-0000-4000-8000-00000000006e@sha256:" + "1" * 64
+    objects, started = InMemoryObjectStore(), []
+
+    class Policy:
+        policy_id = "a0000000-0000-4000-8000-00000000006e"
+
+    async def resolve(self, policy_ref, *, provider_org_id):
+        assert (policy_ref, provider_org_id) == (ref, NEMO)
+        return Policy()
+
+    async def start(self, policy_ref, *, provider_org_id, plan_digest, decided_by, reason):
+        key = lab_workers.plan_key(NEMO, Policy.policy_id)
+        started.append((policy_ref, provider_org_id, plan_digest, decided_by, reason,
+                        await objects.get(key)))
+        if reason == "busy":
+            raise errors.StateConflict("the endpoint already runs a release")
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(PgReleaseStore, "start", start)
+    monkeypatch.setattr(lab_workers, "lab_objects", lambda mode, env: objects)
+    operator = "0e000000-0000-4000-8000-0000000000e0"
+    env = {**BASE, "LAB_OPERATOR_ID": operator, "LAB_S3_BUCKET": "lab"}
+    good, other, bad = tmp_path / "plan.json", tmp_path / "other.json", tmp_path / "bad.json"
+    good.write_text(plan().model_dump_json())
+    other.write_text(plan(max_error_rate=0.5).model_dump_json())
+    bad.write_text('{"horizon_s": 1}')
+
+    def launch(path, reason="canary 10%", e=env):
+        return outcome(lambda: lab_workers.main(
+            ["rollout", "launch", "--policy-ref", ref, "--plan", str(path), "--reason", reason],
+            env=dict(e)))
+    assert launch(good, e={**env, "LAB_S3_BUCKET": ""}) == 2          # no bucket
+    assert launch(bad) == 2 and started == []                         # not R2's plan
+    assert launch(good) == 0
+    stored = asyncio.run(objects.get(lab_workers.plan_key(NEMO, Policy.policy_id)))
+    assert stored is not None, "the plan is not stored where the pass and the page read it"
+    assert r2.Plan.model_validate_json(stored) == plan()
+    assert started == [(ref, NEMO, r2.plan_digest(plan()), operator, "canary 10%", stored)]
+    assert launch(good, reason="busy") == 1 and len(started) == 2    # the replay: same bytes
+    assert launch(other) == 1 and len(started) == 2                  # a stored plan stays
+    try:
+        died = lab_workers.main(["rollout", "launch", "--policy-ref", ref, "--reason", "x"],
+                                env=dict(env))
+    except BaseException as raised:        # noqa: BLE001 - argparse exits; a crash is a bug
+        died = raised
+    assert type(died) is SystemExit, died
+
+
 def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeypatch):
     """WR-R4-2: `rollout decide --policy-ref --proposal-id --approve|--reject --reason`, as
     `LAB_OPERATOR_ID`. The proposal is looked up among the provider's (the ref's) for that

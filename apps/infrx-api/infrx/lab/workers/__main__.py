@@ -4,6 +4,7 @@
     python -m infrx.lab.workers rollout emergency-rollback --policy-ref <ref> --reason <text>
     python -m infrx.lab.workers rollout decide --policy-ref <ref> --proposal-id <id>
         (--approve | --reject) --reason <text>
+    python -m infrx.lab.workers rollout launch --policy-ref <ref> --plan <plan.json> --reason <text>
 
 What the I5/I6/I7/I2L-OBS units run (`apps/infrx-api/deploy/lab/*/infrx-lab-<role>.service`),
 one role per process, each OFF until its `/etc/infrx-lab/<role>.env` exists (the unit's
@@ -40,7 +41,8 @@ never runs in a consumer process.
                the plan stored beside it (WR-R2-3; a running one only on R1's aggregates,
                held while unreadable). `emergency-rollback` (LAB_OPERATOR_ID of the invoking
                shell): R2's operator stop over D9 and L3. `decide`: the operator's decision
-               of a Lab proposal through D9's CAS (WR-R4-2).
+               of a Lab proposal through D9's CAS (WR-R4-2). `launch` (+ LAB_S3_BUCKET): the
+               release launcher - the plan stored write-once, then D9's start (WR-C5-PLAN).
 * `annotation` LAB_S3_BUCKET, LAB_TEACHER_URL (the local teacher fake until P-10; + JUDGE_MODE):
                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
                submitted chunk run of every approved teacher batch (WR-P4B-2).
@@ -429,8 +431,8 @@ class NoLive:
 
 
 def plan_key(provider_org_id: str, policy_id: str) -> str:
-    """R2's full `Plan` of a release, stored write-once beside it by its launcher (D9 keeps
-    only its digest, which `Controller` checks)."""
+    """R2's full `Plan` of a release, stored write-once beside it by its launcher
+    (`rollout launch`, WR-C5-PLAN; D9 keeps only its digest, which `Controller` checks)."""
     return f"lab/{provider_org_id}/releases/{policy_id}/plan.json"
 
 
@@ -617,6 +619,42 @@ async def emergency_rollback(env, policy_ref: str, reason: str) -> int:
     return 0
 
 
+async def launch_release(env, policy_ref: str, plan_path: str, reason: str) -> int:
+    """WR-C5-PLAN: the release launcher, as `LAB_OPERATOR_ID`. R2's `Plan` (read from
+    `plan_path`; anything else refuses before a write) is stored write-once beside the
+    release (`plan_key`), THEN D9 starts the revision `policy_ref` names with that plan's
+    digest: no pass or page sees a started release without its plan. A replay stores the same
+    bytes; another plan for a stored one is a conflict and D9 is not asked."""
+    mode = "lab-rollout"
+    values = settings(mode, env, (DATABASE, BUCKET, "LAB_OPERATOR_ID"))
+    match = lab.REF_RE.fullmatch(policy_ref)
+    if match is None or match.group(1) != "policy":
+        raise RuntimeMisconfigured(mode, detail="--policy-ref must be a lab:policy ref")
+    from ...datasets.imports import write_once
+    from ...rollouts.control import Plan, plan_digest
+    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_rollout import PgReleaseStore
+    try:
+        with open(plan_path, "rb") as stored:
+            plan = Plan.model_validate_json(stored.read())
+    except (OSError, ValueError) as unreadable:
+        raise RuntimeMisconfigured(mode, detail=f"--plan is not R2's plan "
+                                                f"({type(unreadable).__name__})") from None
+    connect, provider = connector(values[DATABASE]), match.group(2)
+    try:
+        policy = await PgLabDataStore(connect).resolve(policy_ref, provider_org_id=provider)
+        await write_once(lab_objects(mode, env), plan_key(provider, policy.policy_id),
+                         plan.model_dump_json().encode())
+        await PgReleaseStore(connect).start(policy_ref, provider_org_id=provider,
+                                            plan_digest=plan_digest(plan),
+                                            decided_by=values["LAB_OPERATOR_ID"], reason=reason)
+    except errors.DomainError as failed:
+        print(f"infrx.lab.workers: the release was not launched: {failed.code}: {failed}",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
 async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
                           reason: str) -> int:
     """WR-R4-2: the operator decides one of the Lab's proposals for the release `policy_ref`
@@ -741,7 +779,8 @@ def main(argv=None, env=None) -> int:
     env = os.environ if env is None else env
     parser = argparse.ArgumentParser(prog="python -m infrx.lab.workers")
     parser.add_argument("role", choices=ROLES)
-    parser.add_argument("command", nargs="?", choices=("emergency-rollback", "decide"))
+    parser.add_argument("command", nargs="?", choices=("emergency-rollback", "decide", "launch"))
+    parser.add_argument("--plan")
     parser.add_argument("--policy-ref")
     parser.add_argument("--reason")
     parser.add_argument("--proposal-id")
@@ -753,7 +792,11 @@ def main(argv=None, env=None) -> int:
         parser.error("emergency-rollback is the rollout role's, with --policy-ref and --reason")
     if args.command == "decide" and not (args.proposal_id and (args.approve or args.reject)):
         parser.error("decide names --proposal-id and --approve or --reject")
+    if args.command == "launch" and not args.plan:
+        parser.error("launch names --plan (R2's plan as JSON)")
     try:
+        if args.command == "launch":
+            return asyncio.run(launch_release(env, args.policy_ref, args.plan, args.reason))
         if args.command == "decide":
             return asyncio.run(decide_proposal(env, args.policy_ref, args.proposal_id,
                                                args.approve, args.reason))
