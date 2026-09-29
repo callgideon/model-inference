@@ -1,0 +1,113 @@
+........................................................................ [ 80%]
+..F...............                                                       [100%]
+=================================== FAILURES ===================================
+______ test_stack_mutant_is_killed[st_releases_route_drops_the_proposals] ______
+
+mutant = Mutant(name='st_releases_route_drops_the_proposals', invariant="the releases answer carries the provider's proposals (...ovider))}', new='"proposals": []}', cases=('test_k10_the_releases_ui_over_the_real_route',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e8l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_releases_route_drops_the_proposals is broken_runner: undeclared exception deaths ['HarnessError@gate.py']: 1 failed, 23 deselected in 7.60s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['HarnessError@gate.py']: 1 failed, 23 deselected in 7.60s").killed
+
+tests/integration/lab_rollout/test_mutants.py:85: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/integration/lab_rollout/test_mutants.py::test_the_lists_are_well_formed
+PASSED tests/integration/lab_rollout/test_mutants.py::test_every_case_is_covered_by_a_mutant
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[xfail_is_a_pass]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[not_run_is_a_pass]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[required_cases_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[harness_error_is_a_product_fail]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[gate_is_the_best_status]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[a_cell_over_every_scenario]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[not_run_exits_zero]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[no_stack_passes]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[a_manifest_test_id_dropped]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_claimed_waiting]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_port_half_optional]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[a_required_case_renamed]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[another_namespace]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[an_endpoint_on_a_service_port]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[the_dead_port_is_an_endpoint]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[not_run_without_the_rerun]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[sub_cell_is_a_pass]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[sub_cell_without_its_lane]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k09_breach_still_a_sub_cell]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_ui_sub_cell_without_its_lane]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_ui_sub_cell_dropped]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_in_scope_lane_excused]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_never_run_excused]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_any_reason_excuses]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_fail_excused_by_its_message]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_pass_is_open]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_sub_cells_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_gpu_in_scope]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_landed_wr_still_excused]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_plan_path_relative]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[unbound_case_runs]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_serving_ref_digest_drifts]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_routing_ignores_the_switch]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_shadow_serves_the_candidate]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_shadow_unbounded]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_assignment_by_request]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_cohort_by_version]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_explicit_pin_routed]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_session_cohort_routed]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_revoked_subject_eligible]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_outage_is_the_baseline]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_first_candidate_takes_all]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_weight_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_rolled_back_still_routes]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_lost_race_raises]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_process_reads_nothing]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_skips_the_rolled_back]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_reads_another_plan]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_rolled_back_needs_live]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_step_leaves_the_rolled_back]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_waits_a_cadence_first]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_held_is_failed]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_never_reads_live]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_converge_by_full_ref]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_alias_answers_a_superseded_listing]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_control_login_lacks_the_listings_read]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_error_rate_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_latency_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_controller_acts_on_expand]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_peeking_wins]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_cost_delta_summed]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_approve_on_hold]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_inconclusive_accepts]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_slice_regression_hidden]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_quality_reject_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_metrics_stale_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_coverage_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_min_requests_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_cohort_skew_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_budget_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_listing_ignores_the_state]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_listing_earliest_decision]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_propose_any_role]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_records_verdict_dropped]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_records_decisions_dropped]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_launch_without_the_plan]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_decide_reasons_unnamed]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_decide_leaves_the_alias]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_decide_reject_moves]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_decide_expand_approved]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_claim_unmeasured]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_version_unprobed]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_tokenizer_ignored]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_any_load_source]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_hardware_unchecked]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_the_runner_cannot_report_a_false_kill[self_no_op]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_the_runner_cannot_report_a_false_kill[self_missing_anchor]
+FAILED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_releases_route_drops_the_proposals]
+1 failed, 89 passed in 1161.53s (0:19:21)
