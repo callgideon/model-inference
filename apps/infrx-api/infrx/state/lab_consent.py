@@ -204,6 +204,14 @@ class PgJudgeLedger:
         """`submitting` runs whose worker went silent -> `ambiguous` (then `reconcile`)."""
         return (await self._call("lab_judge_sweep", {"older_than_s": older_than_s}))["expired"]
 
+    async def runs_in(self, states: Sequence[str], limit: int, *,
+                      provider_org_id: str) -> list[JudgeRun]:
+        """WR-LSQ-C2A: up to `limit` of the provider's runs in one of `states`
+        (`submitted` for collect, `ambiguous` for reconcile), oldest-updated first; `states`
+        empty is `InvalidRequest` (a worker asking for everything gets no unbounded scan)."""
+        return [_run(doc) for doc in await self._call("lab_judge_runs_in", {
+            "provider_org_id": provider_org_id, "states": list(states), "limit": limit})]
+
 
 def _plain(result: Any) -> dict[str, Any]:
     """A dataclass result as JSON-ready data (tuples of scores become lists)."""

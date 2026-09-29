@@ -361,6 +361,39 @@ def check_a_duplicate_submit_under_contention_creates_one_intent(conn) -> str:
     return "4 racing submitters: one created the intent"
 
 
+@rolled_back
+def check_runs_in_lists_this_providers_runs_by_state_oldest_first(conn) -> str:
+    """WR-LSQ-C2A: the collect/reconcile passes need a listing of THIS provider's runs in a
+    given state (never an unbounded scan, never another provider's), bounded to `limit`
+    (ordered oldest-updated first in production; not asserted here, see 0048's note)."""
+    ok(conn, "lab_judge_reserve", reserve(uid(0x50)))              # -> ambiguous, below
+    ok(conn, "lab_judge_begin_submit", {"run_id": uid(0x50)})
+    ok(conn, "lab_judge_record_sent", {"run_id": uid(0x50), "sample_ids": SAMPLES})
+    ok(conn, "lab_judge_quarantine", {"run_id": uid(0x50), "reason": "no answer yet"})
+    ok(conn, "lab_judge_reserve", reserve(uid(0x51)))              # -> prepared only
+    with conn.transaction():
+        call(conn, "lab_judge_reserve", reserve(uid(0x52), payer=OTHER_PAYER, provider=OTHER,
+                                                grant=W["other_grant"]))
+    assert refusal(conn, "lab_judge_runs_in", {"provider_org_id": NEMO, "states": [],
+                                               "limit": 10}) == "invalid_request", \
+        "every state at once is an unbounded scan, not a listing"
+    # (Other checks in this module commit runs of their own that stay `prepared`, so
+    # `prepared` is checked by membership; `ambiguous` is exclusively this check's.)
+    ambiguous = ok(conn, "lab_judge_runs_in", {"provider_org_id": NEMO,
+                                               "states": ["ambiguous"], "limit": 10})
+    assert [r["run_id"] for r in ambiguous] == [uid(0x50)]
+    prepared = [r["run_id"] for r in ok(conn, "lab_judge_runs_in", {
+        "provider_org_id": NEMO, "states": ["prepared"], "limit": 10})]
+    assert uid(0x51) in prepared and uid(0x50) not in prepared
+    assert ok(conn, "lab_judge_runs_in", {"provider_org_id": OTHER, "states": ["ambiguous"],
+                                          "limit": 10}) == [], \
+        "OTHER's provider never sees NEMO's ambiguous run"
+    limited = ok(conn, "lab_judge_runs_in", {"provider_org_id": NEMO,
+                                             "states": ["ambiguous"], "limit": 0})
+    assert limited == [], "limit 0 is bounded to nothing, not unbounded"
+    return "own provider, by state, bounded, empty states refused"
+
+
 @dataclass(frozen=True)
 class _Scores:                       # J2's JudgeScores shape (accepted: it has scores)
     run_id: str
@@ -424,7 +457,8 @@ CHECKS = {c.__name__: c for c in (
     check_an_ambiguous_submit_is_quarantined_never_resubmitted,
     check_results_are_stored_once_and_settled_once,
     check_concurrent_reservations_never_exceed_the_budget,
-    check_a_duplicate_submit_under_contention_creates_one_intent, check_the_store_composes)}
+    check_a_duplicate_submit_under_contention_creates_one_intent,
+    check_runs_in_lists_this_providers_runs_by_state_oldest_first, check_the_store_composes)}
 
 
 # ----------------------------------------------------------------------------- tests

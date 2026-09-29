@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Sequence
 
 from ..contracts import errors
 from ..contracts.lab import records
@@ -197,10 +197,14 @@ class PgLabDataStore:
             "state": state})
 
     # --- the Lab outbox: the store half of `outbox.OutboxRelay` -----------------------------
-    async def dispatch_pending(self, *, limit: int, worker_id: str,
-                               redelivery_s: float) -> list[LabEvent]:
+    async def dispatch_pending(self, *, limit: int, worker_id: str, redelivery_s: float,
+                               kinds: Sequence[str] = ()) -> list[LabEvent]:
+        """WR-LSQ-C2B: `kinds` narrows the claim to a role's own event kinds (empty: every
+        kind, the original one-outbox-for-all behaviour) - so an eval role's relay never
+        claims, times out on and redelivers a checkpoints-role event, or the reverse."""
         return [LabEvent(**row) for row in await self._call("lab_outbox_pending", {
-            "limit": limit, "worker_id": worker_id, "redelivery_s": redelivery_s})]
+            "limit": limit, "worker_id": worker_id, "redelivery_s": redelivery_s,
+            "kinds": list(kinds)})]
 
     async def acknowledge_dispatch(self, event_ids: list[str], *, worker_id: str) -> int:
         return await self._call("lab_outbox_ack", {"event_ids": list(event_ids),
@@ -211,6 +215,46 @@ class PgLabDataStore:
 
     async def record_dispatch_error(self, event_id: str, error: str) -> None:
         await self._call("lab_outbox_error", {"event_id": event_id, "error": error})
+
+
+# --- WR-N4-3: a durable Lab import-job queue (`0051_lab_import_jobs.sql`) ------------------
+class PgLabImportJobs:
+    """N4/I5's durable work queue: a queued import job an I5 worker pool claims (D2/D7's
+    lease pattern - claim, timeout, redeliver, exactly `dispatch_pending`'s), instead of a
+    gateway request's own `asyncio.create_task`."""
+
+    _call = PgLabDataStore._call
+
+    def __init__(self, connect: Connect) -> None:
+        self._connect = connect
+
+    async def enqueue(self, job_id: str, spec: dict[str, Any], *, provider_org_id: str,
+                      actor: str) -> dict[str, Any]:
+        """Idempotent per `job_id` (N1's import id): a replay answers the existing row
+        unchanged, whatever state it has reached."""
+        return await self._call("lab_import_job_enqueue", {
+            "job_id": job_id, "provider_org_id": provider_org_id, "spec": spec,
+            "actor": actor})
+
+    async def claim(self, *, limit: int, worker_id: str,
+                    redelivery_s: float) -> list[dict[str, Any]]:
+        return await self._call("lab_import_job_claim", {
+            "limit": limit, "worker_id": worker_id, "redelivery_s": redelivery_s})
+
+    async def heartbeat(self, job_id: str, *, worker_id: str) -> dict[str, Any]:
+        return await self._call("lab_import_job_heartbeat", {"job_id": job_id,
+                                                             "worker_id": worker_id})
+
+    async def finish(self, job_id: str, state: str, *, worker_id: str,
+                     result: dict[str, Any] | None = None,
+                     error: str | None = None) -> dict[str, Any]:
+        return await self._call("lab_import_job_finish", {
+            "job_id": job_id, "worker_id": worker_id, "state": state, "result": result,
+            "error": error})
+
+    async def job(self, job_id: str, *, provider_org_id: str) -> dict[str, Any]:
+        return await self._call("lab_import_job", {"job_id": job_id,
+                                                   "provider_org_id": provider_org_id})
 
 
 # --- WR-N4-2 / WR-B4-2 reads (`0043_lab_reads_and_proposals.sql`) ---------------------------

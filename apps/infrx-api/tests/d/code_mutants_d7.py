@@ -33,13 +33,17 @@ LEASES = "check_leases_are_fenced_and_one_result_per_case"
 STATES = "check_run_and_checkpoint_states_follow_the_contract"
 CHECKPOINT = "check_checkpoint_delivery_is_received_once"
 RELAY = "check_the_relay_redelivers_a_lost_acknowledgment"
+KINDS = "check_a_roles_relay_claims_only_its_own_kinds"
+KINDS_FILE = "0050_lab_outbox_pending_kinds.sql"
+JOBS = "check_import_jobs_are_a_durable_claim_and_lease_queue"
+JOBS_FILE = "0051_lab_import_jobs.sql"
 RACE = "check_two_publishers_race_to_one_version"
 KILL = "check_a_kill_around_commit_recovers_once"
 PLANS = "check_large_fixture_queries_use_their_indexes"
 
 
-def _s(name, old, new, check, why, **kw):
-    return _d.Mutant(name, FILE, old, new, "lab", check, why, **kw)
+def _s(name, old, new, check, why, file=FILE, **kw):
+    return _d.Mutant(name, file, old, new, "lab", check, why, **kw)
 
 
 SQL_MUTANTS = (
@@ -245,12 +249,45 @@ SQL_MUTANTS = (
     _s("d7_ack_by_anyone", "     and claimed_by = p_args->>'worker_id' and acknowledged_at is "
        "null;", "     and acknowledged_at is null;", RELAY,
        "a dead relay's late ack marks events another relay has not indexed yet"),
+    # d7_redelivered_early/d7_acknowledged_redelivered: `lab_outbox_pending`'s body moved to
+    # 0050 in full (E3L-F2/PROPOSE_FILE's reasoning: a `create or replace` overwrites whatever
+    # 0029's text says, so a mutant of the OLD file would be silently masked and never run).
     _s("d7_redelivered_early", "       and (o.claimed_at is null or o.claimed_at\n",
        "       and (o.claimed_at is null or true or o.claimed_at\n", RELAY,
-       "every pump re-sends events another relay is still working on"),
+       "every pump re-sends events another relay is still working on", file=KINDS_FILE),
     _s("d7_acknowledged_redelivered", "     where o.acknowledged_at is null and o.available_at "
        "<= infrx.now()", "     where o.available_at <= infrx.now()", RELAY,
-       "acknowledged events are delivered forever"),
+       "acknowledged events are delivered forever", file=KINDS_FILE),
+    # --- WR-LSQ-C2B: a role's relay claims only its own kinds, `0050_lab_outbox_pending_kinds.sql`
+    _s("d7c2b_kinds_ignored", "       and (p_args->'kinds' is null or "
+       "jsonb_array_length(p_args->'kinds') = 0\n            or o.kind = "
+       "any(array(select jsonb_array_elements_text(p_args->'kinds'))))\n", "", KINDS,
+       "an eval role's relay claims, times out on and redelivers a checkpoints-role event",
+       file=KINDS_FILE),
+    # --- WR-N4-3: a durable import-job queue, `0051_lab_import_jobs.sql` -------------------
+    _s("n4j_enqueue_any_provider", "    if j.provider_org_id <> v_provider then\n      "
+       "perform infrx.refuse('not_found', 'no such import job for this provider');\n    "
+       "end if;\n", "", JOBS, "a replay from another provider reads someone else's import job",
+       file=JOBS_FILE),
+    _s("n4j_enqueue_not_idempotent", "  select * into j from infrx.lab_import_jobs where "
+       "job_id = v_id;\n  if found then\n", "  select * into j from infrx.lab_import_jobs "
+       "where job_id = v_id;\n  if false then\n", JOBS,
+       "a replayed enqueue opens a second job of the same id", file=JOBS_FILE),
+    _s("n4j_claim_ignores_lease_timeout", "        or (j.state = 'running' and j.updated_at\n"
+       "            <= infrx.now() - make_interval(secs => (p_args->>'redelivery_s')"
+       "::float8))\n", "", JOBS, "a dead I5 worker's job is never redelivered", file=JOBS_FILE),
+    _s("n4j_heartbeat_any_worker", "     and claimed_by = p_args->>'worker_id'\n", "\n", JOBS,
+       "a worker that never claimed the job extends its lease", file=JOBS_FILE),
+    _s("n4j_finish_ignores_holder", "  if j.state <> 'running' or j.claimed_by <> "
+       "p_args->>'worker_id' then\n", "  if false then\n", JOBS,
+       "a worker that does not hold the job finishes it anyway", file=JOBS_FILE),
+    _s("n4j_finish_not_idempotent", "  if j.state = v_to then\n    return "
+       "infrx.lab_import_job_json(j);                 -- a retried ack: already there\n  "
+       "end if;\n", "", JOBS, "a retried finish ack is refused instead of answered",
+       file=JOBS_FILE),
+    _s("n4j_read_any_provider", "     and provider_org_id = (p_args->>'provider_org_id')"
+       "::uuid;", "  ;", JOBS, "a provider reads another provider's import job",
+       file=JOBS_FILE),
     # --- D7.c plans
     _s("d7_no_pending_index", "create index if not exists lab_eval_cases_pending\n  on "
        "infrx.lab_eval_cases (run_id, case_id) where state = 'pending';\n", "", PLANS,
@@ -424,6 +461,7 @@ PUB = "test_publish__sends_the_canonical_bytes_of_the_callers_own_record"
 RESOLVE = "test_resolve__is_the_parsed_record_and_a_refusal_is_typed"
 CALLS = "test_calls__carry_the_callers_provider_the_lease_and_the_cost"
 OUTBOX = "test_outbox__is_the_relays_store_half_with_the_claimant_on_every_ack"
+IMPORT_JOBS = "test_import_jobs__is_a_durable_lease_queue_scoped_to_its_provider"
 FOLLOW = "test_followup__error_release_results_evaluators_reports_and_uses"
 VARIANT_UNITS = "test_variant__a_comparison_is_sent_as_its_canonical_bytes_and_read_back_whole"
 
@@ -470,8 +508,11 @@ CODE_MUTANTS = (
        '"provider_org_id": provider_org_id, "checkpoint_id": checkpoint_id,\n            '
        '"state": state}', '"checkpoint_id": checkpoint_id,\n            "state": state}', CALLS),
     _p("d7_py_pending_without_claimant", "a claim names its relay",
-       '"limit": limit, "worker_id": worker_id, "redelivery_s": redelivery_s}',
-       '"limit": limit, "redelivery_s": redelivery_s}', OUTBOX),
+       '"limit": limit, "worker_id": worker_id, "redelivery_s": redelivery_s,',
+       '"limit": limit, "redelivery_s": redelivery_s,', OUTBOX),
+    _p("d7_py_pending_ignores_role_kinds", "WR-LSQ-C2B: a claim narrows to the role's own "
+       "kinds", '            "kinds": list(kinds)})]',
+       '            "kinds": []})]', OUTBOX),
     _p("d7_py_ack_without_claimant", "an ack lands only for the claimant",
        '{"event_ids": list(event_ids),\n                                                   '
        '"worker_id": worker_id}', '{"event_ids": list(event_ids)}', OUTBOX),
@@ -516,6 +557,9 @@ CODE_MUTANTS = (
        '                                        "report_digest": report_digest})]',
        '            "lab_variant_comparisons", {"report_digest": report_digest})]',
        VARIANT_UNITS),
+    _p("d7_py_import_finish_unscoped", "WR-N4-3: a finish names the worker holding the lease",
+       '"job_id": job_id, "worker_id": worker_id, "state": state, "result": result,',
+       '"job_id": job_id, "state": state, "result": result,', IMPORT_JOBS),
 )
 
 
