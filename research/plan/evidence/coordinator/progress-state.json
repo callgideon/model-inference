@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 288,
- "updated": "2026-09-29T12:35:58Z",
+ "revision": 289,
+ "updated": "2026-09-29T12:37:51Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8459,22 +8459,22 @@
   {
    "id": "W5-LAB-EVALUATE-2",
    "task": "E6L",
-   "slice": "E6L final `make lab-evaluate` + the 32 stack mutants on the e6l stack (Opus); workflow wf_59139ae8-acb",
+   "slice": "E6L final `make lab-evaluate` + the 32 stack mutants on the e6l stack (Opus); workflow wf_59139ae8-acb; ACCEPT at 8f1a017f: j01–j09 PASS, j10 NOT RUN[lab-e2e], j11 NOT RUN[L3 → WR-E6L-J11]; 56/56 mutants",
    "agent": "opus",
    "branch": "codex/w5-lab-evaluate-2",
    "worktree": ".claude/worktrees/codex-w5-lab-evaluate-2",
    "base": "8949ffb1",
-   "head": "3d5ccf49",
+   "head": "8f1a017f",
    "isolation": {
     "ports": "e6l stack",
     "prefix": "infrx-e6l-",
     "db": "e6l"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T12:50:00Z",
-   "updated": "2026-09-29T12:34:54Z",
+   "updated": "2026-09-29T12:37:51Z",
    "blocker": null,
-   "next_action": "handback → merge batch → E6L flips under R222",
+   "next_action": "merge batch #45 (R234/R235, RV-1/RV-2, OUT_OF_SCOPE L3) → E6L flips under R222+R234 at integration; j11 reruns when lab-eval-media lands",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -8600,6 +8600,77 @@
    "owned_paths": [
     "research/plan/evidence/e/E8L-d869ee40.md",
     "tests/integration/lab_rollout/runner.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-45",
+   "task": null,
+   "slice": "merge batch #45 (Opus): lab-evaluate-2 8f1a017f (+R234/R235, WR-E6L-RV-1/RV-2/SCOPE, evidence); E6L flips at integration",
+   "agent": "opus",
+   "branch": "codex/w5-merge-45",
+   "worktree": ".claude/worktrees/codex-w5-merge-45",
+   "base": "7f161b27",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T12:37:51Z",
+   "updated": "2026-09-29T12:37:51Z",
+   "blocker": null,
+   "next_action": "integrate → E6L implemented (R222/R234)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "single-lane batch with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_evaluate/runner.py",
+    "tests/integration/lab_evaluate/test_e6l_runner.py",
+    "tests/integration/lab_evaluate/mutants.py",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/e/E6L-24a7a06.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-EVAL-MEDIA",
+   "task": "E6L",
+   "slice": "WR-E6L-J11 (product, L3/B1): HttpDevEndpoint.complete dispatches media samples as a video_url part (presigned, R61); j11 rerun on e6l (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-eval-media",
+   "worktree": ".claude/worktrees/codex-w5-lab-eval-media",
+   "base": "7f161b27",
+   "head": null,
+   "isolation": {
+    "ports": "e6l stack",
+    "prefix": "infrx-e6l-",
+    "db": "e6l"
+   },
+   "activity": "running",
+   "started": "2026-09-29T12:37:51Z",
+   "updated": "2026-09-29T12:37:51Z",
+   "blocker": null,
+   "next_action": "handback → merge batch → j11 PASS recorded on E6L",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/evaluation/runner/",
+    "apps/infrx-api/tests/b/",
+    "research/plan/evidence/e/E6L-J11-*"
    ],
    "wiring_requests": []
   }
