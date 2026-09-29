@@ -282,3 +282,44 @@ def test_k03_a_release_store_outage_is_a_503_never_the_baseline(lab, workdir):
         run(routing.hook(accept, router(lab, dsn=dead))(who(lab.subjects(1)[0]),
                                                          request(lab.ALIAS, 1), None))
     assert admitted == []
+
+
+# ------------------------------------------------------------------------------------ k10
+def test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict(lab, workdir):
+    """k10's read half as this tip supports it (0048's `lab_releases_in`, merge #34):
+    `PgReleaseStore.releases_in` - the listing WR-R4-1's records port and WR-R2-3's pass loop
+    read - answers a launched release, then its rollback with R2's latest decision, narrowed
+    by state. `pilot._lab_2` still composes `LabReleases` with no records port (WR-R4-2): the
+    UI half stays NOT RUN (`scenarios_pending`)."""
+    policy, ref = lab.launch(lab.policy(weights=(5_000,), candidates=(lab.CAND,)), lw.plan())
+    store = lab.releases()
+
+    def mine(*states):
+        return [x for x in run(store.releases_in(states, provider_org_id=lab.NEMO))
+                if x.policy_ref == ref]
+    running = mine("running")
+    # a non-final decision first (D9's expand, running -> approved), so "latest" is tested
+    # against an older decision row (0048's `order by e.fence desc limit 1`)
+    from infrx.contracts.lab import records
+    evidence = [records.ref_of(x) for x in lab.runs(0x10a, lab.BASE, lab.CAND)]
+    run(store.transition(ref, fence=run(store.release(ref)).fence, to="approved", decision={
+        "schema": "lab.rollout_decision.1", "provider_org_id": policy.provider_org_id,
+        "policy_ref": ref, "decision": "expand", "evidence_refs": evidence,
+        "decided_by": lw.OPERATOR, "decided_at": lab.now().strftime("%Y-%m-%dT%H:%M:%SZ")},
+        reasons=("e8l k10 expand",)))
+    approved = mine("approved")
+    assert [x.latest_decision.decision for x in approved] == ["expand"], approved
+    run(lab.controller().emergency_rollback(lw.OPERATOR, policy, ref, now=lab.now(),
+                                            reason="e8l k10 read half"))
+    after = run(store.release(ref))
+    rolled, still_running, every = mine("rolled_back"), mine("running"), mine()
+    lw.save(workdir, "listing.json", {"running": running, "approved": approved,
+                                      "rolled_back": rolled, "running_after": still_running,
+                                      "every": every})
+    assert [(x.release.state, x.endpoint_id, x.provider_org_id, x.latest_decision)
+            for x in running] == [("running", policy.endpoint_id, lab.NEMO, None)], running
+    assert still_running == [], "a rolled-back release is still listed as running"
+    assert [(x.release.state, x.release.fence) for x in rolled] == [("rolled_back", after.fence)]
+    decision = rolled[0].latest_decision
+    assert (decision.decision, decision.decided_by) == ("rollback", lw.OPERATOR), decision
+    assert every == rolled
