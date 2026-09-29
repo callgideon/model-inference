@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate lab-rollout lab-improve lab-compositions
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate lab-rollout lab-improve lab-compositions lab-local
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -181,3 +181,9 @@ lab-rollout:
 # E7L: the LAB-IMPROVE gate (tests/integration/lab_improve); not in check. verdict.json lands in the evidence dir.
 lab-improve:
 	$(API)/.venv/bin/python tests/integration/lab_improve/runner.py --out $(CURDIR)/research/plan/evidence/e/E7L-raw-$(shell git rev-parse --short HEAD)
+
+# LAB-DEPLOY-PREP: the E4-ON regression (tests/integration/lab_local) - every switch ON, the whole
+# Lab composed locally (gateway, consumer worker, every Lab worker role, the control factory, the
+# Lab web); not in check. verdict.json lands in the evidence dir. GATE_ARGS: "--keep", "--only scenarios".
+lab-local:
+	tests/integration/lab-local.sh --out $(CURDIR)/research/plan/evidence/e/E4ON-raw-$(shell git rev-parse --short HEAD) $(GATE_ARGS)
