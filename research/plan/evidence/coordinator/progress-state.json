@@ -9789,11 +9789,11 @@
   {
    "id": "W5-LAB-LOCAL-3",
    "task": "I2L",
-   "slice": "`GATE_ARGS=--keep make lab-local` after #61: the pipelines/traces journeys run in the composition, o05 judged against CONTROL_EXPECTED, the 14 e4-on skips on other keys run inside the composition or ruled; the 12 stack mutants on the kept stack (Opus)",
+   "slice": "`GATE_ARGS=--keep make lab-local` after #61: the pipelines/traces journeys run in the composition, o05 judged against CONTROL_EXPECTED, the 14 e4-on skips on other keys run inside the composition or ruled; the 12 stack mutants on the kept stack (Opus); workflow wf_504e9d9d-7c5",
    "agent": "opus",
    "branch": "codex/w5-lab-local-3",
    "worktree": ".claude/worktrees/codex-w5-lab-local-3",
-   "base": "HEAD",
+   "base": "8ab880a5",
    "head": null,
    "isolation": {
     "ports": "none (layer-1 only)",
