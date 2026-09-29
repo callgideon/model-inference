@@ -184,14 +184,17 @@ def gate(result: dict) -> str:
 
 
 def r222(result: dict) -> dict:
-    """R222/R235: accepted locally with nothing but PASS, and NOT RUN whose every reason is the
-    scenario's own wait on out-of-local-scope lanes. `open` = what keeps it from acceptance."""
+    """R222/R235/R253: accepted locally with nothing but PASS, and NOT RUN whose every reason is
+    the scenario's own wait on out-of-local-scope lanes and carries its rerun (`--only <sid>`,
+    so the 400-char reason cut can never drop it silently). `open` = what keeps it from
+    acceptance."""
     def excused(sid: str, entry: dict) -> bool:
         lanes = entry.get("lanes") or SCENARIOS[sid]["lanes"]   # a recorded verdict's own
         if entry["status"] != NOT_RUN:        # R234: an in-scope FAIL is never excused
             return False
         return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and \
-            all(f"NOT RUN[{','.join(lanes)}]" in reason for reason in entry["reasons"])
+            all(f"NOT RUN[{','.join(lanes)}]" in reason for reason in entry["reasons"]) and \
+            all(f"--only {sid}" in reason for reason in entry["reasons"])   # R253: its rerun
     still = {sid: entry["status"] for sid, entry in result.items()
              if entry["status"] != PASS and not excused(sid, entry)}
     return {"accepted": not still, "open": still}

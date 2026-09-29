@@ -82,6 +82,8 @@ RERUN = "test_e5l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 DRY_RUN = "test_e5l_the_judge_is_labelled_a_dry_run_never_a_live_run"
 PROJECT = "test_e5l_a_compose_project_override_moves_only_the_compose_names"
 R222 = "test_e5l_r222_accepts_only_a_not_run_out_of_local_scope"
+RERUN_CUT = "test_e5l_o01s_recorded_reason_keeps_its_rerun_inside_the_cut"
+VERDICT = "test_e5l_the_verdict_carries_r222_and_each_scenarios_scope"
 #: the recorded bd13f72 verdict the R222 case reads (o10 NOT RUN[LAB-E2E], o01 on COMPOSITION)
 RECORDED = "research/plan/evidence/e/E5L-raw-bd13f72/gate/verdict.json"
 
@@ -245,6 +247,24 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("o01_rerun_elsewhere", "o01's NOT RUN names the exact rerun `--only o01`", R,
        'return f"{PY} {RUNNER} --out <dir>" + (f" --only {sid}" if sid else "")',
        'return f"{PY} {RUNNER} --out <dir>"', R222),
+    # --- lab-observe-3 merge wirings (R253)
+    _m("r222_rerun_not_required", "a NOT RUN is excused only with its rerun `--only <sid>` "
+       "(WR-LO3-RV2)", R, 'all(f"--only {sid}" in reason for reason in entry["reasons"])',
+       "True", RERUN_CUT),
+    _m("o01_reason_cut_before_its_rerun", "the reason cut keeps o01's rerun (WR-LO3-RV2)", R,
+       "            message[:400])", "            message[:300])", RERUN_CUT),
+    _m("verdict_drops_r222", "verdict.json carries the computed r222 (WR-LO3-RV3)", R,
+       '"cells": cells(result), "r222": r222(result),', '"cells": cells(result), "r222": {},',
+       VERDICT),
+    _m("verdict_drops_scope", "verdict.json carries each scenario's scope (R235, WR-LO3-RV3)",
+       R, '"reproduce": reproduce(sid),\n                       "scope":',
+       '"reproduce": reproduce(sid), "scope_":', VERDICT),
+    _m("r222_reason_any_not_run", "the reason names the scenario's own lanes, not any "
+       "NOT RUN[ (WR-LO3-RV4)", R, "all(f\"NOT RUN[{','.join(lanes)}]\" in reason for",
+       'all("NOT RUN[" in reason for', R222),
+    _m("r222_lane_subset_loosened", "every lane is a ruled class, not one of them (WR-LO3-RV4)",
+       R, "return set(lanes) <= set(OUT_OF_SCOPE) and",
+       "return bool(set(lanes) & set(OUT_OF_SCOPE)) and", R222),
 )
 
 # ------------------------------------------------------------------ the stack list
