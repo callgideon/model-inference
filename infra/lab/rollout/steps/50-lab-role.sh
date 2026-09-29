@@ -37,7 +37,7 @@ common="LAB_DATABASE_URL LAB_S3_BUCKET LAB_S3_ENDPOINT LAB_EGRESS_ALLOW"
 case "$role" in
   eval) names="$common LAB_S3_PREFIX LAB_EVAL_ENDPOINT_URL LAB_EVAL_ENDPOINT_KEY LAB_EVAL_CONCURRENCY"
         needs="LAB_S3_BUCKET LAB_EVAL_ENDPOINT_URL LAB_EVAL_ENDPOINT_KEY" ;;
-  checkpoints) names="$common LAB_S3_PREFIX LAB_CHECKPOINTS_CONCURRENCY"; needs="" ;;
+  checkpoints) names="$common LAB_S3_PREFIX LAB_CHECKPOINTS_CONCURRENCY"; needs="LAB_S3_BUCKET" ;;
   judge) names="LAB_DATABASE_URL JUDGE_PROVIDER_URL CLICKHOUSE_URL S3_TRACE_BUCKET JUDGE_MODE"
          needs="JUDGE_PROVIDER_URL CLICKHOUSE_URL S3_TRACE_BUCKET" ;;
   datasets) names="$common LAB_S3_PREFIX CLICKHOUSE_URL S3_TRACE_BUCKET LAB_DATASETS_CONCURRENCY"
@@ -46,7 +46,7 @@ case "$role" in
               needs="LAB_S3_BUCKET LAB_TEACHER_URL" ;;
   training) names="$common LAB_TRAINING_CONCURRENCY LAB_TRAINING_CONNECTOR LAB_TRAINING_CONNECTOR_URL LAB_TRAINING_CONNECTOR_TOKEN LAB_TRAINING_BUDGET_USD LAB_TRAINING_PAYER_REF"
             needs="LAB_S3_BUCKET" ;;
-  rollout) names="$common LAB_ROLLOUT_CONCURRENCY"; needs="" ;;
+  rollout) names="$common LAB_ROLLOUT_CONCURRENCY LAB_OPERATOR_ID"; needs="LAB_S3_BUCKET LAB_OPERATOR_ID" ;;
 esac
 # the roles whose work source is not on this release: each refuses by name (R198/R211)
 pending=" checkpoints training rollout "

@@ -14,6 +14,7 @@ import json
 import os
 import re
 import stat
+import pytest
 import subprocess
 import sys
 from pathlib import Path
@@ -261,7 +262,8 @@ def test_ldp__a_budget_or_preflight_refusal_replaces_nothing(tmp_path):
     env_file = root / "etc/infrx-lab/rollout.env"
     env_file.write_text("previous\n")
     done = run("50-lab-role.sh", stub, root, STATE="on", ROLE="rollout", RELEASE=head(),
-               SPEC="LAB_DATABASE_URL=/a LAB_S3_BUCKET:=b", STUB_EXIT_python3="1")
+               SPEC="LAB_DATABASE_URL=/a LAB_S3_BUCKET:=b LAB_OPERATOR_ID:=00000000-0000-4000-8000-000000000001",
+               STUB_EXIT_python3="1")
     assert done.returncode == 3 and "preflight" in done.stderr
     assert env_file.read_text() == "previous\n"
     assert [p.name for p in (root / "etc/infrx-lab").iterdir() if "staged" in p.name] == []
@@ -280,7 +282,7 @@ def test_ldp__a_role_that_refuses_by_name_is_exit_5_and_other_unreadiness_exit_4
     stub, root = box(tmp_path, {"systemctl": "2"})
     install_units(root)
     args = {"STATE": "on", "ROLE": "checkpoints", "RELEASE": head(),
-            "SPEC": "LAB_DATABASE_URL=/a", "STUB_EXIT_curl": "7"}
+            "SPEC": "LAB_DATABASE_URL=/a LAB_S3_BUCKET:=b", "STUB_EXIT_curl": "7"}
     done = run("50-lab-role.sh", stub, root, **args)
     assert done.returncode == 5 and "R198" in done.stderr
     (stub / "systemctl.out").write_text("1")
@@ -410,14 +412,17 @@ def test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions(tmp_path):
         ["hosted-migrate", "--release", "a" * 40, "--through", "w6b"]
 
 
+@pytest.mark.xfail(strict=True, reason="R151 condition 2 for the 0052 window: the reviewed "
+                   "EXPECTED_PENDING=0052 patch to infra/rollout/hosted-migrate.sh is operator-held "
+                   "(a Production Deploy edit; runbook 08 §2); strict so it flips once the patch lands")
 def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():
     """LDP-R1, the tree as it stands: hosted-migrate.sh carries the reviewed R151 patch
-    (EXPECTED_PENDING 0027-0051, its W7 post-check `*"0051 lab_import_jobs"`), so condition 2
+    (hosted at 0051 since 2026-09-29: EXPECTED_PENDING 0052, its W7 post-check `*"0052 lab_control_reject"`), so condition 2
     holds and the gate stops only at condition 1 here (a KNOWN_GOOD that refuses: nothing
     after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's)."""
     newest = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))[-1]
     done = subprocess.run(["bash", str(ROLLOUT / "lab-migrate.sh"), "--release", "a" * 40,
-                           "--hosted-at", "0026", "--window", "P-08:dry"], capture_output=True,
+                           "--hosted-at", "0051", "--window", "P-08:dry"], capture_output=True,
                           text=True, cwd=REPO, env={**os.environ, "KNOWN_GOOD": "/bin/false",
                                                     "PY": "/usr/bin/env"})
     assert done.returncode == 2 and "condition 1" in done.stderr, done.stderr
