@@ -1,26 +1,96 @@
-{"task": "L3", "slice": "lab-sql-lw9: WR-LW7-3a + WR-C7-TALLY + WR-LW8-3 (0058, local-only)", "activity": "review",
- "head": "751ff6a2", "worktree": ".claude/worktrees/codex-w5-lab-sql-lw9", "branch": "codex/w5-lab-sql-lw9",
- "owned_paths": ["apps/app/supabase/migrations/0058_lab_variant_identities.sql", "tests/integration/test_harness.py (pin)",
-   "Makefile (lw9 line)", "apps/infrx-api/tests/d/test_code_mutants_lw9.py", "apps/infrx-api/tests/d/test_code_mutants_lw8.py (GRANTED)",
-   "apps/infrx-api/infrx/state/lab_variants.py", "apps/infrx-api/infrx/state/lab_rollout.py (tally)",
-   "apps/infrx-api/infrx/rollouts/optimization/__init__.py (store)", "apps/infrx-api/infrx/gateway/pilot.py (ReleaseRecords.assignments)",
-   "apps/infrx-api/tests/l3sql/", "apps/infrx-api/tests/g/lab_releases/", "research/plan/evidence/l/LAB-SQL-LW9-*"],
+{
+ "task": "L3",
+ "slice": "lab-sql-lw9: WR-LW7-3a + WR-C7-TALLY + WR-LW8-3 (0058, local-only)",
+ "activity": "review",
+ "head": "672bf2ac (+ fix-round evidence commit)",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw9",
+ "branch": "codex/w5-lab-sql-lw9",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0058_lab_variant_identities.sql",
+  "tests/integration/test_harness.py (pin)",
+  "Makefile (lw9 line)",
+  "apps/infrx-api/tests/d/test_code_mutants_lw9.py",
+  "apps/infrx-api/tests/d/test_code_mutants_lw8.py (GRANTED)",
+  "apps/infrx-api/infrx/state/lab_variants.py",
+  "apps/infrx-api/infrx/state/lab_rollout.py (tally)",
+  "apps/infrx-api/infrx/rollouts/optimization/__init__.py (store)",
+  "apps/infrx-api/infrx/gateway/pilot.py (ReleaseRecords.assignments)",
+  "apps/infrx-api/tests/l3sql/",
+  "apps/infrx-api/tests/g/lab_releases/",
+  "research/plan/evidence/l/LAB-SQL-LW9-*"
+ ],
  "commands": [
-  {"cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l3sql tests/g/lab_releases tests/r/optimization", "exit": 0, "summary": "62 passed, 3 skipped (r2-gated)"},
-  {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw9.py", "exit": 0, "summary": "21 SQL mutants killed + 3 guards"},
-  {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py", "exit": 0, "summary": "40 passed (23 SQL + 12 Python mutants, 0 survivors)"},
-  {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw8.py tests/d/test_code_mutants_live.py", "exit": 0, "summary": "47 passed"},
-  {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/lab_releases/test_mutants.py", "exit": 0, "summary": "40 passed (37 mutants, 0 survivors)"},
-  {"cmd": "tests/integration/test_harness.py -k migration_set", "exit": 0, "summary": "1 passed"},
-  {"cmd": "INFRX_D_TASK=l3 make api-test", "exit": 2, "summary": "6940 passed, 1 failed (test_upgrade_lab NEW_TABLES lacks lab_variant_identities: WR-LW9-0, verified patch 7 passed), 182 skipped, 10 xfailed"},
-  {"cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q -rs tests/g tests/w tests/contracts tests/i/test_packaging.py", "exit": 0, "summary": "E4 switches OFF: 2832 passed, 29 skipped, 0 failed"}],
- "estimate": {"optimistic_h": 0.5, "likely_h": 1.25, "pessimistic_h": 3, "confidence": "medium",
-   "basis": "code/tests/mutants done, 0 survivors; remaining = WR-LW9-0 one line + verify round (lw9 list ~3 min, E4 ~20 min) + WR-LW9-2/3 reruns on l4/r2; analogue lab-sql-lw7/lw8 0.5/1.5/4", "at": "2026-09-29T23:01Z"},
- "blockers": [],
- "wiring_requests": ["WR-LW9-0 tests/d/test_upgrade_lab.py NEW_TABLES += infrx.lab_variant_identities (patch LAB-SQL-LW9-wiring-upgrade.patch)",
-   "WR-LW9-1 apps/lab http.ts VARIANT identities back to required once 0058 hosted and every R3 store caller passes identities",
-   "WR-LW9-2 rerun lab_control PG matrix on l4 (releases probe reaches lab_release_live: 503 -> 200)",
-   "WR-LW9-3 rerun tests/g/lab_releases/test_lab_releases_composition_pg.py on r2 (tally expectation updated)",
-   "WR-LW9-4 R3 store callers pass identities=(base, variant), variants=PgLabVariants(connect)",
-   "WR-LW9-5 COMPOSITION-7 text: assignments = D9's tally"],
- "evidence": ["research/plan/evidence/l/LAB-SQL-LW9-751ff6a.md", "research/plan/evidence/l/LAB-SQL-LW9-wiring-upgrade.patch"]}
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l3sql tests/g/lab_releases tests/r/optimization",
+   "exit": 0,
+   "summary": "62 passed, 3 skipped (r2-gated)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw9.py",
+   "exit": 0,
+   "summary": "21 SQL mutants killed + 3 guards"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py",
+   "exit": 0,
+   "summary": "40 passed (23 SQL + 12 Python mutants, 0 survivors)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw8.py tests/d/test_code_mutants_live.py",
+   "exit": 0,
+   "summary": "47 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/lab_releases/test_mutants.py",
+   "exit": 0,
+   "summary": "40 passed (37 mutants, 0 survivors)"
+  },
+  {
+   "cmd": "tests/integration/test_harness.py -k migration_set",
+   "exit": 0,
+   "summary": "1 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 make api-test",
+   "exit": 2,
+   "summary": "6940 passed, 1 failed (test_upgrade_lab NEW_TABLES lacks lab_variant_identities: WR-LW9-0, verified patch 7 passed), 182 skipped, 10 xfailed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q -rs tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "E4 switches OFF: 2832 passed, 29 skipped, 0 failed"
+  },
+  {
+   "cmd": "git apply LAB-SQL-LW9-wiring-upgrade.patch (working tree, reverted) && INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_upgrade_lab.py tests/l3sql tests/g/lab_releases",
+   "exit": 0,
+   "summary": "51 passed, 2 skipped (r2); test_upgrade_lab 7 passed; without patch 1 failed/6 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.25,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "code/tests/mutants done, 0 survivors; remaining = WR-LW9-0 one line + verify round (lw9 list ~3 min, E4 ~20 min) + WR-LW9-2/3 reruns on l4/r2; analogue lab-sql-lw7/lw8 0.5/1.5/4",
+  "at": "2026-09-29T23:01Z"
+ },
+ "blockers": [
+  "WR-LW9-0 must land with the merge or make api-test/api-mutants go red"
+ ],
+ "wiring_requests": [
+  "WR-LW9-0 tests/d/test_upgrade_lab.py NEW_TABLES += infrx.lab_variant_identities (patch LAB-SQL-LW9-wiring-upgrade.patch)",
+  "WR-LW9-1 apps/lab http.ts VARIANT identities back to required once 0058 hosted and every R3 store caller passes identities",
+  "WR-LW9-2 rerun lab_control PG matrix on l4 (releases probe reaches lab_release_live: 503 -> 200)",
+  "WR-LW9-3 rerun tests/g/lab_releases/test_lab_releases_composition_pg.py on r2 (tally expectation updated)",
+  "WR-LW9-4 R3 store callers pass identities=(base, variant), variants=PgLabVariants(connect)",
+  "WR-LW9-5 COMPOSITION-7 text: assignments = D9's tally"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/LAB-SQL-LW9-751ff6a.md",
+  "research/plan/evidence/l/LAB-SQL-LW9-wiring-upgrade.patch"
+ ],
+ "fix_round": {
+  "0-F1": "not fixed in lane: file not owned; WR-LW9-0 patch re-verified, must land in the same merge commit as 0058",
+  "1-LW9-RV-1": "same as 0-F1"
+ }
+}

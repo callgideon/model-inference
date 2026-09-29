@@ -195,3 +195,23 @@ mutants are done with 0 survivors. What remains is one verify round (the lw9 lis
 3 min and E4 about 22 min) plus the coordinator's WR-LW9-2/3 reruns on l4 and r2 (about
 5 min each). WR-LW9-1 is Lab-lane work (about 1 h there) and is not counted. Analogue:
 lab-sql-lw7 and lab-sql-lw8 at 0.5/1.5/4.
+
+## Fix round (2026-09-29, findings 0-F1 and 1-LW9-RV-1)
+
+Both findings name the same gap. `tests/d/test_upgrade_lab.py` NEW_TABLES does not list
+`infrx.lab_variant_identities`, which 0058 adds. The file is outside this lane's owned paths,
+so the lane leaves it unedited and the fix stays WR-LW9-0. The coordinator applies
+`LAB-SQL-LW9-wiring-upgrade.patch` in the same merge commit as 0058 (merge lane #63).
+
+Re-verified at 672bf2ac on l3:
+
+- Without the patch: `INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_upgrade_lab.py`
+  gives 1 failed, 6 passed (test_lab_upgrade_preserves_history_money_identity_and_grants).
+- `git apply --check` of the patch is clean. With it applied in the working tree:
+  `INFRX_D_TASK=l3 uv run --frozen pytest -q -rs tests/d/test_upgrade_lab.py tests/l3sql tests/g/lab_releases`
+  gives 51 passed, 2 skipped. test_upgrade_lab is 7 passed. The 2 skips are the r2-keyed
+  lab_releases PG cases (WR-LW9-3). The earlier 53 figure came from a run that had r2.
+- After that run the patch was reverted with `git checkout -- apps/infrx-api/tests/d/test_upgrade_lab.py`,
+  so the tree is clean.
+
+No lane code changed, so the lw9 mutant list and E4 carry over from the handback (21 killed; 2832/0).
