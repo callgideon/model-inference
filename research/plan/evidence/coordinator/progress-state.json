@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 298,
- "updated": "2026-09-29T14:11:33Z",
+ "revision": 299,
+ "updated": "2026-09-29T14:12:33Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8655,11 +8655,11 @@
     "prefix": "infrx-e6l-",
     "db": "e6l"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T12:37:51Z",
-   "updated": "2026-09-29T13:46:53Z",
+   "updated": "2026-09-29T14:12:33Z",
    "blocker": null,
-   "next_action": "merge batch #49 (WR-LEM-1/2, m1–m4, R239) → j11 PASS recorded on E6L",
+   "next_action": "WR-LEM-SPAN (coordinator: cut clips at import or a gateway span field) and WR-LEM-R3 (refusal names into D7) carried",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -8815,22 +8815,22 @@
   {
    "id": "W5-MERGE-49",
    "task": null,
-   "slice": "merge batch #49 (Opus): lab-eval-media d31ede4a (+scenarios_eval conflict, WR-LEM-1/2, m1–m4, R239); workflow wf_4d165f60-7c4",
+   "slice": "merge batch #49 (Opus): lab-eval-media d31ede4a (+scenarios_eval conflict, WR-LEM-1/2, m1–m4, R239); workflow wf_4d165f60-7c4; integrated (R239 on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-49",
    "worktree": ".claude/worktrees/codex-w5-merge-49",
    "base": "41bd46f5",
-   "head": null,
+   "head": "355a8ae3",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T13:46:53Z",
-   "updated": "2026-09-29T13:46:53Z",
+   "updated": "2026-09-29T14:12:33Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → E6L j11 PASS on the tip",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
