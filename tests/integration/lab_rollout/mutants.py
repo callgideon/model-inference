@@ -77,6 +77,7 @@ NO_STACK = "test_e8l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e8l_the_namespace_is_the_reserved_block"
 RERUN = "test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 SUB_CELL = "test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun"
+R222 = "test_e8l_r222_accepts_only_a_not_run_out_of_local_scope"
 UNBOUND = tuple(re.findall(r"^def (test_k\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -125,8 +126,30 @@ MUTANTS: tuple[Mutant, ...] = (
        '"parent_status": result[spec["parent"]]["status"],\n             "status": NOT_RUN,',
        '"parent_status": result[spec["parent"]]["status"],\n             "status": PASS,',
        SUB_CELL),
-    _m("sub_cell_without_its_lane", "the breach sub-cell names WR-C5-LIVE", R,
-       '"parent": "k09", "lanes": ["WR-C5-LIVE"],', '"parent": "k09", "lanes": [],', SUB_CELL),
+    _m("sub_cell_without_its_lane", "the breach sub-cell names WR-C6-LIVE", R,
+       '"parent": "k09", "lanes": ["WR-C6-LIVE"],', '"parent": "k09", "lanes": [],', SUB_CELL),
+    # R222/R235: the runner's machine check (lab_evaluate's shape, with the sub-cells)
+    _m("r222_in_scope_lane_excused", "a NOT RUN on a lane not ruled out of scope stays open", R,
+       'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       'return bool(entry["cases"]) and', R222),
+    _m("r222_never_run_excused", "a scenario with no case run is open", R,
+       'set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       "set(lanes) <= set(OUT_OF_SCOPE) and", R222),
+    _m("r222_any_reason_excuses", "every reason must be the scenario's own wait", R,
+       "            all(f\"NOT RUN[{','.join(lanes)}]\" in reason",
+       "            any(f\"NOT RUN[{','.join(lanes)}]\" in reason", R222),
+    _m("r222_fail_excused_by_its_message", "an in-scope FAIL is never excused, whatever its "
+       "message says (R234)", R,
+       "        if entry[\"status\"] != NOT_RUN:        # R234", "        if False:        # R234",
+       R222),
+    _m("r222_pass_is_open", "a PASS never keeps the gate from acceptance", R,
+       'if entry["status"] != PASS and not excused(sid, entry)}',
+       "if not excused(sid, entry)}", R222),
+    _m("r222_sub_cells_ignored", "a sub-cell's NOT RUN is judged like a scenario's", R,
+       "                  if not set(cell[\"lanes\"]) <= set(OUT_OF_SCOPE)})",
+       "                  if False})", R222),
+    _m("r222_gpu_in_scope", "k08's GPU target is ruled out of local scope (R222)", R,
+       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)", ', "OUT_OF_SCOPE = {", R222),
     _m("unbound_case_runs", "a case waiting on P-08 is never a pass",
        P, "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )

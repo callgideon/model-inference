@@ -158,12 +158,46 @@ def test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun():
 
 def test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun():
     """k09 PASS is the pass-loop half; the breach half is a NOT RUN sub-cell in verdict.json
-    naming WR-C5-LIVE and the exact rerun, so the R222 tally is not prose-only."""
+    naming WR-C6-LIVE and the exact rerun, so the R222 tally is not prose-only."""
     result = runner.classify(junit(*everything("k09")))
     assert result["k09"]["status"] == "PASS", "the sub-cell never lowers its parent"
     (cell,) = runner.sub_cells(result)
     assert (cell["id"], cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
-        == ("k09-breach", "k09", "PASS", "NOT RUN", "NOT RUN[WR-C5-LIVE]")
-    assert cell["lanes"] == ["WR-C5-LIVE"]
+        == ("k09-breach", "k09", "PASS", "NOT RUN", "NOT RUN[WR-C6-LIVE]")
+    assert cell["lanes"] == ["WR-C6-LIVE"], "composition-6 carried WR-C5-LIVE as WR-C6-LIVE"
     assert cell["reproduce"] == f"{runner.PY} {runner.RUNNER} --out <dir> --only k09"
     assert "passes today because the breach half is not bound" in cell["note"]
+
+
+def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
+    """R222/R234/R235: the gate is accepted locally with no FAIL and every NOT RUN (sub-cells
+    included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), k09's breach
+    half on a product WR (WR-C6-LIVE) - by its own NOT RUN reason. A NOT RUN on in-scope work
+    (k10, composed since merge #50), a FAIL, or a scenario NOT RUN for another reason
+    (deselected, never run) stays open."""
+    assert runner.OUT_OF_SCOPE == {"P-08": "GPU (P-08 staging target)",
+                                   "WR-C6-LIVE": "product WR: WR-C6-LIVE"}
+    k08 = "NOT RUN[P-08] no allocated GPU; rerun after the merge: x --only k08"
+    others = [c for sid in runner.SCENARIOS if sid != "k08" for c in everything(sid)]
+    accepted = runner.classify(junit(*others, *everything("k08", "skipped", k08)))
+    assert runner.r222(accepted) == {"accepted": True, "open": {}}
+    assert runner.gate(accepted) == "NOT RUN", "accepted is not a PASS"
+    with monkeypatch.context() as patch:            # a lane not ruled out of scope stays open
+        patch.delitem(runner.OUT_OF_SCOPE, "P-08")
+        assert runner.r222(accepted) == {"accepted": False, "open": {"k08": "NOT RUN"}}
+    with monkeypatch.context() as patch:            # the sub-cell is judged too
+        patch.delitem(runner.OUT_OF_SCOPE, "WR-C6-LIVE")
+        assert runner.r222(accepted) == {"accepted": False, "open": {"k09-breach": "NOT RUN"}}
+    failed = runner.classify(junit(*others, *everything("k08", "failure", k08)))
+    assert runner.r222(failed) == {"accepted": False, "open": {"k08": "FAIL"}}, \
+        "R234: an in-scope FAIL is never excused, whatever its message says"
+    ui = "NOT RUN[WR-R4-2:records] the suite passed; rerun after the merge: x --only k10"
+    rest = [c for sid in runner.SCENARIOS if sid not in ("k08", "k10") for c in everything(sid)]
+    waiting = runner.classify(junit(*rest, *everything("k08", "skipped", k08),
+                                    *everything("k10", "skipped", ui)))
+    assert runner.r222(waiting)["open"] == {"k10": "NOT RUN"}, "k10 is in-scope work now"
+    assert "k08" in runner.r222(runner.classify(junit(*everything("k01"))))["open"], \
+        "a scenario never run is open"
+    deselected = runner.classify(junit(*others, *everything("k08", "skipped", k08)),
+                                 only={"k01"})
+    assert "k08" in runner.r222(deselected)["open"], "every reason must be the lane's wait"

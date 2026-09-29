@@ -66,7 +66,7 @@ def _sibling(name: str):
 
 
 NAMESPACE = "e8l"
-BASE = "57a779af"            # the base of the E8L lane this runner last measured (merge #39)
+BASE = "993d481c"            # the base of the E8L lane this runner last measured (merge #50)
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
 EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}
@@ -152,13 +152,20 @@ REQUIRED = {
 #: verdict.json, never prose-only). NOT RUN always; they do not lower their parent's status.
 SUB_CELLS = {
     "k09-breach": {
-        "parent": "k09", "lanes": ["WR-C5-LIVE"],
+        "parent": "k09", "lanes": ["WR-C6-LIVE"],
         "title": "the pass loop sees a breach, kill -9 between D9's decision and the alias CAS, "
                  "restart: converges with no second decision",
         "note": "k09 PASS covers the operator stop and the pass-loop half; the breach half needs "
-                "R1's aggregates (WR-C5-LIVE). The rerun passes today because the breach half "
-                "is not bound: the k09 case gains the breach step when WR-C5-LIVE lands"},
+                "R1's aggregates (WR-C6-LIVE, R244; composition-6 carried WR-C5-LIVE). The rerun "
+                "passes today because the breach half is not bound: the k09 case gains the "
+                "breach step when WR-C6-LIVE lands"},
 }
+#: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
+#: reason class - k08's GPU target (P-08) and k09's breach half, blocked by the product WR
+#: WR-C6-LIVE (R1's aggregates as R2's Live, lane lab-live). k10 is in local scope since
+#: WR-R4-2 is composed (merge #50): its UI half PASSes through LAB-E2E (R238) or stays open.
+#: The gate is re-run when a dependency lands and the cell must then PASS.
+OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)", "WR-C6-LIVE": "product WR: WR-C6-LIVE"}
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>k\d\d)_")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[")
@@ -227,6 +234,23 @@ def cells(result: dict) -> dict:
 
 def gate(result: dict) -> str:
     return worst(entry["status"] for entry in result.values())
+
+
+def r222(result: dict) -> dict:
+    """R222/R235: accepted locally with nothing but PASS, and NOT RUN (sub-cells included)
+    whose every reason is the scenario's own wait on out-of-local-scope lanes. `open` = what
+    keeps it from acceptance."""
+    def excused(sid: str, entry: dict) -> bool:
+        lanes = entry.get("lanes") or SCENARIOS[sid]["lanes"]   # a recorded verdict's own
+        if entry["status"] != NOT_RUN:        # R234: an in-scope FAIL is never excused
+            return False
+        return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and \
+            all(f"NOT RUN[{','.join(lanes)}]" in reason for reason in entry["reasons"])
+    still = {sid: entry["status"] for sid, entry in result.items()
+             if entry["status"] != PASS and not excused(sid, entry)}
+    still.update({cell["id"]: cell["status"] for cell in sub_cells(result)
+                  if not set(cell["lanes"]) <= set(OUT_OF_SCOPE)})
+    return {"accepted": not still, "open": still}
 
 
 def reproduce(sid: str | None = None) -> str:
@@ -349,7 +373,7 @@ def main(argv: list[str] | None = None) -> int:
     verdict = gate(result)
     payload = {
         "task": "E8L", "gate": "LAB-ROLLOUT-LOCAL",
-        "verdict": verdict, "exit": EXIT[verdict], "cells": cells(result),
+        "verdict": verdict, "exit": EXIT[verdict], "cells": cells(result), "r222": r222(result),
         "label": "real PostgreSQL (every migration: D9 0033/0039/0043, D7, L3 0032), the "
                  "merged R1/R2/R3/B2 code, G2's relay on its contract fakes, owned case records "
                  "and synthetic endpoints; no real-model quality claim (P-07), no GPU parity, "
@@ -359,7 +383,9 @@ def main(argv: list[str] | None = None) -> int:
         "seconds": round(time.monotonic() - clock, 1),
         "stack": {"usable": usable, "why_not": why or None,
                   "stages": [{k: s[k] for k in ("stage", "status", "seconds")} for s in report.stages]},
-        "scenarios": [{"id": sid, **SCENARIOS[sid], **entry, "reproduce": reproduce(sid)}
+        "scenarios": [{"id": sid, **SCENARIOS[sid], **entry, "reproduce": reproduce(sid),
+                       "scope": {lane: OUT_OF_SCOPE.get(lane, "local (in scope)")
+                                 for lane in SCENARIOS[sid]["lanes"]}}
                       for sid, entry in result.items()],
         "sub_cells": sub_cells(result),
         "lock": {"path": str(LOCK), "held": held}, "runs": runs,
@@ -370,7 +396,8 @@ def main(argv: list[str] | None = None) -> int:
     (out / "verdict.json").write_text(json.dumps(payload, indent=2, default=str))
     for entry in payload["scenarios"]:
         print(f"{entry['status']:>8}  {entry['id']}  {entry['title']}")
-    print(f"cells {payload['cells']}\ngate {verdict} -> {out / 'verdict.json'}")
+    print(f"cells {payload['cells']}\nr222 {payload['r222']}\ngate {verdict} -> "
+          f"{out / 'verdict.json'}")
     return EXIT[verdict]
 
 
