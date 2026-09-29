@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 302,
- "updated": "2026-09-29T16:14:54Z",
+ "revision": 303,
+ "updated": "2026-09-29T17:25:03Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8948,22 +8948,22 @@
   {
    "id": "W5-LAB-LIVE",
    "task": "R2",
-   "slice": "WR-C6-LIVE under R244: 0054 lab_release_live (LOCAL-ONLY) + the rollout pass evaluates running releases (R228) instead of holding NoLive (Opus); workflow wf_79ddceb1-979",
+   "slice": "WR-C6-LIVE under R244: 0054 lab_release_live (LOCAL-ONLY) + the rollout pass evaluates running releases (R228) instead of holding NoLive (Opus); workflow wf_79ddceb1-979; ACCEPT_WITH_FIXES at 6aae4bbc (0054 lab_release_live per arm; PgReleaseStore.live; the rollout pass evaluates running releases; 219 mutants 0 survivors; E4 2830/0)",
    "agent": "opus",
    "branch": "codex/w5-lab-live",
    "worktree": ".claude/worktrees/codex-w5-lab-live",
    "base": "993d481c",
-   "head": null,
+   "head": "6aae4bbc",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T14:59:31Z",
-   "updated": "2026-09-29T14:59:31Z",
+   "updated": "2026-09-29T17:25:03Z",
    "blocker": null,
-   "next_action": "handback → merge → k09 breach half (lab-rollout-6)",
+   "next_action": "merge batch #52 (0054 minors, R246–R248) → lab-rollout-6 (WR-LIVE-K09) after lab-rollout-5 merges; composition-7 (WR-LIVE-DECIDE/PAGE)",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 8,
@@ -9117,6 +9117,40 @@
     "apps/infrx-api/tests/d/test_code_mutants_lw8.py",
     "apps/infrx-api/tests/i/lab_control/test_control_routes_pg.py",
     "research/plan/evidence/l/LAB-SQL-LW8-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-52",
+   "task": null,
+   "slice": "merge batch #52 (Opus): lab-live 6aae4bbc (+0054 minors: terminal-only units, bool_and health, customer-caused failures excluded, index; R246–R248)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-52",
+   "worktree": ".claude/worktrees/codex-w5-merge-52",
+   "base": "1c63776d",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T17:25:03Z",
+   "updated": "2026-09-29T17:25:03Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → 0054 LOCAL-ONLY on the tip",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0054_lab_release_live.sql",
+    "apps/infrx-api/tests/d/test_code_mutants_live.py",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/r/LAB-LIVE-1f68d35.md"
    ],
    "wiring_requests": []
   }
