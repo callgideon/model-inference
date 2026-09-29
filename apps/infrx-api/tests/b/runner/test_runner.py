@@ -17,8 +17,11 @@ from infrx.contracts import errors
 from infrx.datasets import versions
 from infrx.datasets.imports import sample_key
 from infrx.evaluation import runner
+from infrx.contracts.lab import records
 from infrx.evaluation.runner import HttpDevEndpoint, Limits, Runner
+from infrx.gateway.routes import validate
 from infrx.harnesses.replay import recording_key
+from infrx.media.s3 import S3ObjectStore
 from infrx.media.store import InMemoryObjectStore
 
 from .world import (DEPLOYMENT, DEV, EVALUATOR, EVALUATOR_ID, NEMO, OTHER, OUTSIDER, RATE_CARD, SPEC,
@@ -509,12 +512,94 @@ def test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_c
         with pytest.raises(error):
             run(port.complete(prompt=prompt, media=[], tool_results=[], seed=0,
                               idempotency_key="k"))
-    with pytest.raises(errors.InvalidRequest, match="video"):
-        run(port.complete(prompt="p", media=["m"], tool_results=[], seed=0,
-                          idempotency_key="k"))
+    # WR-E6L-J11: a clip URL is the one `video_url` part after the text, exactly `{url}`
+    # (R58) - the gateway's own validator takes the body as sent.
+    run(port.complete(prompt="p", media=["https://o.test/k?s=1#t=0,1"], tool_results=[],
+                      seed=0, idempotency_key="k"))
+    messages = json.loads(seen[-1].content)["messages"]
+    assert messages == [{"role": "user", "content": [
+        {"type": "text", "text": "p"},
+        {"type": "video_url", "video_url": {"url": "https://o.test/k?s=1#t=0,1"}}]}]
+    validate.check_messages({"messages": messages})
     # B-R3: the gateway takes {role, content} messages of system/user/assistant only, and no
     # tools; a recorded tool result is refused here, never sent as a message it refuses.
     with pytest.raises(errors.InvalidRequest, match="tool"):
         run(port.complete(prompt="p", media=[], tool_results=[{"name": "look", "result": 2}],
                           seed=0, idempotency_key="k"))
-    assert len(seen) == 6                  # neither refusal reached the endpoint
+    assert len(seen) == 7                  # the tool refusal never reached it
+
+
+# ------------------------------------------------------- WR-E6L-J11: finite video to the endpoint
+class Presigning(InMemoryObjectStore):
+    """The Lab objects with `S3ObjectStore.presign`, each signature recorded."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.presigned: list[tuple[str, int]] = []
+
+    async def presign(self, key: str, *, expires_s: int) -> str:
+        self.presigned.append((key, expires_s))
+        return f"https://objects.test/{key}?sig=s"
+
+
+CLIP = "c" * 64
+CLIP_REF = f"lab/{NEMO}/media/{CLIP}"
+
+
+def test_b1_a_finite_video_case_is_sent_as_its_presigned_clip_with_its_span() -> None:
+    """N1's clip (`media_digest`, `span_ms`) reaches the dev endpoint as one URL: a presigned
+    GET of this provider's Lab media object, 600 s at most, the span as a media fragment -
+    two cases cut from one clip are two requests, never the same one."""
+    w = World(n=1, harness={"adapter": "finite_video", "prompt_template": "label {{media_ref}}",
+                            "input_mapping": {}})
+    w.objects = Presigning()
+    run(w.objects.put_if_absent(sample_key(NEMO, w.manifest["samples"][0]["content_digest"]),
+                                records.canonical({
+                                    "modality": "finite_video", "content": {"action": "run"},
+                                    "media_digest": f"sha256:{CLIP}", "span_ms": [30_000, 61_500],
+                                    "original": {"answer": "run"}}), "application/json"))
+    w.wallet.answer = lambda prompt: "run"
+    report = run(w.runner().run(w.freeze()))
+    assert report["failures"] == {} and report["cases"] == {"done": 1}
+    (call,) = w.wallet.calls
+    assert call["prompt"] == f"label {CLIP_REF}"
+    assert call["media"] == [f"https://objects.test/{CLIP_REF}?sig=s#t=30,61.5"]
+    assert w.objects.presigned == [(CLIP_REF, 600)]
+    assert w.results()[w.ids[0]]["score"] == 1.0
+
+
+def test_b1_only_the_runs_providers_clip_within_the_cap_is_signed() -> None:
+    """R227's rule for media: a run sends only `lab/<its provider>/media/<digest>`; a span is
+    1..82000 ms (MAX_VIDEO_SECONDS 82); each refusal names itself and signs nothing."""
+    objects = Presigning()
+    assert run(runner.clip_url(objects, NEMO, CLIP_REF, [0, 82_000])).endswith("#t=0,82")
+    refused = ((f"lab/{OTHER}/media/{CLIP}", [0, 1000], "media_foreign"),
+               (f"lab/{NEMO}/samples/{CLIP}", [0, 1000], "media_foreign"),
+               (f"lab/{NEMO}/media/../{CLIP[:61]}", [0, 1000], "media_foreign"),
+               (CLIP_REF, [0, 82_001], "video_over_cap"),
+               (CLIP_REF, [7, 7], "video_over_cap"),
+               (CLIP_REF, [-1, 1000], "video_over_cap"),
+               (CLIP_REF, [0.5, 1000], "video_over_cap"),
+               (CLIP_REF, runner._MISSING, "video_over_cap"))
+    for ref, span, name in refused:
+        with pytest.raises(errors.InvalidRequest, match=name):
+            run(runner.clip_url(objects, NEMO, ref, span))
+    assert objects.presigned == [(CLIP_REF, 600)]
+
+
+def test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object(monkeypatch) -> None:
+    """The Lab objects' presign (offline: signing needs no network): GET of the prefixed key,
+    SigV4 (a SigV2 URL is refused by buckets created after 2020), expiring as asked."""
+    from urllib.parse import parse_qs, urlsplit
+    for name in ("AWS_SESSION_TOKEN", "AWS_PROFILE"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in (("AWS_ACCESS_KEY_ID", "k"), ("AWS_SECRET_ACCESS_KEY", "s"),
+                        ("AWS_DEFAULT_REGION", "us-east-1"),
+                        ("AWS_CONFIG_FILE", "/nonexistent"),
+                        ("AWS_SHARED_CREDENTIALS_FILE", "/nonexistent")):
+        monkeypatch.setenv(name, value)
+    store = S3ObjectStore.connect("b", "lab/", "http://127.0.0.1:9")
+    url = urlsplit(run(store.presign("x/y", expires_s=600)))
+    query = parse_qs(url.query)
+    assert url.path == "/b/lab/x/y"
+    assert query["X-Amz-Expires"] == ["600"] and query["X-Amz-Algorithm"] == ["AWS4-HMAC-SHA256"]
