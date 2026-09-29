@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 316,
- "updated": "2026-09-29T21:31:03Z",
+ "revision": 317,
+ "updated": "2026-09-29T21:34:42Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9508,22 +9508,22 @@
   {
    "id": "W5-KNOWN-GOOD-REPROOF-3",
    "task": "I8",
-   "slice": "R151 condition 1 through 0056 for the second window + the reviewed EXPECTED_PENDING diff (Opus); workflow wf_e138bcfe-f5d",
+   "slice": "R151 condition 1 through 0056 for the second window + the reviewed EXPECTED_PENDING diff (Opus); workflow wf_e138bcfe-f5d; ACCEPT at 3fc5b06c (both targets through 0056: 4 runs 383/0; 35 mutants; the reviewed patch as a diff)",
    "agent": "opus",
    "branch": "codex/w5-known-good-reproof-3",
    "worktree": ".claude/worktrees/codex-w5-known-good-reproof-3",
    "base": "33547abd",
-   "head": null,
+   "head": "3fc5b06c",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T20:21:25Z",
-   "updated": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T21:34:42Z",
    "blocker": null,
-   "next_action": "handback → merge → the operator runs launch-v1.sh window",
+   "next_action": "merge batch #59 (README/P-25 rows, the committed .patch + launch-v1.sh window uses it, RV-1 test) → the operator runs launch-v1.sh window",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9674,6 +9674,42 @@
     "tests/integration/lab_observe/",
     "research/plan/08-contracts-v1-encoding.md",
     "research/plan/evidence/e/E5L-c25405c.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-59",
+   "task": null,
+   "slice": "merge batch #59 (Opus): known-good-reproof-3 3fc5b06c (+WR-KGR3-1/2 rows, hosted-migrate-0052-0056.patch + launch-v1.sh window via the patch, RV-1 test; no rulings)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-59",
+   "worktree": ".claude/worktrees/codex-w5-merge-59",
+   "base": "83da7aef",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T21:34:42Z",
+   "updated": "2026-09-29T21:34:42Z",
+   "blocker": null,
+   "next_action": "integrate → R151 condition 1 for 0052–0056 met on the tip → tell the operator to run launch-v1.sh window",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infra/rollout/README.md",
+    "research/plan/15-pending-inputs.md",
+    "infra/lab/rollout/launch-v1.sh",
+    "infra/lab/rollout/hosted-migrate-0052-0056.patch",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py"
    ],
    "wiring_requests": []
   }

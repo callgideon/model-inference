@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-29 21:31Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 316, updated 2026-09-29 21:31Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-29 21:34Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 317, updated 2026-09-29 21:34Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -31,8 +31,8 @@ Remaining, in order:
 - Integration branch `claude/consumer-v1` (head `ef37d72a`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V4 measured backend; bands with active work: V2, V4, V5, V6.
-- Agent slots: 16 total, 10 active lanes, 2 reserved.
-- Validation: 0 error(s), 37 warning(s).
+- Agent slots: 16 total, 11 active lanes, 2 reserved.
+- Validation: 0 error(s), 41 warning(s).
 
 ### Actionable blockers
 
@@ -110,14 +110,14 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 |---|---|---|---|---|
 | RV-01 | fixed | F2C (complete), G7 (complete), A3 (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-02 | fixed | D10 (complete), M5 (complete), E1C (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
-| RV-03 | fixed | D10 (complete), M6 (complete), I8 (running), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
+| RV-03 | fixed | D10 (complete), M6 (complete), I8 (review), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-04 | open | S3 (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
 | RV-05 | fixed | F2C (complete), D10 (complete), W5 (complete), G7 (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-06 | fixed | C0 (complete), C3A (complete), A2 (complete), A3 (complete), U1R (complete), U2 (complete), U3 (complete), U4 (complete), E3A (queued) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-07 | fixed | E1C (complete), M5 (complete), G7 (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-08 | open | E1C (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
-| RV-09 | open | D10 (complete), I8 (running), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
-| RV-10 | open | I8 (running), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
+| RV-09 | open | D10 (complete), I8 (review), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
+| RV-10 | open | I8 (review), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
 | RV-11 | fixed | F2C (complete), D10 (complete), G7 (complete), U4 (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-12 | fixed | E2C (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 
@@ -364,11 +364,12 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W5-MERGE-57 | support merge batch #57 (Opus): lab-observe-3 7c675167 (+RV-2/3/4 cases, evidence minors, R253); E5L flips at integration; workflow wf_a4a0a29a-264; integrated (R253 on the tip; E5L implemented → COMPLETE-LOCAL) | complete | codex/w5-merge-57 | c77e75ac → b754ff80 | ports none (layer-1 only), prefix -, db - | 2026-09-29 18:59Z | — | 0.5–2 h remaining (likely 1 h), confidence unknown, estimated — |
 | W5-LAB-LOCAL-2 | I2L `make lab-local` for real after #47/#51/#54/#55: o04 login PASS, o05 control-factory families equal to the owner (0056), e4-on pins green, an R222 machine check; stack mutants (Opus); workflow wf_c7e132a4-c28 | running | codex/w5-lab-local-2 | c77e75ac → 1a5be321 | ports none (layer-1 only), prefix -, db - | 2026-09-29 20:21Z | resumed by run id 2026-09-29T20:15Z (the limit lifted) | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
 | W5-LAB-OBSERVE-4 | E5L WR-LC-O01: o01 bound over the capture seam (TRACE_PUMPS on in the box processes; consented traces ship, no secret in any spool byte); `--only o01` + full `make lab-observe` 18/0/0 (Opus); workflow wf_21e2ad0c-d51; ACCEPT_WITH_FIXES at 5cd59091 (o01 bound over the seam; make lab-observe 18/0/0 at c25405cc, then with the token echoed 18/1/0 — the async half FAILs honestly on R8 → lab-capture-2; 23 stack mutants) | review | codex/w5-lab-observe-4 | be6b2fde → 5cd59091 | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:31Z | merge batch #58 (RV-2/RV-3, R254) → o01 sync PASS; async-echo FAIL until lab-capture-2 | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
-| W5-KNOWN-GOOD-REPROOF-3 | I8 R151 condition 1 through 0056 for the second window + the reviewed EXPECTED_PENDING diff (Opus); workflow wf_e138bcfe-f5d | running | codex/w5-known-good-reproof-3 | 33547abd → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 20:21Z | handback → merge → the operator runs launch-v1.sh window | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
+| W5-KNOWN-GOOD-REPROOF-3 | I8 R151 condition 1 through 0056 for the second window + the reviewed EXPECTED_PENDING diff (Opus); workflow wf_e138bcfe-f5d; ACCEPT at 3fc5b06c (both targets through 0056: 4 runs 383/0; 35 mutants; the reviewed patch as a diff) | review | codex/w5-known-good-reproof-3 | 33547abd → 3fc5b06c | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:34Z | merge batch #59 (README/P-25 rows, the committed .patch + launch-v1.sh window uses it, RV-1 test) → the operator runs launch-v1.sh window | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 | W5-LAB-ROLLOUT-7 | E8L WR-LR6-VERDICT (read-time verdict), WR-LR6-GATE-OUT, WR-LR6-E2E-SHADOW; E8L only k08 NOT RUN (Opus); workflow wf_b5c37c35-1a4 | running | codex/w5-lab-rollout-7 | 33547abd → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 20:21Z | handback → merge | 3–12 h remaining (likely 6 h), confidence unknown, estimated — — STALE |
 | W5-LAB-C7-GAPS | R2 C7-RV-1..6 + WR-C7-DOC (rollback-verdict case, started_at, HeadBucket message, S3_MEDIA_BUCKET in the unit env, USD-settled row fallback) (Opus); workflow wf_20889db3-846 | running | codex/w5-lab-c7-gaps | 33547abd → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 20:21Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
 | W5-LAB-SQL-LW9 | L3 0058 LOCAL-ONLY: variant identities (WR-LW7-3a) + the per-serving assignments tally (WR-C7-TALLY); WR-LW8-3 GRANTED (Opus); workflow wf_a815dde2-641 | running | codex/w5-lab-sql-lw9 | 33547abd → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 20:21Z | handback → merge | 3–12 h remaining (likely 6 h), confidence unknown, estimated — — STALE |
 | W5-MERGE-58 | support merge batch #58 (Opus): lab-observe-4 5cd59091 (+RV-2 output assertion, RV-3 beta sync, evidence minors, R254); workflow wf_5bbd8bfa-aef | running | codex/w5-merge-58 | 34e6ab91 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:31Z | integrate (sort §10) → E5L on the tip: o01 sync PASS, async-echo FAIL[WR-LO4-R8] | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
+| W5-MERGE-59 | support merge batch #59 (Opus): known-good-reproof-3 3fc5b06c (+WR-KGR3-1/2 rows, hosted-migrate-0052-0056.patch + launch-v1.sh window via the patch, RV-1 test; no rulings) | running | codex/w5-merge-59 | 83da7aef → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:34Z | integrate → R151 condition 1 for 0052–0056 met on the tip → tell the operator to run launch-v1.sh window | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 
 ### Queues and locks
 
@@ -393,6 +394,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: stale estimate: lane W5-LAB-C7-GAPS estimated at an unknown time (older than 6 h)
 - warning: stale estimate: lane W5-LAB-SQL-LW9 estimated at an unknown time (older than 6 h)
 - warning: stale estimate: lane W5-MERGE-58 estimated at an unknown time (older than 6 h)
+- warning: stale estimate: lane W5-MERGE-59 estimated at an unknown time (older than 6 h)
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and W5-LAB-LOCAL-2 (running) both own research/plan/evidence/e/ / research/plan/evidence/e/E4ON-*
@@ -401,9 +403,10 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: overlapping writers: E4C (queued) and W5-MERGE-58 (running) both own research/plan/evidence/e/ / research/plan/evidence/e/E5L-c25405c.md
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and W5-LAB-CAPTURE-2 (running) both own apps/app/ / apps/app/supabase/migrations/0057_*
-- warning: overlapping writers: I2A (review) and W5-KNOWN-GOOD-REPROOF-3 (running) both own infra/ / infra/rollout/known-good.json
+- warning: overlapping writers: I2A (review) and W5-KNOWN-GOOD-REPROOF-3 (review) both own infra/ / infra/rollout/known-good.json
 - warning: overlapping writers: I2A (review) and W5-LAB-C7-GAPS (running) both own infra/ / infra/lab/app/lab.json
 - warning: overlapping writers: I2A (review) and W5-LAB-SQL-LW9 (running) both own apps/app/ / apps/app/supabase/migrations/0058_*
+- warning: overlapping writers: I2A (review) and W5-MERGE-59 (running) both own infra/ / infra/rollout/README.md (+2 more)
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and W5-LAB-LOCAL-2 (running) both own tests/integration/ / tests/integration/lab_local/ (+1 more)
 - warning: overlapping writers: E3A (queued) and W5-LAB-OBSERVE-4 (review) both own tests/integration/ / tests/integration/lab_observe/
@@ -411,11 +414,13 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: overlapping writers: E3A (queued) and W5-MERGE-58 (running) both own tests/integration/ / tests/integration/lab_observe/
 - warning: overlapping writers: I3 (queued) and W5-LAB-LOCAL-2 (running) both own tests/integration/ / tests/integration/lab_local/ (+1 more)
 - warning: overlapping writers: I3 (queued) and W5-LAB-OBSERVE-4 (review) both own tests/integration/ / tests/integration/lab_observe/
-- warning: overlapping writers: I3 (queued) and W5-KNOWN-GOOD-REPROOF-3 (running) both own infra/ / infra/rollout/known-good.json
+- warning: overlapping writers: I3 (queued) and W5-KNOWN-GOOD-REPROOF-3 (review) both own infra/ / infra/rollout/known-good.json
 - warning: overlapping writers: I3 (queued) and W5-LAB-ROLLOUT-7 (running) both own tests/integration/ / tests/integration/lab_rollout/
 - warning: overlapping writers: I3 (queued) and W5-LAB-C7-GAPS (running) both own infra/ / infra/lab/app/lab.json
 - warning: overlapping writers: I3 (queued) and W5-MERGE-58 (running) both own tests/integration/ / tests/integration/lab_observe/
+- warning: overlapping writers: I3 (queued) and W5-MERGE-59 (running) both own infra/ / infra/rollout/README.md (+2 more)
 - warning: overlapping writers: W5-LAB-OBSERVE-4 (review) and W5-MERGE-58 (running) both own tests/integration/lab_observe/ / tests/integration/lab_observe/ (+1 more)
+- warning: overlapping writers: W5-KNOWN-GOOD-REPROOF-3 (review) and W5-MERGE-59 (running) both own apps/infrx-api/tests/i/test_known_good_proof.py / apps/infrx-api/tests/i/test_known_good_proof.py (+1 more)
 - warning: overlapping writers: W5-LAB-ROLLOUT-7 (running) and W5-LAB-C7-GAPS (running) both own apps/infrx-api/tests/g/lab_releases/ / apps/infrx-api/tests/g/lab_releases/
 - warning: 99 update file(s) not applied yet: B1-20260928T1130Z.json, B3-20260928T1130Z.json, B3-20260928T2030Z.json, B4-20260928T1030Z.json, B4-20260928T1620Z.json, C2-20260927T2100Z.json, C2-20260928T1130Z.json, C2-20260928T2030Z.json, COMPOSITION-2-20260928T2040Z.json, COMPOSITION-2-20260928T2059Z.json, COMPOSITION-20260927T2310Z.json, COMPOSITION-3-20260929T0110Z.json, COMPOSITION-4-20260929T0540Z.json, COMPOSITION-5-20260929T2330Z.json, COMPOSITION-6-20260929T1315Z.json, COMPOSITION-7-20260929T1836Z.json, D8-20260928T1310Z.json, D8-20260928T1530Z.json, E3L-20260928T2316Z.json, E3L-20260929T0632Z.json, E3L-20260929T0730Z.json, E3L-20260929T1019Z.json, E3L-F1-20260929T0136Z.json, E5L-20260929T1040Z.json, E5L-20260929T1214Z.json, E5L-20260929T1308Z.json, E5L-20260929T1500Z.json, E6L-20260929T1214Z.json, E6L-20260929T1217Z.json, E6L-20260929T1308Z.json, E6L-20260929T1320Z.json, E6L-20260929T2330Z.json, E7L-20260928T2030Z.json, E7L-20260928T2347Z.json, E7L-20260929T0000Z.json, E7L-20260929T0540Z.json, E7L-20260929T1214Z.json, E7L-20260929T1308Z.json, E7L-20260929T1500Z.json, E7L-20260929T1730Z.json, E7L-20260929T2000Z.json, E8L-20260928T1907Z.json, E8L-20260928T2000Z.json, E8L-20260929T0230Z.json, E8L-20260929T0440Z.json, E8L-20260929T0852Z.json, E8L-20260929T1214Z.json, E8L-20260929T1215Z.json, E8L-20260929T1308Z.json, E8L-20260929T1625Z.json, E8L-20260929T1715Z.json, E8L-20260929T1900Z.json, E8L-20260929T2330Z.json, G4T-20260927T2100Z.json, I2L-20260929T0950Z.json, I2L-20260929T1304Z.json, I2L-20260929T1500Z.json, I5-20260928T2040Z.json, I6-20260928T2040Z.json, I7-20260928T2040Z.json, I8-20260928T2337Z.json, I8-20260929T0917Z.json, I8-20260929T1245Z.json, J2-20260928T1130Z.json, J3-20260928T0831Z.json, J3-20260928T2030Z.json, J3-20260929T0110Z.json, L3-20260928T2029Z.json, L3-20260929T1019Z.json, L3-20260929T1712Z.json, L3-20260929T1800Z.json, L4-20260929T0730Z.json, LAB-CAPTURE-20260929T1702Z.json, LAB-E2E-20260929T1214Z.json, LAB-E2E-20260929T1308Z.json, LSQ5-20260929T0030Z.json, LSQ5-20260929T0230Z.json, LSQ6-20260929T0322Z.json, N3-20260928T2030Z.json, N3-20260928T2335Z.json, P1-20260928T2030Z.json, P2-20260928T0831Z.json, P2-20260928T2030Z.json, P2-20260929T0110Z.json, P3-20260928T2030Z.json, P4-20260928T1030Z.json, P4-20260928T1620Z.json, P4-20260928T2100Z.json, R1-20260927T2300Z.json, R1-20260928T1130Z.json, R1-20260928T2030Z.json, R2-20260928T1130Z.json, R2-LAB-LIVE-20260929T1545Z.json, R3-20260928T1130Z.json, R4-20260928T1030Z.json, R4-20260928T1620Z.json, TRACKER-WAVES-20260928T2052Z.json, V1M-20260928T1123Z.json, WR-C3L-2-20260928T0831Z.json (run apply-updates)
 
@@ -727,7 +732,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | `G7` | Align public capability discovery, alias pricing and persisted result expiry | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G8` | Prove headless consumer CREDIT operations and safe activation | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E1C` | Repair upload client and deliver valid resumable dataset/load measurement | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `I8` | Operate continuously with bounded DB pools, durable artifacts and real rollback | Backend corrections | implemented | running | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
+| `I8` | Operate continuously with bounded DB pools, durable artifacts and real rollback | Backend corrections | implemented | review | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E3C` | Integrate corrective backend with real services and process faults | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E4C` | Certify repaired CREDIT backend on final Marlin deployment | Backend corrections | planned | queued | ready: start dependencies met |
 | `U4` | Expose owned consumer request detail and result lifecycle | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
