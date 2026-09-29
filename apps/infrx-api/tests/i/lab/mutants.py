@@ -63,6 +63,9 @@ APP_RELEASE = ("test_i2l__an_app_release_that_conflicts_with_the_installed_lab_s
                "replaces_the_edge")
 LIB = "deploy/lib.sh"
 ROLLBACK = "test_i2l__lab_rollback_restarts_only_the_lab_on_its_previous_release"
+CONTROL_APP = "infrx/lab/control/app.py"
+NO_LOOP = "test_i2l__a_lab_worker_that_refuses_to_start_is_not_restarted_in_a_loop"
+ONE_COMPOSITION = "test_i2l__the_control_factory_is_the_gateways_one_lab_operations_composition"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("starts_without_the_marker", "the Lab is off until the operator enables it",
@@ -115,6 +118,25 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("rollback_restarts_the_worker", "a Lab rollback restarts only the Lab",
        R, "sudo systemctl restart infrx-lab-control\n",
        "sudo systemctl restart infrx-lab-control infrx-worker\n", ROLLBACK),
+    # 0-F5: a refusing Lab worker (exit 2) is never restarted in a loop
+    _m("refusing_annotation_restart_loops", "a refusal (exit 2) is not restarted",
+       "deploy/lab/pipelines/infrx-lab-annotation.service", "RestartPreventExitStatus=2\n", "",
+       NO_LOOP),
+    _m("refusing_judge_restart_loops", "a refusal (exit 2) is not restarted (every unit)",
+       "deploy/lab/observe/infrx-lab-judge.service", "RestartPreventExitStatus=2\n",
+       "RestartPreventExitStatus=1\n", NO_LOOP),
+    _m("dying_eval_never_restarts", "a pass that died (exit 1) still restarts",
+       "deploy/lab/eval/infrx-lab-eval.service", "Restart=on-failure\n", "Restart=no\n",
+       NO_LOOP),
+    # WR-LAB-API-2c: the control factory is the gateway's one L3 composition, on its login
+    _m("control_operations_off_the_login", "L3's operations run on the Lab's own login",
+       CONTROL_APP, "    control = Routes(sessions, access, lab_operations(connect, access))",
+       "    control = Routes(sessions, access, lab_operations(connector(\"\"), access))",
+       ONE_COMPOSITION),
+    _m("control_operations_other_access", "L3 checks the same L2 access the routes use",
+       CONTROL_APP, "    control = Routes(sessions, access, lab_operations(connect, access))",
+       "    control = Routes(sessions, access, lab_operations(connect, "
+       "LabAccess(PgAccessStore(connect))))", ONE_COMPOSITION),
 )
 
 

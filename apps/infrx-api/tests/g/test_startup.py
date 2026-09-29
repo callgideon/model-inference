@@ -184,7 +184,6 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
     even with a service at hand (the launched API is unchanged); on, `POST /v1/feedback` is
     the feedback router's and acknowledges through the composed service."""
     import dataclasses
-    from unittest import mock
 
     from infrx.config import deployment_from_env
     from infrx.contracts.records import Feedback
@@ -391,6 +390,45 @@ def test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_i
     assert store.asked == [support.PUBLIC_MODEL] and world.jobs.jobs == {}
 
 
+def test_rollout_routing__the_router_is_r1_over_d9_on_the_runtime_login_only_when_on():
+    """WR-R1-3-C: off (the default), the composition builds no router; on, R1's `Router` over
+    D9's `PgRoutingReleases` on the gateway's own pool - only when `DATABASE_URL` logs in as
+    `infrx_runtime` (bare or Supavisor's `<role>.<ref>`: SR-R1-1's functions are EXECUTE
+    infrx_runtime only), never the broad/service_role login or the monitor's (refused by
+    name, no credential echoed). No provider-funded shadow runner exists yet: a shadow
+    duplicate is a typed 503 inside R1 (counted, never run, never charged)."""
+    import dataclasses
+
+    from infrx.contracts import errors
+    from infrx.gateway import pilot
+    from infrx.rollouts import routing
+    from infrx.state.lab_rollout import PgRoutingReleases
+
+    runtime = "postgresql://infrx_runtime.proj:pw-do-not-print@db.invalid:6543/postgres"
+
+    def settings(on, dsn=runtime):
+        return support.settings(database_url=dsn, deployment=dataclasses.replace(
+            support.BUILD, rollout_routing=on))
+
+    objects = relay_support.World().objects
+    assert "rollouts" not in pilot.adapters_from_env(settings(False), objects=objects)
+    built = pilot.adapters_from_env(settings(True), objects=objects)
+    assert "rollouts" in built
+    router = built["rollouts"]
+    assert type(router) is routing.Router and type(router.releases) is PgRoutingReleases
+    assert router.releases._connect is built["jobs"]._connect
+    assert pilot._rollouts(settings(True, "postgresql://infrx_runtime@db/x"), "c")[
+        "rollouts"].releases._connect == "c"
+    with pytest.raises(errors.DependencyUnavailable):
+        asyncio.run(router.shadows.run(None, "lab:serving:x", None))
+    for login in ("postgres", "infrx_monitor", "service_role", ""):
+        dsn = f"postgresql://{login}:pw-do-not-print@db.invalid:5432/postgres" if login \
+            else "postgresql://db.invalid:5432/postgres"
+        refused = outcome(lambda: pilot._rollouts(settings(True, dsn), "c"))
+        assert type(refused) is RuntimeMisconfigured, (login, refused)
+        assert "DATABASE_URL" in str(refused) and "do-not-print" not in str(refused)
+
+
 LAB_2 = {"lab_evaluations": ("lab_evals", lab_evaluations.LabEvaluations,
                              lab_evaluations.EVALS_PREFIX + "/runs"),
          "lab_pipelines": ("lab_pipelines", lab_pipelines.LabPipelines,
@@ -456,10 +494,39 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
         ports = {f: getattr(x, f) for f in x.__dataclass_fields__
                  if f not in ("sessions", "access")}
         d7 = {"store"} if name != "lab_releases" else set()
-        assert {f for f, port in ports.items() if port is not None} == d7, name
+        d8 = {"log", "ledger"} if name == "lab_pipelines" else set()   # WR-P1/P3-D8-C
+        assert {f for f, port in ports.items() if port is not None} == d7 | d8, name
         assert all(isinstance(ports[f], PgLabDataStore) for f in d7)
     every = pilot._lab(settings(**{s: True for s, _, _ in LAB_2.values()}), connect=None)
     assert sorted(every) == sorted(LAB_2)
+
+
+def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
+    """WR-P1-D8-C / WR-P3-D8-C: `LAB_PIPELINES` composes P1's label log (D8's `PgLabelLog`)
+    and P3's run ledger (D8's `PgRunLedger`: the CAS and the named payer's PROVIDER_USD
+    reservation on D6J's budget, `lab_submission`-gated in SQL) on the pool, over the Lab
+    objects (R182). The run and checkpoint listings (SR-P3-1, WR-LAB2-4) and B3's evaluation
+    port are not written yet: a typed 503 each, never an AttributeError read as a bug."""
+    import dataclasses
+
+    from infrx.contracts import errors
+    from infrx.gateway import pilot
+    from infrx.state.lab_pipeline import PgLabelLog, PgRunLedger
+
+    settings = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                               lab_pipelines=True))
+    objects = relay_support.World().objects
+    x = pilot._lab(settings, connect="pool", objects=objects)["lab_pipelines"]
+    assert type(x.log) is PgLabelLog and x.log._connect == "pool"
+    assert x.objects is objects and x.store._connect == "pool"
+    d8 = getattr(x.ledger, "ledger", None)
+    assert type(d8) is PgRunLedger and d8._connect == "pool"
+    assert getattr(x.ledger.reserve, "__func__", None) is PgRunLedger.reserve   # D8's own
+    for listing in (x.ledger.run_rows, x.ledger.checkpoint_rows):
+        died = outcome(lambda: asyncio.run(listing("p")))
+        assert type(died) is errors.DependencyUnavailable, died
+    assert x.evals is None
+    assert outcome(lambda: x.port("evals")).code == "dependency_unavailable"
 
 
 LAB_DATA = {"lab_datasets": ("lab_datasets", lab_datasets.LabDatasets,
