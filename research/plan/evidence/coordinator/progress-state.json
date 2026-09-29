@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 267,
- "updated": "2026-09-29T04:31:10Z",
+ "revision": 268,
+ "updated": "2026-09-29T04:31:32Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7739,6 +7739,41 @@
    "evidence": [],
    "commands": [],
    "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-OPERATE-2",
+   "task": "E3L",
+   "slice": "(wave5 LW3 lane lab-operate-2, Opus) LAB-OPERATE-LOCAL: l05b/l10b plain cells (E3L-F1 #31, E3L-F2 #34), the route halves + J01/J02 bound over the real ControlReads (#30), the full `make lab-operate`; workflow wf_db277ff0-a15; base b816f974",
+   "agent": "opus",
+   "branch": "codex/w5-lab-operate-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-operate-2",
+   "base": "b816f974",
+   "head": null,
+   "isolation": {
+    "ports": "e3l 57000-57099; l3 57502; l4 57503",
+    "prefix": "infrx-e3l-",
+    "db": "e3l"
+   },
+   "activity": "running",
+   "started": "2026-09-29T04:31:32Z",
+   "updated": "2026-09-29T04:31:32Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge → E3L accepted",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "four binds + one gate run; e3l-bind took ~3.5 h with four attempts under load"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_operate/**",
+    "apps/lab/tests/l/ui/**",
+    "research/plan/evidence/e/E3L-*"
+   ],
    "wiring_requests": []
   }
  ],
