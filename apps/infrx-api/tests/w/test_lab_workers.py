@@ -379,18 +379,25 @@ def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(mo
                                                                              no_trace_stack):
     """WR-N3-2's pull half: every provider with a lineage in the Lab objects, every page
     (the cursor followed to its end), over L2's grants on the role's database and T3's
-    retention; one provider's failure does not skip the others."""
+    retention, writing 0041 through `PgSampleRestrictions` on the same login (WR-DS5-2:
+    explicit, not found through the directory); one provider's failure does not skip the
+    others."""
     from infrx.datasets import lineage
     from infrx.state.lab_access import PgAccessStore
+    from infrx.state.lab_content import PgSampleRestrictions
     objects, calls = InMemoryObjectStore(), []
     for provider in ("p1", "p2", "p3"):
         asyncio.run(objects.put_if_absent(f"lab/{provider}/lineage/samples/s.json", b"{}",
                                           "application/json"))
     asyncio.run(objects.put_if_absent("lab/p4/datasets/x.json", b"{}", "application/json"))
 
-    async def reconcile(directory, retention, objects_, *, provider_org_id, after=None):
+    async def reconcile(directory, retention, objects_, *, provider_org_id, after=None,
+                        restrictions=None):
         calls.append((provider_org_id, after))
         assert type(directory) is PgAccessStore and type(retention) is Retention
+        # WR-DS5-2: 0041's restrictions passed explicitly, on the directory's own login
+        assert type(restrictions) is PgSampleRestrictions, restrictions
+        assert restrictions._connect is directory._connect
         assert objects_ is objects
         if provider_org_id == "p2":
             raise errors.DependencyUnavailable("clickhouse")

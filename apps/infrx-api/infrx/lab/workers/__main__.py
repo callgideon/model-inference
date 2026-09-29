@@ -337,8 +337,10 @@ async def lineage_providers(objects) -> list[str]:
 def _datasets(mode, env, connect, objects, worker_id, **_):
     from ...datasets import lineage
     from ...state.lab_access import PgAccessStore
+    from ...state.lab_content import PgSampleRestrictions
     _, retention = _traces(mode, env, objects, connect)
-    directory = PgAccessStore(connect)
+    # WR-DS5-2: 0041 written through its own port on this login, not found via the directory
+    directory, restrictions = PgAccessStore(connect), PgSampleRestrictions(connect)
 
     async def reconcile_all() -> dict[str, int]:
         report = {"providers": 0, "failed": 0}
@@ -348,8 +350,8 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
             try:
                 while True:
                     after = (await lineage.reconcile(directory, retention, objects,
-                                                     provider_org_id=provider,
-                                                     after=after))["next"]
+                                                     provider_org_id=provider, after=after,
+                                                     restrictions=restrictions))["next"]
                     if after is None:
                         break
             except Exception:                 # noqa: BLE001 - the next provider still runs

@@ -193,6 +193,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_connector_unapproved", "an automatic connector is refused without P-11",
        '    if env.get("LAB_TRAINING_CONNECTOR", MANUAL) != MANUAL:\n', "    if False:\n",
        NO_PASS),
+    # --- WR-DS5-2 (composition-4): the reconcile pass's explicit 0041 port --------------------
+    _m("lw_reconcile_restrictions_implicit", "the reconcile pass passes PgSampleRestrictions",
+       "provider_org_id=provider, after=after,\n"
+       "                                                     restrictions=restrictions))",
+       "provider_org_id=provider, after=after))", DATASETS),
+    _m("lw_reconcile_restrictions_off_the_login", "0041 is written on the directory's login",
+       "directory, restrictions = PgAccessStore(connect), PgSampleRestrictions(connect)",
+       'directory, restrictions = PgAccessStore(connect), PgSampleRestrictions(connector(""))',
+       DATASETS),
     # --- WR-P4B-2 (composition-4): the annotation role's collect pass --------------------------
     _m("lw_annotation_teacher_url_optional", "the annotation role needs its teacher's URL",
        '"annotation": (BUCKET, "LAB_TEACHER_URL"),', '"annotation": (BUCKET,),', SETTINGS),
