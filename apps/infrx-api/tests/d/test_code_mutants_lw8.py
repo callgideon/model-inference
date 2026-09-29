@@ -44,7 +44,11 @@ GRANTED = frozenset({
     "lab_teacher_reserve", "lab_judge_begin_submit", "lab_teacher_record_sent",
     "lab_judge_release", "lab_judge_quarantine", "lab_judge_record_submission",
     # WR-LR7-GRANT (0059, R251/R259): the release page's Live (0054) and read-time verdict (0043)
-    "lab_release_live", "lab_experiments"})
+    "lab_release_live", "lab_experiments",
+    # WR-LW8-3 (0055, merge #56): the variants listing and the import requeue - applied at
+    # merge #62 because 0059's list (test_code_mutants_lr7) kills on this check; lab-sql-lw9
+    # carries the same two names
+    "lab_optimization_variants", "lab_import_requeue"})
 #: One worker-only claim: an import job is claimed by the I5 datasets pool, never a route.
 WORKER_CLAIM = "lab_import_job_claim"
 
