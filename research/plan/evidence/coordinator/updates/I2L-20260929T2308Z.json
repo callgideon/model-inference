@@ -3,8 +3,8 @@
   "lane": "lab-local-3",
   "slice": "LAB-INTERNAL-TESTING-PREP: E4-ON under R222/R234/R257/R258 - the real make lab-local at b94fd337, the e4-on other-key skips run on their keys, stack mutants",
   "activity": "review",
-  "at": "2026-09-29T23:08:00Z",
-  "head": "6eb57a0e",
+  "at": "2026-09-29T23:40:00Z",
+  "head": "8c3d7fea",
   "base": "8ab880a5",
   "worktree": ".claude/worktrees/codex-w5-lab-local-3",
   "branch": "codex/w5-lab-local-3",
@@ -13,30 +13,126 @@
     "research/plan/evidence/e/E4ON-b94fd337.md",
     "research/plan/evidence/e/E4ON-raw-b94fd337/",
     "research/plan/evidence/e/E4ON-raw-aa386cf3-r1/",
-    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md (§11 G1-G6/L5 rows + log line)",
+    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md (\u00a711 G1-G6/L5 rows + log line)",
     "research/plan/evidence/coordinator/updates/I2L-20260929T2308Z.json"
   ],
   "commands": [
-    {"cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py (before step 1)", "exit": 1, "summary": "5 failed, 20 passed: R257 text not checked; no keyed reruns"},
-    {"cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py", "exit": 0, "summary": "26 passed"},
-    {"cmd": "GATE_ARGS=--keep make lab-local (b94fd337)", "exit": 2, "summary": "runner exit 1, 2455 s, pins clean: e4-on 2833/2858 (10 FAIL = R198 by design + 9 tests/g/lab_releases WR-LL3-1; 15 skipped), e4-on@b1/b3/p1/p2/r2/j2/t2i/t2f 14/14 PASS on their keys, journeys 5/5 PASS, o01/o02/o04/o06 PASS, o05 R237 by design on its recorded text, o03 NOT RUN[P-11], o07 NOT RUN[WR-B4-2,WR-LAB2-4]; r222.accepted false, open {o05, e4-on}"},
-    {"cmd": "runner.e4_keyed on r1 for composition-7's decide_pg skip (aa386cf3)", "exit": 0, "summary": "PASS 1/1 (E4ON-raw-aa386cf3-r1)"},
-    {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l pytest tests/integration/lab_local/test_mutants.py", "exit": 0, "summary": "83 passed: 67 layer-1 + 12 stack mutants killed, 4 list checks, 0 survivors"},
-    {"cmd": "pytest tests/integration/test_harness.py tests/integration/test_lab_package_isolation.py tests/integration/lab_local/test_lab_local_runner.py", "exit": 0, "summary": "76 passed"},
-    {"cmd": "ruff check tests/integration/lab_local/", "exit": 0, "summary": "clean"}
+    {
+      "cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py (before step 1)",
+      "exit": 1,
+      "summary": "5 failed, 20 passed: R257 text not checked; no keyed reruns"
+    },
+    {
+      "cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py",
+      "exit": 0,
+      "summary": "26 passed"
+    },
+    {
+      "cmd": "GATE_ARGS=--keep make lab-local (b94fd337)",
+      "exit": 2,
+      "summary": "runner exit 1, 2455 s, pins clean: e4-on 2833/2858 (10 FAIL = R198 by design + 9 tests/g/lab_releases WR-LL3-1; 15 skipped), e4-on@b1/b3/p1/p2/r2/j2/t2i/t2f 14/14 PASS on their keys, journeys 5/5 PASS, o01/o02/o04/o06 PASS, o05 R237 by design on its recorded text, o03 NOT RUN[P-11], o07 NOT RUN[WR-B4-2,WR-LAB2-4]; r222.accepted false, open {o05, e4-on}"
+    },
+    {
+      "cmd": "runner.e4_keyed on r1 for composition-7's decide_pg skip (aa386cf3)",
+      "exit": 0,
+      "summary": "PASS 1/1 (E4ON-raw-aa386cf3-r1)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l pytest tests/integration/lab_local/test_mutants.py",
+      "exit": 0,
+      "summary": "83 passed: 67 layer-1 + 12 stack mutants killed, 4 list checks, 0 survivors"
+    },
+    {
+      "cmd": "pytest tests/integration/test_harness.py tests/integration/test_lab_package_isolation.py tests/integration/lab_local/test_lab_local_runner.py",
+      "exit": 0,
+      "summary": "76 passed"
+    },
+    {
+      "cmd": "ruff check tests/integration/lab_local/",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "pytest tests/integration/lab_local/test_lab_local_runner.py (fix round, before the fix)",
+      "exit": 1,
+      "summary": "1 failed, 26 passed: CalledProcessError escaped e4_keyed, infrx-t2i-clickhouse not removed (0-LL3R-1)"
+    },
+    {
+      "cmd": "pytest tests/integration/test_harness.py tests/integration/test_lab_package_isolation.py tests/integration/lab_local/test_lab_local_runner.py (8c3d7fea)",
+      "exit": 0,
+      "summary": "77 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_local/test_mutants.py (8c3d7fea)",
+      "exit": 0,
+      "summary": "70 layer-1 mutants killed + 4 list checks, 0 survivors; 12 stack mutants skipped (no kept stack; killed at b94fd337, unchanged code)"
+    },
+    {
+      "cmd": "ruff check tests/integration/lab_local/ (8c3d7fea)",
+      "exit": 0,
+      "summary": "clean"
+    }
   ],
-  "gate_tally": {"verdict": "FAIL", "r222_accepted": false, "open": {"o05": "FAIL (by design, R237)", "e4-on": "FAIL (WR-LL3-1 + R198 by design)"}, "e4_on": {"tests": 2858, "passed": 2833, "failed": 10, "skipped": 15, "keyed_reruns_pass": 15}, "scenarios": {"PASS": ["o01", "o02", "o04", "o06"], "NOT_RUN_ruled": ["o03", "o07"], "FAIL_by_design": ["o05"]}, "journeys_pass": 5, "recomputed_with_WR_LL3_1": "accepted: true, by_design = R198 + R237 only"},
-  "estimate": {"optimistic_h": 1.0, "likely_h": 1.5, "pessimistic_h": 3.0, "confidence": "medium", "basis": "one E4-ON rerun after WR-LL3-1 (this run 2455 s) + stack mutants (783 s) + evidence", "at": "2026-09-29T23:08:00Z"},
-  "blockers": ["WR-LL3-1: tests/g/lab_releases/test_lab_releases.py:404 builds pilot.ReleaseRecords without merge #56's variants (another lane's test code) - e4-on FAIL until it lands"],
+  "gate_tally": {
+    "verdict": "FAIL",
+    "r222_accepted": false,
+    "open": {
+      "o05": "FAIL (by design, R237)",
+      "e4-on": "FAIL (WR-LL3-1 + R198 by design)"
+    },
+    "e4_on": {
+      "tests": 2858,
+      "passed": 2833,
+      "failed": 10,
+      "skipped": 15,
+      "keyed_reruns_pass": 15
+    },
+    "scenarios": {
+      "PASS": [
+        "o01",
+        "o02",
+        "o04",
+        "o06"
+      ],
+      "NOT_RUN_ruled": [
+        "o03",
+        "o07"
+      ],
+      "FAIL_by_design": [
+        "o05"
+      ]
+    },
+    "journeys_pass": 5,
+    "recomputed_with_WR_LL3_1": "accepted: true, by_design = R198 + R237 only"
+  },
+  "estimate": {
+    "optimistic_h": 1.0,
+    "likely_h": 1.5,
+    "pessimistic_h": 3.0,
+    "confidence": "medium",
+    "basis": "one E4-ON rerun after WR-LL3-1 (this run 2455 s) + stack mutants (783 s) + evidence",
+    "at": "2026-09-29T23:08:00Z"
+  },
+  "blockers": [
+    "WR-LL3-1: tests/g/lab_releases/test_lab_releases.py:404 builds pilot.ReleaseRecords without merge #56's variants (another lane's test code) - e4-on FAIL until it lands"
+  ],
   "wiring_requests": [
     "WR-LL3-1: apps/infrx-api/tests/g/lab_releases/test_lab_releases.py:404 `pilot.ReleaseRecords(D9(), D7(), objects)` -> `pilot.ReleaseRecords(D9(), D7(), objects, None)`; test: pytest tests/g/lab_releases (14 + its mutant list) green",
     "WR-LL3-2: coordinator reruns GATE_ARGS=--keep make lab-local + the stack mutants after WR-LL3-1; expected r222.accepted true, by_design = R198 + R237",
-    "Proposed ruling LL3-KEY-HELD (E4ON-b94fd337.md §6)"
+    "Proposed ruling LL3-KEY-HELD (E4ON-b94fd337.md \u00a76)"
   ],
   "evidence": [
     "research/plan/evidence/e/E4ON-b94fd337.md",
     "research/plan/evidence/e/E4ON-raw-b94fd337/verdict.json",
     "research/plan/evidence/e/E4ON-raw-b94fd337/mutants.log",
     "research/plan/evidence/e/E4ON-raw-aa386cf3-r1/keyed.json"
-  ]
+  ],
+  "fix_round": {
+    "review_of": "7b35434a",
+    "findings": {
+      "0-LL3R-1": "fixed: aux feeds the caller's started list; a keyed start/run exception is an INVALID[harness] row, verdict.json still written; test + 2 mutants",
+      "0-LL3R-2": "fixed: empty-failed e4-on FAIL asserted unaccepted; mutant r222_e4_empty_failed_accepted killed"
+    },
+    "evidence": "research/plan/evidence/e/E4ON-b94fd337.md \u00a78"
+  }
 }
