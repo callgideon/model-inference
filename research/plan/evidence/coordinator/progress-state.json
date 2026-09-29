@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 271,
- "updated": "2026-09-29T06:45:06Z",
+ "revision": 272,
+ "updated": "2026-09-29T06:45:27Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7856,6 +7856,40 @@
    "evidence": [],
    "commands": [],
    "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-ROLLOUT-3",
+   "task": "E8L",
+   "slice": "(wave5 LW6 lane lab-rollout-3, Opus) WR-E8L-3 (lab_world Reads → the real PgControlStore) → k09 recheck with the real ControlReads → the full `make lab-rollout` (k06 a plain cell); workflow wf_4b9352f7-428; base 57a779af",
+   "agent": "opus",
+   "branch": "codex/w5-lab-rollout-3",
+   "worktree": ".claude/worktrees/codex-w5-lab-rollout-3",
+   "base": "57a779af",
+   "head": null,
+   "isolation": {
+    "ports": "e8l 57400-57499; r2 57534",
+    "prefix": "infrx-e8l-",
+    "db": "e8l"
+   },
+   "activity": "running",
+   "started": "2026-09-29T06:45:27Z",
+   "updated": "2026-09-29T06:45:27Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge → E8L gate verdict",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "one stand-in swap + one gate run; lab-rollout-2 took ~1 h of gate time"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_rollout/**",
+    "research/plan/evidence/e/E8L-*"
+   ],
    "wiring_requests": []
   }
  ],
