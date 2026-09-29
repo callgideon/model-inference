@@ -127,6 +127,7 @@ class World:
                 granted_at=T0 - timedelta(days=1))
         self.access = LabAccess(self.directory)
         self.lab = FakeLabStore()
+        self.lab.restrictions.clock = lambda: self.directory.now    # D7's clock
         self.traces, self.stones = Traces(), Stones()
         self.trace_objects, self.objects = InMemoryObjectStore(), InMemoryObjectStore()
         self.retention = Retention(self.stones, self.traces, None, self.trace_objects,
