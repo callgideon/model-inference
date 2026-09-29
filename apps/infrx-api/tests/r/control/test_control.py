@@ -492,3 +492,37 @@ def test_r2_a_later_listing_of_the_same_serving_version_is_left_alone_after_a_ro
     asyncio.run(restarted.emergency_rollback(OPERATOR, POLICY, POLICY_REF, now=HORIZON,
                                              reason="finish"))
     assert serving.current == BASE and len(serving.rollbacks) == 1 and len(store.decisions) == 1
+
+
+def test_r2_live_is_read_per_arm_from_d9s_release_read(monkeypatch):
+    """WR-C6-LIVE (R244): `PgReleaseStore.live` is 0054's per-arm read of THIS revision, shaped
+    into R2's `Live`: the arms by name, the candidate's quality coverage and spend (the release's
+    own traffic), the database clock; no assigned job is None (the pass holds, never zeros);
+    legacy USD is refused by name (never converted)."""
+    from infrx.state.lab_rollout import PgReleaseStore
+    asked, rows = [], []
+
+    def row(arm, requests, errors_, p99, covered, value, unit="CREDIT", healthy=True):
+        return {"arm": arm, "requests": requests, "errors": errors_, "p99_ms": p99,
+                "spent": {"unit": unit, "value": value}, "quality_covered": covered,
+                "candidate_healthy": healthy, "observed_until": "2026-09-28T10:00:00+00:00"}
+
+    async def call(self, function, args):
+        asked.append((function, args))
+        return rows
+    monkeypatch.setattr(PgReleaseStore, "_call", call)
+    store = PgReleaseStore(None)
+    assert asyncio.run(store.live(POLICY_REF)) is None
+    rows[:] = [row("baseline", 9_000, 1, 8_000, 7, "90.00000000"),
+               row("candidate", 1_000, 20, None, 500, "10.00000000")]
+    got = asyncio.run(store.live(POLICY_REF))
+    assert got == r2.Live(observed_until=datetime(2026, 9, 28, 10, tzinfo=timezone.utc),
+                          baseline=r2.Arm(9_000, 1, 8_000), candidate=r2.Arm(1_000, 20, None),
+                          quality_covered=500, candidate_healthy=True,
+                          spent=lab.Amount(unit="CREDIT", value="10.00000000")), got
+    assert asked == [("lab_release_live", {"policy_ref": POLICY_REF})] * 2
+    rows[:] = [row(a, 1, 0, 5, 0, "1.00000000", healthy=False) for a in ("baseline", "candidate")]
+    assert asyncio.run(store.live(POLICY_REF)).candidate_healthy is False  # 0-LIVE-1: read, not invented
+    rows[:] = [row(a, 1, 0, 5, 0, "1.00000000", unit="USD") for a in ("baseline", "candidate")]
+    with pytest.raises(errors.InvalidRequest, match="USD"):
+        asyncio.run(store.live(POLICY_REF))
