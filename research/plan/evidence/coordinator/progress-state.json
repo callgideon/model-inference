@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 251,
- "updated": "2026-09-29T00:53:17Z",
+ "revision": 252,
+ "updated": "2026-09-29T01:26:59Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7103,32 +7103,39 @@
    "branch": "codex/w5-lab-sql-lw5",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw5",
    "base": "9e6c01cd",
-   "head": null,
+   "head": "ad2aaff3",
    "isolation": {
     "ports": "dlab 57500; l3 57502; e8l 57400-57499",
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T23:22:19Z",
-   "updated": "2026-09-28T23:22:19Z",
+   "updated": "2026-09-29T01:26:59Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge after #21 integrates → E8L k06 rerun",
+   "next_action": "merge batch #28 (Sonnet; WR-CHECKS-1, R207/R208) → lab-sql-lw6 (items 5/6 + E3L-F2 + WR-E8L-3 + WR-DS5-1) and lab-rollout-2 (WR-E8L-2b + e8l rerun)",
    "estimate": {
-    "optimistic_h": 4,
-    "likely_h": 7,
-    "pessimistic_h": 14,
-    "confidence": "medium",
-    "basis": "lab-sql-lw3/lw4 sizes; six SQL items"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT_WITH_FIXES ad2aaff3; merge running",
+    "at": "2026-09-29T01:26:59Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/d/LSQ5-5b99b52.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/app/supabase/migrations/0045+_*.sql",
     "infrx/state/lab_*.py",
     "tests/d/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-CHECKS-1",
+    "WR-E8L-2b",
+    "WR-LSQ5-3"
+   ]
   },
   {
    "id": "W5-MERGE-24",
@@ -7325,6 +7332,38 @@
     "tests/integration/**",
     "research/plan/evidence/e/E7L-*"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-28",
+   "task": null,
+   "slice": "merge batch #28 (Sonnet): lab-sql-lw5 ad2aaff3 (+R207/R208, WR-CHECKS-1); migrations 0045/0046 local-only",
+   "agent": "sonnet",
+   "branch": "codex/w5-merge-28",
+   "worktree": ".claude/worktrees/codex-w5-merge-28",
+   "base": "0772ca1c",
+   "head": null,
+   "isolation": {
+    "ports": "dlab 57500; l3 57502; r1 57532",
+    "prefix": "infrx-dlab-",
+    "db": "dlab"
+   },
+   "activity": "running",
+   "started": "2026-09-29T01:26:59Z",
+   "updated": "2026-09-29T01:26:59Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T01:26:59Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
