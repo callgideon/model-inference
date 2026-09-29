@@ -135,17 +135,47 @@ def test_a_destructive_helper_refuses_anything_outside_the_namespace():
     assert harness.container_of("postgres") == f"infrx-{harness.NAMESPACE}-postgres"
 
 
+# Assembled from parts so this guard does not trip over its own needles, and so it still
+# scans itself: a leak added to this very file would be caught.
+PRODUCTION_NEEDLES = ("supabase" ".co", "amazonaws" ".com", "callbill" ".ai", "llm-" "bootcamp",
+                      "SUPABASE_SERVICE" "_ROLE_KEY", "AWS_SECRET" "_ACCESS_KEY",
+                      "GATEWAY" "_API_KEY")
+#: (file relative to this directory, needle) pairs that are legitimate - one needle in one
+#: file each, so the same file naming any other needle (or a new file naming this one) is
+#: still caught (WR-LL2-4).
+PRODUCTION_ALLOWED = {
+    # certify's public-edge external check targets the real edge host by name (a URL
+    # string asserted on, never called from this suite).
+    ("backend/test_certify.py", "callbill" ".ai"),
+    # the create-test-user operator script reads the service-role key by this env NAME;
+    # the test feeds it a fake value and checks the refusals - no secret is present.
+    ("ops/test_create_test_user.py", "SUPABASE_SERVICE" "_ROLE_KEY"),
+}
+
+
+def production_offenders(root: Path, files) -> set[tuple[str, str]]:
+    return {(path.relative_to(root).as_posix(), needle) for path in files
+            for needle in PRODUCTION_NEEDLES
+            if needle in path.read_text(errors="ignore")} - PRODUCTION_ALLOWED
+
+
 def test_nothing_in_this_directory_points_at_production():
     """No production credential is needed, and none may be reachable by accident."""
-    # Assembled from parts so this guard does not trip over its own needles, and so it
-    # still scans itself: a leak added to this very file would be caught.
-    forbidden = ("supabase" ".co", "amazonaws" ".com", "callbill" ".ai", "llm-" "bootcamp",
-                 "SUPABASE_SERVICE" "_ROLE_KEY", "AWS_SECRET" "_ACCESS_KEY",
-                 "GATEWAY" "_API_KEY")
-    offenders = {path.name: needle for path in OWNED_FILES
-                 for needle in forbidden
-                 if needle in path.read_text(errors="ignore")}
-    assert offenders == {}, offenders
+    assert production_offenders(harness.HERE, OWNED_FILES) == set()
+
+
+def test_the_production_allow_list_excuses_only_its_own_file_and_needle(tmp_path):
+    """A new file naming a production host or the service-role secret is caught, and an
+    allow-listed file naming any other needle is too."""
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "ops").mkdir()
+    (tmp_path / "new_host.py").write_text("URL = 'https://x." + "callbill" ".ai'\n")
+    (tmp_path / "new_key.py").write_text("NAME = '" + "SUPABASE_SERVICE" "_ROLE_KEY'\n")
+    (tmp_path / "backend" / "test_certify.py").write_text("callbill" ".ai " + "supabase" ".co")
+    (tmp_path / "ops" / "test_create_test_user.py").write_text("SUPABASE_SERVICE" "_ROLE_KEY")
+    assert production_offenders(tmp_path, sorted(tmp_path.rglob("*.py"))) == {
+        ("new_host.py", "callbill" ".ai"), ("new_key.py", "SUPABASE_SERVICE" "_ROLE_KEY"),
+        ("backend/test_certify.py", "supabase" ".co")}
 
 
 # ------------------------------------------------------------------ the test-only clock

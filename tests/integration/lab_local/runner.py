@@ -15,8 +15,9 @@
    gateway + consumer worker + every Lab worker role + the control factory + the Lab web, every
    switch ON; each route family smoked with a real Lab session; the consumer path still serves.
 5. **lab-journeys**: the Lab app's real-route journeys on this key (`INFRX_D_TASK=lab-on`,
-   WR-LDP-1): datasets, releases, evaluations; a journey whose backend binds another key's
-   resource is NOT RUN naming its WR, with the owner's exact rerun.
+   WR-LDP-1): datasets, releases, pipelines, evaluations, traces (pipelines/traces on this
+   block's teacher fake and ClickHouse, WR-LL2-1/2); a journey whose backend binds another
+   key's resource is NOT RUN naming its WR, with the owner's exact rerun.
 
 Every stage is PASS / FAIL / BLOCKED / INVALID / NOT RUN; the gate is the worst (FAIL > INVALID
 > BLOCKED > NOT RUN > PASS), exit 0 / 1 / 3 / 3 / 4, as E2C's gates.py. A skip is never a pass.
@@ -80,19 +81,21 @@ REQUIRED = {
 }
 #: The Lab app's real-route journeys; every backend accepts `lab-on` (WR-LDP-1). `foreign`:
 #: the backend also binds another key's resource, so this gate cannot run it on its own ports -
-#: NOT RUN naming the WR that lets it, with the owner's (`key`) exact rerun.
+#: NOT RUN naming the WR that lets it, with the owner's (`key`) exact rerun. `env`: what the
+#: backend reads instead of another key's resource (WR-LL2-1/2), from this block's lab_world.
 JOURNEYS = {
     "datasets": {"file": "tests/n/journey.test.ts", "flag": "LAB_N_REAL", "key": "n3",
                  "foreign": None},
     "releases": {"file": "tests/r/stack.test.ts", "flag": "LAB_R4_REAL", "key": "r2",
                  "foreign": None},
     "pipelines": {"file": "tests/p/stack.test.ts", "flag": "LAB_P4_REAL", "key": "p1",
-                  "foreign": ("WR-LL2-1", "its backend binds p2's teacher-fake port (57529)")},
+                  "foreign": None,
+                  "env": lambda lw: {"LAB_P4_TEACHER_PORT": str(lw.TEACHER_PORT)}},
     "evaluations": {"file": "tests/b/stack.test.ts", "flag": "LAB_B4_REAL", "key": "b3",
                     "foreign": None},
     "traces": {"file": "tests/v/list/stack.test.ts", "flag": "LAB_V1M_REAL", "key": "lab-v1m",
-               "foreign": ("WR-LL2-2", "its backend reads t2i's ClickHouse "
-                                       "(infrx-t2i-clickhouse, the t2i block)")},
+               "foreign": None,
+               "env": lambda lw: {"LAB_V1M_CLICKHOUSE_URL": lw.clickhouse_url()}},
 }
 #: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, by class - a
 #: product WR per port name (the role's or family's missing work source), an external
@@ -105,6 +108,8 @@ OUT_OF_SCOPE = {
     "WR-LAB2-4": "product WR: WR-LAB2-4 (pipelines: the run listings)",
     "WR-P4B-1": "product WR: WR-P4B-1 (teacher batches)",
     "WR-R4-1": "product WR: WR-R4-1 (releases/optimizations read models)",
+    "WR-LL2-5": "product WR: WR-LL2-5 (the control factory's traces port, pilot._lab_traces: "
+                "unmounted without CLICKHOUSE_URL/S3_TRACE_BUCKET in its env)",
     "P-10": "external teacher provider (P-10)", "P-11": "external training provider (P-11)",
     "P-08": "GPU / staging target (P-08)",
 }
@@ -344,12 +349,13 @@ def scenarios(out: Path, keyword: str | None) -> tuple[dict, dict]:
     return row, result
 
 
-def journeys(out: Path) -> list[dict]:
+def journeys(out: Path, lab_world) -> list[dict]:
     rows = []
     for name, spec in JOURNEYS.items():
         row = journey_row(name, spec)
         if row["status"] is None:
-            env = {**os.environ, spec["flag"]: "1", "INFRX_D_TASK": KEY}
+            env = {**os.environ, spec["flag"]: "1", "INFRX_D_TASK": KEY,
+                   **(spec["env"](lab_world) if "env" in spec else {})}
             code, seconds, log = logged(f"journey-{name}", ["node", "--test", spec["file"]],
                                         out, REPO / "apps" / "lab", env, 1800)
             row.update(exit=code, seconds=seconds, log=str(log),
@@ -358,12 +364,17 @@ def journeys(out: Path) -> list[dict]:
     return rows
 
 
-def pins() -> dict:
+def pins(out: Path | None = None) -> dict:
+    """The run's own raw dir (`out`, when inside the tree) is not dirt; anything else is,
+    other evidence included (1-LL2-RV-2)."""
     def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=REPO, capture_output=True,
                               text=True).stdout.strip()
-    return {"head": git("rev-parse", "HEAD"),        # the run's own evidence is not dirt
-            "dirty": bool(git("status", "--porcelain", "--", ".", ":!research/plan/evidence"))}
+    own = out.resolve() if out else None
+    skip = [f":!{own.relative_to(REPO.resolve()).as_posix()}"] \
+        if own and own.is_relative_to(REPO.resolve()) else []
+    return {"head": git("rev-parse", "HEAD"),
+            "dirty": bool(git("status", "--porcelain", "--", ".", *skip))}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -407,7 +418,7 @@ def main(argv: list[str] | None = None) -> int:
                     row, result = scenarios(out, args.keyword)
                     stages.append(row)
                 if "lab-journeys" in only:
-                    stages += journeys(out)
+                    stages += journeys(out, lab_world)
                 stages += [{"stage": name, "status": NOT_RUN, "reason": "not selected (--only)"}
                            for name in STAGES if name not in only]
     except run.Interrupted as stop:
@@ -428,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
                  "the teacher, the manual-bundle training connector, a local Lab build behind "
                  "local TLS and a Supabase stand-in; not Marlin quality, not GPU capacity, not "
                  "hosted behaviour",
-        "pins": pins(), "namespace": NAMESPACE, "key": KEY,
+        "pins": pins(out), "namespace": NAMESPACE, "key": KEY,
         "started": started.isoformat(timespec="seconds"),
         "seconds": round(time.monotonic() - clock, 1),
         "stack": {"usable": usable, "why_not": why or None,

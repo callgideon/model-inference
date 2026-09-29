@@ -192,3 +192,47 @@ runner keeps them in `r222.open` and lists them under `r222.by_design`.
   The layer-1 copy now also carries the fd0aba04 verdict.
 - Not rerun: `make lab-local` (r222 is a pure function over the recorded verdict; the raw run
   is unchanged).
+
+## Coordinator rulings (merge #61, `codex/w5-merge-61`)
+
+- **R257** (LL2-BY-DESIGN, §6): the E4-ON gate's two by-design FAILs - R198's pilot-box e4-on
+  case (`LAB_EVAL_WORKER` refuses by name on this release) and R237's all-switches App-gateway
+  o05 case - are reported under `r222.by_design`, never excused into PASS. The gate is accepted
+  when `r222.open` holds nothing but by_design cells whose recorded refusal text matches, every
+  other NOT RUN is a ruled class with its rerun, and the e4-on stage has no error, skipped or
+  xfailed case outside a ruled class.
+- **R258** (LL2-SCOPE, §6): a Lab gate cell NOT RUN only because another lane's test backend
+  hard-codes another key's port is a harness wiring request that stays in `r222.open` until it
+  lands - never an out-of-scope class.
+- Wirings in the same merge: WR-LL2-1 (`apps/lab/tests/p/backend.py`: `LAB_P4_TEACHER_PORT`,
+  default p2's teacher-fake), WR-LL2-2 (`apps/lab/tests/v/list/backend.py`:
+  `LAB_V1M_CLICKHOUSE_URL`, default t2i's); `runner.JOURNEYS` pipelines/traces run on `lab-on`
+  with `LAB_P4_TEACHER_PORT=lab_world.TEACHER_PORT` / `LAB_V1M_CLICKHOUSE_URL=lab_world.clickhouse_url()`;
+  WR-LL2-4 (the production guard's allow-list, one (file, needle) pair each, a negative case
+  kept); LL2C-3 (`lab_world.CONTROL_EXPECTED` pins each control-factory family on both logins:
+  a served family's 503 is FAIL), LL2C-4 (the e4-on errors guard's case + mutant), LL2C-5 (the
+  control factory's traces 404 is NOT RUN[WR-LL2-5], product WR: `pilot._lab_traces` unmounted
+  without `CLICKHOUSE_URL`/`S3_TRACE_BUCKET` in its env), 1-LL2-RV-2 (`pins(out)` skips only the
+  run's own raw dir).
+
+## Gate state on the tip (merge #61)
+
+- e4-on: 2838 passed / 1 failed (the R198 by-design case) / 14 skipped on other keys - the skips
+  are other lanes' task-local keys (b1/b3/p1/p2/r2/j2 PostgreSQL, t2i's ClickHouse, t2f) and stay
+  open until ruled or run (LL2C-1).
+- o01/o02/o04/o06 PASS.
+- o05: control-factory families equal on both logins; evals/teacher-batches/optimizations
+  NOT RUN[product WR: WR-B4-2, WR-LAB2-4, WR-P4B-1, WR-R4-1]; the all-switches App gateway FAIL
+  is R237's by-design case (R257).
+- o03 training NOT RUN[P-11]; o07 NOT RUN[product WR].
+- Journeys: datasets/releases/evaluations PASS; pipelines/traces → after WR-LL2-1/2 (landed in
+  this merge; the lab-local-3 rerun flips them).
+- Not run at the merge (≈35 min on a loaded host): `GATE_ARGS=--keep make lab-local`, then
+  `INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rs tests/integration/lab_local/test_mutants.py`
+  (the stack list: o05's control case now judges against `CONTROL_EXPECTED`).
+
+## Carried
+
+- **lab-local-3**: the real `make lab-local` rerun (journeys pipelines/traces on WR-LL2-1/2, o05
+  control on the pinned families) + the stack mutants; and the 14-skip question: run the skipped
+  keys' cases on their keys inside the composition, or rule them.

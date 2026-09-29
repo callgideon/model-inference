@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -31,6 +32,11 @@ runner = _load("lab_local_runner", "runner.py")
 
 def world():
     return sys.modules.get("lab_local_world") or _load("lab_local_world", "lab_world.py")
+
+
+#: lab_world's two names the journeys read (WR-LL2-1/2), for the no-stack cases.
+BLOCK_STUB = types.SimpleNamespace(TEACHER_PORT=57062,
+                                   clickhouse_url=lambda: "http://u:p@127.0.0.1:57012/db")
 
 
 def junit(*cases: tuple[str, str, str]) -> str:
@@ -125,10 +131,12 @@ def test_lab_local_the_e4_subset_is_the_composition_lanes_regression():
 
 
 def test_lab_local_a_key_pinned_journey_is_not_run_with_its_owners_exact_rerun():
-    """WR-LDP-1 landed: every Lab journey whose backend accepts lab-on runs on it; one whose
-    backend binds another key's resource (p2's teacher-fake port, t2i's ClickHouse) is NOT RUN
+    """WR-LDP-1 landed: every Lab journey whose backend accepts lab-on runs on it (WR-LL2-1/2:
+    pipelines and traces too); one whose backend binds another key's resource is NOT RUN
     naming its WR with the owner's exact rerun (never skipped silently or run on that key)."""
-    for name, spec in runner.JOURNEYS.items():
+    foreign = {"file": "tests/x.test.ts", "flag": "LAB_X_REAL", "key": "x1",
+               "foreign": ("WR-X", "binds x1's port")}
+    for name, spec in [*runner.JOURNEYS.items(), ("x", foreign)]:
         row = runner.journey_row(name, spec)
         if spec["foreign"]:
             assert row["status"] == runner.NOT_RUN, name
@@ -137,7 +145,26 @@ def test_lab_local_a_key_pinned_journey_is_not_run_with_its_owners_exact_rerun()
         else:
             assert row["status"] is None and f"INFRX_D_TASK={runner.KEY}" in row["rerun"]
     assert {n for n, s in runner.JOURNEYS.items() if not s["foreign"]} == \
-        {"datasets", "releases", "evaluations"}
+        {"datasets", "releases", "pipelines", "evaluations", "traces"}
+
+
+def test_lab_local_pipelines_and_traces_run_on_this_blocks_teacher_and_clickhouse(
+        tmp_path, monkeypatch):
+    """WR-LL2-1/2: the pipelines journey's backend gets this block's teacher-fake port and the
+    traces journey's this block's ClickHouse (never p2's/t2i's), every journey on lab-on."""
+    envs = {}
+
+    def logged(name, argv, out, cwd, env, timeout):
+        envs[name] = env
+        (out / f"{name}.log").write_text("# tests 1\n# pass 1\n")
+        return 0, 0.0, out / f"{name}.log"
+    monkeypatch.setattr(runner, "logged", logged)
+    rows = runner.journeys(tmp_path, BLOCK_STUB)
+    assert {row["status"] for row in rows} == {runner.PASS}
+    assert envs["journey-pipelines"].get("LAB_P4_TEACHER_PORT") == "57062"
+    assert envs["journey-traces"].get("LAB_V1M_CLICKHOUSE_URL") == "http://u:p@127.0.0.1:57012/db"
+    assert {env["INFRX_D_TASK"] for env in envs.values()} == {runner.KEY}
+    assert "LAB_P4_TEACHER_PORT" not in envs["journey-datasets"]
 
 
 def test_lab_local_the_required_cases_are_what_the_scenario_module_defines():
@@ -201,7 +228,7 @@ def test_lab_local_a_journey_passes_only_when_every_case_ran_and_passed(tmp_path
                              (0, summary.format(3, 3, 0, 0), runner.PASS)):
         monkeypatch.setenv("JOURNEY_OUT", text)
         monkeypatch.setenv("JOURNEY_EXIT", str(code))
-        rows = {row["stage"]: row for row in runner.journeys(tmp_path)}
+        rows = {row["stage"]: row for row in runner.journeys(tmp_path, BLOCK_STUB)}
         assert rows["journey:datasets"]["status"] == want, (code, text)
 
 
@@ -290,15 +317,15 @@ def test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case():
     quarantined - a skip is another key's case that never ran (0-LL2C-1)."""
     stages, scenarios = _green()
 
-    def e4(failed_ids, status=runner.FAIL, skipped=0, xfailed=0):
+    def e4(failed_ids, status=runner.FAIL, skipped=0, xfailed=0, errors=0):
         rows = [row for row in stages if row["stage"] != "e4-on"]
         return rows + [{"stage": "e4-on", "status": status,
-                        "counts": {"failed_ids": failed_ids, "errors": 0,
+                        "counts": {"failed_ids": failed_ids, "errors": errors,
                                    "skipped": skipped, "xfailed": xfailed}}]
     by_design = runner.r222(e4([R198_CASE]), scenarios)
     assert by_design == {"accepted": False, "open": {"e4-on": runner.FAIL},
                          "by_design": {R198_CASE: runner.BY_DESIGN[R198_CASE]}}
-    for extra in ({"skipped": 1}, {"xfailed": 1}):
+    for extra in ({"skipped": 1}, {"xfailed": 1}, {"errors": 1}):     # LL2C-4: an error too
         hidden = runner.r222(e4([R198_CASE], **extra), scenarios)
         assert hidden == {"accepted": False, "open": {"e4-on": runner.FAIL}, "by_design": {}}
     mixed = runner.r222(e4([R198_CASE, "tests.g.x::test_y"]), scenarios)
@@ -325,18 +352,27 @@ def test_lab_local_r222_the_fd0aba04_verdict_stays_open_after_the_journeys_land(
 
 
 def test_lab_local_the_control_login_answers_as_the_owner_login():
-    """R251/WR-LW8-2: on infrx_lab_control each family answers exactly as the same factory on
-    the owner login; a family that is not 200 is only its pending typed 503 (NOT RUN), never a
-    difference (LCR-F1's shape), a 500 or a typed 503 of a family that is not pending."""
+    """R251/WR-LW8-2 + LL2C-3/5: on infrx_lab_control each family answers exactly as the same
+    factory on the owner login, and a non-200 answer only as CONTROL_EXPECTED pins it (the
+    fd0aba04 record): a served family regressing to a typed 503 is FAIL, never NOT RUN;
+    traces' 404 is NOT RUN naming its product WR, never judged apart."""
     lw = world()
     typed = '503 {"refusal":"unavailable"}'
     failed = '503 {"detail":"the datasets service failed"}'
-    assert lw.judge_login({"evals": typed}, {"evals": typed}, {"evals"}) == ({}, {"evals": typed})
-    wrong, pending = lw.judge_login({"datasets": failed}, {}, {"datasets"})
-    assert set(wrong) == {"datasets"} and pending == {}
-    assert set(lw.judge_login({"datasets": failed}, {"datasets": failed}, {"datasets"})[0]) \
-        == {"datasets"}
-    assert set(lw.judge_login({"control": typed}, {"control": typed}, {"evals"})[0]) == {"control"}
+    record = {"traces": '404 {"detail":"Not Found"}', "evals": typed, "pipelines": typed,
+              "teacher-batches": typed, "optimizations": typed}   # fd0aba04, both logins
+    assert lw.judge_login(record, dict(record)) == ({}, record)
+    lanes = {lw.CONTROL_EXPECTED[f][1] for f in record}
+    assert lanes == {"WR-B4-2", "WR-LAB2-4", "WR-P4B-1", "WR-R4-1", "WR-LL2-5"}
+    assert lanes <= set(runner.OUT_OF_SCOPE)
+    for served in ("control", "datasets", "releases"):
+        wrong, pending = lw.judge_login({**record, served: typed}, {**record, served: typed})
+        assert set(wrong) == {served} and served not in pending, served
+    assert set(lw.judge_login({**record, "evals": failed}, record)[0]) == {"evals"}
+    assert set(lw.judge_login({**record, "evals": failed},
+                              {**record, "evals": failed})[0]) == {"evals"}
+    landed = {f: v for f, v in record.items() if f != "evals"}          # its lane landed: 200
+    assert lw.judge_login(landed, dict(landed)) == ({}, landed)
 
 
 def test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers(tmp_path, monkeypatch):
@@ -344,7 +380,6 @@ def test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers(tmp_pat
     not bound its port yet (ConnectError). The Lab web is ready only when its https origin
     answers through the terminator too, not only its loopback http."""
     import contextlib
-    import types
     lw = world()
     (tmp_path / "apps" / "lab" / ".next").mkdir(parents=True)
     (tmp_path / "apps" / "lab" / ".next" / "BUILD_ID").write_text("x")
@@ -361,13 +396,19 @@ def test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers(tmp_pat
 
 def test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty(tmp_path, monkeypatch):
     """The verdict dir lives under research/plan/evidence (make lab-local): the run's own
-    output is not a dirty tree (every earlier verdict said dirty: true); anything else is."""
+    raw dir is not a dirty tree (every earlier verdict said dirty: true); anything else is,
+    other evidence included (1-LL2-RV-2)."""
     import subprocess
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     monkeypatch.setattr(runner, "REPO", tmp_path)
-    raw = tmp_path / "research" / "plan" / "evidence" / "e" / "E4ON-raw-x"
+    evidence = tmp_path / "research" / "plan" / "evidence" / "e"
+    raw = evidence / "E4ON-raw-x"
     raw.mkdir(parents=True)
     (raw / "verdict.json").write_text("{}")
-    assert runner.pins()["dirty"] is False
+    assert runner.pins(raw)["dirty"] is False
+    assert runner.pins()["dirty"] is True                  # no run dir: nothing is skipped
+    (evidence / "E4ON-x.md").write_text("")
+    assert runner.pins(raw)["dirty"] is True
+    (evidence / "E4ON-x.md").unlink()
     (tmp_path / "stray.py").write_text("")
-    assert runner.pins()["dirty"] is True
+    assert runner.pins(raw)["dirty"] is True

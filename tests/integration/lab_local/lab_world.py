@@ -456,14 +456,31 @@ def lab_web(workdir: Path, api_url: str, supabase_url: str, control: str | None 
 UNAVAILABLE = '503 {"refusal":"unavailable"}'
 
 
-def judge_login(login: dict, owner: dict, pending) -> tuple[dict, dict]:
+#: LL2C-3/LL2C-5: what each family answers on the control factory, on BOTH logins, per the
+#: seeded record (E4ON-raw-fd0aba04 o05-control-families.json): (status line prefix, the lane
+#: a non-200 waits on). A served family answering anything else - a typed 503 included - is
+#: FAIL, never NOT RUN; datasets is 200 on the seeded provider-A record.
+CONTROL_EXPECTED = {
+    "control": ("200", None), "datasets": ("200", None), "releases": ("200", None),
+    "pipelines": (UNAVAILABLE, "WR-LAB2-4"), "evals": (UNAVAILABLE, "WR-B4-2"),
+    "teacher-batches": (UNAVAILABLE, "WR-P4B-1"), "optimizations": (UNAVAILABLE, "WR-R4-1"),
+    "traces": ("404", "WR-LL2-5"),     # pilot._lab_traces unmounted: no CLICKHOUSE_URL here
+}
+
+
+def judge_login(login: dict, owner: dict,
+                expected: dict = CONTROL_EXPECTED) -> tuple[dict, dict]:
     """R251 (WR-LW8-2): each family's answer on `infrx_lab_control` is the same factory's on
-    the owner login (0056 grants the login its routes' functions); a family that is not 200
-    is only a pending family's typed 503. `login`/`owner`: the non-200 answers by family.
-    (wrong, typed): a difference or any other answer is wrong; typed is NOT RUN."""
+    the owner login (0056 grants the login its routes' functions), and a non-200 answer is
+    only the one `expected` pins for that family (200 always passes: its lane landed).
+    `login`/`owner`: the non-200 answers by family. (wrong, typed): a difference or an
+    unpinned answer is wrong (FAIL); typed = the pinned non-200 answers, NOT RUN naming
+    their lane."""
     wrong = {f: f"{login.get(f, '200')} on {CONTROL_LOGIN}, {owner.get(f, '200')} on the owner"
              for f in set(login) | set(owner) if login.get(f) != owner.get(f)}
-    typed = {f: v for f, v in owner.items()
-             if f not in wrong and f in pending and v.startswith(UNAVAILABLE)}
-    wrong.update({f: v for f, v in owner.items() if f not in wrong and f not in typed})
+    for f, got in owner.items():
+        want = expected.get(f, ("200", None))[0]
+        if f not in wrong and not got.startswith(want):
+            wrong[f] = f"{got} on both logins, pinned {want}"
+    typed = {f: v for f, v in owner.items() if f not in wrong}
     return wrong, typed

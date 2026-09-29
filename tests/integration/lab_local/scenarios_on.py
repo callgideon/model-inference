@@ -196,8 +196,9 @@ def test_o05_the_control_factory_serves_every_family_on_its_own_login(on):
     """WR-LDP-2 / R245 / R251 (WR-LW8-2): the control factory on 0043's `infrx_lab_control`
     (the box's only /lab/v1/* server) answers every family exactly as the same factory on the
     owner login (0056 grants the login its routes' functions: no NOT RUN[SR-LCR-1] any more),
-    and a family that is not 200 only as its typed 503 - NOT RUN naming its pending ports -
-    never a 401/404/500. Traces is judged apart (its ClickHouse backend is not in this env)."""
+    and each family answers what `lw.CONTROL_EXPECTED` pins for it (LL2C-3): control, datasets
+    and releases 200 (a regression to 503 is FAIL); evals/pipelines/teacher-batches/
+    optimizations their typed 503 and traces 404 (LL2C-5) - NOT RUN naming their lanes."""
     need(on, "lab-control-login")
     need(on, "lab-control")
     if on.login_families is None:
@@ -206,10 +207,11 @@ def test_o05_the_control_factory_serves_every_family_on_its_own_login(on):
                       lambda s: s == 200)
     (on.workdir / "o05-control-families.json").write_text(__import__("json").dumps(
         {"infrx_lab_control": on.login_families, "owner": owner}, indent=1))
-    apart = lambda found: {f: v for f, v in found.items() if f != "traces"}   # noqa: E731
-    wrong, typed = lw.judge_login(apart(on.login_families), apart(owner), PENDING_FAMILIES)
-    assert not wrong, f"families on {lw.CONTROL_LOGIN} not serving as on the owner: {wrong}"
-    not_run_pending(typed)
+    wrong, typed = lw.judge_login(on.login_families, owner)
+    assert not wrong, f"families on {lw.CONTROL_LOGIN} not serving as pinned: {wrong}"
+    if typed:
+        pytest.skip("NOT RUN[" + ",".join(sorted({lw.CONTROL_EXPECTED[f][1] for f in typed}))
+                    + f"] pinned until the lane lands: {sorted(typed)}")
 
 
 def test_o05_a_consumer_key_is_no_lab_session_on_any_family(on):

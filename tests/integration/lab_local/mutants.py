@@ -71,6 +71,7 @@ R222_FD = "test_lab_local_r222_the_fd0aba04_verdict_stays_open_after_the_journey
 AS_OWNER = "test_lab_local_the_control_login_answers_as_the_owner_login"
 TLS_READY = "test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers"
 PIN_CLEAN = "test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty"
+JOURNEY_ENV = "test_lab_local_pipelines_and_traces_run_on_this_blocks_teacher_and_clickhouse"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("a_switch_left_off", "EVERY switch is ON in the composition", W,
@@ -104,6 +105,18 @@ MUTANTS: tuple[Mutant, ...] = (
        '"tests/g", "tests/w", "tests/contracts",', '"tests/g", "tests/contracts",', E4),
     _m("pinned_journey_runs", "a journey on another key's resource is NOT RUN, never run", R,
        '    if spec["foreign"]:\n        wr, why', '    if False:\n        wr, why', PINNED),
+    _m("journey_env_dropped", "pipelines/traces get this block's teacher and ClickHouse "
+       "(WR-LL2-1/2)", R, '"INFRX_D_TASK": KEY,\n                   **(spec["env"](lab_world) '
+       'if "env" in spec else {})}', '"INFRX_D_TASK": KEY}', JOURNEY_ENV),
+    _m("pipelines_on_p2s_teacher", "the pipelines journey's teacher is this block's (WR-LL2-1)",
+       R, '{"LAB_P4_TEACHER_PORT": str(lw.TEACHER_PORT)}', '{"LAB_P4_TEACHER_PORT": "57529"}',
+       JOURNEY_ENV),
+    _m("traces_on_t2is_clickhouse", "the traces journey's ClickHouse is this block's "
+       "(WR-LL2-2)", R, '{"LAB_V1M_CLICKHOUSE_URL": lw.clickhouse_url()}',
+       '{"LAB_V1M_CLICKHOUSE_URL": "http://127.0.0.1:57540/infrx_t2i"}', JOURNEY_ENV),
+    _m("a_journey_left_foreign", "every journey runs on lab-on (WR-LL2-1)", R,
+       '"key": "p1",\n                  "foreign": None,',
+       '"key": "p1",\n                  "foreign": ("WR-LL2-1", "x"),', PINNED),
     _m("a_runnable_journey_skipped", "every journey whose backend accepts lab-on runs (WR-LDP-1)",
        R, '"key": "r2",\n                 "foreign": None}',
        '"key": "r2",\n                 "foreign": ("WR-X", "x")}', PINNED),
@@ -133,6 +146,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "BY_DESIGN.items() if case in failed})\n",
        "            excused.update({case: why for case, why in BY_DESIGN.items() if case in "
        "failed})\n            continue\n", R222_E4, R222_FD),
+    _m("r222_e4_errors_ignored", "an e4-on stage with an error is never reported as only its "
+       "by-design FAIL (LL2C-4)", R, 'and not counts.get("errors")', "and True", R222_E4),
     _m("r222_stages_ignored", "a stage that did not pass keeps the gate open", R,
        "        still[name] = status\n", "        pass\n", R222_E4, R222_RECORDED),
     _m("r222_always_accepted", "accepted is computed, never asserted", R,
@@ -140,12 +155,18 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("login_judged_alone", "the Lab login answers as the owner login (R251)", W,
        "for f in set(login) | set(owner) if login.get(f) != owner.get(f)}",
        "for f in set(login) | set(owner) if False}", AS_OWNER),
-    _m("login_any_typed_family_pending", "only a pending family's typed 503 is NOT RUN", W,
-       "if f not in wrong and f in pending and v.startswith(UNAVAILABLE)}",
-       "if f not in wrong and v.startswith(UNAVAILABLE)}", AS_OWNER),
+    _m("login_unpinned_answer_pending", "a non-200 answer is NOT RUN only as its family's "
+       "pinned answer (LL2C-3)", W, "        if f not in wrong and not got.startswith(want):",
+       "        if False:", AS_OWNER),
     _m("login_any_503_pending", "a store fault's 503 is no typed unavailability", W,
-       "and f in pending and v.startswith(UNAVAILABLE)}",
-       'and f in pending and v.startswith("503")}', AS_OWNER),
+       '"evals": (UNAVAILABLE, "WR-B4-2")', '"evals": ("503", "WR-B4-2")', AS_OWNER),
+    _m("login_served_family_pinned_503", "releases is served on the control factory: its 503 "
+       "is FAIL, never NOT RUN (LL2C-3)", W, '"releases": ("200", None),',
+       '"releases": (UNAVAILABLE, "WR-R4-1"),', AS_OWNER),
+    _m("login_traces_judged_apart", "traces' 404 is a pinned product-WR NOT RUN (LL2C-5)", W,
+       '    "traces": ("404", "WR-LL2-5"),', '    "traces": ("404", "WR-LL2-X"),', AS_OWNER),
+    _m("traces_wr_unruled", "the control factory's traces port is a ruled product WR", R,
+       '    "WR-LL2-5": "product WR: WR-LL2-5', '    "WR-LL2-Y": "product WR: WR-LL2-5', AS_OWNER),
     _m("a_required_case_renamed", "the required cases are the module's cases", R,
        '    "o04": ("test_o04_the_control_factory_serves_a_lab_session",\n',
        '    "o04": ("test_o04_the_control_factory_serves",\n', REQUIRED),
@@ -180,7 +201,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "answers (o07's race)", W, ' or \\\n                wait_ready(proc, f"{origin}/", 30.0, verify=False)',
        "", TLS_READY),
     _m("evidence_is_dirt", "the run's own evidence never makes the pin dirty", R,
-       '"--porcelain", "--", ".", ":!research/plan/evidence"))}', '"--porcelain"))}', PIN_CLEAN),
+       '"--porcelain", "--", ".", *skip))}', '"--porcelain"))}', PIN_CLEAN),
+    _m("all_evidence_skipped", "the pin skips only the run's own raw dir (1-LL2-RV-2)", R,
+       'skip = [f":!{own.relative_to(REPO.resolve()).as_posix()}"]',
+       'skip = [":!research/plan/evidence"]', PIN_CLEAN),
     _m("anything_is_clean", "a stray file outside the evidence is dirty", R,
        '"dirty": bool(git("status", "--porcelain",', '"dirty": False and bool(git("status", "--porcelain",',
        PIN_CLEAN),
