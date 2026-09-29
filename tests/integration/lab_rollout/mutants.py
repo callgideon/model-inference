@@ -81,6 +81,8 @@ K09_BOUND = "test_e8l_k09s_breach_half_is_bound_and_no_longer_a_sub_cell"
 K10_UI = "test_e8l_k10s_composed_ui_journey_is_bound_and_no_longer_a_sub_cell"
 R222 = "test_e8l_r222_accepts_only_a_not_run_out_of_local_scope"
 PLAN_PATH = "test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute"
+GATE_OUT = "test_e8l_the_ui_suites_record_is_read_back_from_a_relative_out"
+E2E = "apps/lab/tests/e2e/gate.py"
 UNBOUND = tuple(re.findall(r"^def (test_k\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -171,6 +173,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("k10_plan_path_relative", "the plan path handed to `rollout launch` (cwd=API) is "
        "absolute (WR-LR5-RV2)", W, '    return workdir.resolve() / "plan.json"',
        '    return workdir / "plan.json"', PLAN_PATH),
+    _m("gate_out_relative", "the suite's record directory reaches node absolute "
+       "(WR-LR6-GATE-OUT)", E2E, '    out = Path(out).resolve() / f"e2e-{suite}"',
+       '    out = Path(out) / f"e2e-{suite}"', GATE_OUT),
     _m("unbound_case_runs", "a case waiting on P-08 is never a pass",
        P, "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )
@@ -441,6 +446,8 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(API_DIR / "infrx", root / "apps" / "infrx-api" / "infrx", ignore=junk)
     (root / "research" / "plan").mkdir(parents=True)
     shutil.copy2(REPO / "research" / "plan" / "tasks.json", root / "research" / "plan" / "tasks.json")
+    (root / E2E).parent.mkdir(parents=True)             # LAB-E2E's gate half (WR-LR6-GATE-OUT)
+    shutil.copy2(REPO / E2E, root / E2E)
     return root
 
 

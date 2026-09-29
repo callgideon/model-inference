@@ -235,3 +235,33 @@ def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     deselected = runner.classify(junit(*others, *everything("k08", "skipped", k08)),
                                  only={"k01"})
     assert "k08" in runner.r222(deselected)["open"], "every reason must be the lane's wait"
+
+
+def test_e8l_the_ui_suites_record_is_read_back_from_a_relative_out(tmp_path, monkeypatch):
+    """WR-LR6-GATE-OUT: `runner.py --out` may be relative to the caller's directory, while node
+    runs the suite in apps/lab - the gate hands node the record's directory absolute, so a green
+    suite's record is read back (never None: a false FAIL of the UI cell)."""
+    import importlib.util
+    from types import SimpleNamespace
+    spec = importlib.util.spec_from_file_location(
+        "e8l_e2e_gate", REPO / "apps" / "lab" / "tests" / "e2e" / "gate.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    lab = tmp_path / "lab"
+    lab.mkdir()
+    monkeypatch.setattr(gate, "LAB", lab)
+    monkeypatch.syspath_prepend(str(REPO / "apps" / "infrx-api"))    # the gate reads infrx's path
+    monkeypatch.chdir(tmp_path)
+
+    def node(argv, *, cwd, env, **_):
+        """Node's side: the suite writes its record under LAB_E2E_OUT, from its own cwd."""
+        record = Path(cwd) / env["LAB_E2E_OUT"] / "rollout.json"
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps({"composed": {"records": True}}))
+        return SimpleNamespace(returncode=0, stdout="# pass 6\n# fail 0\n# cancelled 0\n"
+                                                    "# skipped 0\n", stderr="")
+    monkeypatch.setattr(gate.subprocess, "run", node)
+    got = gate.run("rollout", Path("out"))
+    assert got["record"] == {"composed": {"records": True}}, got
+    assert gate.missing(got) == []
+
