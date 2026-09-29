@@ -89,6 +89,11 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "p3": {"postgres": 57530, "protocol": 57531},
     "r1": {"postgres": 57532, "valkey": 57533}, "r2": {"postgres": 57534},
     "g5": {"postgres": 57535}, "i4": {"postgres": 57536},
+    # LAB-DEPLOY-PREP: `make lab-local`'s E4-ON stage (the consumer E4 subset with every switch
+    # ON) runs the D harness on its own PostgreSQL and D2 Valkey; its composed stack borrows
+    # the finished e3l block under E3L's runner lock (no 100-port block is free in the band).
+    # `valkey-q`: Q's harness on its own port (as e2c's), never Q3's default 55462.
+    "lab-on": {"postgres": 57537, "valkey": 57538, "valkey-q": 57539},
     # The Lab E gates compose the E2 stack in their own blocks (TASK_BLOCKS below); the
     # PostgreSQL port is the one the harness derives, 55532 + the block's offset, as e3c's.
     "e3l": {"postgres": 57032}, "e5l": {"postgres": 57132}, "e6l": {"postgres": 57232},

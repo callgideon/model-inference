@@ -1,0 +1,1 @@
+infrx.lab.workers: refusing to start: INFRX_MODE='lab-checkpoints': checkpoints needs a registry adapter and L3's dev deployer (WR-B3-3): without them B3 would reject every checkpoint

@@ -1,0 +1,21 @@
+2026-09-29 09:15:16,995 INFO botocore.credentials Found credentials in environment variables.
+2026-09-29 09:15:17,198 INFO botocore.credentials Found credentials in environment variables.
+2026-09-29 09:15:17,250 INFO infrx.worker reconciliation gauges disabled: no monitor login
+2026-09-29 09:15:17,269 INFO infrx.media.retention retention sweep: 0 deleted, 0 retained, 0 delete failures, 0 lost acks, batch 0, in flight 0, oldest pending delete 0 s
+2026-09-29 09:15:17,273 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-29 09:15:22,174 INFO infrx.worker prepared 5f0b0c5c-ee99-4a60-b013-24c10fd3f287: 1337 prompt tokens (engine /tokenize, 2 ms)
+2026-09-29 09:15:22,621 INFO infrx.worker prepared d2964592-1903-4fde-96db-1679fca980db: 1337 prompt tokens (engine /tokenize, 3 ms)
+2026-09-29 09:15:25,297 WARNING infrx.worker drained: 10 finished, 0 released [], ended []
+2026-09-29 09:15:25,297 WARNING infrx.worker drained preparation: 2 finished, 0 released [], ended []

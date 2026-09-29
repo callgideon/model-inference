@@ -9,8 +9,10 @@ Detailed briefs for [program 22](../22-consumer-v1-implementation.md); [tasks.js
 5. [Client, capacity and recovery protocol](05-client-and-load-testing.md)
 6. [Progress tracker and parallel coordination](06-progress-tracker.md)
 7. [Post-launch waves LW0–LW6 and C1–C3](07-post-launch-waves.md): the wave map the tracker renders.
+8. [Lab internal-testing rollout](08-lab-internal-testing-rollout.md): the pilot box + the Lab's Vercel project, R151's hosted window, the box steps (`infra/lab/rollout/`), rollback and the tester checklist; gated by `make lab-local` (E4-ON).
 
 ## Audit log
 
 - 2026-09-28: Index created with the post-launch wave map (07); briefs 01–06 unchanged.
+- 2026-09-29: 08 added (LAB-DEPLOY-PREP): the Lab internal-testing rollout runbook; preparation only, nothing hosted run.
 - [Path to v1 internal testing](09-path-to-internal-testing.md) — the completion plan: COMPLETE-LOCAL, then the internal-testing deployment (2026-09-29)
