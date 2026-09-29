@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 250,
- "updated": "2026-09-29T00:52:29Z",
+ "revision": 251,
+ "updated": "2026-09-29T00:53:17Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7291,6 +7291,40 @@
    "evidence": [],
    "commands": [],
    "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-IMPROVE-2",
+   "task": "E7L",
+   "slice": "(wave5 LW6 lane lab-improve-2, Sonnet) WR-E7L-5 (tests/integration lab_* helper-module collision + root pytest.ini) → WR-E7L-4 (lab_world on D8's Pg ledgers, the R192 i06 assertion) → E7L rerun; workflow wf_802a0e44-d7f; base 1d26fd59",
+   "agent": "sonnet",
+   "branch": "codex/w5-lab-improve-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-improve-2",
+   "base": "1d26fd59",
+   "head": null,
+   "isolation": {
+    "ports": "e7l 57300-57399",
+    "prefix": "infrx-e7l-",
+    "db": "e7l"
+   },
+   "activity": "running",
+   "started": "2026-09-29T00:53:17Z",
+   "updated": "2026-09-29T00:53:17Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "two harness items + one gate rerun"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/**",
+    "research/plan/evidence/e/E7L-*"
+   ],
    "wiring_requests": []
   }
  ],
