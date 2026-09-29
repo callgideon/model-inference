@@ -7371,7 +7371,7 @@
   {
    "id": "W5-MERGE-29",
    "task": null,
-   "slice": "merge batch #29 (Sonnet): i-harness-key 3fd8ccd1 (+R209)",
+   "slice": "merge batch #29 (Sonnet): i-harness-key 3fd8ccd1 (+R209); workflow wf_2bb0f42b-75b",
    "agent": "sonnet",
    "branch": "codex/w5-merge-29",
    "worktree": ".claude/worktrees/codex-w5-merge-29",
