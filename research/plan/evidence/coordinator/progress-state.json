@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 295,
- "updated": "2026-09-29T13:26:29Z",
+ "revision": 296,
+ "updated": "2026-09-29T13:46:53Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8644,22 +8644,22 @@
   {
    "id": "W5-LAB-EVAL-MEDIA",
    "task": "E6L",
-   "slice": "WR-E6L-J11 (product, L3/B1): HttpDevEndpoint.complete dispatches media samples as a video_url part (presigned, R61); j11 rerun on e6l (Opus); workflow wf_9a32de3e-7f5",
+   "slice": "WR-E6L-J11 (product, L3/B1): HttpDevEndpoint.complete dispatches media samples as a video_url part (presigned, R61); j11 rerun on e6l (Opus); workflow wf_9a32de3e-7f5; ACCEPT_WITH_FIXES at d31ede4a (j11 PASS on the real e6l stack: presigned SigV4 GET of the provider's own media object; 91/91 mutants; E4 2826/0; span/cap enforcement carried as WR-LEM-SPAN)",
    "agent": "opus",
    "branch": "codex/w5-lab-eval-media",
    "worktree": ".claude/worktrees/codex-w5-lab-eval-media",
    "base": "7f161b27",
-   "head": null,
+   "head": "d31ede4a",
    "isolation": {
     "ports": "e6l stack",
     "prefix": "infrx-e6l-",
     "db": "e6l"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T12:37:51Z",
-   "updated": "2026-09-29T12:37:51Z",
+   "updated": "2026-09-29T13:46:53Z",
    "blocker": null,
-   "next_action": "handback → merge batch → j11 PASS recorded on E6L",
+   "next_action": "merge batch #49 (WR-LEM-1/2, m1–m4, R239) → j11 PASS recorded on E6L",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -8809,6 +8809,41 @@
     "Makefile",
     "research/plan/08-contracts-v1-encoding.md",
     "research/plan/evidence/e/LAB-E2E-2299b82.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-49",
+   "task": null,
+   "slice": "merge batch #49 (Opus): lab-eval-media d31ede4a (+scenarios_eval conflict, WR-LEM-1/2, m1–m4, R239)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-49",
+   "worktree": ".claude/worktrees/codex-w5-merge-49",
+   "base": "41bd46f5",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T13:46:53Z",
+   "updated": "2026-09-29T13:46:53Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → E6L j11 PASS on the tip",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_evaluate/",
+    "apps/infrx-api/tests/b/runner/",
+    "apps/infrx-api/infrx/evaluation/runner/",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/e/E6L-J11-9938ad6.md"
    ],
    "wiring_requests": []
   }
