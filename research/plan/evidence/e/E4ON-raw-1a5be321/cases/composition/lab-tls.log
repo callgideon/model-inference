@@ -1,0 +1,8 @@
+{"level":"warn","ts":1790709561.1598775,"logger":"admin","msg":"admin endpoint disabled"}
+{"level":"info","ts":1790709561.160066,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x3e0127f1b100"}
+{"level":"info","ts":1790709561.1738453,"logger":"http.auto_https","msg":"automatic HTTP->HTTPS redirects are disabled","server_name":"proxy"}
+{"level":"info","ts":1790709561.1778715,"logger":"tls","msg":"cleaning storage unit","storage":"FileStorage:/data/caddy"}
+{"level":"info","ts":1790709561.1799638,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"warn","ts":1790709561.3225195,"logger":"pki.ca.local","msg":"installing root certificate (you might be prompted for password)","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1790709561.3234508,"msg":"warning: \"certutil\" is not available, install \"certutil\" with \"apt install libnss3-tools\" or \"yum install nss-tools\" and try again"}
+{"level":"info","ts":1790709561.3234682,"msg":"define JAVA_HOME environment variable to use the Java trust"}

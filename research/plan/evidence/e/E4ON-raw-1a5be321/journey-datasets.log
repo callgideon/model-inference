@@ -1,0 +1,42 @@
+TAP version 13
+# (node:3237311) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/apps/lab/tests/n/journey.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: N4-J01 import, interrupted and resumed, then a frozen version, its splits, an export and a revocation, on real N1/N2
+ok 1 - N4-J01 import, interrupted and resumed, then a frozen version, its splits, an export and a revocation, on real N1/N2
+  ---
+  duration_ms: 5153.550724
+  type: 'test'
+  ...
+# Traceback (most recent call last):
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+#     return self._loop.run_until_complete(task)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+#     return future.result()
+#            ^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/apps/lab/tests/n/backend.py", line 242, in serve
+#     await task
+# asyncio.exceptions.CancelledError
+# During handling of the above exception, another exception occurred:
+# Traceback (most recent call last):
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/apps/lab/tests/n/backend.py", line 248, in <module>
+#     main()
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/apps/lab/tests/n/backend.py", line 243, in main
+#     asyncio.run(serve())
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+#     return runner.run(main)
+#            ^^^^^^^^^^^^^^^^
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 123, in run
+#     raise KeyboardInterrupt()
+# KeyboardInterrupt
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6090.073928

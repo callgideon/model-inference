@@ -1,0 +1,16 @@
+{
+ "infrx_lab_control": {
+  "traces": "404 {\"detail\":\"Not Found\"}",
+  "evals": "503 {\"refusal\":\"unavailable\"}",
+  "pipelines": "503 {\"refusal\":\"unavailable\"}",
+  "teacher-batches": "503 {\"refusal\":\"unavailable\"}",
+  "optimizations": "503 {\"refusal\":\"unavailable\"}"
+ },
+ "owner": {
+  "traces": "404 {\"detail\":\"Not Found\"}",
+  "evals": "503 {\"refusal\":\"unavailable\"}",
+  "pipelines": "503 {\"refusal\":\"unavailable\"}",
+  "teacher-batches": "503 {\"refusal\":\"unavailable\"}",
+  "optimizations": "503 {\"refusal\":\"unavailable\"}"
+ }
+}
