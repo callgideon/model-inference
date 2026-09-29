@@ -2,7 +2,7 @@
  "task": "T2",
  "slice": "lab-capture-2 (LW6): R8 job-record credential scrub, R7 lost-ack retry traced once, R9 request line off the loop, WR-LC-HOSTED 0057 trace_consent for infrx_runtime; TRACE_PUMPS stays default OFF",
  "activity": "review",
- "head": "4f87f54c",
+ "head": "d12a6c3f (+ fix-round evidence commit)",
  "worktree": ".claude/worktrees/codex-w5-lab-capture-2",
  "branch": "codex/w5-lab-capture-2",
  "base": "7880f3c5",
@@ -56,6 +56,11 @@
    "cmd": "make api-test (t2f)",
    "exit": 2,
    "summary": "6861 passed, 3 failed (the WR-LC2-RUNTIME pins only; green with the WR), 187 skipped, 10 xfailed"
+  },
+  {
+   "cmd": "fix round: git apply --check LAB-CAPTURE-2-WR-RUNTIME.diff on tip 6738643c; grep infrx_runtime grants in 0058 (lw9 672bf2ac) / 0059 (merge-62 46fb5117)",
+   "exit": 0,
+   "summary": "applies clean; neither grants infrx_runtime -> runtime set stays 45; 0057 free"
   }
  ],
  "estimate": {
@@ -67,7 +72,7 @@
  },
  "blockers": [],
  "wiring_requests": [
-  "WR-LC2-RUNTIME (tests/d): apply research/plan/evidence/t/LAB-CAPTURE-2-WR-RUNTIME.diff with 0057 (RUNTIME_FUNCTIONS += infrx.trace_consent(uuid,uuid); check_operator_privileges expects 45); applies clean on tip 33547abd; without it test_reads_privileges, test_operator_privileges, test_0025_is_re_runnable fail",
+  "WR-LC2-RUNTIME (tests/d): apply research/plan/evidence/t/LAB-CAPTURE-2-WR-RUNTIME.diff with 0057 (RUNTIME_FUNCTIONS += infrx.trace_consent(uuid,uuid); check_operator_privileges expects 45); applies clean on tip 6738643c; count 45 re-derived after 0058/0059 (neither grants infrx_runtime); without it test_reads_privileges, test_operator_privileges, test_0025_is_re_runnable fail",
   "WR-LC2-PIN (integration): the harness pin goes after 0056_lab_control_grants.sql on the tip (the only merge-tree conflict); renumber 0057 at merge if taken"
  ],
  "evidence": [
@@ -77,5 +82,9 @@
  ],
  "proposed_rulings": [
   "amend R250: job records scrubbed of the minted key family by the worker; request line built off the loop; output traced once after the accepted completion incl. the lost-ack retry; consent read via infrx.trace_consent (0057), absent = off"
- ]
+ ],
+ "fix_round": {
+  "0-LC2-CMO-1": "merge-time (tests/d not owned); WR-LC2-RUNTIME + WR-LC2-PIN re-verified",
+  "1-LC2-INT-1": "merge-time; same WR, count 45 re-derived after 0058/0059"
+ }
 }

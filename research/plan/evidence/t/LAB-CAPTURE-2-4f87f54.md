@@ -60,3 +60,24 @@ Remaining to merge: 1 / 2 / 4 h (one verify round + the WR-RUNTIME/pin integrati
 ## Audit log
 
 - 2026-09-29: written at code head 4f87f54c (steps 5-6 of lane lab-capture-2).
+
+## Fix round (2026-09-29, from handback d12a6c3f)
+
+Findings 0-LC2-CMO-1 and 1-LC2-INT-1 describe one item. The tests/d runtime-function pins
+(`checks_operator.py:478` `len(held) == 44`, `checks_reads.RUNTIME_FUNCTIONS`) are outside
+this lane's owned paths, so the lane cannot turn `make api-test` green on the branch. Both
+reviewers call this a merge-time wiring item and not a seam defect. No code changed in this round.
+Re-verified for the merge lane:
+
+- `git apply --check LAB-CAPTURE-2-WR-RUNTIME.diff` passes on the tip `6738643c`, where line 478
+  still reads `len(held) == 44`.
+- Re-derived the count against the pending lanes. `codex/w5-lab-sql-lw9` (672bf2ac) adds
+  0058_lab_variant_identities.sql, whose grants go to authenticated/service_role and the Lab
+  roles, with none to infrx_runtime. `codex/w5-merge-62` (46fb5117) adds 0059_lab_control_grants_2.sql,
+  which grants to `infrx_lab_control` only ("anon, authenticated and infrx_runtime gain nothing").
+  The runtime set is therefore 45 after 0057+0058+0059. The diff stays correct as written.
+- 0057 is not taken on the tip or on either pending lane (0058 and 0059), so no renumber is needed.
+
+Merge instruction (unchanged): apply WR-LC2-RUNTIME in the same commit as 0057, and put the
+WR-LC2-PIN harness line after 0056 (or after 0058/0059 if those merge first). Keep the files in
+number order.
