@@ -1,0 +1,105 @@
+{
+  "task": "I8",
+  "slice": "KNOWN-GOOD-REPROOF (R151/R201 condition 1, 2026-09-29 window): both rollback targets (bda1586, 4226315) re-proven through 0051 with the committed driver on the Supabase image and plain PostgreSQL + shim; schema_proof through 0051 (files + 0027-0051), the through-0026 proof kept under `superseded`; known-good.py <t> --applied 0051 exits 0, 0052 exits 1",
+  "activity": "review",
+  "head": "fca3ea3",
+  "worktree": ".claude/worktrees/codex-w5-known-good-reproof",
+  "branch": "codex/w5-known-good-reproof",
+  "owned_paths": [
+    "infra/rollout/known-good.json",
+    "infra/runbooks/schema_proof.py",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py",
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-fca3ea3.md",
+    "research/plan/evidence/coordinator/updates/I8-20260929T0917Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "standin.sh supabase|plain (KGP2's 744b887a, key e3b2d; sha256 edc7f2ee)",
+      "exit": 0,
+      "summary": "migrate.py plan/apply: 0001-0018 6995aef8, 0019-0051 50cf89cb on both images"
+    },
+    {
+      "cmd": "schema_proof.py <bda1586> --candidate 72dc76ad --task d10, plain, driver 7560a92b (before)",
+      "exit": 1,
+      "summary": "25 PASS / 1 FAIL: test_pgharness decoy lint (dlab 57540 = t2i ClickHouse in the candidate's registry); runs stopped, SHAPE +1 at fca3ea38"
+    },
+    {
+      "cmd": "INFRX_D1_IMAGE=supabase SCHEMA_PROOF_DSN=<stand-in> infra/runbooks/schema_proof.py bda15866e5700f3856d7142580da842fba9bbd23 --candidate 72dc76ad --task e3b2d",
+      "exit": 0,
+      "summary": "PASS schema 0001-0051; 26/26: 383 passed, 0 skipped, 14 SHAPE deselected, 5 xfailed; PASS through 0051 (e1b318ce)"
+    },
+    {
+      "cmd": "the same, 422631591845fbd66b590c73d5ff4150318d9d7a, Supabase image",
+      "exit": 0,
+      "summary": "26/26, 383 passed, 14 deselected, 5 xfailed; PASS through 0051 (241d80b0)"
+    },
+    {
+      "cmd": "the same, bda1586, plain PostgreSQL + shim, --task d10",
+      "exit": 0,
+      "summary": "26/26, 383 passed, 14 deselected, 5 xfailed; PASS through 0051 (ab3d51e2)"
+    },
+    {
+      "cmd": "the same, 4226315, plain PostgreSQL + shim, --task d10",
+      "exit": 0,
+      "summary": "26/26, 383 passed, 14 deselected, 5 xfailed; PASS through 0051 (0ba71745)"
+    },
+    {
+      "cmd": "pytest -q tests/i/test_known_good_proof.py at 1cea5025 (through-0026 record)",
+      "exit": 1,
+      "summary": "2 failed, 5 passed (fails before)"
+    },
+    {
+      "cmd": "pytest -q tests/i/test_known_good_proof.py",
+      "exit": 0,
+      "summary": "7 passed"
+    },
+    {
+      "cmd": "pytest -q tests/i/test_mutants.py -k 'well_formed or every_case'",
+      "exit": 0,
+      "summary": "2 passed"
+    },
+    {
+      "cmd": "python tests/i/mutants.py <25 known_good*/schema_proof* mutants>",
+      "exit": 0,
+      "summary": "25/25 killed (new: known_good_record_stops_at_0026, known_good_record_proves_other_0051, known_good_record_proves_other_0027, schema_proof_drops_the_registry_shape_case)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=i8 uv run --frozen --no-sync pytest -q -rs tests/i",
+      "exit": 1,
+      "summary": "354 passed, 4 skipped (i5-only lab_eval drills), 1 xfailed, 8 errors: i8 pooler stack setup (docker run exit 125) while another checkout held i8"
+    },
+    {
+      "cmd": "INFRX_D_TASK=i8 pytest -q tests/i/test_observe.py tests/i/test_pooler.py tests/i/test_privilege_probe.py tests/i/test_rollback_drill.py",
+      "exit": 0,
+      "summary": "36 passed, 1 xfailed (the 8 errored cases green on a free i8)"
+    },
+    {
+      "cmd": "known-good.py <bda1586|4226315> --applied 0026/0027/0051/0052; --list --applied 0051 --set ...",
+      "exit": 0,
+      "summary": "0051 KNOWN-GOOD exit 0 (was 1); 0052 NOT-KNOWN-GOOD (migrations) exit 1; list: 27af05a NOT, 4226315 and bda1586 KNOWN-GOOD"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.1,
+    "likely_h": 0.2,
+    "pessimistic_h": 0.4,
+    "confidence": "high",
+    "basis": "lane done; coordinator applies WR-KGR-1 (rollout README RR:51) and WR-KGR-2 (P-25 row) - text only, as WR-KGP3-1/2",
+    "at": "2026-09-29T09:17Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-KGR-1 infra/rollout/README.md RR:51 row + paragraph: through 0051, files 0019-0051, not proven after 0051; verification-log line (KNOWN-GOOD-REPROOF-fca3ea3)",
+    "WR-KGR-2 research/plan/15-pending-inputs.md P-25 row: schema_proof reaches 0051 for both targets (plain + Supabase image); extend at 0052; log line",
+    "WR-KGR-3 coordinator: hosted is recorded at 0051 (95d5c050) before this merge; record that the window had no qualifying rollback target until it; WR-KGP3-3 (R147 follow-up breaks both targets) still holds"
+  ],
+  "evidence": [
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-fca3ea3.md"
+  ]
+}

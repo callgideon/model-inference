@@ -42,8 +42,9 @@ DSN_ENV = "SCHEMA_PROOF_DSN"
 # Cases of the target's own tests/d that cannot hold on a newer catalog for a reason that is
 # not the old runtime's SQL. Each is deselected BY NAME and printed as SKIP with its reason;
 # anything else that fails is a FAIL. Measured at bda1586/4226315 on 0001-0023 (every one
-# passes on the target's own 0001-0018): KNOWN-GOOD-PROOF evidence; the last three on 0001-0025
-# (each passes on 0001-0023): KNOWN-GOOD-PROOF-2 evidence.
+# passes on the target's own 0001-0018): KNOWN-GOOD-PROOF evidence; the 0024/0025 three on 0001-0025
+# (each passes on 0001-0023): KNOWN-GOOD-PROOF-2 evidence; the registry one at 72dc76ad (it passes
+# with 400a7e94's registry): KNOWN-GOOD-REPROOF evidence.
 SHAPE = {
     # the old tree's catalog enumerations: the schema grew (0019-0023 objects, grants to the
     # runtime/monitor logins, consumer read functions); not SQL the old runtime runs
@@ -74,6 +75,11 @@ SHAPE = {
     "tests/d/test_schema_postgres.py::test_dur_rls__the_browser_privilege_surface_is_enumerated":
         "enumerates the old browser surface (0025 grants authenticated SELECT on operator_wallet_drift / "
         "operator_unknown_usage)",
+    # the candidate's port registry (copied in, see `scratch`), not SQL: at 0051 it carries the
+    # Lab keys, and the old rig's decoy formula puts dlab's decoy (57540) on t2i's ClickHouse port
+    "tests/d/test_pgharness.py::test_the_decoy_is_the_tasks_own_and_d1s_is_unchanged":
+        "lints the candidate's port registry with the old decoy formula (dlab's 57540 is t2i's "
+        "ClickHouse port in the Lab registry); no SQL and no catalog",
 }
 # The one path none of the target's suites walks end to end on PostgreSQL: its runtime's
 # admit -> prepare -> claim -> complete (its own terminalize SQL) -> the gateway's result read
