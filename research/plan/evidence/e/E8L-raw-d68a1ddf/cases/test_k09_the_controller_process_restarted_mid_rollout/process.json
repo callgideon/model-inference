@@ -1,0 +1,30 @@
+{
+ "decisions_after_first": [
+  [
+   "rollback",
+   "rolled_back",
+   "00000091-0000-4000-8000-0000000000e8",
+   [
+    "operator:e8l k09 real process"
+   ]
+  ]
+ ],
+ "decisions_after_second": [
+  [
+   "rollback",
+   "rolled_back",
+   "00000091-0000-4000-8000-0000000000e8",
+   [
+    "operator:e8l k09 real process"
+   ]
+  ]
+ ],
+ "first": {
+  "exit": 1,
+  "stderr": "infrx.lab.workers: emergency rollback did not finish: dependency_unavailable: dependency_unavailable: L3's control reads are not wired (WR-LSQ-9)\n"
+ },
+ "second": {
+  "exit": 1,
+  "stderr": "infrx.lab.workers: emergency rollback did not finish: dependency_unavailable: dependency_unavailable: L3's control reads are not wired (WR-LSQ-9)\n"
+ }
+}
