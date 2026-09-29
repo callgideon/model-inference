@@ -5,6 +5,9 @@ Description=infrx Lab annotation worker - P1 imports, reviews and exports; P2 te
 # skipped condition, not a failure), no Requires=/PartOf= on a consumer unit and none of them
 # names this one: a Lab outage never stops, restarts or blocks inference.
 # Runbook: infra/lab/workers/training/RUNBOOK.md.
+# The role collects approved teacher batches (WR-P4B-2: P2 collect for every submitted chunk run
+# of every administrator-approved batch, R202); it needs LAB_TEACHER_URL (the local teacher fake
+# until P-10, WR-C4-PREFLIGHT) and exits 2 without it.
 # Two switches, both needed (conditions are ANDed): I2L's Lab-wide enable marker
 # (infra/lab/app/lab.json enable_marker; its Disable removes it and every Lab unit stays
 # down) and this role's own env file.

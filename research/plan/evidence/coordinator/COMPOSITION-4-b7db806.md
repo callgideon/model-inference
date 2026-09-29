@@ -197,3 +197,5 @@ Optimistic 0.5 h, likely 1.5 h, pessimistic 4 h; confidence medium. Basis:
 - E7L is 20/0/2, with PIPELINE-LINEAGE now PASS;
 - composition-3 needed one fix round (about 2 h);
 - the remaining work is one verify round plus WR-C4-PREFLIGHT (outside the lane).
+
+**Rulings:** the three proposals above are numbered R217 (teacher egress is redacted public content), R218 (the annotation worker collects only what an administrator approved) and R219 (P3's evaluation evidence is what B1 froze) in 08 §10 at the composition-4 merge on `codex/w5-merge-36`.
