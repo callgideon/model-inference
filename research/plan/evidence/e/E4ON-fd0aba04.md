@@ -77,6 +77,29 @@ Scenario cells:
 out-of-scope classes (product WR per port, P-11). **The gate is acceptable under R222 once
 WR-LL2-1/2 land (or once the coordinator rules LL2-SCOPE, below).** No in-scope FAIL remains.
 
+## 3. Step 3: the mutants on the kept stack (fd0aba04)
+
+`INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rs tests/integration/lab_local/test_mutants.py`
+→ exit 0, **56 passed, 0 skipped in 830 s**: 40 layer-1 mutants + 12 stack mutants killed
+(pristine baseline green on the kept stack, KNOWN_FAIL = the R237 o05 case), plus the 4 list
+checks (well-formed, every case covered, no false kill). 0 survivors. Log:
+`E4ON-raw-fd0aba04/mutants.log`. New this lane: `r222_*` (8), `login_*` (3),
+`st_control_families_set_role`, `lab_web_ready_before_its_origin`, `evidence_is_dirt`,
+`anything_is_clean`. The stack was then torn down (`lab-local.sh --reuse --only none`); no
+e3l/lab-on container left.
+
+## 4. Other checks
+
+| Command | Exit | Result |
+|---|---|---|
+| `pytest -q tests/integration/lab_local/test_lab_local_runner.py` | 0 | 21 passed (2 new cases red first) |
+| `pytest -q tests/integration/test_harness.py tests/integration/test_lab_package_isolation.py` + the above | 1 | 69 passed, 1 failed: the production guard on two files this lane does not own (WR-LL2-4, base red at c77e75ac) |
+| `make lab-local` at 1a5be321 | 2 (runner 1) | FAIL: o07 TLS race (fixed) |
+| `GATE_ARGS=--keep make lab-local` at fd0aba04 | 2 (runner 1) | FAIL by design only; r222 open = 2 journeys (§2) |
+
+Not run: `make api-test` whole (no product code changed; its E4 subset ran inside e4-on),
+`make lab-*` (apps/lab untouched).
+
 ## 5. Wiring requests
 
 - **WR-LL2-1** (owner: the lane owning `apps/lab/tests/p/`; test harness, not product):
