@@ -9753,7 +9753,7 @@
   {
    "id": "W5-MERGE-61",
    "task": null,
-   "slice": "merge batch #61 (Opus): lab-local-2 44a19b71 (+WR-LL2-1/2 test-backend ports, WR-LL2-4, minors, R257–R258)",
+   "slice": "merge batch #61 (Opus): lab-local-2 44a19b71 (+WR-LL2-1/2 test-backend ports, WR-LL2-4, minors, R257–R258); workflow wf_6480cc4a-e86",
    "agent": "opus",
    "branch": "codex/w5-merge-61",
    "worktree": ".claude/worktrees/codex-w5-merge-61",

@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-29 21:38Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 319, updated 2026-09-29 21:38Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-29 21:39Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 319, updated 2026-09-29 21:38Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -371,7 +371,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W5-MERGE-58 | support merge batch #58 (Opus): lab-observe-4 5cd59091 (+RV-2 output assertion, RV-3 beta sync, evidence minors, R254); workflow wf_5bbd8bfa-aef | running | codex/w5-merge-58 | 34e6ab91 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:31Z | integrate (sort §10) → E5L on the tip: o01 sync PASS, async-echo FAIL[WR-LO4-R8] | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 | W5-MERGE-59 | support merge batch #59 (Opus): known-good-reproof-3 3fc5b06c (+WR-KGR3-1/2 rows, hosted-migrate-0052-0056.patch + launch-v1.sh window via the patch, RV-1 test; no rulings); workflow wf_e53131b8-dd4 | running | codex/w5-merge-59 | 83da7aef → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:34Z | integrate → R151 condition 1 for 0052–0056 met on the tip → tell the operator to run launch-v1.sh window | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 | W5-MERGE-60 | support merge batch #60 (Opus): lab-c7-gaps ae83ab2b (+WR-C7G-PREFLIGHT, F1/F3/F4, R255–R256) | running | codex/w5-merge-60 | b88a733c → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:37Z | integrate (sort §10); pilot.py conflicts with lab-rollout-7 / lab-sql-lw9 resolved at their merges | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
-| W5-MERGE-61 | support merge batch #61 (Opus): lab-local-2 44a19b71 (+WR-LL2-1/2 test-backend ports, WR-LL2-4, minors, R257–R258) | running | codex/w5-merge-61 | 1b19a1f4 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:38Z | integrate (sort §10) → lab-local-3 | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
+| W5-MERGE-61 | support merge batch #61 (Opus): lab-local-2 44a19b71 (+WR-LL2-1/2 test-backend ports, WR-LL2-4, minors, R257–R258); workflow wf_6480cc4a-e86 | running | codex/w5-merge-61 | 1b19a1f4 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:38Z | integrate (sort §10) → lab-local-3 | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 
 ### Queues and locks
 
