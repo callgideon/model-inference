@@ -207,6 +207,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_lost_race_raises", "a lost CAS race rereads and accepts the same rollback", R2,
        "            if (await self._store.release(policy_ref)).state != to:",
        "            if True:", K04_ONCE, K09_PROCESS),
+    _m("st_process_reads_nothing", "the real emergency-rollback process reads the alias through "
+       "the real PgControlStore (pilot.control_serving, WR-E8L-7)", G,
+       "                   PgControlStore(connect),\n", "                   PgControlStore(None),\n",
+       K09_PROCESS),
     _m("st_converge_by_full_ref", "R2 recognises a promoted candidate by serving identity "
        "(R216, E8L-F2): L3's promotion mints a fresh deployment revision", R2,
        "    return f\"{head.rpartition(':')[0]}@{digest}\"", "    return ref", K06_PROMOTED),

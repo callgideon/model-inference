@@ -368,48 +368,59 @@ def test_k06_the_worlds_alias_read_is_the_real_control_store_on_its_login(lab, w
 
 # ------------------------------------------------------------------------------------ k09
 def test_k09_the_controller_process_restarted_mid_rollout(lab, workdir):
-    """composition-2 landed `python -m infrx.lab.workers rollout emergency-rollback
-    --policy-ref --reason` (WR-I7-1): run it as a REAL OS process, twice, over one running
-    release on this stack's own Lab database - the "process killed and restarted" drill this
-    case's title names, for the one subcommand that exists. D9's decision is the process's own
-    (never an in-process `Controller` standing in for it, as k04/k06 use): the second, restarted
-    invocation over an already-`rolled_back` release is the CAS backstop's own no-op, not a
-    second decision - a lost race accepted on reread, exactly what a killed-and-restarted process
-    finding the work already done must do. The alias CAS itself does not run here: the real
-    process composes `pilot.control_serving`'s `NoControlReads` (WR-LSQ-9 wired a real store into
-    lab_world's own `Serving`, item 3/4 of `LSQ5-5b99b52.md`, but not into `control_serving` -
-    WR-E8L-7 below), so both invocations exit 1 naming that gap after D9's decision is safely
-    recorded - "the pass loop refuses" (composition-2's own COMPOSITION-2-b790f17.md) for the
-    continuous loop; the exact rerun once WR-R2-3 lands is below."""
+    """composition-2's `python -m infrx.lab.workers rollout emergency-rollback --policy-ref
+    --reason` (WR-I7-1) as a REAL OS process, twice, over one running release whose candidate
+    the operator promoted (L3: the alias's next listing serves serving_2) - the "process
+    killed and restarted" drill for the one subcommand that exists. The process composes
+    `pilot.control_serving`, whose reads are now the real `PgControlStore` (merge #30,
+    WR-E8L-7): the first invocation records D9's decision and moves the alias back to the
+    baseline deployment (exit 0); the restarted one finds the work done - the CAS backstop's
+    reread, no second decision, the alias left alone (exit 0). The continuous pass loop waits
+    on WR-R2-3 (below)."""
     import os
     import subprocess
     import sys
-    policy, ref = lab.launch(lab.policy(weights=(5_000,), candidates=(lab.CAND,)), lw.plan())
+    listed = lab.listing()
+    base = lab.sql("select infrx.lab_serving_ref(%s)", listed[1])[0][0]
+    policy, ref = lab.launch({**lab.policy(weights=(5_000,), candidates=(lab.CAND,)),
+                              "baseline_ref": base}, lw.plan())
     r = router(lab)
     traffic(lab, r, 20, 2, 0x69)
+    promoted = lab.promote(lab.q8.W["serving_2"], 9)
     env = {**os.environ, "LAB_DATABASE_URL": lab.dsn, "LAB_OPERATOR_ID": lw.OPERATOR}
     argv = [sys.executable, "-m", "infrx.lab.workers", "rollout", "emergency-rollback",
             "--policy-ref", ref, "--reason", "e8l k09 real process"]
-    first = subprocess.run(argv, cwd=lw.API, env=env, capture_output=True, text=True, timeout=30)
-    after_first = run(lab.releases().release(ref))
-    decisions_after_first = lab.decisions(ref)
-    second = subprocess.run(argv, cwd=lw.API, env=env, capture_output=True, text=True, timeout=30)
-    after_second = run(lab.releases().release(ref))
-    lw.save(workdir, "process.json", {
-        "first": {"exit": first.returncode, "stderr": first.stderr[-2000:]},
-        "second": {"exit": second.returncode, "stderr": second.stderr[-2000:]},
-        "decisions_after_first": decisions_after_first, "decisions_after_second": lab.decisions(ref)})
-    assert (after_first.state, after_second.state) == ("rolled_back", "rolled_back"), (
-        "the real process's own emergency-rollback did not record D9's decision")
-    assert [d[1] for d in decisions_after_first] == ["rolled_back"]
-    assert decisions_after_first == lab.decisions(ref), (
-        "the restarted process recorded a second decision instead of a no-op reread "
-        "(the lost-race backstop, K04's own oracle, broke for a real OS process too)")
-    assert first.returncode == second.returncode == 1, (
-        "the real process's alias converge should refuse on NoControlReads (WR-E8L-7), not "
-        f"succeed or crash differently: exits were {first.returncode}, {second.returncode}")
-    for run_ in (first, second):
-        assert "WR-LSQ-9" in run_.stderr or "DependencyUnavailable" in run_.stderr, run_.stderr
+    try:
+        promoted_listing = lab.listing()
+        first = subprocess.run(argv, cwd=lw.API, env=env, capture_output=True, text=True,
+                               timeout=30)
+        after_first, listing_first = run(lab.releases().release(ref)), lab.listing()
+        decisions_after_first = lab.decisions(ref)
+        second = subprocess.run(argv, cwd=lw.API, env=env, capture_output=True, text=True,
+                                timeout=30)
+        after_second, listing_second = run(lab.releases().release(ref)), lab.listing()
+        lw.save(workdir, "process.json", {
+            "first": {"exit": first.returncode, "stderr": first.stderr[-2000:]},
+            "second": {"exit": second.returncode, "stderr": second.stderr[-2000:]},
+            "listing_before": listed, "listing_promoted": promoted_listing,
+            "listing_after_first": listing_first, "listing_after_second": listing_second,
+            "decisions_after_first": decisions_after_first,
+            "decisions_after_second": lab.decisions(ref)})
+        assert promoted_listing[1] == promoted, "the promotion did not list the candidate"
+        assert (first.returncode, second.returncode) == (0, 0), (
+            f"the real process did not finish: exits {first.returncode}, "
+            f"{second.returncode}: {first.stderr[-600:]} {second.stderr[-600:]}")
+        assert (after_first.state, after_second.state) == ("rolled_back", "rolled_back"), (
+            "the real process's own emergency-rollback did not record D9's decision")
+        assert [d[1] for d in decisions_after_first] == ["rolled_back"]
+        assert decisions_after_first == lab.decisions(ref), (
+            "the restarted process recorded a second decision instead of a no-op reread "
+            "(the lost-race backstop, K04's own oracle, broke for a real OS process too)")
+        assert listing_first[1] == listed[1], (
+            f"the real process left the alias on {listing_first}, not the baseline {listed}")
+        assert listing_second == listing_first, "the restarted process moved the alias again"
+    finally:
+        lab.restore_alias(listed[0])
     lw.not_run("k09", "WR-R2-3", why="the pass loop `python -m infrx.lab.workers rollout` (no "
                "subcommand) refuses by name (composition-2's own `_rollout`: \"the rollout "
                "pass needs every running or rolled-back D9 release with its frozen plan, R1's "
