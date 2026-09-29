@@ -11,13 +11,13 @@ mutant in `mutants.py`.
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from infrx.contracts import errors
 from infrx.datasets import imports, lineage, versions
 
-from ..imports.world import chunks, fixture, grant_ref, run
+from ..imports.world import FakeSampleRestrictions, chunks, fixture, grant_ref, run
 from .world import (CATEGORIES, CONSUMER, DEV, GRANTOR, GRANTOR_2, MODEL, NEMO, OTHER, VIEWER,
                     World, rid)
 
@@ -105,6 +105,10 @@ def test_n3_permitted_traces_become_a_dataset_with_lineage_per_sample() -> None:
                      "categories": ["request_content", "response_content", "feedback"],
                      "content_until": (row.started_at + timedelta(days=90)).isoformat()}
     assert sample.group_key == a
+    assert w.lab.restrictions.bounds == {                  # WR-N3-5: 0041 holds the bound
+        (NEMO, s.sample_id): datetime.fromisoformat(run(lineage.trace_of(
+            w.objects, provider_org_id=NEMO, sample_id=s.sample_id))["content_until"])
+        for s in manifest.samples}
     assert permitted(w, got.dataset_ref) == {s.sample_id for s in manifest.samples}
 
 
@@ -189,16 +193,19 @@ def test_n3_the_fan_out_is_bounded() -> None:
     assert w.content.calls == [] and w.lab.published == []
     ok(w, requests)
     page = run(lineage.reconcile(w.directory, w.retention, w.objects, provider_org_id=NEMO,
-                                 limit=2))
+                                 limit=2, restrictions=w.lab.restrictions))
     assert page["checked"] == 2 and page["next"] is not None
     rest = run(lineage.reconcile(w.directory, w.retention, w.objects, provider_org_id=NEMO,
-                                 after=page["next"], limit=2))
+                                 after=page["next"], limit=2,
+                                 restrictions=w.lab.restrictions))
     assert rest["checked"] == 1 and rest["next"] is None
     first = run(lineage.tombstone(w.objects, provider_org_id=NEMO, grantor_org_id=GRANTOR,
-                                  reason="grant_revoked", at=w.now, limit=2))
+                                  reason="grant_revoked", at=w.now, limit=2,
+                                  restrictions=w.lab.restrictions))
     assert first == {"tombstoned": 2, "more": True}
     second = run(lineage.tombstone(w.objects, provider_org_id=NEMO, grantor_org_id=GRANTOR,
-                                   reason="grant_revoked", at=w.now, limit=2))
+                                   reason="grant_revoked", at=w.now, limit=2,
+                                  restrictions=w.lab.restrictions))
     assert second == {"tombstoned": 1, "more": False}
 
 
@@ -234,9 +241,12 @@ def test_n3_revocation_tombstones_every_derived_version_and_export() -> None:
     part = run(versions.read_part(w.lab, w.objects, provider_org_id=NEMO, export_id=rid(0xe1),
                                   part=0, now=w.now))
     assert {json.loads(line)["sample_id"] for line in part.splitlines()} & trace_ids == set()
-    report = run(lineage.reconcile(w.directory, w.retention, w.objects, provider_org_id=NEMO))
+    report = run(lineage.reconcile(w.directory, w.retention, w.objects, provider_org_id=NEMO,
+                                    restrictions=w.lab.restrictions))
     assert sorted(t["reason"] for t in report["tombstoned"]) == ["grant_not_current"] * 4
     assert report["purged"] == 0                       # logical now; physical after retention
+    assert run(w.lab.restrictions.blocked(derived, provider_org_id=NEMO)) == \
+        dict.fromkeys(trace_ids, "grant_not_current"), "the tombstones never reached 0041"
     w.grant(GRANTOR, 0x91, *w.directory.grants[(GRANTOR, NEMO)].categories[2:])
     assert permitted(w, derived, "training") & trace_ids == set(), "a re-grant resurrected"
     part = run(versions.read_part(w.lab, w.objects, provider_org_id=NEMO, export_id=rid(0xe1),
@@ -245,18 +255,21 @@ def test_n3_revocation_tombstones_every_derived_version_and_export() -> None:
     later = run(versions.export(w.lab, w.objects, provider_org_id=NEMO, dataset_ref=derived,
                                 export_id=rid(0xe2), now=w.now, ttl_s=3600))
     assert {o["sample_id"] for o in later["omitted"]} == trace_ids
+    assert run(lineage.export_evidence(w.objects, provider_org_id=NEMO, export_id=rid(0xe2),
+                                       now=w.now, restrictions=w.lab.restrictions))[
+        "affected"] == [], "evidence names items this export never delivered"
     again = run(versions.derive(w.lab, w.objects, provider_org_id=NEMO, actor="dev@nemo",
                                 dataset_id=rid(0xd6), version=1, now=w.now,
                                 created_at="2026-09-27T14:00:00Z", policy=POLICY,
                                 add=[derived]))
     assert {o["sample_id"] for o in again.omitted} == trace_ids
     evidence = run(lineage.export_evidence(w.objects, provider_org_id=NEMO,
-                                           export_id=rid(0xe1), now=w.now))
+                                           export_id=rid(0xe1), now=w.now,
+                                           restrictions=w.lab.restrictions))
     assert (evidence["dataset_ref"], evidence["recalled"]) == (derived, False)
     assert sorted(a["sample_id"] for a in evidence["affected"]) == sorted(trace_ids)
     assert export["created_at"] == evidence["delivered_from"]
-    stones = [run(w.objects.get(k)) for k in run(w.objects.keys(f"lab/{NEMO}/lineage/tomb"))]
-    retained = b"".join(stones) + json.dumps(evidence).encode()
+    retained = json.dumps([evidence, sorted(w.lab.restrictions.stones.items())]).encode()
     assert b"question" not in retained and b"answer" not in retained
 
 
@@ -277,7 +290,8 @@ def test_n3_a_narrowed_grant_version_tombstones_its_trace_samples() -> None:
 
     def reconcile():
         return {t["sample_id"]: t["reason"] for t in run(lineage.reconcile(
-            w.directory, w.retention, w.objects, provider_org_id=NEMO))["tombstoned"]}
+            w.directory, w.retention, w.objects, provider_org_id=NEMO,
+            restrictions=w.lab.restrictions))["tombstoned"]}
     w.narrow(GRANTOR_2, retention_days=7)               # narrows nothing a sample uses
     w.narrow(GRANTOR, categories=CATEGORIES)            # drops feedback only
     assert reconcile() == {ids[rated]: "grant_narrowed"}
@@ -304,10 +318,12 @@ def test_n3_deletion_and_expiry_deny_at_once_and_purge_after_retention() -> None
     assert permitted(w, got.dataset_ref) == {ids[kept].sample_id, ids[doomed].sample_id}
     run(w.delete(GRANTOR, doomed))
     assert run(lineage.tombstone(w.objects, provider_org_id=NEMO, grantor_org_id=GRANTOR,
-                                 request_id=doomed, reason="deleted", at=w.now)) == \
+                                 request_id=doomed, reason="deleted", at=w.now,
+                                 restrictions=w.lab.restrictions)) == \
         {"tombstoned": 1, "more": False}
     assert permitted(w, got.dataset_ref) == {ids[kept].sample_id}
-    report = run(lineage.reconcile(w.directory, w.retention, w.objects, provider_org_id=NEMO))
+    report = run(lineage.reconcile(w.directory, w.retention, w.objects, provider_org_id=NEMO,
+                                    restrictions=w.lab.restrictions))
     assert sorted(t["reason"] for t in report["tombstoned"]) == ["content_expired"]
     assert report["purged"] == 2
     for request, present in ((old, False), (doomed, False), (kept, True)):
@@ -317,3 +333,101 @@ def test_n3_deletion_and_expiry_deny_at_once_and_purge_after_retention() -> None
                               now=w.now))
     assert {s["trace"]["request_id"]: s["restricted"] for s in view["samples"]} == \
         {old: "content_expired", kept: None, doomed: "deleted"}
+
+
+# --- WR-N3-5: 0041 holds the restrictions; the caller's clock still counts ----------------
+def test_n3_a_bound_passed_on_either_clock_denies() -> None:
+    """Oracle (WR-N3-5, a caller-supplied `now` honored): a trace sample is denied once its
+    content bound passes on the caller's `now` while D7's clock has not reached it, and once
+    it passes on D7's clock (0041's `infrx.now()`) for a caller whose clock lags; the status
+    view says `content_expired` either way. A gate that reads only one clock, or a bound
+    never recorded in D7, fails."""
+    w = World()
+    got = ok(w, [w.trace(1)])
+    [sid] = permitted(w, got.dataset_ref)
+    until = datetime.fromisoformat(run(lineage.trace_of(
+        w.objects, provider_org_id=NEMO, sample_id=sid))["content_until"])
+
+    def seen(now):
+        return (run(lineage.permitted(w.lab, w.objects, got.dataset_ref, provider_org_id=NEMO,
+                                      purpose="training", now=now)),
+                run(lineage.status(w.lab, w.objects, got.dataset_ref, provider_org_id=NEMO,
+                                   now=now))["samples"][0]["restricted"])
+    assert seen(w.now) == ({sid}, None)
+    assert seen(until) == (set(), "content_expired")          # the caller's clock passed it
+    w.directory.now = until                                    # D7's clock passed it
+    assert seen(until - timedelta(days=1)) == (set(), "content_expired")
+
+
+def test_n3_backfill_moves_the_object_restrictions_into_d7_once() -> None:
+    """Oracle (WR-N3-5): a tombstone written as an object before 0041 held it is denied by
+    the gate (fix round: object records stay deny-only) but absent from 0041 until
+    `backfill` moves it with the object's reason; every trace entry's bound is D7's, and a
+    rerun moves nothing new - a sample D7 had already tombstoned keeps its first reason."""
+    w = World()
+    got = ok(w, [w.trace(1), w.trace(2), w.trace(3)])
+    a, b, c = sorted(permitted(w, got.dataset_ref))
+    w.lab.restrictions = FakeSampleRestrictions(w.lab, clock=lambda: w.directory.now)  # empty
+    for sid, reason in ((a, "grant_revoked"), (b, "deleted")):
+        w.objects.seed(f"lab/{NEMO}/lineage/tombstones/{sid}.json", json.dumps(
+            {"sample_id": sid, "reason": reason}).encode(), "application/json")
+    run(w.lab.restrictions.tombstone([b], provider_org_id=NEMO, reason="grant_narrowed"))
+    assert permitted(w, got.dataset_ref) == {c}                # the gate honors the object
+    assert run(w.lab.restrictions.blocked(got.dataset_ref, provider_org_id=NEMO)) == \
+        {b: "grant_narrowed"}                                  # but 0041 has not got it
+
+    def move():
+        return run(lineage.backfill(w.objects, provider_org_id=NEMO,
+                                    restrictions=w.lab.restrictions))
+    assert move() == {"stones": 2, "tombstoned": 1, "bounded": 3}
+    assert permitted(w, got.dataset_ref) == {c}
+    assert run(w.lab.restrictions.blocked(got.dataset_ref, provider_org_id=NEMO)) == \
+        {a: "grant_revoked", b: "grant_narrowed"}
+    assert w.lab.restrictions.bounds == {(NEMO, s): datetime.fromisoformat(run(
+        lineage.trace_of(w.objects, provider_org_id=NEMO, sample_id=s))["content_until"])
+        for s in (a, b, c)}
+    assert move() == {"stones": 2, "tombstoned": 0, "bounded": 3}
+
+
+# --- fix round 0-DS5-R1/R2: callers that predate WR-N3-5 keep their shapes and still deny
+def test_n3_callers_without_the_port_still_deny_for_good() -> None:
+    """Oracle (0-DS5-R1/R2, 1-DS5-R1/R2): the tip's callers written before WR-N3-5 - P1/P2's
+    `_stone`, composition's push `tombstone` and the Lab worker's `reconcile` without
+    `restrictions`, `export_evidence` without it, and a store with no restrictions port
+    (P2's fake) - still deny: a re-grant resurrects nothing, 0041 gets every stone once the
+    directory carries the port (PgAccessStore by its connection), and the evidence names
+    every delivered item now denied."""
+    w = World()
+    requests = [w.trace(n) for n in range(1, 5)]
+    got = ok(w, requests)
+    ids = {body(w, s)["trace"]["request_id"]: s.sample_id
+           for s in run(w.lab.resolve(got.dataset_ref, provider_org_id=NEMO)).samples}
+    a, b, c, d = (ids[r] for r in requests)
+    run(versions.export(w.lab, w.objects, provider_org_id=NEMO, dataset_ref=got.dataset_ref,
+                        export_id=rid(0xe3), now=w.now, ttl_s=3600))
+    run(lineage._stone(w.objects, NEMO, run(lineage.trace_of(          # P1/P2's shape
+        w.objects, provider_org_id=NEMO, sample_id=a)), "grant_not_current", w.now))
+    assert permitted(w, got.dataset_ref) == {b, c, d}
+    run(w.delete(GRANTOR, requests[1]))
+    assert run(lineage.tombstone(w.objects, provider_org_id=NEMO, grantor_org_id=GRANTOR,
+                                 request_id=requests[1], reason="deleted", at=w.now)) == \
+        {"tombstoned": 1, "more": False}                                 # composition's push
+    assert permitted(w, got.dataset_ref) == {c, d}
+    w.directory.restrictions = w.lab.restrictions      # PgAccessStore: 0041 by `_connect`
+    w.revoke(GRANTOR)
+    report = run(lineage.reconcile(w.directory, w.retention, w.objects,  # the worker's shape
+                                   provider_org_id=NEMO))
+    assert {t["sample_id"]: t["reason"] for t in report["tombstoned"]} == {
+        a: "grant_not_current", b: "deleted", c: "grant_not_current", d: "grant_not_current"}
+    assert run(w.lab.restrictions.blocked(got.dataset_ref, provider_org_id=NEMO)) == {
+        a: "grant_not_current", b: "deleted", c: "grant_not_current", d: "grant_not_current"}
+    w.grant(GRANTOR, 0x91, *w.directory.grants[(GRANTOR, NEMO)].categories[2:])
+    assert permitted(w, got.dataset_ref) == set(), "a re-grant resurrected"
+
+    class Bare:                                        # P2's fake: no port, no connection
+        accessible_samples = w.lab.accessible_samples
+    assert run(lineage.permitted(Bare(), w.objects, got.dataset_ref, provider_org_id=NEMO,
+                                 purpose="provider_sharing", now=w.now)) == set()
+    evidence = run(lineage.export_evidence(w.objects, provider_org_id=NEMO,
+                                           export_id=rid(0xe3), now=w.now))
+    assert sorted(x["sample_id"] for x in evidence["affected"]) == sorted(ids.values())

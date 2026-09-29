@@ -14,6 +14,9 @@ import asyncio
 import hashlib
 import json
 import pathlib
+import re
+import uuid
+from datetime import UTC, datetime
 
 from infrx.contracts import errors
 from infrx.contracts.lab import records
@@ -48,8 +51,68 @@ async def chunks(data: bytes, size: int = 7):
         yield data[i:i + size]
 
 
+class FakeSampleRestrictions:
+    """0041's N3 half (`PgSampleRestrictions`) in memory: per (provider, sample id) one
+    permanent tombstone (the first reason stands) and one write-once content bound; `blocked`
+    and `permitted` read the dataset's samples on `clock` (0041's `infrx.now()`). The same
+    refusals: a non-UUID id or a reason outside `^[a-z][a-z_]{0,63}$` refuses the whole call
+    (`InvalidRequest`), another bound for a bounded sample `IdempotencyConflict`."""
+
+    def __init__(self, store: "FakeLabStore", clock=lambda: datetime.now(UTC)) -> None:
+        self.store, self.clock = store, clock
+        self.stones: dict[tuple[str, str], str] = {}
+        self.bounds: dict[tuple[str, str], datetime] = {}
+
+    @staticmethod
+    def _ids(ids) -> list[str]:
+        try:
+            return [str(uuid.UUID(i)) for i in ids]
+        except (ValueError, TypeError, AttributeError):
+            raise errors.InvalidRequest("a sample id is a UUID") from None
+
+    async def tombstone(self, sample_ids, *, provider_org_id: str, reason: str) -> list[str]:
+        ids = self._ids(sample_ids)
+        if not re.fullmatch(r"[a-z][a-z_]{0,63}", reason or ""):
+            raise errors.InvalidRequest("a tombstone names a reason word")
+        new = sorted({i for i in ids if (provider_org_id, i) not in self.stones})
+        self.stones.update({(provider_org_id, i): reason for i in new})
+        return new
+
+    async def bound(self, bounds: dict, *, provider_org_id: str) -> None:
+        pairs = dict(zip(self._ids(bounds), bounds.values()))
+        if any(self.bounds.get((provider_org_id, i), at) != at for i, at in pairs.items()):
+            raise errors.IdempotencyConflict("a sample already has another content bound")
+        for i, at in pairs.items():
+            self.bounds.setdefault((provider_org_id, i), at)
+
+    async def blocked(self, dataset_ref: str, *, provider_org_id: str) -> dict[str, str]:
+        try:
+            manifest = self.store.catalog.resolve(dataset_ref, provider_org_id=provider_org_id)
+        except errors.NotFound:
+            return {}
+        out = {}
+        for s in sorted(manifest.samples, key=lambda s: s.sample_id):
+            key = (provider_org_id, s.sample_id)
+            if key in self.stones:
+                out[s.sample_id] = self.stones[key]
+            elif key in self.bounds and self.clock() >= self.bounds[key]:
+                out[s.sample_id] = "content_expired"
+        return out
+
+    async def permitted(self, dataset_ref: str, *, provider_org_id: str,
+                        purpose: str = "provider_sharing") -> list[str]:
+        try:
+            allowed = await self.store.accessible_samples(
+                dataset_ref, provider_org_id=provider_org_id, purpose=purpose)
+        except errors.NotFound:                    # 0029: a foreign or unknown ref reads []
+            return []
+        denied = await self.blocked(dataset_ref, provider_org_id=provider_org_id)
+        return sorted(set(allowed) - set(denied))
+
+
 class FakeLabStore:
     def __init__(self) -> None:
+        self.restrictions = FakeSampleRestrictions(self)
         self.catalog = FakeLabCatalog()
         self.grants: dict[str, dict] = {}
         self.sources: dict[str, tuple[str, str]] = {}     # source id -> (ref, grant ref)

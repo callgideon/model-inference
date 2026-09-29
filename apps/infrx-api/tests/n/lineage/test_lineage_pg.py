@@ -13,6 +13,7 @@ mutants plus the recorded fail-first run in the N3 evidence.
 """
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from datetime import timedelta
@@ -27,6 +28,7 @@ from infrx.state import migrations
 from infrx.state.feedback import PgFeedbackService
 from infrx.state.jobstore import connector
 from infrx.state.lab_access import PgAccessStore
+from infrx.state.lab_content import PgSampleRestrictions
 from infrx.state.lab_data import PgLabDataStore
 from infrx.traces import ship
 from infrx.traces.retention import Retention
@@ -83,7 +85,8 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
     sample bound to the current grant, with its durable D6F row as a correction; a
     consumer-only user and a viewer are refused; after the real `lab_revoke_access_grant`
     the gate returns nothing, reconcile tombstones the sample, and a re-grant does not bring
-    it back."""
+    it back. The reconcile is the Lab worker's call, without `restrictions` (1-DS5-R1):
+    PgAccessStore's connection reaches 0041."""
     w, dsn = world, world.dsn
     directory = PgAccessStore(connector(dsn))
     access, store = LabAccess(directory), PgLabDataStore(connector(dsn))
@@ -129,10 +132,15 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
         "select grant_id::text from infrx.lab_access_grants where grantor_org_id = %s "
         "and recipient_provider_org_id = %s limit 1", (w.grantor, NEMO)).fetchone()[0]
     assert bound == [(grant_id, "train")]
+    assert w.conn.execute(
+        "select sample_id::text, content_until from infrx.lab_sample_bounds "
+        "where provider_org_id = %s", (NEMO,)).fetchall() == \
+        [(sample_id, now - timedelta(hours=1) + timedelta(days=90))
+         for sample_id in [run(store.resolve(got.dataset_ref,
+                                             provider_org_id=NEMO)).samples[0].sample_id]]
     view = run(lineage.status(store, w.objects, got.dataset_ref, provider_org_id=NEMO, now=now))
     [sample] = view["samples"]
     assert (sample["restricted"], sample["trace"]["request_id"]) == (None, w.request)
-    import json
 
     from infrx.datasets import imports
     manifest = run(store.resolve(got.dataset_ref, provider_org_id=NEMO))
@@ -149,7 +157,9 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
         "actor_user_id": l2.C1, "grantor_org_id": w.grantor,
         "recipient_provider_org_id": NEMO})
     assert gate() == set()
-    report = run(lineage.reconcile(directory, retention, w.objects, provider_org_id=NEMO))
+    restrictions = PgSampleRestrictions(connector(dsn))      # WR-N3-5: 0041 is the authority
+    report = run(lineage.reconcile(directory, retention, w.objects,   # the worker's shape
+                                   provider_org_id=NEMO))             # (1-DS5-R1)
     assert report["tombstoned"] == [{"sample_id": sample["sample_id"],
                                      "reason": "grant_not_current"}]
     l2.call(w.conn, "lab_put_access_grant", l2.scope(
@@ -157,3 +167,36 @@ def test_n3_pg_selection_revocation_and_tombstones(world) -> None:
     assert run(store.accessible_samples(got.dataset_ref, provider_org_id=NEMO,
                                         purpose="training")) == [sample["sample_id"]]
     assert gate() == set(), "a re-grant resurrected a tombstoned sample"
+    assert run(restrictions.blocked(got.dataset_ref, provider_org_id=NEMO)) == \
+        {sample["sample_id"]: "grant_not_current"}, "the tombstone never reached 0041"
+    assert run(restrictions.permitted(got.dataset_ref, provider_org_id=NEMO,
+                                      purpose="training")) == []
+
+
+def test_n3_pg_backfill_moves_object_restrictions_once(world) -> None:
+    """Oracle (WR-N3-5 on 0041): `backfill` moves object-era tombstones (their reason) and
+    trace-entry bounds into `lab_sample_tombstones`/`lab_sample_bounds`; a rerun stones
+    nothing new and replays the same bounds."""
+    from datetime import UTC, datetime
+
+    from infrx.media.store import InMemoryObjectStore
+    objects, a, b = InMemoryObjectStore(), str(uuid.uuid4()), str(uuid.uuid4())
+    until, base = datetime(2026, 12, 1, tzinfo=UTC), f"lab/{NEMO}/lineage"
+    for sid in (a, b):
+        objects.seed(f"{base}/samples/{sid}.json", json.dumps(
+            {"sample_id": sid, "content_until": until.isoformat()}).encode(), "application/json")
+    objects.seed(f"{base}/tombstones/{a}.json", json.dumps(
+        {"sample_id": a, "reason": "deleted"}).encode(), "application/json")
+    restrictions = PgSampleRestrictions(connector(world.dsn))
+
+    def move():
+        return run(lineage.backfill(objects, provider_org_id=NEMO, restrictions=restrictions))
+    assert move() == {"stones": 1, "tombstoned": 1, "bounded": 2}
+    assert move() == {"stones": 1, "tombstoned": 0, "bounded": 2}
+    assert world.conn.execute(
+        "select sample_id::text, reason from infrx.lab_sample_tombstones "
+        "where sample_id = any(%s::uuid[])", ([a, b],)).fetchall() == [(a, "deleted")]
+    assert sorted(world.conn.execute(
+        "select sample_id::text, content_until from infrx.lab_sample_bounds "
+        "where sample_id = any(%s::uuid[])", ([a, b],)).fetchall()) == \
+        sorted([(a, until), (b, until)])
