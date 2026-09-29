@@ -76,6 +76,9 @@ NO_STACK = "test_e6l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e6l_the_namespace_is_the_reserved_block"
 RERUN = "test_e6l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 R222 = "test_e6l_r222_accepts_only_a_not_run_out_of_local_scope"
+TRIPWIRE = "test_e6l_j10_fails_its_tripwire_once_the_lab_e2e_suite_exists"
+#: the lane's recorded final verdict, read by the R222 case (R234: accepted over its statuses)
+RECORDED = "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json"
 UNBOUND = tuple(re.findall(r"^def (test_j\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -119,9 +122,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("r222_in_scope_lane_excused", "a NOT RUN on in-scope work (L3's media path) stays open",
        R, 'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
        'return bool(entry["cases"]) and', R222),
-    _m("r222_out_of_scope_widened", "only the lab-e2e UI harness is out of scope for E6L", R,
-       'OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI"}',
-       'OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI", "L3": "GPU"}', R222),
+    _m("r222_out_of_scope_widened", "only R234's ruled classes are out of scope for E6L", R,
+       '"L3": "product WR: WR-E6L-J11"}', '"L3": "product WR: WR-E6L-J11", "B1": "GPU"}', R222),
     _m("r222_never_run_excused", "a scenario with no case run is open", R,
        'set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
        "set(lanes) <= set(OUT_OF_SCOPE) and", R222),
@@ -132,6 +134,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("r222_pass_is_open", "a PASS never keeps the gate from acceptance", R,
        'if entry["status"] != PASS and not excused(sid, entry)}',
        "if not excused(sid, entry)}", R222),
+    # coordinator wirings at the lab-evaluate-2 merge (R234/R235)
+    _m("r222_fail_excused_by_its_message", "an in-scope FAIL is never excused, whatever its "
+       "message says (WR-E6L-RV-1)", R, '        if entry["status"] != NOT_RUN:',
+       "        if False:", R222),
+    _m("r222_product_wr_dropped", "R234 (ii): j11 waiting on WR-E6L-J11 is out of local scope "
+       "(WR-E6L-SCOPE)", R, ', "L3": "product WR: WR-E6L-J11"}', "}", R222),
+    _m("j10_tripwire_disarmed", "j10 fails E6L-BIND once the lab-e2e suite exists "
+       "(WR-E6L-RV-2)", P, "    assert not suite.exists(),", "    assert True or suite.exists(),",
+       TRIPWIRE),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -310,6 +321,8 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(API_DIR / "infrx", root / "apps" / "infrx-api" / "infrx", ignore=junk)
     (root / "research" / "plan").mkdir(parents=True)
     shutil.copy2(REPO / "research" / "plan" / "tasks.json", root / "research" / "plan" / "tasks.json")
+    (root / RECORDED).parent.mkdir(parents=True)
+    shutil.copy2(REPO / RECORDED, root / RECORDED)
     return root
 
 

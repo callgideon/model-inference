@@ -3,7 +3,7 @@
  "lane": "lab-evaluate-2",
  "slice": "E6L final run under R222: make lab-evaluate on the tip after merge #42 + the 32 stack mutants on a kept e6l stack",
  "activity": "review",
- "head": "3d5ccf49 (code; evidence commit follows)",
+ "head": "8f1a017f (lane head; code 3d5ccf49)",
  "base": "8949ffb1",
  "worktree": ".claude/worktrees/codex-w5-lab-evaluate-2",
  "branch": "codex/w5-lab-evaluate-2",
@@ -13,7 +13,7 @@
  ],
  "commands": [
   {
-   "cmd": "make lab-evaluate (at 8949ffb1 via runner.py --keep)",
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --keep --out research/plan/evidence/e/E6L-raw-8949ffb/run-0-base (at 8949ffb1; a --keep run, not make lab-evaluate)",
    "exit": 1,
    "summary": "gate FAIL: j10 E6L-BIND tripwire (B4 + lab-api-2 merged); j11 NOT RUN[L3]"
   },

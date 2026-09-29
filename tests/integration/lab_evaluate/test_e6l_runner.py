@@ -63,17 +63,31 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert runner.SCENARIOS["j11"]["lanes"] == ["L3"]
 
 
-def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope():
+def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     """R222: the gate is accepted locally with no FAIL cell and every NOT RUN waiting only on
     out-of-local-scope work (a GPU, staging, an external provider, the lab-e2e UI harness),
     by its own NOT RUN reason. A NOT RUN on in-scope work (j11's L3 media path), a FAIL, or a
     scenario NOT RUN for another reason (deselected, a case absent) is left open."""
-    assert runner.OUT_OF_SCOPE == {"lab-e2e": "lab-e2e UI"}
+    assert runner.OUT_OF_SCOPE == {"lab-e2e": "lab-e2e UI", "L3": "product WR: WR-E6L-J11"}
     ui = "NOT RUN[lab-e2e] the UI; rerun after the merge: x --only j10"
-    base = [*(c for sid in runner.SCENARIOS if sid not in ("j10", "j11")
-              for c in everything(sid)), *everything("j10", "skipped", ui)]
+    others = [c for sid in runner.SCENARIOS if sid not in ("j10", "j11") for c in everything(sid)]
+    base = [*others, *everything("j10", "skipped", ui)]
     result = runner.classify(junit(*base, *everything("j11", "skipped", "NOT RUN[L3] media")))
-    assert runner.r222(result) == {"accepted": False, "open": {"j11": "NOT RUN"}}
+    assert runner.r222(result) == {"accepted": True, "open": {}}, "R234 (ii): WR-E6L-J11"
+    with monkeypatch.context() as patch:            # a NOT RUN on in-scope work stays open
+        patch.delitem(runner.OUT_OF_SCOPE, "L3")
+        assert runner.r222(result) == {"accepted": False, "open": {"j11": "NOT RUN"}}
+    # R234: an in-scope FAIL is never excused, whatever its message says (WR-E6L-RV-1)
+    result = runner.classify(junit(*others, *everything("j10", "failure", ui), *everything("j11")))
+    assert runner.r222(result) == {"accepted": False, "open": {"j10": "FAIL"}}
+    # the lane's recorded final verdict at 24a7a065 is accepted over its statuses (WR-E6L-SCOPE)
+    recorded = json.loads((REPO / "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json")
+                          .read_text())
+    statuses = {s["id"]: {k: s[k] for k in ("status", "cases", "reasons")}
+                for s in recorded["scenarios"]}
+    assert {sid: s["status"] for sid, s in statuses.items() if s["status"] != "PASS"} == \
+        {"j10": "NOT RUN", "j11": "NOT RUN"}
+    assert runner.r222(statuses) == {"accepted": True, "open": {}}
     result = runner.classify(junit(*base, *everything("j11")))
     assert runner.r222(result) == {"accepted": True, "open": {}}
     assert runner.gate(result) == "NOT RUN", "accepted is not a PASS"
@@ -83,6 +97,18 @@ def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope():
     assert "j10" in runner.r222(result)["open"], "every reason must be the lane's wait"
     result = runner.classify(junit(*base, *everything("j11", "failure", "AssertionError")))
     assert runner.r222(result)["open"] == {"j11": "FAIL"}
+
+
+
+def test_e6l_j10_fails_its_tripwire_once_the_lab_e2e_suite_exists(tmp_path, monkeypatch):
+    """WR-E6L-RV-2: once apps/lab/tests/e2e/evaluate/ exists, j10 fails E6L-BIND (it must be
+    bound) instead of staying NOT RUN[lab-e2e]."""
+    pending = _load("e6l_pending", "scenarios_pending.py")
+    (tmp_path / "apps" / "lab" / "tests" / "e2e" / "evaluate").mkdir(parents=True)
+    monkeypatch.setattr(pending.lw, "REPO", tmp_path)
+    with pytest.raises(BaseException) as caught:    # a skip (NOT RUN) is caught, and fails
+        pending.test_j10_the_provider_ui_launches_compares_and_cancels()
+    assert caught.type is AssertionError and "lab-e2e landed" in str(caught.value), caught
 
 
 def test_e6l_the_required_cases_are_exactly_what_the_scenario_modules_define():

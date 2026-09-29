@@ -141,9 +141,13 @@ REQUIRED = {
     "j10": ("test_j10_the_provider_ui_launches_compares_and_cancels",),
     "j11": ("test_j11_a_finite_video_case_reaches_the_dev_endpoint",),
 }
-#: R222: the lanes whose NOT RUN is outside local scope, with their reason class (a GPU,
-#: staging, an external provider, or the Lab browser harness for a UI leg).
-OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI"}
+#: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
+#: reason class (a GPU, staging, an external provider; R234 (i) `lab-e2e UI`: j10's browser
+#: leg, rerun `make lab-e2e` then `--only j10`; R234 (ii) `product WR`: j11 waits on
+#: WR-E6L-J11 (L3's media path, lane lab-eval-media), rerun
+#: `apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir>
+#: --only j11`). The gate is re-run when the dependency lands and the cell must then PASS.
+OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI", "L3": "product WR: WR-E6L-J11"}
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>j\d\d)_")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[")
@@ -219,6 +223,8 @@ def r222(result: dict) -> dict:
     scenario's own wait on out-of-local-scope lanes. `open` = what keeps it from acceptance."""
     def excused(sid: str, entry: dict) -> bool:
         lanes = SCENARIOS[sid]["lanes"]
+        if entry["status"] != NOT_RUN:        # R234: an in-scope FAIL is never excused
+            return False
         return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and \
             all(f"NOT RUN[{','.join(lanes)}]" in reason for reason in entry["reasons"])
     still = {sid: entry["status"] for sid, entry in result.items()
