@@ -63,6 +63,8 @@ REFUSED = "test_a_refused_completion_spools_nothing_and_raises_as_before"
 JOB_FAILS = "test_a_worker_capture_failure_never_fails_the_job"
 REMEMBER = "test_the_worker_remembers_a_bounded_number_of_jobs"
 JOB_CREDENTIAL = "test_an_async_jobs_record_holds_no_credential"
+HASH_GATEWAY = "test_large_inline_media_is_hashed_off_the_gateways_loop"
+HASH_WORKER = "test_large_inline_media_is_hashed_off_the_workers_loop"
 LOST_ACK = "test_a_job_whose_first_ack_is_lost_is_traced_once_when_the_retry_commits"
 LOST_REFUSED = "test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced"
 SHIP_BOTH = "test_the_gateway_ships_its_own_spool_and_every_finished_job_spool"
@@ -154,7 +156,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "                or request.execution_mode is ExecutionMode.async_:",
        "        if request.execution_mode is ExecutionMode.async_:", UNCONSENTED),
     _m("hook_no_request_half", "the record carries what was asked", C,
-       "            capture.add(request_line(request, self.token))\n",
+       "            capture.add(await asyncio.to_thread(request_line, request, self.token))\n",
        "            pass\n", SYNC, CREDENTIAL),
     _m("hook_no_answer_half", "the record carries the answer as sent", C,
        "                capture.add(scrub(message[\"body\"], self.token))",
@@ -264,6 +266,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("job_spool_in_the_gateways_directory", "job spools live under jobs/, never beside the "
        "gateway's segments", C, "Path(root) / JOBS_DIR, limits or DEFAULTS",
        "Path(root), limits or DEFAULTS", ASYNC_OUT),
+    # --- lens R9: inline media hashed off the event loop -------------------------------
+    _m("hook_hashes_on_the_loop", "the gateway builds a request line off its loop", C,
+       "            capture.add(await asyncio.to_thread(request_line, request, self.token))\n",
+       "            capture.add(request_line(request, self.token))\n", HASH_GATEWAY),
+    _m("job_hashes_on_the_loop", "the worker builds a request line off its loop", C,
+       "scrub_keys(await asyncio.to_thread(request_line, request))",
+       "scrub_keys(request_line(request))", HASH_WORKER),
     # --- lens R7: a lost terminal ack, then the runner's retry --------------------------
     _m("job_forgotten_on_a_lost_ack", "a lost ack keeps the attempt for the retry", C,
        "        except errors.DomainError:\n            self.open.pop(lease.job_id, None)\n",
@@ -274,8 +283,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except errors.DomainError:\n", LOST_REFUSED),
     # --- lens R8: the job record holds no credential -----------------------------------
     _m("job_credential_in_the_request", "the job record's request half holds no key", C,
-       "            capture.add(scrub_keys(request_line(request)))",
-       "            capture.add(request_line(request))", JOB_CREDENTIAL),
+       "            capture.add(scrub_keys(await asyncio.to_thread(request_line, request)))",
+       "            capture.add(await asyncio.to_thread(request_line, request))", JOB_CREDENTIAL),
     _m("job_credential_in_the_output", "the job record's output holds no key", C,
        "                capture.add(scrub_keys(text.encode()))",
        "                capture.add(text.encode())", JOB_CREDENTIAL),

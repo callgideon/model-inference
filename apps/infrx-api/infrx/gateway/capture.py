@@ -160,7 +160,10 @@ def scrub_keys(data: bytes) -> bytes:
 
 
 def request_line(request, token: bytes = b"") -> bytes:
-    """The request half of a record: what the caller asked, redacted, one line of JSON."""
+    """The request half of a record: what the caller asked, redacted, one line of JSON.
+    Callers on an event loop run it in a thread (lens R9: inline media up to 96 MiB is
+    hashed here). ponytail: every request line takes the thread hop, not only one over
+    1 MiB; a size check first when a measured hop cost matters."""
     document = {"request_id": request.request_id, "model": request.model_revision,
                 "messages": redacted(list(request.messages)),
                 "parameters": redacted(dict(request.parameters))}
@@ -195,7 +198,7 @@ class Captured(Response):
         try:
             capture = self.sink.open(request.request_id, request.org_id,
                                      request.trace_policy.trace_mode, request.deadline_at)
-            capture.add(request_line(request, self.token))
+            capture.add(await asyncio.to_thread(request_line, request, self.token))
         except Exception:                        # noqa: BLE001 - never the request's error
             log.warning("trace capture of %s failed", request.request_id, exc_info=True)
             return await self.inner(scope, receive, send)
@@ -365,7 +368,7 @@ class JobCapture:
         try:
             capture = sink.open(request.request_id, request.org_id,
                                 request.trace_policy.trace_mode, request.deadline_at)
-            capture.add(scrub_keys(request_line(request)))
+            capture.add(scrub_keys(await asyncio.to_thread(request_line, request)))
             if text:
                 capture.add(scrub_keys(text.encode()))
             await capture.finish(envelope(request, capture, self.limits, text is not None))

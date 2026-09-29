@@ -659,6 +659,55 @@ def test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced(tmp_path):
     assert job_spools(tmp_path) == [] and runner.jobs.open == {}
 
 
+def with_large_media(request):
+    """`request` with one inline part over 1 MiB (2 MiB of base64)."""
+    url = "data:video/mp4;base64," + "A" * (2 << 20)
+    part = {"type": "video_url", "video_url": {"url": url}}
+    return request.model_copy(update={"messages": ({"role": "user", "content": [part]},)})
+
+
+def hashed_on_the_loop(monkeypatch) -> list:
+    """`capture`'s sha256, recording per digest (size, whether it ran on an event loop's
+    thread - the loop every other request or lease is served on)."""
+    import hashlib
+    seen = []
+
+    def sha256(data=b""):
+        seen.append((len(data), asyncio._get_running_loop() is not None))
+        return hashlib.sha256(data)
+    monkeypatch.setattr(capture, "hashlib", SimpleNamespace(sha256=sha256))
+    return seen
+
+
+def test_large_inline_media_is_hashed_off_the_gateways_loop(tmp_path, monkeypatch):
+    """Oracle (lens R9, merge #54): a > 1 MiB inline part hashed on the event loop (up to
+    96 MiB of sha256 blocks every request the gateway is serving meanwhile)."""
+    client, composed, calls = gateway(tmp_path / "g", TraceMode.full)
+    client.post(support.CHAT_PATH, headers=support.AUTH, json=said("describe the van"))
+    request = with_large_media(calls[0])
+    seen = hashed_on_the_loop(monkeypatch)
+
+    async def sent(message):
+        pass
+    run(composed.response(JSONResponse(ANSWER), request, support.AUTH)({"type": "http"},
+                                                                       None, sent))
+    assert [on_loop for size, on_loop in seen if size > 1 << 20] == [False], seen
+    content = spooled(tmp_path / "g", composed).contents[-1]       # after the posted one's
+    assert b"data-sha256:" in content and b"AAAA" not in content
+
+
+def test_large_inline_media_is_hashed_off_the_workers_loop(tmp_path, monkeypatch):
+    """Oracle (R9): the worker's job record hashing a > 1 MiB part on its event loop (the
+    loop that heartbeats every running attempt's lease)."""
+    request = with_large_media(admitted(tmp_path, TraceMode.full))
+    seen = hashed_on_the_loop(monkeypatch)
+    worked(tmp_path, request)
+    assert [on_loop for size, on_loop in seen if size > 1 << 20] == [False], seen
+    [spool] = job_spools(tmp_path)
+    [content] = recover(spool).contents
+    assert b"data-sha256:" in content and b"AAAA" not in content
+
+
 def test_the_worker_remembers_a_bounded_number_of_jobs(tmp_path):
     """Oracle: an attempt that never completes (killed, lease lost) held for ever."""
     request = admitted(tmp_path, TraceMode.full)
