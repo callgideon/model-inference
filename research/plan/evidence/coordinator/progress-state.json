@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 305,
- "updated": "2026-09-29T17:39:14Z",
+ "revision": 306,
+ "updated": "2026-09-29T17:41:54Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8959,11 +8959,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T14:59:31Z",
-   "updated": "2026-09-29T17:25:03Z",
+   "updated": "2026-09-29T17:41:54Z",
    "blocker": null,
-   "next_action": "merge batch #52 (0054 minors, R246–R248) → lab-rollout-6 (WR-LIVE-K09) after lab-rollout-5 merges; composition-7 (WR-LIVE-DECIDE/PAGE)",
+   "next_action": "lab-rollout-6 binds the k09 breach half; composition-7 lands WR-LIVE-DECIDE/PAGE",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 8,
@@ -9123,22 +9123,22 @@
   {
    "id": "W5-MERGE-52",
    "task": null,
-   "slice": "merge batch #52 (Opus): lab-live 6aae4bbc (+0054 minors: terminal-only units, bool_and health, customer-caused failures excluded, index; R246–R248); workflow wf_cc3c2b59-04b",
+   "slice": "merge batch #52 (Opus): lab-live 6aae4bbc (+0054 minors: terminal-only units, bool_and health, customer-caused failures excluded, index; R246–R248); workflow wf_cc3c2b59-04b; integrated (R246–R248 sorted before R249; 0054 LOCAL-ONLY on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-52",
    "worktree": ".claude/worktrees/codex-w5-merge-52",
    "base": "1c63776d",
-   "head": null,
+   "head": "63ff03cb",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T17:25:03Z",
-   "updated": "2026-09-29T17:25:03Z",
+   "updated": "2026-09-29T17:41:54Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → 0054 LOCAL-ONLY on the tip",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9185,6 +9185,76 @@
     "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
     "research/plan/08-contracts-v1-encoding.md",
     "research/plan/evidence/e/E8L-c581c59.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-ROLLOUT-6",
+   "task": "E8L",
+   "slice": "WR-LIVE-K09 (the k09 breach half over 0054 Live) + WR-LR5-1 (the e2e rollout suite drops its journey stand-ins → k10-ui-composed) + the RV-3 real-stack run; make lab-rollout: only k08 NOT RUN (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-rollout-6",
+   "worktree": ".claude/worktrees/codex-w5-lab-rollout-6",
+   "base": "6ee21d2f",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T17:41:54Z",
+   "updated": "2026-09-29T17:41:54Z",
+   "blocker": null,
+   "next_action": "handback → merge → E8L: every local cell PASS",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_rollout/",
+    "apps/lab/tests/e2e/rollout/",
+    "research/plan/evidence/e/E8L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-COMPOSITION-7",
+   "task": "I7",
+   "slice": "WR-LIVE-DECIDE (expansion approval on R2's expand verdict), WR-LIVE-PAGE (/lab/v1/releases progress from Live), WR-LR5-3 refusal (one plan location), WR-LEM-R3 (media refusal names into D7); every switch OFF; E4 (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-composition-7",
+   "worktree": ".claude/worktrees/codex-w5-composition-7",
+   "base": "6ee21d2f",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T17:41:54Z",
+   "updated": "2026-09-29T17:41:54Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/workers/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/evaluation/runner/",
+    "apps/infrx-api/tests/w/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "apps/infrx-api/tests/b/runner/",
+    "research/plan/evidence/coordinator/COMPOSITION-7-*"
    ],
    "wiring_requests": []
   }
