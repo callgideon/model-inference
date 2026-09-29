@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 292,
- "updated": "2026-09-29T13:12:28Z",
+ "revision": 293,
+ "updated": "2026-09-29T13:14:34Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8356,22 +8356,22 @@
   {
    "id": "W5-LAB-E2E",
    "task": null,
-   "slice": "(wave5 LW6 lane lab-e2e, Opus) one Lab browser/route e2e harness under apps/lab/tests/e2e binding the four gates' UI cells: E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; `make lab-e2e`; base 073c58fe; workflow wf_a9a9b058-dda",
+   "slice": "(wave5 LW6 lane lab-e2e, Opus) one Lab browser/route e2e harness under apps/lab/tests/e2e binding the four gates' UI cells: E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; `make lab-e2e`; base 073c58fe; workflow wf_a9a9b058-dda; ACCEPT_WITH_FIXES at 123f9736 (make lab-e2e 24/24; o10 PASS, i08-UI PASS on the merged tip; j10 NOT RUN[WR-B4-2/WR-LAB2-2/WR-B3-1], k10-UI NOT RUN[WR-R4-2])",
    "agent": "opus",
    "branch": "codex/w5-lab-e2e",
    "worktree": ".claude/worktrees/codex-w5-lab-e2e",
    "base": "073c58fe",
-   "head": null,
+   "head": "123f9736",
    "isolation": {
     "ports": "l4 57503; the gate stacks via their runners",
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T10:25:45Z",
-   "updated": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T13:14:34Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge → the four UI cells",
+   "next_action": "merge batch #48 (conflict resolution vs #45, WR-LE2E-1/2, R238) → o10/i08-UI PASS recorded; j10/k10-UI NOT RUN[product WR]",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 7,
@@ -8774,6 +8774,41 @@
     "apps/infrx-api/infrx/lab/control/",
     "apps/infrx-api/infrx/gateway/routes/lab_datasets.py",
     "research/plan/evidence/l/LAB-CONTROL-ROUTES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-48",
+   "task": null,
+   "slice": "merge batch #48 (Opus): lab-e2e 123f9736 (+conflict resolution vs #45 in lab_evaluate, WR-LE2E-1/2, R238)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-48",
+   "worktree": ".claude/worktrees/codex-w5-merge-48",
+   "base": "31231785",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T13:14:34Z",
+   "updated": "2026-09-29T13:14:34Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10: R236–R237 from #47, R238) → E5L o10 / E7L i08-UI PASS on the tip",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_evaluate/",
+    "tests/integration/lab_improve/scenarios_surface.py",
+    "Makefile",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/e/LAB-E2E-2299b82.md"
    ],
    "wiring_requests": []
   }
