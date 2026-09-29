@@ -44,7 +44,7 @@ shared.compile = lambda source, filename, mode, *a, **k: (
     compile(source, filename, mode, *a, **k) if str(filename).endswith(".py") else None)
 
 L = "tests/integration/lab_observe/"
-R, W = L + "runner.py", L + "observe_world.py"
+R, W, TRACE_L1 = L + "runner.py", L + "observe_world.py", L + "scenarios_trace.py"
 OBS, UNITS = "infra/lab/observe/", "apps/infrx-api/deploy/lab/observe/"
 JUDGE_UNIT, GAUGES_UNIT = UNITS + "infrx-lab-judge.service", UNITS + "infrx-lab-trace-gauges.service"
 TIMER, MANIFEST = UNITS + "infrx-lab-trace-gauges.timer", OBS + "observe.json"
@@ -86,6 +86,8 @@ RERUN_CUT = "test_e5l_o01s_recorded_reason_keeps_its_rerun_inside_the_cut"
 VERDICT = "test_e5l_the_verdict_carries_r222_and_each_scenarios_scope"
 #: the recorded bd13f72 verdict the R222 case reads (o10 NOT RUN[LAB-E2E], o01 on COMPOSITION)
 RECORDED = "research/plan/evidence/e/E5L-raw-bd13f72/gate/verdict.json"
+#: the recorded df837faf verdict (o01 NOT RUN[WR-C6-CAPTURE], accepted on its own lanes)
+RECORDED_DF = "research/plan/evidence/e/E5L-raw-df837faf/verdict.json"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- I2L-OBS packaging
@@ -180,8 +182,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("a_required_case_renamed", "the required cases are the modules' cases", R,
        '    "o08": ("test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled",),',
        '    "o08": ("test_o08_a_timed_out_submit",),', REQUIRED),
-    _m("a_lane_undeclared", "a scenario waiting on a lane declares it", R,
-       '"lanes": ["WR-C6-CAPTURE"]}', '"lanes": []}', LANES),
+    _m("a_lane_undeclared", "a scenario declares exactly the lanes it waits on (o01 bound "
+       "by WR-C6-CAPTURE)", R, '"TRACE-TENANT"], "lanes": []}',
+       '"TRACE-TENANT"], "lanes": ["COMPOSITION"]}', LANES),
+    _m("o01_still_excused", "a bound o01 waits on nothing: its NOT RUN is in scope, open", R,
+       '"TRACE-TENANT"], "lanes": []}', '"TRACE-TENANT"], "lanes": ["WR-C6-CAPTURE"]}',
+       R222, LANES),
+    _m("o01_rebound_to_a_not_run", "o01's switch case runs on the stack, never skips", TRACE_L1,
+       "        spool = capture_on(trip, workdir)",
+       '        ow.not_run("o01", "WR-C6-CAPTURE", why="x")\n'
+       "        spool = capture_on(trip, workdir)",
+       UNBOUND, LANES),
     _m("another_namespace", "e5l runs in its own reserved block", R,
        'NAMESPACE = "e5l"', 'NAMESPACE = "e3l"', NAMESPACE),
     _m("judge_fake_on_the_gateway_port", "the judge fake has a port of its own", W,
@@ -277,6 +288,8 @@ OWORLD = "../../tests/integration/lab_observe/observe_world.py"
 
 O01_OFF = "test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace"
 O01_SHIP = "test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it"
+O01_ON = "test_o01_capture_turned_on_through_the_composition_switch"         # WR-C6-CAPTURE
+CAPTURE = "infrx/gateway/capture.py"
 O02 = "test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once"
 O03 = "test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant"
 O04_DEFAULT = "test_o04_the_default_dry_run_mode_sends_nothing"
@@ -297,7 +310,12 @@ J3 = "infrx/judge/calibration/report.py"
 #: Cases that FAIL on this base (a product finding, recorded in the evidence): no mutant can
 #: name them (the pristine baseline refuses a failing case), so coverage lists them here and
 #: `test_every_case_is_covered_by_a_mutant` holds the list to exactly the failing ones.
-KNOWN_FAIL: dict[str, str] = {}   # E5L-F1 fixed by WR-OBS-3 (J2 reads through Retention)
+# E5L-F1 fixed by WR-OBS-3 (J2 reads through Retention)
+KNOWN_FAIL: dict[str, str] = {
+    "test_o01_an_async_jobs_shipped_record_holds_no_caller_token":
+        "R8 (lab-capture-2): JobCapture.spool writes request_line(request) without the "
+        "caller's token, so an echoed bearer token reaches the shipped async record "
+        "(WR-LO4-RV1)"}
 
 STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_capture_on_in_the_box", "the drill judges capture off with the box at its defaults",
@@ -305,6 +323,14 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "    with world.composed(workdir, start=start, **{'TRACE_SPOOL_DIR': str(workdir), **env}) "
        "as trip:",
        O01_OFF),
+    _m("st_capture_switch_ignored", "TRACE_PUMPS on composes the gateway's capture", CAPTURE,
+       "if settings.deployment.trace_pumps else {}", "if False else {}", O01_ON),
+    _m("st_capture_key_opt_in_ignored", "a key that never opted in leaves no trace", CAPTURE,
+       "    mode = min(TraceMode(key_mode or TraceMode.off), TraceMode(org_mode), key=ORDER.index)",
+       "    mode = TraceMode(org_mode)", O01_ON),
+    _m("st_capture_scrub_off", "an echoed bearer token is redacted in the shipped sync record "
+       "(WR-LO4-RV1; HM1)", CAPTURE,
+       "    return data.replace(token, REDACTED) if token else data", "    return data", O01_ON),
     _m("st_ship_without_pins", "a shipped row carries the pins PostgreSQL admitted", SHIP,
        "serving_version_id=pins.serving_version_id if pins else None,",
        "serving_version_id=None,", O01_SHIP),
@@ -407,8 +433,9 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(REPO / wiring, root / wiring)
     (root / "research" / "plan").mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO / "research" / "plan" / "tasks.json", root / "research" / "plan" / "tasks.json")
-    (root / RECORDED).parent.mkdir(parents=True)
-    shutil.copy2(REPO / RECORDED, root / RECORDED)
+    for recorded in (RECORDED, RECORDED_DF):
+        (root / recorded).parent.mkdir(parents=True)
+        shutil.copy2(REPO / recorded, root / recorded)
     return root
 
 

@@ -1,0 +1,128 @@
+{
+ "task": "E5L",
+ "slice": "lab-observe-4: o01 bound over the capture seam (WR-LC-O01), stack mutants, final make lab-observe; fix round WR-LO4-RV1 (token oracle on the shipped record; async echo case red on R8)",
+ "activity": "review",
+ "head": "a183f1fd",
+ "worktree": ".claude/worktrees/codex-w5-lab-observe-4",
+ "branch": "codex/w5-lab-observe-4",
+ "owned_paths": [
+  "tests/integration/lab_observe/**",
+  "research/plan/evidence/e/E5L-*"
+ ],
+ "commands": [
+  {
+   "cmd": "pytest tests/integration/lab_observe/test_e5l_runner.py (base be6b2fde + new tests)",
+   "exit": 1,
+   "summary": "RED: 3 failed / 16 passed"
+  },
+  {
+   "cmd": "pytest tests/integration/lab_observe/test_e5l_runner.py test_i2l_obs.py",
+   "exit": 0,
+   "summary": "32 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py -k 'not stack_mutant'",
+   "exit": 0,
+   "summary": "73 passed (layer-1 mutants killed + well_formed + every_case + self-tests)"
+  },
+  {
+   "cmd": "runner.py --out <dir> --only o01",
+   "exit": 3,
+   "summary": "o01 PASS 3/3 (46.6 s); others not selected"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e5l pytest test_mutants.py -k stack_mutant (kept e5l)",
+   "exit": 0,
+   "summary": "22/22 stack mutants killed incl. st_capture_on_in_the_box, st_capture_switch_ignored, st_capture_key_opt_in_ignored; stack torn down"
+  },
+  {
+   "cmd": "make lab-observe",
+   "exit": 0,
+   "summary": "gate PASS: 18 PASS / 0 FAIL / 0 NOT RUN; o01..o10 PASS; r222 accepted, open {}"
+  },
+  {
+   "cmd": "pytest tests/integration/lab_observe/test_e5l_runner.py test_i2l_obs.py (fix round, d43057b3)",
+   "exit": 0,
+   "summary": "32 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest test_mutants.py -k 'not stack_mutant' (d43057b3)",
+   "exit": 0,
+   "summary": "73 passed"
+  },
+  {
+   "cmd": "runner.py --keep --only o01 (d43057b3)",
+   "exit": 1,
+   "summary": "o01 FAIL: off/ship/switch PASS (sync echo redacted); async echo case FAIL on R8 (token in the shipped request line)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e5l pytest test_mutants.py -k stack_mutant (kept e5l, d43057b3)",
+   "exit": 0,
+   "summary": "23/23 killed incl. st_capture_scrub_off (HM1); stack torn down"
+  },
+  {
+   "cmd": "make lab-observe (a183f1fd)",
+   "exit": 2,
+   "summary": "gate FAIL: 18 PASS / 1 FAIL / 0 NOT RUN; o01 FAIL (async echo, R8), o02..o10 PASS; r222 accepted false, open {o01: FAIL}"
+  }
+ ],
+ "gate": {
+  "verdict": "FAIL",
+  "exit": 1,
+  "head": "a183f1fd",
+  "tally": {
+   "PASS": 18,
+   "FAIL": 1,
+   "NOT RUN": 0
+  },
+  "cells": {
+   "TRACE-BOUNDS": "FAIL",
+   "TRACE-RECOVER": "PASS",
+   "TRACE-TENANT": "FAIL",
+   "FEEDBACK-ACK": "PASS",
+   "JUDGE-BUDGET": "PASS",
+   "JUDGE-SCORES": "PASS",
+   "LAB-ACCESS": "PASS",
+   "CONSOLE-FLOWS": "PASS"
+  },
+  "r222": {
+   "accepted": false,
+   "open": {
+    "o01": "FAIL"
+   }
+  }
+ },
+ "estimate": {
+  "optimistic_h": 0,
+  "likely_h": 0.1,
+  "pessimistic_h": 0.5,
+  "confidence": "high",
+  "basis": "lane work done; the o01 FAIL is lab-capture-2's R8; gate rerun after its merge ~5 min (274 s here)",
+  "at": "2026-09-29T21:40Z"
+ },
+ "blockers": [
+  "R8 (lab-capture-2): JobCapture.spool writes the async request line without the caller's token; o01's async echo case is red until it merges (or the coordinator rules the async token oracle deferred)"
+ ],
+ "wiring_requests": [
+  "WR-LO4-R8 (lab-capture-2): scrub the caller's bearer token from the async job's request line (JobCapture has no token today); oracle: test_o01_an_async_jobs_shipped_record_holds_no_caller_token"
+ ],
+ "open_issues": [
+  "R8 now exercised at gate level: o01 FAIL (async echo case, request line only)",
+  "R7 (lost-ack retry untraced) stays with lab-capture-2; o01 does not exercise it",
+  "Proposed ruling (unnumbered): E5L accepted only after R8 merges, or the coordinator defers the async token oracle to lab-capture-2"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E5L-c25405c.md",
+  "research/plan/evidence/e/E5L-raw-c25405cc/",
+  "research/plan/evidence/e/E5L-raw-lo4/",
+  "research/plan/evidence/e/E5L-raw-a183f1fd/",
+  "research/plan/evidence/e/E5L-raw-lo4/fix/"
+ ],
+ "findings": [
+  {
+   "id": "0-LO4-RV1",
+   "fixed": true,
+   "note": "token oracle moved to the shipped record with an echoed token; sync green + st_capture_scrub_off killed; async red on R8 (honest FAIL)"
+  }
+ ]
+}

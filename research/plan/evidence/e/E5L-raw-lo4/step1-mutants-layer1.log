@@ -1,0 +1,5 @@
+.......................................................................s [ 75%]
+sssssssssssssssssssss..                                                  [100%]
+=========================== short test summary info ============================
+SKIPPED [22] tests/integration/lab_observe/test_mutants.py:86: NOT RUN: no kept infrx-e5l stack: run tests/integration/lab_observe/runner.py --keep first (the same INFRX_E5L_PROJECT)
+73 passed, 22 skipped in 95.45s (0:01:35)

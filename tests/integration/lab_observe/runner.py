@@ -63,7 +63,7 @@ JUDGE_LABEL = ("dry-run: J2's local judge fake on 127.0.0.1 and J2's in-memory D
 SCENARIOS = {
     "o01": {"title": "capture -> ship -> search: off by default; a captured request ships once "
                      "with its pins; only its org finds it; capture on via the switch",
-            "test_ids": ["TRACE-BOUNDS", "TRACE-TENANT"], "lanes": ["WR-C6-CAPTURE"]},
+            "test_ids": ["TRACE-BOUNDS", "TRACE-TENANT"], "lanes": []},
     "o02": {"title": "feedback acknowledged after commit, owned by its key, projected once",
             "test_ids": ["FEEDBACK-ACK"], "lanes": []},
     "o03": {"title": "Lab review: a provider reads a grantor's trace only under a current grant, "
@@ -89,7 +89,8 @@ SCENARIOS = {
 REQUIRED = {
     "o01": ("test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace",
             "test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it",
-            "test_o01_capture_turned_on_through_the_composition_switch"),
+            "test_o01_capture_turned_on_through_the_composition_switch",
+            "test_o01_an_async_jobs_shipped_record_holds_no_caller_token"),
     "o02": ("test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once",),
     "o03": ("test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant",
             "test_o03_the_lab_traces_route_through_the_real_gateway"),
@@ -107,11 +108,10 @@ REQUIRED = {
     "o10": ("test_o10_the_lab_review_panel_renders_the_routes_answer",),
 }
 #: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
-#: class (as lab_evaluate's runner). R234 (ii) `product WR`: o01's "capture on through the
-#: switch" waits on WR-C6-CAPTURE (COMPOSITION-6: the gateway has no capture seam and no consent
-#: source), rerun `apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out
-#: <dir> --only o01`. R234 (i) `lab-e2e UI`: kept only for the recorded bd13f72 verdict, whose o10
-#: waited NOT RUN[LAB-E2E]; o10 is bound through apps/lab/tests/e2e/gate.py (R238).
+#: class (as lab_evaluate's runner). Both are kept only to judge recorded verdicts on their own
+#: lanes: R234 (ii) `product WR` for df837faf's o01, which waited on WR-C6-CAPTURE (bound since
+#: merge #54: no scenario declares it now); R234 (i) `lab-e2e UI` for bd13f72's o10, which waited
+#: NOT RUN[LAB-E2E] (bound through apps/lab/tests/e2e/gate.py, R238).
 OUT_OF_SCOPE = {"LAB-E2E": "lab-e2e UI", "WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>o\d\d)_")

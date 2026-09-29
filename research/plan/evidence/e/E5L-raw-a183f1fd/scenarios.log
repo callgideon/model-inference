@@ -1,0 +1,43 @@
+..........F........                                                                                                                                                                                                                                                                                                                                                                                      [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+_________________________________________________________________________________________________________________________________________________________________________ test_o01_an_async_jobs_shipped_record_holds_no_caller_token __________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-4/research/plan/evidence/e/E5L-raw-a183f1fd/cases/test_o01_an_async_jobs_shipped_record_holds_no_caller_token')
+
+    def test_o01_an_async_jobs_shipped_record_holds_no_caller_token(workdir):
+        """The async half of WR-LO4-RV1: alpha's job prompt echoes its own token; the worker's
+        job spool (JobCapture) is shipped by the gateway, and the record holds the redaction,
+        never the token. Known FAIL on this base: R8 (lab-capture-2) - `JobCapture.spool` writes
+        `request_line(request)` without the caller's token (mutants.KNOWN_FAIL)."""
+        with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:
+            alpha = trip.world.alpha
+            capture_on(trip, workdir)
+            request_id = ow.served(trip, alpha, "o01-echo", messages=echoing(alpha))
+            retention = trip.traces.retention
+            world.wait_for(lambda: run(retention.find_traces(alpha.org_id, request_id)), 60.0,
+                           "the gateway's ship pass")
+>           holds_no_token(trip, alpha, request_id, "async")
+
+tests/integration/lab_observe/scenarios_trace.py:143: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+trip = <pilotbox.Journey object at 0x7b59a9b2d160>, tenant = Tenant(name='alpha', user_id='65b2030a-9c00-48bd-b26e-87b18ecff56e', org_id='2a9a1d4d-91b8-4478-b42c-0b9c6f0cdd3c', ke...ccountView=PgAccountView, WalletDirectory=PgWalletDirectory, CatalogDirectory=PgCatalogDirectory, JobStore=PgJobStore'), request_id = '446c87d5-e71b-4be2-8d24-c64fc401552b', half = 'async'
+
+    def holds_no_token(trip, tenant, request_id: str, half: str) -> None:
+        """The shipped record of `request_id` holds the redaction and never the caller's token.
+        The failure names the half and the byte class, never the token (no assertion rewrite
+        over the bytes)."""
+        from infrx.gateway.capture import REDACTED
+        content = run(trip.traces.retention.read_content(tenant.org_id, request_id))
+        request_part, _, answer_part = content.partition(b"\n")
+        token = tenant.secret.encode()
+        where = [name for name, part in (("request line", request_part),
+                                         ("answer", answer_part)) if token in part]
+>       assert not where, f"{half}: the caller's bearer token in the shipped record's {where}"
+E       AssertionError: async: the caller's bearer token in the shipped record's ['request line']
+E       assert not ['request line']
+
+tests/integration/lab_observe/scenarios_trace.py:95: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o01_an_async_jobs_shipped_record_holds_no_caller_token - AssertionError: async: the caller's bearer token in the shipped record's ['request line']
+1 failed, 18 passed in 238.12s (0:03:58)
