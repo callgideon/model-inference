@@ -9157,7 +9157,7 @@
   {
    "id": "W5-MERGE-53",
    "task": null,
-   "slice": "merge batch #53 (Opus): lab-rollout-5 bd257bfa (+RV-2/RV-3 cases, WR-LR5-3 runbook rule, evidence minors, R249)",
+   "slice": "merge batch #53 (Opus): lab-rollout-5 bd257bfa (+RV-2/RV-3 cases, WR-LR5-3 runbook rule, evidence minors, R249); workflow wf_b5775e74-ee4",
    "agent": "opus",
    "branch": "codex/w5-merge-53",
    "worktree": ".claude/worktrees/codex-w5-merge-53",
