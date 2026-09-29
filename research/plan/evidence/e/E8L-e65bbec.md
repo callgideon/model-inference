@@ -394,3 +394,47 @@ time over D9's Live and the B2 report (WR-LR6-VERDICT)".
   at e65bbecf: k01-k07, k09, k10 PASS, k08 NOT RUN[P-08], r222 accepted. E4 2840/0 on r2.
   Found: the unit login's missing `lab_release_live` grant (pre-existing, WR-LR7-GRANT).
   Local only.
+
+## Fix round (0-LR7-RV-1, head 32e52c7f)
+
+**Finding.** The verdict reads B4's `lab_experiments` (through `release_report`) and the page's
+progress reads 0054's `lab_release_live`. Neither is granted to `infrx_lab_control`. No test ran
+the page on that login, because every PG case connected as the superuser DSN.
+
+**What this lane landed (owned paths only).** A new case, `test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict`
+in `tests/g/lab_releases/test_lab_releases_composition_pg.py`, on r2:
+- It sets up a running release with one assigned healthy candidate job, then reads the page
+  twice: first on the owner DSN, then on `infrx_lab_control` with `connector(dsn, set_role=False)`,
+  which is how `infrx/lab/control/app.py` composes it.
+- It asserts that the owner page shows progress and a non-null `hold` verdict, and that the
+  unit's page equals the owner's.
+- It is marked `xfail(strict=True)` on WR-LR7-GRANT. After the grant lands, the case XPASSes,
+  and strict mode turns that into a failure. That failure forces the marker to be dropped.
+  This makes the case the grant seam's test.
+
+**Proof** (raw files in `E8L-raw-lr7/fix-round/`; the scratch plugins `wr_lr7_grant_plugin.py`
+and `diag_plugin.py` only apply the grant to the task-local r2 world or print the refusal's
+text; they are not suites):
+
+| run | result |
+|---|---|
+| `--runxfail`, no grant (`unit-login-runxfail-red.log`) | 1 failed: 503, `permission denied for function lab_release_live` |
+| `--runxfail`, grant on `lab_release_live` only (`unit-login-live-grant-only-runxfail.log`) | 1 failed: 503, `permission denied for function lab_experiments`. The verdict's own seam. |
+| `--runxfail`, WR-LR7-GRANT as filed (`unit-login-with-wr-lr7-grant-runxfail.log`) | 3 passed: the unit's page equals the owner's |
+| strict, WR-LR7-GRANT applied (`unit-login-with-wr-lr7-grant-strict.log`) | 1 failed (XPASS strict): the marker must go |
+| `INFRX_D_TASK=r2 pytest tests/g/lab_releases` (`lab-releases-r2.log`) | 31 passed, 1 xfailed |
+| `INFRX_MUTANTS=all … tests/g/lab_releases/test_mutants.py` (`lab-releases-mutants.log`) | 51 passed, 0 survivors |
+| **E4** `INFRX_D_TASK=r2 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py` (`e4-r2.log`) | **2840 passed, 26 skipped, 1 xfailed** (floor 2831) |
+
+**Not changed, on purpose.** `ReleaseRecords.verdict` still lets an `InsufficientPrivilege` from
+`release_report` answer 503. It does not degrade that to a null verdict. A missing grant is a
+composition fault, and a null would hide it, which is what R257 forbids. The null stays reserved
+for R244 and R248.
+
+**Still open, outside this lane's paths.**
+- WR-LR7-GRANT is unchanged. It is proven sufficient and necessary for both functions by the
+  runs above.
+- WR-LR7-I-OPT is also still open.
+- Coordinator: keep `LAB_RELEASES` OFF on the unit until `INFRX_D_TASK=l4 pytest
+  tests/i/lab_control/test_control_routes_pg.py` is 2/2 and this case's marker is dropped.
+- No new mutant: the seam is a grant (SQL), not code in `pilot.py`. The strict XPASS is the kill.

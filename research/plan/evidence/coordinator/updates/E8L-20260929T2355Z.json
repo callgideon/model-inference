@@ -2,22 +2,119 @@
  "task": "E8L",
  "slice": "lab-rollout-7: WR-LR6-VERDICT, k10 UI journey bound (no sub-cell), WR-LR6-GATE-OUT, WR-LR6-E2E-SHADOW",
  "activity": "review",
- "head": "e65bbecf",
+ "head": "32e52c7f",
  "worktree": ".claude/worktrees/codex-w5-lab-rollout-7",
  "branch": "codex/w5-lab-rollout-7",
- "owned_paths": ["apps/infrx-api/infrx/gateway/pilot.py (ReleaseRecords.verdict)", "apps/infrx-api/tests/g/lab_releases/", "apps/infrx-api/tests/g/mutants.py (anchors)", "tests/integration/lab_rollout/", "apps/lab/tests/e2e/", "research/plan/evidence/e/E8L-*"],
- "commands": [
-  {"cmd": "INFRX_MUTANTS=all pytest tests/g/lab_releases/test_mutants.py", "exit": 0, "summary": "51 passed: 48 mutants (13 new verdict_*), 0 survivors"},
-  {"cmd": "INFRX_D_TASK=r2 pytest tests/g/lab_releases/test_lab_releases_composition_pg.py tests/g/lab_releases/test_lab_releases_pg.py", "exit": 0, "summary": "3 passed (verdict null / hold no_report / expand / D9 decision / unit refusal null on real 0054+0043+D7)"},
-  {"cmd": "make lab-e2e", "exit": 0, "summary": "24/24 on l4 (evaluate/improve were red at base: route shadowed since WR-LDP-2)"},
-  {"cmd": "LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs", "exit": 0, "summary": "harness 17/17, stack 24/24 killed"},
-  {"cmd": "make lab-rollout (e65bbecf)", "exit": 2, "summary": "runner 3: k01-k07, k09, k10 PASS; k08 NOT RUN[P-08]; sub_cells []; r222 accepted"},
-  {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest tests/integration/lab_rollout/test_mutants.py", "exit": 0, "summary": "90 passed: 86 mutants (31 layer 1 + 55 stack), 0 survivors"},
-  {"cmd": "(apps/infrx-api) INFRX_D_TASK=r2 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py", "exit": 0, "summary": "E4 2840 passed, 26 skipped, 0 failed (floor 2831)"}
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/pilot.py (ReleaseRecords.verdict)",
+  "apps/infrx-api/tests/g/lab_releases/",
+  "apps/infrx-api/tests/g/mutants.py (anchors)",
+  "tests/integration/lab_rollout/",
+  "apps/lab/tests/e2e/",
+  "research/plan/evidence/e/E8L-*"
  ],
- "gate_tally": {"k01": "PASS", "k02": "PASS", "k03": "PASS", "k04": "PASS", "k05": "PASS", "k06": "PASS", "k07": "PASS", "k08": "NOT RUN[P-08]", "k09": "PASS", "k10": "PASS", "sub_cells": [], "cells": {"ROLLOUT-PIN": "PASS", "ROLLOUT-RECOVER": "PASS", "OPT-PARITY": "NOT RUN"}, "r222": {"accepted": true, "open": {}}},
- "estimate": {"optimistic_h": 0, "likely_h": 0.5, "pessimistic_h": 2, "confidence": "high", "basis": "E8L's local gate is at its floor (only k08 NOT RUN[P-08], no sub-cell, r222 accepted); remaining = one verify lens (47-234 min, session-03); WR-LR7-GRANT/WR-LR7-I-OPT are a lab-sql slice (~1-2 h) outside this figure; k08 is P-08 GPU operator work", "at": "2026-09-29T23:55Z"},
+ "commands": [
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/g/lab_releases/test_mutants.py",
+   "exit": 0,
+   "summary": "51 passed: 48 mutants (13 new verdict_*), 0 survivors"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 pytest tests/g/lab_releases/test_lab_releases_composition_pg.py tests/g/lab_releases/test_lab_releases_pg.py",
+   "exit": 0,
+   "summary": "3 passed (verdict null / hold no_report / expand / D9 decision / unit refusal null on real 0054+0043+D7)"
+  },
+  {
+   "cmd": "make lab-e2e",
+   "exit": 0,
+   "summary": "24/24 on l4 (evaluate/improve were red at base: route shadowed since WR-LDP-2)"
+  },
+  {
+   "cmd": "LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs",
+   "exit": 0,
+   "summary": "harness 17/17, stack 24/24 killed"
+  },
+  {
+   "cmd": "make lab-rollout (e65bbecf)",
+   "exit": 2,
+   "summary": "runner 3: k01-k07, k09, k10 PASS; k08 NOT RUN[P-08]; sub_cells []; r222 accepted"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest tests/integration/lab_rollout/test_mutants.py",
+   "exit": 0,
+   "summary": "90 passed: 86 mutants (31 layer 1 + 55 stack), 0 survivors"
+  },
+  {
+   "cmd": "(apps/infrx-api) INFRX_D_TASK=r2 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "E4 2840 passed, 26 skipped, 0 failed (floor 2831)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 pytest tests/g/lab_releases",
+   "exit": 0,
+   "summary": "31 passed, 1 xfailed (WR-LR7-GRANT seam, strict)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 pytest --runxfail -p wr_lr7_grant tests/g/lab_releases/test_lab_releases_composition_pg.py",
+   "exit": 0,
+   "summary": "3 passed with WR-LR7-GRANT applied task-locally; live-only grant still 503 on lab_experiments"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/g/lab_releases/test_mutants.py",
+   "exit": 0,
+   "summary": "51 passed, 0 survivors (fix round)"
+  },
+  {
+   "cmd": "(apps/infrx-api) INFRX_D_TASK=r2 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "E4 2840 passed, 26 skipped, 1 xfailed (fix round)"
+  }
+ ],
+ "gate_tally": {
+  "k01": "PASS",
+  "k02": "PASS",
+  "k03": "PASS",
+  "k04": "PASS",
+  "k05": "PASS",
+  "k06": "PASS",
+  "k07": "PASS",
+  "k08": "NOT RUN[P-08]",
+  "k09": "PASS",
+  "k10": "PASS",
+  "sub_cells": [],
+  "cells": {
+   "ROLLOUT-PIN": "PASS",
+   "ROLLOUT-RECOVER": "PASS",
+   "OPT-PARITY": "NOT RUN"
+  },
+  "r222": {
+   "accepted": true,
+   "open": {}
+  }
+ },
+ "estimate": {
+  "optimistic_h": 0,
+  "likely_h": 0.5,
+  "pessimistic_h": 2,
+  "confidence": "high",
+  "basis": "E8L's local gate is at its floor (only k08 NOT RUN[P-08], no sub-cell, r222 accepted); remaining = one verify lens (47-234 min, session-03); WR-LR7-GRANT/WR-LR7-I-OPT are a lab-sql slice (~1-2 h) outside this figure; k08 is P-08 GPU operator work",
+  "at": "2026-09-30T00:40Z"
+ },
  "blockers": [],
- "wiring_requests": ["WR-LR7-GRANT (lab-sql: grant execute on infrx.lab_release_live, infrx.lab_experiments to infrx_lab_control; pre-existing 503 on the unit login since WR-LIVE-PAGE)", "WR-LR7-I-OPT (tests/i/lab_control/test_control_routes_pg.py: optimizations 503 -> 200 {\"data\":[]} since #56)", "WR-LR7-DOC (08 §5 Lab releases row: the read-time verdict)"],
- "evidence": ["research/plan/evidence/e/E8L-e65bbec.md", "research/plan/evidence/e/E8L-raw-lr7/", "research/plan/evidence/e/E8L-raw-e65bbecf/"]
+ "wiring_requests": [
+  "WR-LR7-GRANT (lab-sql: grant execute on infrx.lab_release_live, infrx.lab_experiments to infrx_lab_control; pre-existing 503 on the unit login since WR-LIVE-PAGE); gate LAB_RELEASES on the unit until test_control_routes_pg.py is 2/2 on l4 and the strict xfail in test_lab_releases_composition_pg.py is dropped",
+  "WR-LR7-I-OPT (tests/i/lab_control/test_control_routes_pg.py: optimizations 503 -> 200 {\"data\":[]} since #56)",
+  "WR-LR7-DOC (08 \u00a75 Lab releases row: the read-time verdict)"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E8L-e65bbec.md",
+  "research/plan/evidence/e/E8L-raw-lr7/",
+  "research/plan/evidence/e/E8L-raw-e65bbecf/"
+ ],
+ "fix_round": {
+  "finding": "0-LR7-RV-1",
+  "fixed": true,
+  "code_head": "32e52c7f",
+  "summary": "unit-login releases-page case with an assigned running release, strict xfail on WR-LR7-GRANT; red on lab_release_live then lab_experiments, XPASS with the filed grant"
+ }
 }
