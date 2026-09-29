@@ -387,7 +387,8 @@ def test_lab_workers__the_judge_pass_reconciles_and_collects_every_providers_run
     to `submitted`, none leaves it exactly as it is (R184/R192: never resubmitted or released
     by the platform); then every `submitted` run is J2's `collect` on the role's wiring. A
     teacher run (consented by its dataset ref) is the annotation role's. One run's failure is
-    counted and the next still runs; the providers are read on the role's own login."""
+    counted and the next still runs; the providers are those with judge work in those two
+    states, read on the role's own ledger (0053, WR-C5-PROVIDERS)."""
     from infrx.judge import submit
     from infrx.judge.submit import HttpJudgeProvider
     from infrx.state.lab_consent import PgJudgeLedger
@@ -413,14 +414,14 @@ def test_lab_workers__the_judge_pass_reconciles_and_collects_every_providers_run
         if run_id == "r4":
             raise errors.DependencyUnavailable("the provider did not answer")
 
-    async def providers(connect):
-        providers.connect = connect
+    async def providers(self, states):
+        providers.seen = (self, tuple(states))
         return ["p1", "p2"]
     monkeypatch.setattr(PgJudgeLedger, "runs_in", runs_in)
     monkeypatch.setattr(PgJudgeLedger, "record_submission", record_submission)
     monkeypatch.setattr(HttpJudgeProvider, "lookup", lookup)
     monkeypatch.setattr(submit, "collect", collect)
-    monkeypatch.setattr(lab_workers, "provider_ids", providers)
+    monkeypatch.setattr(PgJudgeLedger, "providers_in", providers)      # WR-C5-PROVIDERS
     steps = captured_steps(monkeypatch)
     worker = composed("judge")
     worker.tasks["judge_collect"]().close()
@@ -435,7 +436,7 @@ def test_lab_workers__the_judge_pass_reconciles_and_collects_every_providers_run
                      ("p1", ("submitted",), lab_workers.JUDGE_BATCH),
                      ("p2", ("ambiguous",), lab_workers.JUDGE_BATCH),
                      ("p2", ("submitted",), lab_workers.JUDGE_BATCH)]
-    assert providers.connect is worker.wiring.ledger._connect
+    assert providers.seen == (worker.wiring.ledger, ("ambiguous", "submitted"))
 
 
 def captured_steps(monkeypatch) -> dict:
@@ -563,18 +564,19 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
         monkeypatch):
     """WR-R2-3: every ROLLOUT_PASS_S the rollout role runs R2's `Controller.step` (over D9's
     `PgReleaseStore` and L3's serving control, acting as `LAB_OPERATOR_ID`) for every running
-    or rolled-back D9 release (`releases_in`) of every provider with a release under
-    `lab/<p>/releases/`, on the plan stored beside it (`plan.json`; R2 refuses one whose
-    digest is not D9's) and D7's policy record. A running release is evaluated on R1's live
-    aggregates; while they are unreadable (`DependencyUnavailable`) it is held, never
-    evaluated on invented numbers. A rolled-back release only converges (R216: step, never the
-    operator's stop). A release without its plan is held; one failure is counted and the
-    next release still runs."""
+    or rolled-back D9 release (`releases_in`) of every provider D9 lists with one
+    (0053's `providers_in`, WR-C5-PROVIDERS / 0-F2: never the objects), on the plan stored
+    beside it (`plan.json`; R2 refuses one whose digest is not D9's) and D7's policy record.
+    A running release is evaluated on R1's live aggregates; while they are unreadable
+    (`DependencyUnavailable`) it is held, never evaluated on invented numbers. A rolled-back
+    release only converges (R216: step, never the operator's stop). A release without its
+    plan - even a provider with no Lab object at all - is counted held; one failure is counted
+    and the next release still runs."""
     from infrx.rollouts import control as r2
-    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_data import PgLabDataStore, PgLabReads
     from infrx.state.lab_rollout import PgReleaseStore
     from tests.r.control.test_control import plan
-    objects, stepped, asked = InMemoryObjectStore(), [], []
+    objects, stepped, asked, listed = InMemoryObjectStore(), [], [], []
     stored = plan().model_dump_json().encode()
     for key in ("lab/p1/releases/pol-p1-1/plan.json", "lab/p1/releases/pol-p1-2/plan.json",
                 "lab/p1/releases/pol-p1-3/plan.json", "lab/p2/releases/pol-p2-1/plan.json"):
@@ -587,7 +589,12 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
         return {"p1": [listing("p1", 1, "running"), listing("p1", 2, "rolled_back"),
                        listing("p1", 3, "running")],
                 "p2": [listing("p2", 1, "running")],
-                "p3": [listing("p3", 1, "running")]}.get(provider_org_id, [])
+                "p3": [listing("p3", 1, "running")],
+                "p4": [listing("p4", 1, "rolled_back")]}.get(provider_org_id, [])
+
+    async def providers_in(self, states):
+        listed.append((self._connect, tuple(states)))
+        return ["p1", "p2", "p3", "p4"]
 
     async def resolve(self, ref, *, provider_org_id):
         if ref == "ref-p2-1":
@@ -598,12 +605,17 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
         stepped.append((self, policy, policy_ref, plan_, live, report, runs))
         return r2.Verdict("hold", ())
 
+    async def no_experiments(self, *, provider_org_id):
+        return []
+
     async def live(item):
         if item.policy_id == "pol-p1-3":
             raise errors.DependencyUnavailable("R1's aggregates")
         return ("live", item.policy_id)
     monkeypatch.setattr(PgReleaseStore, "releases_in", releases_in)
+    monkeypatch.setattr(PgReleaseStore, "providers_in", providers_in)
     monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(PgLabReads, "experiments", no_experiments)
     monkeypatch.setattr(r2.Controller, "step", step)
     steps = captured_steps(monkeypatch)
     worker = lab_workers.compose("rollout", ENV["rollout"], objects=objects, live=live)
@@ -611,9 +623,10 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
     interval, pump = steps["rollout pass"]
     assert interval == lab_workers.ROLLOUT_PASS_S
     report = asyncio.run(pump())
-    assert report == {"stepped": 2, "held": 2, "failed": 1}
-    assert [p for _, _, p in asked] == ["p1", "p2", "p3"]
+    assert report == {"stepped": 2, "held": 3, "failed": 1}
+    assert [p for _, _, p in asked] == ["p1", "p2", "p3", "p4"]
     assert {s for _, s, _ in asked} == {("running", "rolled_back")}
+    assert listed == [(asked[0][0], ("running", "rolled_back"))]
     (ctl, policy, ref, plan_, live_, rep, runs), (ctl2, _, ref2, _, live2, _, _) = stepped
     assert (policy, ref, plan_, live_) == (("policy", "ref-p1-1", "p1"), "ref-p1-1", plan(),
                                            ("live", "pol-p1-1"))
@@ -625,8 +638,90 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
     stepped.clear()
     bare = lab_workers.compose("rollout", ENV["rollout"], objects=objects)
     bare.tasks["rollout_pass"]().close()
-    assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 1, "held": 4, "failed": 0}
+    assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 1, "held": 5, "failed": 0}
     assert [s[2] for s in stepped] == ["ref-p1-2"]
+
+
+def test_lab_workers__a_running_release_is_stepped_on_its_stored_b2_report(monkeypatch):
+    """WR-C5-REPORT: the pass hands R2 the release's B2 report and its two runs - the
+    provider's NEWEST experiment (B4's launch record, 0043) with a stored report under the
+    plan's own protocol (its digest) whose runs (D7's records) are the policy's baseline and
+    one of its candidates; an experiment under another protocol, of other servings or without
+    a report is never used. None found: no report (R2 holds `no_report`). A rolled-back
+    release reads none (it only converges)."""
+    import json as _json
+
+    from infrx.contracts.lab import records as lab
+    from infrx.rollouts import control as r2
+    from infrx.state.lab_data import PgLabDataStore, PgLabReads
+    from infrx.state.lab_rollout import PgReleaseStore
+    from tests.r.control import test_control as r2w
+    objects, stepped, read = InMemoryObjectStore(), [], []
+    for n in (1, 2):
+        asyncio.run(objects.put_if_absent(f"lab/{r2w.P}/releases/pol-{n}/plan.json",
+                                          r2w.plan().model_dump_json().encode(), "x"))
+    other_run = {**r2w.CAND_RUN, "serving_ref": r2w.BASE}
+    runs = {lab.ref_of(r): r for r in (r2w.BASE_RUN, r2w.CAND_RUN, other_run)}
+    good, older = r2w.report(), r2w.report("reject")
+
+    def experiment(rep, base=r2w.BASE_RUN, cand=r2w.CAND_RUN, protocol=r2w.PROTOCOL):
+        body = {k: v for k, v in (rep or {}).items() if k != "report_digest"}
+        return {"protocol_digest": r2w.digest(protocol),
+                "baseline": {"run_ref": lab.ref_of(base)},
+                "candidate": {"run_ref": lab.ref_of(cand)},
+                "report": None if rep is None else {"report_digest": rep["report_digest"],
+                                                    "body": _json.dumps(body)}}
+
+    async def experiments(self, *, provider_org_id):
+        read.append((self._connect, provider_org_id))
+        return [experiment(r2w.report(protocol={"other": 1}), protocol={"other": 1}),
+                experiment(r2w.report(cand_run=other_run), cand=other_run),
+                experiment(None),
+                experiment(good), experiment(older)]
+
+    async def resolve(self, ref, *, provider_org_id):
+        if ref == r2w.POLICY_REF:
+            return r2w.POLICY
+        return lab.parse(runs[ref])
+
+    async def providers_in(self, states):
+        return [r2w.P]
+
+    async def releases_in(self, states=(), *, provider_org_id):
+        from infrx.state.lab_rollout import Release, ReleaseListing
+        return [ReleaseListing(policy_id=f"pol-{n}", provider_org_id=r2w.P, endpoint_id="e",
+                               policy_ref=r2w.POLICY_REF, latest_decision=None,
+                               release=Release(state=state, fence=1, plan_digest="d",
+                                               started_at=r2w.START))
+                for n, state in ((1, "running"), (2, "rolled_back"))]
+
+    async def step(self, policy, policy_ref, plan_, live, *, now, report=None, runs=None):
+        stepped.append((policy_ref, live, report, runs))
+        return r2.Verdict("hold", ())
+
+    async def aggregates(item):
+        return "live"
+    monkeypatch.setattr(PgLabReads, "experiments", experiments)
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(PgReleaseStore, "providers_in", providers_in)
+    monkeypatch.setattr(PgReleaseStore, "releases_in", releases_in)
+    monkeypatch.setattr(r2.Controller, "step", step)
+    steps = captured_steps(monkeypatch)
+    worker = lab_workers.compose("rollout", ENV["rollout"], objects=objects, live=aggregates)
+    worker.tasks["rollout_pass"]().close()
+    assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 2, "held": 0, "failed": 0}
+    (_, live, rep, pair), (_, live2, rep2, pair2) = stepped
+    assert rep == good and pair == (r2w.BASE_RUN, r2w.CAND_RUN), (rep, pair)
+    assert (live2, rep2, pair2) == (None, None, None)
+    assert read == [(worker.wiring._store._connect, r2w.P)]      # the rolled-back one: none
+    stepped.clear()
+
+    async def none(self, *, provider_org_id):
+        return [experiment(None)]
+    monkeypatch.setattr(PgLabReads, "experiments", none)
+    worker.tasks["rollout_pass"]().close()
+    asyncio.run(steps["rollout pass"][1]())
+    assert [(r, p) for _, _, r, p in stepped] == [(None, None), (None, None)]
 
 
 def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkeypatch):
@@ -662,6 +757,140 @@ def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkey
     assert rolled == [("ops@infrx", "policy-record", ref, "breach", PgReleaseStore, Serving,
                        "ops@infrx", "ops@infrx", "PgControlStore")]
     assert outcome(lambda: lab_workers.main(argv[:-1] + ["partitioned"], env=env)) == 1
+
+
+def test_lab_workers__a_release_is_launched_with_its_plan_stored_first(monkeypatch, tmp_path):
+    """WR-C5-PLAN: `rollout launch --policy-ref --plan <file> --reason`, as `LAB_OPERATOR_ID`,
+    over the Lab bucket: R2's `Plan` from the file (refused before anything if it is not
+    one) is stored write-once beside the release (`plan_key` of the ref's provider and D7's
+    policy id), THEN D9 starts the revision with that plan's digest - so the pass and the
+    page never see a started release without its plan. A replay stores the same bytes; a
+    different plan for a stored one is a conflict and D9 is not asked; D9's refusal is exit 1."""
+    from infrx.rollouts import control as r2
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_rollout import PgReleaseStore
+    from tests.r.control.test_control import plan
+    ref = f"lab:policy:{NEMO}:a0000000-0000-4000-8000-00000000006e@sha256:" + "1" * 64
+    objects, started = InMemoryObjectStore(), []
+
+    class Policy:
+        policy_id = "a0000000-0000-4000-8000-00000000006e"
+
+    async def resolve(self, policy_ref, *, provider_org_id):
+        assert (policy_ref, provider_org_id) == (ref, NEMO)
+        return Policy()
+
+    async def start(self, policy_ref, *, provider_org_id, plan_digest, decided_by, reason):
+        key = lab_workers.plan_key(NEMO, Policy.policy_id)
+        started.append((policy_ref, provider_org_id, plan_digest, decided_by, reason,
+                        await objects.get(key)))
+        if reason == "busy":
+            raise errors.StateConflict("the endpoint already runs a release")
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(PgReleaseStore, "start", start)
+    monkeypatch.setattr(lab_workers, "lab_objects", lambda mode, env: objects)
+    operator = "0e000000-0000-4000-8000-0000000000e0"
+    env = {**BASE, "LAB_OPERATOR_ID": operator, "LAB_S3_BUCKET": "lab"}
+    good, other, bad = tmp_path / "plan.json", tmp_path / "other.json", tmp_path / "bad.json"
+    good.write_text(plan().model_dump_json())
+    other.write_text(plan(max_error_rate=0.5).model_dump_json())
+    bad.write_text('{"horizon_s": 1}')
+
+    def launch(path, reason="canary 10%", e=env):
+        return outcome(lambda: lab_workers.main(
+            ["rollout", "launch", "--policy-ref", ref, "--plan", str(path), "--reason", reason],
+            env=dict(e)))
+    assert launch(good, e={**env, "LAB_S3_BUCKET": ""}) == 2          # no bucket
+    assert launch(bad) == 2 and started == []                         # not R2's plan
+    assert launch(good) == 0
+    stored = asyncio.run(objects.get(lab_workers.plan_key(NEMO, Policy.policy_id)))
+    assert stored is not None, "the plan is not stored where the pass and the page read it"
+    assert r2.Plan.model_validate_json(stored) == plan()
+    assert started == [(ref, NEMO, r2.plan_digest(plan()), operator, "canary 10%", stored)]
+    assert launch(good, reason="busy") == 1 and len(started) == 2    # the replay: same bytes
+    assert launch(other) == 1 and len(started) == 2                  # a stored plan stays
+    try:
+        died = lab_workers.main(["rollout", "launch", "--policy-ref", ref, "--reason", "x"],
+                                env=dict(env))
+    except BaseException as raised:        # noqa: BLE001 - argparse exits; a crash is a bug
+        died = raised
+    assert type(died) is SystemExit, died
+
+
+def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeypatch):
+    """WR-R4-2: `rollout decide --policy-ref --proposal-id --approve|--reject --reason`, as
+    `LAB_OPERATOR_ID`. The proposal is looked up among the provider's (the ref's) for that
+    release (another release's id is a non-zero exit, nothing decided). A rejection moves
+    nothing. An approved rollback is 0043's decision - D9's CAS at the proposal's fence and
+    the proposal's state in one transaction - carrying R2's `lab.rollout_decision.1` by the
+    operator, then R2's operator stop converges the alias (its CAS finds the release already
+    rolled back). An approved expansion needs R2's expand verdict on R1's aggregates
+    (WR-C5-LIVE): refused, nothing decided. A refused CAS (a stale fence) is exit 1."""
+    from infrx.rollouts import control
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_rollout import PgReleaseProposals, PgReleaseStore
+    ref = f"lab:policy:{NEMO}:a0000000-0000-4000-8000-00000000006e@sha256:" + "1" * 64
+    other = ref[:-1] + "2"
+    listed, decided, rolled = [], [], []
+    pending = [{"proposal_id": "p-rb", "policy_ref": ref, "kind": "rollback", "fence": 4},
+               {"proposal_id": "p-ex", "policy_ref": ref, "kind": "expand", "fence": 4},
+               {"proposal_id": "p-other", "policy_ref": other, "kind": "rollback", "fence": 1}]
+
+    async def proposals(self, *, provider_org_id):
+        listed.append((type(self), provider_org_id))
+        return pending
+
+    async def decide(self, proposal_id, *, approve, decided_by, decision=None, reasons=()):
+        decided.append((proposal_id, approve, decided_by, decision, reasons))
+        if reasons and reasons[0] == "operator:stale":
+            raise errors.StateConflict("stale fence")
+        return {}
+
+    async def resolve(self, policy_ref, *, provider_org_id):
+        return ("policy", policy_ref, provider_org_id)
+
+    async def emergency_rollback(self, operator_id, policy, policy_ref, *, now, reason):
+        rolled.append((operator_id, policy, policy_ref, reason, type(self._store), self._actor))
+    monkeypatch.setattr(PgReleaseProposals, "proposals", proposals)
+    monkeypatch.setattr(PgReleaseProposals, "decide", decide)
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(control.Controller, "emergency_rollback", emergency_rollback)
+    operator = "0e000000-0000-4000-8000-0000000000e0"
+    env = {**BASE, "LAB_OPERATOR_ID": operator}
+
+    def decide_(proposal, verb, reason="pager", policy_ref=ref, e=env):
+        return outcome(lambda: lab_workers.main(
+            ["rollout", "decide", "--policy-ref", policy_ref, "--proposal-id", proposal,
+             f"--{verb}", "--reason", reason], env=dict(e)))
+    assert decide_("p-rb", "approve", e=BASE) == 2                    # no operator
+    assert decide_("p-other", "approve") == 1                        # another release's
+    assert (decided, rolled) == ([], [])
+    assert decide_("p-rb", "reject") == 0
+    assert decided == [("p-rb", False, operator, None, ())] and rolled == []
+    decided.clear()
+    assert decide_("p-ex", "approve") == 1                            # WR-C5-LIVE
+    assert (decided, rolled) == ([], [])
+    assert decide_("p-rb", "approve") == 0
+    [(pid, approve, by, doc, reasons)] = decided
+    assert (pid, approve, by, reasons) == ("p-rb", True, operator,
+                                          ("operator:pager", "proposal:p-rb"))
+    assert {k: doc[k] for k in ("schema", "provider_org_id", "policy_ref", "decision",
+                                "evidence_refs", "decided_by")} == {
+        "schema": "lab.rollout_decision.1", "provider_org_id": NEMO, "policy_ref": ref,
+        "decision": "rollback", "evidence_refs": [], "decided_by": operator}
+    assert rolled == [(operator, ("policy", ref, NEMO), ref, "pager", PgReleaseStore,
+                       operator)]
+    assert {provider for _, provider in listed} == {NEMO}
+    decided.clear(), rolled.clear()
+    assert decide_("p-rb", "approve", reason="stale") == 1           # D9's CAS refused
+    assert len(decided) == 1 and rolled == []
+    decided.clear()
+    for argv in (["rollout", "decide", "--policy-ref", ref, "--reason", "x", "--approve"],
+                 ["rollout", "decide", "--policy-ref", ref, "--proposal-id", "p", "--reason",
+                  "x"]):
+        with pytest.raises(SystemExit):
+            lab_workers.main(argv, env=dict(env))
+    assert decided == []
 
 
 # ------------------------------------------------------------ annotation / training (WR-I6-3)

@@ -2,6 +2,9 @@
 
     python -m infrx.lab.workers <eval|checkpoints|judge|annotation|training|rollout|datasets>
     python -m infrx.lab.workers rollout emergency-rollback --policy-ref <ref> --reason <text>
+    python -m infrx.lab.workers rollout decide --policy-ref <ref> --proposal-id <id>
+        (--approve | --reject) --reason <text>
+    python -m infrx.lab.workers rollout launch --policy-ref <ref> --plan <plan.json> --reason <text>
 
 What the I5/I6/I7/I2L-OBS units run (`apps/infrx-api/deploy/lab/*/infrx-lab-<role>.service`),
 one role per process, each OFF until its `/etc/infrx-lab/<role>.env` exists (the unit's
@@ -27,7 +30,8 @@ never runs in a consumer process.
 * `judge`      JUDGE_PROVIDER_URL, CLICKHOUSE_URL, S3_TRACE_BUCKET (+ JUDGE_MODE, default
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
                and T3's retention; its passes move silent `submitting` runs to `ambiguous`
-               and reconcile/collect every provider's ambiguous/submitted runs (WR-LSQ-C2A);
+               and reconcile/collect the ambiguous/submitted runs of every provider with such
+               work (WR-LSQ-C2A; 0053's listing, WR-C5-PROVIDERS);
                `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
                every provider with a lineage, every page (WR-N3-2's pull half), and N1's
@@ -36,7 +40,9 @@ never runs in a consumer process.
                `Controller.step` every 30 s for every running or rolled-back D9 release on
                the plan stored beside it (WR-R2-3; a running one only on R1's aggregates,
                held while unreadable). `emergency-rollback` (LAB_OPERATOR_ID of the invoking
-               shell): R2's operator stop over D9 and L3.
+               shell): R2's operator stop over D9 and L3. `decide`: the operator's decision
+               of a Lab proposal through D9's CAS (WR-R4-2). `launch` (+ LAB_S3_BUCKET): the
+               release launcher - the plan stored write-once, then D9's start (WR-C5-PLAN).
 * `annotation` LAB_S3_BUCKET, LAB_TEACHER_URL (the local teacher fake until P-10; + JUDGE_MODE):
                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
                submitted chunk run of every approved teacher batch (WR-P4B-2).
@@ -46,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import importlib
 import json
 import logging
@@ -88,10 +95,12 @@ LAB_PREFIX = "infrx/"
 JUDGE_PASS_S = 60.0
 JUDGE_SILENT_S = 300                  # a `submitting` run silent this long is `ambiguous`
 JUDGE_BATCH = 100                     # runs per provider, state and pass (oldest first)
+JUDGE_WORK = ("ambiguous", "submitted")   # the states the pass works (0053's provider listing)
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
 IMPORT_PASS_S = 5.0                   # 0051's import-job queue, claimed
 TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
 ROLLOUT_PASS_S = 30.0                 # R2's controller pass over the live releases
+ROLLOUT_STATES = ("running", "rolled_back")   # what the pass steps (R216: converge only)
 PROBE_TIMEOUT_S = 5.0
 
 
@@ -316,19 +325,7 @@ def _judge(mode, env, connect, objects, worker_id, **_):
     return {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
                                          "judge sweep"),
             "judge_collect": lambda: every(JUDGE_PASS_S, lambda: judge_pass(
-                wiring, partial(provider_ids, connect)), "judge collect")}, wiring
-
-
-async def provider_ids(connect) -> list[str]:
-    """Every provider org, on the role's login.
-    ponytail: one select until lab-sql lists the providers with work (WR-C5-PROVIDERS)."""
-    conn = await connect()
-    try:
-        cursor = await conn.execute("select provider_org_id::text from infrx.provider_orgs "
-                                    "order by 1")
-        return [row[0] for row in await cursor.fetchall()]
-    finally:
-        await conn.close()
+                wiring, partial(ledger.providers_in, JUDGE_WORK)), "judge collect")}, wiring
 
 
 async def judge_pass(wiring, providers) -> dict[str, int]:
@@ -341,7 +338,7 @@ async def judge_pass(wiring, providers) -> dict[str, int]:
     done = {"reconciled": 0, "waiting": 0, "collected": 0, "failed": 0}
     ledger = wiring.ledger
     for provider in await providers():
-        for state in ("ambiguous", "submitted"):
+        for state in JUDGE_WORK:
             for run in await ledger.runs_in((state,), JUDGE_BATCH, provider_org_id=provider):
                 if run.consent.grant_id.startswith("lab:"):
                     continue
@@ -435,23 +432,41 @@ class NoLive:
 
 
 def plan_key(provider_org_id: str, policy_id: str) -> str:
-    """R2's full `Plan` of a release, stored write-once beside it by its launcher (D9 keeps
-    only its digest, which `Controller` checks)."""
+    """R2's full `Plan` of a release, stored write-once beside it by its launcher
+    (`rollout launch`, WR-C5-PLAN; D9 keeps only its digest, which `Controller` checks)."""
     return f"lab/{provider_org_id}/releases/{policy_id}/plan.json"
 
 
-async def rollout_pass(objects, store, releases, controller, live) -> dict[str, int]:
+async def release_report(reads, store, provider: str, policy, plan):
+    """WR-C5-REPORT: the release's B2 report and its two runs (D7's records) - the provider's
+    NEWEST experiment (B4's launch record, 0043's listing) with a stored report under the
+    plan's own protocol whose runs are the policy's baseline and one of its candidates - or
+    `(None, None)` (R2 then holds `no_report`). R2 checks the binding again."""
+    protocol = "sha256:" + hashlib.sha256(lab.canonical(plan.protocol)).hexdigest()
+    for e in await reads.experiments(provider_org_id=provider):          # newest first
+        if e["report"] is None or e["protocol_digest"] != protocol:
+            continue
+        runs = tuple([(await store.resolve(e[arm]["run_ref"], provider_org_id=provider))
+                      .model_dump(mode="json", by_alias=True, exclude_unset=True)   # its ref
+                      for arm in ("baseline", "candidate")])
+        if runs[0]["serving_ref"] == policy.baseline_ref and \
+                runs[1]["serving_ref"] in {c.serving_ref for c in policy.candidates}:
+            return ({**json.loads(e["report"]["body"]),
+                     "report_digest": e["report"]["report_digest"]}, runs)
+    return None, None
+
+
+async def rollout_pass(objects, store, releases, controller, live, reads) -> dict[str, int]:
     """WR-R2-3: `Controller.step` for every running or rolled-back D9 release of every
-    provider with a release under `lab/<p>/releases/`, on its stored plan and D7's policy.
-    A running release needs R1's aggregates (held while unreadable); a rolled-back one only
-    converges (R216). ponytail: no stored B2 report is linked to a release yet
-    (WR-C5-REPORT), so none is passed and a running release holds `no_report`; the wall
-    clock is `now`, D9's CAS orders the decisions."""
+    provider D9 lists with one (0053, WR-C5-PROVIDERS), on its stored plan and D7's policy;
+    one without a stored plan is counted held (0-F2: the report shows the gap). A running
+    release needs R1's aggregates (held while unreadable); a rolled-back one only
+    converges (R216). A running one is stepped on its B2 report (`release_report`,
+    WR-C5-REPORT). ponytail: the wall clock is `now`, D9's CAS orders the decisions."""
     from ...rollouts.control import Plan
     done = {"stepped": 0, "held": 0, "failed": 0}
-    providers = sorted({key.split("/")[1] for key in await objects.keys("lab/")
-                        if key.split("/")[2:3] == ["releases"]})
-    for provider in providers:
+    for provider in await releases.providers_in(ROLLOUT_STATES):
+        # == ROLLOUT_STATES, spelled out: E8L's st_pass_skips_the_rolled_back anchors on it
         for item in await releases.releases_in(("running", "rolled_back"),
                                                provider_org_id=provider):
             try:
@@ -461,8 +476,11 @@ async def rollout_pass(objects, store, releases, controller, live) -> dict[str, 
                     continue
                 current = await live(item) if item.release.state == "running" else None
                 policy = await store.resolve(item.policy_ref, provider_org_id=provider)
-                await controller.step(policy, item.policy_ref, Plan.model_validate_json(raw),
-                                      current, now=datetime.now(timezone.utc))
+                plan = Plan.model_validate_json(raw)
+                report, runs = await release_report(reads, store, provider, policy, plan) \
+                    if current is not None else (None, None)
+                await controller.step(policy, item.policy_ref, plan, current,
+                                      now=datetime.now(timezone.utc), report=report, runs=runs)
                 done["stepped"] += 1
             except errors.DependencyUnavailable:
                 done["held"] += 1
@@ -475,13 +493,14 @@ async def rollout_pass(objects, store, releases, controller, live) -> dict[str, 
 def _rollout(mode, env, connect, objects, worker_id, live=None, **_):
     from ...gateway.pilot import control_serving
     from ...rollouts.control import Controller
-    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_data import PgLabDataStore, PgLabReads
     from ...state.lab_rollout import PgReleaseStore
     operator, releases = env["LAB_OPERATOR_ID"], PgReleaseStore(connect)
     controller = Controller(releases, control_serving(connect, operator), actor_id=operator)
     store, live = PgLabDataStore(connect), live or NoLive()
+    reads = PgLabReads(connect)                             # WR-C5-REPORT: B4's experiments
     return {"rollout_pass": lambda: every(ROLLOUT_PASS_S, lambda: rollout_pass(
-        objects, store, releases, controller, live), "rollout pass")}, controller
+        objects, store, releases, controller, live, reads), "rollout pass")}, controller
 
 
 def _annotation(mode, env, connect, objects, worker_id, **_):
@@ -625,6 +644,92 @@ async def emergency_rollback(env, policy_ref: str, reason: str) -> int:
     return 0
 
 
+async def launch_release(env, policy_ref: str, plan_path: str, reason: str) -> int:
+    """WR-C5-PLAN: the release launcher, as `LAB_OPERATOR_ID`. R2's `Plan` (read from
+    `plan_path`; anything else refuses before a write) is stored write-once beside the
+    release (`plan_key`), THEN D9 starts the revision `policy_ref` names with that plan's
+    digest: no pass or page sees a started release without its plan. A replay stores the same
+    bytes; another plan for a stored one is a conflict and D9 is not asked."""
+    mode = "lab-rollout"
+    values = settings(mode, env, (DATABASE, BUCKET, "LAB_OPERATOR_ID"))
+    match = lab.REF_RE.fullmatch(policy_ref)
+    if match is None or match.group(1) != "policy":
+        raise RuntimeMisconfigured(mode, detail="--policy-ref must be a lab:policy ref")
+    from ...datasets.imports import write_once
+    from ...rollouts.control import Plan, plan_digest
+    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_rollout import PgReleaseStore
+    try:
+        with open(plan_path, "rb") as stored:
+            plan = Plan.model_validate_json(stored.read())
+    except (OSError, ValueError) as unreadable:
+        raise RuntimeMisconfigured(mode, detail=f"--plan is not R2's plan "
+                                                f"({type(unreadable).__name__})") from None
+    connect, provider = connector(values[DATABASE]), match.group(2)
+    try:
+        policy = await PgLabDataStore(connect).resolve(policy_ref, provider_org_id=provider)
+        await write_once(lab_objects(mode, env), plan_key(provider, policy.policy_id),
+                         plan.model_dump_json().encode())
+        await PgReleaseStore(connect).start(policy_ref, provider_org_id=provider,
+                                            plan_digest=plan_digest(plan),
+                                            decided_by=values["LAB_OPERATOR_ID"], reason=reason)
+    except errors.DomainError as failed:
+        print(f"infrx.lab.workers: the release was not launched: {failed.code}: {failed}",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
+                          reason: str) -> int:
+    """WR-R4-2: the operator decides one of the Lab's proposals for the release `policy_ref`
+    names, as `LAB_OPERATOR_ID`, through 0043's decision: D9's CAS at the proposal's fence and
+    the proposal's state in one transaction (a stale fence refuses and leaves it pending). A
+    rejection moves nothing. An approved rollback is R2's `lab.rollout_decision.1` by the
+    operator; R2's operator stop then converges the alias (its CAS finds the release rolled
+    back). An approved expansion needs R2's `expand` verdict on R1's aggregates, which are
+    not readable (WR-C5-LIVE): refused, nothing decided."""
+    mode, needs = "lab-rollout", (DATABASE, "LAB_OPERATOR_ID")
+    values = settings(mode, env, needs)
+    match = lab.REF_RE.fullmatch(policy_ref)
+    if match is None or match.group(1) != "policy":
+        raise RuntimeMisconfigured(mode, detail="--policy-ref must be a lab:policy ref")
+    from ...gateway.pilot import control_serving
+    from ...rollouts.control import Controller
+    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_rollout import PgReleaseProposals, PgReleaseStore
+    connect, operator, provider = connector(values[DATABASE]), values["LAB_OPERATOR_ID"], \
+        match.group(2)
+    proposals = PgReleaseProposals(connect)
+    try:
+        found = next((p for p in await proposals.proposals(provider_org_id=provider)
+                      if str(p["proposal_id"]) == proposal_id and p["policy_ref"] == policy_ref),
+                     None)
+        if found is None:
+            raise errors.NotFound("no such proposal for this release")
+        if not approve:
+            await proposals.decide(proposal_id, approve=False, decided_by=operator)
+            return 0
+        if found["kind"] != "rollback":
+            raise errors.DependencyUnavailable("an expansion is approved on R2's expand verdict "
+                                               "over R1's aggregates (WR-C5-LIVE)")
+        now = datetime.now(timezone.utc)
+        await proposals.decide(proposal_id, approve=True, decided_by=operator, decision={
+            "schema": "lab.rollout_decision.1", "provider_org_id": provider,
+            "policy_ref": policy_ref, "decision": "rollback", "evidence_refs": [],
+            "decided_by": operator, "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")},
+            reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))
+        policy = await PgLabDataStore(connect).resolve(policy_ref, provider_org_id=provider)
+        serving = control_serving(connect, operator)
+        controller = Controller(PgReleaseStore(connect), serving, actor_id=operator)
+        await controller.emergency_rollback(operator, policy, policy_ref, now=now, reason=reason)
+    except errors.DomainError as failed:
+        print(f"infrx.lab.workers: the proposal was not decided: {failed.code}: {failed}",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
 # --- the process ----------------------------------------------------------------------------
 async def _answers(ready) -> bool:
     try:
@@ -699,13 +804,27 @@ def main(argv=None, env=None) -> int:
     env = os.environ if env is None else env
     parser = argparse.ArgumentParser(prog="python -m infrx.lab.workers")
     parser.add_argument("role", choices=ROLES)
-    parser.add_argument("command", nargs="?", choices=("emergency-rollback",))
+    parser.add_argument("command", nargs="?", choices=("emergency-rollback", "decide", "launch"))
+    parser.add_argument("--plan")
     parser.add_argument("--policy-ref")
     parser.add_argument("--reason")
+    parser.add_argument("--proposal-id")
+    verdict = parser.add_mutually_exclusive_group()
+    verdict.add_argument("--approve", action="store_true")
+    verdict.add_argument("--reject", action="store_true")
     args = parser.parse_args(argv)
     if args.command and not (args.role == "rollout" and args.policy_ref and args.reason):
         parser.error("emergency-rollback is the rollout role's, with --policy-ref and --reason")
+    if args.command == "decide" and not (args.proposal_id and (args.approve or args.reject)):
+        parser.error("decide names --proposal-id and --approve or --reject")
+    if args.command == "launch" and not args.plan:
+        parser.error("launch names --plan (R2's plan as JSON)")
     try:
+        if args.command == "launch":
+            return asyncio.run(launch_release(env, args.policy_ref, args.plan, args.reason))
+        if args.command == "decide":
+            return asyncio.run(decide_proposal(env, args.policy_ref, args.proposal_id,
+                                               args.approve, args.reason))
         if args.command:
             return asyncio.run(emergency_rollback(env, args.policy_ref, args.reason))
         worker = compose(args.role, env)

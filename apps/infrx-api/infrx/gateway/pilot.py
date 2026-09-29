@@ -294,9 +294,10 @@ def _lab(settings, connect, objects=None) -> dict:
     if deployment.lab_traces:
         lab["lab_traces"] = _lab_traces(settings, connect, sessions, access)
     if deployment.lab_datasets:           # WR-N4-1 over D7, L2 and the Lab objects (R182)
-        from ..state.lab_data import PgLabDataStore
+        from ..state.lab_data import PgLabDataStore, PgLabImportJobs
         from .routes.lab_datasets import LabDatasets
-        lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects)
+        lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects,
+                                          PgLabImportJobs(connect))    # WR-C5-N4-ROUTE (0051)
     return {**lab, **_lab_2(deployment, connect, sessions, access, objects, teachers)}
 
 
@@ -369,14 +370,13 @@ def _lab_2(deployment, connect, sessions, access, objects=None, teachers=None) -
     (WR-E7L-1) with the production suites (WR-C4-B3-SUITES: D7's receipt, D8's subscription,
     L3's dev deployer on this pool). The ports
     whose tables are not merged (experiments, the B3 ledger listing, the catalog; the run
-    listings; the release read models, proposals and D9) are absent, so their routes answer
-    503."""
+    listings) are absent, so their routes answer 503; the release surface is WR-R4-2's
+    (`lab_releases`)."""
     from ..evaluation import checkpoints
     from ..state.lab_data import PgLabDataStore
     from ..state.lab_pipeline import PgLabelLog, PgRunLedger
     from .routes.lab_evaluations import LabEvaluations
     from .routes.lab_pipelines import LabPipelines
-    from .routes.lab_releases import LabReleases
     store = PgLabDataStore(connect)
     return {**({"lab_evaluations": LabEvaluations(sessions, access, store=store)}
                if deployment.lab_evals else {}),
@@ -389,8 +389,105 @@ def _lab_2(deployment, connect, sessions, access, objects=None, teachers=None) -
                                                       connect)),
                                               teachers=teachers)}
                if deployment.lab_pipelines else {}),
-            **({"lab_releases": LabReleases(sessions, access)}
+            **({"lab_releases": lab_releases(connect, sessions, access, objects)}
                if deployment.lab_releases else {})}
+
+
+# --- WR-R4-2 (composition-6): the release surface's ports --------------------------------
+def lab_releases(connect, sessions, access, objects):
+    """`LAB_RELEASES`: the read models over D9, D7 and the Lab objects, 0043's proposals and
+    D9 as the route's store, on this pool."""
+    from ..state.lab_data import PgLabDataStore
+    from ..state.lab_rollout import PgReleaseProposals, PgReleaseStore
+    from .routes.lab_releases import LabReleases
+    d9 = PgReleaseStore(connect)
+    return LabReleases(sessions, access,
+                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects),
+                       proposals=ReleaseProposals(PgReleaseProposals(connect)), store=d9)
+
+
+SHOWN = ("running", "approved", "rolled_back")      # the Lab's release states (port.ts)
+
+
+def _z(value) -> str:
+    """A database timestamp (ISO text or datetime) as the Lab's `...Z` second."""
+    from datetime import datetime, timezone
+    at = value if isinstance(value, datetime) else datetime.fromisoformat(value)
+    return at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class ReleaseRecords:
+    """WR-R4-2: `/lab/v1/releases`' read models (port.ts, snake_case). Each D9 release (0048)
+    with D7's policy revision and the plan its launcher stored (WR-C5-PLAN; none stored: a
+    503 naming it, never a guessed plan); `progress` null (R1's aggregates are not readable,
+    WR-C5-LIVE); the verdict is D9's latest decision. Decisions are 0053's. R3's variant
+    listing is not written (WR-C6-VARIANTS): 503."""
+
+    def __init__(self, d9, store, objects) -> None:
+        self.d9, self.store, self.objects = d9, store, objects
+
+    async def releases(self, provider_org_id: str) -> list[dict]:
+        from ..lab.workers.__main__ import plan_key
+        from ..rollouts.control import Plan
+        out = []
+        for item in await self.d9.releases_in(SHOWN, provider_org_id=provider_org_id):
+            raw = await self.objects.get(plan_key(provider_org_id, item.policy_id))
+            if raw is None:
+                raise errors.DependencyUnavailable(
+                    f"the plan of {item.policy_ref} is not stored (WR-C5-PLAN)")
+            plan = Plan.model_validate_json(raw).model_dump(mode="json")
+            policy = await self.store.resolve(item.policy_ref, provider_org_id=provider_org_id)
+            release, d = item.release, item.latest_decision
+            out.append({
+                "policy_ref": item.policy_ref, "endpoint_id": policy.endpoint_id,
+                "version": policy.version, "baseline_ref": policy.baseline_ref,
+                "mode": policy.mode, "cohort": policy.cohort,
+                "candidates": [{"serving_ref": c.serving_ref, "weight_bp": c.weight_bp}
+                               for c in policy.candidates],
+                "state": release.state, "fence": release.fence,
+                "plan_digest": release.plan_digest,
+                "plan": {**{k: plan[k] for k in ("horizon_s", "min_requests", "max_error_rate",
+                                                 "max_p99_ms", "max_skew_bp",
+                                                 "min_quality_coverage", "max_lag_s")},
+                         "budget": {"amount": plan["budget"]["value"],
+                                    "unit": plan["budget"]["unit"]}},
+                "started_at": _z(release.started_at), "progress": None,
+                "verdict": None if d is None else {
+                    "action": d.decision, "reasons": list(d.reasons),
+                    "evidence_refs": list(d.evidence_refs), "evaluated_at": _z(d.at)}})
+        return out
+
+    async def decisions(self, provider_org_id: str) -> list[dict]:
+        return [{**d, "decided_at": _z(d["decided_at"])}
+                for d in await self.d9.decisions(provider_org_id=provider_org_id)]
+
+    async def variants(self, provider_org_id: str):
+        raise errors.DependencyUnavailable("R3's variant listing is not wired (WR-C6-VARIANTS)")
+
+
+class ReleaseProposals:
+    """WR-R4-2: the route's proposals over 0043 (`PgReleaseProposals`): one pending per
+    release revision (its unique partial index), filed at the shown fence by the session's
+    user; an operator decides it through D9's CAS (`infrx.lab.workers rollout decide`)."""
+
+    def __init__(self, store) -> None:
+        self.store = store
+
+    @staticmethod
+    def _lab(doc: dict) -> dict:
+        return {"proposal_id": str(doc["proposal_id"]), "kind": doc["kind"],
+                "policy_ref": doc["policy_ref"], "fence": doc["fence"], "state": doc["state"],
+                "proposed_at": _z(doc["proposed_at"]),
+                "decided_at": None if doc["decided_at"] is None else _z(doc["decided_at"])}
+
+    async def proposals(self, provider_org_id: str) -> list[dict]:
+        return [self._lab(p) for p in await self.store.proposals(provider_org_id=provider_org_id)]
+
+    async def add(self, provider_org_id: str, proposal: dict) -> dict:
+        return self._lab(await self.store.propose(
+            proposal["policy_ref"], provider_org_id=provider_org_id,
+            proposal_id=proposal["proposal_id"], kind=proposal["kind"],
+            fence=proposal["fence"], proposed_by=proposal["proposed_by"]))
 
 
 def lab_control(connect, access):

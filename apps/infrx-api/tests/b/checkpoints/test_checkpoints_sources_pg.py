@@ -85,10 +85,9 @@ def test_b3_pg_the_checkpoints_role_decides_with_the_lab_registry_and_l3s_dev_re
                                                  "LAB_S3_BUCKET": "unused"}, objects=objects)
     worker.tasks["lab_checkpoints"]().close()
     pump = steps["lab checkpoints"]
-    try:
-        run(pump())
-    except errors.InvalidRequest as other:                 # the eval role's kinds
-        assert "eval_run" in str(other), other
+    run(pump())                          # R215: never claims the eval_run event (0-F3)
+    claimed = rows(w, "select claimed_by from infrx.lab_outbox where kind = 'eval_run'")
+    assert claimed and set(claimed) == {(None,)}, claimed
     (decided,) = rows(w, "select state, run_id::text from infrx.lab_checkpoint_decisions "
                          "where checkpoint_id = %s", e["checkpoint_id"])
     assert decided[0] == "queued", decided

@@ -449,10 +449,13 @@ async def work(jobs, store, objects, *, worker_id: str, limit: int = 1,
                lease_s: float = IMPORT_LEASE_S, beat_s: float | None = None) -> dict[str, int]:
     """The I5 datasets pool's half: claim up to `limit` jobs (one whose lease lapsed is
     claimed again), run N1's `Importer` on the stored rows as the job's actor while the
-    lease is heartbeaten, and finish each once - `succeeded` with the report, or `failed`
-    with its reason (a refusal; rejected rows keep their report). A transient refusal (5xx,
-    429) or any other failure finishes nothing: the lease lapses and the job is claimed again
-    (`retry`)."""
+    lease is heartbeaten (every lease/3), and finish each once - `succeeded` with the report,
+    or `failed` with its reason (a refusal; rejected rows keep their report). A transient
+    refusal (5xx, 429) or any other failure finishes nothing: the lease lapses and the job is
+    claimed again (`retry`). A lost lease - a heartbeat or the finish refused because another
+    worker holds the job now - stops that import and is logged and counted `retry`; the
+    pass's other jobs still run (1-C5-2)."""
+    log = logging.getLogger(__name__)
     done = {"succeeded": 0, "failed": 0, "retry": 0}
     for job in await jobs.claim(limit=limit, worker_id=worker_id, redelivery_s=lease_s):
         job_id, provider, task = job["job_id"], job["provider_org_id"], job["spec"]
@@ -461,31 +464,45 @@ async def work(jobs, store, objects, *, worker_id: str, limit: int = 1,
             while True:
                 await asyncio.sleep(beat_s or lease_s / 3)
                 await jobs.heartbeat(job_id, worker_id=worker_id)
-        beating = asyncio.create_task(beat())
-        result = error = None
-        try:
+
+        async def imported() -> dict:
             rows = await objects.get(rows_key(provider, job_id))
             if rows is None:
                 raise errors.NotFound("the upload is missing")
-            result = vars(await Importer(store, objects).run(
+            return vars(await Importer(store, objects).run(
                 task["spec"], _pieces(rows), provider_org_id=provider, actor=task["actor"],
                 accept_rejects=task["accept_rejects"]))
+        beating, importing = asyncio.create_task(beat()), asyncio.create_task(imported())
+        await asyncio.wait((beating, importing), return_when=asyncio.FIRST_COMPLETED)
+        beating.cancel()
+        if not importing.done():             # the heartbeat died: the lease is not ours
+            importing.cancel()
+            await asyncio.gather(importing, return_exceptions=True)
+            log.warning("import job %s: the lease was lost (%r); the import stopped", job_id,
+                        beating.exception())
+            done["retry"] += 1               # lost: another worker finishes it
+            continue
+        result = error = None
+        try:
+            result = importing.result()
         except ImportRejected as rejected:
             result, error = vars(rejected.report), "rejected"
         except (errors.ServerError, errors.RateLimitError):
-            logging.getLogger(__name__).warning("import job %s: transient refusal", job_id,
-                                                exc_info=True)
+            log.warning("import job %s: transient refusal", job_id, exc_info=True)
             done["retry"] += 1               # a 5xx/429 is not final: the lease lapses
             continue
         except errors.DomainError as refusal:
             error = str(refusal).removeprefix(f"{refusal.code}: ")
         except Exception:                    # noqa: BLE001 - the lease lapses: claimed again
-            logging.getLogger(__name__).exception("import job %s did not finish", job_id)
+            log.exception("import job %s did not finish", job_id)
             done["retry"] += 1
             continue
-        finally:
-            beating.cancel()
         state = "failed" if error else "succeeded"
-        await jobs.finish(job_id, state, worker_id=worker_id, result=result, error=error)
+        try:
+            await jobs.finish(job_id, state, worker_id=worker_id, result=result, error=error)
+        except errors.StateConflict:
+            log.warning("import job %s: the lease was lost before its finish", job_id)
+            done["retry"] += 1               # lost at the finish: the new holder finishes it
+            continue
         done[state] += 1
     return done

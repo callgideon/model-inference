@@ -174,6 +174,21 @@ def test_i6_every_setting_is_named_for_its_role_and_purpose(role, name) -> None:
     assert check(role, {**BASE, name: "x"}) == [f"{name}: not a {role} setting"]
 
 
+def test_i6_only_the_rollout_role_names_its_operator_principal() -> None:
+    """WR-C5-PREFLIGHT (merge #42): the rollout role's env names `LAB_OPERATOR_ID` (R2's pass
+    and `emergency-rollback` / `decide` / `launch` act as that principal) and passes; the
+    training and annotation roles never hold it - an operator identity in another role's
+    file is refused by name. Failure oracle: the rollout unit refusing its own required
+    setting (the pass never starts), or another role accepting an operator principal."""
+    operator = {"LAB_OPERATOR_ID": "00000090-0000-4000-8000-000000000090"}
+    assert "LAB_OPERATOR_ID" in PF["allowed_names"]("rollout")
+    assert check("rollout", {**BASE, **operator}) == []
+    for role in ("training", "annotation"):
+        assert "LAB_OPERATOR_ID" not in PF["allowed_names"](role), role
+        assert check(role, {**BASE, **operator}) == \
+            [f"LAB_OPERATOR_ID: not a {role} setting"], role
+
+
 def test_i6_the_image_is_a_local_content_addressed_id_never_a_flag_or_a_pull() -> None:
     """`${INFRX_IMAGE}` is one argv word of `docker run`, before the command. Failure oracle:
     a docker flag there (`--privileged` and the image becomes `python`), an absent or empty
