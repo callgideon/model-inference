@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 308,
- "updated": "2026-09-29T18:20:18Z",
+ "revision": 309,
+ "updated": "2026-09-29T18:37:07Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9017,22 +9017,22 @@
   {
    "id": "W5-LAB-SQL-LW7",
    "task": "L3",
-   "slice": "WR-C6-VARIANTS (a provider listing of optimization variants with both identities + latest comparison → /lab/v1/optimizations) and WR-C6-REQUEUE (a requeue RPC for a failed import id) as 0055 LOCAL-ONLY (Opus); workflow wf_caa9c5f6-702",
+   "slice": "WR-C6-VARIANTS (a provider listing of optimization variants with both identities + latest comparison → /lab/v1/optimizations) and WR-C6-REQUEUE (a requeue RPC for a failed import id) as 0055 LOCAL-ONLY (Opus); workflow wf_caa9c5f6-702; REJECT at a3fe463a with one open = a coordinator ruling (WR-LW7-3) → ruled (b), merged as ACCEPT_WITH_FIXES; 0055 variants + requeue; 19 mutants; api-test 6778/0",
    "agent": "opus",
    "branch": "codex/w5-lab-sql-lw7",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw7",
    "base": "993d481c",
-   "head": null,
+   "head": "a3fe463a",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T14:59:31Z",
-   "updated": "2026-09-29T14:59:31Z",
+   "updated": "2026-09-29T18:37:07Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #56 (WR-LW7-1 pilot patch, WR-LW7-2 import-again, WR-LW7-3 option (b) = R252, minors) → /lab/v1/optimizations answers the listing",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 6,
@@ -9328,6 +9328,45 @@
     "tests/integration/test_harness.py",
     "Makefile",
     "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+    "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-56",
+   "task": null,
+   "slice": "merge batch #56 (Opus): lab-sql-lw7 a3fe463a (+WR-LW7-1 pilot patch, WR-LW7-2/3b Lab app, 0055 minors, R252)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-56",
+   "worktree": ".claude/worktrees/codex-w5-merge-56",
+   "base": "f63f914c",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T18:37:07Z",
+   "updated": "2026-09-29T18:37:07Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10; harness pin 0055 before 0056) → 0055 LOCAL-ONLY on the tip",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0055_lab_variants_requeue.sql",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/g/",
+    "apps/infrx-api/tests/l3sql/",
+    "apps/lab/lib/services/",
+    "apps/lab/tests/r/",
+    "tests/integration/test_harness.py",
+    "Makefile",
     "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
