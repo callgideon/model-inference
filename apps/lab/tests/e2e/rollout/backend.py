@@ -16,7 +16,7 @@ two small test-local adapters (the route's `ReleaseRecords` / `Proposals` shapes
 `Controller`
 deciding; R1's aggregates and R2's latest verdict are this backend's last-seen values (no table
 holds them yet). `world.composed` says which ports the gateway's own composition carries, so the
-gate reports NOT RUN until it carries them. Test-only doors: `/_test/launch`, `/_test/step`
+gate reports NOT RUN until it carries them. Test-only doors: `/_test/probe` (the gateway records port's own refusal), `/_test/launch`, `/_test/step`
 (R2's pass), `/_test/decide` (the operator, through R2, whose transition is the proposal's own
 decide RPC).
 
@@ -187,6 +187,14 @@ def main() -> None:
     async def composition(body: dict):
         switch.current = {"gateway": gateway, "journey": journey}[body["as"]]
         return {"as": body["as"]}
+
+    @app.post("/_test/probe")
+    async def probe(body: dict):
+        """The gateway's own records port, read directly: which refusal R01's page fails on."""
+        try:
+            return {"rows": len(await gateway.records.releases(NEMO))}
+        except errors.DependencyUnavailable as refused:
+            return {"refusal": str(refused)}
 
     @app.post("/_test/launch")
     async def launch(body: dict):
