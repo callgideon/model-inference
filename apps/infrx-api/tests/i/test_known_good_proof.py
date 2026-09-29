@@ -10,7 +10,8 @@ check refuses a history that differs from the candidate's files by a version or 
 CLI-split history that omits, reorders or fragments the file's statements. KNOWN-GOOD-REPROOF
 (R151 condition 1): both proofs reach 0051 and bind this checkout's 0027-0051 bytes;
 KNOWN-GOOD-REPROOF-2 (the next window's condition 1): they reach 0052, and the through-0051
-proof is kept word for word in `superseded` (R224).
+proof is kept word for word in `superseded` (R224); KNOWN-GOOD-REPROOF-3 (the next window's
+condition 1 again): they reach 0056, and the through-0052 proof is kept word for word in front.
 """
 from __future__ import annotations
 
@@ -77,26 +78,29 @@ def test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema():
         assert f"{len(PROOF['SHAPE'])} SHAPE cases" in proof["result"], len(PROOF["SHAPE"])
 
 
-def test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0052():
+def test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0056():
     """KNOWN-GOOD-REPROOF (R151/R201 condition 1, the 2026-09-29 window: hosted 0026 -> 0051),
-    KNOWN-GOOD-REPROOF-2 (the next window: 0051 -> 0052, lab-control-2's reject).
-    Failure oracle: a record whose proofs stop short of 0052, or whose 0027-0052 hashes are not
+    KNOWN-GOOD-REPROOF-2 (0051 -> 0052, lab-control-2's reject), KNOWN-GOOD-REPROOF-3 (the next
+    window: 0051 -> 0056, 0053-0056 the Lab's composition reads, release live, variants/requeue
+    and control grants).
+    Failure oracle: a record whose proofs stop short of 0056, or whose 0027-0056 hashes are not
     this checkout's bytes (a Lab migration revised after the proof ran), leaves the window with
-    no rollback target; the re-proof's evidence is named first; the through-0051 proof it
-    replaces is kept, not dropped (R224)."""
+    no rollback target; the re-proof's evidence is named first; the through-0052 proof it
+    replaces is kept, not dropped, in front of the through-0051 one (R224)."""
     record = json.loads(RECORD.read_text())
     lab = {p.name[:4]: hashlib.sha256(p.read_bytes()).hexdigest()
-           for p in (support.REPO / MIG).glob("[0-9][0-9][0-9][0-9]_*.sql") if "0026" < p.name[:4] <= "0052"}
-    assert sorted(lab) == [f"{n:04d}" for n in range(27, 53)]
+           for p in (support.REPO / MIG).glob("[0-9][0-9][0-9][0-9]_*.sql") if "0026" < p.name[:4] <= "0056"}
+    assert sorted(lab) == [f"{n:04d}" for n in range(27, 57)]
     proven = {r["sha"][:7]: r["schema_proof"] for r in record["releases"]
               if r.get("known_good") and r.get("schema_proof")}
     assert set(proven) == {"4226315", "bda1586"}
     for sha, proof in proven.items():
-        assert proof["through"] >= "0052", sha
+        assert proof["through"] >= "0056", sha
         assert {v: proof["files"].get(v) for v in lab} == lab, sha
-        assert "KNOWN-GOOD-REPROOF-2-" in proof["evidence"][0], sha
-        assert [s["through"] for s in proof["superseded"]] == ["0051", "0026"], sha
-        assert "KNOWN-GOOD-REPROOF-fca3ea3" in proof["superseded"][0]["evidence"][0], sha
+        assert "KNOWN-GOOD-REPROOF-3-" in proof["evidence"][0], sha
+        assert [s["through"] for s in proof["superseded"]] == ["0052", "0051", "0026"], sha
+        assert "KNOWN-GOOD-REPROOF-2-68ba65f" in proof["superseded"][0]["evidence"][0], sha
+        assert "KNOWN-GOOD-REPROOF-fca3ea3" in proof["superseded"][1]["evidence"][0], sha
 
 
 # WR-KGR2-RV2 (R224, word for word): the through-0051 proof as the record held it before the
@@ -118,16 +122,47 @@ THROUGH_0051 = {sha: {
 } for sha in ("4226315", "bda1586")}
 
 
+# KNOWN-GOOD-REPROOF-3 (R224, word for word): the through-0052 proof as the record held it
+# before this re-proof, copied from the git blob infra/rollout/known-good.json at 33547abd.
+THROUGH_0052 = {sha: {
+    "through": "0052",
+    "result": f"{sha}: its own tests/d (26 suites, 383 passed, 14 SHAPE cases skipped by name, "
+              "5 xfailed) + the result-read probe PASS on 0001-0052, on plain PostgreSQL + shim AND on "
+              "the Supabase image; migrate.py history check PASS on both (the committed driver at "
+              "fca3ea3, unchanged; candidate e9e32e0e)",
+    "candidate": "e9e32e0e (0001-0051 as proven at 0051 by KNOWN-GOOD-REPROOF, 0052 lab-control-2's "
+                 "reject, LOCAL-ONLY until the next R151 window); supersedes the through-0051 proof, "
+                 "rerun whole",
+    "evidence": ["research/plan/evidence/i/KNOWN-GOOD-REPROOF-2-68ba65f.md",
+                 "research/plan/evidence/i/KNOWN-GOOD-REPROOF-fca3ea3.md",
+                 "research/plan/evidence/i/KNOWN-GOOD-PROOF-3-af552ed.md",
+                 "research/plan/evidence/i/KNOWN-GOOD-PROOF-2-3f7df77.md",
+                 "research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md"],
+} for sha in ("4226315", "bda1586")}
+
+
 def test_ops_recover__the_superseded_0051_proof_is_the_recorded_one_word_for_word():
     """R224: a re-proof moves the proof it replaces into `superseded` word for word.
-    Failure oracle: superseded[0] reworded, or a field dropped, differs from the through-0051
-    record at ac8bc06d."""
+    Failure oracle: the through-0051 entry (superseded[1] since KNOWN-GOOD-REPROOF-3) reworded,
+    or a field dropped, differs from the through-0051 record at ac8bc06d."""
     record = json.loads(RECORD.read_text())
     proven = {r["sha"][:7]: r["schema_proof"] for r in record["releases"]
               if r.get("known_good") and r.get("schema_proof")}
     assert set(proven) == set(THROUGH_0051)
     for sha, proof in proven.items():
-        assert proof["superseded"][0] == THROUGH_0051[sha], sha
+        assert proof["superseded"][1] == THROUGH_0051[sha], sha
+
+
+def test_ops_recover__the_superseded_0052_proof_is_the_recorded_one_word_for_word():
+    """R224 (KNOWN-GOOD-REPROOF-3): superseded[0] is the through-0052 proof word for word.
+    Failure oracle: it reworded, a field dropped, or not moved at all differs from the
+    through-0052 record at 33547abd."""
+    record = json.loads(RECORD.read_text())
+    proven = {r["sha"][:7]: r["schema_proof"] for r in record["releases"]
+              if r.get("known_good") and r.get("schema_proof")}
+    assert set(proven) == set(THROUGH_0052)
+    for sha, proof in proven.items():
+        assert proof["superseded"][0] == THROUGH_0052[sha], sha
 
 # The 14 SHAPE cases the record's runs deselected (KNOWN-GOOD-REPROOF-fca3ea3; KGR-RV-1): the
 # count alone lets a real SQL case replace one of them unnoticed.
@@ -207,13 +242,13 @@ def test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order():
         "statements differ from the candidate's files: ['0002']"
 
 
-def test_ops_recover__both_targets_are_known_good_through_0052_and_not_beyond(tmp_path):
-    """KNOWN-GOOD-PROOF-2/-3 (RR:51), KNOWN-GOOD-REPROOF (R151): each target's REAL record entry,
-    judged against this checkout's real 0019-0052 bytes, is KNOWN-GOOD with hosted at 0024-0052
-    (0026 fences put_result; its lease-less call, the targets' write, is 0014's; 0027-0052 are
-    the Lab's) and NOT at 0053, which no proof reaches. The target tree is a stand-in commit (0001-0018 and the
+def test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond(tmp_path):
+    """KNOWN-GOOD-PROOF-2/-3 (RR:51), KNOWN-GOOD-REPROOF(-2/-3) (R151): each target's REAL record
+    entry, judged against this checkout's real 0019-0056 bytes, is KNOWN-GOOD with hosted at
+    0024-0056 (0026 fences put_result; its lease-less call, the targets' write, is 0014's;
+    0027-0056 are the Lab's) and NOT at 0057, which no proof reaches. The target tree is a stand-in commit (0001-0018 and the
     preparation loop, as both targets carry) because mutation copies are not git checkouts;
-    the real-sha verdicts are the evidence's `known-good.py <sha> --applied 0052|0053` runs."""
+    the real-sha verdicts are the evidence's `known-good.py <sha> --applied 0056|0057` runs."""
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "trunk")
@@ -229,8 +264,8 @@ def test_ops_recover__both_targets_are_known_good_through_0052_and_not_beyond(tm
             (repo / path).parent.mkdir(parents=True, exist_ok=True)
             (repo / path).touch()
         at = {applied: judge(target, applied, [], None, {"releases": [entry]}, repo)
-              for applied in ("0024", "0026", "0027", "0051", "0052", "0053")}
-        assert {at[a]["verdict"] for a in ("0024", "0026", "0027", "0051", "0052")} == {"KNOWN-GOOD"}, \
-            (real["sha"], at)
-        assert at["0053"]["verdict"] == "NOT-KNOWN-GOOD"
-        assert [c["check"] for c in at["0053"]["checks"] if not c["ok"]] == ["migrations"]
+              for applied in ("0024", "0026", "0027", "0051", "0052", "0056", "0057")}
+        assert {at[a]["verdict"] for a in ("0024", "0026", "0027", "0051", "0052", "0056")} == \
+            {"KNOWN-GOOD"}, (real["sha"], at)
+        assert at["0057"]["verdict"] == "NOT-KNOWN-GOOD"
+        assert [c["check"] for c in at["0057"]["checks"] if not c["ok"]] == ["migrations"]
