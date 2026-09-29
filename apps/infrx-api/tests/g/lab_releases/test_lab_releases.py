@@ -401,7 +401,7 @@ def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_o
         async def resolve(self, ref, *, provider_org_id):
             return r2w.POLICY
 
-    records = pilot.ReleaseRecords(D9(), D7(), objects)
+    records = pilot.ReleaseRecords(D9(), D7(), objects, None)   # variants: unread here
     assert [r["progress"] for r in asyncio.run(records.releases(r2w.P))] == [None, None]
     assert asked == refs, "each release's Live is read for its own revision"
     lives[refs[0]] = r2w.live(requests=40, errors_=2, p99=950, covered=7, spent="3.50000000",
@@ -414,3 +414,62 @@ def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_o
         "candidate": {"requests": 40, "errors": 2, "p99_ms": 950},
         "quality_covered": 7, "spent": {"amount": "3.50000000", "unit": "PROVIDER_USD"},
         "candidate_healthy": False, "assignments": []}, first
+
+
+def test_lab_releases__a_unit_refused_live_nulls_its_own_row_and_the_others_list():
+    """C7-RV-6 (R248, proposed ruling): a release whose jobs settled in legacy USD makes D9's
+    Live refuse (`InvalidRequest`, never converted). That row alone shows `progress` and
+    `verdict` null with the typed reason `refused: "unit_refused"`; every other release still
+    lists with its own Live and verdict. Any other Live failure still fails the listing (a
+    503, never a guessed row). Oracle: one misconfigured release failing the whole page, a
+    refused row showing a verdict or progress, or an outage hidden as a unit refusal."""
+    import asyncio
+    from datetime import datetime, timezone
+
+    from infrx.contracts import errors
+    from infrx.gateway import pilot
+    from infrx.lab.workers.__main__ import plan_key
+    from infrx.media.store import InMemoryObjectStore
+    from infrx.state.lab_rollout import Decision, Release, ReleaseListing
+    from tests.r.control import test_control as r2w
+
+    objects = InMemoryObjectStore()
+    usd, ok = r2w.POLICY_REF, r2w.POLICY_REF.replace("sha256:", "sha256:0", 1)[:-1]
+    fails = {usd: errors.InvalidRequest("this release's jobs settled in USD, no Lab unit")}
+    asyncio.run(objects.put_if_absent(plan_key(r2w.P, r2w.POLICY.policy_id),
+                                      r2w.plan().model_dump_json().encode(), "x"))
+    held = Decision(decision="hold", reasons=("min_requests",), evidence_refs=(),
+                    decided_by="c", at=datetime(2026, 9, 28, tzinfo=timezone.utc))
+
+    class D9:
+        async def releases_in(self, states=(), *, provider_org_id):
+            return [ReleaseListing(policy_id=r2w.POLICY.policy_id, provider_org_id=r2w.P,
+                                   endpoint_id="e", policy_ref=ref, latest_decision=held,
+                                   release=Release(state="running", fence=1, plan_digest="d",
+                                                   started_at=r2w.START)) for ref in (usd, ok)]
+
+        async def live(self, policy_ref):
+            if policy_ref in fails:
+                raise fails[policy_ref]
+            return r2w.live()
+
+        async def tally(self, policy_ref):     # 0058 once lab-sql-lw9 lands: never for a refused row
+            assert policy_ref not in fails, "a refused row reads no tally"
+            return []
+
+    class D7:
+        async def resolve(self, ref, *, provider_org_id):
+            return r2w.POLICY
+
+    records = pilot.ReleaseRecords(D9(), D7(), objects, None)
+    refused, listed = asyncio.run(records.releases(r2w.P))
+    assert (refused["policy_ref"], refused["progress"], refused["verdict"],
+            refused.get("refused")) == (usd, None, None, "unit_refused"), refused
+    assert listed["policy_ref"] == ok and listed["progress"]["candidate"]["requests"] == 1_000
+    assert (listed["verdict"] or {}).get("action") == "hold" and "refused" not in listed, listed
+    fails[usd] = errors.DependencyUnavailable("D9 did not answer")
+    try:
+        asyncio.run(records.releases(r2w.P))
+        raise AssertionError("an outage was listed as a row")
+    except errors.DependencyUnavailable:
+        pass

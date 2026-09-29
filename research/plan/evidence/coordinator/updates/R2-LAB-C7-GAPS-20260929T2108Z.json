@@ -1,0 +1,37 @@
+{
+  "task": "R2",
+  "slice": "lab-c7-gaps: C7-RV-1 (rollback verdict), C7-RV-2 (started_at), C7-RV-4 (LAB_S3_BUCKET named), C7-RV-5 (S3_MEDIA_* declared + runbook), C7-RV-6 (unit-refused row, proposed ruling), WR-C7-DOC",
+  "tasks_touched": ["I7", "R2"],
+  "activity": "review",
+  "head": "ed21f2ad",
+  "worktree": ".claude/worktrees/codex-w5-lab-c7-gaps",
+  "branch": "codex/w5-lab-c7-gaps",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/workers/__main__.py",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/w/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "infra/lab/app/lab.json",
+    "infra/lab/app/README.md",
+    "infra/lab/workers/rollout/RUNBOOK.md",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/coordinator/LAB-C7-GAPS-*"
+  ],
+  "commands": [
+    {"cmd": "INFRX_MUTANTS=all pytest tests/w/test_lab_workers_mutants.py", "exit": 0, "summary": "158 passed, 0 survivors (3 new)"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/g/lab_releases/test_mutants.py", "exit": 0, "summary": "44 passed, 1 skipped (opt-in PG half), 0 survivors (5 new)"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_LAB_RELEASES_PG=1 INFRX_D_TASK=p3 pytest tests/g/lab_releases/test_mutants.py -k 'pg or well_formed or every_case'", "exit": 0, "summary": "4 passed; page_unit_refusal_fails_listing_pg killed on real 0054"},
+    {"cmd": "INFRX_D_TASK=p3 pytest (r2-gated decide/releases PG cases via throwaway p3 copies) + test_lab_releases_unit_refused_pg.py", "exit": 0, "summary": "4 passed"},
+    {"cmd": "INFRX_D_TASK=p3 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py", "exit": 0, "summary": "E4 2835 passed, 30 skipped, 0 failed (every switch OFF)"},
+    {"cmd": "pytest tests/integration/lab_*/test_mutants.py -k 'well_formed or every_case or anchor or declared or known'", "exit": 0, "summary": "19 passed; anchors intact"},
+    {"cmd": "pytest tests/i/lab_rollout tests/i/lab_pipeline tests/i/lab_control tests/i/lab_eval; tests/i/lab -k declared (l4, file reads)", "exit": 0, "summary": "87 passed, 6 skipped; 4 passed"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium",
+               "basis": "one verify/fix round on a finished lane (47-234 min, session-03); WR-C7G-PREFLIGHT is a coordinator wiring", "at": "2026-09-29T21:08:33Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-C7G-PREFLIGHT (coordinator): preflight.py allowed_names(rollout) += LAB_S3_PREFIX, S3_MEDIA_BUCKET, S3_MEDIA_PREFIX + lab_pipeline case/mutant; patch LAB-C7-GAPS-WR-C7G-PREFLIGHT.patch (applies at ed21f2ad)",
+    "Makefile (optional): the opt-in p3 PG half of tests/g/lab_releases/test_mutants.py (INFRX_LAB_RELEASES_PG=1 INFRX_D_TASK=p3)"
+  ],
+  "evidence": ["research/plan/evidence/coordinator/LAB-C7-GAPS-ed21f2a.md", "research/plan/evidence/coordinator/LAB-C7-GAPS-WR-C7G-PREFLIGHT.patch"]
+}

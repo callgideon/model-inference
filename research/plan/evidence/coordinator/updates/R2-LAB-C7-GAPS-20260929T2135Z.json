@@ -1,0 +1,88 @@
+{
+  "task": "R2",
+  "slice": "lab-c7-gaps: C7-RV-1 (rollback verdict), C7-RV-2 (started_at), C7-RV-4 (LAB_S3_BUCKET named), C7-RV-5 (S3_MEDIA_* declared + runbook), C7-RV-6 (unit-refused row, proposed ruling), WR-C7-DOC",
+  "tasks_touched": [
+    "I7",
+    "R2"
+  ],
+  "activity": "review",
+  "head": "2e5f93a8+evidence",
+  "worktree": ".claude/worktrees/codex-w5-lab-c7-gaps",
+  "branch": "codex/w5-lab-c7-gaps",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/workers/__main__.py",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/w/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "infra/lab/app/lab.json",
+    "infra/lab/app/README.md",
+    "infra/lab/workers/rollout/RUNBOOK.md",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/coordinator/LAB-C7-GAPS-*"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/w/test_lab_workers_mutants.py",
+      "exit": 0,
+      "summary": "158 passed, 0 survivors (3 new)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/g/lab_releases/test_mutants.py",
+      "exit": 0,
+      "summary": "44 passed, 1 skipped (opt-in PG half), 0 survivors (5 new)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_LAB_RELEASES_PG=1 INFRX_D_TASK=p3 pytest tests/g/lab_releases/test_mutants.py -k 'pg or well_formed or every_case'",
+      "exit": 0,
+      "summary": "4 passed; page_unit_refusal_fails_listing_pg killed on real 0054"
+    },
+    {
+      "cmd": "INFRX_D_TASK=p3 pytest (r2-gated decide/releases PG cases via throwaway p3 copies) + test_lab_releases_unit_refused_pg.py",
+      "exit": 0,
+      "summary": "4 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=p3 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py",
+      "exit": 0,
+      "summary": "E4 2835 passed, 30 skipped, 0 failed (every switch OFF)"
+    },
+    {
+      "cmd": "pytest tests/integration/lab_*/test_mutants.py -k 'well_formed or every_case or anchor or declared or known'",
+      "exit": 0,
+      "summary": "19 passed; anchors intact"
+    },
+    {
+      "cmd": "pytest tests/i/lab_rollout tests/i/lab_pipeline tests/i/lab_control tests/i/lab_eval; tests/i/lab -k declared (l4, file reads)",
+      "exit": 0,
+      "summary": "87 passed, 6 skipped; 4 passed"
+    },
+    {
+      "cmd": "fix round 1-C7G-RV-A: trial merges (git merge --no-commit + --abort) of codex/w5-lab-rollout-7 e65bbecf and codex/w5-lab-sql-lw9 751ff6a2, resolved per the merge note",
+      "exit": 0,
+      "summary": "rollout-7: lab_releases 19 passed, mutants 57 passed/0 survivors, PG case + PG mutant green on p3; lw9: 15 passed, mutants 46 passed/0 survivors, PG case + PG mutant green"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/g/lab_releases/test_mutants.py (2e5f93a8)",
+      "exit": 0,
+      "summary": "44 passed, 1 skipped, 0 survivors"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.2,
+    "likely_h": 0.5,
+    "pessimistic_h": 1.5,
+    "confidence": "medium",
+    "basis": "coordinator merge + WR-C7G-PREFLIGHT wiring; the conflict resolution is pre-verified",
+    "at": "2026-09-29T21:35:40Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-C7G-PREFLIGHT (coordinator): preflight.py allowed_names(rollout) += LAB_S3_PREFIX, S3_MEDIA_BUCKET, S3_MEDIA_PREFIX + lab_pipeline case/mutant; patch LAB-C7-GAPS-WR-C7G-PREFLIGHT.patch (applies at ed21f2ad)",
+    "Makefile (optional): the opt-in p3 PG half of tests/g/lab_releases/test_mutants.py (INFRX_LAB_RELEASES_PG=1 INFRX_D_TASK=p3)",
+    "MERGE NOTE (coordinator, 1-C7G-RV-A): pilot.py/lab_releases mutants.py/test_lab_releases.py conflict with lab-rollout-7 and lab-sql-lw9; the lane landing second keeps the single guarded live read feeding _progress (lw9 tally only when live is not None) and rollout-7's verdict line verbatim, plus out[-1].update(verdict=None, refused=refused); lw9's page_progress_withheld re-anchors to '\"progress\": _progress(live,'; see LAB-C7-GAPS-ed21f2a.md 'Fix round'"
+  ],
+  "evidence": [
+    "research/plan/evidence/coordinator/LAB-C7-GAPS-ed21f2a.md",
+    "research/plan/evidence/coordinator/LAB-C7-GAPS-WR-C7G-PREFLIGHT.patch"
+  ]
+}
