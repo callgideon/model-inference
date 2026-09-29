@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 317,
- "updated": "2026-09-29T21:34:42Z",
+ "revision": 318,
+ "updated": "2026-09-29T21:37:34Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9577,22 +9577,22 @@
   {
    "id": "W5-LAB-C7-GAPS",
    "task": "R2",
-   "slice": "C7-RV-1..6 + WR-C7-DOC (rollback-verdict case, started_at, HeadBucket message, S3_MEDIA_BUCKET in the unit env, USD-settled row fallback) (Opus); workflow wf_20889db3-846",
+   "slice": "C7-RV-1..6 + WR-C7-DOC (rollback-verdict case, started_at, HeadBucket message, S3_MEDIA_BUCKET in the unit env, USD-settled row fallback) (Opus); workflow wf_20889db3-846; ACCEPT_WITH_FIXES at ae83ab2b (C7-RV-1..6 + WR-C7-DOC; a tip red repaired; 202 mutants 0 survivors; E4 2835/0)",
    "agent": "opus",
    "branch": "codex/w5-lab-c7-gaps",
    "worktree": ".claude/worktrees/codex-w5-lab-c7-gaps",
    "base": "33547abd",
-   "head": null,
+   "head": "ae83ab2b",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T20:21:25Z",
-   "updated": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T21:37:34Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #60 (WR-C7G-PREFLIGHT, F1/F3/F4, R255–R256)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9710,6 +9710,43 @@
     "infra/lab/rollout/hosted-migrate-0052-0056.patch",
     "apps/infrx-api/tests/i/test_known_good_proof.py",
     "apps/infrx-api/tests/i/mutants.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-60",
+   "task": null,
+   "slice": "merge batch #60 (Opus): lab-c7-gaps ae83ab2b (+WR-C7G-PREFLIGHT, F1/F3/F4, R255–R256)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-60",
+   "worktree": ".claude/worktrees/codex-w5-merge-60",
+   "base": "b88a733c",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T21:37:34Z",
+   "updated": "2026-09-29T21:37:34Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10); pilot.py conflicts with lab-rollout-7 / lab-sql-lw9 resolved at their merges",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/lab/workers/__main__.py",
+    "infra/lab/workers/training/preflight.py",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "apps/infrx-api/tests/i/lab_pipeline/",
+    "apps/lab/",
+    "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
   }
