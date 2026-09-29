@@ -116,7 +116,7 @@ SCENARIOS = {
                      "uncertainty", "test_ids": ["EVAL-COMPARE"],
             "lanes": ["WR-B4-2", "WR-LAB2-2", "WR-B3-1"]},
     "j11": {"title": "a finite-video case reaches the dev endpoint through H1/B1",
-            "test_ids": ["EVAL-COMPARE"], "lanes": ["L3"]},
+            "test_ids": ["EVAL-COMPARE"], "lanes": []},
 }
 REQUIRED = {
     "j01": ("test_j01_a_benchmark_with_bad_rows_is_refused_until_its_rejects_are_accepted",
@@ -147,9 +147,9 @@ REQUIRED = {
 #: the recorded 24a7a065 verdict, whose j10 waited NOT RUN[lab-e2e]; R234 (ii) `product WR`:
 #: j10 now runs apps/lab/tests/e2e/evaluate (LAB-E2E, R238) and waits on the gateway's
 #: LAB_EVALS composition ports WR-B4-2/WR-LAB2-2/WR-B3-1, rerun `make lab-e2e` then
-#: `--only j10`; j11 waits on WR-E6L-J11 (L3's media path, lane lab-eval-media), rerun
-#: `apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir>
-#: --only j11`). The gate is re-run when the dependency lands and the cell must then PASS.
+#: `--only j10`; `L3` is kept only for the recorded 24a7a065 verdict, whose j11 waited
+#: NOT RUN[L3] on WR-E6L-J11 - j11 is bound since lab-eval-media (R239) and PASSes). The gate
+#: is re-run when the dependency lands and the cell must then PASS.
 OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI", "WR-B4-2": "product WR: WR-B4-2",
                 "WR-LAB2-2": "product WR: WR-LAB2-2", "WR-B3-1": "product WR: WR-B3-1",
                 "L3": "product WR: WR-E6L-J11"}

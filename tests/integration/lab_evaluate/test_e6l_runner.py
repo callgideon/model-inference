@@ -62,14 +62,18 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert runner.SCENARIOS["j10"]["lanes"] == ["WR-B4-2", "WR-LAB2-2", "WR-B3-1"], (
         "j10 runs apps/lab/tests/e2e/evaluate (LAB-E2E); NOT RUN until the gateway's own "
         "LAB_EVALS composition carries the experiments, catalog and ledger ports")
-    assert runner.SCENARIOS["j11"]["lanes"] == ["L3"]
+    assert runner.SCENARIOS["j11"]["lanes"] == [], (
+        "j11 is bound (WR-E6L-J11, lab-eval-media): its presigned video_url reaches the dev "
+        "endpoint, so a NOT RUN of it is in local scope")
 
 
 def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     """R222: the gate is accepted locally with no FAIL cell and every NOT RUN waiting only on
     out-of-local-scope work (a GPU, staging, an external provider, a product WR: j10's
-    LAB_EVALS ports), by its own NOT RUN reason. A NOT RUN on in-scope work (j11's L3 media path), a FAIL, or a
-    scenario NOT RUN for another reason (deselected, a case absent) is left open."""
+    LAB_EVALS ports), by its own NOT RUN reason. A NOT RUN on in-scope work (j11, bound since
+    WR-E6L-J11), a FAIL, or a scenario NOT RUN for another reason (deselected, a case absent)
+    is left open. `L3` stays out of scope only for the recorded 24a7a065 verdict, whose j11
+    waited NOT RUN[L3]."""
     assert runner.OUT_OF_SCOPE == {"lab-e2e": "lab-e2e UI", "WR-B4-2": "product WR: WR-B4-2",
                                    "WR-LAB2-2": "product WR: WR-LAB2-2",
                                    "WR-B3-1": "product WR: WR-B3-1",
@@ -78,10 +82,8 @@ def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     others = [c for sid in runner.SCENARIOS if sid not in ("j10", "j11") for c in everything(sid)]
     base = [*others, *everything("j10", "skipped", ui)]
     result = runner.classify(junit(*base, *everything("j11", "skipped", "NOT RUN[L3] media")))
-    assert runner.r222(result) == {"accepted": True, "open": {}}, "R234 (ii): WR-E6L-J11"
-    with monkeypatch.context() as patch:            # a NOT RUN on in-scope work stays open
-        patch.delitem(runner.OUT_OF_SCOPE, "L3")
-        assert runner.r222(result) == {"accepted": False, "open": {"j11": "NOT RUN"}}
+    assert runner.r222(result) == {"accepted": False, "open": {"j11": "NOT RUN"}}, \
+        "j11 is bound (WR-E6L-J11): a NOT RUN of it is in-scope work and stays open"
     # R234: an in-scope FAIL is never excused, whatever its message says (WR-E6L-RV-1)
     result = runner.classify(junit(*others, *everything("j10", "failure", ui), *everything("j11")))
     assert runner.r222(result) == {"accepted": False, "open": {"j10": "FAIL"}}
@@ -93,7 +95,10 @@ def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     assert statuses["j10"]["lanes"] == ["lab-e2e"]
     assert {sid: s["status"] for sid, s in statuses.items() if s["status"] != "PASS"} == \
         {"j10": "NOT RUN", "j11": "NOT RUN"}
-    assert runner.r222(statuses) == {"accepted": True, "open": {}}
+    assert runner.r222(statuses) == {"accepted": True, "open": {}}, "R234 (ii): WR-E6L-J11"
+    with monkeypatch.context() as patch:            # a NOT RUN on in-scope work stays open
+        patch.delitem(runner.OUT_OF_SCOPE, "L3")
+        assert runner.r222(statuses) == {"accepted": False, "open": {"j11": "NOT RUN"}}
     result = runner.classify(junit(*base, *everything("j11")))
     assert runner.r222(result) == {"accepted": True, "open": {}}
     assert runner.gate(result) == "NOT RUN", "accepted is not a PASS"

@@ -271,8 +271,8 @@ class DevWallet:
 
     def reply(self, *, prompt, media, tool_results, seed, idempotency_key) -> dict:
         with self.lock:
-            self.calls.append({"prompt": prompt, "seed": seed, "key": idempotency_key,
-                               "tool_results": tool_results})
+            self.calls.append({"prompt": prompt, "media": media, "seed": seed,
+                               "key": idempotency_key, "tool_results": tool_results})
             if self.fail and (failure := self.fail.pop(0)) is not None:
                 raise failure
             if idempotency_key in self.replies:
@@ -302,7 +302,8 @@ class DevWallet:
 
 def serve(wallet: DevWallet, port: int, api_key: str) -> ThreadingHTTPServer:
     """`wallet` as an OpenAI-compatible `/v1/chat/completions` on 127.0.0.1:`port`
-    (402 `insufficient_quota`, 503 for an injected transient failure)."""
+    (402 `insufficient_quota`, 503 for an injected transient failure); a finite-video case's
+    first message is `[text, video_url]` parts, the clip URLs reaching the wallet as `media`."""
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -322,8 +323,11 @@ def serve(wallet: DevWallet, port: int, api_key: str) -> ThreadingHTTPServer:
                 return self._send(401, {"error": {"code": "invalid_api_key"}})
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             messages = body["messages"]
+            content = messages[0]["content"]         # a string, or [text, video_url] (R58)
+            parts = [{"type": "text", "text": content}] if isinstance(content, str) else content
             try:
-                r = wallet.reply(prompt=messages[0]["content"], media=[], seed=body.get("seed"),
+                r = wallet.reply(prompt=parts[0]["text"], seed=body.get("seed"),
+                                 media=[p["video_url"]["url"] for p in parts[1:]],
                                  tool_results=[json.loads(m["content"]) for m in messages[1:]],
                                  idempotency_key=self.headers.get("Idempotency-Key"))
             except errors.DomainError as failed:

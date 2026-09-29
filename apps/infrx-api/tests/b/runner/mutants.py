@@ -41,10 +41,14 @@ CONC = "test_b1_cases_run_with_bounded_concurrency"
 HTTP = "test_b1_the_http_dev_endpoint_speaks_openai_with_the_key_and_prices_by_the_card"
 MEMBER = "test_b1_only_a_current_member_allowed_to_run_evaluations_schedules"
 UNEXPECTED = "test_b1_an_unexpected_error_fails_its_case_visibly_and_the_delivery_goes_on"
+VIDEO = "test_b1_a_finite_video_case_is_sent_as_its_presigned_clip_with_its_span"
+CLIPS = "test_b1_only_the_runs_providers_clip_within_the_cap_is_signed"
+PRESIGN = "test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object"
+S3 = "media/s3.py"
 
 
-def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
-    return Mutant(name=name, invariant=invariant, file=P, old=old, new=new, cases=cases,
+def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1, file=P):
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
                   dies_by=dies_by, occurrences=occurrences)
 
 
@@ -223,8 +227,11 @@ MUTANTS: tuple[Mutant, ...] = (
       'Credit(status["costs"].get("CREDIT", "0")) + self._unrecorded',
       'Credit(status["costs"].get("CREDIT", "0"))', BUDGET),
     # --- the HTTP dev endpoint (L3 stand-in)
-    m("b1_http_media_sent", "finite video is refused until L3's media path",
-      "        if media:\n", "        if False:\n", HTTP),
+    m("b1_http_media_as_text", "a clip is sent, not dropped for the prompt alone",
+      '"content": content if media else prompt}]', '"content": prompt}]', HTTP),
+    m("b1_http_video_part_shaped", "a clip is a `video_url` part of exactly {url} (R58)",
+      '{"type": "video_url", "video_url": {"url": url}}', '{"type": "video_url", "url": url}',
+      HTTP),
     m("b1_http_seed_dropped", "the seed is sent", '"seed": seed,', '"seed": 0,', HTTP),
     m("b1_http_tool_results_sent", "a tool result is refused, not sent as a refused role (B-R3)",
       "        if tool_results:        # B-R3", "        if False:        # B-R3", HTTP),
@@ -252,6 +259,56 @@ MUTANTS: tuple[Mutant, ...] = (
       'charged=self._rate_card.debit(usage["completion_tokens"],\n'
       '                                                        usage["prompt_tokens"])', HTTP),
 )
+
+
+# --- WR-E6L-J11: a finite-video case to the dev endpoint
+MEDIA = (
+    m("b1_media_unsigned", "the endpoint gets the clip's URL, never the object key",
+      "        media = [await clip_url(", "        media = media or [await clip_url(", VIDEO),
+    m("b1_media_another_provider", "a clip is signed for the run's own provider",
+      "self._frozen.run.provider_org_id, ref,", '"", ref,', VIDEO),
+    m("b1_media_span_dropped", "the clip's span is the case's `span_ms`",
+      '_at(case, "sample.span_ms")', '_at(case, "sample.duration_ms")', VIDEO),
+    m("b1_clip_any_provider", "only lab/<the run's provider>/media/ is signed (R227)",
+      '    if not re.fullmatch(re.escape(media_key(provider_org_id, "")) + "[0-9a-f]{64}", '
+      "media_ref):", "    if False:", CLIPS),
+    m("b1_clip_any_path", "a media ref is a digest, never a path",
+      '+ "[0-9a-f]{64}", media_ref)', '+ ".*", media_ref)', CLIPS),
+    m("b1_clip_over_cap", "a clip is at most MAX_VIDEO_MS (82 s)",
+      "span[1] <= span[0] + lab.MAX_VIDEO_MS", "span[1] <= span[0] + lab.MAX_VIDEO_MS + 1",
+      CLIPS),
+    m("b1_clip_empty", "a clip is at least 1 ms", "0 <= span[0] < span[1]",
+      "0 <= span[0] <= span[1]", CLIPS),
+    m("b1_clip_negative_start", "a clip starts at 0 or later", "0 <= span[0] < span[1]",
+      "span[0] < span[1]", CLIPS),
+    m("b1_clip_fractional_ms", "a span is whole milliseconds",
+      "all(type(ms) is int for ms in span)", "True", CLIPS),
+    m("b1_clip_extra_bounds", "a span is exactly [start, end]", "len(span) == 2",
+      "len(span) >= 2", CLIPS),
+    m("b1_clip_no_span", "a missing span is refused by name", "isinstance(span, list) and ",
+      "", CLIPS, dies_by=("TypeError",)),
+    m("b1_clip_long_lived", "a clip URL lives 600 s", "PRESIGN_S = 600",
+      "PRESIGN_S = 604800", VIDEO, CLIPS),
+    m("b1_clip_span_unsent", "the span travels as the URL's media fragment",
+      '    return f"{url}#t={span[0] / 1000:g},{span[1] / 1000:g}"', "    return url",
+      VIDEO, CLIPS),
+    m("b1_clip_span_in_ms", "the fragment is in seconds", "{span[1] / 1000:g}", "{span[1]}",
+      VIDEO, CLIPS),
+    m("b1_presign_unbounded", "the URL expires as asked",
+      "            ExpiresIn=expires_s)", "            )", PRESIGN, file=S3),
+    m("b1_presign_sigv2", "the URL is SigV4", ' signature_version="s3v4",', "", PRESIGN,
+      file=S3),
+    m("b1_presign_unprefixed", "the URL names the prefixed key",
+      '"Key": self.prefix + key},', '"Key": key},', PRESIGN, file=S3),
+    # coordinator wirings at the lab-eval-media merge (WR-LEM-m1/m2/m3)
+    m("b1_clip_ref_unanchored", "a media ref is anchored at its end (nothing after the digest)",
+      "    if not re.fullmatch(re.escape(", "    if not re.match(re.escape(", CLIPS),
+    m("b1_clip_bool_ms", "a span of booleans is refused (bool is not a whole ms)",
+      "all(type(ms) is int for ms in span)", "all(isinstance(ms, int) for ms in span)", CLIPS),
+    m("b1_presign_head", "the presigned URL is a GET of the object, never a HEAD",
+      '"get_object", Params=', '"head_object", Params=', PRESIGN, file=S3),
+)
+MUTANTS += MEDIA
 
 
 def case_names() -> set[str]:

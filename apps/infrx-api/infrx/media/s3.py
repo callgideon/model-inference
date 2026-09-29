@@ -77,7 +77,9 @@ class S3ObjectStore:
         # Two attempts in all (`max_attempts` would count retries: 3 was 4 attempts, ~2 min
         # against an endpoint that accepts and never answers - review A4). Worst case per
         # call, startup's HeadBucket included: 2 x 30 s read + backoff, about a minute.
-        config = Config(connect_timeout=5, read_timeout=30,
+        # `s3v4` is already every call's signature; naming it makes `presign` SigV4 too
+        # (botocore presigns SigV2 otherwise, which newer buckets refuse).
+        config = Config(connect_timeout=5, read_timeout=30, signature_version="s3v4",
                         retries={"mode": "standard", "total_max_attempts": ATTEMPTS},
                         s3={"addressing_style": "path"} if endpoint_url else None)
         client = botocore.session.get_session().create_client(
@@ -136,6 +138,16 @@ class S3ObjectStore:
     async def describe(self, key: str) -> tuple[int, str] | None:
         head = await self._s3(self._head_object, key, absent_ok=True)
         return (head["ContentLength"], head.get("ContentType", "")) if head else None
+
+    def _presign(self, key: str, expires_s: int) -> str:
+        return self.client.generate_presigned_url(
+            "get_object", Params={"Bucket": self.bucket, "Key": self.prefix + key},
+            ExpiresIn=expires_s)
+
+    async def presign(self, key: str, *, expires_s: int) -> str:
+        """A GET URL for one object, valid `expires_s` seconds (signed locally, no request).
+        It is a bearer credential for those bytes: callers never log it."""
+        return await self._s3(self._presign, key, expires_s)
 
     def _keys(self, prefix: str) -> list[str]:
         pages = self.client.get_paginator("list_objects_v2").paginate(

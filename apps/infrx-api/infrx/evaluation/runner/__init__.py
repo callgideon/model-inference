@@ -53,6 +53,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -71,6 +72,7 @@ from ...harnesses.replay import Bounds, Replayer, ReplayBoundExceeded
 from ...lab.access import LabAccess
 
 MAX_BODY = 65536                        # D7's bound on one result body
+PRESIGN_S = 600                         # a clip URL's life: the gateway fetches it at admission
 RETRYABLE = (errors.RateLimitError, errors.ServerError)
 _MISSING = object()
 
@@ -104,6 +106,24 @@ def case_of(provider_org_id: str, content: dict[str, Any]) -> dict[str, Any]:
         content = {**content, "media_ref": media_key(provider_org_id, content["media_digest"]),
                    "duration_ms": end - start}
     return {"sample": content}
+
+
+async def clip_url(objects, provider_org_id: str, media_ref: str, span: Any) -> str:
+    """WR-E6L-J11: H1's media ref as what the dev deployment's gateway fetches - a presigned
+    GET of the run provider's own Lab media object (R227's rule for `lab/<provider>/`), live
+    `PRESIGN_S`, with the span as a media fragment (`#t=<start s>,<end s>`), since a gateway
+    `video_url` part is exactly `{url}` (R58). The URL is a bearer credential: never logged.
+    ponytail: the fragment is advisory - fetchers drop it, so the gateway gets (and caps) the
+    whole stored object; the span binds only once N1 stores cut clips or the gateway takes a
+    span field (WR-LEM-3)."""
+    if not re.fullmatch(re.escape(media_key(provider_org_id, "")) + "[0-9a-f]{64}", media_ref):
+        raise errors.InvalidRequest("media_foreign: a run sends only its provider's Lab media")
+    if not (isinstance(span, list) and len(span) == 2
+            and all(type(ms) is int for ms in span)
+            and 0 <= span[0] < span[1] <= span[0] + lab.MAX_VIDEO_MS):
+        raise errors.InvalidRequest(f"video_over_cap: a clip is 1..{lab.MAX_VIDEO_MS} ms")
+    url = await objects.presign(media_ref, expires_s=PRESIGN_S)
+    return f"{url}#t={span[0] / 1000:g},{span[1] / 1000:g}"
 
 
 @dataclass(frozen=True)
@@ -202,7 +222,8 @@ class Completion:
 
 
 class DevEndpoint(Protocol):
-    """One call to the run's dev deployment, paid from the provider_dev wallet. Raises
+    """One call to the run's dev deployment, paid from the provider_dev wallet; `media` is
+    the case's clip URLs (`clip_url`). Raises
     `InsufficientCredit` (402), a `RETRYABLE` error, or any other `DomainError` (final)."""
 
     async def complete(self, *, prompt: str, media: list[str],
@@ -279,7 +300,8 @@ class Runner:
             if raw is None:
                 return await self._finish(lease, "failed", reason="missing_content")
             case = case_of(f.run.provider_org_id, json.loads(raw))
-            replayer = Replayer(f.harness, self._deployment, self._bridge(lease, bill, loop),
+            replayer = Replayer(f.harness, self._deployment,
+                                self._bridge(lease, bill, loop, case),
                                 self._recordings, Bounds(spec["max_requests"],
                                                          spec["max_bytes"], spec["max_seconds"]))
             outcome = await asyncio.to_thread(replayer.replay, case)
@@ -315,16 +337,21 @@ class Runner:
         await self._finish(lease, "succeeded", bill=bill,
                            results=[{"evaluator_ref": f.run.evaluator_ref, "body": text}])
 
-    def _bridge(self, lease, bill: _Bill, loop):
+    def _bridge(self, lease, bill: _Bill, loop, case: dict[str, Any]):
         """H1's synchronous model port, run on the Replayer's thread, into this loop."""
         def model(prompt, media, results):
             return asyncio.run_coroutine_threadsafe(
-                self._call(lease, bill, prompt, media, results), loop).result()
+                self._call(lease, bill, prompt, media, results, case), loop).result()
         return model
 
     async def _call(self, lease, bill: _Bill, prompt: str, media: list[str],
-                    results: list[dict[str, Any]]) -> dict[str, Any]:
+                    results: list[dict[str, Any]], case: dict[str, Any]) -> dict[str, Any]:
         await self._store.heartbeat(lease, lease_s=self._limits.lease_s)   # the fence
+        # ponytail: signed once per call, so a 402 give-back re-run sends a new URL under the
+        # same key (the gateway's replay then sees a changed payload); fine while 402 is
+        # refused before admission records the key.
+        media = [await clip_url(self._objects, self._frozen.run.provider_org_id, ref,
+                                _at(case, "sample.span_ms")) for ref in media]
         key = f"{lease['idempotency_key']}:{bill.calls}"
         bill.calls += 1
         # ponytail: immediate retries; honour Retry-After when the real L3 endpoint sends it.
@@ -372,7 +399,8 @@ class HttpDevEndpoint:
     """The L3 stand-in: an OpenAI-compatible `/v1/chat/completions` of one private dev
     deployment, called with its endpoint-scoped provider_dev credential. The gateway meters
     the call (D5 settles `rate_card.debit(usage)` into the dev wallet); the attempt's cost is
-    the same debit on the rate card frozen at the deployment's publication."""
+    the same debit on the rate card frozen at the deployment's publication. A finite-video
+    case is the prompt then one `video_url` part per clip URL (R58, WR-E6L-J11)."""
 
     def __init__(self, base_url: str, *, api_key: str, model: str,
                  rate_card: v2.RateCardSnapshot, client: httpx.AsyncClient | None = None) -> None:
@@ -383,11 +411,11 @@ class HttpDevEndpoint:
     async def complete(self, *, prompt: str, media: list[str],
                        tool_results: list[dict[str, Any]], seed: int,
                        idempotency_key: str) -> Completion:
-        if media:
-            raise errors.InvalidRequest("finite video dispatch waits on L3's media path")
         if tool_results:        # B-R3: the gateway takes system/user/assistant, no tools
             raise errors.InvalidRequest("tool replay waits on the gateway's tool support")
-        messages = [{"role": "user", "content": prompt}]
+        content = [{"type": "text", "text": prompt},
+                   *({"type": "video_url", "video_url": {"url": url}} for url in media)]
+        messages = [{"role": "user", "content": content if media else prompt}]
         try:
             answer = await self._client.post(
                 self._url, json={"model": self._model, "seed": seed, "messages": messages},
