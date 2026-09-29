@@ -20,10 +20,13 @@
 --         another job holds `state_conflict`. The gateway copies the upload's rows to the
 --         new id before calling this (`imports.work` reads rows by job id).
 --
--- EXECUTE service_role only through 0004's defaults (SECURITY DEFINER).
+-- EXECUTE: service_role through 0004's defaults (SECURITY DEFINER), and the control unit's
+-- login `infrx_lab_control` (0043; R237: the box's `/lab/v1/*` server composes lab_datasets
+-- and lab_releases on it), granted explicitly below as 0052 does.
 --
 -- ROLLBACK (this file alone; nothing references it): drop function
---   infrx.lab_import_requeue(jsonb), infrx.lab_optimization_variants(jsonb);
+--   infrx.lab_import_requeue(jsonb), infrx.lab_optimization_variants(jsonb) (their grants go
+--   with them);
 --   alter table infrx.lab_import_jobs drop column requeued_from.
 --
 -- Re-runnable: `if not exists`, `create or replace`.
@@ -78,3 +81,6 @@ begin
   end if;
   return infrx.lab_import_job_json(j) || jsonb_build_object('requeued_from', j.requeued_from);
 end $$;
+
+grant execute on function infrx.lab_optimization_variants(jsonb),
+  infrx.lab_import_requeue(jsonb) to infrx_lab_control;

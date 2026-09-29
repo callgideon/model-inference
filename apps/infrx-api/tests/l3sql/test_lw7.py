@@ -49,7 +49,9 @@ def requeue(job: str, new: str, provider: str = NEMO, actor: str | None = "dev2@
 # ----------------------------------------------------------------------------- checks
 @v.rolled_back
 def check_browser_roles_reach_nothing(conn) -> str:
-    """DUR-RLS: no browser session executes 0055's functions; the platform role does."""
+    """DUR-RLS: no browser session executes 0055's functions; the platform role does, and so
+    does the control unit's login (`infrx_lab_control`, R237: the box's `/lab/v1/*` server
+    composes lab_datasets and lab_releases on it - fix round LW7-SCOPE-1)."""
     probes = [f"select infrx.{name}('{{}}'::jsonb)" for name in RPCS]
     reached = [f"{s}: {sql[:60]}" for s in cc.BROWSER for sql in probes
                if not (cc.refused_as(conn, s, sql) or "").startswith("42501")]
@@ -57,6 +59,10 @@ def check_browser_roles_reach_nothing(conn) -> str:
     got = cc.refused_as(conn, "service", "select infrx.lab_optimization_variants("
                         f"'{{\"provider_org_id\": \"{NEMO}\"}}')")
     assert got is None, f"the platform role cannot read: {got}"
+    unit = {name: conn.execute("select has_function_privilege('infrx_lab_control', "
+                               f"'infrx.{name}(jsonb)', 'execute')").fetchone()[0]
+            for name in RPCS}
+    assert unit == dict.fromkeys(RPCS, True), f"the control unit cannot execute: {unit}"
     return f"{len(cc.BROWSER)} browser sessions x {len(probes)} probes refused"
 
 

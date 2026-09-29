@@ -59,6 +59,11 @@ MUTANTS = (
        "  return infrx.lab_import_job_json(j) || jsonb_build_object("
        "'requeued_from', j.requeued_from);\nend $$;\n" + BROWSER.format("lab_import_requeue"),
        ROLES, "a browser session requeues any provider's imports"),
+    _s("lw7_control_unit_ungranted",
+       "\n\ngrant execute on function infrx.lab_optimization_variants(jsonb),\n"
+       "  infrx.lab_import_requeue(jsonb) to infrx_lab_control;\n", "\n", ROLES,
+       "the box's /lab/v1/* unit answers 503 on optimizations and 'import again' "
+       "(LW7-SCOPE-1)"),
     _s("lw7_requeue_any_provider",
        "  select * into j from infrx.lab_import_jobs where job_id = (p_args->>'job_id')::uuid\n"
        "     and provider_org_id = (p_args->>'provider_org_id')::uuid;\n",
