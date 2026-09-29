@@ -39,6 +39,7 @@ Lab web (Vercel project `infrx-lab`, per environment; `apps/lab/.env.example`) [
 | `LAB_EVALS_API_URL` | server | server-only lab-api base URL for the evaluation pages (WR-B4-1, `apps/lab/lib/services/evaluation/server.ts`, `/lab/v1/evaluations` behind `LAB_EVALS`); unset = those pages answer "unavailable" |
 | `LAB_PIPELINES_API_URL` | server | server-only lab-api base URL for the annotation and training pages (WR-P4-1, `apps/lab/lib/services/pipelines/server.ts`, `/lab/v1/pipelines` behind `LAB_PIPELINES`); unset = those pages answer "unavailable" |
 | `LAB_RELEASES_API_URL` | server | server-only lab-api base URL for the release and optimization pages (WR-R4-1, `apps/lab/lib/services/rollouts/server.ts`, `/lab/v1/releases` + `/lab/v1/optimizations` behind `LAB_RELEASES`); unset = those pages answer "unavailable" |
+| `LAB_CONTROL_URL` | server | server-only base URL of the Lab control service (the control origin, R186's factory) for the overview, models and deployments pages (WR-E3L-J, `apps/lab/lib/services/control/server.ts`, `/lab/v1/control`); unset = those pages answer "unavailable" |
 
 Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
 

@@ -3,11 +3,13 @@
 // Usage: node tests/l/ui/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "../shell/harness.mjs";
 
-const SUITE = ["view", "journey", "actions", "pages"].map((f) => `tests/l/ui/${f}.test.ts`);
+const SUITE = ["view", "journey", "actions", "pages", "http"].map((f) => `tests/l/ui/${f}.test.ts`);
 const PORT = "lib/services/control/port.ts";
 const FAKE = "lib/services/control/fake.ts";
 const VIEW = "lib/services/control/view.ts";
 const ACTIONS = "lib/services/control/actions.ts";
+const HTTP = "lib/services/control/http.ts";
+const SERVER = "lib/services/control/server.ts";
 const LAYOUT = "app/(provider)/layout.tsx";
 const MODELS = "app/(provider)/models/page.tsx";
 const DEPLOY = "app/(provider)/deployments/page.tsx";
@@ -29,6 +31,11 @@ const C = {
   a05: "L4-A05 a consumer-only user gets a 404 from every action and the control service is never asked",
   p01: "L4-P01 each page reads the control records as the session's workspace and shows ?refused= only as fixed copy",
   p02: "L4-P02 the provider layout links the L4 pages and labels the preview stand-in only when it is on",
+  h01: "L4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched",
+  h02: "L4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
+  h03: "L4-H03 one unreadable model, deployment, proposal or aggregate fails the whole answer closed",
+  h04: "L4-H04 without a session token, or when reading it fails, nothing is sent and every call is unavailable",
+  h05: "L4-H05 controlPort() is the HTTP adapter only with LAB_CONTROL_URL and a Lab config, carrying the session's own token",
 };
 
 const MUTANTS = [
@@ -47,7 +54,7 @@ const MUTANTS = [
   m("L4-X13", "an idle window divides by zero", VIEW, "a.requests > 0 ? `${Math.round((a.errors / a.requests) * 1000) / 10}%` : \"—\"", "`${Math.round((a.errors / a.requests) * 1000) / 10}%`", [C.v05]),
   m("L4-X14", "any ?refused= string is looked up", VIEW, "(REFUSALS as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v06]),
   m("L4-X15", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v07]),
-  m("L4-X16", "the default port is the stand-in, not unavailable", PORT, "  return UNAVAILABLE;\n}", "  return (preview ??= new FakeControl());\n}", [C.v07]),
+  m("L4-X16", "the default port is the stand-in, not unavailable", PORT, "  return labControl(env) ?? UNAVAILABLE;\n}", "  return (preview ??= new FakeControl());\n}", [C.v07]),
   m("L4-X17", "any preview flag value turns the stand-in on", PORT, 'env.LAB_CONTROL_PREVIEW === "1"', "env.LAB_CONTROL_PREVIEW !== undefined", [C.v07]),
   m("L4-X18", "reads are not scoped to the provider", FAKE, "rows.filter((r) => r.providerId === actor.providerId).map(strip)", "rows.map(strip)", [C.j02]),
   m("L4-X19", "another provider's revision can be acted on", FAKE, "d.deploymentRevisionId === id && d.providerId === actor.providerId", "d.deploymentRevisionId === id", [C.j02]),
@@ -82,6 +89,37 @@ const MUTANTS = [
   m("L4-X45", "a page claims success on its own", DEPLOY, "<h1>Deployments</h1>", "<h1>Deployments</h1>\n      <p>Published successfully.</p>", [C.p01]),
   m("L4-X46", "the nav loses the deployments page", LAYOUT, '<Link href="/deployments">Deployments</Link>', "Deployments", [C.p02]),
   m("L4-X47", "the preview label shows when the stand-in is off", LAYOUT, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
+  m("L4-X48", "the session token is not forwarded", HTTP, "authorization: `Bearer ${bearer}`", 'authorization: "Bearer service"', [C.h01, C.h05]),
+  m("L4-X49", "the actor's provider is not sent", HTTP, "?provider_org_id=${encodeURIComponent(actor.providerId)}", "", [C.h01, C.h05]),
+  m("L4-X50", "a signed-out call is still sent", HTTP, '    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent\n', "", [C.h04]),
+  m("L4-X51", "an unreadable session throws instead of failing closed", HTTP, "await token().catch(() => null);", "await token();", [C.h04]),
+  m("L4-X52", "a 401 is not denied", HTTP, '401: "denied", ', "", [C.h02]),
+  m("L4-X53", "a 403 reads as not_found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
+  m("L4-X54", "409 and 422 are swapped", HTTP, '409: "conflict", 422: "invalid"', '409: "invalid", 422: "conflict"', [C.h02]),
+  m("L4-X55", "an unknown status is a conflict, not unavailable", HTTP, '?? "unavailable" };', '?? "conflict" };', [C.h02]),
+  m("L4-X56", "a transport failure throws", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'throw new Error("down"); // transport', [C.h02]),
+  m("L4-X57", "records are not checked", HTTP, "return readable(value) ?", "return true ?", [C.h03]),
+  m("L4-X58", "any environment is read", HTTP, 'environment: oneOf("dev", "prod")', "environment: str", [C.h03]),
+  m("L4-X59", "any visibility is read", HTTP, 'visibility: oneOf("private", "public")', "visibility: str", [C.h03]),
+  m("L4-X60", "any deployment state is read", HTTP, 'state: oneOf("active", "retired")', "state: str", [C.h03]),
+  m("L4-X61", "any smoke value is read", HTTP, 'smoke: oneOf("none", "passed", "failed")', "smoke: str", [C.h03]),
+  m("L4-X62", "a missing rate card field is read", HTTP, "rateCardVersion: nul(str),", "rateCardVersion: () => true,", [C.h03]),
+  m("L4-X63", "a model without its digest is read", HTTP, "artifactDigest: str, schemaVersion: str, runtime: str, registeredAt: str", "schemaVersion: str, runtime: str", [C.h03]),
+  m("L4-X64", "any proposal state is read", HTTP, 'state: oneOf("proposed", "approved", "rejected")', "state: str", [C.h03]),
+  m("L4-X65", "any proposal kind is read", HTTP, 'kind: oneOf("publish", "rollback")', "kind: str", [C.h03]),
+  m("L4-X66", "a proposal without its decision field is read", HTTP, "decidedAt: nul(str)", "decidedAt: () => true", [C.h03]),
+  m("L4-X67", "aggregate counts are not checked", HTTP, "requests: num, errors: num, p95LatencyMs: nul(num)", "requests: () => true, errors: num", [C.h03]),
+  m("L4-X68", "records keep the route's snake_case", HTTP, "const value = camel(method === \"GET\" ? payload.data : payload);", "const value = method === \"GET\" ? payload.data : payload;", [C.h01]),
+  m("L4-X69", "a read is not unwrapped from {data}", HTTP, 'camel(method === "GET" ? payload.data : payload)', "camel(payload)", [C.h01]),
+  m("L4-X70", "the registration body is sent in camelCase", HTTP, "artifact_digest: r.artifactDigest, schema_version: r.schemaVersion", "artifactDigest: r.artifactDigest, schemaVersion: r.schemaVersion", [C.h01]),
+  m("L4-X71", "the proposal body names the revision in camelCase", HTTP, "{ kind, deployment_revision_id: id }", "{ kind, deploymentRevisionId: id }", [C.h01]),
+  m("L4-X72", "a revision id reaches the path unencoded", HTTP, "`deployments/${encodeURIComponent(id)}/smoke`", "`deployments/${id}/smoke`", [C.h01]),
+  m("L4-X73", "every call claims a JSON body", HTTP, 'if (body !== undefined) headers["content-type"]', 'headers["content-type"]', [C.h01]),
+  m("L4-X74", "smoke is a read", HTTP, 'call(actor, "POST", `deployments/', 'call(actor, "GET", `deployments/', [C.h01]),
+  m("L4-X75", "a trailing slash on the base URL doubles", HTTP, 'baseUrl.replace(/\\/+$/, "")', "baseUrl", [C.h01]),
+  m("L4-X76", "the adapter runs without LAB_CONTROL_URL", SERVER, "if (!baseUrl || config === null) return null;", "if (config === null) return null;", [C.h05]),
+  m("L4-X77", "the adapter carries a fixed credential, not the session's", SERVER, "token: sessionToken(config)", 'token: async () => "service"', [C.h05]),
+  m("L4-X78", "controlPort() never uses the adapter", PORT, "return labControl(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.h05]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "L4", mutants: MUTANTS }));
