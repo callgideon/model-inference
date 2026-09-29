@@ -19,6 +19,7 @@ import asyncio
 import os
 
 import pytest
+from infrx.contracts import errors
 from infrx.evaluation import checkpoints
 from infrx.lab.access import LabAccess
 from infrx.lab.workers import __main__ as lab_workers
@@ -34,6 +35,16 @@ _reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") in ("b3", "p
     "PostgreSQL only on the b3 (or, b3 held, p3) task-local key"
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
+
+
+def pumped(pump) -> None:
+    """One relay pass. The queued runs' own `eval_run` events are the eval role's: this role
+    refuses them after acknowledging its own (the relay raises the first such refusal last;
+    a `kinds` filter is WR-LSQ-C2B's)."""
+    try:
+        run(pump())
+    except errors.InvalidRequest as other:
+        assert "eval_run" in str(other), other
 
 
 def test_b3_pg_the_composed_checkpoints_role_decides_on_d8s_ledger(world, monkeypatch):
@@ -56,12 +67,12 @@ def test_b3_pg_the_composed_checkpoints_role_decides_on_d8s_ledger(world, monkey
     worker.tasks["lab_checkpoints"]().close()
     pump = steps["lab checkpoints"]
     assert type(pump.__self__.scheduler.ledger) is PgCheckpointLedger
-    run(pump())
+    pumped(pump)
     decided = rows(w, "select state from infrx.lab_checkpoint_decisions where checkpoint_id = "
                       "%s", e["checkpoint_id"])
     assert decided == [("queued",)], decided
     assert rows(w, "select state from infrx.lab_checkpoint_receipts where checkpoint_id = %s",
                 e["checkpoint_id"]) == [("evaluated",)]
-    run(pump())                                            # a second pass decides nothing new
+    pumped(pump)                                           # a second pass decides nothing new
     assert rows(w, "select count(*) from infrx.lab_checkpoint_decisions where checkpoint_id = "
                    "%s", e["checkpoint_id"]) == [(1,)]

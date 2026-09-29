@@ -46,7 +46,7 @@ def composed(objects):
                       objects=objects)["lab_pipelines"]
 
 
-def test_p3_pg_the_composed_pipeline_surface_reserves_once_on_the_named_payer(world) -> None:
+def test_p3_pg_the_composed_pipeline_surface_runs_on_d8_for_the_named_payer(world) -> None:
     conn, store, objects, ref, export = world
     x, who = composed(objects), SimpleNamespace(provider_org_id=NEMO, user_id=l2.DEV)
     ext = uid(9, 0xe1)
@@ -60,7 +60,7 @@ def test_p3_pg_the_composed_pipeline_surface_reserves_once_on_the_named_payer(wo
         "prepared", PAYER, "prepared")
     submitted = run(routes.move(x, who, ext, "submit"))
     assert submitted["state"] == d8_run(conn, ext) == "submitted"
-    assert d8_holds(conn, ext) in ([], [("held", 1)])       # manual: nothing platform-paid
+    assert d8_holds(conn, ext) == []    # the manual bundle reserves nothing (P-11 connectors do)
     assert run(routes.move(x, who, ext, "submit"))["state"] == "submitted"   # replay: once
     with pytest.raises(errors.DependencyUnavailable):
         run(routes.training_runs(x, who))
