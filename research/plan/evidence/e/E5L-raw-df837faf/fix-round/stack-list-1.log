@@ -1,0 +1,42 @@
+...................F                                                     [100%]
+=================================== FAILURES ===================================
+________ test_stack_mutant_is_killed[st_traces_route_ignores_deletion] _________
+
+mutant = Mutant(name='st_traces_route_ignores_deletion', invariant='a request its owner deleted is gone from the Lab list and p... not t3.metadata_live(', cases=('test_o10_the_lab_review_panel_renders_the_routes_answer',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_traces_route_ignores_deletion is broken_runner: undeclared exception deaths ['HarnessError@gate.py']: 1 failed, 17 deselected in 9.90s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['HarnessError@gate.py']: 1 failed, 17 deselected in 9.90s").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_capture_on_in_the_box]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_ship_without_pins]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_find_of_any_org]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_feedback_ack_before_commit_status]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_first_grant_version]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_judge_in_any_mode]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_judge_sends_one_sample]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_no_recheck_before_egress]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_judge_reads_the_raw_projection]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_deleted_request_found]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_sweep_keeps_objects]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_failed_insert_acked]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_timeout_is_a_failure]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_claim_window_ignored]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_worker_never_restarted]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_route_content_without_a_grant]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_route_shows_a_deleted_request]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_pg_reserve_another_payer]
+PASSED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_j3_limited_results_calibrate]
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_traces_route_ignores_deletion]
+1 failed, 19 passed, 65 deselected in 528.44s (0:08:48)
