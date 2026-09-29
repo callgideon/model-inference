@@ -21,9 +21,9 @@ never runs in a consumer process.
                meters provider_dev), LAB_EVAL_ENDPOINT_KEY (the dev endpoint's credential).
                Evaluators: D7's `lab_evaluator` for the provider the ref names (WR-COMP-1,
                0034). Targets: `DevTargets` over L3's rows (WR-COMP-2; no ControlReads needed).
-* `checkpoints` B3's `on_checkpoint` per `checkpoint_received` event over D8's checkpoint
-               ledger (0042); needs a registry adapter and L3's dev deployer (WR-B3-3), so it
-               refuses until they exist (otherwise every checkpoint would be rejected).
+* `checkpoints` LAB_S3_BUCKET: B3's `on_checkpoint` per `checkpoint_received` event over D8's
+               checkpoint ledger (0042), with the Lab registry of the event's own provider
+               (`lab://<provider>/<path>`) and L3's dev deployer over 0044's reads (WR-B3-3).
 * `judge`      JUDGE_PROVIDER_URL, CLICKHOUSE_URL, S3_TRACE_BUCKET (+ JUDGE_MODE, default
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
                and T3's retention; its pass moves silent `submitting` runs to `ambiguous`;
@@ -72,7 +72,7 @@ REFUSED = 2
 DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_BUCKET"
 TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
 NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
-         "checkpoints": (), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
+         "checkpoints": (BUCKET,), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
          "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,), "rollout": (),
          "datasets": (BUCKET, *TRACES)}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
@@ -244,7 +244,9 @@ def _eval(mode, env, connect, objects, worker_id, **_):
 class Checkpoints:
     """The Lab outbox's `checkpoint_received` handler: B3's decision, once per delivery
     (B3 makes a redelivery the same run). `CapacityExhausted` reaches the relay, which hands
-    the event back for later; another kind is not this handler's (it stays pending)."""
+    the event back for later; another kind is not this handler's. A checkpoint without B3's
+    signed event is P3's (the Lab route decided it; its receipt wrote the same kind): done.
+    `registries(provider)` is the registry adapters for that provider's events."""
 
     def __init__(self, store, ledger, access, registries, deployer) -> None:
         self.store, self.ledger, self.access = store, ledger, access
@@ -253,28 +255,34 @@ class Checkpoints:
     async def enqueue(self, event) -> bool:
         if event.kind != "checkpoint_received":
             raise errors.InvalidRequest(f"no checkpoints worker handles {event.kind}")
+        checkpoint_id, provider = event.payload["checkpoint_id"], event.provider_org_id
+        try:
+            await self.ledger.event(checkpoint_id, provider_org_id=provider)
+        except errors.NotFound:
+            return True
         await checkpoints.on_checkpoint(
-            event.payload["checkpoint_id"], provider_org_id=event.provider_org_id,
-            ledger=self.ledger, store=self.store, registries=self.registries,
-            deployer=self.deployer, access=self.access)
+            checkpoint_id, provider_org_id=provider, ledger=self.ledger, store=self.store,
+            registries=self.registries(provider), deployer=self.deployer, access=self.access)
         return True
 
 
 def _checkpoints(mode, env, connect, objects, worker_id, registries=None, deployer=None):
-    if not registries or deployer is None:
-        raise RuntimeMisconfigured(mode, detail="checkpoints needs a registry adapter and "
-                                   "L3's dev deployer (WR-B3-3): without them B3 would reject "
-                                   "every checkpoint")
+    """WR-B3-3: the Lab registry over the role's objects and L3's dev deployer over
+    `PgControlStore` (0044's reads) unless a test passes its own."""
     from ...lab.access import LabAccess
     from ...state.lab_access import PgAccessStore
+    from ...state.lab_control import PgControlStore
     from ...state.lab_data import PgLabDataStore
     from ...state.outbox import OutboxRelay
     ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connect)
     store = PgLabDataStore(connect)
+    per_provider = (lambda _: registries) if registries else \
+        partial(checkpoints.lab_registry, objects)
+    deployer = deployer or checkpoints.DevDeployer(PgControlStore(connect))
     # ponytail: one relay per role over one outbox: an event of the other role's kind is
     # refused and handed out again after the window (a `kinds` filter is WR-LSQ-C2B's).
     relay = OutboxRelay(store, Checkpoints(store, ledger, LabAccess(PgAccessStore(connect)),
-                                           registries, deployer),
+                                           per_provider, deployer),
                         worker_id=f"{worker_id}-relay")
     return {"lab_checkpoints": lambda: every(worker_main.LAB_PUMP_S, relay.pump,
                                              "lab checkpoints")}, None
@@ -461,7 +469,7 @@ BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
 
 def compose(role: str, env, *, objects=None, **sources) -> Worker:
     """The role's passes and readiness from its environment. `objects` is for tests only;
-    `sources` are the checkpoints role's `registries`/`deployer` (WR-B3-3). Raises
+    `sources` replace the checkpoints role's `registries`/`deployer` in tests. Raises
     `RuntimeMisconfigured` naming what cannot serve; nothing connects but the bucket."""
     mode = f"lab-{role}"
     if role not in BUILD:

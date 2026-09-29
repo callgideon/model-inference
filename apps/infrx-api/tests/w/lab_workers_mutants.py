@@ -25,7 +25,7 @@ SETTINGS = C + "each_role_refuses_to_start_naming_a_missing_setting"
 PROCESS = C + "the_process_refuses_an_unknown_role_and_a_missing_setting"
 EVAL = C + "eval_is_the_consumer_workers_one_composition"
 TARGETS = C + "dev_targets_resolve_only_the_providers_private_dev_revision"
-CKPT_REFUSE = C + "checkpoints_refuse_without_a_registry_and_a_deployer"
+CKPT_SOURCES = C + "checkpoints_compose_l3s_dev_deployer_and_the_lab_registry"
 CKPT = C + "a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_it_back"
 JUDGE = C + "the_judge_is_j2_on_its_ledger_dry_run_by_default"
 SWEEP = C + "the_judge_pass_sweeps_silent_submissions"
@@ -93,15 +93,34 @@ MUTANTS: tuple[Mutant, ...] = (
        "                               model=serving.serving_version_id, rate_card=card,",
        TARGETS),
     # --- checkpoints -------------------------------------------------------------------------------
-    _m("lw_checkpoints_without_deployer", "no checkpoint is decided without both sources",
-       "    if not registries or deployer is None:\n", "    if deployer is None:\n",
-       CKPT_REFUSE),
+    _m("lw_checkpoints_bucket_optional", "the checkpoints role needs the Lab objects",
+       '         "checkpoints": (BUCKET,), "judge"', '         "checkpoints": (), "judge"', SETTINGS),
+    _m("lw_checkpoints_no_deployer", "the role composes L3's dev deployer by default",
+       "    deployer = deployer or checkpoints.DevDeployer(PgControlStore(connect))",
+       "    deployer = deployer", CKPT_SOURCES),
+    _m("lw_checkpoints_deployer_off_the_pool", "L3's reads are on the role's database",
+       "checkpoints.DevDeployer(PgControlStore(connect))",
+       'checkpoints.DevDeployer(PgControlStore(connector("")))', CKPT_SOURCES),
+    _m("lw_checkpoints_registry_other_provider", "each event gets its own provider's registry",
+       "            registries=self.registries(provider), deployer=self.deployer,",
+       "            registries=self.registries(None), deployer=self.deployer,", CKPT_SOURCES),
+    Mutant(name="lw_checkpoints_registry_other_objects",
+           invariant="the Lab registry reads the role's objects", file=F,
+           old="        partial(checkpoints.lab_registry, objects)",
+           new="        partial(checkpoints.lab_registry, None)", cases=(CKPT_SOURCES,),
+           dies_by=("AttributeError",)),
+    _m("lw_checkpoints_p3_decided_by_b3", "a checkpoint without B3's signed event is P3's: done",
+       "        except errors.NotFound:\n            return True\n",
+       "        except errors.NotFound:\n            pass\n", CKPT),
+    _m("lw_checkpoints_signed_other_provider", "the signed event is looked up for its provider",
+       "            await self.ledger.event(checkpoint_id, provider_org_id=provider)",
+       "            await self.ledger.event(checkpoint_id, provider_org_id=None)", CKPT),
     _m("lw_checkpoints_any_kind", "the checkpoints handler takes checkpoint_received only",
        '        if event.kind != "checkpoint_received":\n', "        if False:\n", CKPT),
     _m("lw_checkpoints_payload_provider", "a checkpoint is decided for the event's provider",
-       "            event.payload[\"checkpoint_id\"], provider_org_id=event.provider_org_id,",
-       "            event.payload[\"checkpoint_id\"], "
-       "provider_org_id=event.payload.get(\"provider_org_id\"),", CKPT),
+       'checkpoint_id, provider = event.payload["checkpoint_id"], event.provider_org_id',
+       'checkpoint_id, provider = event.payload["checkpoint_id"], '
+       'event.payload.get("provider_org_id")', CKPT),
     _m("lw_checkpoints_ledger_off_the_pool", "D8's checkpoint ledger is on the role's database",
        '    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connect)',
        '    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connector(""))', CKPT),

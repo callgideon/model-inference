@@ -48,7 +48,7 @@ LAB = {**BASE, "LAB_S3_BUCKET": "infrx-lab"}
 TRACES = {"CLICKHOUSE_URL": "http://ch.invalid:8123/infrx", "S3_TRACE_BUCKET": "infrx-traces"}
 ENV = {"eval": {**LAB, "LAB_EVAL_ENDPOINT_URL": "http://127.0.0.1:9",
                 "LAB_EVAL_ENDPOINT_KEY": KEY},
-       "checkpoints": dict(BASE),
+       "checkpoints": dict(LAB),
        "judge": {**BASE, "JUDGE_PROVIDER_URL": "http://127.0.0.1:9", **TRACES},
        "annotation": {**LAB, "LAB_TEACHER_URL": "http://127.0.0.1:9"}, "training": dict(LAB),
        "rollout": dict(BASE),
@@ -218,13 +218,33 @@ def test_lab_workers__dev_targets_resolve_only_the_providers_private_dev_revisio
 
 
 # ------------------------------------------------------------------ checkpoints (WR-B-5 amended)
-def test_lab_workers__checkpoints_refuse_without_a_registry_and_a_deployer():
-    """B3's registration needs a registry adapter and L3's dev deployer (WR-B3-3); without
-    them every checkpoint would be REJECTED `unsupported_registry` for good - so the role
-    refuses to start instead of deciding anything."""
-    for sources in ({}, {"registries": {"s3": object()}}, {"deployer": object()}):
-        with pytest.raises(RuntimeMisconfigured, match="WR-B3-3"):
-            composed("checkpoints", **sources)
+def test_lab_workers__checkpoints_compose_l3s_dev_deployer_and_the_lab_registry(monkeypatch):
+    """WR-B3-3: with no sources given (the unit's `main()`), the role composes L3's dev
+    deployer over `PgControlStore`'s reads (0044) on the role's pool and, per event, the Lab
+    registry of the event's OWN provider over the role's Lab objects (`LAB_S3_BUCKET`)."""
+    from infrx.evaluation import checkpoints
+    from infrx.state.lab_control import PgControlStore
+    fake_d8(monkeypatch, PgCheckpointLedger=Ledger)
+    steps = captured_steps(monkeypatch)
+    objects = InMemoryObjectStore()
+    asyncio.run(objects.put_if_absent(f"lab/{NEMO}/c/a", b"mine", "x"))
+    worker = lab_workers.compose("checkpoints", ENV["checkpoints"], objects=objects)
+    worker.tasks["lab_checkpoints"]().close()
+    handler = steps["lab checkpoints"][1].__self__.scheduler
+    assert type(handler.deployer) is checkpoints.DevDeployer
+    assert type(handler.deployer.reads) is PgControlStore
+    assert handler.deployer.reads._connect is handler.ledger.connect
+    seen = {}
+
+    async def on_checkpoint(checkpoint_id, **kw):
+        seen.update(kw)
+    monkeypatch.setattr(checkpoints, "on_checkpoint", on_checkpoint)
+    from infrx.state.lab_data import LabEvent
+    asyncio.run(handler.enqueue(LabEvent(event_id="e", kind="checkpoint_received",
+                                         provider_org_id=NEMO, payload={"checkpoint_id": "c"})))
+    assert seen["deployer"] is handler.deployer
+    assert asyncio.run(seen["registries"]["lab"](f"lab://{NEMO}/c/a")) == b"mine"
+    assert asyncio.run(handler.registries("other")["lab"](f"lab://{NEMO}/c/a")) == b""
 
 
 def fake_d8(monkeypatch, **classes):
@@ -238,6 +258,9 @@ def fake_d8(monkeypatch, **classes):
 class Ledger:
     def __init__(self, connect) -> None:
         self.connect = connect
+
+    async def event(self, checkpoint_id, *, provider_org_id):
+        return object()                          # B3's signed event exists
 
 
 def test_lab_workers__a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_it_back(
@@ -283,6 +306,23 @@ def test_lab_workers__a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_
         event_id="e3", kind="eval_run", provider_org_id=NEMO, payload={"run_id": "r"}))))
     assert type(other) is errors.InvalidRequest
     assert len(calls) == 2
+    handler.ledger = Unsigned()
+    assert asyncio.run(handler.enqueue(LabEvent(event_id="e4", kind="checkpoint_received",
+                                                provider_org_id=NEMO,
+                                                payload={"checkpoint_id": "p3"}))) is True
+    assert len(calls) == 2 and handler.ledger.asked == [("p3", NEMO)]
+
+
+class Unsigned:
+    """D8's checkpoint ledger without a signed event: a P3 (manual-bundle) checkpoint,
+    decided by the Lab route, whose D7 receipt wrote the same `checkpoint_received` kind."""
+
+    def __init__(self) -> None:
+        self.asked = []
+
+    async def event(self, checkpoint_id, *, provider_org_id):
+        self.asked.append((checkpoint_id, provider_org_id))
+        raise errors.NotFound("no such checkpoint event for this provider")
 
 
 # ------------------------------------------------------------------------------ judge (WR-OBS-1)
