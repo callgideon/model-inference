@@ -59,10 +59,12 @@ def test_e8l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 10
     assert runner.SCENARIOS["k08"]["lanes"] == ["P-08"]
-    assert runner.SCENARIOS["k09"]["lanes"] == ["composition-2"]
+    assert runner.SCENARIOS["k09"]["lanes"] == [], (
+        "k09's I7 entry point landed (composition-2): it runs for real now, NOT RUN only "
+        "internally (WR-R2-3, the pass loop), not as a whole-scenario merge wait")
     assert runner.SCENARIOS["k10"]["lanes"] == ["lab-ui-swap"]
     assert not any(runner.SCENARIOS[sid]["lanes"] for sid in
-                   ("k01", "k02", "k03", "k04", "k05", "k06", "k07"))
+                   ("k01", "k02", "k03", "k04", "k05", "k06", "k07", "k09"))
 
 
 def test_e8l_the_required_cases_are_exactly_what_the_scenario_modules_define():

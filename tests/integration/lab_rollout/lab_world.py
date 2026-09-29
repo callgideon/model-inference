@@ -130,9 +130,27 @@ class Lab:
                  "engine_options_digest, precision, capability, 'e8l' from "
                  "infrx.serving_versions where serving_version_id = %s",
                  self.serving_b, self.label_b, cc.SERVING)
-        # R1's refs (0043 reads a candidate ref's id as its serving version)
+        # WR-E8L-2b (R191/R208): a candidate's serving_ref is L3's own
+        # operations.serving_ref identity - a real deployment revision's
+        # infrx.lab_serving_ref(deployment_revision_id), never a bare serving version id.
+        # serving_2's deployment (q8.W['deployment_2'], private/dev on cc.DEV_ENDPOINT) and
+        # its ref (q8.W['candidate_ref']) are q8.seed's own (WR-E8L-2's fixture); serving_b
+        # (the A/B leg, this world's own) gets the same treatment here.
+        self.deployment_b = uid(4, 0x5e)
+        self.sql("insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id, "
+                 "provider_org_id, environment, serving_version_id, visibility, state, "
+                 "max_input_tokens, max_output_tokens, created_by) values (%s, %s, %s, 'dev', "
+                 "%s, 'private', 'ready_private', 30720, 2048, 'e8l')",
+                 self.deployment_b, cc.DEV_ENDPOINT, self.NEMO, self.serving_b)
+        # The baseline ref is never resolved by `release_active` (only a candidate is, R191/
+        # R208) and `q8.policy()` itself always writes `q8.serving_ref(cc.SERVING)` as the
+        # stored policy's own `baseline_ref` (opaque, by design - see its docstring): this
+        # world's BASE must be that exact same opaque stand-in, or every assignment/report
+        # this world records against the baseline no longer matches the policy's own field.
         self.BASE = q8.serving_ref(cc.SERVING)
-        self.CAND, self.CAND_B = q8.serving_ref(q8.W["serving_2"]), q8.serving_ref(self.serving_b)
+        self.CAND = q8.W["candidate_ref"]
+        self.CAND_B = self.sql("select infrx.lab_serving_ref(%s)", self.deployment_b)[0][0]
+        assert self.BASE and self.CAND and self.CAND_B, "0045 resolved no ref for a real row"
         self.PIN = f"{self.ALIAS}@{q8.W['label_2']}"
         self.PIN_B = f"{self.ALIAS}@{self.label_b}"
         self.runtime = runtime_dsn(DATABASE)
@@ -253,6 +271,20 @@ class Lab:
                              PgCatalogDirectory(connector(self.dsn)), None)
         # LabControl.rollback reads the session's principal only (the audited actor)
         return Serving(control, Reads(self), types.SimpleNamespace(principal="e8l-controller"))
+
+    async def python_serving_ref(self, deployment_revision_id: str) -> str:
+        """L3's own `operations.serving_ref` over the same store 0045's SQL function reads
+        (WR-E8L-2b: the two computations must agree byte-for-byte, or a ref this world builds
+        with one is not the ref `release_active`/R2 check with the other)."""
+        from infrx.lab.control.operations import serving_ref
+        from infrx.state.catalog import PgCatalogDirectory
+        from infrx.state.jobstore import connector
+        from infrx.state.lab_control import PgControlStore
+        store, catalog = (PgControlStore(connector(self.dsn)),
+                          PgCatalogDirectory(connector(self.dsn)))
+        deployment = await store.deployment(deployment_revision_id)
+        serving = await catalog.serving_revision(deployment.serving_version_id)
+        return serving_ref(deployment, serving)
 
     def listing(self) -> tuple[int, str]:
         """(version, deployment_revision_id) of the alias's newest listing."""
