@@ -1,0 +1,54 @@
+TAP version 13
+# (node:3799062) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/ui/journey.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L4-J01 register → dev smoke → publish proposal → operator approval → App discovery → operator rollback
+not ok 1 - L4-J01 register → dev smoke → publish proposal → operator approval → App discovery → operator rollback
+  ---
+  duration_ms: 3.142036
+  type: 'test'
+  location: '<worktree>/apps/lab/tests/l/ui/journey.test.ts:26:1'
+  failureType: 'testCodeFailure'
+  error: "the operator's approval is what publishes"
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '97939c97-c4a8-4b8a-a83c-c924562015a4'
+  actual: '97939c97-c4a8-4b8a-a83c-c924562015a4'
+  operator: 'notStrictEqual'
+  stack: |-
+    j01 (file://<worktree>/apps/lab/tests/l/ui/journeys.ts:49:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: L4-J02 unauthorized variants: another provider, a viewer, a developer proposing, an unimported model or digest, publish before smoke, a provider rollback, a repeat
+not ok 2 - L4-J02 unauthorized variants: another provider, a viewer, a developer proposing, an unimported model or digest, publish before smoke, a provider rollback, a repeat
+  ---
+  duration_ms: 0.813562
+  type: 'test'
+  location: '<worktree>/apps/lab/tests/l/ui/journey.test.ts:28:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    only a model of the workspace with imported weights
+    
+    'ok' !== 'not_found'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'not_found'
+  actual: 'ok'
+  operator: 'strictEqual'
+  stack: |-
+    j02 (file://<worktree>/apps/lab/tests/l/ui/journeys.ts:74:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 141.575469
