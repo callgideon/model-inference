@@ -249,6 +249,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0052_lab_control_reject.sql",
     # Lab (local-only, R151/R201): composition-6 (WR-R4-2, WR-C5-RECEIPT, WR-C5-PROVIDERS)
     "0053_lab_composition_reads.sql",
+    # Lab (local-only, R151/R201): lab-sql LW8 (SR-LCR-1, the control login's route halves)
+    "0056_lab_control_grants.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
