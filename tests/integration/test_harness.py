@@ -284,6 +284,7 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0055_lab_variants_requeue.sql",
     "0056_lab_control_grants.sql",
     # Lab (local-only, R151/R201): lab-capture-2 (WR-LC-HOSTED, the runtime login's consent read)
+    # (merge #63, WR-LC2-PIN); 0058 (lab-sql-lw9) and 0059 (merge #62) slot after it as they land
     "0057_trace_consent_read.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR

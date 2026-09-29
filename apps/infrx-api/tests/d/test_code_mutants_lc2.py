@@ -109,6 +109,18 @@ def check_nothing_else_executes_it(conn) -> str:
     return "PUBLIC, anon, authenticated, infrx_monitor and infrx_lab_control refused"
 
 
+def check_it_is_a_definer_with_a_fixed_search_path(conn) -> str:
+    """CMO-3: the read runs as its owner (SECURITY DEFINER) under a pinned search_path, so a
+    caller's schema can never shadow `api_keys` or `consent_history` inside it. Oracle: an
+    invoker body, or a definer whose search_path is the caller's."""
+    definer, config = conn.execute("select prosecdef, coalesce(proconfig, '{}') from pg_proc "
+                                   f"where oid = '{RPC}'::regprocedure").fetchone()
+    assert definer, "trace_consent is not SECURITY DEFINER"
+    paths = [c for c in config if c.startswith("search_path=")]
+    assert paths == ["search_path=infrx, public, pg_temp"], config
+    return f"definer; {paths[0]}"
+
+
 @rolled_back
 def check_a_key_answers_only_under_its_own_org(conn) -> str:
     """A key named under another organization reads nothing (its opt-in never answers for
@@ -139,9 +151,9 @@ def check_the_head_is_the_newest_version_revoked_or_not(conn) -> str:
 
 CHECKS = {c.__name__: c for c in (
     check_the_runtime_login_reads_consent_through_the_rpc, check_nothing_else_executes_it,
-    check_a_key_answers_only_under_its_own_org,
+    check_it_is_a_definer_with_a_fixed_search_path, check_a_key_answers_only_under_its_own_org,
     check_the_head_is_the_newest_version_revoked_or_not)}
-RUNTIME, ONLY, OWN_ORG, HEAD = CHECKS
+RUNTIME, ONLY, DEFINER, OWN_ORG, HEAD = CHECKS
 
 
 def _s(name, old, new, check, why, **kw):
@@ -154,6 +166,10 @@ SQL_MUTANTS = (
        RUNTIME, "the dedicated gateway login reads no consent: capture stays off hosted"),
     _s("lc2_security_invoker", "stable security definer", "stable security invoker", RUNTIME,
        "the runtime login runs the read without the tables' privileges: capture stays off"),
+    _s("lc2_no_search_path",
+       "stable security definer set search_path = infrx, public, pg_temp as",
+       "stable security definer as", DEFINER,
+       "a definer body resolves names through the caller's search_path: a shadowed table"),
     _s("lc2_key_opt_in_ignored", "  select k.trace_mode, c.consent_version",
        "  select 'full'::text, c.consent_version", RUNTIME,
        "a key that never opted in is captured at its org's mode"),

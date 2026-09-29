@@ -81,3 +81,65 @@ Re-verified for the merge lane:
 Merge instruction (unchanged): apply WR-LC2-RUNTIME in the same commit as 0057, and put the
 WR-LC2-PIN harness line after 0056 (or after 0058/0059 if those merge first). Keep the files in
 number order.
+
+## Coordinator rulings
+
+- **R261** (08 §10, numbered at the lab-capture-2 merge on `codex/w5-merge-63`, appended directly after R258;
+  R259–R260 are on `codex/w5-merge-62`; next free R262): amends R250 - the worker removes the minted key family
+  (`sk-infrx-*`) from both halves of a job record because it never holds the caller's token; the request line is
+  built off the event loop; a job's output is traced exactly once, after the completion the store accepted, including
+  the retry after a lost ack (the remembered attempt is forgotten only on settlement or a `DomainError` refusal); the
+  consent read goes through `infrx.trace_consent` (0057, SECURITY DEFINER with a fixed search_path, EXECUTE for
+  `infrx_runtime` only), and when it is absent or refused capture is off.
+
+## Applied at merge
+
+Merge `1b932e64` (one conflict: `tests/integration/test_harness.py`, the pin list; both sides kept) and one wirings
+commit on `codex/w5-merge-63`. Checks ran from a shared clone (key t2f; e5l for o01) at the tree-identical preflight
+commit `b169ce9f` (same tree as the wirings commit minus this note and the E5L note), then again at the wirings head.
+
+- **WR-LC2-RUNTIME**: `LAB-CAPTURE-2-WR-RUNTIME.diff` applied as written (`git apply --check` clean);
+  `infrx.trace_consent(uuid,uuid)` joins `RUNTIME_FUNCTIONS`, `check_operator_privileges` expects 45. Re-derived on the
+  merged tree: 0055/0056 grant `infrx_runtime` nothing new, 0058/0059 are not on the tip (0059 grants
+  `infrx_lab_control` only). `tests/t/capture` + `tests/d/test_reads.py test_operator_d10.py test_upgrade_d10.py` (+ lc2):
+  131 passed, 2 skipped (the t2f stack case without `INFRX_T2F_STACK`, the mutant list without `INFRX_MUTANTS`),
+  3 xfailed.
+- **WR-LC2-PIN**: `0057_trace_consent_read.sql` pinned after `0056_lab_control_grants.sql`, with the note that 0058
+  (lab-sql-lw9) and 0059 (merge #62) slot after it; 0057 was free on the tip, no renumber.
+- **CMO-2**: `test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced` parametrized over `StaleLease` and
+  `AlreadyTerminal` (the fake store raises the given refusal); new mutant `job_refusal_stale_lease_only`
+  (`except errors.StaleLease`) is killed by the `AlreadyTerminal` case.
+- **CMO-3**: `check_it_is_a_definer_with_a_fixed_search_path` asserts `prosecdef` and exactly one `proconfig`
+  entry `search_path=infrx, public, pg_temp`; new SQL mutant `lc2_no_search_path` is killed by it.
+  Mutants: capture 89 + lc2 16 = **105 passed, 0 survivors** (`INFRX_MUTANTS=all INFRX_D_TASK=t2f`).
+- **DOC-1**: the update JSON moved to `research/plan/evidence/coordinator/updates/T2-LAB-CAPTURE-2-20260929T2316Z.json`
+  with `head` 8ddb75f8.
+- **DOC-3**: `capture.py`'s module docstring names the RPC consent read (0057; absent or refused = off), the worker's
+  key-shape scrub of both halves and the accepted-completion rule.
+- **DOC-2 / E4 (every switch off, t2f)**: `INFRX_D_TASK=t2f .venv/bin/python -m pytest -q -p no:cacheprovider tests/g
+  tests/w tests/contracts tests/i/test_packaging.py -rs`: **2834 passed, 31 skipped, 0 failed** (21:40; 2865 collected).
+  Below the brief's estimate of ≥ 2840 passed: every skip is key- or stack-scoped (other keys' PostgreSQL
+  b1/b3/p1/p2/p3/r2/j2, no `INFRX_M_S3_ENDPOINT`, the t2i/t2f stacks, empty mutant sets without `INFRX_MUTANTS`);
+  the tip adds new skipped cases on the p3/r2 keys, so 2865 - 31 = 2834. 0 failed is the gate.
+- **o01 rerun (R254's precondition)**: o01 PASS 4/4 with the async echo case green on a kept e5l stack; `KNOWN_FAIL`
+  WR-LO4-R8 dropped; the o01 stack mutants 5 killed / 0 survivors on an o01-only baseline (the listed full-list command
+  is refused by its pristine baseline because o10 needs the l4 key, held by merge #62); teardown clean. Details and
+  verdict paths: `evidence/e/E5L-c25405c.md` "Rerun at merge #63".
+
+## Enable gate
+
+`TRACE_PUMPS` stays default OFF. It may be turned on locally only after this merge. A hosted enable needs 0057 applied
+under an R151 window (a re-proof through 0057+ first) and an E4-ON run on the enable tree; the full E5L gate
+(`make lab-observe`, o10 on l4) on a tree carrying this merge is still owed.
+
+## Carried
+
+- **CMO-4**: the lost-ack cases drive a hand-written copy of `AttemptRunner`'s retry (`lost_ack` in
+  `tests/t/capture/test_capture.py`), not the runner; a runner-level case (the real `worker/attempt.py` retry over
+  `JobCapture`) belongs to a worker lane. Reproduction:
+  `cd apps/infrx-api && INFRX_D_TASK=t2f .venv/bin/python -m pytest -q -p no:cacheprovider tests/t/capture/test_capture.py -k ack` (3 cases: the lost ack that commits, and the refused retry over StaleLease and AlreadyTerminal).
+
+## Audit log (merge)
+
+- 2026-09-29: coordinator merge #63 on `codex/w5-merge-63`: R261, WR-LC2-RUNTIME, WR-LC2-PIN, CMO-2, CMO-3, DOC-1,
+  DOC-2, DOC-3, the o01 rerun; CMO-4 carried.

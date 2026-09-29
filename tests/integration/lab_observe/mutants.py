@@ -289,6 +289,7 @@ OWORLD = "../../tests/integration/lab_observe/observe_world.py"
 O01_OFF = "test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace"
 O01_SHIP = "test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it"
 O01_ON = "test_o01_capture_turned_on_through_the_composition_switch"         # WR-C6-CAPTURE
+O01_ASYNC = "test_o01_an_async_jobs_shipped_record_holds_no_caller_token"      # WR-LO4-R8
 CAPTURE = "infrx/gateway/capture.py"
 O02 = "test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once"
 O03 = "test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant"
@@ -311,11 +312,8 @@ J3 = "infrx/judge/calibration/report.py"
 #: name them (the pristine baseline refuses a failing case), so coverage lists them here and
 #: `test_every_case_is_covered_by_a_mutant` holds the list to exactly the failing ones.
 # E5L-F1 fixed by WR-OBS-3 (J2 reads through Retention)
-KNOWN_FAIL: dict[str, str] = {
-    "test_o01_an_async_jobs_shipped_record_holds_no_caller_token":
-        "R8 (lab-capture-2): JobCapture.spool writes request_line(request) without the "
-        "caller's token, so an echoed bearer token reaches the shipped async record "
-        "(WR-LO4-RV1)"}
+# WR-LO4-R8 fixed by lab-capture-2 (R261, merge #63): the async echo case is a real cell.
+KNOWN_FAIL: dict[str, str] = {}
 
 STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_capture_on_in_the_box", "the drill judges capture off with the box at its defaults",
@@ -332,8 +330,11 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "(WR-LO4-RV1; HM1)", CAPTURE,
        "    return data.replace(token, REDACTED) if token else data", "    return data", O01_ON),
     _m("st_job_output_dropped", "an async job's shipped record holds its output (WR-LO4-RV2)",
-       CAPTURE, "            if text:\n                capture.add(text.encode())",
+       CAPTURE, "            if text:\n                capture.add(scrub_keys(text.encode()))",
        "            if text:\n                pass", O01_ON),
+    _m("st_job_scrub_off", "an echoed minted key is redacted in the shipped async record "
+       "(R8, lab-capture-2)", CAPTURE, "    return KEY_SHAPE.sub(REDACTED, data)",
+       "    return data", O01_ASYNC),
     _m("st_ship_without_pins", "a shipped row carries the pins PostgreSQL admitted", SHIP,
        "serving_version_id=pins.serving_version_id if pins else None,",
        "serving_version_id=None,", O01_SHIP),

@@ -1,0 +1,8 @@
+baseline cases: ('test_o01_an_async_jobs_shipped_record_holds_no_caller_token', 'test_o01_capture_turned_on_through_the_composition_switch')
+pristine: PASS
+st_capture_switch_ignored: killed -> 1 failed, 18 deselected in 69.70s (0:01:09)
+st_capture_key_opt_in_ignored: killed -> 1 failed, 18 deselected in 30.90s
+st_capture_scrub_off: killed -> 1 failed, 18 deselected in 18.98s
+st_job_output_dropped: killed -> 1 failed, 18 deselected in 18.82s
+st_job_scrub_off: killed -> 1 failed, 18 deselected in 18.97s
+5 killed, 0 not killed

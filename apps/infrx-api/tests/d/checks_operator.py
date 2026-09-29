@@ -475,7 +475,7 @@ def check_operator_privileges(conn) -> str:
         "p.pronamespace where n.nspname in ('infrx', 'public') "
         "and has_function_privilege('infrx_runtime', p.oid, 'execute') and not exists "
         "(select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')")}
-    assert held == checks_reads.RUNTIME_FUNCTIONS and len(held) == 44, sorted(held)
+    assert held == checks_reads.RUNTIME_FUNCTIONS and len(held) == 45, sorted(held)
     return (f"3 RPCs authenticated-only, helper nobody's, definer/{owner}; 2 views SELECT "
             f"for authenticated+service_role; runtime set {len(held)} unchanged")
 

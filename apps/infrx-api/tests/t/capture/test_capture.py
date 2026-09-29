@@ -479,8 +479,9 @@ class Store:
         if self.lose:                                   # the terminal ack is lost
             self.lose -= 1
             raise ConnectionError("the ack was lost")
-        if self.refuse:
-            raise errors.StaleLease("another worker holds the lease")
+        if self.refuse:                                 # True, or the refusal to raise
+            refusal = errors.StaleLease if self.refuse is True else self.refuse
+            raise refusal("another worker holds the lease")
         return "settled"
 
     async def heartbeat(self, lease):
@@ -637,11 +638,13 @@ def test_a_job_whose_first_ack_is_lost_is_traced_once_when_the_retry_commits(tmp
     assert request.request_id not in runner.jobs.open
 
 
-def test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced(tmp_path):
+@pytest.mark.parametrize("refusal", [errors.StaleLease, errors.AlreadyTerminal])
+def test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced(tmp_path, refusal):
     """Oracle (R7): a refused retry (the store settled it for another attempt) recorded, or
-    its attempt remembered after the refusal (held until evicted)."""
+    its attempt remembered after the refusal (held until evicted) - for every DomainError
+    refusal, not only a stale lease (CMO-2)."""
     request = admitted(tmp_path, TraceMode.full)
-    store = Store(request, lose=1, refuse=True)
+    store = Store(request, lose=1, refuse=refusal)
     runner = SimpleNamespace(jobs=store, put_result=store.put_result)
     capture.capture_jobs(runner, tmp_path / "spool", capture.Wall)
     lease = SimpleNamespace(job_id=request.request_id)
@@ -651,7 +654,7 @@ def test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced(tmp_path):
         with pytest.raises(ConnectionError):
             await runner.jobs.complete(lease, "outcome")
         assert request.request_id in runner.jobs.open          # kept for the retry
-        with pytest.raises(errors.StaleLease):
+        with pytest.raises(refusal):
             await runner.jobs.complete(lease, "outcome")
     run(attempt())
     assert job_spools(tmp_path) == [] and runner.jobs.open == {}

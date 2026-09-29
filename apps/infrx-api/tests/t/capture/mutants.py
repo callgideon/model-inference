@@ -280,6 +280,11 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("job_refusal_remembered", "a refused completion forgets its attempt", C,
        "        except errors.DomainError:\n            self.open.pop(lease.job_id, None)\n",
        "        except errors.DomainError:\n", LOST_REFUSED),
+    _m("job_refusal_stale_lease_only", "every DomainError refusal forgets its attempt, not "
+       "only a stale lease (CMO-2)", C,
+       "        except errors.DomainError:\n            self.open.pop(lease.job_id, None)\n",
+       "        except errors.StaleLease:\n            self.open.pop(lease.job_id, None)\n",
+       LOST_REFUSED),
     # --- lens R8: the job record holds no credential -----------------------------------
     _m("job_credential_in_the_request", "the job record's request half holds no key", C,
        "            capture.add(scrub_keys(await asyncio.to_thread(request_line, request)))",

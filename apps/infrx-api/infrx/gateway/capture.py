@@ -3,8 +3,10 @@
 * **Consent (a).** `ConsentSource.policy(auth, now)`: the key's own opt-in
   (`api_keys.trace_mode`, null = off, D3) under its organization's consent head
   (`infrx.consent_history`, the highest version; revoked or not yet effective = off), the
-  lower of the two. Read at request time, cached per process per key for `CONSENT_TTL_S`
-  (the key cache's TTL: a console change is live within a minute), bounded, fail closed -
+  lower of the two, read through the SECURITY DEFINER RPC `infrx.trace_consent(org, key)`
+  (0057, EXECUTE for `infrx_runtime`; absent or refused = off). Read at request time, cached
+  per process per key for `CONSENT_TTL_S` (the key cache's TTL: a console change is live
+  within a minute), bounded, fail closed -
   a read that fails is `off_mode_policy`, never an error into the request.
 * **The request-path hook (b).** `GatewayCapture.response(...)` wraps a sync or SSE answer
   (`Captured`): one record per request in the gateway's spool - the request, redacted
@@ -15,7 +17,10 @@
   counted by the sink and never becomes the request's.
 * **Async output and shipping (c, proposed ruling).** The worker writes an async job's record
   (the request line, then its output) into a spool of its own, `TRACE_SPOOL_DIR/jobs/<job
-  id>-<n>` - hidden (`.`-prefixed) while it writes, renamed once sealed and unlocked: one
+  id>-<n>` - hidden (`.`-prefixed) while it writes, renamed once sealed and unlocked. The
+  worker never holds the caller's token, so it scrubs by shape: every minted key
+  (`KEY_SHAPE`, `sk-infrx-*`) from both halves of the record. The output is recorded once,
+  after the completion the store accepted (a lost ack keeps the attempt for the retry). One
   writer per directory, the sink's lock. Only the gateway ships: every `SHIP_S` its lifespan
   seals and ships its own spool, then each finished job spool it can lock, removed once
   every segment is acked. One gateway process per `TRACE_SPOOL_DIR` (its sink's lock refuses

@@ -2,7 +2,7 @@
  "task": "T2",
  "slice": "lab-capture-2 (LW6): R8 job-record credential scrub, R7 lost-ack retry traced once, R9 request line off the loop, WR-LC-HOSTED 0057 trace_consent for infrx_runtime; TRACE_PUMPS stays default OFF",
  "activity": "review",
- "head": "d12a6c3f (+ fix-round evidence commit)",
+ "head": "8ddb75f8",
  "worktree": ".claude/worktrees/codex-w5-lab-capture-2",
  "branch": "codex/w5-lab-capture-2",
  "base": "7880f3c5",
@@ -78,7 +78,7 @@
  "evidence": [
   "research/plan/evidence/t/LAB-CAPTURE-2-4f87f54.md",
   "research/plan/evidence/t/LAB-CAPTURE-2-WR-RUNTIME.diff",
-  "research/plan/evidence/t/LAB-CAPTURE-2-update.json"
+  "research/plan/evidence/coordinator/updates/T2-LAB-CAPTURE-2-20260929T2316Z.json"
  ],
  "proposed_rulings": [
   "amend R250: job records scrubbed of the minted key family by the worker; request line built off the loop; output traced once after the accepted completion incl. the lost-ack retry; consent read via infrx.trace_consent (0057), absent = off"

@@ -142,8 +142,8 @@ def test_o01_capture_turned_on_through_the_composition_switch(workdir):
 def test_o01_an_async_jobs_shipped_record_holds_no_caller_token(workdir):
     """The async half of WR-LO4-RV1: alpha's job prompt echoes its own token; the worker's
     job spool (JobCapture) is shipped by the gateway, and the record holds the redaction,
-    never the token. Known FAIL on this base: R8 (lab-capture-2) - `JobCapture.spool` writes
-    `request_line(request)` without the caller's token (mutants.KNOWN_FAIL)."""
+    never the token: the worker scrubs every minted key by shape (R8/R261, lab-capture-2;
+    stack mutant `st_job_scrub_off`)."""
     with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:
         alpha = trip.world.alpha
         capture_on(trip, workdir)
