@@ -66,3 +66,46 @@ N3's sample restrictions (permanent tombstones and write-once content bounds) ha
 
 ## Estimate (remaining for this lane)
 optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium. Basis: done and proven on n2/n3 with 0 survivors. What remains is one review round (LAB-SQL-INTEGRATION-2 took one fix round) and the wiring requests, which belong to other lanes. Actual cost of this lane: about 3.5 h, most of it the 2 h 12 min `make api-test`, inside the 3/5/10 h estimate.
+
+## Fix round (handback d814d434; code head 0d695a7b)
+Findings: 0-DS5-R1, 1-DS5-R1 (the tip's callers of `reconcile`/`tombstone`/`export_evidence` break on the new required `restrictions`; the worker swallows the TypeError), 0-DS5-R2, 1-DS5-R2 (pipelines-lineage's `lineage._stone` callers and P2's port-less fake Store break: 20 tests/p failures in the combined tree).
+
+**Correction.** The earlier "Signatures" section said `tombstone`, `reconcile` and `export_evidence` had no caller outside `infrx/datasets` and `tests/n`. That was true at base 1b2fab07 but false at the tip. The callers are `infrx/lab/workers/__main__.py:297` (`_datasets.reconcile_all`, tip 8cbe913f), composition-3 979819b2 `__main__.py:156` (`lineage_push` → `tombstone`), `tests/integration/lab_improve/lab_world.py:517` (`reconcile`), `scenarios_faults.py:84` (`export_evidence`), and pipelines-lineage a609f368 `tests/p/annotations/world.py:116` and `tests/p/teachers/test_teachers.py:99` (`_stone`). The deviation is withdrawn: every public signature is now base-compatible.
+
+**Fix (no caller has to re-thread; no WR is merge-blocking).**
+- `restrictions` is optional again (default None) on `tombstone`, `reconcile`, `export_evidence` and `blocked`, and `blocked`'s `dataset_ref` is optional too. `permitted`, `select` and `status` are unchanged. A caller-supplied `now` is still honored.
+- `reconcile` without `restrictions` resolves `restrictions_of(directory)`. The worker's `PgAccessStore(connect)` carries `_connect`, so the Lab worker's reconcile reaches 0041 with no change to `__main__.py`.
+- `_stone(objects, provider, entry, reason, at, *, restrictions=None)` is restored with its base signature. It writes the write-once object record (the first reason stands) and, when given `restrictions`, also 0041's row. It returns True when either write was new. `tombstone` and `reconcile` stone through it.
+- Every gate (`blocked`, and through it `permitted`, `status` and `export_evidence`) honors the object records, deny-only: the object reason wins because it is always the first write. A caller without the database (composition-3's push, `export_evidence`, P1/P2's `_stone`) therefore can neither miss a tombstone nor undo one. 0041 stays D7's copy for `lab_permitted_samples` and the SQL-side reads. `backfill` still moves the object-era records into 0041.
+- `restrictions_of(store)` returns `store.restrictions`, else `PgSampleRestrictions(store._connect)`, else None. None means the object-era gate: D7's `accessible_samples` less the object tombstones and the caller-clock expiry, which covers P2's fake Store. Production stores always carry `_connect`.
+
+**Tests first.** Commit c9d61792 was red at d814d434: `test_n3_callers_without_the_port_still_deny_for_good` failed with AttributeError `_stone`. The case covers the tip's shapes (P1/P2 `_stone`, composition's push `tombstone`, the worker's `reconcile` and `export_evidence`, each without `restrictions`, plus a store with no port) and checks that a re-grant resurrects nothing, that 0041 gets every stone through the directory's port, and that the evidence names every delivered item now denied. In the same commit, `test_lineage_pg.py` makes its reconcile call in the worker's shape (no `restrictions`), and `PgSampleRestrictions.blocked` still names the sample. `test_n3_backfill_…` now asserts that the object stone is denied at once but absent from 0041 until backfill.
+
+**Mutants (45 → 52; every named case notices, 0 survivors).**
+- New: `n3_gate_skips_denial`, `n3_push_port_dropped`, `n3_stone_skips_0041`, `n3_stone_skips_object`, `n3_reconcile_port_dropped`, `n3_reconcile_port_unresolved`, `n3_portless_store_refused` (dies by TypeError), `n3_gate_ignores_object_stones`.
+- Retargeted to the new code: `n3_bound_unrecorded`, `n3_gate_ignores_tombstones`, `n3_reason_lost`, `n3_push_unpaged`, `n3_push_stops_at_done`, `n3_reconcile_reports_old_stones`, `n3_backfill_skips_bounds`.
+- `n3_no_lineage_entry` now declares a TypeError death, because the push stones from the trace entry.
+- Removed or renamed: `n3_gate_ignores_caller_clock` became `n3_gate_skips_denial`, and `n3_reconcile_stone_unwritten` became `n3_reconcile_port_dropped` plus `n3_stone_skips_0041`.
+
+| command (fix round) | exit | result |
+|---|---|---|
+| `uv run --frozen pytest -q tests/n/lineage/test_lineage.py` at c9d61792 (red) | 1 | 1 failed (the new case), 10 passed |
+| `INFRX_D_TASK=n3 INFRX_MUTANTS=all uv run --frozen pytest -q tests/n` at 0d695a7b | 0 | **205 passed** (6:59); lineage 52 mutants, 0 survivors; the PG files ran on n3 |
+| `INFRX_D_TASK=n2 INFRX_MUTANTS=all uv run --frozen pytest -q tests/n` at 0d695a7b | 0 | **205 passed** (7:02) |
+| `uv run --frozen ruff check infrx/datasets tests/n` | 0 | clean |
+| Scratch clone: tip 8cbe913f + pipelines-lineage a609f368 + this lane (clean merges): `pytest -q tests/p tests/n tests/w tests/b tests/g/lab_evaluations tests/g/lab_pipelines -k 'not mutant'` | 1 | 15 failed, 452 passed, 38 skipped. The **same 15 failures as tip+pipelines-lineage alone** (zero diff in the failure list). **0 failures in tests/p** (was 20). The 15 are 7 tests/w `*_pg` cases that also fail on the bare tip (no task key; the default d1 key is a foreign container) and 8 `tests/g/lab_pipelines` cases (`lab route failed: TypeError`) that pipelines-lineage brings on its own. Not this lane's; recorded for the coordinator. |
+| Same clone + composition-3 979819b2 (clean): `pytest -q tests/w tests/n tests/p -k 'not mutant and not _pg'` | 0 | 388 passed, 1 skipped |
+| Same clone: the worker's `reconcile(directory, retention, objects, provider_org_id=p, after=None)` and composition-3's `tombstone(objects, …, reason="deleted", at=…)` called directly | 0 | no TypeError: `{'checked': 0, …, 'next': None}`, `{'tombstoned': 0, 'more': False}` |
+
+`make api-test` was not rerun in the fix round. The change is confined to `infrx/datasets/lineage` and `tests/n`, and the suites that import it (n, p, w, b, g/lab_*) were run above, including on the combined tree. The earlier full run is recorded above. No docker was touched other than n2/n3's own containers, which were gone after each run; the foreign containers and volumes were left alone.
+
+**Wiring requests, revised.**
+- WR-DS5-1 is unchanged (optional).
+- WR-DS5-2 is **no longer merge-blocking**: callers may pass `restrictions=PgSampleRestrictions(connect)` to write 0041 at push time. Without it, the object record denies at once and the next reconcile writes 0041.
+- WR-DS5-3 is unchanged.
+- WR-DS5-4 is **withdrawn**: `_stone` and a port-less store work as they did at base, so pipelines-lineage needs no change and the two lanes merge in either order.
+- New, WR-DS5-5 (composition, optional): add a tests/w case that awaits one real `reconcile_all` pass (`test_lab_workers.py:356` monkeypatches `lineage.reconcile`) so the call shape is proven in the worker itself.
+
+**Proposed ruling (amended, unnumbered).** 0041 is D7's authority for N3's SQL-side gate (`lab_permitted_samples`). Every tombstone also keeps its write-once object record, which every lineage gate honors deny-only, so a caller without the database can neither miss nor undo a denial. A bound passed on either clock denies.
+
+**Open issue (new).** `blocked` lists the provider's object tombstones once per read again, the base's ponytail ceiling. The upgrade path is to retire the object reads once every caller passes `restrictions` (WR-DS5-2) and `backfill` has run (WR-DS5-3).
