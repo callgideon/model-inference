@@ -143,6 +143,7 @@ B2 = "infrx/evaluation/reports/__init__.py"
 B3 = "infrx/evaluation/checkpoints/__init__.py"
 B1 = "infrx/evaluation/runner/__init__.py"
 D7 = "../app/supabase/migrations/0029_lab_data.sql"
+D7F = "../app/supabase/migrations/0034_lab_eval_followup.sql"
 
 J01_REFUSED = "test_j01_a_benchmark_with_bad_rows_is_refused_until_its_rejects_are_accepted"
 J01_REPLAY = "test_j01_a_replayed_upload_is_the_same_dataset_and_a_changed_one_conflicts"
@@ -226,8 +227,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "checkpoint)", B3,
        '    digest = hashlib.sha256(f"{subscription_id}:{checkpoint_id}".encode()).digest()',
        "    digest = uuid.uuid4().bytes", J08_TWICE, J08_CRASH),
+    # 0034 (lab-sql LW2) re-creates lab_receive_checkpoint: 0029's copy is dead code, so the
+    # mutant targets the live definition (lab-evaluate-2: it survived on 0029)
     _m("st_receipt_twice", "a redelivered checkpoint is the same receipt, no second event",
-       D7, "    return infrx.lab_receipt_json(c);\n  end if;\n"
+       D7F, "    return infrx.lab_receipt_json(c);\n  end if;\n"
            "  insert into infrx.lab_outbox (provider_org_id, kind, payload)\n"
            "  values (v_provider, 'checkpoint_received'",
        "  end if;\n  insert into infrx.lab_outbox (provider_org_id, kind, payload)\n"
