@@ -1698,6 +1698,12 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "    if regime == CREDIT and card.rate_card_version != settings.pilot.active_rate_card_version:",
        "    if False:",
        "test_catalog_truth__credit_discovery_advertises_only_the_approved_card"),
+    # E3L-F1: discovery reports the listing version resolution landed on, not a constant.
+    _m("listing_version_ignores_resolution", "discovery reports the version it resolved, "
+       "not always 1 (E3L-F1)",
+       M, "        if resolved is not None:\n            listing_version = resolved",
+       "        if False:\n            listing_version = resolved",
+       "test_catalog_truth__discovery_reports_the_listing_version_it_serves"),
     # A3 WR-4 / P-01: `provisional` is the card's approval record, fail closed.
     _m("provisional_flag_constant", "an approved card is not published as provisional",
        M, "    return unapproved(card.approved_by) is not None",
