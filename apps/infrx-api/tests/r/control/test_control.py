@@ -443,6 +443,8 @@ def test_r2_a_deployment_only_candidate_rolls_back_once_and_never_relists_the_ba
     assert serving.current == BASE and len(serving.rollbacks) == 1
     verdict = asyncio.run(ctl.step(policy, ref, plan(), live(), now=HORIZON))
     assert verdict.action == "rolled_back" and len(serving.rollbacks) == 1
+    asyncio.run(ctl.emergency_rollback(OPERATOR, policy, ref, now=START, reason="again"))
+    assert serving.current == BASE and len(serving.rollbacks) == 1
 
 
 # 0-RI-1: identity membership is the decision's, not the pass loop's. A later deliberate
