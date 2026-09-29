@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 319,
- "updated": "2026-09-29T21:38:55Z",
+ "revision": 320,
+ "updated": "2026-09-29T21:40:25Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9487,11 +9487,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T19:01:01Z",
-   "updated": "2026-09-29T21:31:03Z",
+   "updated": "2026-09-29T21:40:25Z",
    "blocker": null,
-   "next_action": "merge batch #58 (RV-2/RV-3, R254) → o01 sync PASS; async-echo FAIL until lab-capture-2",
+   "next_action": "the async-echo case turns PASS at lab-capture-2's merge (kept-stack rerun of o01 + st_job_output_dropped)",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9647,22 +9647,22 @@
   {
    "id": "W5-MERGE-58",
    "task": null,
-   "slice": "merge batch #58 (Opus): lab-observe-4 5cd59091 (+RV-2 output assertion, RV-3 beta sync, evidence minors, R254); workflow wf_5bbd8bfa-aef",
+   "slice": "merge batch #58 (Opus): lab-observe-4 5cd59091 (+RV-2 output assertion, RV-3 beta sync, evidence minors, R254); workflow wf_5bbd8bfa-aef; integrated (R254 on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-58",
    "worktree": ".claude/worktrees/codex-w5-merge-58",
    "base": "34e6ab91",
-   "head": null,
+   "head": "896f9bce",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T21:31:03Z",
-   "updated": "2026-09-29T21:31:03Z",
+   "updated": "2026-09-29T21:40:25Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → E5L on the tip: o01 sync PASS, async-echo FAIL[WR-LO4-R8]",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
