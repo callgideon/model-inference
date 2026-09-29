@@ -122,3 +122,71 @@ done with 0 survivors; remaining = one verify round and the WR-LDP-5 re-run of `
 (~45 min) and of `make lab-local` (~26 min). The operator's hosted window itself (runbook §2–§8)
 is P-08-gated and not in this estimate: ~3–5 h once P-08 and WR-LDP-2/4/5 land (analogue: the
 I2B window).
+
+## Fix round (2026-09-29, handback e65db427 -> code head 4aed97ac)
+
+Base for this round: `e65db427` plus a merge of the `claude/consumer-v1` tip `72f1a74a`
+(`1dbe0d9e`, the only way to fix LDP-RSI-1 without a rebase; its 2 textual conflicts were
+resolved by union: the Makefile `.PHONY` line and the consumer-v1 README audit log). Commits:
+`1dbe0d9e` merge, `0926afdb` + `82a81c35` + `28c9c2cc` lab_local, `950a570b` steps + runbook,
+`b03a6814` + `4aed97ac` runbook/comments. `make lab-local` verdict at `28c9c2cc`
+(`4aed97ac` changes comments and the runbook only). Nothing touched the box, AWS/SSM/S3,
+Vercel, hosted Supabase or a secret; docker only on lab-on and the borrowed e3l block under its
+lock (torn down; no `infrx-e3l-*` / `infrx-e3llab-tls` container remains). Foreign leftovers
+(`infrx-m5-s3`, `infrx-q3-valkey`, `gideon-migration-order-test-*`) left as found.
+
+| Finding | Fixed | What changed (tests first) |
+|---|---|---|
+| 0-LDP-R1 | yes | `lab-migrate.sh` checks the W7 post-check line itself, `*"NNNN name"$'\n'"nothing pending")` (migrate.py plan's space form). The gate stub now carries a real `case "$POST"` line; new R151 sub-case: EXPECTED_PENDING matches but the post-check names 0026 -> refused. `test_ldp__todays_hosted_migrate_carries_the_reviewed_patch`: the tip's real `hosted-migrate.sh` (bcb73cc1 carries the reviewed patch) passes condition 2 and the gate stops at condition 1 (a refusing KNOWN_GOOD). Before the fix it stopped at condition 2 (the reported defect). The real `known-good.py --list --applied 0051` exits 0 at the tip (aafd387e, manual check). Mutants `r151_no_post_check` and `r151_post_check_file_name` are killed. |
+| 0-LDP-R2 | yes | (1) `test_ldp__every_secret_is_refused_as_a_literal` checks all 5 names in `secrets` (the DSN with its password, both tokens, the endpoint key, CLICKHOUSE_URL) against a list held in the test. There is one mutant per name (`secret_literal_*`), all killed. (2) `journey_status(code, text)` is PASS only when `# tests N` > 0 and `# pass` == N. `test_lab_local_a_journey_passes_only_when_every_case_ran_and_passed` drives `journeys()` through a stubbed `node`: exit 1 -> FAIL; skipped / `# tests 0` / no summary -> BLOCKED. Mutants `journey_always_passes`, `journey_skips_pass` and `journey_empty_passes` are killed. (3) = R1. |
+| 0-LDP-R3 | yes | `50-lab-role.sh` has per-role `needs=` (= `infrx.lab.workers` NEEDS; AGREE now asserts equality). A SPEC missing one is exit 2 before any change (`test_ldp__a_spec_without_a_name_the_role_needs_is_refused_before_any_change`: judge/datasets without CLICKHOUSE_URL or S3_TRACE_BUCKET, etc.). Exit 5 is reserved for `pending=" checkpoints training rollout "`. A served role's exit 2 is exit 4, "refused its settings". Mutants `role_needs_unchecked`, `role_needs_drift` and `served_refusal_is_a_pending_lane` are killed. Runbook §0/§3/§4 L7/§5: this box runs `eval` only; judge and datasets wait for CLICKHOUSE_URL + S3_TRACE_BUCKET (the trace projection). |
+| 0-LDP-R4 | yes (as asked: proven where possible, NOT RUN where not) | The composition starts the control factory on 0043's `infrx_lab_control`, with a local password set as the operator would, first and alone. Case `test_o04_the_control_factory_is_ready_on_its_own_login` reads it; layer-1 `test_lab_local_the_control_factory_runs_on_its_own_login_never_the_owner` has mutant `control_on_the_owner`. The owner-login factory still serves o04's session case and o05, so those families are judged apart from the new finding LDP-F7. **LDP-F7 (new, real)**: `infrx.lab.control.app` `_store()`/`_compose()` build `connector(dsn)` without `set_role=False`. Off the :6543 pooler it runs `set role service_role`, which `infrx_lab_control` (a member of no role) is refused, so `/readyz` 503 (reproduced by hand: `permission denied to set role "service_role"`). It is KNOWN_FAIL in the stack list. o03 is recorded as proven on the owner login only. WR-LDP-7 asks for per-role logins, and the runbook's L5/L7 proofs depend on LDP-F7/WR-LDP-7. |
+| 1-LDP-RSI-1 | yes | LAB_TEACHERS moved into GATEWAY_SWITCHES, PENDING_SWITCHES = {}. LAB_TEACHER_URL = the teacher fake (switch env and role env). LAB_CONTROL_URL = the control factory for the Lab web (the o07 control pages now render: **LDP-F2 resolved**, `/overview` `/models` `/deployments` are absent from o07-pages.json). `annotation` is no longer pending (its teacher-collect pass is on the tip; o03 starts it). 50-lab-role.sh allows and needs LAB_TEACHER_URL for annotation. Before the fix, after the merge: lab_local 4 failed, tests/i/lab 1 failed (as reported). |
+| 1-LDP-RSI-2 | no (coordinator's WR-LDP-5, unchanged) | tasklocal.py sha at this head = `0624c8eb3b25dbdd163cf3160f7b3d3b5ce6f503c8cee42fa4618e6c347cf297` (the WR-LDP-5 value). 57537-57539 are free at the tip. `infrx/contracts/tasklocal.py` is the file that holds the key (`tests/d/tasklocal.py` does not exist). |
+
+Also fixed during the round: the E4-ON stage now passes `INFRX_M_S3_BUCKET` (the stack's media
+bucket). Without it, the tip's `tests/w/test_lab_workers_lineage_pg.py` fell back to `infrx-n1`,
+which does not exist on the e3l MinIO, and failed "the media object store did not answer" in
+the 950a570b run.
+
+### E4-ON at 28c9c2cc (`GATE_ARGS=--reuse make lab-local`, exit 1 = FAIL): `E4ON-raw-28c9c2cc/`
+
+- lab-build PASS; journey:datasets PASS; 4 key-pinned journeys NOT RUN (WR-LDP-1).
+- e4-on FAIL: 2794 passed / 36 failed / 14 skipped (other keys). The 36 failures are the 35
+  WR-LDP-5 pins and their mutant cascades, plus LDP-F4 (R198 seam, by design). There is nothing new.
+- o01 PASS, o02 PASS, o06 PASS.
+- o03 NOT RUN: eval, judge, annotation and datasets start (owner login). checkpoints/training/rollout refuse by name.
+- o04 FAIL: the owner-login session case PASSes; the `infrx_lab_control` case FAILs (LDP-F7).
+- o05 FAIL: LDP-F1 (the all-switches gateway on infrx_runtime: every family 503) and LDP-F3 (datasets 500), unchanged.
+- o07 NOT RUN: every page renders signed in except the typed-unavailable evals/pipelines/releases families (WR-B4-2, WR-LAB2-4, WR-R4-1).
+- Earlier runs this round: `E4ON-raw-950a570b/` (control on the login inside the composition: o04/o07 FAIL; the n-track bucket failure) is kept. The 82a81c35 run was deleted: its o04 "PASS" was false, because the login factory could not bind the port and the ready probe read the owner-login factory on that port. The case now starts it first and alone.
+
+### Checks (this round)
+
+| Command | Exit | Result |
+|---|---|---|
+| lab_local layer 1 + tests/i/lab before the fixes, after the merge | 1 | 4 failed / 1 failed (RSI-1 reproduced) |
+| the new tests/i/lab cases against the old 50-lab-role.sh / lab-migrate.sh | 1 | 5 failed (fail-first) |
+| `pytest tests/integration/lab_local/test_lab_local_runner.py` | 0 | 15 passed |
+| `INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l pytest tests/integration/lab_local/test_mutants.py` (kept stack) | 0 | 38 passed: every layer-1 and stack mutant killed, 0 skipped, 0 survivors |
+| `cd apps/infrx-api && pytest -q tests/i/lab` | 0 | 36 passed |
+| `INFRX_MUTANTS=all pytest -q tests/i/lab` | 0 | 100 passed (36 cases + the I2L/LDP mutant list), 0 survivors |
+| `uv run --frozen ruff check tests/i/lab ../../tests/integration/lab_local` | 0 | clean |
+| `make lab-lint`, `make lab-typecheck` | 0 | clean; lab-build PASS inside `make lab-local` |
+| `make lab-local` at 28c9c2cc | 1 | FAIL as above (only named findings) |
+| `make api-test` | not run whole | its only known reds are the 35 WR-LDP-5 pins (seen inside E4-ON's tests/contracts); rerun after WR-LDP-5 |
+
+### Wiring requests (new/changed)
+
+- **WR-LDP-5** unchanged (sha above).
+- **WR-I2L-4b / LDP-F7** (I2L owner): in `infrx/lab/control/app.py`, `_store()` should use `connector(os.environ[DATABASE_URL], set_role=False)` and `_compose()` should use `connector(lab[DATABASE_URL], set_role=False)`. Test: E4-ON o04's login case PASSes; then drop `O04_LOGIN` from `KNOWN_FAIL` in `tests/integration/lab_local/mutants.py`.
+- **WR-LDP-7** (lab-sql): one dedicated login per Lab worker role (infrx_lab_eval first), with 0043's shape. `lab_world.role_env` then switches to it, so o03 proves the box's logins.
+- The runbook's WR-LDP-4 is marked landed for the EXPECTED_PENDING/post-check half (bcb73cc1). The W7 maintenance precondition half is still open.
+
+### Estimate (remaining)
+
+optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium. Basis: every finding of this
+round except RSI-2 (the coordinator's WR-LDP-5) is fixed with 0 survivors. What remains is the
+coordinator's merge with WR-LDP-5 plus a rerun of `make api-test` (~45-90 min) and
+`make lab-local` (~45 min). LDP-F7 and WR-LDP-7 belong to other lanes (~1-2 h each). The hosted
+window stays P-08-gated.

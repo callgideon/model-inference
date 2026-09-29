@@ -1,0 +1,137 @@
+2026-09-29 13:02:40,426 botocore.credentials Found credentials in environment variables.
+2026-09-29 13:02:40,713 botocore.credentials Found credentials in environment variables.
+2026-09-29 13:03:45,380 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 13:03:45,384 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 13:03:45,387 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 13:03:45,391 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 13:03:45,395 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 13:03:45,399 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 13:03:45,403 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 13:03:45,409 infrx.gateway /lab/v1/providers/b0000001-0000-4000-8000-000000000001/datasets/versions: unhandled error on request 0cb77ed5-f017-4c96-8e09-7bbb54865dff
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/routing.py", line 280, in handle
+    await self.app(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 352, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/gateway/routes/lab_datasets.py", line 147, in listing
+    return await guarded(request, provider, work)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/gateway/routes/lab_datasets.py", line 85, in guarded
+    return await work(await acting_provider(access, user, provider), user)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/datasets/__init__.py", line 25, in acting_provider
+    for workspace in await access.workspaces(user_id):
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/lab/access/__init__.py", line 121, in workspaces
+    rows = await self.store.membership_rows(user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_access.py", line 59, in membership_rows
+    return await self._call("lab_provider_memberships", {"user_id": user_id})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_access.py", line 42, in _call
+    raise domain_error(failed) from None
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_access.py", line 39, in _call
+    cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection_async.py", line 333, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InsufficientPrivilege: permission denied for function lab_provider_memberships
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 411, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/routing.py", line 280, in handle
+    await self.app(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 352, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/gateway/routes/lab_datasets.py", line 147, in listing
+    return await guarded(request, provider, work)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/gateway/routes/lab_datasets.py", line 85, in guarded
+    return await work(await acting_provider(access, user, provider), user)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/datasets/__init__.py", line 25, in acting_provider
+    for workspace in await access.workspaces(user_id):
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/lab/access/__init__.py", line 121, in workspaces
+    rows = await self.store.membership_rows(user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_access.py", line 59, in membership_rows
+    return await self._call("lab_provider_memberships", {"user_id": user_id})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_access.py", line 42, in _call
+    raise domain_error(failed) from None
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_access.py", line 39, in _call
+    cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection_async.py", line 333, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InsufficientPrivilege: permission denied for function lab_provider_memberships

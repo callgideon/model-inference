@@ -1,0 +1,42 @@
+{
+ "task": "I2L",
+ "slice": "LAB-DEPLOY-PREP fix round (LDP-R1..R4, LDP-RSI-1/2): merged the tip 72f1a74a, fixed the R151 post-check form, secret/journey/needs mutants, the control factory on infrx_lab_control, LAB_TEACHERS/LAB_TEACHER_URL/LAB_CONTROL_URL",
+ "activity": "review",
+ "head": "4aed97ac",
+ "worktree": ".claude/worktrees/codex-w5-lab-deploy-prep",
+ "branch": "codex/w5-lab-deploy-prep",
+ "owned_paths": [
+  "tests/integration/lab-local.sh",
+  "tests/integration/lab_local/",
+  "Makefile (lab-local + .PHONY)",
+  "apps/infrx-api/infrx/contracts/tasklocal.py (the one key lab-on)",
+  "infra/lab/rollout/",
+  "apps/infrx-api/tests/i/lab/",
+  "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+  "research/plan/consumer-v1/README.md (index line)",
+  "research/plan/evidence/e/E4ON-*",
+  "research/plan/evidence/i/LAB-DEPLOY-PREP-*"
+ ],
+ "commands": [
+  {"cmd": "git merge 72f1a74a (union of 2 conflicts)", "exit": 0, "summary": "1dbe0d9e; RSI-1 reproduced after it: lab_local 4 failed, tests/i/lab 1 failed"},
+  {"cmd": "GATE_ARGS=--reuse make lab-local (at 28c9c2cc)", "exit": 1, "summary": "E4-ON FAIL, only named findings: e4-on 2794 passed / 36 failed (35 WR-LDP-5 pins + LDP-F4) / 14 skipped; o01 o02 o06 PASS; o03 NOT RUN (pending roles; eval/judge/annotation/datasets start on the owner login); o04 FAIL (infrx_lab_control case = LDP-F7; owner-login case PASS); o05 FAIL (LDP-F1/F3); o07 NOT RUN (typed unavailable evals/pipelines/releases; control pages now render: LDP-F2 resolved); journey:datasets PASS"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l pytest tests/integration/lab_local/test_mutants.py", "exit": 0, "summary": "38 passed, 0 skipped: every layer-1 and stack mutant killed"},
+  {"cmd": "cd apps/infrx-api && INFRX_MUTANTS=all pytest -q tests/i/lab", "exit": 0, "summary": "100 passed (36 cases + mutant list), 0 survivors"},
+  {"cmd": "ruff check tests/i/lab tests/integration/lab_local; make lab-lint; make lab-typecheck", "exit": 0, "summary": "clean"}
+ ],
+ "results": {"0-LDP-R1": "fixed", "0-LDP-R2": "fixed", "0-LDP-R3": "fixed", "0-LDP-R4": "fixed (control login proven -> found LDP-F7; roles NOT RUN on dedicated logins until WR-LDP-7)", "1-LDP-RSI-1": "fixed (tip merged into the branch)", "1-LDP-RSI-2": "not fixed here: coordinator WR-LDP-5 (sha 0624c8eb... unchanged)"},
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "all lane-side findings fixed with 0 survivors; remaining = coordinator merge + WR-LDP-5 + reruns of make api-test (~45-90 min) and make lab-local (~45 min); LDP-F7/WR-LDP-7 are other lanes' (~1-2 h each); the hosted window is P-08-gated", "at": "2026-09-29T13:04Z"},
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LDP-5 contracts pins: frozen_contracts.json tasklocal sha 0624c8eb3b25dbdd163cf3160f7b3d3b5ce6f503c8cee42fa4618e6c347cf297; test_config_and_imports.py LAB_LANE_PORTS += lab-on {postgres 57537, valkey 57538, valkey-q 57539}",
+  "WR-I2L-4b / LDP-F7: infrx/lab/control/app.py _store()/_compose() connector(..., set_role=False); then drop O04_LOGIN from lab_local mutants KNOWN_FAIL",
+  "WR-LDP-7 per-role Lab worker logins (lab-sql), then lab_world.role_env on them",
+  "WR-LDP-1, WR-LDP-2, WR-LDP-3 unchanged; WR-LDP-4 half landed (bcb73cc1), W7 maintenance precondition open"
+ ],
+ "evidence": [
+  "research/plan/evidence/i/LAB-DEPLOY-PREP-24512389.md (Fix round section)",
+  "research/plan/evidence/e/E4ON-raw-28c9c2cc/",
+  "research/plan/evidence/e/E4ON-raw-950a570b/",
+  "research/plan/consumer-v1/08-lab-internal-testing-rollout.md"
+ ]
+}

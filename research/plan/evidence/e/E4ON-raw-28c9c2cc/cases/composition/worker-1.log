@@ -1,0 +1,3 @@
+2026-09-29 13:02:37,757 INFO botocore.credentials Found credentials in environment variables.
+2026-09-29 13:02:38,027 INFO botocore.credentials Found credentials in environment variables.
+infrx.worker: refusing to start: INFRX_MODE='pilot': LAB_EVAL_WORKER needs an evaluator source (WR-B-2(b)) and a dev target source (WR-B-3)

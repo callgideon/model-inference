@@ -1,0 +1,21 @@
+2026-09-29 13:02:43,745 INFO botocore.credentials Found credentials in environment variables.
+2026-09-29 13:02:43,908 ERROR infrx.worker judge sweep failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_consent.py", line 205, in sweep
+    return (await self._call("lab_judge_sweep", {"older_than_s": older_than_s}))["expired"]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_data.py", line 63, in _call
+    raise domain_error(failed) from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: maintenance: maintenance: lab_submission is not enabled
+2026-09-29 13:03:43,987 ERROR infrx.worker judge sweep failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_consent.py", line 205, in sweep
+    return (await self._call("lab_judge_sweep", {"older_than_s": older_than_s}))["expired"]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/state/lab_data.py", line 63, in _call
+    raise domain_error(failed) from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: maintenance: maintenance: lab_submission is not enabled

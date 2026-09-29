@@ -1,0 +1,99 @@
+2026-09-29 11:38:29,420 INFO botocore.credentials Found credentials in environment variables.
+2026-09-29 11:38:29,629 INFO botocore.credentials Found credentials in environment variables.
+2026-09-29 11:38:29,685 INFO infrx.worker reconciliation gauges disabled: no monitor login
+2026-09-29 11:38:29,712 INFO infrx.media.retention retention sweep: 0 deleted, 0 retained, 0 delete failures, 0 lost acks, batch 0, in flight 0, oldest pending delete 0 s
+2026-09-29 11:38:29,721 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-29 11:38:39,726 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-29 11:38:49,728 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-29 11:38:59,730 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-29 11:39:09,732 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-29 11:39:19,747 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-29 11:39:29,748 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-29 11:39:33,769 INFO infrx.worker prepared 2adf8f2c-4012-416f-983d-d044d7b05e3d: 1337 prompt tokens (engine /tokenize, 3 ms)
+2026-09-29 11:39:34,210 INFO infrx.worker prepared 09814696-50be-4246-8085-15a7979aad44: 1337 prompt tokens (engine /tokenize, 3 ms)
+2026-09-29 11:39:38,146 WARNING infrx.worker drained: 10 finished, 0 released [], ended []
+2026-09-29 11:39:38,146 WARNING infrx.worker drained preparation: 2 finished, 0 released [], ended []
