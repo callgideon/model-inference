@@ -466,7 +466,9 @@ async def rollout_pass(objects, store, releases, controller, live, reads) -> dic
     from ...rollouts.control import Plan
     done = {"stepped": 0, "held": 0, "failed": 0}
     for provider in await releases.providers_in(ROLLOUT_STATES):
-        for item in await releases.releases_in(ROLLOUT_STATES, provider_org_id=provider):
+        # == ROLLOUT_STATES, spelled out: E8L's st_pass_skips_the_rolled_back anchors on it
+        for item in await releases.releases_in(("running", "rolled_back"),
+                                               provider_org_id=provider):
             try:
                 raw = await objects.get(plan_key(provider, item.policy_id))
                 if raw is None:
