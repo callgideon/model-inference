@@ -30,7 +30,8 @@ never runs in a consumer process.
                and reconcile/collect every provider's ambiguous/submitted runs (WR-LSQ-C2A);
                `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
-               every provider with a lineage, every page (WR-N3-2's pull half).
+               every provider with a lineage, every page (WR-N3-2's pull half), and N1's
+               imports from 0051's durable job queue (WR-N4-3).
 * `rollout`    LAB_S3_BUCKET, LAB_OPERATOR_ID (the controller's audited principal): R2's
                `Controller.step` every 30 s for every running or rolled-back D9 release on
                the plan stored beside it (WR-R2-3; a running one only on R1's aggregates,
@@ -88,6 +89,7 @@ JUDGE_PASS_S = 60.0
 JUDGE_SILENT_S = 300                  # a `submitting` run silent this long is `ambiguous`
 JUDGE_BATCH = 100                     # runs per provider, state and pass (oldest first)
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
+IMPORT_PASS_S = 5.0                   # 0051's import-job queue, claimed
 TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
 ROLLOUT_PASS_S = 30.0                 # R2's controller pass over the live releases
 PROBE_TIMEOUT_S = 5.0
@@ -414,8 +416,13 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
                 log.exception("lineage reconcile failed for one provider")
                 report["failed"] += 1
         return report
+    from ...datasets import imports
+    from ...state.lab_data import PgLabDataStore, PgLabImportJobs
+    jobs, store = PgLabImportJobs(connect), PgLabDataStore(connect)
     return {"lineage_reconcile": lambda: every(LINEAGE_PASS_S, reconcile_all,
-                                               "lineage reconcile")}, None
+                                               "lineage reconcile"),
+            "import_jobs": lambda: every(IMPORT_PASS_S, lambda: imports.work(
+                jobs, store, objects, worker_id=worker_id), "import jobs")}, None
 
 
 class NoLive:

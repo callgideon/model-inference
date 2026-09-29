@@ -522,6 +522,33 @@ def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(mo
     assert no_trace_stack["objects"] is objects      # WR-N3-2a: its deletions push tombstones
 
 
+def test_lab_workers__the_datasets_role_works_the_durable_import_job_queue(monkeypatch,
+                                                                           no_trace_stack):
+    """WR-N4-3: every IMPORT_PASS_S the datasets role (the I5 datasets pool) works 0051's
+    import-job queue - N1's `imports.work` over `PgLabImportJobs` and D7's `PgLabDataStore`
+    on the role's pool, the role's Lab objects, as this process's worker id."""
+    from infrx.datasets import imports
+    from infrx.state.lab_data import PgLabDataStore, PgLabImportJobs
+    seen = []
+
+    async def work(jobs, store, objects, *, worker_id):
+        seen.append((jobs, store, objects, worker_id))
+        return {"succeeded": 1}
+    monkeypatch.setattr(imports, "work", work)
+    steps = captured_steps(monkeypatch)
+    objects = InMemoryObjectStore()
+    worker = lab_workers.compose("datasets", ENV["datasets"], objects=objects)
+    assert set(worker.tasks) == {"lineage_reconcile", "import_jobs"}
+    worker.tasks["import_jobs"]().close()
+    interval, step = steps["import jobs"]
+    assert interval == lab_workers.IMPORT_PASS_S
+    assert asyncio.run(step()) == {"succeeded": 1}
+    ((jobs, store, got, worker_id),) = seen
+    assert type(jobs) is PgLabImportJobs and type(store) is PgLabDataStore
+    assert jobs._connect is store._connect and got is objects
+    assert worker_id.startswith("lab-datasets-")
+
+
 # ------------------------------------------------------------------ rollout (WR-I7-1)
 def listing(provider, n, state):
     from infrx.state.lab_rollout import Release, ReleaseListing

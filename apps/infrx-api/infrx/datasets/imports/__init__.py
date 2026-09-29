@@ -35,8 +35,10 @@ membership check, WR-N-2) at the route; D7 re-checks the grant.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -418,3 +420,66 @@ def preview(payload: Any, head: bytes, *, provider_org_id: str, rows: int = 20) 
             types.setdefault(name, set()).add(_type(value))
         shown.append({"line": number, "mapped": checked})
     return {"fields": {name: sorted(t) for name, t in sorted(types.items())}, "rows": shown}
+
+
+# --- WR-N4-3: the durable import-job queue's two halves (0051, `PgLabImportJobs`) ------------
+IMPORT_LEASE_S = 60.0               # a job silent this long is claimed again
+
+
+def rows_key(provider: str, import_id: str) -> str:
+    return f"lab/{provider}/imports/{import_id}/rows.jsonl"
+
+
+async def enqueue(jobs, objects, body: dict, *, provider_org_id: str, actor: str) -> dict:
+    """The route's half: the upload's rows write-once beside its bundle, then ONE job per
+    import id (a replay is the same job, whatever state it reached)."""
+    spec = parse_spec(body["spec"], provider_org_id=provider_org_id)
+    await write_once(objects, rows_key(provider_org_id, spec.import_id), body["body"].encode(),
+                     "application/x-ndjson")
+    return await jobs.enqueue(spec.import_id, {
+        "spec": body["spec"], "accept_rejects": bool(body.get("accept_rejects")),
+        "actor": actor}, provider_org_id=provider_org_id, actor=actor)
+
+
+async def _pieces(data: bytes):
+    yield data
+
+
+async def work(jobs, store, objects, *, worker_id: str, limit: int = 1,
+               lease_s: float = IMPORT_LEASE_S, beat_s: float | None = None) -> dict[str, int]:
+    """The I5 datasets pool's half: claim up to `limit` jobs (one whose lease lapsed is
+    claimed again), run N1's `Importer` on the stored rows as the job's actor while the
+    lease is heartbeaten, and finish each once - `succeeded` with the report, or `failed`
+    with its reason (a refusal; rejected rows keep their report). Any other failure finishes
+    nothing: the lease lapses and the job is claimed again (`retry`)."""
+    done = {"succeeded": 0, "failed": 0, "retry": 0}
+    for job in await jobs.claim(limit=limit, worker_id=worker_id, redelivery_s=lease_s):
+        job_id, provider, task = job["job_id"], job["provider_org_id"], job["spec"]
+
+        async def beat() -> None:
+            while True:
+                await asyncio.sleep(beat_s or lease_s / 3)
+                await jobs.heartbeat(job_id, worker_id=worker_id)
+        beating = asyncio.create_task(beat())
+        result = error = None
+        try:
+            rows = await objects.get(rows_key(provider, job_id))
+            if rows is None:
+                raise errors.NotFound("the upload is missing")
+            result = vars(await Importer(store, objects).run(
+                task["spec"], _pieces(rows), provider_org_id=provider, actor=task["actor"],
+                accept_rejects=task["accept_rejects"]))
+        except ImportRejected as rejected:
+            result, error = vars(rejected.report), "rejected"
+        except errors.DomainError as refused:
+            error = str(refused).removeprefix(f"{refused.code}: ")
+        except Exception:                    # noqa: BLE001 - the lease lapses: claimed again
+            logging.getLogger(__name__).exception("import job %s did not finish", job_id)
+            done["retry"] += 1
+            continue
+        finally:
+            beating.cancel()
+        state = "failed" if error else "succeeded"
+        await jobs.finish(job_id, state, worker_id=worker_id, result=result, error=error)
+        done[state] += 1
+    return done

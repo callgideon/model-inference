@@ -8,6 +8,7 @@ scenarios on the real `PgLabDataStore`. Every case is named by a mutant in `muta
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import hashlib
 import json
@@ -500,3 +501,95 @@ def test_wrn2_only_a_current_developer_member_acts_for_the_provider() -> None:
     assert route(users[(NEMO, "developer", True)]) == "NotFound"
     assert route(users[(OTHER, "developer", False)]) == "NotFound"
     assert route("f1000000-0000-4000-8000-0000000000f1") == "NotFound"    # consumer-only
+
+
+# ------------------------------------------------ WR-N4-3: the durable import-job queue's halves
+class FakeJobs:
+    """0051's lease queue in memory: one job per id; `claim` takes queued jobs (or running
+    ones whose lease `lapsed`); heartbeat and finish only by the holder."""
+
+    def __init__(self) -> None:
+        self.rows: dict[str, dict] = {}
+        self.beats: list[tuple[str, str]] = []
+
+    async def enqueue(self, job_id, spec, *, provider_org_id, actor):
+        return self.rows.setdefault(job_id, {"job_id": job_id, "provider_org_id": provider_org_id,
+                                             "spec": spec, "state": "queued", "by": None,
+                                             "lapsed": False, "attempts": 0})
+
+    async def claim(self, *, limit, worker_id, redelivery_s):
+        out = [j for j in self.rows.values()
+               if j["state"] == "queued" or (j["state"] == "running" and j["lapsed"])][:limit]
+        for j in out:
+            j.update(state="running", by=worker_id, lapsed=False, attempts=j["attempts"] + 1)
+        return [dict(j) for j in out]
+
+    async def heartbeat(self, job_id, *, worker_id):
+        if self.rows[job_id]["by"] != worker_id:
+            raise errors.StateConflict("this worker does not hold that job")
+        self.beats.append((job_id, worker_id))
+
+    async def finish(self, job_id, state, *, worker_id, result=None, error=None):
+        job = self.rows[job_id]
+        if job["state"] != "running" or job["by"] != worker_id:
+            raise errors.StateConflict("this worker does not hold that job")
+        job.update(state=state, result=result, error=error)
+        return dict(job)
+
+
+def test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_lease(
+        monkeypatch) -> None:
+    """WR-N4-3: the route's half stores the rows write-once beside the bundle and enqueues ONE
+    job per import id (a replay is the same job). The pool's half claims it, runs N1's
+    importer on the stored rows as the job's actor while heartbeating its lease, and finishes
+    it once: `succeeded` with the report, or `failed` with its reason (rejected rows keep
+    their report; a missing upload says so). An infrastructure failure finishes nothing: the
+    lease lapses and the job is claimed again."""
+    spec, data = fixture("benchmark")
+    store, objects, _ = world()
+    jobs = FakeJobs()
+    body = {"spec": spec, "body": data.decode(), "accept_rejects": False}
+    for _ in range(2):
+        run(imports.enqueue(jobs, objects, body, provider_org_id=NEMO, actor="dev@nemo"))
+    assert list(jobs.rows) == [spec["import_id"]]
+    assert run(objects.get(imports.rows_key(NEMO, spec["import_id"]))) == data
+    assert jobs.rows[spec["import_id"]]["spec"] == {"spec": spec, "accept_rejects": False,
+                                                    "actor": "dev@nemo"}
+    slow, actors = imports.Importer.run, []
+
+    async def slowly(self, *args, **kw):
+        actors.append(kw["actor"])
+        await asyncio.sleep(0.05)
+        return await slow(self, *args, **kw)
+    monkeypatch.setattr(imports.Importer, "run", slowly)
+    done = run(imports.work(jobs, store, objects, worker_id="w1", beat_s=0.01))
+    assert done == {"succeeded": 1, "failed": 0, "retry": 0}
+    job = jobs.rows[spec["import_id"]]
+    assert job["state"] == "succeeded" and job["result"]["dataset_ref"] == store.published[-1]
+    assert job["result"]["accepted"] > 0 and ("dataset_ref" in job["result"])
+    assert jobs.beats and set(jobs.beats) == {(spec["import_id"], "w1")}
+    assert actors == ["dev@nemo"], "the import runs as the job's actor"
+    assert run(imports.work(jobs, store, objects, worker_id="w1")) == \
+        {"succeeded": 0, "failed": 0, "retry": 0}                    # finished: never again
+    bad = {**spec, "import_id": "b0000001-0000-4000-8000-00000000b001"}
+    run(imports.enqueue(jobs, objects, {"spec": bad, "body": "not json\n"},
+                        provider_org_id=NEMO, actor="dev@nemo"))
+    gone = {**spec, "import_id": "b0000001-0000-4000-8000-00000000b002"}
+    run(jobs.enqueue(gone["import_id"], {"spec": gone, "accept_rejects": False,
+                                         "actor": "dev@nemo"}, provider_org_id=NEMO, actor="x"))
+    for limit in (1, 5):                                  # one job per pass unless asked
+        assert run(imports.work(jobs, store, objects, worker_id="w2", limit=limit)) == \
+            {"succeeded": 0, "failed": 1, "retry": 0}
+    assert (jobs.rows[bad["import_id"]]["error"], jobs.rows[gone["import_id"]]["error"]) == \
+        ("rejected", "the upload is missing")
+    assert jobs.rows[bad["import_id"]]["result"]["rejected"][0]["reason"] == "not_json"
+
+    async def down(self, *args, **kw):
+        raise ConnectionError("the database did not answer")
+    monkeypatch.setattr(imports.Importer, "run", down)
+    later = {**spec, "import_id": "b0000001-0000-4000-8000-00000000b003"}
+    run(imports.enqueue(jobs, objects, {"spec": later, "body": data.decode()},
+                        provider_org_id=NEMO, actor="dev@nemo"))
+    assert run(imports.work(jobs, store, objects, worker_id="w3")) == \
+        {"succeeded": 0, "failed": 0, "retry": 1}
+    assert jobs.rows[later["import_id"]]["state"] == "running"       # its lease will lapse

@@ -31,6 +31,7 @@ JUDGE = C + "the_judge_is_j2_on_its_ledger_dry_run_by_default"
 SWEEP = C + "the_judge_pass_sweeps_silent_submissions"
 JPASS = C + "the_judge_pass_reconciles_and_collects_every_providers_runs"
 DATASETS = C + "datasets_reconcile_every_providers_lineage_page_by_page"
+IMPORTS = C + "the_datasets_role_works_the_durable_import_job_queue"
 ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
@@ -133,6 +134,19 @@ MUTANTS: tuple[Mutant, ...] = (
        '    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connector(""))', CKPT),
     _m("lw_checkpoints_cadence", "the checkpoints relay pumps at the Lab pump cadence",
        "every(worker_main.LAB_PUMP_S, relay.pump,", "every(LINEAGE_PASS_S, relay.pump,", CKPT),
+    # WR-N4-3 (composition-5): the datasets role's import-job pass
+    _m("lw_import_jobs_unscheduled", "the datasets role works the import-job queue",
+       '            "import_jobs": lambda: every(IMPORT_PASS_S,',
+       '            "import_jobs_off": lambda: every(IMPORT_PASS_S,', IMPORTS),
+    _m("lw_import_jobs_cadence", "the queue is claimed every IMPORT_PASS_S",
+       '"import_jobs": lambda: every(IMPORT_PASS_S,', '"import_jobs": lambda: every(LINEAGE_PASS_S,',
+       IMPORTS),
+    _m("lw_import_jobs_off_the_pool", "the job queue is on the role's database",
+       "    jobs, store = PgLabImportJobs(connect), PgLabDataStore(connect)",
+       '    jobs, store = PgLabImportJobs(connector("")), PgLabDataStore(connect)', IMPORTS),
+    _m("lw_import_jobs_other_objects", "imports read and write the role's Lab objects",
+       "                jobs, store, objects, worker_id=worker_id)",
+       "                jobs, store, None, worker_id=worker_id)", IMPORTS),
     # --- judge ------------------------------------------------------------------------------------
     # WR-LSQ-C2A (composition-5): the collect/reconcile pass
     _m("lw_judge_pass_unscheduled", "the judge role runs its collect/reconcile pass",
