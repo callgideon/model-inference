@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 252,
- "updated": "2026-09-29T01:26:59Z",
+ "revision": 253,
+ "updated": "2026-09-29T01:28:42Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6737,26 +6737,28 @@
    "branch": "codex/w5-i-harness-key",
    "worktree": ".claude/worktrees/codex-w5-i-harness-key",
    "base": "49393c56",
-   "head": null,
+   "head": "3fd8ccd1",
    "isolation": {
     "ports": "i8 (exclusive) / i3",
     "prefix": "infrx-i3-",
     "db": "i3"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T20:38:50Z",
-   "updated": "2026-09-28T20:38:50Z",
+   "updated": "2026-09-29T01:28:42Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → coordinator merge",
+   "next_action": "merge batch #29 (Sonnet; R209)",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "one harness defect",
-    "at": "2026-09-28T20:38:50Z"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT_WITH_FIXES 3fd8ccd1; merge running",
+    "at": "2026-09-29T01:28:42Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/i/I-HARNESS-KEY-38298d6.md"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/i/mutants.py",
@@ -7360,6 +7362,38 @@
     "confidence": "high",
     "basis": "single-lane batch",
     "at": "2026-09-29T01:26:59Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-29",
+   "task": null,
+   "slice": "merge batch #29 (Sonnet): i-harness-key 3fd8ccd1 (+R209)",
+   "agent": "sonnet",
+   "branch": "codex/w5-merge-29",
+   "worktree": ".claude/worktrees/codex-w5-merge-29",
+   "base": "0772ca1c",
+   "head": null,
+   "isolation": {
+    "ports": "i4 57536",
+    "prefix": "infrx-i4-",
+    "db": "i4"
+   },
+   "activity": "running",
+   "started": "2026-09-29T01:28:42Z",
+   "updated": "2026-09-29T01:28:42Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R207/R208 before R209 at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T01:28:42Z"
    },
    "evidence": [],
    "commands": [],
