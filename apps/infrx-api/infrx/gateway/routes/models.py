@@ -59,9 +59,10 @@ OWNED_BY = "nemostation"
 # The approved release profile: Marlin-2B as release bda1586 deploys it (F2C.c's record of
 # `/etc/marlin2b-gateway.env`: 82 s). A runtime past it advertises nothing.
 APPROVED = deployed_profile()
-# ponytail: the catalog port does not return the listing version resolution landed on
-# (D10 wiring); one served model is one listing.
-LISTING_VERSION = 1
+# E3L-F1 fallback only: a catalog with no `listing_version` reader (an adapter this lane
+# does not own) reports this instead of crashing. The real and fake directories both
+# implement it now, so a served model normally reports the listing it actually resolved.
+_UNKNOWN_LISTING_VERSION = 1
 # The OpenRouter v2.4 names of the parameters it types, with their bounds (validate's).
 PROVIDER_PARAMETERS = {
     "max_tokens": ("max_tokens", {"type": "integer", "min": 1}),
@@ -131,8 +132,8 @@ def enforced_profile(rt, deployment, serving) -> pm.ServingProfile:
 
 async def catalog_rows(rt):
     """The served model as a consumer's key resolves it now: (deployment, serving, card,
-    USD price), or None. A catalog that cannot answer is a retryable 503, never an empty
-    list or a stale claim."""
+    USD price, listing version), or None. A catalog that cannot answer is a retryable 503,
+    never an empty list or a stale claim."""
     catalog, settings = rt.ingress.catalog, rt.settings
     deployment = await _dependency(catalog.resolve(
         settings.model_id, audience=CredentialAudience.consumer, endpoint_id=None))
@@ -144,7 +145,13 @@ async def catalog_rows(rt):
         return None
     reader = getattr(catalog, "usd_price", None)
     usd = await _dependency(reader(serving.model_revision)) if reader is not None else None
-    return deployment, serving, card, usd
+    lv_reader = getattr(catalog, "listing_version", None)
+    listing_version = _UNKNOWN_LISTING_VERSION
+    if lv_reader is not None:
+        resolved = await _dependency(lv_reader(deployment.deployment_revision_id))
+        if resolved is not None:
+            listing_version = resolved
+    return deployment, serving, card, usd, listing_version
 
 
 def provisional(card) -> bool:
@@ -162,7 +169,7 @@ def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
     not publishable (`project`'s refusal) or past a profile."""
     if rows is None:
         return []
-    deployment, serving, card, usd = rows
+    deployment, serving, card, usd, listing_version = rows
     settings = rt.settings
     regime = settings.deployment.accounting_regime
     if regime == CREDIT and card.rate_card_version != settings.pilot.active_rate_card_version:
@@ -171,7 +178,7 @@ def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
     available = all(state == OK for state in component_state(rt.ingress.checks).values())
     try:
         published = pm.project(
-            serving=serving, deployment=deployment, listing_version=LISTING_VERSION,
+            serving=serving, deployment=deployment, listing_version=listing_version,
             regime=regime, credit_card=card, credit_provisional=provisional(card), usd_price=usd,
             capability=profile.capability, profile=profile, owned_by=OWNED_BY,
             available=available, as_of=now)

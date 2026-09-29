@@ -167,6 +167,17 @@ def test_catalog_truth__credit_discovery_advertises_only_the_approved_card():
     assert listed(discovery_app(other)[0]) == []
 
 
+def test_catalog_truth__discovery_reports_the_listing_version_it_serves():
+    """E3L-F1: discovery used to hardcode `listing_version: 1` for every entry
+    (`infrx/gateway/routes/models.py`'s retired `LISTING_VERSION` constant), so a model
+    published twice still claimed version 1. The second publication (listing 2, same
+    deployment) must be reported as 2."""
+    catalog = priced()
+    assert only(discovery_app(catalog=catalog)[0])["listing_version"] == 1
+    catalog.move_alias(support.PUBLIC_MODEL, IDS.prod_deployment)      # republished: listing 2
+    assert only(discovery_app(catalog=catalog)[0])["listing_version"] == 2
+
+
 LAUNCH = "rc_marlin2b_20260925_launch"
 # P-01's enactment: the text G8's `publish-card --approved-by` records (15 "Decisions
 # 2026-09-25"); it carries none of the blocking markers (`transition.unapproved`).

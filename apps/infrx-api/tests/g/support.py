@@ -18,7 +18,7 @@ import httpx
 from fastapi import FastAPI
 
 from infrx.config import DEPLOYMENT_DEFAULTS, Settings, validate_runtime
-from infrx.contracts.conformance.v2_fakes import fake_v2_harness
+from infrx.contracts.conformance.v2_fakes import FakeCatalogDirectory, fake_v2_harness
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.limits import DEFAULTS
 from infrx.gateway.app import Runtime
@@ -117,10 +117,36 @@ def preview_card():
         "deployment_revision_id": IDS.dev_deployment, "rate_card_version": "rc_internal_preview"})
 
 
+@dataclasses.dataclass
+class ListedCatalog(FakeCatalogDirectory):
+    """E3L-F1: the frozen `FakeCatalogDirectory` (`infrx/contracts/conformance/v2_fakes.py`,
+    pinned byte-identical since F3) has no `listing_version`, and its `move_alias` only
+    overwrites `aliases` - so the `infrx.catalog_listings`-style version history lives here
+    instead, test-owned: append-only (alias, version, deployment revision) per publication.
+    `PgCatalogDirectory.listing_version` (`infrx/state/catalog.py`, this lane's own) answers
+    the same question from the real table."""
+
+    listings: list[tuple[str, int, str]] = dataclasses.field(default_factory=list)
+
+    async def listing_version(self, deployment_revision_id: str) -> int | None:
+        named = [v for _, v, dep in self.listings if dep == deployment_revision_id]
+        return max(named) if named else None
+
+    def move_alias(self, requested_model: str, deployment_revision_id: str) -> None:
+        """A new catalog listing: the next version for this alias, naming
+        `deployment_revision_id` (a republish or a rollback both call this)."""
+        super().move_alias(requested_model, deployment_revision_id)
+        version = 1 + sum(1 for alias, _, _ in self.listings if alias == requested_model)
+        self.listings.append((requested_model, version, deployment_revision_id))
+
+
 def catalog():
     """The operator-seeded catalog (the F2P fixtures D1R seeds verbatim), fresh per call,
     with the bare public alias listed beside its R62 pin as D1R's resolver reads both."""
-    directory = fake_v2_harness().catalog
+    base = fake_v2_harness().catalog
+    directory = ListedCatalog(aliases=base.aliases, deployments=base.deployments,
+                              servings=base.servings, rate_cards=base.rate_cards,
+                              policies=base.policies, prices=base.prices)
     directory.move_alias(PUBLIC_MODEL, directory.aliases[MODEL_REVISION])
     return directory
 

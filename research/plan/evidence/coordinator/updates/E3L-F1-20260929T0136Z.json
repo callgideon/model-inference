@@ -1,0 +1,59 @@
+{
+  "task": "E3L-F1",
+  "slice": "GET /v1/models projects the catalog's own listing version instead of the retired LISTING_VERSION constant (E3L-BIND cell l05b). PgCatalogDirectory.listing_version added (max(catalog_listings.version), like usd_price, not the frozen CatalogDirectory protocol); models.py threads it through pm.project. Fail-first on the fake (tests/g/test_catalog_truth.py) and on real PostgreSQL (tests/d/test_catalog_pg.py, RigCatalog.publish). A first attempt put the fake-side tracking in infrx/contracts/conformance/v2_fakes.py (FakeCatalogDirectory), which a full make api-test run showed breaks F3's byte-identical freeze pin (tests/contracts/lab/frozen_contracts.json) - 9 tests turned red. Reverted that file (byte-identical to base again) and moved the tracking into a ListedCatalog(FakeCatalogDirectory) subclass in tests/g/support.py, an owned, unpinned path; tests/contracts/lab/ went from 9 failed to 75 passed. Full G mutant list (444 mutants, INFRX_MUTANTS=all): 451 passed, 0 survivors. l05b's actual gate rerun needs codex/w5-e3l-bind merged onto this head; not attempted here (recorded, with the exact rerun command).",
+  "activity": "review",
+  "head": "99c32850",
+  "worktree": ".claude/worktrees/codex-w5-e3l-f1",
+  "branch": "codex/w5-e3l-f1",
+  "blockers": [],
+  "owned_paths": [
+    "apps/infrx-api/infrx/gateway/routes/models.py",
+    "apps/infrx-api/infrx/state/catalog.py",
+    "apps/infrx-api/tests/g/**",
+    "apps/infrx-api/tests/d/test_catalog*.py"
+  ],
+  "commands": [
+    {
+      "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/g/test_catalog_truth.py",
+      "exit": 0,
+      "summary": "17 passed (incl. the new fail-first case, verified red on ad828a2d)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=d10 apps/infrx-api/.venv/bin/python -m pytest -q tests/d/test_catalog_pg.py",
+      "exit": 0,
+      "summary": "39 passed, 1 xfailed (dlab/57500 held by codex-w5-lab-sql-lw5 all session; d10/55442 used instead, the brief's listed fallback)"
+    },
+    {
+      "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/contracts/lab/",
+      "exit": 0,
+      "summary": "75 passed - was 9 failed at c728ba92 before reverting v2_fakes.py; confirms the correction"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all apps/infrx-api/.venv/bin/python -m pytest -q tests/g/test_mutants.py",
+      "exit": 0,
+      "summary": "451 passed in 1523.92s (25m23s), 0 survivors, incl. the new listing_version_ignores_resolution mutant"
+    },
+    {
+      "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/g",
+      "exit": 1,
+      "summary": "937 passed, 20 failed, 11 errors, 12 skipped - identical list before/after the correction, all ForeignContainer/HarnessBusy on the default d1 PG lock held by other concurrent lanes, none in this lane's paths"
+    },
+    {
+      "cmd": "INFRX_D_TASK=g7 make api-test",
+      "exit": 1,
+      "summary": "at c728ba92 (before the correction): 6557 passed, 157 skipped, 9 xfailed, 16 failed in 1:26:33 - 9 were the frozen-pin regression (now fixed, reverified via the 75-passed contracts/lab rerun), 7 are pre-existing tests/d/test_outbox_relay.py[valkey] ForeignContainer on infrx-d2-valkey (foreign infra per the brief, not touched). Not rerun in full at 99c32850 (~90 min under this host's contention); targeted reruns above cover both changed files"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "two-file root-cause fix plus one test-owned support file, fail-first on the fake and on real PostgreSQL, named mutant killed, full G mutant list clean, and a self-inflicted frozen-pin regression caught by make api-test and corrected in the same session"
+  },
+  "wiring_requests": [],
+  "evidence": [
+    "research/plan/evidence/g/E3L-F1-c728ba9.md",
+    "research/plan/evidence/g/E3L-F1-99c3285.md"
+  ]
+}
