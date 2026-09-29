@@ -102,6 +102,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "    fence: int = Field(ge=0)", "    fence: int", BODY),
     _m("kind_open", "a proposal is expand or rollback",
        '    kind: Literal["expand", "rollback"]', "    kind: str", BODY),
+    # WR-R4-2 (composition-6): 0043 records the proposer
+    _m("proposer_not_the_session", "a proposal's proposer is the session's user",
+       '        "proposed_by": who.user_id})', '        "proposed_by": None})', FENCE),
 )
 
 

@@ -664,6 +664,82 @@ def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkey
     assert outcome(lambda: lab_workers.main(argv[:-1] + ["partitioned"], env=env)) == 1
 
 
+def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeypatch):
+    """WR-R4-2: `rollout decide --policy-ref --proposal-id --approve|--reject --reason`, as
+    `LAB_OPERATOR_ID`. The proposal is looked up among the provider's (the ref's) for that
+    release (another release's id is a non-zero exit, nothing decided). A rejection moves
+    nothing. An approved rollback is 0043's decision - D9's CAS at the proposal's fence and
+    the proposal's state in one transaction - carrying R2's `lab.rollout_decision.1` by the
+    operator, then R2's operator stop converges the alias (its CAS finds the release already
+    rolled back). An approved expansion needs R2's expand verdict on R1's aggregates
+    (WR-C5-LIVE): refused, nothing decided. A refused CAS (a stale fence) is exit 1."""
+    from infrx.rollouts import control
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_rollout import PgReleaseProposals, PgReleaseStore
+    ref = f"lab:policy:{NEMO}:a0000000-0000-4000-8000-00000000006e@sha256:" + "1" * 64
+    other = ref[:-1] + "2"
+    listed, decided, rolled = [], [], []
+    pending = [{"proposal_id": "p-rb", "policy_ref": ref, "kind": "rollback", "fence": 4},
+               {"proposal_id": "p-ex", "policy_ref": ref, "kind": "expand", "fence": 4},
+               {"proposal_id": "p-other", "policy_ref": other, "kind": "rollback", "fence": 1}]
+
+    async def proposals(self, *, provider_org_id):
+        listed.append((type(self), provider_org_id))
+        return pending
+
+    async def decide(self, proposal_id, *, approve, decided_by, decision=None, reasons=()):
+        decided.append((proposal_id, approve, decided_by, decision, reasons))
+        if reasons and reasons[0] == "operator:stale":
+            raise errors.StateConflict("stale fence")
+        return {}
+
+    async def resolve(self, policy_ref, *, provider_org_id):
+        return ("policy", policy_ref, provider_org_id)
+
+    async def emergency_rollback(self, operator_id, policy, policy_ref, *, now, reason):
+        rolled.append((operator_id, policy, policy_ref, reason, type(self._store), self._actor))
+    monkeypatch.setattr(PgReleaseProposals, "proposals", proposals)
+    monkeypatch.setattr(PgReleaseProposals, "decide", decide)
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(control.Controller, "emergency_rollback", emergency_rollback)
+    operator = "0e000000-0000-4000-8000-0000000000e0"
+    env = {**BASE, "LAB_OPERATOR_ID": operator}
+
+    def decide_(proposal, verb, reason="pager", policy_ref=ref, e=env):
+        return outcome(lambda: lab_workers.main(
+            ["rollout", "decide", "--policy-ref", policy_ref, "--proposal-id", proposal,
+             f"--{verb}", "--reason", reason], env=dict(e)))
+    assert decide_("p-rb", "approve", e=BASE) == 2                    # no operator
+    assert decide_("p-other", "approve") == 1                        # another release's
+    assert (decided, rolled) == ([], [])
+    assert decide_("p-rb", "reject") == 0
+    assert decided == [("p-rb", False, operator, None, ())] and rolled == []
+    decided.clear()
+    assert decide_("p-ex", "approve") == 1                            # WR-C5-LIVE
+    assert (decided, rolled) == ([], [])
+    assert decide_("p-rb", "approve") == 0
+    [(pid, approve, by, doc, reasons)] = decided
+    assert (pid, approve, by, reasons) == ("p-rb", True, operator,
+                                          ("operator:pager", "proposal:p-rb"))
+    assert {k: doc[k] for k in ("schema", "provider_org_id", "policy_ref", "decision",
+                                "evidence_refs", "decided_by")} == {
+        "schema": "lab.rollout_decision.1", "provider_org_id": NEMO, "policy_ref": ref,
+        "decision": "rollback", "evidence_refs": [], "decided_by": operator}
+    assert rolled == [(operator, ("policy", ref, NEMO), ref, "pager", PgReleaseStore,
+                       operator)]
+    assert {provider for _, provider in listed} == {NEMO}
+    decided.clear(), rolled.clear()
+    assert decide_("p-rb", "approve", reason="stale") == 1           # D9's CAS refused
+    assert len(decided) == 1 and rolled == []
+    decided.clear()
+    for argv in (["rollout", "decide", "--policy-ref", ref, "--reason", "x", "--approve"],
+                 ["rollout", "decide", "--policy-ref", ref, "--proposal-id", "p", "--reason",
+                  "x"]):
+        with pytest.raises(SystemExit):
+            lab_workers.main(argv, env=dict(env))
+    assert decided == []
+
+
 # ------------------------------------------------------------ annotation / training (WR-I6-3)
 def test_lab_workers__training_has_no_pass_and_a_teacher_host_needs_its_approval():
     """P3's runs are started by the Lab route and the manual bundle has no platform job, so

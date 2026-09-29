@@ -34,6 +34,7 @@ DATASETS = C + "datasets_reconcile_every_providers_lineage_page_by_page"
 IMPORTS = C + "the_datasets_role_works_the_durable_import_job_queue"
 ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
+DECIDE = C + "an_operator_decides_a_lab_proposal_through_d9s_cas"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
 ANNOT = C + "the_annotation_role_collects_teacher_batches_with_n2s_redaction"
 COLLECT = C + "the_teacher_pass_collects_every_submitted_run_of_every_approved_batch"
@@ -291,6 +292,37 @@ MUTANTS: tuple[Mutant, ...] = (
        "                   OperatorSession(ops=None, principal=principal))",
        '                   OperatorSession(ops=None, principal="rollout:controller"))', STOP,
        file=P),
+    # --- WR-R4-2 (composition-6): the operator decides a Lab proposal through D9's CAS ---------
+    _m("lw_decide_without_operator", "a decision names its operator",
+       '    mode, needs = "lab-rollout", (DATABASE, "LAB_OPERATOR_ID")',
+       '    mode, needs = "lab-rollout", (DATABASE,)', DECIDE),
+    _m("lw_decide_other_release", "a proposal is decided only for the release the ref names",
+       ' and p["policy_ref"] == policy_ref),', "),", DECIDE),
+    _m("lw_decide_other_provider", "the proposals are the ref's provider's",
+       "await proposals.proposals(provider_org_id=provider)",
+       'await proposals.proposals(provider_org_id="")', DECIDE),
+    _m("lw_decide_reject_approves", "a rejection moves nothing",
+       "            await proposals.decide(proposal_id, approve=False, decided_by=operator)",
+       "            await proposals.decide(proposal_id, approve=True, decided_by=operator)",
+       DECIDE),
+    _m("lw_decide_expand_without_live", "an expansion needs R2's verdict on R1's aggregates",
+       '        if found["kind"] != "rollback":\n', "        if False:\n", DECIDE),
+    _m("lw_decide_other_actor", "the decision is the operator's",
+       "await proposals.decide(proposal_id, approve=True, decided_by=operator, decision={",
+       'await proposals.decide(proposal_id, approve=True, decided_by="ops", decision={', DECIDE),
+    _m("lw_decide_reasons_unnamed", "the decision names the operator's reason and the proposal",
+       '            reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))',
+       "            reasons=())", DECIDE),
+    _m("lw_decide_no_converge", "an approved rollback converges the alias (R2's stop)",
+       "        await controller.emergency_rollback(operator, policy, policy_ref, now=now, "
+       "reason=reason)\n", "", DECIDE),
+    _m("lw_decide_refusal_escapes", "a refused CAS is a non-zero exit, not a crash",
+       '        print(f"infrx.lab.workers: the proposal was not decided: {failed.code}: {failed}",\n'
+       "              file=sys.stderr)\n        return 1\n",
+       '        raise\n', DECIDE),
+    _m("lw_decide_unparsed", "decide names a proposal and approve or reject",
+       '    if args.command == "decide" and not (args.proposal_id and (args.approve or '
+       'args.reject)):\n', "    if False:\n", DECIDE),
     # --- annotation / training ------------------------------------------------------------------
     _m("lw_teacher_unapproved", "a teacher host is refused without P-10",
        '    if env.get("LAB_ANNOTATION_TEACHER", "dry-run") != "dry-run":\n', "    if False:\n",

@@ -114,7 +114,8 @@ async def propose(x: LabReleases, who, wanted: ProposalRequest) -> dict[str, Any
     return await x.port("proposals").add(provider, {
         "proposal_id": str(uuid.uuid4()), "kind": wanted.kind, "policy_ref": wanted.policy_ref,
         "fence": wanted.fence, "state": "proposed",
-        "proposed_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "decided_at": None})
+        "proposed_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "decided_at": None,
+        "proposed_by": who.user_id})             # 0043 records the proposer (WR-R4-2)
 
 
 def register(app, rt, lab_releases: LabReleases | None = None):

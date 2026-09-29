@@ -497,10 +497,137 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
         d7 = {"store"} if name != "lab_releases" else set()
         d8 = {"log", "ledger", "evals"} if name == "lab_pipelines" else set()   # WR-P1/P3-D8-C,
         #                                                          WR-E7L-1 (P3's evaluations)
-        assert {f for f, port in ports.items() if port is not None} == d7 | d8, name
+        d9 = {"records", "proposals", "store"} if name == "lab_releases" else set()   # WR-R4-2
+        assert {f for f, port in ports.items() if port is not None} == d7 | d8 | d9, name
         assert all(isinstance(ports[f], PgLabDataStore) for f in d7)
     every = pilot._lab(settings(**{s: True for s, _, _ in LAB_2.values()}), connect=None)
     assert sorted(every) == sorted(LAB_2)
+
+
+def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals():
+    """WR-R4-2: `LAB_RELEASES` composes the release read models over D9 (0048's listing of the
+    three states the Lab shows, 0053's decisions), D7's policy revision and the plan its
+    launcher stored beside it (WR-C5-PLAN), the proposals over 0043 (one pending per revision,
+    the proposer the session's user), and D9 as the route's store - all on the gateway's
+    pool and Lab objects. R1's aggregates are not readable (WR-C5-LIVE): progress is null; the
+    verdict is D9's latest decision; a release whose plan is not stored, and R3's variant
+    listing (not written), are a typed 503, never a guessed row."""
+    import dataclasses
+    from datetime import datetime, timezone
+
+    from infrx.contracts.lab import records as lab
+    from infrx.gateway import pilot
+    from infrx.lab.workers.__main__ import plan_key
+    from infrx.rollouts import control as r2
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_rollout import (Decision, PgReleaseProposals, PgReleaseStore, Release,
+                                         ReleaseListing)
+
+    settings = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                               lab_releases=True))
+    objects = relay_support.World().objects
+    x = pilot._lab(settings, connect="pool", objects=objects)["lab_releases"]
+    assert type(x.store) is PgReleaseStore and x.store._connect == "pool"
+    assert type(x.records) is pilot.ReleaseRecords, x.records
+    assert type(x.proposals) is pilot.ReleaseProposals, x.proposals
+    assert type(x.records.d9) is PgReleaseStore and x.records.d9._connect == "pool"
+    assert type(x.records.store) is PgLabDataStore and x.records.store._connect == "pool"
+    assert x.records.objects is objects
+    assert type(x.proposals.store) is PgReleaseProposals and x.proposals.store._connect == "pool"
+
+    provider = "a0000000-0000-4000-8000-00000000000a"
+    serving = f"lab:serving:{provider}:00000001-0000-4000-8000-000000000021@sha256:"
+    record = {"schema": "lab.rollout_policy.1", "provider_org_id": provider,
+              "policy_id": "00000001-0000-4000-8000-00000000006e", "version": 2,
+              "created_at": "2026-09-27T10:00:00Z",
+              "endpoint_id": "00000001-0000-4000-8000-00000000006f",
+              "baseline_ref": serving + "f" * 64, "mode": "canary", "cohort": "session",
+              "candidates": [{"serving_ref": serving + "b" * 64, "weight_bp": 1_000}]}
+    ref, at = lab.ref_of(record), datetime(2026, 9, 28, 9, 30, 5, tzinfo=timezone.utc)
+    plan = r2.Plan(horizon_s=3_600, min_requests=100, max_error_rate=0.02, max_p99_ms=900,
+                   max_skew_bp=500, min_quality_coverage=0.5, max_lag_s=120,
+                   budget=lab.Amount(unit="PROVIDER_USD", value="12.50000000"),
+                   protocol={"kind": "b2"})
+    asked = []
+
+    class D9:
+        async def releases_in(self, states=(), *, provider_org_id):
+            asked.append((tuple(states), provider_org_id))
+            return [ReleaseListing(
+                policy_id=record["policy_id"], provider_org_id=provider,
+                endpoint_id=record["endpoint_id"], policy_ref=ref,
+                release=Release(state="rolled_back", fence=3, plan_digest=r2.plan_digest(plan),
+                                started_at=datetime(2026, 9, 27, 10, tzinfo=timezone.utc)),
+                latest_decision=Decision(decision="rollback", reasons=("error_rate",),
+                                         evidence_refs=("run:x",), decided_by="op", at=at))]
+
+        async def decisions(self, *, provider_org_id):
+            return [{"policy_ref": ref, "decision": "rollback", "reasons": ["error_rate"],
+                     "evidence_refs": ["run:x"], "decided_by": "op",
+                     "decided_at": "2026-09-28T11:30:05.123456+02:00"}]
+
+    class D7:
+        async def resolve(self, wanted, *, provider_org_id):
+            assert (wanted, provider_org_id) == (ref, provider)
+            return lab.parse(record)
+
+    records = pilot.ReleaseRecords(D9(), D7(), objects)
+    died = outcome(lambda: asyncio.run(records.releases(provider)))
+    assert type(died) is errors.DependencyUnavailable and "WR-C5-PLAN" in str(died), died
+    asyncio.run(objects.put_if_absent(plan_key(provider, record["policy_id"]),
+                                      plan.model_dump_json().encode(), "application/json"))
+    [row] = asyncio.run(records.releases(provider))
+    assert asked[-1] == (("running", "approved", "rolled_back"), provider)
+    assert row == {
+        "policy_ref": ref, "endpoint_id": record["endpoint_id"], "version": 2,
+        "baseline_ref": record["baseline_ref"], "mode": "canary", "cohort": "session",
+        "candidates": record["candidates"], "state": "rolled_back", "fence": 3,
+        "plan_digest": r2.plan_digest(plan),
+        "plan": {"horizon_s": 3_600, "min_requests": 100, "max_error_rate": 0.02,
+                 "max_p99_ms": 900, "max_skew_bp": 500, "min_quality_coverage": 0.5,
+                 "max_lag_s": 120, "budget": {"amount": "12.50000000", "unit": "PROVIDER_USD"}},
+        "started_at": "2026-09-27T10:00:00Z", "progress": None,
+        "verdict": {"action": "rollback", "reasons": ["error_rate"], "evidence_refs": ["run:x"],
+                    "evaluated_at": "2026-09-28T09:30:05Z"}}
+    assert asyncio.run(records.decisions(provider)) == [
+        {"policy_ref": ref, "decision": "rollback", "reasons": ["error_rate"],
+         "evidence_refs": ["run:x"], "decided_by": "op", "decided_at": "2026-09-28T09:30:05Z"}]
+    died = outcome(lambda: asyncio.run(records.variants(provider)))
+    assert type(died) is errors.DependencyUnavailable, died
+
+    made = []
+
+    class Proposals:
+        async def propose(self, policy_ref, **kw):
+            made.append((policy_ref, kw))
+            return {"proposal_id": kw["proposal_id"], "policy_ref": policy_ref,
+                    "kind": kw["kind"], "fence": kw["fence"], "state": "proposed",
+                    "proposed_by": kw["proposed_by"],
+                    "proposed_at": "2026-09-28T09:30:05.5+00:00", "decided_by": None,
+                    "decided_at": None}
+
+        async def proposals(self, *, provider_org_id):
+            return [{"proposal_id": "p", "policy_ref": ref, "kind": "rollback", "fence": 3,
+                     "state": "rejected", "proposed_by": "u", "decided_by": "op",
+                     "proposed_at": "2026-09-28T09:30:05+00:00",
+                     "decided_at": "2026-09-28T10:00:00+00:00"}] if provider_org_id == provider \
+                else []
+
+    proposals = pilot.ReleaseProposals(Proposals())
+    stored = asyncio.run(proposals.add(provider, {
+        "proposal_id": "q", "kind": "expand", "policy_ref": ref, "fence": 3,
+        "state": "proposed", "proposed_at": "ignored", "decided_at": None,
+        "proposed_by": "user-1"}))
+    assert made == [(ref, {"provider_org_id": provider, "proposal_id": "q", "kind": "expand",
+                           "fence": 3, "proposed_by": "user-1"})]
+    assert stored == {"proposal_id": "q", "kind": "expand", "policy_ref": ref, "fence": 3,
+                      "state": "proposed", "proposed_at": "2026-09-28T09:30:05Z",
+                      "decided_at": None}
+    assert asyncio.run(proposals.proposals(provider)) == [
+        {"proposal_id": "p", "kind": "rollback", "policy_ref": ref, "fence": 3,
+         "state": "rejected", "proposed_at": "2026-09-28T09:30:05Z",
+         "decided_at": "2026-09-28T10:00:00Z"}]
+    assert asyncio.run(proposals.proposals("b0000000-0000-4000-8000-00000000000b")) == []
 
 
 def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers(monkeypatch):

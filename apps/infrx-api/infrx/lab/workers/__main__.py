@@ -2,6 +2,8 @@
 
     python -m infrx.lab.workers <eval|checkpoints|judge|annotation|training|rollout|datasets>
     python -m infrx.lab.workers rollout emergency-rollback --policy-ref <ref> --reason <text>
+    python -m infrx.lab.workers rollout decide --policy-ref <ref> --proposal-id <id>
+        (--approve | --reject) --reason <text>
 
 What the I5/I6/I7/I2L-OBS units run (`apps/infrx-api/deploy/lab/*/infrx-lab-<role>.service`),
 one role per process, each OFF until its `/etc/infrx-lab/<role>.env` exists (the unit's
@@ -36,7 +38,8 @@ never runs in a consumer process.
                `Controller.step` every 30 s for every running or rolled-back D9 release on
                the plan stored beside it (WR-R2-3; a running one only on R1's aggregates,
                held while unreadable). `emergency-rollback` (LAB_OPERATOR_ID of the invoking
-               shell): R2's operator stop over D9 and L3.
+               shell): R2's operator stop over D9 and L3. `decide`: the operator's decision
+               of a Lab proposal through D9's CAS (WR-R4-2).
 * `annotation` LAB_S3_BUCKET, LAB_TEACHER_URL (the local teacher fake until P-10; + JUDGE_MODE):
                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
                submitted chunk run of every approved teacher batch (WR-P4B-2).
@@ -625,6 +628,56 @@ async def emergency_rollback(env, policy_ref: str, reason: str) -> int:
     return 0
 
 
+async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
+                          reason: str) -> int:
+    """WR-R4-2: the operator decides one of the Lab's proposals for the release `policy_ref`
+    names, as `LAB_OPERATOR_ID`, through 0043's decision: D9's CAS at the proposal's fence and
+    the proposal's state in one transaction (a stale fence refuses and leaves it pending). A
+    rejection moves nothing. An approved rollback is R2's `lab.rollout_decision.1` by the
+    operator; R2's operator stop then converges the alias (its CAS finds the release rolled
+    back). An approved expansion needs R2's `expand` verdict on R1's aggregates, which are
+    not readable (WR-C5-LIVE): refused, nothing decided."""
+    mode, needs = "lab-rollout", (DATABASE, "LAB_OPERATOR_ID")
+    values = settings(mode, env, needs)
+    match = lab.REF_RE.fullmatch(policy_ref)
+    if match is None or match.group(1) != "policy":
+        raise RuntimeMisconfigured(mode, detail="--policy-ref must be a lab:policy ref")
+    from ...gateway.pilot import control_serving
+    from ...rollouts.control import Controller
+    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_rollout import PgReleaseProposals, PgReleaseStore
+    connect, operator, provider = connector(values[DATABASE]), values["LAB_OPERATOR_ID"], \
+        match.group(2)
+    proposals = PgReleaseProposals(connect)
+    try:
+        found = next((p for p in await proposals.proposals(provider_org_id=provider)
+                      if str(p["proposal_id"]) == proposal_id and p["policy_ref"] == policy_ref),
+                     None)
+        if found is None:
+            raise errors.NotFound("no such proposal for this release")
+        if not approve:
+            await proposals.decide(proposal_id, approve=False, decided_by=operator)
+            return 0
+        if found["kind"] != "rollback":
+            raise errors.DependencyUnavailable("an expansion is approved on R2's expand verdict "
+                                               "over R1's aggregates (WR-C5-LIVE)")
+        now = datetime.now(timezone.utc)
+        await proposals.decide(proposal_id, approve=True, decided_by=operator, decision={
+            "schema": "lab.rollout_decision.1", "provider_org_id": provider,
+            "policy_ref": policy_ref, "decision": "rollback", "evidence_refs": [],
+            "decided_by": operator, "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")},
+            reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))
+        policy = await PgLabDataStore(connect).resolve(policy_ref, provider_org_id=provider)
+        serving = control_serving(connect, operator)
+        controller = Controller(PgReleaseStore(connect), serving, actor_id=operator)
+        await controller.emergency_rollback(operator, policy, policy_ref, now=now, reason=reason)
+    except errors.DomainError as failed:
+        print(f"infrx.lab.workers: the proposal was not decided: {failed.code}: {failed}",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
 # --- the process ----------------------------------------------------------------------------
 async def _answers(ready) -> bool:
     try:
@@ -699,13 +752,22 @@ def main(argv=None, env=None) -> int:
     env = os.environ if env is None else env
     parser = argparse.ArgumentParser(prog="python -m infrx.lab.workers")
     parser.add_argument("role", choices=ROLES)
-    parser.add_argument("command", nargs="?", choices=("emergency-rollback",))
+    parser.add_argument("command", nargs="?", choices=("emergency-rollback", "decide"))
     parser.add_argument("--policy-ref")
     parser.add_argument("--reason")
+    parser.add_argument("--proposal-id")
+    verdict = parser.add_mutually_exclusive_group()
+    verdict.add_argument("--approve", action="store_true")
+    verdict.add_argument("--reject", action="store_true")
     args = parser.parse_args(argv)
     if args.command and not (args.role == "rollout" and args.policy_ref and args.reason):
         parser.error("emergency-rollback is the rollout role's, with --policy-ref and --reason")
+    if args.command == "decide" and not (args.proposal_id and (args.approve or args.reject)):
+        parser.error("decide names --proposal-id and --approve or --reject")
     try:
+        if args.command == "decide":
+            return asyncio.run(decide_proposal(env, args.policy_ref, args.proposal_id,
+                                               args.approve, args.reason))
         if args.command:
             return asyncio.run(emergency_rollback(env, args.policy_ref, args.reason))
         worker = compose(args.role, env)
