@@ -235,6 +235,16 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0045_lab_serving_ref_identity.sql",
     # Lab (local-only, R151/R201): lab-sql LW5 (WR-E8L-4)
     "0046_lab_shadow_limit_operator.sql",
+    # Lab (local-only, R151/R201): lab-sql LW6 (E3L-F2/R205)
+    "0047_lab_control_propose_idempotent.sql",
+    # Lab (local-only, R151/R201): lab-sql LW6 (WR-R4-1's lab-sql half)
+    "0048_lab_release_listing.sql",
+    # Lab (local-only, R151/R201): lab-sql LW6 (WR-LSQ-C2A)
+    "0049_lab_judge_runs_in.sql",
+    # Lab (local-only, R151/R201): lab-sql LW6 (WR-LSQ-C2B)
+    "0050_lab_outbox_pending_kinds.sql",
+    # Lab (local-only, R151/R201): lab-sql LW6 (WR-N4-3)
+    "0051_lab_import_jobs.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()

@@ -315,6 +315,22 @@ def test_lab_control__publication_and_rollback_are_compare_and_set(world):
                                  reason="x")).version == 3
 
 
+def test_lab_control__a_proposal_retried_after_a_lost_answer_proposes_once(world):
+    """Oracle (E3L-F2, R205): `LabControl.propose` mints a NEW id every call, so a retry
+    after a lost answer (the Lab UI's only recourse: it has no idempotency key of its own)
+    calls `propose` again with a fresh id. The store answers the OPEN proposal of the same
+    dev revision, never opens a second one, and the audit gains no second `lab_propose`."""
+    w = world
+    _, d = ready_dev(w, "2026-10-01")
+    first = run(w.control.propose(w.ADMIN_A, w.A, d.deployment_revision_id,
+                                  endpoint_name="marlin-2b"))
+    retried = run(w.control.propose(w.ADMIN_A, w.A, d.deployment_revision_id,
+                                    endpoint_name="marlin-2b"))
+    assert retried.deployment_revision_id == first.deployment_revision_id, \
+        "a retry opened a second proposal"
+    assert actions(w, w.A).count("lab_propose") == 1
+
+
 def test_lab_control__a_rollback_targets_an_earlier_servable_listing_only(world):
     """Oracle: a rollback names an earlier listing version whose deployment is still active;
     the current version, a later one and a retired deployment are refused."""

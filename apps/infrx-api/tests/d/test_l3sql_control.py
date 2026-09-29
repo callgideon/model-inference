@@ -48,6 +48,11 @@ D2 = "c0000006-0000-4000-8000-000000000006"          # S2's private dev revision
 P2 = "c0000007-0000-4000-8000-000000000007"          # S2's proposed public revision
 P3 = "c0000008-0000-4000-8000-000000000008"          # a second proposal of S2
 NEW = "c000000a-0000-4000-8000-00000000000a"          # a proposal this file inserts
+RETRY_ID = "c000000c-0000-4000-8000-00000000000c"     # a second, freshly-minted retry id
+S3 = "d0000009-0000-4000-8000-000000000009"           # a third serving version, for the race
+D3 = "c0000009-0000-4000-8000-000000000009"           # its ready_private dev revision
+RACE_A = "c000000d-0000-4000-8000-00000000000d"       # two concurrent proposals of D3
+RACE_B = "c000000e-0000-4000-8000-00000000000e"
 CARD1, CARD2, CARD3 = cc.CARD, "rc_marlin2b_s2", "rc_marlin2b_s2b"
 RPCS = ("lab_control_endpoint", "lab_control_transition", "lab_control_propose",
         "lab_control_dev_key", "lab_control_publish", "lab_control_rollback",
@@ -207,10 +212,33 @@ def check_a_proposal_comes_from_a_validated_dev_source(conn) -> str:
     row = ok(conn, "lab_control_propose", args)
     assert (row["state"], row["visibility"], row["environment"], row["serving_version_id"]) \
         == ("proposed_public", "public", "prod", S2), row
-    assert refusal(conn, "lab_control_propose", args) == "state_conflict", "id reused"
+    # E3L-F2/R205: a repeat call of the same source (even the identical id) is now the
+    # open-proposal retry path - see check_a_proposal_retried_after_a_lost_answer_proposes_once
+    # for the fresh-id case a real client retry actually sends.
+    assert ok(conn, "lab_control_propose", args) == row, "a repeat call opens a second proposal"
     assert [(e["action"], e["subject"], e["after"]) for e in events(conn)][-1] == \
         ("lab_propose", NEW, {"source": D2})
-    return "validated dev source only; foreign not_found; audited"
+    return "validated dev source only; foreign not_found; audited; a repeat call is idempotent"
+
+
+@rolled_back
+def check_a_proposal_retried_after_a_lost_answer_proposes_once(conn) -> str:
+    """E3L-F2/R205: `LabControl.propose` mints a NEW id every call, so a retry of a lost
+    answer never reuses the first call's id (unlike "id reused" above, a client-side replay
+    the unique_violation catches) - it is a SECOND insert attempt of the SAME source. The
+    open proposal answers it; no second `proposed_public` row, no second `lab_propose`
+    audit."""
+    validated(conn)
+    first = ok(conn, "lab_control_propose", {"proposal": proposal(), "source_revision_id": D2,
+                                             "actor": "admin@nemo"})
+    retried = ok(conn, "lab_control_propose", {"proposal": proposal(RETRY_ID),
+                                               "source_revision_id": D2, "actor": "admin@nemo"})
+    assert retried["deployment_revision_id"] == first["deployment_revision_id"] == NEW, \
+        f"a retry with a fresh id opened a second proposal: {retried}"
+    assert conn.execute("select count(*) from infrx.deployment_revisions where "
+                        "deployment_revision_id = %s", (RETRY_ID,)).fetchone()[0] == 0
+    assert [e["action"] for e in events(conn)].count("lab_propose") == 1
+    return "a retry of a lost answer answers the open proposal, never a second insert"
 
 
 @rolled_back
@@ -382,6 +410,61 @@ def _race(conn, fn: str, calls: list[dict]) -> list:
     return sorted(map(str, answers))
 
 
+def _race_propose(conn, calls: list[dict]) -> list[str]:
+    """Like `_race`, but for `lab_control_propose`: each thread's own `deployment_revision_id`
+    (the id on the winning row every caller is answered with, whether it inserted it or found
+    it already open) or its refusal code."""
+    gate, answers = threading.Barrier(len(calls)), [None] * len(calls)
+
+    def one(i: int) -> None:
+        with psycopg.connect(pgharness.dsn(conn.info.dbname), autocommit=True) as mine:
+            gate.wait()
+            try:
+                answers[i] = call(mine, "lab_control_propose", calls[i])[
+                    "deployment_revision_id"]
+            except psycopg.Error as failed:
+                answers[i] = str(failed).splitlines()[0]
+    threads = [threading.Thread(target=one, args=(i,)) for i in range(len(calls))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    return answers
+
+
+def check_a_proposal_retry_race_of_the_same_source_proposes_once(conn) -> str:
+    """E3L-F2/R205 under real concurrency (commits its own rows, like the publish race
+    above): a crash-and-retry window can genuinely overlap the original request still
+    committing, so two propose calls of the SAME source, released together, must still
+    agree on ONE open proposal - never both pass the open-proposal check and both insert."""
+    conn.execute(f"""
+    insert into infrx.serving_versions (serving_version_id, model_version_id, model_id,
+      provider_org_id, revision_label, prompt_harness_ref, preprocessor_profile_version,
+      runtime_image_ref, engine_options_digest, precision, capability, created_by)
+    select '{S3}', model_version_id, model_id, provider_org_id, '2026-10-03', prompt_harness_ref,
+           preprocessor_profile_version, runtime_image_ref, engine_options_digest, precision,
+           capability, 'ops' from infrx.serving_versions where serving_version_id = '{S1}';
+    insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id,
+      provider_org_id, environment, serving_version_id, visibility, state, max_input_tokens,
+      max_output_tokens, created_by) values
+      ('{D3}', '{cc.DEV_ENDPOINT}', '{NEMO}', 'dev', '{S3}', 'private', 'ready_private',
+       30720, 2048, 'dev@nemo');
+    """)
+    calls = [{"proposal": proposal(RACE_A, serving=S3), "source_revision_id": D3,
+             "actor": "admin@nemo"},
+             {"proposal": proposal(RACE_B, serving=S3), "source_revision_id": D3,
+             "actor": "admin@nemo"}]
+    answers = _race_propose(conn, calls)
+    assert answers[0] == answers[1] and answers[0] in (RACE_A, RACE_B), \
+        f"two racing retries of the same source disagreed: {answers}"
+    open_rows = conn.execute(
+        "select deployment_revision_id::text from infrx.deployment_revisions where "
+        "serving_version_id = %s and state = 'proposed_public'", (S3,)).fetchall()
+    assert [r[0] for r in open_rows] == [answers[0]], \
+        f"more than one open proposal of the same source: {open_rows}"
+    return f"both racing retries answered {answers[0]}; one row, one insert"
+
+
 def check_two_operators_racing_publish_once(conn) -> str:
     """LAB-PUBLISH races (commit their own rows): two operators approving two proposals of
     one alias from the same version - exactly one publishes, the other is told the alias
@@ -460,12 +543,14 @@ CHECKS = {c.__name__: c for c in (
     check_browser_roles_reach_nothing,
     check_transitions_are_a_cas_on_the_providers_own_private_revisions,
     check_a_proposal_comes_from_a_validated_dev_source,
+    check_a_proposal_retried_after_a_lost_answer_proposes_once,
     check_dev_keys_are_scoped_to_the_providers_dev_endpoint,
     check_publication_is_a_cas_on_the_listing_version,
     check_dev_revisions_never_reach_app_discovery,
     check_rollback_is_a_new_listing_and_admitted_jobs_keep_their_pins,
     check_the_dev_wallet_opens_at_zero_and_is_funded_only_by_audited_allocation,
-    check_two_operators_racing_publish_once, check_the_store_composes)}
+    check_two_operators_racing_publish_once, check_a_proposal_retry_race_of_the_same_source_proposes_once,
+    check_the_store_composes)}
 
 
 # ----------------------------------------------------------------------------- tests
