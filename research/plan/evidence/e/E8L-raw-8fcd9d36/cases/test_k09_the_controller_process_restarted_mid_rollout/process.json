@@ -1,0 +1,46 @@
+{
+ "decisions_after_first": [
+  [
+   "rollback",
+   "rolled_back",
+   "00000091-0000-4000-8000-0000000000e8",
+   [
+    "operator:e8l k09 real process"
+   ]
+  ]
+ ],
+ "decisions_after_second": [
+  [
+   "rollback",
+   "rolled_back",
+   "00000091-0000-4000-8000-0000000000e8",
+   [
+    "operator:e8l k09 real process"
+   ]
+  ]
+ ],
+ "first": {
+  "exit": 0,
+  "stderr": ""
+ },
+ "listing_after_first": [
+  6,
+  "c0000004-0000-4000-8000-000000000004"
+ ],
+ "listing_after_second": [
+  6,
+  "c0000004-0000-4000-8000-000000000004"
+ ],
+ "listing_before": [
+  4,
+  "c0000004-0000-4000-8000-000000000004"
+ ],
+ "listing_promoted": [
+  5,
+  "00000de8-0000-4000-8000-000000000009"
+ ],
+ "second": {
+  "exit": 0,
+  "stderr": ""
+ }
+}

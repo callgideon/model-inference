@@ -1,0 +1,129 @@
+{
+ "plan": [
+  {
+   "reason": "holdout",
+   "sample_id": "1ea2a564-d819-41f7-8613-83820285fcb4"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "2ce729f6-b31e-4e17-89cf-4eb5e3e1510b"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "363f2f2e-52a6-439b-8939-8009fe3ca046"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "3b45edd4-004f-4caf-8496-09ad7f59c15c"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "576d7709-3dc7-4d95-8329-7b3496218089"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "68f8c8da-a60c-40c3-87de-534ee9933e31"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "9bfff087-0d41-4cb2-82c7-0bd7d2a48cca"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "9c2a4b00-173a-4f91-8f7f-f435f2fd4095"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "d139905c-13be-401a-8a21-7312fb29e844"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "d7030ba6-25c8-41da-8996-5efae535fa59"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "e9792ba1-612b-4dfe-8049-7cc9c47457af"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "ec767df6-dbfa-4808-8bf0-40bccf31d647"
+  }
+ ],
+ "posts": [
+  {
+   "items": [
+    {
+     "content": "What is the capital of Italy?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "268f4b3b-d8a5-43f2-8c11-369d70016e00"
+    },
+    {
+     "content": "What is the capital of Japan?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "2c915104-af29-43b1-87df-747db27a5da3"
+    },
+    {
+     "content": "What is the capital of Canada?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "36e7ec6e-ae63-441a-80b0-e1327a03d85a"
+    },
+    {
+     "content": "What is the capital of Spain?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "3f539322-4fb7-48cd-89d8-b0168c078b8a"
+    }
+   ],
+   "submit_key": "submit:3e4e9b71-42e2-543d-b484-8de73cfabd22"
+  },
+  {
+   "items": [
+    {
+     "content": "What is the capital of Kenya?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "50ad02e6-af59-4480-8d7d-59e94a133e17"
+    },
+    {
+     "content": "What is the capital of Ghana?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "5c52582b-ae2e-4145-80e0-fae389afcdb1"
+    },
+    {
+     "content": "What is the capital of Chile?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "aaf2b8dc-c96a-41a1-82e8-27cf6333c75b"
+    },
+    {
+     "content": "What is the capital of France?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "c8980deb-6377-44ea-8710-47dd4dbb1739"
+    }
+   ],
+   "submit_key": "submit:356bc99a-79ef-50c9-b9e6-a5a05a919514"
+  },
+  {
+   "items": [
+    {
+     "content": "What is the capital of Egypt?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "c8efbc48-e281-440d-840e-a1e8508a589d"
+    },
+    {
+     "content": "What is the capital of Norway?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "d0a5492e-0520-4b98-842d-02b7f9d3eb7f"
+    },
+    {
+     "content": "What is the capital of Nepal?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "d2625b97-f35c-4c0f-821c-a65446450ddb"
+    },
+    {
+     "content": "What is the capital of Peru?",
+     "prompt_version": "e7l-teach-1",
+     "sample_id": "dbaa3d3e-d05b-419b-8e01-0961aafce4e0"
+    }
+   ],
+   "submit_key": "submit:7ea28c00-7f80-572b-8b89-cfb8b810e393"
+  }
+ ]
+}

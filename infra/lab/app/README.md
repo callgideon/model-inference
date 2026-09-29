@@ -39,6 +39,7 @@ Lab web (Vercel project `infrx-lab`, per environment; `apps/lab/.env.example`) [
 | `LAB_EVALS_API_URL` | server | server-only lab-api base URL for the evaluation pages (WR-B4-1, `apps/lab/lib/services/evaluation/server.ts`, `/lab/v1/evaluations` behind `LAB_EVALS`); unset = those pages answer "unavailable" |
 | `LAB_PIPELINES_API_URL` | server | server-only lab-api base URL for the annotation and training pages (WR-P4-1, `apps/lab/lib/services/pipelines/server.ts`, `/lab/v1/pipelines` behind `LAB_PIPELINES`); unset = those pages answer "unavailable" |
 | `LAB_RELEASES_API_URL` | server | server-only lab-api base URL for the release and optimization pages (WR-R4-1, `apps/lab/lib/services/rollouts/server.ts`, `/lab/v1/releases` + `/lab/v1/optimizations` behind `LAB_RELEASES`); unset = those pages answer "unavailable" |
+| `LAB_CONTROL_URL` | server | server-only base URL of the Lab control service (the control origin, R186's factory) for the overview, models and deployments pages (WR-E3L-J, `apps/lab/lib/services/control/server.ts`, `/lab/v1/control`); unset = those pages answer "unavailable" |
 
 Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
 
@@ -66,6 +67,7 @@ runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
 | `LAB_EGRESS_ALLOW` | unit | NO_PROXY allowlist: exactly the object store host, 169.254.169.254 and the enabled adapter's approved host |
 | `LAB_ANNOTATION_CONCURRENCY` | server | annotation worker concurrency (pool_budget.py role default 1) |
 | `LAB_ANNOTATION_TEACHER` | server | the annotation teacher adapter; default dry-run, any other needs its P-10 approval in egress.json |
+| `LAB_TEACHER_URL` | server | the annotation role's teacher endpoint for collecting approved teacher batches (WR-P4B-2); the local teacher fake (`http://127.0.0.1:<port>`) only until P-10, its host in LAB_EGRESS_ALLOW; unset = the annotation role exits 2 |
 | `LAB_ANNOTATION_TEACHER_URL` | server | the approved teacher's https endpoint (non-default adapter only) |
 | `LAB_ANNOTATION_TEACHER_TOKEN` | **secret** | the teacher's purpose-specific token (non-default adapter only) |
 | `LAB_ANNOTATION_BUDGET_USD` | server | the annotation USD budget, above 0 and within the P-10 approval's cap |

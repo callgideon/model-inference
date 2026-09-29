@@ -1,0 +1,1767 @@
+cd apps/lab && pnpm test
+
+> infrx-lab@0.1.0 test <worktree>/apps/lab
+> node --test "lib/**/*.test.ts" "tests/**/*.test.ts" "app/**/*.test.ts" "components/**/*.test.ts"
+
+TAP version 13
+# (node:3926386) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/b/actions.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: B4-A01 a launch runs as the session's provider and role and sends the parsed, predeclared protocol
+ok 1 - B4-A01 a launch runs as the session's provider and role and sends the parsed, predeclared protocol
+  ---
+  duration_ms: 52.379353
+  type: 'test'
+  ...
+# Subtest: B4-A02 a viewer is refused before the evaluation service is asked
+ok 2 - B4-A02 a viewer is refused before the evaluation service is asked
+  ---
+  duration_ms: 1.549428
+  type: 'test'
+  ...
+# Subtest: B4-A03 malformed launch, cancel and subscription input is refused as invalid and never reaches the service
+ok 3 - B4-A03 malformed launch, cancel and subscription input is refused as invalid and never reaches the service
+  ---
+  duration_ms: 18.754233
+  type: 'test'
+  ...
+# Subtest: B4-A04 the service's refusal is carried as its reason; a cancel lands back on the run records
+ok 4 - B4-A04 the service's refusal is carried as its reason; a cancel lands back on the run records
+  ---
+  duration_ms: 2.376318
+  type: 'test'
+  ...
+# Subtest: B4-A05 a consumer-only user gets a 404 from every action and the export, and the service is never asked
+ok 5 - B4-A05 a consumer-only user gets a 404 from every action and the export, and the service is never asked
+  ---
+  duration_ms: 5.922805
+  type: 'test'
+  ...
+# Subtest: B4-A06 the export is the stored B2 report verbatim for the provider's own experiment, and nothing before it exists
+ok 6 - B4-A06 the export is the stored B2 report verbatim for the provider's own experiment, and nothing before it exists
+  ---
+  duration_ms: 17.119574
+  type: 'test'
+  ...
+# (node:3926388) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/b/http.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: B4-H01 every call is the session's token and the actor's provider on its route, reads unwrapped from {data}
+ok 7 - B4-H01 every call is the session's token and the actor's provider on its route, reads unwrapped from {data}
+  ---
+  duration_ms: 103.4228
+  type: 'test'
+  ...
+# Subtest: B4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable
+ok 8 - B4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable
+  ---
+  duration_ms: 2.636233
+  type: 'test'
+  ...
+# Subtest: B4-H03 the backends' records pass verbatim; one unreadable row fails the whole answer closed
+ok 9 - B4-H03 the backends' records pass verbatim; one unreadable row fails the whole answer closed
+  ---
+  duration_ms: 8.896889
+  type: 'test'
+  ...
+# Subtest: B4-H04 without a session token nothing is sent and every call is unavailable
+ok 10 - B4-H04 without a session token nothing is sent and every call is unavailable
+  ---
+  duration_ms: 0.353824
+  type: 'test'
+  ...
+# Subtest: B4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable
+ok 11 - B4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable
+  ---
+  duration_ms: 0.672582
+  type: 'test'
+  ...
+# (node:3926389) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/b/journey.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: B4-J01 launch → queued baseline and candidate runs → progress → cancel → the report, each read back from the records
+ok 12 - B4-J01 launch → queued baseline and candidate runs → progress → cancel → the report, each read back from the records
+  ---
+  duration_ms: 4.773234
+  type: 'test'
+  ...
+# Subtest: B4-J02 foreign, viewer and malformed variants: nothing leaks, nothing is queued
+ok 13 - B4-J02 foreign, viewer and malformed variants: nothing leaks, nothing is queued
+  ---
+  duration_ms: 1.182023
+  type: 'test'
+  ...
+# Subtest: B4-J03 a checkpoint subscription pins its suite and CREDIT limits once; decisions arrive from B3 and stay the provider's
+ok 14 - B4-J03 a checkpoint subscription pins its suite and CREDIT limits once; decisions arrive from B3 and stay the provider's
+  ---
+  duration_ms: 1.041361
+  type: 'test'
+  ...
+# (node:3926395) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/b/pages.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: B4-P01 each page reads the evaluation records as the session's workspace and shows ?refused= only as fixed copy
+ok 15 - B4-P01 each page reads the evaluation records as the session's workspace and shows ?refused= only as fixed copy
+  ---
+  duration_ms: 2.318051
+  type: 'test'
+  ...
+# Subtest: B4-P02 launch and subscribe forms are shown only to a role that runs evaluations and carry a fresh record id
+ok 16 - B4-P02 launch and subscribe forms are shown only to a role that runs evaluations and carry a fresh record id
+  ---
+  duration_ms: 0.747939
+  type: 'test'
+  ...
+# Subtest: B4-P03 an experiment is found only among the workspace's own, compared only through B2's report, exported only once it exists
+ok 17 - B4-P03 an experiment is found only among the workspace's own, compared only through B2's report, exported only once it exists
+  ---
+  duration_ms: 1.230634
+  type: 'test'
+  ...
+# Subtest: B4-P04 the preview stand-in is labelled on every page only when it is on
+ok 18 - B4-P04 the preview stand-in is labelled on every page only when it is on
+  ---
+  duration_ms: 3.374369
+  type: 'test'
+  ...
+# (node:3926401) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/b/real.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: B4-R01 real D7 run records: a cancelled run's in-flight case stays unfinished, a queued one waits
+ok 19 - B4-R01 real D7 run records: a cancelled run's in-flight case stays unfinished, a queued one waits
+  ---
+  duration_ms: 9.284797
+  type: 'test'
+  ...
+# Subtest: B4-C01 a required slice that is inferior rejects the candidate even when the overall estimate improved
+ok 20 - B4-C01 a required slice that is inferior rejects the candidate even when the overall estimate improved
+  ---
+  duration_ms: 2.172227
+  type: 'test'
+  ...
+# Subtest: B4-C02 missing, errored and unscored cases stay in view and a coverage gap is inconclusive, never accepted
+ok 21 - B4-C02 missing, errored and unscored cases stay in view and a coverage gap is inconclusive, never accepted
+  ---
+  duration_ms: 0.596731
+  type: 'test'
+  ...
+# Subtest: B4-C03 costs stay per unit: PROVIDER_USD beside CREDIT, and a delta only where both runs carry the unit
+ok 22 - B4-C03 costs stay per unit: PROVIDER_USD beside CREDIT, and a delta only where both runs carry the unit
+  ---
+  duration_ms: 0.264201
+  type: 'test'
+  ...
+# Subtest: B4-C04 the comparison names both runs, the case universe and the protocol by digest so it can be reproduced
+ok 23 - B4-C04 the comparison names both runs, the case universe and the protocol by digest so it can be reproduced
+  ---
+  duration_ms: 0.273352
+  type: 'test'
+  ...
+# (node:3926407) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/b/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: B4-S01..S03 the evaluation journeys on the real route: launch/progress/cancel/report, foreign and malformed, subscriptions
+ok 24 - B4-S01..S03 the evaluation journeys on the real route: launch/progress/cancel/report, foreign and malformed, subscriptions # SKIP LAB_B4_REAL=1 (Docker, b3)
+  ---
+  duration_ms: 0.898342
+  type: 'test'
+  ...
+# (node:3926413) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/b/view.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: B4-V01 everyone in the workspace reads evaluations; only developer and administrator run or cancel them
+ok 25 - B4-V01 everyone in the workspace reads evaluations; only developer and administrator run or cancel them
+  ---
+  duration_ms: 2.049143
+  type: 'test'
+  ...
+# Subtest: B4-V02 progress is counted against every case of the run, failures and unfinished cases included
+ok 26 - B4-V02 progress is counted against every case of the run, failures and unfinished cases included
+  ---
+  duration_ms: 0.710395
+  type: 'test'
+  ...
+# Subtest: B4-V03 cancel is offered only on a queued or running run, and only to a role that runs evaluations
+ok 27 - B4-V03 cancel is offered only on a queued or running run, and only to a role that runs evaluations
+  ---
+  duration_ms: 0.846207
+  type: 'test'
+  ...
+# Subtest: B4-V04 a run's state is its record's: queued waits for a worker and an ended run is never called a success
+ok 28 - B4-V04 a run's state is its record's: queued waits for a worker and an ended run is never called a success
+  ---
+  duration_ms: 0.296373
+  type: 'test'
+  ...
+# Subtest: B4-V05 CREDIT and PROVIDER_USD are listed per unit, as exact strings, never summed or converted
+ok 29 - B4-V05 CREDIT and PROVIDER_USD are listed per unit, as exact strings, never summed or converted
+  ---
+  duration_ms: 0.347756
+  type: 'test'
+  ...
+# Subtest: B4-V06 an estimate with too few cases or clusters shows no difference, no interval and no improvement; no latency is not a number
+ok 30 - B4-V06 an estimate with too few cases or clusters shows no difference, no interval and no improvement; no latency is not a number
+  ---
+  duration_ms: 0.653916
+  type: 'test'
+  ...
+# Subtest: B4-V07 a subscription shows its pinned suite, CREDIT limits and one decision per checkpoint as recorded
+ok 31 - B4-V07 a subscription shows its pinned suite, CREDIT limits and one decision per checkpoint as recorded
+  ---
+  duration_ms: 4.145991
+  type: 'test'
+  ...
+# Subtest: B4-V08 a refusal is fixed copy for a known reason and nothing for anything else in the URL
+ok 32 - B4-V08 a refusal is fixed copy for a known reason and nothing for anything else in the URL
+  ---
+  duration_ms: 0.263119
+  type: 'test'
+  ...
+# Subtest: B4-V09 the evaluation port fails closed: unavailable until the real adapter is wired, the preview never in production
+ok 33 - B4-V09 the evaluation port fails closed: unavailable until the real adapter is wired, the preview never in production
+  ---
+  duration_ms: 1.056274
+  type: 'test'
+  ...
+# (node:3926414) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/b/wiring.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: B4-W01 LAB_EVALS_API_URL set: the port reads the route as the session's own access token
+ok 34 - B4-W01 LAB_EVALS_API_URL set: the port reads the route as the session's own access token
+  ---
+  duration_ms: 53.372692
+  type: 'test'
+  ...
+# Subtest: B4-W02 a missing LAB_EVALS_API_URL or Supabase config fails closed: every call unavailable, nothing sent
+ok 35 - B4-W02 a missing LAB_EVALS_API_URL or Supabase config fails closed: every call unavailable, nothing sent
+  ---
+  duration_ms: 0.504343
+  type: 'test'
+  ...
+# (node:3926426) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/c/content/refs.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: C2-L01 the issue is the named RPC with the handle's digest only, never the handle or an identity
+ok 36 - C2-L01 the issue is the named RPC with the handle's digest only, never the handle or an identity
+  ---
+  duration_ms: 5.629676
+  type: 'test'
+  ...
+# Subtest: C2-L02 a refusal maps by its code; anything else, or a throw, is unavailable
+ok 37 - C2-L02 a refusal maps by its code; anything else, or a throw, is unavailable
+  ---
+  duration_ms: 2.242051
+  type: 'test'
+  ...
+# Subtest: C2-L03 a malformed answer fails closed
+ok 38 - C2-L03 a malformed answer fails closed
+  ---
+  duration_ms: 2.746313
+  type: 'test'
+  ...
+# Subtest: C2-L04 a malformed input never reaches the RPC
+ok 39 - C2-L04 a malformed input never reaches the RPC
+  ---
+  duration_ms: 0.300427
+  type: 'test'
+  ...
+# Subtest: C2-L05 every content state reads as a sentence; an unknown one reads as lost
+ok 40 - C2-L05 every content state reads as a sentence; an unknown one reads as lost
+  ---
+  duration_ms: 0.291432
+  type: 'test'
+  ...
+# (node:3926431) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/c/judge/judge.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: C3L-A01 the provider comes from the guarded workspace, never from the form
+ok 41 - C3L-A01 the provider comes from the guarded workspace, never from the form
+  ---
+  duration_ms: 16.889313
+  type: 'test'
+  ...
+# Subtest: C3L-A02 malformed org, model or run ids are refused before any call
+ok 42 - C3L-A02 malformed org, model or run ids are refused before any call
+  ---
+  duration_ms: 1.636589
+  type: 'test'
+  ...
+# Subtest: C3L-A03 a well-formed foreign org or model is the server's refusal: denied, nothing else
+ok 43 - C3L-A03 a well-formed foreign org or model is the server's refusal: denied, nothing else
+  ---
+  duration_ms: 4.739632
+  type: 'test'
+  ...
+# Subtest: C3L-A04 an expired grant denies the configuration, the run and the calibration page
+ok 44 - C3L-A04 an expired grant denies the configuration, the run and the calibration page
+  ---
+  duration_ms: 6.347579
+  type: 'test'
+  ...
+# Subtest: C3L-A05 a failed or thrown call is unavailable, never denied and never data
+ok 45 - C3L-A05 a failed or thrown call is unavailable, never denied and never data
+  ---
+  duration_ms: 4.889554
+  type: 'test'
+  ...
+# Subtest: C3L-A06 a viewer has no judge action; only an administrator sets a budget
+ok 46 - C3L-A06 a viewer has no judge action; only an administrator sets a budget
+  ---
+  duration_ms: 0.424926
+  type: 'test'
+  ...
+# Subtest: C3L-B01 a budget is PROVIDER_USD, exact to 1e-8, for this provider's own named payer
+ok 47 - C3L-B01 a budget is PROVIDER_USD, exact to 1e-8, for this provider's own named payer
+  ---
+  duration_ms: 1.691558
+  type: 'test'
+  ...
+# Subtest: C3L-B02 a double-click submit is one run: both clicks carry the form's run id
+ok 48 - C3L-B02 a double-click submit is one run: both clicks carry the form's run id
+  ---
+  duration_ms: 17.0658
+  type: 'test'
+  ...
+# Subtest: C3L-P01 calibration pages are bounded: the limit is clamped, a bad cursor or limit is refused
+ok 49 - C3L-P01 calibration pages are bounded: the limit is clamped, a bad cursor or limit is refused
+  ---
+  duration_ms: 8.274998
+  type: 'test'
+  ...
+# Subtest: C3L-P02 a full page carries the next cursor, a short page ends, an over-long page is refused
+ok 50 - C3L-P02 a full page carries the next cursor, a short page ends, an over-long page is refused
+  ---
+  duration_ms: 5.384983
+  type: 'test'
+  ...
+# Subtest: C3L-S01 the calls ride the user's own Lab session; a misconfigured Lab builds no client
+ok 51 - C3L-S01 the calls ride the user's own Lab session; a misconfigured Lab builds no client
+  ---
+  duration_ms: 1.130139
+  type: 'test'
+  ...
+# (node:3926440) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/c/judge/page.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: C3P-01 the page runs the guard, then mints one run id per render into the run form only
+ok 52 - C3P-01 the page runs the guard, then mints one run id per render into the run form only
+  ---
+  duration_ms: 1.80952
+  type: 'test'
+  ...
+# Subtest: C3P-02 the four forms post the four C3L actions and never a provider or identity field
+ok 53 - C3P-02 the four forms post the four C3L actions and never a provider or identity field
+  ---
+  duration_ms: 1.368904
+  type: 'test'
+  ...
+# Subtest: C3P-03 a viewer gets no judge form; only an administrator gets the budget form
+ok 54 - C3P-03 a viewer gets no judge form; only an administrator gets the budget form
+  ---
+  duration_ms: 0.399334
+  type: 'test'
+  ...
+# Subtest: C3P-04 every outcome has fixed copy, and a refusal never renders data
+ok 55 - C3P-04 every outcome has fixed copy, and a refusal never renders data
+  ---
+  duration_ms: 0.38816
+  type: 'test'
+  ...
+# (node:3926443) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/c/judge/runs.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: J3L-R01 the read names the session's provider and the request, and returns the rows
+ok 56 - J3L-R01 the read names the session's provider and the request, and returns the rows
+  ---
+  duration_ms: 9.589287
+  type: 'test'
+  ...
+# Subtest: J3L-R02 a viewer or a malformed request id makes no call
+ok 57 - J3L-R02 a viewer or a malformed request id makes no call
+  ---
+  duration_ms: 0.38021
+  type: 'test'
+  ...
+# Subtest: J3L-R03 the server's refusal is denied; any other failure is unavailable
+ok 58 - J3L-R03 the server's refusal is denied; any other failure is unavailable
+  ---
+  duration_ms: 0.669775
+  type: 'test'
+  ...
+# Subtest: J3L-R04 one malformed row fails the whole read closed
+ok 59 - J3L-R04 one malformed row fails the whole read closed
+  ---
+  duration_ms: 1.025634
+  type: 'test'
+  ...
+# Subtest: J3L-R05 a no-media pass or an unsupported 'calibrated' is never passed through
+ok 60 - J3L-R05 a no-media pass or an unsupported 'calibrated' is never passed through
+  ---
+  duration_ms: 0.597921
+  type: 'test'
+  ...
+# (node:3926466) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/c/review/review-postgrest.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: C3F-P03 a provider developer reviews the customer signals a current grant shares, labels and identities excluded
+ok 61 - C3F-P03 a provider developer reviews the customer signals a current grant shares, labels and identities excluded # SKIP needs the task-local stack: run apps/app/tests/c/feedback/stack.py
+  ---
+  duration_ms: 1.073672
+  type: 'test'
+  ...
+# Subtest: C3F-P04 the viewer, a revoked grant, another provider, a forged workspace and an unknown request share nothing
+ok 62 - C3F-P04 the viewer, a revoked grant, another provider, a forged workspace and an unknown request share nothing # SKIP needs the task-local stack: run apps/app/tests/c/feedback/stack.py
+  ---
+  duration_ms: 0.175024
+  type: 'test'
+  ...
+# (node:3926469) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/c/review/review.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: C3F-L01 the review reads through the one named door with the selected workspace and the request, no identity
+ok 63 - C3F-L01 the review reads through the one named door with the selected workspace and the request, no identity
+  ---
+  duration_ms: 6.04709
+  type: 'test'
+  ...
+# Subtest: C3F-L02 a malformed request id is not_found without asking the database
+ok 64 - C3F-L02 a malformed request id is not_found without asking the database
+  ---
+  duration_ms: 0.571979
+  type: 'test'
+  ...
+# Subtest: C3F-L03 the door's refusals keep their meaning; anything unexpected is unavailable, never an empty review
+ok 65 - C3F-L03 the door's refusals keep their meaning; anything unexpected is unavailable, never an empty review
+  ---
+  duration_ms: 0.694644
+  type: 'test'
+  ...
+# Subtest: C3F-L04 a row that is not a shared customer signal fails the whole review closed
+ok 66 - C3F-L04 a row that is not a shared customer signal fails the whole review closed
+  ---
+  duration_ms: 4.050133
+  type: 'test'
+  ...
+# (node:3926470) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/shell/access.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L1-A01 a signed-in user with no provider membership (consumer-only) is denied
+ok 67 - L1-A01 a signed-in user with no provider membership (consumer-only) is denied
+  ---
+  duration_ms: 2.706135
+  type: 'test'
+  ...
+# Subtest: L1-A02 a single membership is selected without asking
+ok 68 - L1-A02 a single membership is selected without asking
+  ---
+  duration_ms: 0.246751
+  type: 'test'
+  ...
+# Subtest: L1-A03 several memberships and no valid choice ask the user to select
+ok 69 - L1-A03 several memberships and no valid choice ask the user to select
+  ---
+  duration_ms: 0.27933
+  type: 'test'
+  ...
+# Subtest: L1-A04 a cookie naming a provider the user is not a member of selects nothing
+ok 70 - L1-A04 a cookie naming a provider the user is not a member of selects nothing
+  ---
+  duration_ms: 0.315979
+  type: 'test'
+  ...
+# Subtest: L1-A05 a failed membership read is unavailable, never denied and never a workspace
+ok 71 - L1-A05 a failed membership read is unavailable, never denied and never a workspace
+  ---
+  duration_ms: 0.199481
+  type: 'test'
+  ...
+# Subtest: L1-A06 a signed-out request is signed-out and never reads memberships
+ok 72 - L1-A06 a signed-out request is signed-out and never reads memberships
+  ---
+  duration_ms: 0.415371
+  type: 'test'
+  ...
+# Subtest: L1-A07 the selection action accepts only one of the user's own workspaces
+ok 73 - L1-A07 the selection action accepts only one of the user's own workspaces
+  ---
+  duration_ms: 0.341806
+  type: 'test'
+  ...
+# Subtest: L1-A09 a page needs a selected workspace; the selection action needs a provider session
+ok 74 - L1-A09 a page needs a selected workspace; the selection action needs a provider session
+  ---
+  duration_ms: 0.261698
+  type: 'test'
+  ...
+# Subtest: L1-A08 the denial copy keeps consumer onboarding in the App: no signup, credits or onboarding offer
+ok 75 - L1-A08 the denial copy keeps consumer onboarding in the App: no signup, credits or onboarding offer
+  ---
+  duration_ms: 0.840702
+  type: 'test'
+  ...
+# Subtest: L1-M01 the membership read is the named RPC over the user's own session, with no identity argument
+ok 76 - L1-M01 the membership read is the named RPC over the user's own session, with no identity argument
+  ---
+  duration_ms: 2.650803
+  type: 'test'
+  ...
+# Subtest: L1-M02 an RPC error or a thrown transport is unavailable
+ok 77 - L1-M02 an RPC error or a thrown transport is unavailable
+  ---
+  duration_ms: 0.414238
+  type: 'test'
+  ...
+# Subtest: L1-M03 a malformed, unknown-role or duplicate row fails the whole read closed
+ok 78 - L1-M03 a malformed, unknown-role or duplicate row fails the whole read closed
+  ---
+  duration_ms: 0.348602
+  type: 'test'
+  ...
+# (node:3926511) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/shell/boundary.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L1-B01 every page, route, provider layout and server action calls the provider guard
+ok 79 - L1-B01 every page, route, provider layout and server action calls the provider guard
+  ---
+  duration_ms: 324.341725
+  type: 'test'
+  ...
+# Subtest: L1-B02 the provider layout renders its children only for a ready workspace
+ok 80 - L1-B02 the provider layout renders its children only for a ready workspace
+  ---
+  duration_ms: 0.337313
+  type: 'test'
+  ...
+# Subtest: L1-B05 a signed-out visitor gets the Lab sign-in form, and every signed-in state can sign out
+ok 81 - L1-B05 a signed-out visitor gets the Lab sign-in form, and every signed-in state can sign out
+  ---
+  duration_ms: 0.229141
+  type: 'test'
+  ...
+# Subtest: L1-B03 the selection action stores the membership it validated, never the submitted value
+ok 82 - L1-B03 the selection action stores the membership it validated, never the submitted value
+  ---
+  duration_ms: 0.20744
+  type: 'test'
+  ...
+# Subtest: L1-B04 the Lab never imports the App: shared code comes only from packages/shared
+ok 83 - L1-B04 the Lab never imports the App: shared code comes only from packages/shared
+  ---
+  duration_ms: 2.909789
+  type: 'test'
+  ...
+# (node:3926520) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/shell/config.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L1-C01 the origin is explicit: development defaults to port 3100, production needs its own https origin
+ok 84 - L1-C01 the origin is explicit: development defaults to port 3100, production needs its own https origin
+  ---
+  duration_ms: 1.597931
+  type: 'test'
+  ...
+# Subtest: L1-C02 cookies are secure exactly when the origin is https
+ok 85 - L1-C02 cookies are secure exactly when the origin is https
+  ---
+  duration_ms: 0.419092
+  type: 'test'
+  ...
+# Subtest: L1-C03 the Lab session cookie is its own and host-only: never the App's name, never a domain
+ok 86 - L1-C03 the Lab session cookie is its own and host-only: never the App's name, never a domain
+  ---
+  duration_ms: 0.542817
+  type: 'test'
+  ...
+# Subtest: L1-C04 the workspace preference cookie is http-only and bounded
+ok 87 - L1-C04 the workspace preference cookie is http-only and bounded
+  ---
+  duration_ms: 0.239228
+  type: 'test'
+  ...
+# Subtest: L1-C05 every Lab response is private and no-store, and does not advertise the framework
+ok 88 - L1-C05 every Lab response is private and no-store, and does not advertise the framework
+  ---
+  duration_ms: 4.29223
+  type: 'test'
+  ...
+# (node:3926531) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/shell/guard.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L1-G01 a page gets a workspace only when one is selected: the picker state is a 404, never the first workspace
+ok 89 - L1-G01 a page gets a workspace only when one is selected: the picker state is a 404, never the first workspace
+  ---
+  duration_ms: 2.420019
+  type: 'test'
+  ...
+# Subtest: L1-G02 the selection action runs for any provider session and is a 404 for everyone else
+ok 90 - L1-G02 the selection action runs for any provider session and is a 404 for everyone else
+  ---
+  duration_ms: 0.718907
+  type: 'test'
+  ...
+# Subtest: L1-G03 the guard reads through the Lab's own session client and sends no identity
+ok 91 - L1-G03 the guard reads through the Lab's own session client and sends no identity
+  ---
+  duration_ms: 0.840775
+  type: 'test'
+  ...
+# (node:3926541) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/shell/harness.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: harness: a deep-equal kill is reported as an assertion failure; replacements are literal
+ok 92 - harness: a deep-equal kill is reported as an assertion failure; replacements are literal
+  ---
+  duration_ms: 372.584982
+  type: 'test'
+  ...
+# (node:3926544) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/shell/request.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L1-R01 a misconfigured Lab is unavailable and builds no client
+ok 93 - L1-R01 a misconfigured Lab is unavailable and builds no client
+  ---
+  duration_ms: 2.202505
+  type: 'test'
+  ...
+# Subtest: L1-R02 the session client is the Lab's: its cookie options, its env, and the request's cookie store
+ok 94 - L1-R02 the session client is the Lab's: its cookie options, its env, and the request's cookie store
+  ---
+  duration_ms: 1.233768
+  type: 'test'
+  ...
+# Subtest: L1-R03 the user comes from the session and the workspace from the Lab's cookie, re-checked against memberships
+ok 95 - L1-R03 the user comes from the session and the workspace from the Lab's cookie, re-checked against memberships
+  ---
+  duration_ms: 0.580655
+  type: 'test'
+  ...
+# (node:3926551) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/shell/session.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L1-S01 sign-in sets the Lab session through the Lab's own client and lands on the home page
+ok 96 - L1-S01 sign-in sets the Lab session through the Lab's own client and lands on the home page
+  ---
+  duration_ms: 3.473699
+  type: 'test'
+  ...
+# Subtest: L1-S02 a failed or impossible sign-in is a fixed notice: never the auth server's words, never a session
+ok 97 - L1-S02 a failed or impossible sign-in is a fixed notice: never the auth server's words, never a session
+  ---
+  duration_ms: 1.100105
+  type: 'test'
+  ...
+# Subtest: L1-S03 sign-out ends the Lab session and forgets the workspace preference
+ok 98 - L1-S03 sign-out ends the Lab session and forgets the workspace preference
+  ---
+  duration_ms: 0.478315
+  type: 'test'
+  ...
+# Subtest: L1-S04 the email-link callback verifies the code or token on the Lab client and only ever returns home
+ok 99 - L1-S04 the email-link callback verifies the code or token on the Lab client and only ever returns home
+  ---
+  duration_ms: 8.320385
+  type: 'test'
+  ...
+# Subtest: L1-S05 the proxy refreshes the Lab session cookie on the response and never redirects
+ok 100 - L1-S05 the proxy refreshes the Lab session cookie on the response and never redirects
+  ---
+  duration_ms: 2.345402
+  type: 'test'
+  ...
+# (node:3926558) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/ui/actions.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L4-A01 register runs as the session's provider and role, whatever the form claims
+ok 101 - L4-A01 register runs as the session's provider and role, whatever the form claims
+  ---
+  duration_ms: 29.746292
+  type: 'test'
+  ...
+# Subtest: L4-A02 a role without the capability is refused before the control service is asked
+ok 102 - L4-A02 a role without the capability is refused before the control service is asked
+  ---
+  duration_ms: 1.339513
+  type: 'test'
+  ...
+# Subtest: L4-A03 malformed input is refused as invalid and never reaches the control service
+ok 103 - L4-A03 malformed input is refused as invalid and never reaches the control service
+  ---
+  duration_ms: 1.491386
+  type: 'test'
+  ...
+# Subtest: L4-A04 the service's refusal is carried as its reason; its success is a plain return to the records
+ok 104 - L4-A04 the service's refusal is carried as its reason; its success is a plain return to the records
+  ---
+  duration_ms: 1.635328
+  type: 'test'
+  ...
+# Subtest: L4-A05 a consumer-only user gets a 404 from every action and the control service is never asked
+ok 105 - L4-A05 a consumer-only user gets a 404 from every action and the control service is never asked
+  ---
+  duration_ms: 0.56771
+  type: 'test'
+  ...
+# (node:3926564) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/ui/http.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched
+ok 106 - L4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched
+  ---
+  duration_ms: 35.916229
+  type: 'test'
+  ...
+# Subtest: L4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable
+ok 107 - L4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable
+  ---
+  duration_ms: 3.601743
+  type: 'test'
+  ...
+# Subtest: L4-H03 one unreadable model, deployment, proposal or aggregate fails the whole answer closed
+ok 108 - L4-H03 one unreadable model, deployment, proposal or aggregate fails the whole answer closed
+  ---
+  duration_ms: 10.445455
+  type: 'test'
+  ...
+# Subtest: L4-H04 without a session token, or when reading it fails, nothing is sent and every call is unavailable
+ok 109 - L4-H04 without a session token, or when reading it fails, nothing is sent and every call is unavailable
+  ---
+  duration_ms: 1.693597
+  type: 'test'
+  ...
+# Subtest: L4-H05 controlPort() is the HTTP adapter only with LAB_CONTROL_URL and a Lab config, carrying the session's own token
+ok 110 - L4-H05 controlPort() is the HTTP adapter only with LAB_CONTROL_URL and a Lab config, carrying the session's own token
+  ---
+  duration_ms: 4.016389
+  type: 'test'
+  ...
+# (node:3926565) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/ui/journey.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L4-J01 register → dev smoke → publish proposal → operator approval → App discovery → operator rollback
+ok 111 - L4-J01 register → dev smoke → publish proposal → operator approval → App discovery → operator rollback
+  ---
+  duration_ms: 4.37137
+  type: 'test'
+  ...
+# Subtest: L4-J02 unauthorized variants: another provider, a viewer, a developer proposing, an unimported model or digest, publish before smoke, a provider rollback, a repeat
+ok 112 - L4-J02 unauthorized variants: another provider, a viewer, a developer proposing, an unimported model or digest, publish before smoke, a provider rollback, a repeat
+  ---
+  duration_ms: 2.266404
+  type: 'test'
+  ...
+# (node:3926580) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/ui/pages.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L4-P01 each page reads the control records as the session's workspace and shows ?refused= only as fixed copy
+ok 113 - L4-P01 each page reads the control records as the session's workspace and shows ?refused= only as fixed copy
+  ---
+  duration_ms: 2.280132
+  type: 'test'
+  ...
+# Subtest: L4-P02 the provider layout links the L4 pages and labels the preview stand-in only when it is on
+ok 114 - L4-P02 the provider layout links the L4 pages and labels the preview stand-in only when it is on
+  ---
+  duration_ms: 0.42555
+  type: 'test'
+  ...
+# (node:3926597) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/ui/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L4-S01..S03 the journeys J01/J02 through the HTTP adapter on the real control service (L3 over PgControlStore)
+ok 115 - L4-S01..S03 the journeys J01/J02 through the HTTP adapter on the real control service (L3 over PgControlStore) # SKIP LAB_L4_REAL=1 (Docker, l4)
+  ---
+  duration_ms: 4.340728
+  type: 'test'
+  ...
+# (node:3926619) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/l/ui/view.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: L4-V01 roles mirror ROLE_CAPABILITIES: viewer reads health, developer manages dev, only administrator proposes
+ok 116 - L4-V01 roles mirror ROLE_CAPABILITIES: viewer reads health, developer manages dev, only administrator proposes
+  ---
+  duration_ms: 1.997052
+  type: 'test'
+  ...
+# Subtest: L4-V02 a row shows the pinned model, serving, runtime, schema and rate identities and where it is visible
+ok 117 - L4-V02 a row shows the pinned model, serving, runtime, schema and rate identities and where it is visible
+  ---
+  duration_ms: 0.511953
+  type: 'test'
+  ...
+# Subtest: L4-V03 actions follow the record and the role: smoke dev, publish only after a passed smoke, never a provider rollback
+ok 118 - L4-V03 actions follow the record and the role: smoke dev, publish only after a passed smoke, never a provider rollback
+  ---
+  duration_ms: 0.515847
+  type: 'test'
+  ...
+# Subtest: L4-V04 a pending proposal is shown as awaiting the operator and blocks a second one; a decided one does not
+ok 119 - L4-V04 a pending proposal is shown as awaiting the operator and blocks a second one; a decided one does not
+  ---
+  duration_ms: 1.455923
+  type: 'test'
+  ...
+# Subtest: L4-V05 health rows carry the redacted aggregate only, whatever else a record carries
+ok 120 - L4-V05 health rows carry the redacted aggregate only, whatever else a record carries
+  ---
+  duration_ms: 0.583347
+  type: 'test'
+  ...
+# Subtest: L4-V06 a refusal is fixed copy for a known reason and nothing for anything else in the URL
+ok 121 - L4-V06 a refusal is fixed copy for a known reason and nothing for anything else in the URL
+  ---
+  duration_ms: 0.313382
+  type: 'test'
+  ...
+# Subtest: L4-V07 the control port fails closed: unavailable until the real adapter is wired, the preview never in production
+ok 122 - L4-V07 the control port fails closed: unavailable until the real adapter is wired, the preview never in production
+  ---
+  duration_ms: 1.847663
+  type: 'test'
+  ...
+# (node:3926628) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/n/flows.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: N4-F01 a viewer is refused before any backend call
+ok 123 - N4-F01 a viewer is refused before any backend call
+  ---
+  duration_ms: 36.327125
+  type: 'test'
+  ...
+# Subtest: N4-F02 the provider is the guarded workspace's, never a submitted field
+ok 124 - N4-F02 the provider is the guarded workspace's, never a submitted field
+  ---
+  duration_ms: 1.74455
+  type: 'test'
+  ...
+# Subtest: N4-F03 a malformed mapping or a missing file never leaves the Lab; a preview reads only the head
+ok 125 - N4-F03 a malformed mapping or a missing file never leaves the Lab; a preview reads only the head
+  ---
+  duration_ms: 1.418858
+  type: 'test'
+  ...
+# Subtest: N4-F04 an upload over the bound is refused before the backend
+ok 126 - N4-F04 an upload over the bound is refused before the backend
+  ---
+  duration_ms: 6.917557
+  type: 'test'
+  ...
+# Subtest: N4-F05 a derivation needs a UUID, whole numbers within 10000 basis points and a parent
+ok 127 - N4-F05 a derivation needs a UUID, whole numbers within 10000 basis points and a parent
+  ---
+  duration_ms: 0.74708
+  type: 'test'
+  ...
+# Subtest: N4-F06 an export lives 1 s to 7 days and names a version
+ok 128 - N4-F06 an export lives 1 s to 7 days and names a version
+  ---
+  duration_ms: 0.365817
+  type: 'test'
+  ...
+# Subtest: N4-F07 a backend failure is an error state carrying its leaks and report, never success
+ok 129 - N4-F07 a backend failure is an error state carrying its leaks and report, never success
+  ---
+  duration_ms: 0.601514
+  type: 'test'
+  ...
+# (node:3926643) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/n/journey.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: N4-J01 import, interrupted and resumed, then a frozen version, its splits, an export and a revocation, on real N1/N2
+ok 130 - N4-J01 import, interrupted and resumed, then a frozen version, its splits, an export and a revocation, on real N1/N2 # SKIP LAB_N_REAL=1 with a task-local key
+  ---
+  duration_ms: 0.921322
+  type: 'test'
+  ...
+# (node:3926697) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/n/port.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: N4-P01 every call is the provider-scoped path with the user's own token and nothing else
+ok 131 - N4-P01 every call is the provider-scoped path with the user's own token and nothing else
+  ---
+  duration_ms: 38.755987
+  type: 'test'
+  ...
+# Subtest: N4-P02 refusals are named failures, carrying leaks and the rejection report
+ok 132 - N4-P02 refusals are named failures, carrying leaks and the rejection report
+  ---
+  duration_ms: 6.600102
+  type: 'test'
+  ...
+# Subtest: N4-P03 a success the Lab does not understand is unavailable, never success
+ok 133 - N4-P03 a success the Lab does not understand is unavailable, never success
+  ---
+  duration_ms: 2.578864
+  type: 'test'
+  ...
+# Subtest: N4-P04 an unreachable or unconfigured service is unavailable for every call
+ok 134 - N4-P04 an unreachable or unconfigured service is unavailable for every call
+  ---
+  duration_ms: 0.764066
+  type: 'test'
+  ...
+# Subtest: N4-P05 a download route answers a failure with its status, never 200
+ok 135 - N4-P05 a download route answers a failure with its status, never 200
+  ---
+  duration_ms: 0.292203
+  type: 'test'
+  ...
+# (node:3926704) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/n/views.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: N4-V01 only a published import with its dataset reads as success; the rest say how to resume
+ok 136 - N4-V01 only a published import with its dataset reads as success; the rest say how to resume
+  ---
+  duration_ms: 2.270839
+  type: 'test'
+  ...
+# Subtest: N4-V02 the rejected-rows download is line, reason and detail only
+ok 137 - N4-V02 the rejected-rows download is line, reason and detail only
+  ---
+  duration_ms: 0.286656
+  type: 'test'
+  ...
+# Subtest: N4-V03 the split summary counts samples and restrictions per split
+ok 138 - N4-V03 the split summary counts samples and restrictions per split
+  ---
+  duration_ms: 0.440407
+  type: 'test'
+  ...
+# Subtest: N4-V04 every restriction is explained; an unknown reason is still a restriction
+ok 139 - N4-V04 every restriction is explained; an unknown reason is still a restriction
+  ---
+  duration_ms: 0.282398
+  type: 'test'
+  ...
+# Subtest: N4-V05 leakage warnings name leaks, near-duplicate families and holdout relatives
+ok 140 - N4-V05 leakage warnings name leaks, near-duplicate families and holdout relatives
+  ---
+  duration_ms: 0.409186
+  type: 'test'
+  ...
+# (node:3926705) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/p/actions.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: P4-A01 actions run as the session's provider and role, whatever the form claims
+ok 141 - P4-A01 actions run as the session's provider and role, whatever the form claims
+  ---
+  duration_ms: 31.183843
+  type: 'test'
+  ...
+# Subtest: P4-A02 a role without the capability is refused before the pipeline service is asked
+ok 142 - P4-A02 a role without the capability is refused before the pipeline service is asked
+  ---
+  duration_ms: 2.244048
+  type: 'test'
+  ...
+# Subtest: P4-A03 malformed input, another provider's payer or dataset, or an unknown op never reaches the pipeline service
+ok 143 - P4-A03 malformed input, another provider's payer or dataset, or an unknown op never reaches the pipeline service
+  ---
+  duration_ms: 22.229262
+  type: 'test'
+  ...
+# Subtest: P4-A04 the training connector is always the manual bundle, never the form's; a double submit is one run
+ok 144 - P4-A04 the training connector is always the manual bundle, never the form's; a double submit is one run
+  ---
+  duration_ms: 18.446926
+  type: 'test'
+  ...
+# Subtest: P4-A05 the service's refusal is carried as its reason; its success is a plain return to the records
+ok 145 - P4-A05 the service's refusal is carried as its reason; its success is a plain return to the records
+  ---
+  duration_ms: 5.811608
+  type: 'test'
+  ...
+# Subtest: P4-A06 a consumer-only user gets a 404 from every action and the pipeline service is never asked
+ok 146 - P4-A06 a consumer-only user gets a 404 from every action and the pipeline service is never asked
+  ---
+  duration_ms: 0.678577
+  type: 'test'
+  ...
+# Subtest: P4-A07 a teacher dry run and its approval: the session's actor and the form's batch id; a developer never approves; malformed input never reaches the service
+ok 147 - P4-A07 a teacher dry run and its approval: the session's actor and the form's batch id; a developer never approves; malformed input never reaches the service
+  ---
+  duration_ms: 4.790529
+  type: 'test'
+  ...
+# (node:3926711) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/p/http.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: P4-H01 every call is the session's token and the actor's provider on its route; keys are renamed both ways, values untouched
+ok 148 - P4-H01 every call is the session's token and the actor's provider on its route; keys are renamed both ways, values untouched
+  ---
+  duration_ms: 42.313368
+  type: 'test'
+  ...
+# Subtest: P4-H02 the route's refusals are the port's reasons (410 is gone); anything else, or no answer, is unavailable
+ok 149 - P4-H02 the route's refusals are the port's reasons (410 is gone); anything else, or no answer, is unavailable
+  ---
+  duration_ms: 1.919036
+  type: 'test'
+  ...
+# Subtest: P4-H03 the route's records pass (renamed only); one unreadable row fails the whole answer closed
+ok 150 - P4-H03 the route's records pass (renamed only); one unreadable row fails the whole answer closed
+  ---
+  duration_ms: 12.880245
+  type: 'test'
+  ...
+# Subtest: P4-H04 without a session token nothing is sent and every call is unavailable
+ok 151 - P4-H04 without a session token nothing is sent and every call is unavailable
+  ---
+  duration_ms: 0.405248
+  type: 'test'
+  ...
+# Subtest: P4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable
+ok 152 - P4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable
+  ---
+  duration_ms: 0.621218
+  type: 'test'
+  ...
+# Subtest: P4-H06 teacher batches: listed, planned (the form's batch id, snake_case) and approved on their routes; an unreadable batch or chunk fails closed
+ok 153 - P4-H06 teacher batches: listed, planned (the form's batch id, snake_case) and approved on their routes; an unreadable batch or chunk fails closed
+  ---
+  duration_ms: 29.440106
+  type: 'test'
+  ...
+# (node:3926735) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/p/journey.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: P4-J01 import → correction → adjudication → train-only export: methods kept apart, lineage and omissions recorded
+ok 154 - P4-J01 import → correction → adjudication → train-only export: methods kept apart, lineage and omissions recorded
+  ---
+  duration_ms: 46.047123
+  type: 'test'
+  ...
+# Subtest: P4-J02 manual bundle → submit (nothing reserved) → finish → checkpoint → held-out evaluation → eligible, all replay-safe
+ok 155 - P4-J02 manual bundle → submit (nothing reserved) → finish → checkpoint → held-out evaluation → eligible, all replay-safe
+  ---
+  duration_ms: 6.008101
+  type: 'test'
+  ...
+# Subtest: P4-J03 a bad, late or mismatched checkpoint is rejected with its reason and never evaluated; a redelivery keeps the first outcome
+ok 156 - P4-J03 a bad, late or mismatched checkpoint is rejected with its reason and never evaluated; a redelivery keeps the first outcome
+  ---
+  duration_ms: 8.484569
+  type: 'test'
+  ...
+# Subtest: P4-J04 an ambiguous submission is only ever looked up, never resubmitted; a revoked grant stops a submit
+ok 157 - P4-J04 an ambiguous submission is only ever looked up, never resubmitted; a revoked grant stops a submit
+  ---
+  duration_ms: 1.315007
+  type: 'test'
+  ...
+# Subtest: P4-J05 unauthorized variants: another provider, a viewer, a developer assigning, a foreign payer, an expired export
+ok 158 - P4-J05 unauthorized variants: another provider, a viewer, a developer assigning, a foreign payer, an expired export
+  ---
+  duration_ms: 7.766429
+  type: 'test'
+  ...
+# Subtest: P4-J06 teacher batch: a dry run sends nothing; only an administrator approves within the budget; a double click is one batch; ambiguous, stopped and unauthorized variants
+ok 159 - P4-J06 teacher batch: a dry run sends nothing; only an administrator approves within the budget; a double click is one batch; ambiguous, stopped and unauthorized variants
+  ---
+  duration_ms: 2.439712
+  type: 'test'
+  ...
+# (node:3926807) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/p/pages.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: P4-P01 each page reads the pipeline records as the session's workspace and shows ?refused= only as fixed copy
+ok 160 - P4-P01 each page reads the pipeline records as the session's workspace and shows ?refused= only as fixed copy
+  ---
+  duration_ms: 4.898802
+  type: 'test'
+  ...
+# Subtest: P4-P02 every import, export, bundle and checkpoint form carries an id minted at render, never typed or re-minted by the action
+ok 161 - P4-P02 every import, export, bundle and checkpoint form carries an id minted at render, never typed or re-minted by the action
+  ---
+  duration_ms: 0.663114
+  type: 'test'
+  ...
+# Subtest: P4-P03 the paid forms show the USD budget and named payer, and no form picks a connector
+ok 162 - P4-P03 the paid forms show the USD budget and named payer, and no form picks a connector
+  ---
+  duration_ms: 0.457146
+  type: 'test'
+  ...
+# Subtest: P4-P04 labels show their kind and ground-truth status apart; the preview stand-in is labelled only when it is on
+ok 163 - P4-P04 labels show their kind and ground-truth status apart; the preview stand-in is labelled only when it is on
+  ---
+  duration_ms: 0.492973
+  type: 'test'
+  ...
+# Subtest: P4-P05 the teacher section: a dry-run form with its batch id minted at render, its USD budget and payer; approval only where the view allows it; unavailable said as such
+ok 164 - P4-P05 the teacher section: a dry-run form with its batch id minted at render, its USD budget and payer; approval only where the view allows it; unavailable said as such
+  ---
+  duration_ms: 5.30985
+  type: 'test'
+  ...
+# (node:3926815) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/p/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: P4-S01..S06 the pipelines journeys on the real route: labels, the manual run to an eligible checkpoint, rejected checkpoints, ambiguous and revoked, teacher batches, unauthorized
+ok 165 - P4-S01..S06 the pipelines journeys on the real route: labels, the manual run to an eligible checkpoint, rejected checkpoints, ambiguous and revoked, teacher batches, unauthorized # SKIP LAB_P4_REAL=1 (Docker, p1)
+  ---
+  duration_ms: 0.927959
+  type: 'test'
+  ...
+# (node:3926817) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/p/view.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: P4-V01 roles mirror ROLE_CAPABILITIES: a viewer runs no pipeline, a developer does, only an administrator assigns
+ok 166 - P4-V01 roles mirror ROLE_CAPABILITIES: a viewer runs no pipeline, a developer does, only an administrator assigns
+  ---
+  duration_ms: 6.343214
+  type: 'test'
+  ...
+# Subtest: P4-V02 synthetic, imported and reviewed labels never read alike; only a human review is ground truth
+ok 167 - P4-V02 synthetic, imported and reviewed labels never read alike; only a human review is ground truth
+  ---
+  duration_ms: 0.618549
+  type: 'test'
+  ...
+# Subtest: P4-V03 only a submitted label can be reviewed, and only by a role that runs pipelines
+ok 168 - P4-V03 only a submitted label can be reviewed, and only by a role that runs pipelines
+  ---
+  duration_ms: 4.162343
+  type: 'test'
+  ...
+# Subtest: P4-V04 an import receipt lists every rejected row with its reason; an unknown reason is not echoed
+ok 169 - P4-V04 an import receipt lists every rejected row with its reason; an unknown reason is not echoed
+  ---
+  duration_ms: 0.449609
+  type: 'test'
+  ...
+# Subtest: P4-V05 an export shows its lineage (sample → labels and methods) and every omitted sample with its reason
+ok 170 - P4-V05 an export shows its lineage (sample → labels and methods) and every omitted sample with its reason
+  ---
+  duration_ms: 0.384164
+  type: 'test'
+  ...
+# Subtest: P4-V06 a training run shows its USD budget and named payer, config, data and holdout pin
+ok 171 - P4-V06 a training run shows its USD budget and named payer, config, data and holdout pin
+  ---
+  duration_ms: 0.601451
+  type: 'test'
+  ...
+# Subtest: P4-V07 an ambiguous submission reads as unknown with its hold, and offers no resubmit or cancel
+ok 172 - P4-V07 an ambiguous submission reads as unknown with its hold, and offers no resubmit or cancel
+  ---
+  duration_ms: 0.442857
+  type: 'test'
+  ...
+# Subtest: P4-V08 cost is unsettled, unknown or as reported, never estimated; the manual bundle holds nothing
+ok 173 - P4-V08 cost is unsettled, unknown or as reported, never estimated; the manual bundle holds nothing
+  ---
+  duration_ms: 0.945527
+  type: 'test'
+  ...
+# Subtest: P4-V09 run actions follow the record: submit a prepared bundle, finish a manual one, cancel live ones; none for a viewer
+ok 174 - P4-V09 run actions follow the record: submit a prepared bundle, finish a manual one, cancel live ones; none for a viewer
+  ---
+  duration_ms: 0.978401
+  type: 'test'
+  ...
+# Subtest: P4-V10 a rejected checkpoint shows its reason and is never evaluated or approvable
+ok 175 - P4-V10 a rejected checkpoint shows its reason and is never evaluated or approvable
+  ---
+  duration_ms: 1.008094
+  type: 'test'
+  ...
+# Subtest: P4-V11 lineage runs from the checkpoint to its run, data, export, config and holdout pin
+ok 176 - P4-V11 lineage runs from the checkpoint to its run, data, export, config and holdout pin
+  ---
+  duration_ms: 0.346175
+  type: 'test'
+  ...
+# Subtest: P4-V12 approval needs a succeeded evaluation on exactly the run's pinned holdout; training metrics never promote
+ok 177 - P4-V12 approval needs a succeeded evaluation on exactly the run's pinned holdout; training metrics never promote
+  ---
+  duration_ms: 0.533703
+  type: 'test'
+  ...
+# Subtest: P4-V13 a refusal is fixed copy for a known reason and nothing for anything else in the URL
+ok 178 - P4-V13 a refusal is fixed copy for a known reason and nothing for anything else in the URL
+  ---
+  duration_ms: 0.184006
+  type: 'test'
+  ...
+# Subtest: P4-V14 the pipelines port fails closed: unavailable until the real adapter is wired, the preview never in production
+ok 179 - P4-V14 the pipelines port fails closed: unavailable until the real adapter is wired, the preview never in production
+  ---
+  duration_ms: 0.535483
+  type: 'test'
+  ...
+# Subtest: P4-V15 a teacher dry run shows its USD budget, named payer, cost ceiling and each chunk's reservation; nothing is reserved or sent
+ok 180 - P4-V15 a teacher dry run shows its USD budget, named payer, cost ceiling and each chunk's reservation; nothing is reserved or sent
+  ---
+  duration_ms: 0.653924
+  type: 'test'
+  ...
+# Subtest: P4-V16 only an administrator approves, only a dry run within its budget, and never twice
+ok 181 - P4-V16 only an administrator approves, only a dry run within its budget, and never twice
+  ---
+  duration_ms: 0.316213
+  type: 'test'
+  ...
+# Subtest: P4-V17 each chunk reads as its ledger records it: held, ambiguous (never resent), settled or unknown cost, stopped, failures counted
+ok 182 - P4-V17 each chunk reads as its ledger records it: held, ambiguous (never resent), settled or unknown cost, stopped, failures counted
+  ---
+  duration_ms: 0.443176
+  type: 'test'
+  ...
+# (node:3926823) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/p/wiring.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: P4-W01 LAB_PIPELINES_API_URL set: the port reads the route as the session's own access token
+ok 183 - P4-W01 LAB_PIPELINES_API_URL set: the port reads the route as the session's own access token
+  ---
+  duration_ms: 47.161487
+  type: 'test'
+  ...
+# Subtest: P4-W02 a missing LAB_PIPELINES_API_URL or Supabase config fails closed: every call unavailable, nothing sent
+ok 184 - P4-W02 a missing LAB_PIPELINES_API_URL or Supabase config fails closed: every call unavailable, nothing sent
+  ---
+  duration_ms: 0.624513
+  type: 'test'
+  ...
+# (node:3926845) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/r/actions.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: R4-A01 a proposal runs as the session's provider and role, whatever the form claims
+ok 185 - R4-A01 a proposal runs as the session's provider and role, whatever the form claims
+  ---
+  duration_ms: 80.503854
+  type: 'test'
+  ...
+# Subtest: R4-A02 a role without propose_publication is refused before the releases service is asked
+ok 186 - R4-A02 a role without propose_publication is refused before the releases service is asked
+  ---
+  duration_ms: 4.31738
+  type: 'test'
+  ...
+# Subtest: R4-A03 malformed input is refused as invalid and never reaches the releases service
+ok 187 - R4-A03 malformed input is refused as invalid and never reaches the releases service
+  ---
+  duration_ms: 5.248304
+  type: 'test'
+  ...
+# Subtest: R4-A04 the service's refusal is carried as its reason; its success is a plain return to the records
+ok 188 - R4-A04 the service's refusal is carried as its reason; its success is a plain return to the records
+  ---
+  duration_ms: 0.861153
+  type: 'test'
+  ...
+# Subtest: R4-A05 a consumer-only user gets a 404 and the releases service is never asked
+ok 189 - R4-A05 a consumer-only user gets a 404 and the releases service is never asked
+  ---
+  duration_ms: 0.380093
+  type: 'test'
+  ...
+# (node:3926856) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/r/http.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: R4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched
+ok 190 - R4-H01 every call is the session's token and the actor's provider on its route; records come back in the port's keys, values untouched
+  ---
+  duration_ms: 44.876575
+  type: 'test'
+  ...
+# Subtest: R4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable
+ok 191 - R4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable
+  ---
+  duration_ms: 2.730708
+  type: 'test'
+  ...
+# Subtest: R4-H03 one unreadable release, decision, proposal or variant fails the whole answer closed
+ok 192 - R4-H03 one unreadable release, decision, proposal or variant fails the whole answer closed
+  ---
+  duration_ms: 16.302418
+  type: 'test'
+  ...
+# Subtest: R4-H04 without a session token nothing is sent and every call is unavailable
+ok 193 - R4-H04 without a session token nothing is sent and every call is unavailable
+  ---
+  duration_ms: 0.318117
+  type: 'test'
+  ...
+# Subtest: R4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable
+ok 194 - R4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable
+  ---
+  duration_ms: 0.579919
+  type: 'test'
+  ...
+# (node:3926866) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/r/journey.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: R4-J01 guardrail rollback: the controller's rollback verdict is one D9 transition and the page shows it from the records
+ok 195 - R4-J01 guardrail rollback: the controller's rollback verdict is one D9 transition and the page shows it from the records
+  ---
+  duration_ms: 4.561223
+  type: 'test'
+  ...
+# Subtest: R4-J02 promotion: expand verdict → administrator proposal → operator approval → approved with its evidence
+ok 196 - R4-J02 promotion: expand verdict → administrator proposal → operator approval → approved with its evidence
+  ---
+  duration_ms: 1.883795
+  type: 'test'
+  ...
+# Subtest: R4-J03 unsafe proposals: another provider, a viewer or developer, a stale fence, a double click, an inconclusive verdict, a rolled-back release
+ok 197 - R4-J03 unsafe proposals: another provider, a viewer or developer, a stale fence, a double click, an inconclusive verdict, a rolled-back release
+  ---
+  duration_ms: 0.939499
+  type: 'test'
+  ...
+# Subtest: R4-J04 an operator approval of a stale or rejected proposal leaves the release untouched
+ok 198 - R4-J04 an operator approval of a stale or rejected proposal leaves the release untouched
+  ---
+  duration_ms: 0.802745
+  type: 'test'
+  ...
+# (node:3926867) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/r/pages.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: R4-P01 each page reads the records as the session's workspace and shows ?refused= only as fixed copy
+ok 199 - R4-P01 each page reads the records as the session's workspace and shows ?refused= only as fixed copy
+  ---
+  duration_ms: 1.708507
+  type: 'test'
+  ...
+# Subtest: R4-P02 no page offers a launch or allocation control or claims success; the preview stand-in is labelled only when it is on
+ok 200 - R4-P02 no page offers a launch or allocation control or claims success; the preview stand-in is labelled only when it is on
+  ---
+  duration_ms: 0.841089
+  type: 'test'
+  ...
+# (node:3926886) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/r/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: R4-S01..S04 the release journeys on the real route: guardrail rollback, promotion, unsafe proposals, a stale approval
+ok 201 - R4-S01..S04 the release journeys on the real route: guardrail rollback, promotion, unsafe proposals, a stale approval # SKIP LAB_R4_REAL=1 (Docker, r2)
+  ---
+  duration_ms: 0.905362
+  type: 'test'
+  ...
+# (node:3926888) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/r/view.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: R4-V01 a release row shows the frozen plan, cohort, baseline and candidate weights from the D9 record
+ok 202 - R4-V01 a release row shows the frozen plan, cohort, baseline and candidate weights from the D9 record
+  ---
+  duration_ms: 3.169311
+  type: 'test'
+  ...
+# Subtest: R4-V02 progress shows traffic, errors, p99, quality coverage, spend and assignments from R1's aggregates; empty metrics show dashes
+ok 203 - R4-V02 progress shows traffic, errors, p99, quality coverage, spend and assignments from R1's aggregates; empty metrics show dashes
+  ---
+  duration_ms: 0.542721
+  type: 'test'
+  ...
+# Subtest: R4-V03 spend in another unit than the budget is named, never converted
+ok 204 - R4-V03 spend in another unit than the budget is named, never converted
+  ---
+  duration_ms: 0.312231
+  type: 'test'
+  ...
+# Subtest: R4-V04 an inconclusive evaluation blocks promotion and says so; only an expand verdict offers expansion
+ok 205 - R4-V04 an inconclusive evaluation blocks promotion and says so; only an expand verdict offers expansion
+  ---
+  duration_ms: 0.683487
+  type: 'test'
+  ...
+# Subtest: R4-V05 actions follow the record and the role: only an administrator proposes; nothing on a rolled-back release or while a request is pending
+ok 206 - R4-V05 actions follow the record and the role: only an administrator proposes; nothing on a rolled-back release or while a request is pending
+  ---
+  duration_ms: 0.563273
+  type: 'test'
+  ...
+# Subtest: R4-V06 a rollback is shown from the D9 decision records with reasons and who decided, never from a request
+ok 207 - R4-V06 a rollback is shown from the D9 decision records with reasons and who decided, never from a request
+  ---
+  duration_ms: 0.378292
+  type: 'test'
+  ...
+# Subtest: R4-V07 a variant row names the hardware and runtime scope of both sides and what changed
+ok 208 - R4-V07 a variant row names the hardware and runtime scope of both sides and what changed
+  ---
+  duration_ms: 0.547806
+  type: 'test'
+  ...
+# Subtest: R4-V08 performance is a measurement only when every source is an experiment results path at a commit
+ok 209 - R4-V08 performance is a measurement only when every source is an experiment results path at a commit
+  ---
+  duration_ms: 0.271784
+  type: 'test'
+  ...
+# Subtest: R4-V09 an optimization is claimed and a variant is eligible only for an equivalent comparison
+ok 210 - R4-V09 an optimization is claimed and a variant is eligible only for an equivalent comparison
+  ---
+  duration_ms: 0.588779
+  type: 'test'
+  ...
+# Subtest: R4-V10 a refusal is fixed copy for a known reason and nothing for anything else in the URL
+ok 211 - R4-V10 a refusal is fixed copy for a known reason and nothing for anything else in the URL
+  ---
+  duration_ms: 0.414001
+  type: 'test'
+  ...
+# Subtest: R4-V11 the releases port fails closed: unavailable until the real adapter is wired, the preview never in production
+ok 212 - R4-V11 the releases port fails closed: unavailable until the real adapter is wired, the preview never in production
+  ---
+  duration_ms: 0.418119
+  type: 'test'
+  ...
+# (node:3926895) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/r/wiring.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: R4-W01 LAB_RELEASES_API_URL set: the port reads the route as the session's own access token
+ok 213 - R4-W01 LAB_RELEASES_API_URL set: the port reads the route as the session's own access token
+  ---
+  duration_ms: 44.190821
+  type: 'test'
+  ...
+# Subtest: R4-W02 a missing LAB_RELEASES_API_URL or Supabase config fails closed: every call unavailable, nothing sent
+ok 214 - R4-W02 a missing LAB_RELEASES_API_URL or Supabase config fails closed: every call unavailable, nothing sent
+  ---
+  duration_ms: 0.57143
+  type: 'test'
+  ...
+# (node:3926905) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/detail/feedback-postgrest.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V2-R01 the panel shows the durable customer signals with their provenance, and never the operator's label
+ok 215 - V2-R01 the panel shows the durable customer signals with their provenance, and never the operator's label # SKIP needs the task-local stack: run apps/app/tests/c/feedback/stack.py (WR-V2-3)
+  ---
+  duration_ms: 1.080374
+  type: 'test'
+  ...
+# Subtest: V2-R02 revoked sharing and a viewer get the fixed copy, not an empty review
+ok 216 - V2-R02 revoked sharing and a viewer get the fixed copy, not an empty review # SKIP needs the task-local stack: run apps/app/tests/c/feedback/stack.py (WR-V2-3)
+  ---
+  duration_ms: 0.166509
+  type: 'test'
+  ...
+# (node:3926930) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/detail/journey.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V2-J01 the provider's developer reads its own request and opens its content on demand
+ok 217 - V2-J01 the provider's developer reads its own request and opens its content on demand
+  ---
+  duration_ms: 3.085979
+  type: 'test'
+  ...
+# Subtest: V2-J02 another provider, a viewer and a malformed id learn nothing; a missing request is the not-projected copy
+ok 218 - V2-J02 another provider, a viewer and a malformed id learn nothing; a missing request is the not-projected copy
+  ---
+  duration_ms: 0.591471
+  type: 'test'
+  ...
+# Subtest: V2-J03 without a current grant, after revocation, with a forged grant or past T3 retention, no content is read
+ok 219 - V2-J03 without a current grant, after revocation, with a forged grant or past T3 retention, no content is read
+  ---
+  duration_ms: 0.515149
+  type: 'test'
+  ...
+# (node:3926938) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/detail/page.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V2-P01 the page reads as the session's workspace, and feedback shows whatever the trace read says
+ok 220 - V2-P01 the page reads as the session's workspace, and feedback shows whatever the trace read says
+  ---
+  duration_ms: 1.680642
+  type: 'test'
+  ...
+# Subtest: V2-P02 content is asked for by a link, read only for ?content=1 and rendered as text in a wrapping block
+ok 221 - V2-P02 content is asked for by a link, read only for ?content=1 and rendered as text in a wrapping block
+  ---
+  duration_ms: 0.582093
+  type: 'test'
+  ...
+# Subtest: V2-P03 each feedback row shows its provenance (who) beside what and when
+ok 222 - V2-P03 each feedback row shows its provenance (who) beside what and when
+  ---
+  duration_ms: 0.324263
+  type: 'test'
+  ...
+# (node:3926946) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/detail/view.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V2-D01 metadata rows are named fields only; without a grant no organization, size or content is shown
+ok 223 - V2-D01 metadata rows are named fields only; without a grant no organization, size or content is shown
+  ---
+  duration_ms: 7.577078
+  type: 'test'
+  ...
+# Subtest: V2-D02 content states are honest: not captured, lost, metadata only, expired or tombstoned, else offered
+ok 224 - V2-D02 content states are honest: not captured, lost, metadata only, expired or tombstoned, else offered
+  ---
+  duration_ms: 2.508814
+  type: 'test'
+  ...
+# Subtest: V2-D03 content is read only on demand, through C2, as the session's provider with the row's grant
+ok 225 - V2-D03 content is read only on demand, through C2, as the session's provider with the row's grant
+  ---
+  duration_ms: 0.684771
+  type: 'test'
+  ...
+# Subtest: V2-D04 a refused ref is revoked, expired or unavailable, never text
+ok 226 - V2-D04 a refused ref is revoked, expired or unavailable, never text
+  ---
+  duration_ms: 0.430796
+  type: 'test'
+  ...
+# Subtest: V2-D05 feedback is labelled with its stored provenance and is never presented as a calibration label
+ok 227 - V2-D05 feedback is labelled with its stored provenance and is never presented as a calibration label
+  ---
+  duration_ms: 2.741975
+  type: 'test'
+  ...
+# Subtest: V2-D06 a missing request reads the same whether it is another provider's or not projected yet
+ok 228 - V2-D06 a missing request reads the same whether it is another provider's or not projected yet
+  ---
+  duration_ms: 0.36141
+  type: 'test'
+  ...
+# Subtest: V2-D07 the trace ports fail closed: unavailable until the real adapters are wired, whatever the environment says
+ok 229 - V2-D07 the trace ports fail closed: unavailable until the real adapters are wired, whatever the environment says
+  ---
+  duration_ms: 0.487764
+  type: 'test'
+  ...
+# (node:3926953) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/judge/panel.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V3-P01 the judge panel is read only, shows refusals as fixed copy and links judge consent to Settings
+ok 230 - V3-P01 the judge panel is read only, shows refusals as fixed copy and links judge consent to Settings
+  ---
+  duration_ms: 1.311886
+  type: 'test'
+  ...
+# Subtest: V3-P02 the page reads judge runs as the session's actor and shows them only beside a visible request
+ok 231 - V3-P02 the page reads judge runs as the session's actor and shows them only beside a visible request
+  ---
+  duration_ms: 0.296089
+  type: 'test'
+  ...
+# (node:3926966) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/judge/view.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V3-J01 a dry run is labelled an estimate: no scores, no verdict, nothing reserved
+ok 232 - V3-J01 a dry run is labelled an estimate: no scores, no verdict, nothing reserved
+  ---
+  duration_ms: 2.251617
+  type: 'test'
+  ...
+# Subtest: V3-J02 a collected live run shows each score out of its maximum with the judge model and rubric
+ok 233 - V3-J02 a collected live run shows each score out of its maximum with the judge model and rubric
+  ---
+  duration_ms: 0.442424
+  type: 'test'
+  ...
+# Subtest: V3-J03 without media, media criteria read not scored and the verdict is never a pass
+ok 234 - V3-J03 without media, media criteria read not scored and the verdict is never a pass
+  ---
+  duration_ms: 0.375494
+  type: 'test'
+  ...
+# Subtest: V3-J04 in-flight and ambiguous runs show the held USD budget and no scores; nothing is ever CREDIT
+ok 235 - V3-J04 in-flight and ambiguous runs show the held USD budget and no scores; nothing is ever CREDIT
+  ---
+  duration_ms: 0.525141
+  type: 'test'
+  ...
+# Subtest: V3-J05 calibration is claimed only with the statistics and enough operator labels behind it
+ok 236 - V3-J05 calibration is claimed only with the statistics and enough operator labels behind it
+  ---
+  duration_ms: 1.916519
+  type: 'test'
+  ...
+# Subtest: V3-J06 the judge read is the provider's own, developer+, and the wired adapter fails closed without lab_judge_runs
+ok 237 - V3-J06 the judge read is the provider's own, developer+, and the wired adapter fails closed without lab_judge_runs
+  ---
+  duration_ms: 25.601159
+  type: 'test'
+  ...
+# (node:3926976) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/list/adapter.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1M-A01 reads as the session's workspace with the user's own token: the list and one request
+ok 238 - V1M-A01 reads as the session's workspace with the user's own token: the list and one request
+  ---
+  duration_ms: 28.802479
+  type: 'test'
+  ...
+# Subtest: V1M-A02 refusals map to denied, not_found or unavailable, and no token sends nothing
+ok 239 - V1M-A02 refusals map to denied, not_found or unavailable, and no token sends nothing
+  ---
+  duration_ms: 2.198155
+  type: 'test'
+  ...
+# Subtest: V1M-A03 only the route's named fields are kept: a metadata row never carries an organization, key, size or content
+ok 240 - V1M-A03 only the route's named fields are kept: a metadata row never carries an organization, key, size or content
+  ---
+  duration_ms: 0.998952
+  type: 'test'
+  ...
+# Subtest: V1M-A04 an answer that is not the route's shape is unavailable, never a partial record
+ok 241 - V1M-A04 an answer that is not the route's shape is unavailable, never a partial record
+  ---
+  duration_ms: 4.02366
+  type: 'test'
+  ...
+# (node:3926982) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/list/page.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1M-P01 the list reads as the session's workspace through the Lab trace service
+ok 242 - V1M-P01 the list reads as the session's workspace through the Lab trace service
+  ---
+  duration_ms: 1.47236
+  type: 'test'
+  ...
+# Subtest: V1M-P02 rows are native links to the request page; states and refusals are text; no App kit, no scripts on rows
+ok 243 - V1M-P02 rows are native links to the request page; states and refusals are text; no App kit, no scripts on rows
+  ---
+  duration_ms: 0.896936
+  type: 'test'
+  ...
+# (node:3926991) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/list/query.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1M-Q01 the route's cursor passes through exactly; every other name is ignored and reported, sorted
+ok 244 - V1M-Q01 the route's cursor passes through exactly; every other name is ignored and reported, sorted
+  ---
+  duration_ms: 2.197513
+  type: 'test'
+  ...
+# Subtest: V1M-Q02 a repeated, oversized or non-base64url cursor is refused with its reason, never sent
+ok 245 - V1M-Q02 a repeated, oversized or non-base64url cursor is refused with its reason, never sent
+  ---
+  duration_ms: 0.627144
+  type: 'test'
+  ...
+# Subtest: V1M-Q03 page links are /requests plus the cursor, and the first page carries none
+ok 246 - V1M-Q03 page links are /requests plus the cursor, and the first page carries none
+  ---
+  duration_ms: 0.20879
+  type: 'test'
+  ...
+# (node:3927000) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/list/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1M-S01..S06 the six L2 cases on the real route: own requests, another provider, consumer-only, revoked, expired, capture off and lost
+ok 247 - V1M-S01..S06 the six L2 cases on the real route: own requests, another provider, consumer-only, revoked, expired, capture off and lost # SKIP LAB_V1M_REAL=1 (Docker, lab-v1m, infrx-t2i-clickhouse)
+  ---
+  duration_ms: 0.952979
+  type: 'test'
+  ...
+# (node:3927010) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/list/view.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1M-L01 each row links to its request page and shows named metadata only: no organization, size or content
+ok 248 - V1M-L01 each row links to its request page and shows named metadata only: no organization, size or content
+  ---
+  duration_ms: 2.194315
+  type: 'test'
+  ...
+# Subtest: V1M-L02 content reads honestly: shared, metadata only, not captured, lost with its reason, expired
+ok 249 - V1M-L02 content reads honestly: shared, metadata only, not captured, lost with its reason, expired
+  ---
+  duration_ms: 0.352073
+  type: 'test'
+  ...
+# Subtest: V1M-L03 an empty workspace says capture-off requests leave no record; an empty page with more to come says so
+ok 250 - V1M-L03 an empty workspace says capture-off requests leave no record; an empty page with more to come says so
+  ---
+  duration_ms: 0.407348
+  type: 'test'
+  ...
+# Subtest: V1M-L04 the next link is the server's cursor, and the way back to the first page shows only on a later page
+ok 251 - V1M-L04 the next link is the server's cursor, and the way back to the first page shows only on a later page
+  ---
+  duration_ms: 0.280266
+  type: 'test'
+  ...
+# Subtest: V1M-L05 a refusal is fixed copy: a viewer's role, a lost workspace, an unreachable service; never rows
+ok 252 - V1M-L05 a refusal is fixed copy: a viewer's role, a lost workspace, an unreachable service; never rows
+  ---
+  duration_ms: 1.284196
+  type: 'test'
+  ...
+# (node:3927019) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/apps/lab/tests/v/list/wiring.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to <worktree>/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1M-W01 the detail page's trace port is the Lab adapter, reading with the session's access token
+ok 253 - V1M-W01 the detail page's trace port is the Lab adapter, reading with the session's access token
+  ---
+  duration_ms: 35.284977
+  type: 'test'
+  ...
+# Subtest: V1M-W02 unset LAB_TRACES_API_URL or Supabase config is off: every read unavailable, nothing sent
+ok 254 - V1M-W02 unset LAB_TRACES_API_URL or Supabase config is off: every read unavailable, nothing sent
+  ---
+  duration_ms: 2.39471
+  type: 'test'
+  ...
+1..254
+# tests 254
+# suites 0
+# pass 244
+# fail 0
+# cancelled 0
+# skipped 10
+# todo 0
+# duration_ms 1533.638281

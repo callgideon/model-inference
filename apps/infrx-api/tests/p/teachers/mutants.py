@@ -34,6 +34,8 @@ FOREIGN = "test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_o
 HTTP = "test_p2_http__a_batch_round_trips_through_the_local_teacher_fake"
 REGRANT_SEND = "test_p2__a_regrant_never_sends_a_tombstoned_sample"
 REGRANT_LABEL = "test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample"
+REDACT = "test_p2__n2s_public_redaction_masks_personal_data_before_a_teacher_sees_it"
+V = "datasets/versions/__init__.py"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- P2.a: the manifest ------------------------------------------------------------------------
@@ -146,6 +148,19 @@ MUTANTS: tuple[Mutant, ...] = (
        T, "        await ledger.record_failures(run_id, logged)", "        pass", COLLECT),
     _m("foreign_id_jams_the_collect", "a provider id D8 cannot store never blocks import/settle",
        T, "if _is_uuid(f[0])]", "]", FOREIGN),
+    # --- WR-P2-4: N2's public redaction (composition-4) -------------------------------------
+    _m("redaction_misses_phones", "a +-prefixed phone number is masked",
+       V, r'|\+\d[\d ().-]{6,}\d")', '")', REDACT),
+    _m("redaction_masks_plain_numbers", "ids and plain numbers are not personal data",
+       V, r'|\+\d[\d ().-]{6,}\d")', r'|\+?\d[\d ().-]{6,}\d")', REDACT),
+    _m("redaction_skips_lists", "every string at any depth is redacted",
+       V, "        return [redact_content(v) for v in value]", "        return value", REDACT),
+    _m("redaction_skips_objects", "every string at any depth is redacted",
+       V, "        return {k: redact_content(v) for k, v in value.items()}",
+       "        return value", REDACT),
+    _m("redaction_rewrites_keys", "keys are unchanged",
+       V, "{k: redact_content(v) for k, v", "{redact_content(k): redact_content(v) for k, v",
+       REDACT),
     _m("ambiguous_submit_released", "an unknown outcome keeps its hold (ambiguous)",
        "judge/submit.py", "        return await ledger.quarantine(run.run_id,",
        '        return await ledger.release(run.run_id, "failed",', AMBIG),

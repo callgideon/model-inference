@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate lab-rollout lab-improve lab-compositions lab-local
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -165,6 +165,8 @@ lab-compositions:
 	cd $(API) && INFRX_D_TASK=r1 .venv/bin/python -m pytest -q tests/r/routing/test_routing_composition_pg.py
 	cd $(API) && INFRX_D_TASK=p3 .venv/bin/python -m pytest -q tests/p/training/test_training_composition_pg.py
 	cd $(API) && INFRX_D_TASK=p3 .venv/bin/python -m pytest -q tests/b/checkpoints/test_checkpoints_composition_pg.py
+	cd $(API) && INFRX_D_TASK=p2 .venv/bin/python -m pytest -q tests/g/lab_pipelines/test_lab_teachers_composition_pg.py tests/w/test_lab_workers_teachers_pg.py
+	cd $(API) && INFRX_D_TASK=n3 .venv/bin/python -m pytest -q tests/w/test_lab_workers_lineage_pg.py
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:
@@ -173,6 +175,11 @@ lab-operate:
 # E6L: the LAB-EVALUATE gate (tests/integration/lab_evaluate); not in check. verdict.json lands in the evidence dir.
 lab-evaluate:
 	$(API)/.venv/bin/python tests/integration/lab_evaluate/runner.py --out $(CURDIR)/research/plan/evidence/e/E6L-raw-$(shell git rev-parse --short HEAD)
+
+# E5L: the LAB-OBSERVE gate (tests/integration/lab_observe); not in check. verdict.json lands in the evidence dir.
+# INFRX_E5L_PROJECT=e5l2 runs it under compose project infrx-e5l2 (same ports; the foreign infrx-e5l_* volumes are never touched).
+lab-observe:
+	$(API)/.venv/bin/python tests/integration/lab_observe/runner.py --out $(CURDIR)/research/plan/evidence/e/E5L-raw-$(shell git rev-parse --short HEAD)
 
 # E8L: the LAB-ROLLOUT gate (tests/integration/lab_rollout); not in check. verdict.json lands in the evidence dir.
 lab-rollout:

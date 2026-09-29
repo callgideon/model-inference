@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 274,
- "updated": "2026-09-29T07:09:57Z",
+ "revision": 285,
+ "updated": "2026-09-29T10:46:04Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7690,11 +7690,11 @@
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T03:55:57Z",
-   "updated": "2026-09-29T06:39:35Z",
+   "updated": "2026-09-29T07:41:35Z",
    "blocker": null,
-   "next_action": "merge batch #36 (Opus; WR-C4-PREFLIGHT, WR-C4-MK, R217–R219) → composition-5 (WR-B3-3/WR-C4-B3-SUITES, the lab-sql-lw6 Python halves) → lab-evaluate-2 (E6L j09 checkpoint half)",
+   "next_action": "composition-5 carries WR-B3-3/WR-C4-B3-SUITES",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
@@ -7836,22 +7836,22 @@
   {
    "id": "W5-MERGE-36",
    "task": null,
-   "slice": "merge batch #36 (Opus): composition-4 6bffa2e8 (+WR-C4-PREFLIGHT, WR-C4-MK, R217–R219); workflow wf_feaa3652-8ec",
+   "slice": "merge batch #36 (Opus): composition-4 6bffa2e8 (+WR-C4-PREFLIGHT, WR-C4-MK, R217–R219); workflow wf_feaa3652-8ec; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-36",
    "worktree": ".claude/worktrees/codex-w5-merge-36",
    "base": "e35ea4dd",
-   "head": null,
+   "head": "5ed53a41",
    "isolation": {
     "ports": "p3 57530/57531; p2 57528/57529; l4 57503",
     "prefix": "infrx-p3-",
     "db": "p3"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T06:39:35Z",
-   "updated": "2026-09-29T06:39:35Z",
+   "updated": "2026-09-29T07:41:35Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R216 before R217 at integration)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
@@ -7873,31 +7873,38 @@
    "branch": "codex/w5-lab-rollout-3",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout-3",
    "base": "57a779af",
-   "head": null,
+   "head": "d4d0fe0b",
    "isolation": {
     "ports": "e8l 57400-57499; r2 57534",
     "prefix": "infrx-e8l-",
     "db": "e8l"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T06:45:27Z",
-   "updated": "2026-09-29T06:45:27Z",
+   "updated": "2026-09-29T09:13:14Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge → E8L gate verdict",
+   "next_action": "k09 loop after composition-5; k10 UI after lab-rollout-ui; then E8L under R222",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 3,
-    "pessimistic_h": 6,
-    "confidence": "medium",
-    "basis": "one stand-in swap + one gate run; lab-rollout-2 took ~1 h of gate time"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT d4d0fe0b; merge running",
+    "at": "2026-09-29T09:07:35Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E8L-8fcd9d36.md",
+    "research/plan/evidence/e/E8L-raw-8fcd9d36/"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_rollout/**",
     "research/plan/evidence/e/E8L-*"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-R2-3",
+    "WR-R4-2"
+   ]
   },
   {
    "id": "W5-MERGE-37",
@@ -7939,30 +7946,477 @@
    "branch": "codex/w5-lab-app-control",
    "worktree": ".claude/worktrees/codex-w5-lab-app-control",
    "base": "adb84d11",
-   "head": null,
+   "head": "62d5130c",
    "isolation": {
     "ports": "l4 57503; l3 57502",
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T07:05:47Z",
-   "updated": "2026-09-29T07:05:47Z",
+   "updated": "2026-09-29T08:00:11Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge",
+   "next_action": "J02 rejection on the real L3 after lab-control-2",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 3,
-    "pessimistic_h": 6,
-    "confidence": "medium",
-    "basis": "one HTTP port in the rollouts/http.ts style + a journey re-cut + one real stack"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT 62d5130c; merge running",
+    "at": "2026-09-29T07:46:58Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/l/LAB-APP-CONTROL-e2d6eb5.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/lab/lib/services/control/**",
     "apps/lab/tests/l/**"
    ],
+   "wiring_requests": [
+    "WR-LAC-1",
+    "WR-LAC-2",
+    "E3L-F4",
+    "E3L-F5"
+   ]
+  },
+  {
+   "id": "W5-COMPOSITION-5",
+   "task": null,
+   "slice": "(wave5 LW6 lane composition-5, Opus) WR-B3-3/WR-C4-B3-SUITES → WR-R2-3 pass loop → WR-LSQ-C2A/C2B → WR-N4-3 → the E6L j09 checkpoint half; workflow wf_9ca204e9-694; base 5ed53a41",
+   "agent": "opus",
+   "branch": "codex/w5-composition-5",
+   "worktree": ".claude/worktrees/codex-w5-composition-5",
+   "base": "5ed53a41",
+   "head": "6c092e92",
+   "isolation": {
+    "ports": "b1 57520/57521; j2 57511/57512; r2 57534; n3 57518/57519; e6l 57200-57299",
+    "prefix": "infrx-b1-",
+    "db": "b1"
+   },
+   "activity": "integration",
+   "started": "2026-09-29T07:34:02Z",
+   "updated": "2026-09-29T10:25:45Z",
+   "blocker": null,
+   "next_action": "merge batch #42 (Opus; WR-C5-PREFLIGHT, WR-C5-MK, R226–R230) → lab-evaluate-2 (E6L final), lab-rollout-4 (WR-C5-K09), composition-6 (WR-COMP-4, WR-R4-2, WR-C5-N4-ROUTE, the C5 halves)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "ACCEPT_WITH_FIXES 6c092e92; merge with the E4 regression running",
+    "at": "2026-09-29T10:25:45Z"
+   },
+   "evidence": [
+    "research/plan/evidence/coordinator/COMPOSITION-5-bd5a273.md",
+    "research/plan/evidence/e/E6L-raw-da7e770/"
+   ],
+   "commands": [],
+   "owned_paths": [
+    "infrx/gateway/pilot.py",
+    "infrx/lab/workers/**",
+    "infrx/evaluation/**",
+    "tests/w/**"
+   ],
+   "wiring_requests": [
+    "WR-C5-PREFLIGHT",
+    "WR-C5-K09",
+    "WR-C5-LIVE",
+    "WR-C5-REPORT",
+    "WR-C5-PLAN",
+    "WR-C5-RECEIPT",
+    "WR-C5-PROVIDERS",
+    "WR-C5-N4-ROUTE",
+    "WR-C5-ANNOT",
+    "WR-C5-MK"
+   ]
+  },
+  {
+   "id": "W5-LAB-OBSERVE-2",
+   "task": "E5L",
+   "slice": "(wave5 LW5 lane lab-observe-2, Opus) E5L final: compose project override (INFRX_E5L_PROJECT) sidestepping the foreign e5l volumes, o06 + the newly supported cells bound, `make lab-observe`; workflow wf_ef42ed84-e78; base ed071536",
+   "agent": "opus",
+   "branch": "codex/w5-lab-observe-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-observe-2",
+   "base": "ed071536",
+   "head": "84dacef4",
+   "isolation": {
+    "ports": "e5l 57100-57199 under project e5l2",
+    "prefix": "infrx-e5l2-",
+    "db": "e5l"
+   },
+   "activity": "complete",
+   "started": "2026-09-29T07:34:02Z",
+   "updated": "2026-09-29T10:30:56Z",
+   "blocker": null,
+   "next_action": "o01 after composition-6 (WR-COMP-4); o10 after lab-e2e; then E5L under R222",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT 84dacef4; merge running",
+    "at": "2026-09-29T10:25:45Z"
+   },
+   "evidence": [
+    "research/plan/evidence/e/E5L-1d62678.md",
+    "research/plan/evidence/e/E5L-raw-bd13f72/"
+   ],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_observe/**",
+    "research/plan/evidence/e/E5L-*"
+   ],
+   "wiring_requests": [
+    "WR-OBS-6",
+    "WR-COMP-4",
+    "LAB-E2E"
+   ]
+  },
+  {
+   "id": "W5-LAB-DEPLOY-PREP",
+   "task": "I2L",
+   "slice": "(wave5 LW6 lane lab-deploy-prep, Opus) `make lab-local` = every switch ON locally (E4-ON), the internal-testing runbook 08-lab-internal-testing-rollout.md, the Lab rollout step scripts + tests/i/lab; workflow wf_2da4035b-8be; base ed071536",
+   "agent": "opus",
+   "branch": "codex/w5-lab-deploy-prep",
+   "worktree": ".claude/worktrees/codex-w5-lab-deploy-prep",
+   "base": "ed071536",
+   "head": null,
+   "isolation": {
+    "ports": "a new tasklocal key lab-on; l4 57503",
+    "prefix": "infrx-lab-on-",
+    "db": "lab-on"
+   },
+   "activity": "running",
+   "started": "2026-09-29T07:34:02Z",
+   "updated": "2026-09-29T07:34:02Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 8,
+    "pessimistic_h": 16,
+    "confidence": "low",
+    "basis": "a new gate script + a runbook + step scripts with tests"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab-local.sh",
+    "infra/lab/rollout/**",
+    "tests/i/lab/**",
+    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-38",
+   "task": null,
+   "slice": "merge batch #38 (Opus): lab-app-control 62d5130c (+WR-LAC-1/2, R223); workflow wf_fe012911-849; integrated",
+   "agent": "opus",
+   "branch": "codex/w5-merge-38",
+   "worktree": ".claude/worktrees/codex-w5-merge-38",
+   "base": "97b3689b",
+   "head": "82a34950",
+   "isolation": {
+    "ports": "l4 57503",
+    "prefix": "infrx-l4-",
+    "db": "l4"
+   },
+   "activity": "complete",
+   "started": "2026-09-29T07:46:58Z",
+   "updated": "2026-09-29T08:00:11Z",
+   "blocker": null,
+   "next_action": null,
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T07:46:58Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-CONTROL-2",
+   "task": "L3",
+   "slice": "(wave5 LW6 lane lab-control-2, Opus) E3L-F4 operator rejection of a publication proposal (0052) → E3L-F5 the Deployment record says what is listed; base 97b3689b; workflow wf_548e56bc-0d3",
+   "agent": "opus",
+   "branch": "codex/w5-lab-control-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-control-2",
+   "base": "97b3689b",
+   "head": "d2565c4f",
+   "isolation": {
+    "ports": "l3 57502; dlab 57500; l4 57503",
+    "prefix": "infrx-l3-",
+    "db": "l3"
+   },
+   "activity": "integration",
+   "started": "2026-09-29T07:46:58Z",
+   "updated": "2026-09-29T10:46:04Z",
+   "blocker": null,
+   "next_action": "merge batch #43 (Opus; WR-LC2-1/2 Lab-app diffs, R231–R233); 0052 local-only until the next R151 window; known-good-reproof-2 at 0052",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "ACCEPT d2565c4f; merge running with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [
+    "research/plan/evidence/l/LAB-CONTROL-2-c1aac90.md",
+    "research/plan/evidence/l/LAB-CONTROL-2-raw/"
+   ],
+   "commands": [],
+   "owned_paths": [
+    "infrx/lab/control/**",
+    "infrx/state/lab_control.py",
+    "apps/app/supabase/migrations/0052_*.sql",
+    "tests/l/**"
+   ],
+   "wiring_requests": [
+    "WR-LC2-1",
+    "WR-LC2-2"
+   ]
+  },
+  {
+   "id": "W5-MERGE-39",
+   "task": null,
+   "slice": "merge batch #39 (Opus): lab-rollout-3 d4d0fe0b (E8L k01–k07 PASS; +BASE pin, k10 latest-decision oracle); workflow wf_5a6d9d1f-572; integrated",
+   "agent": "opus",
+   "branch": "codex/w5-merge-39",
+   "worktree": ".claude/worktrees/codex-w5-merge-39",
+   "base": "95d5c050",
+   "head": "b7610278",
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "complete",
+   "started": "2026-09-29T09:07:35Z",
+   "updated": "2026-09-29T09:13:14Z",
+   "blocker": null,
+   "next_action": null,
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch, layer-1 only",
+    "at": "2026-09-29T09:07:35Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-KNOWN-GOOD-REPROOF",
+   "task": "I8",
+   "slice": "(wave5 LW6 lane known-good-reproof, Opus) R151/R201 condition 1: bda1586 + 4226315 re-proven through 0051; workflow wf_41213cbb-275; base 72dc76ad",
+   "agent": "opus",
+   "branch": "codex/w5-known-good-reproof",
+   "worktree": ".claude/worktrees/codex-w5-known-good-reproof",
+   "base": "72dc76ad",
+   "head": "21b3f93d",
+   "isolation": {
+    "ports": "e3b2d / d10 (the driver's stand-ins)",
+    "prefix": "infrx-d10rv-",
+    "db": "d10"
+   },
+   "activity": "complete",
+   "started": "2026-09-29T09:50:31Z",
+   "updated": "2026-09-29T10:13:33Z",
+   "blocker": null,
+   "next_action": null,
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT; merge running"
+   },
+   "evidence": [
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-fca3ea3.md"
+   ],
+   "commands": [],
+   "owned_paths": [
+    "infra/rollout/known-good.json",
+    "infra/runbooks/schema_proof.py",
+    "tests/i/test_known_good_proof.py"
+   ],
+   "wiring_requests": [
+    "WR-KGR-1",
+    "WR-KGR-2",
+    "WR-KGR-3"
+   ]
+  },
+  {
+   "id": "W5-MERGE-40",
+   "task": null,
+   "slice": "merge batch #40 (Opus): known-good-reproof 21b3f93d (+WR-KGR-1/2, the SHAPE-keys case, R224); workflow wf_95eb8ac4-3c7; integrated",
+   "agent": "opus",
+   "branch": "codex/w5-merge-40",
+   "worktree": ".claude/worktrees/codex-w5-merge-40",
+   "base": "dc8851b7",
+   "head": "547f2f5a",
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "complete",
+   "started": "2026-09-29T09:50:31Z",
+   "updated": "2026-09-29T10:13:33Z",
+   "blocker": null,
+   "next_action": null,
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T09:50:31Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-41",
+   "task": null,
+   "slice": "merge batch #41 (Opus): lab-observe-2 84dacef4 (E5L 16/0/2; +WR-OBS-6, R225); workflow wf_e8af0ed9-1b6; integrated",
+   "agent": "opus",
+   "branch": "codex/w5-merge-41",
+   "worktree": ".claude/worktrees/codex-w5-merge-41",
+   "base": "073c58fe",
+   "head": "007deee4",
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "complete",
+   "started": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T10:30:56Z",
+   "blocker": null,
+   "next_action": null,
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch, layer-1 only",
+    "at": "2026-09-29T10:25:45Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-42",
+   "task": null,
+   "slice": "merge batch #42 (Opus): composition-5 6c092e92 (+WR-C5-PREFLIGHT, WR-C5-MK, R226–R230); workflow wf_71ca3135-5f8",
+   "agent": "opus",
+   "branch": "codex/w5-merge-42",
+   "worktree": ".claude/worktrees/codex-w5-merge-42",
+   "base": "073c58fe",
+   "head": null,
+   "isolation": {
+    "ports": "p3 57530/57531; l4 57503",
+    "prefix": "infrx-p3-",
+    "db": "p3"
+   },
+   "activity": "running",
+   "started": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T10:25:45Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge (R226–R230 after R225 at integration) → lab-evaluate-2, lab-rollout-4, composition-6",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "single-lane batch with the E4 regression",
+    "at": "2026-09-29T10:25:45Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-E2E",
+   "task": null,
+   "slice": "(wave5 LW6 lane lab-e2e, Opus) one Lab browser/route e2e harness under apps/lab/tests/e2e binding the four gates' UI cells: E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; `make lab-e2e`; base 073c58fe; workflow wf_a9a9b058-dda",
+   "agent": "opus",
+   "branch": "codex/w5-lab-e2e",
+   "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+   "base": "073c58fe",
+   "head": null,
+   "isolation": {
+    "ports": "l4 57503; the gate stacks via their runners",
+    "prefix": "infrx-l4-",
+    "db": "l4"
+   },
+   "activity": "running",
+   "started": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T10:25:45Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge → the four UI cells",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 14,
+    "confidence": "low",
+    "basis": "four suites over the real stores + four runner binds"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/tests/e2e/**",
+    "tests/integration/lab_*/ (UI cell binds)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-43",
+   "task": null,
+   "slice": "merge batch #43 (Opus): lab-control-2 d2565c4f (0052 local-only; +WR-LC2-1/2, R231–R233); workflow wf_f6b062a6-f2b",
+   "agent": "opus",
+   "branch": "codex/w5-merge-43",
+   "worktree": ".claude/worktrees/codex-w5-merge-43",
+   "base": "f918dd89",
+   "head": null,
+   "isolation": {
+    "ports": "l3 57502; dlab 57500; l4 57503",
+    "prefix": "infrx-l3-",
+    "db": "l3"
+   },
+   "activity": "running",
+   "started": "2026-09-29T10:46:04Z",
+   "updated": "2026-09-29T10:46:04Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge (R226–R230 before R231 at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "single-lane batch with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],

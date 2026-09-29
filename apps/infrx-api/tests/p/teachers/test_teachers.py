@@ -305,3 +305,17 @@ def test_p2_http__a_batch_round_trips_through_the_local_teacher_fake():
         assert got.run.state == "completed" and case.labels.calls[0]["rows"][0]["label"] == "a"
     finally:
         fake.close()
+
+
+def test_p2__n2s_public_redaction_masks_personal_data_before_a_teacher_sees_it():
+    """WR-P2-4: what leaves for a teacher is `versions.redact_content` of the sample's content -
+    every email address and `+`-prefixed phone number masked in every string of the value,
+    at any depth; ids, plain numbers, keys and non-text values are unchanged (the teacher
+    still answers the question, and the answer maps back to its sample)."""
+    from infrx.datasets.versions import redact_content
+    sample = "7b000000-0000-4000-8000-000000000001"
+    assert redact_content(f"q a@b.example {sample}") == f"q [redacted] {sample}"
+    assert redact_content("call +1 (555) 010-9999 or Ann.Lee+x@mail.co.uk, 2+2 = 4, 12345678") \
+        == "call [redacted] or [redacted], 2+2 = 4, 12345678"
+    assert redact_content({"a@b.example": ["x@y.io", {"n": 7, "t": "+44 20 7946 0958"}], "k": None}) \
+        == {"a@b.example": ["[redacted]", {"n": 7, "t": "[redacted]"}], "k": None}

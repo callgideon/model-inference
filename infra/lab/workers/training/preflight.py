@@ -10,7 +10,10 @@ python3 runs it from the deployed checkout, so the approvals are the deployed co
 
 * **Names.** Every setting is on the role's own list: `INFRX_IMAGE`, the database, object store,
   egress allowlist and concurrency, plus - for the annotation (teacher, P-10) and training
-  (connector, P-11) roles only - that role's adapter, endpoint, token, USD budget and payer.
+  (connector, P-11) roles only - that role's adapter, endpoint, token, USD budget and payer;
+  the annotation role also `LAB_TEACHER_URL` (WR-C4-PREFLIGHT: the approved teacher batches'
+  collector, `http://` to the local teacher fake only until P-10; its host may be in
+  `LAB_EGRESS_ALLOW`).
   Anything else (a consumer secret, another purpose's token, cloud credentials, a proxy
   override in any letter case, a `DOCKER_*`, `PYTHON*` or `LD_*` setting: EnvironmentFile=
   reaches every Exec line of the unit) is refused. A bare `NAME` line is refused: docker's
@@ -64,6 +67,9 @@ IMAGE = re.compile(r"sha256:[0-9a-f]{64}")
 IMDS = "169.254.169.254"                  # botocore's instance-role credentials (IMDSv2)
 UNSAFE = re.compile(r"[\\'\"\x00-\x1f\x7f]")   # read differently by systemd and docker
 ARGV = ("INFRX_IMAGE", "LAB_EGRESS_ALLOW")  # expanded by systemd into the unit's argv
+# WR-C4-PREFLIGHT: the annotation role's LAB_TEACHER_URL is J2's local teacher fake until P-10
+# (infrx.judge.submit.LOCAL_HOSTS, http only); its host may join LAB_EGRESS_ALLOW.
+LOCAL_TEACHER = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
 def paid_names(role: str) -> tuple[str, ...]:
@@ -76,6 +82,8 @@ def allowed_names(role: str) -> set[str]:
     names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY"}
     if role in ADAPTERS:
         names |= {ADAPTERS[role][0], *paid_names(role)}
+    if role == "annotation":
+        names.add("LAB_TEACHER_URL")
     return names
 
 
@@ -124,6 +132,12 @@ def check(role: str, env: dict[str, str], approvals: dict[str, list[dict]]) -> l
         refusals.append("INFRX_IMAGE: not a local image id (sha256:<64 hex>)")
     hosts = {_host(env["LAB_S3_ENDPOINT"])} if env.get("LAB_S3_ENDPOINT") else set()
     hosts.add(IMDS)
+    if role == "annotation" and "LAB_TEACHER_URL" in env:
+        teacher = urlsplit(env["LAB_TEACHER_URL"])
+        if teacher.scheme == "http" and teacher.hostname in LOCAL_TEACHER:
+            hosts.add(teacher.hostname)
+        else:
+            refusals.append("LAB_TEACHER_URL: the local teacher fake only until P-10")
     if role in ADAPTERS:
         setting, default, prefix, approval_id = ADAPTERS[role]
         budget, url, token, payer = paid_names(role)

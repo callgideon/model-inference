@@ -1,0 +1,6 @@
+retired 59702fb8-b015-4274-b962-4ab38a9a7ba5
+proposals FAILED ValidationError ['1 validation error for DeploymentRevision', "  Value error, a public deployment is in ['active', 'draining', 'proposed_public'], not retired; a failed validation never becomes public [type=value_error, input_value={'deployment_revision_id'...oneInfo(key='Etc/UTC'))}, input_type=dict]"]
+deployments FAILED ValidationError ['1 validation error for DeploymentRevision', "  Value error, a public deployment is in ['active', 'draining', 'proposed_public'], not retired; a failed validation never becomes public [type=value_error, input_value={'deployment_revision_id'...oneInfo(key='Etc/UTC'))}, input_type=dict]"]
+('lab_transition', 'fe5ace93-b036-464a-a7cb-0c568bb2bf4c', {'state': 'draft'}, {'state': 'validating', 'reason': 'dev smoke started'})
+('lab_transition', 'fe5ace93-b036-464a-a7cb-0c568bb2bf4c', {'state': 'validating'}, {'state': 'ready_private', 'reason': 'dev smoke passed'})
+('lab_propose', '59702fb8-b015-4274-b962-4ab38a9a7ba5', None, {'source': 'fe5ace93-b036-464a-a7cb-0c568bb2bf4c'})

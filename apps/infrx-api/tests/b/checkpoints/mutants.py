@@ -29,6 +29,7 @@ BAD = "test_b3_a_malformed_or_changed_artifact_is_rejected_and_never_deploys"
 ORDER = "test_b3_out_of_order_events_never_redefine_latest"
 BURST = "test_b3_a_burst_is_bounded_by_concurrency_and_budget_with_visible_skips"
 CRASH = "test_b3_a_crash_between_receipt_and_dispatch_never_queues_paid_work_twice"
+EVALS = "test_b3_p3_evaluations_freeze_one_b1_run_on_the_bundles_dataset_and_answer_d7s_state"
 REVOKED = "test_b3_a_revoked_owner_or_grant_is_a_visible_skip"
 
 
@@ -147,6 +148,31 @@ MUTANTS: tuple[Mutant, ...] = (
     m("b3_skip_redecided", "a recorded skip is final",
       '        if done is not None and done["state"] != "queued":\n',
       "        if False:\n", BURST),
+    # --- P3's Evaluations port (composition-4, WR-E7L-1 / WR-B3-EVALS) ------------------------
+    m("p3_evals_freeze_without_a_suite", "no suite source: a typed 503, nothing frozen",
+      "            if self.suites is None:\n                raise errors.DependencyUnavailable",
+      "            if False:\n                raise errors.DependencyUnavailable", EVALS,
+      dies_by=("TypeError",)),
+    m("p3_evals_digest_copied", "the holdout digest is what B1 froze, never the ask's",
+      '"holdout_sha256": hashlib.sha256(\n', '"holdout_sha256": holdout_sha256 or hashlib.sha256(\n',
+      EVALS),
+    m("p3_evals_suites_dataset", "the run is on the dataset P3 asks (the bundle's)",
+      '"dataset_ref": dataset_ref}', "}", EVALS),
+    m("p3_evals_frozen_again", "a lost record resumes the run, never freezes another",
+      "                frozen = await runner.resume(self.store, run_id, evaluator=sub.evaluator,\n",
+      "                raise errors.NotFound(run_id)\n                frozen = await runner.resume("
+      "self.store, run_id, evaluator=sub.evaluator,\n", EVALS),
+    m("p3_evals_run_per_call", "one run per (suite, checkpoint, dataset)",
+      'run_id = run_id_of(sub.subscription_id, f"{checkpoint_id}:{dataset_ref}")',
+      "run_id = str(uuid.uuid4())", EVALS),
+    m("p3_evals_state_stale", "evaluation() answers D7's run state",
+      '        return {**record, "state": status["state"]}', '        return {**record, "state": "queued"}',
+      EVALS),
+    m("p3_evals_any_split", "only the frozen holdout is evaluated",
+      '        if split != "holdout":\n', "        if False:\n", EVALS),
+    m("p3_evals_not_the_owner", "the run is frozen as the suite's owner",
+      "access=self.access, user_id=sub.owner_user_id,", "access=self.access, user_id=sub.provider_org_id,",
+      EVALS),
 )
 
 

@@ -495,7 +495,8 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
         ports = {f: getattr(x, f) for f in x.__dataclass_fields__
                  if f not in ("sessions", "access")}
         d7 = {"store"} if name != "lab_releases" else set()
-        d8 = {"log", "ledger"} if name == "lab_pipelines" else set()   # WR-P1/P3-D8-C
+        d8 = {"log", "ledger", "evals"} if name == "lab_pipelines" else set()   # WR-P1/P3-D8-C,
+        #                                                          WR-E7L-1 (P3's evaluations)
         assert {f for f, port in ports.items() if port is not None} == d7 | d8, name
         assert all(isinstance(ports[f], PgLabDataStore) for f in d7)
     every = pilot._lab(settings(**{s: True for s, _, _ in LAB_2.values()}), connect=None)
@@ -506,8 +507,9 @@ def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
     """WR-P1-D8-C / WR-P3-D8-C: `LAB_PIPELINES` composes P1's label log (D8's `PgLabelLog`)
     and P3's run ledger (D8's `PgRunLedger`: the CAS and the named payer's PROVIDER_USD
     reservation on D6J's budget, `lab_submission`-gated in SQL) on the pool, over the Lab
-    objects (R182). The run and checkpoint listings (SR-P3-1, WR-LAB2-4) and B3's evaluation
-    port are not written yet: a typed 503 each, never an AttributeError read as a bug."""
+    objects (R182), and P3's evaluation port over B3/B1 (WR-E7L-1). The run and checkpoint
+    listings (SR-P3-1, WR-LAB2-4) are not written yet: a typed 503 each, never an
+    AttributeError read as a bug."""
     import dataclasses
 
     from infrx.contracts import errors
@@ -526,8 +528,73 @@ def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
     for listing in (x.ledger.run_rows, x.ledger.checkpoint_rows):
         died = outcome(lambda: asyncio.run(listing("p")))
         assert type(died) is errors.DependencyUnavailable, died
-    assert x.evals is None
-    assert outcome(lambda: x.port("evals")).code == "dependency_unavailable"
+    # WR-E7L-1 / WR-B3-EVALS: P3's evaluation port is B3/B1's over the same D7 store, Lab
+    # objects and L2; with no suite source or dev deployer (WR-B3-3) it freezes nothing (503)
+    from infrx.evaluation.checkpoints import Evaluations
+    assert type(x.evals) is Evaluations and x.evals.suites is None
+    assert (x.evals.store, x.evals.objects, x.evals.access) == (x.store, objects, x.access)
+    ask = {"provider_org_id": "p", "checkpoint_id": "c", "dataset_ref": "d",
+           "split": "holdout", "holdout_sha256": "0" * 64}
+    assert type(outcome(lambda: asyncio.run(x.evals.evaluate(**ask)))) is \
+        errors.DependencyUnavailable
+    assert asyncio.run(x.evals.evaluation(provider_org_id="p", checkpoint_id="c")) is None
+
+
+TEACHER_FAKE = "http://127.0.0.1:57529"
+
+
+def test_lab_teachers__p2_is_composed_under_lab_pipelines_only_when_lab_teachers_is_on():
+    """WR-P4B-1: `LAB_TEACHERS` is off by default and then the pipeline surface has no
+    teacher port (`GET teacher-batches` is a typed 503). On (beside `LAB_PIPELINES`), P2's
+    `TeacherWiring` is L2's members, D8's `PgTeacherLedger` and `PgLabelLog`, D7's store, all
+    on the pool, the Lab objects, P1's import, the approved rate table, the pilot settings
+    (judge mode not live by default: an approval is a 503) and N2's public redaction
+    (WR-P2-4), sending only to the local teacher fake `LAB_TEACHER_URL` names (P-10). On
+    without `LAB_PIPELINES`, without a URL, or with any other host refuses to start by name."""
+    import dataclasses
+    from types import SimpleNamespace
+
+    from infrx.config import deployment_from_env
+    from infrx.datasets.versions import redact_content
+    from infrx.gateway import pilot
+    from infrx.judge.cost import APPROVED_RATES
+    from infrx.judge.submit import HttpJudgeProvider
+    from infrx.pipelines import annotations as p1
+    from infrx.pipelines.teachers import TeacherWiring
+    from infrx.state.lab_access import PgAccessStore
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_pipeline import PgLabelLog, PgTeacherLedger
+
+    default = deployment_from_env({})
+    assert (default.lab_teachers, default.lab_teacher_url) == (False, "")
+
+    def settings(**on):
+        return support.settings(deployment=dataclasses.replace(support.BUILD, **on))
+
+    objects, who = relay_support.World().objects, SimpleNamespace(provider_org_id="p")
+    off = pilot._lab(settings(lab_pipelines=True, lab_teacher_url=TEACHER_FAKE), connect="pool",
+                     objects=objects)["lab_pipelines"]
+    assert off.teachers is None
+    died = outcome(lambda: asyncio.run(lab_pipelines.teacher_batches(off, who)))
+    assert type(died) is errors.DependencyUnavailable, died
+    on = settings(lab_pipelines=True, lab_teachers=True, lab_teacher_url=TEACHER_FAKE + "/")
+    t = pilot._lab(on, connect="pool", objects=objects)["lab_pipelines"].teachers
+    assert type(t) is TeacherWiring
+    stores = (t.members, t.ledger, t.store, t.log)
+    assert [type(x) for x in stores] == [PgAccessStore, PgTeacherLedger, PgLabDataStore,
+                                         PgLabelLog]
+    assert {x._connect for x in stores} == {"pool"}
+    assert (t.objects, t.labels, t.rates, t.redact) == (objects, p1.import_labels,
+                                                        APPROVED_RATES, redact_content)
+    assert t.settings is on.pilot and t.settings.judge_mode != "live"
+    assert (type(t.provider), t.provider.base_url) == (HttpJudgeProvider, TEACHER_FAKE)
+    for bad, name in ((settings(lab_teachers=True, lab_teacher_url=TEACHER_FAKE), "LAB_PIPELINES"),
+                      (settings(lab_pipelines=True, lab_teachers=True), "LAB_TEACHER_URL"),
+                      (settings(lab_pipelines=True, lab_teachers=True,
+                                lab_teacher_url="https://api.teacher.example"), "LAB_TEACHER_URL")):
+        refused = outcome(lambda: pilot._lab(bad, connect="pool", objects=objects))
+        assert type(refused) is RuntimeMisconfigured and name in str(refused), (name, refused)
+        assert "teacher.example" not in str(refused)
 
 
 LAB_DATA = {"lab_datasets": ("lab_datasets", lab_datasets.LabDatasets,

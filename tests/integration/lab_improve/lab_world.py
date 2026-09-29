@@ -561,6 +561,100 @@ class Lab:
                                      provider_org_id=self.NEMO))
 
 
+    # ------------------------------------------------ the composed pipeline surface (i07, i08)
+    @functools.cached_property
+    def surface(self):
+        """`/lab/v1/pipelines` exactly as the gateway composes it with LAB_PIPELINES and
+        LAB_TEACHERS on (`pilot._lab`: D7, D8's label log / run ledger / teacher ledger, L2,
+        the Lab objects, P3's evaluation port over B3/B1, P2 with N2's redaction to the local
+        teacher fake) over this world's database and objects. Stand-ins, named in the
+        verdict: the session verifier (test tokens), the checkpoint listing (WR-LAB2-4:
+        `Listing`), B3's suite source and dev deployer (WR-B3-3: `suite`), the teacher rate
+        table (the approved one is empty) and JUDGE_MODE live. Answers (x, client)."""
+        from decimal import Decimal
+
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from infrx.gateway import pilot
+        from infrx.gateway.routes import lab_pipelines as lp
+        from infrx.state.jobstore import connector
+        from tests.g import support
+        from tests.g.lab_pipelines.test_lab_pipelines import Sessions
+        settings = support.settings(
+            judge_mode="live", judge_live_budget_usd=Decimal("50"),
+            deployment=dataclasses.replace(support.BUILD, lab_pipelines=True, lab_teachers=True,
+                                           lab_teacher_url=self.teacher.url))
+        x = pilot._lab(settings, connector(self.dsn), self.objects)["lab_pipelines"]
+        x.evals.suites = self.suite
+        x = dataclasses.replace(x, sessions=Sessions((self.DEV, self.ADMIN)),
+                                ledger=Listing(x.ledger, self),
+                                teachers=dataclasses.replace(x.teachers,
+                                                             rates=self.j1.TEST_RATES))
+        app = FastAPI()
+        lp.register(app, support.runtime(), x)
+        return x, TestClient(app, raise_server_exceptions=False)
+
+    def call(self, user: str, method: str, path: str, body=None, **query):
+        """One request to the composed surface as `user` (a test session)."""
+        from infrx.gateway.routes.lab_pipelines import PIPELINES_PREFIX
+        from tests.g.lab_pipelines.test_lab_pipelines import token
+        return self.surface[1].request(
+            method, f"{PIPELINES_PREFIX}/{path}", params={"provider_org_id": self.NEMO, **query},
+            json=body, headers={"authorization": f"Bearer {token(user)}"})
+
+    async def suite(self, *, provider_org_id: str, checkpoint_id: str):
+        """WR-B3-3's stand-in: B3's pinned suite for a checkpoint of the composed surface -
+        H1's harness, the deterministic evaluator, seed 7, every case, 100 CREDIT per run,
+        owned by DEV - and the synthetic endpoint the checkpoint is served as (L3's dev
+        deployer): `self.cache["suites"][checkpoint_id] = (external run ref, endpoint)`."""
+        from infrx.evaluation.checkpoints import Subscription
+        external_run_ref, name = self.cache["suites"][checkpoint_id]
+        return Subscription.model_validate({
+            "subscription_id": uid(int(checkpoint_id[-12:], 16), 0x5b8),
+            "provider_org_id": provider_org_id, "owner_user_id": self.DEV,
+            "external_run_ref": external_run_ref, "dataset_ref": self.benchmark,
+            "harness_ref": await self.harness_ref(), "evaluator_ref": EVALUATOR(self.NEMO),
+            "evaluator": SPEC, "seed": 7, "max_cases": 100,
+            "run_limit": {"unit": "CREDIT", "value": "100.00000000"},
+            "limit": {"unit": "CREDIT", "value": "1000.00000000"}, "max_active": 5,
+            "policy": "every"}), self.serving(name)
+
+    def work(self, run_ref: str, name: str) -> dict:
+        """The Lab eval worker's job on one queued run (B1's `resume` + `Runner`), served by
+        endpoint `name`: its report."""
+        from infrx.evaluation import runner
+        record = run(self.store.resolve(run_ref, provider_org_id=self.NEMO))
+        frozen = run(runner.resume(self.store, record.run_id, evaluator=SPEC,
+                                   provider_org_id=self.NEMO))
+        with endpoint(name) as (wallet, http):
+            report = run(self.b1(http).run(frozen))
+        self.wallets.append((name, wallet))
+        return report
+
+
+class Listing:
+    """WR-LAB2-4's stand-in: the composed `RunLedger` (D8's `PgRunLedger`) plus the checkpoint
+    listing lab-sql has not written - D7's receipts with P3's outcome note."""
+
+    def __init__(self, composed, lab: Lab) -> None:
+        self.composed, self.lab = composed, lab
+
+    def __getattr__(self, name):
+        return getattr(self.composed, name)
+
+    async def checkpoint_rows(self, provider_org_id: str) -> list[dict]:
+        out = []
+        for cid, ref, digest, state in self.lab.sql(
+                "select checkpoint_id::text, external_run_ref, artifact_digest, state from "
+                "infrx.lab_checkpoint_receipts where provider_org_id = %s order by received_at",
+                provider_org_id):
+            note = await self.composed.noted(f"checkpoint:{cid}",
+                                             provider_org_id=provider_org_id) or {}
+            out.append({"checkpoint_id": cid, "external_run_ref": ref, "artifact_digest": digest,
+                        "state": state, "reason": note.get("reason")})
+        return out
+
+
 # ------------------------------------------------------------ P3's evaluation port (WR-E7L-1)
 class Evaluations:
     """P3's `Evaluations` port as B3 would serve it (not on the base: WR-E7L-1). A validated

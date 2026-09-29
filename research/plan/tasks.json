@@ -3443,7 +3443,7 @@
       "track": "E",
       "product": "lab",
       "milestone": "LAB-M3",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
@@ -3477,7 +3477,8 @@
       ],
       "acceptance": "Two iterations preserve source rights, original evidence, independent holdout and budget reconciliation. A seeded bad checkpoint is rejected for promotion even with improved training loss. No synthetic training fixture is presented as real model improvement.",
       "failure_oracle": "Suite catches holdout leakage, relabeled synthetic truth, duplicate paid submission, missing transitive revocation and promotion from training loss alone.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "LAB-IMPROVE-LOCAL accepted per R222 at composition-4 17176f58 (merge #36): the E7L runner on a real e7l stack gives 20 PASS / 0 FAIL / 2 NOT RUN — i07 training half NOT RUN[P-11 external training provider], i09 NOT RUN[staging]; D8 ledgers real (lab-improve-2), i04 lineage PASS (pipelines-lineage), i08 over the composed LAB_PIPELINES surface; the provider-UI half of i08 is WR-C4-UI (a follow-up, not a gate cell)"
     },
     {
       "id": "E8L",

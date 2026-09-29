@@ -1,0 +1,12 @@
+{
+ "every": [
+  "ReleaseListing(policy_id='000000b8-0000-4000-8000-000000000015', provider_org_id='b0000001-0000-4000-8000-000000000001', endpoint_id='c0000002-0000-4000-8000-000000000002', policy_ref='lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-000000000015@sha256:e488f0c405cd7f597c16209815d81f08cf62a4a08d9177a449466249518ff0e5', release=Release(state='rolled_back', fence=2, plan_digest='sha256:773703938f58ac51e7e5cb7d948deab0675eec3bd1ccb5d363ea3e497b88f52a', started_at=datetime.datetime(2026, 9, 20, 12, 0, tzinfo=datetime.timezone.utc)), latest_decision=Decision(decision='rollback', reasons=('operator:e8l k10 read half',), evidence_refs=(), decided_by='00000091-0000-4000-8000-0000000000e8', at=datetime.datetime(2026, 9, 20, 12, 0, tzinfo=datetime.timezone.utc)))"
+ ],
+ "rolled_back": [
+  "ReleaseListing(policy_id='000000b8-0000-4000-8000-000000000015', provider_org_id='b0000001-0000-4000-8000-000000000001', endpoint_id='c0000002-0000-4000-8000-000000000002', policy_ref='lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-000000000015@sha256:e488f0c405cd7f597c16209815d81f08cf62a4a08d9177a449466249518ff0e5', release=Release(state='rolled_back', fence=2, plan_digest='sha256:773703938f58ac51e7e5cb7d948deab0675eec3bd1ccb5d363ea3e497b88f52a', started_at=datetime.datetime(2026, 9, 20, 12, 0, tzinfo=datetime.timezone.utc)), latest_decision=Decision(decision='rollback', reasons=('operator:e8l k10 read half',), evidence_refs=(), decided_by='00000091-0000-4000-8000-0000000000e8', at=datetime.datetime(2026, 9, 20, 12, 0, tzinfo=datetime.timezone.utc)))"
+ ],
+ "running": [
+  "ReleaseListing(policy_id='000000b8-0000-4000-8000-000000000015', provider_org_id='b0000001-0000-4000-8000-000000000001', endpoint_id='c0000002-0000-4000-8000-000000000002', policy_ref='lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-000000000015@sha256:e488f0c405cd7f597c16209815d81f08cf62a4a08d9177a449466249518ff0e5', release=Release(state='running', fence=1, plan_digest='sha256:773703938f58ac51e7e5cb7d948deab0675eec3bd1ccb5d363ea3e497b88f52a', started_at=datetime.datetime(2026, 9, 20, 12, 0, tzinfo=datetime.timezone.utc)), latest_decision=None)"
+ ],
+ "running_after": []
+}

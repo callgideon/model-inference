@@ -1,0 +1,76 @@
+{
+ "task": "L4",
+ "slice": "WR-E3L-J + E3L-F3 + J01/J02 on the real L3 (lab-app-control)",
+ "activity": "review",
+ "head": "e2d6eb52",
+ "worktree": ".claude/worktrees/codex-w5-lab-app-control",
+ "branch": "codex/w5-lab-app-control",
+ "owned_paths": [
+  "apps/lab/lib/services/control/",
+  "apps/lab/tests/l/ui/",
+  "infra/lab/app/lab.json",
+  "infra/lab/app/README.md",
+  "research/plan/evidence/l/"
+ ],
+ "commands": [
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "254 tests: 244 pass, 0 fail, 10 skipped"
+  },
+  {
+   "cmd": "make lab-lint",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-typecheck",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "make lab-build",
+   "exit": 0,
+   "summary": "built"
+  },
+  {
+   "cmd": "make lab-mutants",
+   "exit": 0,
+   "summary": "all runners 0 survivors; tests/l/ui 21 cases named, 85/85 killed"
+  },
+  {
+   "cmd": "cd apps/lab && LAB_L4_REAL=1 INFRX_D_TASK=l4 node --test tests/l/ui/stack.test.ts",
+   "exit": 0,
+   "summary": "4/4: J01, J02 (rejection step fake-only, E3L-F4), consumer-only 403, on R186's factory over the real PgControlStore"
+  },
+  {
+   "cmd": "cd apps/infrx-api && INFRX_D_TASK=l4 .venv/bin/python -m pytest -q tests/i/lab",
+   "exit": 0,
+   "summary": "19 passed (LAB_CONTROL_URL declared)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l4 .venv/bin/python -m pytest -q tests/i/lab/test_mutants.py",
+   "exit": 0,
+   "summary": "28 passed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium-high",
+  "basis": "adapter, fake re-cut and real J01/J02 green, 0 survivors; remains one verify round (47-234 min) + WR-LAC-1/2",
+  "at": "2026-09-29T07:30Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LAC-1 apps/lab/.env.example: add LAB_CONTROL_URL= with its comment",
+  "WR-LAC-2 deployments/page.tsx: drop the dead rollback LABEL/heading copy (view offers no provider rollback)",
+  "E3L-F4 to L3: no proposal rejection; a platform retire of a proposed_public revision 503s the provider's listings",
+  "E3L-F5 to L3: Deployment records do not say what is listed (proposed_public and rolled-back revisions read prod/public/active)"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/LAB-APP-CONTROL-e2d6eb5.md",
+  "research/plan/evidence/l/LAB-APP-CONTROL-raw-e2d6eb5/"
+ ]
+}

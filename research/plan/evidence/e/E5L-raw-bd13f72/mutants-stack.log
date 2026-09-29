@@ -1,0 +1,22 @@
+F..................                                                      [100%]
+=================================== FAILURES ===================================
+____________ test_stack_mutant_is_killed[st_capture_on_in_the_box] _____________
+
+mutant = Mutant(name='st_capture_on_in_the_box', invariant='the drill judges capture off with the box at its defaults', file='.... trip:", cases=('test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_capture_on_in_the_box is broken_runner: undeclared exception deaths ['RuntimeError@pilotbox.py']: 1 failed, 17 deselected in 9.53s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['RuntimeError@pilotbox.py']: 1 failed, 17 deselected in 9.53s").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_capture_on_in_the_box]
+1 failed, 18 passed, 50 deselected in 659.36s (0:10:59)

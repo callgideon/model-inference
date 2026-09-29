@@ -5,7 +5,7 @@ import { deploymentRows, refusalCopy, REFUSAL_COPY, type Action } from "@/lib/se
 
 export const metadata = { title: "Deployments · infrx Lab" };
 
-const LABEL: Record<Action, string> = { smoke: "Run dev smoke", publish: "Propose publication", rollback: "Propose rollback" };
+const LABEL: Record<Action, string> = { smoke: "Run dev smoke", publish: "Propose publication" };
 
 // L4: pinned identities, dev/prod visibility and proposals, from the records only. A button's
 // outcome is whatever the records say after the redirect back here.
@@ -47,7 +47,7 @@ export default async function Deployments({ searchParams }: PageProps<"/deployme
           </tbody>
         </table>
       )}
-      <h2>Publication and rollback requests</h2>
+      <h2>Publication requests</h2>
       {proposals.value.length === 0 ? (
         <p>No requests yet. An operator approves or rejects each one.</p>
       ) : (

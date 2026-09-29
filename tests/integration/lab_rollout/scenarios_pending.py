@@ -68,7 +68,9 @@ def test_k10_the_releases_ui_over_the_real_route():
     `/lab/v1/releases` route mount (LAB_RELEASES, off), but `pilot._lab_2` composes
     `LabReleases(sessions, access)` with no records/proposal port (WR-R4-1's lab-sql half,
     WR-R4-2): every read and the one write answer 503 today, so the route exists but has
-    nothing real to show yet - and no coordinator-assigned e2e suite drives it."""
+    nothing real to show yet - and no coordinator-assigned e2e suite drives it. The store's
+    listing the records port will read (0048's `lab_releases_in`) is bound for real in
+    `scenarios_route`'s k10 read-half case."""
     suite = lw.REPO / "apps" / "lab" / "tests" / "e2e" / "rollout"
     releases_route = lw.API / "infrx" / "gateway" / "routes" / "lab_releases.py"
     assert releases_route.exists(), "WR-R4-1's route module is gone: re-check this tripwire"

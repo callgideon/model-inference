@@ -66,7 +66,7 @@ def _sibling(name: str):
 
 
 NAMESPACE = "e8l"
-BASE = "b2906856"            # the LW6 base this runner was built on (coordinator dispatch)
+BASE = "57a779af"            # the base of the E8L lane this runner last measured (merge #39)
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
 EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}
@@ -135,12 +135,14 @@ REQUIRED = {
             "test_k05_missing_or_stale_evidence_never_expands",
             "test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back",
             "test_k05_overspend_rolls_back_and_units_never_mix"),
-    "k06": ("test_k06_an_emergency_rollback_moves_a_promoted_alias_back",),
+    "k06": ("test_k06_an_emergency_rollback_moves_a_promoted_alias_back",
+            "test_k06_the_worlds_alias_read_is_the_real_control_store_on_its_login"),
     "k07": ("test_k07_a_variant_is_probed_compared_and_stored",
             "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"),
     "k08": ("test_k08_parity_on_an_allocated_gpu_target",),
     "k09": ("test_k09_the_controller_process_restarted_mid_rollout",),
-    "k10": ("test_k10_the_releases_ui_over_the_real_route",),
+    "k10": ("test_k10_the_releases_ui_over_the_real_route",
+            "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict"),
 }
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>k\d\d)_")

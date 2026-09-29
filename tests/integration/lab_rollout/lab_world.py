@@ -15,9 +15,9 @@ contract fakes for the consumer's money, and synthetic endpoints over HTTP - not
   `PgReleaseStore`. `shadow_limit` has no RPC yet (0043: "until an operator raises it"): the
   operator's raise is an owner UPDATE here.
 * **L3** (0032): R2's `ServingControl` is L3's own `operations.Serving` over `LabControl` on
-  `PgControlStore` and `PgCatalogDirectory`. `ControlReads` (WR-LSQ-9) is not on
-  `PgControlStore` yet: `Reads` below is two plain SELECTs of 0007's listing rows, the
-  stand-in until lab-sql's lands.
+  `PgControlStore` and `PgCatalogDirectory`; its `ControlReads` (WR-LSQ-9, 0044) are the real
+  `PgControlStore` on the control service's own `infrx_lab_control` login (WR-E8L-3), as
+  `pilot.control_serving` composes them.
 * **B2 input**: owned case records (`records`), not B1 runs - B1 -> B2 on D7 and MinIO is
   E6L's j05-j07. The runs they name are published D7 eval-run records differing in serving
   only, so the report binds to real refs.
@@ -154,6 +154,7 @@ class Lab:
         self.PIN = f"{self.ALIAS}@{q8.W['label_2']}"
         self.PIN_B = f"{self.ALIAS}@{self.label_b}"
         self.runtime = runtime_dsn(DATABASE)
+        self.control = runtime_dsn(DATABASE, "infrx_lab_control")
         from infrx.contracts.conformance.v2_fakes import IDS
         self.grant_org(IDS.consumer_org, "e8l-relay")
         self._subjects: list[str] = []
@@ -270,7 +271,8 @@ class Lab:
         control = LabControl(None, PgControlStore(connector(self.dsn)), None,
                              PgCatalogDirectory(connector(self.dsn)), None)
         # LabControl.rollback reads the session's principal only (the audited actor)
-        return Serving(control, Reads(self), types.SimpleNamespace(principal="e8l-controller"))
+        return Serving(control, PgControlStore(connector(self.control, set_role=False)),
+                       types.SimpleNamespace(principal="e8l-controller"))
 
     async def python_serving_ref(self, deployment_revision_id: str) -> str:
         """L3's own `operations.serving_ref` over the same store 0045's SQL function reads
@@ -351,9 +353,10 @@ class Lab:
         return datetime.fromisoformat(self.sql("select infrx.now()::text")[0][0])
 
 
-def runtime_dsn(database: str) -> str:
-    """E3C's WR-4 step: 0021's `infrx_runtime` given LOGIN and a fresh random password on this
-    namespace's cluster (the operator's out-of-band step, done here as the owner)."""
+def runtime_dsn(database: str, role: str = "infrx_runtime") -> str:
+    """E3C's WR-4 step: 0021's `infrx_runtime` (or 0043's `infrx_lab_control`) given LOGIN and
+    a fresh random password on this namespace's cluster (the operator's out-of-band step, done
+    here as the owner)."""
     import secrets
     from urllib.parse import urlsplit
 
@@ -361,10 +364,10 @@ def runtime_dsn(database: str) -> str:
     from psycopg import sql
     owner, secret = harness.pg_dsn(database), secrets.token_hex(16)
     with psycopg.connect(owner, autocommit=True) as conn:
-        conn.execute(sql.SQL("alter role infrx_runtime login password {}").format(
-            sql.Literal(secret)))
+        conn.execute(sql.SQL("alter role {} login password {}").format(
+            sql.Identifier(role), sql.Literal(secret)))
     parts = urlsplit(owner)
-    return owner.replace(f"{parts.username}:{parts.password}@", f"infrx_runtime:{secret}@", 1)
+    return owner.replace(f"{parts.username}:{parts.password}@", f"{role}:{secret}@", 1)
 
 
 class Recorded:
@@ -380,27 +383,6 @@ class Recorded:
             self.asked.append(name)
             return await target(*args, **kwargs)
         return call
-
-
-class Reads:
-    """WR-LSQ-9's `ControlReads` half R2's `Serving` needs, as plain reads of 0007's rows."""
-
-    def __init__(self, lab: Lab) -> None:
-        self.lab = lab
-
-    async def endpoint_alias(self, endpoint_id: str) -> str | None:
-        rows = self.lab.sql("select l.public_model_id from infrx.catalog_listings l join "
-                            "infrx.deployment_revisions d using (deployment_revision_id) where "
-                            "d.endpoint_id = %s order by l.version desc limit 1", endpoint_id)
-        return rows[0][0] if rows else None
-
-    async def listing_versions(self, public_model_id: str):
-        from infrx.state.lab_control import Listing
-        return [Listing(public_model_id=a, version=v, deployment_revision_id=d,
-                        rate_card_version=c) for a, v, d, c in self.lab.sql(
-            "select public_model_id, version, deployment_revision_id::text, rate_card_version "
-            "from infrx.catalog_listings where public_model_id = %s order by version",
-            public_model_id)]
 
 
 # ------------------------------------------------------------------ R2's plan and live

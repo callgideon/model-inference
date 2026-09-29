@@ -1,0 +1,63 @@
+..F..                                                                                                                                                                                                                                                                                                                                                                                                    [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+_____________________________________________________________________________________________________________________________________________________________________________ test_o04_the_judge_ledger_is_d6js_postgresql_ledger ______________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind2/cases/test_o04_the_judge_ledger_is_d6js_postgresql_ledger')
+
+    def test_o04_the_judge_ledger_is_d6js_postgresql_ledger(workdir):
+        """D6J's `PgJudgeLedger` under J2's submit/collect, and J3's report published through the
+        same ledger: one POST; the scores stored once (a duplicate delivery stores nothing); the
+        named payer's budget holds nothing and settled exactly the actual; no customer wallet
+        moved; J3's report over these text-only samples excludes both results as `limited` (no
+        media: groundedness is unjudgeable), so it publishes `uncalibrated`, never a claim, and it
+        is the configuration's latest. Oracles: a ledger that re-stores a delivery, charges
+        another payer, or keeps the hold; a report that calibrates on limited results."""
+        from infrx.contracts.v2.money_units import ProviderUsd
+        from infrx.judge.calibration import publish
+        from infrx.judge.submit import collect
+        labels = ow.load("e5l_j_fakes", ow.API / "tests" / "j" / "fakes.py")
+        with ow.observe_trip(workdir) as trip:
+            alpha = trip.world.alpha
+            ids = traced(trip, 2, "o04-pg")
+            before = books(trip)
+            with ow.judge(trip, pg=True) as judge:
+                ledger, stored = judge.ledger, []
+                record = ledger.record_results
+    
+                async def kept(run_id, results):
+                    stored.extend(results)
+                    return await record(run_id, results)
+                ledger.record_results = kept
+                job = judge.job(trip, ids)
+                first = run(ow.submit(judge, trip, ids, job=job))
+                assert first.state == "submitted", first
+                [post] = judge.posts()
+                assert sorted(item["sample_id"] for item in post["items"]) == sorted(ids)
+                judge.fake.outputs[first.external_id] = [[sid, ow.judge_result()] for sid in ids]
+                done = run(collect(job.run_id, wiring=judge.wiring))
+                assert done.state == "completed" and done.actual is not None, done
+                assert run(collect(job.run_id, wiring=judge.wiring)).state == "completed"
+                assert trip.one("select count(*) from infrx.lab_judge_results where run_id = %s",
+                                job.run_id)[0] == len(ids), "a duplicate delivery stored twice"
+                reserved, settled = trip.one(
+                    "select reserved, settled from infrx.lab_budgets where provider_org_id = %s "
+                    "and payer_ref = %s", ow.PROVIDER, judge.payer)
+                assert reserved == 0 and ProviderUsd(settled) == done.actual, (reserved, settled)
+                assert len(judge.posts()) == 1
+                verdicts = [labels.label(sid, org_id=alpha.org_id) for sid in ids]
+                report = run(publish(ledger, stored[:len(ids)], verdicts,
+                                     provider_org_id=ow.PROVIDER, org_id=alpha.org_id,
+                                     judge_model=ow.JUDGE_MODEL,
+                                     rubric_version=stored[0].rubric_version))
+>               assert (report.calibration()["state"], report.excluded["limited_result"]) == (
+                    "uncalibrated", len(ids)), report.excluded
+E               AssertionError: Counter({'rejected_result': 2, 'no_judge_result': 2})
+E               assert ('uncalibrated', 0) == ('uncalibrated', 2)
+E                 
+E                 At index 1 diff: 0 != 2
+E                 Use -v to get more diff
+
+tests/integration/lab_observe/scenarios_judge.py:122: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_observe/scenarios_judge.py::test_o04_the_judge_ledger_is_d6js_postgresql_ledger - AssertionError: Counter({'rejected_result': 2, 'no_judge_result': 2})
+1 failed, 4 passed, 13 deselected in 37.69s
