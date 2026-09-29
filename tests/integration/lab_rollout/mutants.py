@@ -76,6 +76,7 @@ GATE = "test_e8l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_doe
 NO_STACK = "test_e8l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e8l_the_namespace_is_the_reserved_block"
 RERUN = "test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
+SUB_CELL = "test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun"
 UNBOUND = tuple(re.findall(r"^def (test_k\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -116,6 +117,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "DEAD_PORT = 57499", "DEAD_PORT = 57460", NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
+    _m("sub_cell_is_a_pass", "k09's unbound breach half is NOT RUN, never a pass", R,
+       '"parent_status": result[spec["parent"]]["status"],\n             "status": NOT_RUN,',
+       '"parent_status": result[spec["parent"]]["status"],\n             "status": PASS,',
+       SUB_CELL),
+    _m("sub_cell_without_its_lane", "the breach sub-cell names WR-C5-LIVE", R,
+       '"parent": "k09", "lanes": ["WR-C5-LIVE"],', '"parent": "k09", "lanes": [],', SUB_CELL),
     _m("unbound_case_runs", "a case waiting on P-08/composition-2/lab-ui-swap is never a pass",
        P, "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )
