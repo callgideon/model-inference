@@ -1,0 +1,10 @@
+{
+ "/overview": "200 Control records could not be read. Nothing is shown until they can be; try again shortly.",
+ "/models": "200 Control records could not be read. Nothing is shown until they can be; try again shortly.",
+ "/deployments": "200 Control records could not be read. Nothing is shown until they can be; try again shortly.",
+ "/evaluations": "200 Evaluation records could not be read. Nothing is shown until they can be; try again shortly.",
+ "/evaluations/checkpoints": "200 Evaluation records could not be read. Nothing is shown until they can be; try again shortly.",
+ "/training": "200 Pipeline records could not be read. Nothing is shown until they can be; try again shortly.",
+ "/releases": "200 Release records could not be read. Nothing is shown until they can be; try again shortly.",
+ "/optimizations": "200 Release records could not be read. Nothing is shown until they can be; try again shortly."
+}

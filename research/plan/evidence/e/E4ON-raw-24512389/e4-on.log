@@ -1,0 +1,632 @@
+........................................................................ [  2%]
+........................................................................ [  5%]
+..............................................................s......... [  7%]
+.......................ss............................s.................. [ 10%]
+........s............................................................... [ 12%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 25%]
+........................................................................ [ 27%]
+........................................................................ [ 30%]
+........................................................................ [ 33%]
+........................................................................ [ 35%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+.......................................................s................ [ 43%]
+........................................................................ [ 45%]
+................s...sss.......................................F......... [ 48%]
+.....................ss................................................. [ 50%]
+........F..FFFFFFFF..................................................... [ 53%]
+........................................................................ [ 55%]
+..............................F......................................... [ 58%]
+........................................................................ [ 61%]
+........................................................................ [ 63%]
+........................................................................ [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 71%]
+........................................................................ [ 73%]
+........................................................................ [ 76%]
+........................................................................ [ 78%]
+......................................................FFFFFFFFFFFFFFFFFF [ 81%]
+FFFF........F...F...F................................................... [ 83%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 91%]
+........................................................................ [ 94%]
+........................................................................ [ 96%]
+........................................................................ [ 99%]
+........................                                                 [100%]
+=================================== FAILURES ===================================
+__ test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it __
+
+box = <tests.w.test_worker_main.Box object at 0x7ee77c67e840>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ee77c67cad0>
+
+    def test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it(box, monkeypatch):
+        """E3B's pilot box on this lane's services: `start("worker")` returns once `python -m
+        infrx.worker` answers `/readyz` 200, and `stop` drains it to exit 0."""
+        pilotbox = pilotbox_module(monkeypatch)
+        box.start_engine()
+        pilot = pilotbox.PilotBox(dict(box.settings), f"http://127.0.0.1:{box.engine_port}",
+                                  box.log.parent, 1)
+        try:
+>           pilot.start("worker", timeout=60)
+
+tests/w/test_worker_main.py:1024: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../tests/integration/backend/pilotbox.py:217: in start
+    self._wait_ready(role, ready, timeout)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <infrx_i2b_pilotbox.PilotBox object at 0x7ee77a2f0170>, role = 'worker'
+url = 'http://127.0.0.1:50863/readyz', timeout = 60
+
+    def _wait_ready(self, role: str, url: str, timeout: float) -> None:
+        import httpx
+        end, last = time.monotonic() + timeout, ""
+        while time.monotonic() < end:
+            if self.processes[role].poll() is not None:
+>               raise RuntimeError(f"the {role} exited {self.processes[role].returncode}: "
+                                   f"{self.tail(role)}")
+E               RuntimeError: the worker exited 2: 2026-09-29 09:13:44,234 INFO botocore.credentials Found credentials in environment variables. | 2026-09-29 09:13:44,441 INFO botocore.credentials Found credentials in environment variables. | infrx.worker: refusing to start: INFRX_MODE='pilot': LAB_EVAL_WORKER needs an evaluator source (WR-B-2(b)) and a dev target source (WR-B-3)
+
+../../tests/integration/backend/pilotbox.py:224: RuntimeError
+____________ test_lab_existing_frozen_contracts_are_byte_identical _____________
+
+    def test_lab_existing_frozen_contracts_are_byte_identical():
+        """Every v1/v2 contract file (Python and console) hashes to its value at the F3 base
+        9a6c3685; only `infrx/contracts/lab/` is new. A deliberate revision updates the pin."""
+        pinned = json.loads(PIN.read_text())
+        assert pinned["base"] == "9a6c3685"
+>       assert frozen_files() == pinned["files"]
+E       AssertionError: assert {'apps/infrx-...546b611', ...} == {'apps/app/li...6dc8569', ...}
+E         
+E         Omitting 146 identical items, use -vv to show
+E         Differing items:
+E         {'apps/infrx-api/infrx/contracts/tasklocal.py': '0624c8eb3b25dbdd163cf3160f7b3d3b5ce6f503c8cee42fa4618e6c347cf297'} != {'apps/infrx-api/infrx/contracts/tasklocal.py': 'c91207a14f240f484cb9ff8c14d0249d5653324f03751d494bf98972a07f1932'}
+E         Use -v to get more diff
+
+tests/contracts/lab/test_lab_contracts.py:354: AssertionError
+_____________ test_mutant_is_killed[lab_provider_segment_ignored] ______________
+
+mutant = Mutant(name='lab_provider_segment_ignored', invariant="every ref belongs to the record's provider", file='contracts/la...rg_id"):', new='if False:', cases=('test_lab_rejected_fixture_is_refused_with_its_reason',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_provider_segment_ignored is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...(pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']").killed
+
+tests/contracts/lab/test_mutants.py:47: AssertionError
+___________ test_mutant_is_killed[lab_units_side_by_side_unchecked] ____________
+
+mutant = Mutant(name='lab_units_side_by_side_unchecked', invariant='amounts side by side share one unit', file='contracts/lab/r...ayload):', new='if False:', cases=('test_lab_rejected_fixture_is_refused_with_its_reason',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_units_side_by_side_unchecked is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...(pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']").killed
+
+tests/contracts/lab/test_mutants.py:47: AssertionError
+________________ test_mutant_is_killed[lab_refs_scan_free_form] ________________
+
+mutant = Mutant(name='lab_refs_scan_free_form', invariant='a tool schema, mapping, output or label holds no Lab refs', file='co...table_ref', 'test_lab_free_form_content_is_opaque_to_the_ref_and_unit_scans'), dies_by=('LabRejected',), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_refs_scan_free_form is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...(pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']").killed
+
+tests/contracts/lab/test_mutants.py:47: AssertionError
+_____________ test_mutant_is_killed[lab_digest_numbers_as_python] ______________
+
+mutant = Mutant(name='lab_digest_numbers_as_python', invariant='numbers are spelled as ECMAScript does (1.0 is 1)', file='contr...halves_derive_the_same_immutable_ref', 'test_lab_canonical_json_is_rfc8785_in_both_halves'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_digest_numbers_as_python is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...(pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']").killed
+
+tests/contracts/lab/test_mutants.py:47: AssertionError
+________________ test_mutant_is_killed[lab_ambiguous_resubmits] ________________
+
+mutant = Mutant(name='lab_ambiguous_resubmits', invariant='an ambiguous submit is reconciled, never resubmitted', file='contrac...reconciled_never_resubmitted', 'test_lab_vocabularies_and_transitions_match_across_halves'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_ambiguous_resubmits is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...(pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']").killed
+
+tests/contracts/lab/test_mutants.py:47: AssertionError
+_____________________ test_mutant_is_killed[lab_gate_open] _____________________
+
+mutant = Mutant(name='lab_gate_open', invariant='every gate needs a current membership and grant', file='contracts/lab/records....o_continued_access', 'test_lab_external_submission_is_authorized_for_the_runs_own_purpose'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_gate_open is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...(pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']").killed
+
+tests/contracts/lab/test_mutants.py:47: AssertionError
+__________ test_mutant_is_killed[lab_submission_checks_first_purpose] __________
+
+mutant = Mutant(name='lab_submission_checks_first_purpose', invariant="the gate checks the run's purpose, not judging (0-LC-1)"...nt_for_its_purpose', 'test_lab_external_submission_is_authorized_for_the_runs_own_purpose'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_submission_checks_first_purpose is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...(pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']").killed
+
+tests/contracts/lab/test_mutants.py:47: AssertionError
+______________ test_mutant_is_killed[lab_frozen_contract_edited] _______________
+
+mutant = Mutant(name='lab_frozen_contract_edited', invariant='v1/v2 contract files stay byte-identical', file='contracts/money....rt annotations  # edited', cases=('test_lab_existing_frozen_contracts_are_byte_identical',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_frozen_contract_edited is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...(pytest exit 1): ['tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical']").killed
+
+tests/contracts/lab/test_mutants.py:47: AssertionError
+__________________ test_every_lab_lane_port_sits_in_one_band ___________________
+
+    def test_every_lab_lane_port_sits_in_one_band():
+        """Oracle: a lane port outside 57500-57599, a lane on another's port, or a T lane still on
+        the track's ClickHouse native 59000 fails here."""
+        for task, ports in LAB_LANE_PORTS.items():
+            services = tasklocal.local_services(task)
+            assert {name: s.host_port for name, s in services.items()} == ports, task
+            assert all(s.container == f"infrx-{task}-{s.service}" for s in services.values())
+        for task, native in (("t2i", 57541), ("t2f", 57544), ("t3", 57547)):
+            assert tasklocal.local_services(task)["clickhouse"].extra_ports == (native,), task
+        used = {port for ports in LAB_LANE_PORTS.values() for port in ports.values()} | {57541, 57544, 57547}
+        reserved = tasklocal.all_host_ports()          # raises on any collision
+>       assert {port for port in reserved if port in LAB_BAND} == used
+E       assert {57500, 57501...4, 57505, ...} == {57500, 57501...4, 57505, ...}
+E         
+E         Extra items in the left set:
+E         57537
+E         57538
+E         57539
+E         Use -v to get more diff
+
+tests/contracts/test_config_and_imports.py:493: AssertionError
+__________________ test_mutant_is_killed[cap_org_not_counted] __________________
+
+mutant = Mutant(name='cap_org_not_counted', invariant='the per-org active-job ceiling', file='contracts/fakes/state.py', old='(...ve_jobs_per_org),', cases=('dur_cap__total_org_and_key_limits_reject_with_retry_guidance',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: cap_org_not_counted is broken_runner (the per-org active-job ceiling): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['dur_cap__total_org_and_key_limits_reject_with_retry_guidance'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+__________ test_mutant_is_killed[heartbeat_stores_the_callers_lease] ___________
+
+mutant = Mutant(name='heartbeat_stores_the_callers_lease', invariant='a lease is a fencing token, not a record (R29)', file='co...= lease.model_copy(update={', cases=('dur_fence__a_lease_is_a_fencing_token_not_a_record',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: heartbeat_stores_the_callers_lease is broken_runner (a lease is a fencing token, not a record (R29)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['dur_fence__a_lease_is_a_fencing_token_not_a_record'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+____________________ test_mutant_is_killed[debit_rounds_up] ____________________
+
+mutant = Mutant(name='debit_rounds_up', invariant='one half-up rounding per debit', file='contracts/money.py', old='def half_up...urn _q(value, decimal.ROUND_CEILING)', cases=('dur_settle__the_store_rounds_half_up_once',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: debit_rounds_up is broken_runner (one half-up rounding per debit): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['dur_settle__the_store_rounds_half_up_once'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+___________________ test_mutant_is_killed[settles_any_cause] ___________________
+
+mutant = Mutant(name='settles_any_cause', invariant='only three causes can charge (R21)', file='contracts/records.py', old='BIL...use) - {TerminalCause.invalid_media})', cases=('dur_settle__only_three_causes_can_charge',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: settles_any_cause is broken_runner (only three causes can charge (R21)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['dur_settle__only_three_causes_can_charge'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+____________ test_mutant_is_killed[visibility_from_the_event_time] _____________
+
+mutant = Mutant(name='visibility_from_the_event_time', invariant='index visibility is measured from the claim', file='contracts...onds=self.limits.lease_ttl_s):', cases=('dur_outbox__a_lost_worker_returns_its_candidate',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: visibility_from_the_event_time is broken_runner (index visibility is measured from the claim): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['dur_outbox__a_lost_worker_returns_its_candidate'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_________________ test_mutant_is_killed[upload_expiry_ignored] _________________
+
+mutant = Mutant(name='upload_expiry_ignored', invariant='an expired upload window says so (R22)', file='contracts/fakes/media.p...mpletion")', new='            pass', cases=('media_sec__an_expired_upload_window_says_so',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: upload_expiry_ignored is broken_runner (an expired upload window says so (R22)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['media_sec__an_expired_upload_window_says_so'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_______________ test_mutant_is_killed[capture_bytes_not_charged] _______________
+
+mutant = Mutant(name='capture_bytes_not_charged', invariant='capture bytes are charged as they accumulate (R27)', file='contrac... self.content_bytes += size', cases=('trace_bounds__concurrent_captures_share_one_budget',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: capture_bytes_not_charged is broken_runner (capture bytes are charged as they accumulate (R27)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['trace_bounds__concurrent_captures_share_one_budget'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+__________ test_mutant_is_killed[feedback_operator_role_from_session] __________
+
+mutant = Mutant(name='feedback_operator_role_from_session', invariant='accept always records customer (R31)', file='contracts/f...rator else AuthorRole.customer,', cases=('feedback_ack__a_client_cannot_forge_provenance',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: feedback_operator_role_from_session is broken_runner (accept always records customer (R31)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['feedback_ack__a_client_cannot_forge_provenance'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_________________ test_mutant_is_killed[judge_settle_negative] _________________
+
+mutant = Mutant(name='judge_settle_negative', invariant='a judge cost is validated money (R11)', file='contracts/fakes/judge.py...ual = money.parse(actual)', cases=('judge_budget__settlement_amounts_are_validated_money',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: judge_settle_negative is broken_runner (a judge cost is validated money (R11)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['judge_budget__settlement_amounts_are_validated_money'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+___________ test_mutant_is_killed[a_v1_payload_is_silently_accepted] ___________
+
+mutant = Mutant(name='a_v1_payload_is_silently_accepted', invariant='schema_version is explicit; a v1 body is refused, never re...      if False:', cases=('split_contract__an_internal_v1_payload_is_refused_not_upgraded',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: a_v1_payload_is_silently_accepted is broken_runner (schema_version is explicit; a v1 body is refused, never reinterpreted): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['split_contract__an_internal_v1_payload_is_refused_not_upgraded'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_______________ test_mutant_is_killed[units_are_interchangeable] _______________
+
+mutant = Mutant(name='units_are_interchangeable', invariant='arithmetic across two denominations is refused by construction', f...ount) else None', cases=('credit_units__mixed_unit_arithmetic_is_refused_by_construction',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: units_are_interchangeable is broken_runner (arithmetic across two denominations is refused by construction): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['credit_units__mixed_unit_arithmetic_is_refused_by_construction'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_________________ test_mutant_is_killed[raw_answers_any_unit] __________________
+
+mutant = Mutant(name='raw_answers_any_unit', invariant='raw(unit) refuses unless the caller names the unit it already expects',...      if False:', cases=('credit_units__mixed_unit_arithmetic_is_refused_by_construction',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: raw_answers_any_unit is broken_runner (raw(unit) refuses unless the caller names the unit it already expects): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['credit_units__mixed_unit_arithmetic_is_refused_by_construction'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+______________ test_mutant_is_killed[a_request_may_name_a_wallet] ______________
+
+mutant = Mutant(name='a_request_may_name_a_wallet', invariant='extra=forbid is what stops a payload naming a wallet, price or i...en=True, extra="ignore")', cases=('credit_identity__no_request_field_can_select_a_wallet',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: a_request_may_name_a_wallet is broken_runner (extra=forbid is what stops a payload naming a wallet, price or identity): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['credit_identity__no_request_field_can_select_a_wallet'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+__________ test_mutant_is_killed[the_grant_key_includes_the_campaign] __________
+
+mutant = Mutant(name='the_grant_key_includes_the_campaign', invariant='the grant key is the individual and the entitlement, not...gn_version)', cases=('credit_identity__campaign_and_membership_never_reset_the_grant_key',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: the_grant_key_includes_the_campaign is broken_runner (the grant key is the individual and the entitlement, nothing else): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['credit_identity__campaign_and_membership_never_reset_the_grant_key'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_______________ test_mutant_is_killed[the_grant_amount_changes] ________________
+
+mutant = Mutant(name='the_grant_amount_changes', invariant='the initial grant is exactly +10000.00000000 CREDIT', file='contrac...t("1000.00000000")', cases=('credit_grant__the_grant_is_exactly_ten_thousand_credit_once',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: the_grant_amount_changes is broken_runner (the initial grant is exactly +10000.00000000 CREDIT): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['credit_grant__the_grant_is_exactly_ten_thousand_credit_once'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_____________ test_mutant_is_killed[the_hold_rounds_like_a_charge] _____________
+
+mutant = Mutant(name='the_hold_rounds_like_a_charge', invariant='the maximum hold rounds up; equal roundings under-reserve', fi...._rates()))', cases=('credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: the_hold_rounds_like_a_charge is broken_runner (the maximum hold rounds up; equal roundings under-reserve): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_________________ test_mutant_is_killed[the_charge_rounds_up] __________________
+
+mutant = Mutant(name='the_charge_rounds_up', invariant='the final charge rounds half up once, never away from the customer', fi...._rates()))', cases=('credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: the_charge_rounds_up is broken_runner (the final charge rounds half up once, never away from the customer): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_______________ test_mutant_is_killed[settle_ignores_certainty] ________________
+
+mutant = Mutant(name='settle_ignores_certainty', invariant='only authoritative engine usage settles a debit', file='contracts/v...uthoritative:', new='    if False:', cases=('credit_rate__unknown_usage_is_never_settled',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: settle_ignores_certainty is broken_runner (only authoritative engine usage settles a debit): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['credit_rate__unknown_usage_is_never_settled'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_________________ test_mutant_is_killed[revocation_is_ignored] _________________
+
+mutant = Mutant(name='revocation_is_ignored', invariant='revocation blocks new access immediately, not at the next snapshot', f...            return False', cases=('lab_access__a_revoked_grant_blocks_access_immediately',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: revocation_is_ignored is broken_runner (revocation blocks new access immediately, not at the next snapshot): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['lab_access__a_revoked_grant_blocks_access_immediately'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+______________ test_mutant_is_killed[lc_reopen_loses_the_tickets] ______________
+
+mutant = Mutant(name='lc_reopen_loses_the_tickets', invariant='every upload step survives a new process (RV-02)', file='contrac...ock, self.ids, durable=None,', cases=('upload_restart__every_step_survives_a_new_process',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: lc_reopen_loses_the_tickets is broken_runner (every upload step survives a new process (RV-02)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['upload_restart__every_step_survives_a_new_process'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+___________ test_mutant_is_killed[lc_missing_marker_reads_as_empty] ____________
+
+mutant = Mutant(name='lc_missing_marker_reads_as_empty', invariant='no marker is not_ready, never an empty manifest (RV-05)', f...at=self.clock.now()))', cases=('admission_ready__a_job_with_no_marker_is_never_claimable',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: lc_missing_marker_reads_as_empty is broken_runner (no marker is not_ready, never an empty manifest (RV-05)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['admission_ready__a_job_with_no_marker_is_never_claimable'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+_____________ test_mutant_is_killed[lc_manifest_reference_ignored] _____________
+
+mutant = Mutant(name='lc_manifest_reference_ignored', invariant="a job's manifest reference protects its source (RV-03)", file=...w)', cases=('retention_durable__a_referenced_object_is_neither_a_candidate_nor_claimable',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: lc_manifest_reference_ignored is broken_runner (a job's manifest reference protects its source (RV-03)): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']. The cases ['retention_durable__a_referenced_object_is_neither_a_candidate_nor_claimable'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:82: AssertionError
+________ test_the_same_defect_is_a_kill_once_its_exception_is_declared _________
+
+    def test_the_same_defect_is_a_kill_once_its_exception_is_declared():
+        """The other half of the classification: an invariant whose honest kill *is* an
+        exception (`TraceCapture.add` never raises, R37) declares it, and then the **same
+        edit** is a kill rather than a runner error - the self-test above runs it
+        undeclared."""
+        undeclared = next(mutant for name, _expected, mutant in SELF_TESTS
+                          if name == "an_undeclared_exception_death_is_not_a_kill")
+        declared = next(m for m in ALL if m.name == "add_raises_on_a_non_byte_part")
+        assert declared.dies_by == ("TypeError",)
+        assert (declared.old, declared.new) == (undeclared.old, undeclared.new)
+>       assert mutation_list.run_mutant(declared).killed
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+E        +    where Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']") = <function run_mutant at 0x7ee7adf7f880>(Mutant(name='add_raises_on_a_non_byte_part', invariant='a malformed part is dropped, not raised', file='contracts/trac...    elif False:', cases=('trace_bounds__a_capture_belongs_to_its_own_request',), dies_by=('TypeError',), occurrences=1))
+E        +      where <function run_mutant at 0x7ee7adf7f880> = mutation_list.run_mutant
+
+tests/contracts/test_mutants.py:166: AssertionError
+__________ test_a_known_lethal_mutant_is_killed_for_the_right_reason ___________
+
+    def test_a_known_lethal_mutant_is_killed_for_the_right_reason():
+        """The positive control: the same machinery reports a real kill, and the failing
+        test id is the case the mutant names."""
+        mutant = next(m for m in ALL if m.name == "heartbeat_stores_the_callers_lease")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed and "1 failed" in result.detail
+E       assert (False)
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']").killed
+
+tests/contracts/test_mutants.py:216: AssertionError
+______________ test_a_list_whose_cases_fail_unmutated_is_refused _______________
+
+    def test_a_list_whose_cases_fail_unmutated_is_refused():
+        """(b) The pristine baseline: a named case that fails on the unmutated tree would
+        'kill' every mutant naming it, so the list is refused before any mutant runs - and
+        `run_mutant` consults it for every mutant that belongs to a loaded list."""
+        runner = _with_test_file("def test_fails_on_the_pristine_tree():\n    assert False\n")
+        refused = mutation_list.pristine(("test_fails_on_the_pristine_tree",), runner)
+        assert refused is not None and refused.outcome is mutation_list.Outcome.broken_runner
+        assert "pristine baseline" in refused.detail
+        assert "test_fails_on_the_pristine_tree" in refused.detail
+        assert mutation_list._siblings(ALL[0]) is mutation_list.MUTANTS
+>       assert mutation_list.pristine(tuple(sorted({c for m in ALL for c in m.cases})),
+                                      mutation_list.CONTRACTS) is None
+E       assert Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']") is None
+E        +  where Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_every_lab_lane_port_sits_in_one_band']") = <function pristine at 0x7ee7adf7f740>(('admission_ready__a_job_with_no_marker_is_never_claimable', 'admission_ready__a_refused_expectation_or_capability_adm...ission_ready__an_expired_upload_cannot_be_admitted', 'admission_ready__the_manifest_is_the_orgs_own_live_content', ...), Runner(name='contracts', targets=('tests/contracts/test_conformance.py', 'tests/contracts/test_fixtures.py', 'tests/co...e.py'), extra_args=(), package='infrx', timeout_s=300, require_every_case=False, targets_for=None, layout=None, env=()))
+E        +    where <function pristine at 0x7ee7adf7f740> = mutation_list.pristine
+E        +    and   ('admission_ready__a_job_with_no_marker_is_never_claimable', 'admission_ready__a_refused_expectation_or_capability_adm...ission_ready__an_expired_upload_cannot_be_admitted', 'admission_ready__the_manifest_is_the_orgs_own_live_content', ...) = tuple(['admission_ready__a_job_with_no_marker_is_never_claimable', 'admission_ready__a_refused_expectation_or_capability_adm...ission_ready__an_expired_upload_cannot_be_admitted', 'admission_ready__the_manifest_is_the_orgs_own_live_content', ...])
+E        +      where ['admission_ready__a_job_with_no_marker_is_never_claimable', 'admission_ready__a_refused_expectation_or_capability_adm...ission_ready__an_expired_upload_cannot_be_admitted', 'admission_ready__the_manifest_is_the_orgs_own_live_content', ...] = sorted({'admission_ready__a_job_with_no_marker_is_never_claimable', 'admission_ready__a_refused_expectation_or_capability_adm...ission_ready__an_expired_upload_cannot_be_admitted', 'admission_ready__the_manifest_is_the_orgs_own_live_content', ...})
+E        +    and   Runner(name='contracts', targets=('tests/contracts/test_conformance.py', 'tests/contracts/test_fixtures.py', 'tests/co...e.py'), extra_args=(), package='infrx', timeout_s=300, require_every_case=False, targets_for=None, layout=None, env=()) = mutation_list.CONTRACTS
+
+tests/contracts/test_mutants.py:294: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+.venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-deploy-prep/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/contracts/test_config_and_imports.py::test_each_lab_gate_owns_a_compose_block_below_the_band, argvalues type: enumerate
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/g/lab_evaluations/test_lab_evaluations_pg.py:96: task-local PostgreSQL unavailable: PostgreSQL only on the b3 task-local key (INFRX_D_TASK=b3)
+SKIPPED [1] tests/g/lab_pipelines/test_lab_pipelines_pg.py:81: task-local PostgreSQL unavailable: PostgreSQL only on the p1 task-local key (INFRX_D_TASK=p1)
+SKIPPED [1] tests/g/lab_pipelines/test_lab_teachers_pg.py:94: task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/g/lab_releases/test_lab_releases_pg.py:78: task-local PostgreSQL unavailable: PostgreSQL only on the r2 task-local key (INFRX_D_TASK=r2)
+SKIPPED [1] tests/g/lab_traces/test_lab_traces_stack.py:70: no ClickHouse: start infrx-t2i-clickhouse on the tasklocal t2i block and export INFRX_LAB_API_STACK=1
+SKIPPED [1] tests/w/test_prep_worker_mutants.py:77: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_w5_mutants.py:79: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:73: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:87: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:110: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_main_mutants.py:77: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_worker_traces_pg.py:88: WR-T-4 proof needs the t2f key and its stack (INFRX_D_TASK=t2f INFRX_T2F_STACK=1)
+36 failed, 2784 passed, 12 skipped, 3 warnings in 1430.69s (0:23:50)

@@ -1,0 +1,51 @@
+{
+ "task": "I2L",
+ "slice": "LAB-DEPLOY-PREP (LW6, lab-deploy-prep): make lab-local (E4-ON, every switch ON) -> the Lab internal-testing rollout runbook -> infra/lab/rollout box steps + the R151 gate",
+ "activity": "review",
+ "head": "24512389",
+ "worktree": ".claude/worktrees/codex-w5-lab-deploy-prep",
+ "branch": "codex/w5-lab-deploy-prep",
+ "owned_paths": [
+  "tests/integration/lab-local.sh",
+  "tests/integration/lab_local/",
+  "Makefile (lab-local + .PHONY)",
+  "apps/infrx-api/infrx/contracts/tasklocal.py (the one key lab-on)",
+  "infra/lab/rollout/",
+  "apps/infrx-api/tests/i/lab/",
+  "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+  "research/plan/consumer-v1/README.md (index line)",
+  "research/plan/evidence/e/E4ON-*",
+  "research/plan/evidence/i/LAB-DEPLOY-PREP-*"
+ ],
+ "commands": [
+  {"cmd": "GATE_ARGS=--reuse make lab-local", "exit": 1, "summary": "E4-ON FAIL: e4-on 2829 = 2784 passed / 36 failed (35 = WR-LDP-5 tasklocal pins + their mutant cascades, 1 = LDP-F4 R198 seam) / 9 skipped (other keys); scenarios o01 o02 o04 o06 PASS, o03 o07 NOT RUN (named lanes), o05 FAIL (LDP-F1 infrx_runtime has no L2 RPC grant; LDP-F3 datasets 500); journey:datasets PASS; 4 key-pinned journeys NOT RUN (WR-LDP-1)"},
+  {"cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_local/test_mutants.py (layer 1 + stack on the kept e3l stack)", "exit": 0, "summary": "19 layer-1 + 9 stack mutants killed, 0 survivors; KNOWN_FAIL o05 all-switches"},
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/i/lab", "exit": 0, "summary": "34 passed"},
+  {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab/test_mutants.py", "exit": 0, "summary": "60 passed: 56 mutants killed (24 I2L + 32 rollout-step), 0 survivors"},
+  {"cmd": "pytest tests/integration/lab_{operate,evaluate,observe,rollout,improve,local} tests/integration/test_lab_package_isolation.py", "exit": 0, "summary": "125 passed, 6 skipped"},
+  {"cmd": "ruff check (new/changed Python)", "exit": 0, "summary": "clean"},
+  {"cmd": "make lab-lint / lab-typecheck / lab-build / lab-test", "exit": 0, "summary": "all green; lab-test 239 pass 9 skip 0 fail"}
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "all three steps done, 0 survivors; remaining = one verify round plus the post-WR-LDP-5 reruns of make api-test (~45-90 min) and make lab-local (~26 min). The operator's hosted window (runbook) is P-08-gated: ~3-5 h once P-08 and WR-LDP-2/4/5 land (I2B window analogue).",
+  "at": "2026-09-29T09:50Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LDP-5 contracts pins of the new key: frozen_contracts.json tasklocal sha 0624c8eb3b25dbdd163cf3160f7b3d3b5ce6f503c8cee42fa4618e6c347cf297; test_config_and_imports.py LAB_LANE_PORTS += lab-on {postgres 57537, valkey 57538, valkey-q 57539}",
+  "WR-LDP-1 apps/lab/tests/{r,p,b,v/list}/backend.py accept INFRX_D_TASK=lab-on",
+  "WR-LDP-2 mount lab_datasets/lab_evaluations/lab_pipelines/lab_releases(/lab_checkpoints) in infrx.lab.control.app so the box serves every Lab family from the control unit",
+  "WR-LDP-3 declare the missing worker names in infra/lab/app/lab.json (LAB_S3_PREFIX, LAB_EVAL_ENDPOINT_URL/KEY, *_CONCURRENCY)",
+  "WR-LDP-4 the reviewed hosted-migrate.sh patch for the Lab window (EXPECTED_PENDING 0027-0051, 0026/0051 end checks, W7 maintenance precondition)",
+  "WR-LDP-6 (optional) a dedicated harness.NAMESPACES block for lab-on"
+ ],
+ "evidence": [
+  "research/plan/evidence/i/LAB-DEPLOY-PREP-24512389.md",
+  "research/plan/evidence/e/E4ON-raw-24512389/",
+  "research/plan/consumer-v1/08-lab-internal-testing-rollout.md"
+ ]
+}
