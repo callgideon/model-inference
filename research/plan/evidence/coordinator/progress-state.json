@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 280,
- "updated": "2026-09-29T09:13:14Z",
+ "revision": 281,
+ "updated": "2026-09-29T09:50:31Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8180,6 +8180,79 @@
     "confidence": "high",
     "basis": "single-lane batch, layer-1 only",
     "at": "2026-09-29T09:07:35Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-KNOWN-GOOD-REPROOF",
+   "task": "I8",
+   "slice": "(wave5 LW6 lane known-good-reproof, Opus) R151/R201 condition 1: bda1586 + 4226315 re-proven through 0051; workflow wf_41213cbb-275; base 72dc76ad",
+   "agent": "opus",
+   "branch": "codex/w5-known-good-reproof",
+   "worktree": ".claude/worktrees/codex-w5-known-good-reproof",
+   "base": "72dc76ad",
+   "head": "21b3f93d",
+   "isolation": {
+    "ports": "e3b2d / d10 (the driver's stand-ins)",
+    "prefix": "infrx-d10rv-",
+    "db": "d10"
+   },
+   "activity": "integration",
+   "started": "2026-09-29T09:50:31Z",
+   "updated": "2026-09-29T09:50:31Z",
+   "blocker": null,
+   "next_action": "merge batch #40 (Opus; WR-KGR-1/2, R224)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT; merge running"
+   },
+   "evidence": [
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-fca3ea3.md"
+   ],
+   "commands": [],
+   "owned_paths": [
+    "infra/rollout/known-good.json",
+    "infra/runbooks/schema_proof.py",
+    "tests/i/test_known_good_proof.py"
+   ],
+   "wiring_requests": [
+    "WR-KGR-1",
+    "WR-KGR-2",
+    "WR-KGR-3"
+   ]
+  },
+  {
+   "id": "W5-MERGE-40",
+   "task": null,
+   "slice": "merge batch #40 (Opus): known-good-reproof 21b3f93d (+WR-KGR-1/2, the SHAPE-keys case, R224)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-40",
+   "worktree": ".claude/worktrees/codex-w5-merge-40",
+   "base": "dc8851b7",
+   "head": null,
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-29T09:50:31Z",
+   "updated": "2026-09-29T09:50:31Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T09:50:31Z"
    },
    "evidence": [],
    "commands": [],
