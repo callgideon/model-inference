@@ -26,7 +26,8 @@ never runs in a consumer process.
                (`lab://<provider>/<path>`) and L3's dev deployer over 0044's reads (WR-B3-3).
 * `judge`      JUDGE_PROVIDER_URL, CLICKHOUSE_URL, S3_TRACE_BUCKET (+ JUDGE_MODE, default
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
-               and T3's retention; its pass moves silent `submitting` runs to `ambiguous`;
+               and T3's retention; its passes move silent `submitting` runs to `ambiguous`
+               and reconcile/collect every provider's ambiguous/submitted runs (WR-LSQ-C2A);
                `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
                every provider with a lineage, every page (WR-N3-2's pull half).
@@ -85,6 +86,7 @@ LAB_PREFIX = "infrx/"
 # ponytail: fixed cadences, as the consumer worker's Lab pumps.
 JUDGE_PASS_S = 60.0
 JUDGE_SILENT_S = 300                  # a `submitting` run silent this long is `ambiguous`
+JUDGE_BATCH = 100                     # runs per provider, state and pass (oldest first)
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
 TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
 ROLLOUT_PASS_S = 30.0                 # R2's controller pass over the live releases
@@ -309,10 +311,51 @@ def _judge(mode, env, connect, objects, worker_id, **_):
     wiring = JudgeWiring(access=LabAccess(PgAccessStore(connect)), ledger=ledger,
                          provider=provider, retention=retention, rates=APPROVED_RATES,
                          settings=limits)
-    # ponytail: collect/reconcile need D6J's listing of submitted/ambiguous runs (lab-sql,
-    # WR-LSQ-C2A); until then a run is collected by the door that submitted it.
     return {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
-                                         "judge sweep")}, wiring
+                                         "judge sweep"),
+            "judge_collect": lambda: every(JUDGE_PASS_S, lambda: judge_pass(
+                wiring, partial(provider_ids, connect)), "judge collect")}, wiring
+
+
+async def provider_ids(connect) -> list[str]:
+    """Every provider org, on the role's login.
+    ponytail: one select until lab-sql lists the providers with work (WR-C5-PROVIDERS)."""
+    conn = await connect()
+    try:
+        cursor = await conn.execute("select provider_org_id::text from infrx.provider_orgs "
+                                    "order by 1")
+        return [row[0] for row in await cursor.fetchall()]
+    finally:
+        await conn.close()
+
+
+async def judge_pass(wiring, providers) -> dict[str, int]:
+    """WR-LSQ-C2A: for every provider, D6J's `ambiguous` runs (`runs_in`, 0049) are looked up
+    by their submit key - the provider's record moves the run to `submitted`; none leaves it
+    as it is (R184/R192: never resubmitted or released by the platform) - then every
+    `submitted` run is J2's `collect`. A teacher run (consented by its dataset ref) is the
+    annotation role's. One run's failure is counted; the next still runs."""
+    from ...judge import submit
+    done = {"reconciled": 0, "waiting": 0, "collected": 0, "failed": 0}
+    ledger = wiring.ledger
+    for provider in await providers():
+        for state in ("ambiguous", "submitted"):
+            for run in await ledger.runs_in((state,), JUDGE_BATCH, provider_org_id=provider):
+                if run.consent.grant_id.startswith("lab:"):
+                    continue
+                try:
+                    if state == "submitted":
+                        await submit.collect(run.run_id, wiring=wiring)
+                        done["collected"] += 1
+                    elif (external := await wiring.provider.lookup(run.submit_key)) is None:
+                        done["waiting"] += 1
+                    else:
+                        await ledger.record_submission(run.run_id, external)
+                        done["reconciled"] += 1
+                except Exception:             # noqa: BLE001 - the next run still runs
+                    log.exception("judge pass failed for one run")
+                    done["failed"] += 1
+    return done
 
 
 class JudgeReport:

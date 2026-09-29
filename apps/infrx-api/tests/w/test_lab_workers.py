@@ -343,7 +343,7 @@ def test_lab_workers__the_judge_is_j2_on_its_ledger_dry_run_by_default(no_trace_
     assert type(wiring.provider) is HttpJudgeProvider and wiring.rates is APPROVED_RATES
     assert type(wiring.retention) is Retention
     assert no_trace_stack["limits"].clickhouse_url == ENV["judge"]["CLICKHOUSE_URL"]
-    assert set(worker.tasks) == {"judge_sweep"}
+    assert set(worker.tasks) == {"judge_sweep", "judge_collect"}
     with pytest.raises(RuntimeMisconfigured, match="JUDGE_LIVE_BUDGET_USD"):
         composed("judge", {**ENV["judge"], "JUDGE_MODE": "live"})
     live = composed("judge", {**ENV["judge"], "JUDGE_MODE": "live",
@@ -368,6 +368,72 @@ def test_lab_workers__the_judge_pass_sweeps_silent_submissions(monkeypatch, no_t
     interval, step = steps["judge sweep"]
     assert asyncio.run(step()) == 1
     assert swept == [lab_workers.JUDGE_SILENT_S] and interval == lab_workers.JUDGE_PASS_S
+
+
+def judge_run(n, state, consent="grant-1"):
+    from infrx.state.lab_consent import Consent, JudgeRun, ProviderUsd
+    return JudgeRun(run_id=f"r{n}", provider_org_id="p", payer_ref="payer",
+                    consent=Consent(consent, 1), sample_ids=(), media_ids=frozenset(),
+                    price_version="v", reserved=ProviderUsd("1"), state=state,
+                    submit_key=f"k{n}")
+
+
+def test_lab_workers__the_judge_pass_reconciles_and_collects_every_providers_runs(
+        monkeypatch, no_trace_stack):
+    """WR-LSQ-C2A: every JUDGE_PASS_S, for every provider org, D6J's `ambiguous` runs
+    (`runs_in`, 0049) are looked up by their submit key: the provider's record moves the run
+    to `submitted`, none leaves it exactly as it is (R184/R192: never resubmitted or released
+    by the platform); then every `submitted` run is J2's `collect` on the role's wiring. A
+    teacher run (consented by its dataset ref) is the annotation role's. One run's failure is
+    counted and the next still runs; the providers are read on the role's own login."""
+    from infrx.judge import submit
+    from infrx.judge.submit import HttpJudgeProvider
+    from infrx.state.lab_consent import PgJudgeLedger
+    moved, collected, asked = [], [], []
+    runs = {("p1", "ambiguous"): [judge_run(1, "ambiguous"), judge_run(2, "ambiguous"),
+                                  judge_run(3, "ambiguous", "lab:dataset:p1:x")],
+            ("p1", "submitted"): [judge_run(4, "submitted"), judge_run(5, "submitted"),
+                                  judge_run(6, "submitted", "lab:dataset:p1:x")],
+            ("p2", "submitted"): [judge_run(7, "submitted")]}
+
+    async def runs_in(self, states, limit, *, provider_org_id):
+        asked.append((provider_org_id, tuple(states), limit))
+        return runs.get((provider_org_id, *states), [])
+
+    async def record_submission(self, run_id, external_id):
+        moved.append((run_id, external_id))
+
+    async def lookup(self, submit_key):
+        return {"k1": "ext-1"}.get(submit_key)
+
+    async def collect(run_id, *, wiring):
+        collected.append((run_id, wiring))
+        if run_id == "r4":
+            raise errors.DependencyUnavailable("the provider did not answer")
+
+    async def providers(connect):
+        providers.connect = connect
+        return ["p1", "p2"]
+    monkeypatch.setattr(PgJudgeLedger, "runs_in", runs_in)
+    monkeypatch.setattr(PgJudgeLedger, "record_submission", record_submission)
+    monkeypatch.setattr(HttpJudgeProvider, "lookup", lookup)
+    monkeypatch.setattr(submit, "collect", collect)
+    monkeypatch.setattr(lab_workers, "provider_ids", providers)
+    steps = captured_steps(monkeypatch)
+    worker = composed("judge")
+    worker.tasks["judge_collect"]().close()
+    interval, step = steps["judge collect"]
+    assert interval == lab_workers.JUDGE_PASS_S
+    report = asyncio.run(step())
+    assert report == {"reconciled": 1, "waiting": 1, "collected": 2, "failed": 1}
+    assert moved == [("r1", "ext-1")]
+    assert [r for r, _ in collected] == ["r4", "r5", "r7"]
+    assert all(w is worker.wiring for _, w in collected)
+    assert asked == [("p1", ("ambiguous",), lab_workers.JUDGE_BATCH),
+                     ("p1", ("submitted",), lab_workers.JUDGE_BATCH),
+                     ("p2", ("ambiguous",), lab_workers.JUDGE_BATCH),
+                     ("p2", ("submitted",), lab_workers.JUDGE_BATCH)]
+    assert providers.connect is worker.wiring.ledger._connect
 
 
 def captured_steps(monkeypatch) -> dict:

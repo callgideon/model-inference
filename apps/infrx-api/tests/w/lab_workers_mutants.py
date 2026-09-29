@@ -29,6 +29,7 @@ CKPT_SOURCES = C + "checkpoints_compose_l3s_dev_deployer_and_the_lab_registry"
 CKPT = C + "a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_it_back"
 JUDGE = C + "the_judge_is_j2_on_its_ledger_dry_run_by_default"
 SWEEP = C + "the_judge_pass_sweeps_silent_submissions"
+JPASS = C + "the_judge_pass_reconciles_and_collects_every_providers_runs"
 DATASETS = C + "datasets_reconcile_every_providers_lineage_page_by_page"
 ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
@@ -127,6 +128,35 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_checkpoints_cadence", "the checkpoints relay pumps at the Lab pump cadence",
        "every(worker_main.LAB_PUMP_S, relay.pump,", "every(LINEAGE_PASS_S, relay.pump,", CKPT),
     # --- judge ------------------------------------------------------------------------------------
+    # WR-LSQ-C2A (composition-5): the collect/reconcile pass
+    _m("lw_judge_pass_unscheduled", "the judge role runs its collect/reconcile pass",
+       '"judge sweep"),\n            "judge_collect"', '"judge sweep"),\n            "judge_collect_off"',
+       JUDGE),
+    _m("lw_judge_pass_cadence", "the collect pass runs every JUDGE_PASS_S",
+       '"judge_collect": lambda: every(JUDGE_PASS_S,', '"judge_collect": lambda: every(LINEAGE_PASS_S,',
+       JPASS),
+    _m("lw_judge_pass_providers_off_the_login", "the providers are read on the role's login",
+       "wiring, partial(provider_ids, connect)),", 'wiring, partial(provider_ids, connector(""))),',
+       JPASS),
+    _m("lw_judge_pass_ambiguous_released", "an ambiguous run the provider lacks is never released",
+       "                    elif (external := await wiring.provider.lookup(run.submit_key)) is None:\n"
+       "                        done[\"waiting\"] += 1\n",
+       "                    elif (external := await wiring.provider.lookup(run.submit_key)) is None:\n"
+       "                        await ledger.record_submission(run.run_id, external)\n", JPASS),
+    _m("lw_judge_pass_teachers_collected", "a teacher run is the annotation role's",
+       '                if run.consent.grant_id.startswith("lab:"):\n                    continue\n',
+       "", JPASS),
+    _m("lw_judge_pass_submitted_only", "ambiguous runs are reconciled before collection",
+       '        for state in ("ambiguous", "submitted"):', '        for state in ("submitted",):', JPASS),
+    _m("lw_judge_pass_one_failure_stops_all", "one run's failure never stops the pass",
+       '                    log.exception("judge pass failed for one run")\n'
+       '                    done["failed"] += 1\n', "                    raise\n", JPASS),
+    _m("lw_judge_pass_unbounded", "each listing is bounded to JUDGE_BATCH",
+       "runs_in((state,), JUDGE_BATCH, provider_org_id=provider)",
+       "runs_in((state,), 10_000, provider_org_id=provider)", JPASS),
+    _m("lw_judge_pass_other_wiring", "a run is collected on the role's own wiring",
+       "                        await submit.collect(run.run_id, wiring=wiring)",
+       "                        await submit.collect(run.run_id, wiring=None)", JPASS),
     _m("lw_judge_live_by_default", "the judge is dry_run unless JUDGE_MODE=live",
        "        limits = validate_pilot(pilot_from_env(env))",
        '        limits = validate_pilot(pilot_from_env({"JUDGE_MODE": "live", '
@@ -286,7 +316,10 @@ MUTANTS: tuple[Mutant, ...] = (
        '                log.exception("teacher collect failed for one run")\n'
        '                done["failed"] += 1\n                break\n', COLLECT),
     _m("lw_collect_uncounted", "each collected run is counted",
-       '                done["collected"] += 1\n', "                pass\n", COLLECT),
+       '                await p2.collect(batch, run_id, wiring=wiring)\n'
+       '                done["collected"] += 1\n',
+       '                await p2.collect(batch, run_id, wiring=wiring)\n'
+       "                pass\n", COLLECT),
     # --- WR-P2-D8-C: the teacher wiring ------------------------------------------------------
     _m("lw_teacher_plain_judge_ledger", "P2's ledger is D8's PgTeacherLedger (record_failures)",
        "ledger=PgTeacherLedger(connect),", "ledger=PgTeacherLedger.__mro__[1](connect),",
