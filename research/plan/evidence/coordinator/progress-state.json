@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 272,
- "updated": "2026-09-29T06:45:27Z",
+ "revision": 273,
+ "updated": "2026-09-29T07:05:47Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7767,32 +7767,39 @@
    "branch": "codex/w5-lab-operate-2",
    "worktree": ".claude/worktrees/codex-w5-lab-operate-2",
    "base": "b816f974",
-   "head": null,
+   "head": "5bf07c1f",
    "isolation": {
     "ports": "e3l 57000-57099; l3 57502; l4 57503",
     "prefix": "infrx-e3l-",
     "db": "e3l"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T04:31:32Z",
-   "updated": "2026-09-29T04:31:32Z",
+   "updated": "2026-09-29T07:05:47Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge → E3L accepted",
+   "next_action": "merge batch #37 (Opus; R220/R221) → E3L implemented; J01/J02 UI journey after WR-E3L-J (lab-app-control)",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "four binds + one gate run; e3l-bind took ~3.5 h with four attempts under load"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT 5bf07c1f, gate PASS; merge running",
+    "at": "2026-09-29T07:05:47Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E3L-5bec250.md",
+    "research/plan/evidence/e/E3L-raw-5bec250c/"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_operate/**",
     "apps/lab/tests/l/ui/**",
     "research/plan/evidence/e/E3L-*"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-E3L-J",
+    "WR-E3L-2"
+   ]
   },
   {
    "id": "W5-MERGE-35",
@@ -7889,6 +7896,72 @@
    "owned_paths": [
     "tests/integration/lab_rollout/**",
     "research/plan/evidence/e/E8L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-37",
+   "task": null,
+   "slice": "merge batch #37 (Opus): lab-operate-2 5bf07c1f (LAB-OPERATE-LOCAL PASS; +R220/R221)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-37",
+   "worktree": ".claude/worktrees/codex-w5-merge-37",
+   "base": "adb84d11",
+   "head": null,
+   "isolation": {
+    "ports": "l4 57503",
+    "prefix": "infrx-l4-",
+    "db": "l4"
+   },
+   "activity": "running",
+   "started": "2026-09-29T07:05:47Z",
+   "updated": "2026-09-29T07:05:47Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R217–R219 before R220 at integration) → flip E3L",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch, layer-1 only",
+    "at": "2026-09-29T07:05:47Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-APP-CONTROL",
+   "task": "L4",
+   "slice": "(wave5 LW3 lane lab-app-control, Opus) WR-E3L-J: the Lab App's control HTTP adapter (controlPort over /lab/v1/control), FakeControl follows L3 (E3L-F3), J01/J02 re-cut and run on the real L3 on l4; base adb84d11",
+   "agent": "opus",
+   "branch": "codex/w5-lab-app-control",
+   "worktree": ".claude/worktrees/codex-w5-lab-app-control",
+   "base": "adb84d11",
+   "head": null,
+   "isolation": {
+    "ports": "l4 57503; l3 57502",
+    "prefix": "infrx-l4-",
+    "db": "l4"
+   },
+   "activity": "running",
+   "started": "2026-09-29T07:05:47Z",
+   "updated": "2026-09-29T07:05:47Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "one HTTP port in the rollouts/http.ts style + a journey re-cut + one real stack"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/lib/services/control/**",
+    "apps/lab/tests/l/**"
    ],
    "wiring_requests": []
   }
