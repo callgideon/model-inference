@@ -1,0 +1,4 @@
+=========================== short test summary info ============================
+FAILED tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_k10s_composed_ui_journey_is_bound_and_no_longer_a_sub_cell
+FAILED tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_r222_accepts_only_a_not_run_out_of_local_scope
+2 failed, 14 passed in 0.15s

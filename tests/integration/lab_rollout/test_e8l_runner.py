@@ -180,21 +180,14 @@ def test_e8l_a_sub_cell_is_not_run_naming_its_lanes_and_its_parents_rerun(monkey
     assert cell["reproduce"] == f"{runner.PY} {runner.RUNNER} --out <dir> --only k09"
 
 
-def test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun():
-    """WR-LR5-1 (lab-rollout-6): the page's journey runs over the gateway's own composition
-    (records, 0043's proposals, D9; `rollout launch|decide`), except R2's hold/expand verdict of
-    a release D9 holds no decision for (no composed read: WR-LR6-VERDICT) and an expansion's
-    approval (`rollout decide` refuses it: WR-LIVE-DECIDE). Until both land, the journey is a
-    NOT RUN sub-cell naming them in verdict.json, never prose-only."""
+def test_e8l_k10s_composed_ui_journey_is_bound_and_no_longer_a_sub_cell():
+    """WR-LR6-VERDICT + WR-LIVE-DECIDE (lab-rollout-7): the page's journey reads R2's verdict
+    from the composed records (read time, over D9's Live and the B2 report) and an expansion is
+    approved by `rollout decide` itself, so no stand-in waits on a product WR: k10's UI half is
+    k10's own case and no scenario has a NOT RUN sub-cell beside it."""
     result = runner.classify(junit(*everything("k10")))
-    assert result["k10"]["status"] == "PASS", "the sub-cell never lowers its parent"
-    cells = {c["id"]: c for c in runner.sub_cells(result)}
-    assert set(cells) == {"k10-ui-composed"}
-    cell = cells["k10-ui-composed"]
-    assert (cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
-        == ("k10", "PASS", "NOT RUN", "NOT RUN[WR-LIVE-DECIDE,WR-LR6-VERDICT]")
-    assert cell["reproduce"] == f"{runner.PY} {runner.RUNNER} --out <dir> --only k10"
-    assert "WR-C6-LIVE" not in cell["lanes"], "0054's Live landed at merge #52"
+    assert result["k10"]["status"] == "PASS"
+    assert runner.sub_cells(result) == [] and runner.SUB_CELLS == {}
 
 
 def test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute(tmp_path, monkeypatch):
@@ -209,13 +202,12 @@ def test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute(tmp_path, monkeypat
 
 def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     """R222/R234/R235: the gate is accepted locally with no FAIL and every NOT RUN (sub-cells
-    included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), k10's composed
-    UI journey on a product WR - by its own NOT RUN reason. A NOT RUN on in-scope work
-    (k10, composed since merge #50), a FAIL, or a scenario NOT RUN for another reason
-    (deselected, never run) stays open."""
-    assert runner.OUT_OF_SCOPE == {"P-08": "GPU (P-08 staging target)",
-                                   "WR-LIVE-DECIDE": "product WR: WR-LIVE-DECIDE",
-                                   "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT"}
+    included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), the one lane
+    left out of scope: the product WRs k10's journey waited on landed (WR-LIVE-DECIDE,
+    WR-LR6-VERDICT) - by its own NOT RUN reason. A NOT RUN on in-scope work (k10, composed
+    since merge #50), a sub-cell on a lane not ruled out of scope, a FAIL, or a scenario NOT
+    RUN for another reason (deselected, never run) stays open."""
+    assert runner.OUT_OF_SCOPE == {"P-08": "GPU (P-08 staging target)"}
     k08 = "NOT RUN[P-08] no allocated GPU; rerun after the merge: x --only k08"
     others = [c for sid in runner.SCENARIOS if sid != "k08" for c in everything(sid)]
     accepted = runner.classify(junit(*others, *everything("k08", "skipped", k08)))
@@ -224,10 +216,12 @@ def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     with monkeypatch.context() as patch:            # a lane not ruled out of scope stays open
         patch.delitem(runner.OUT_OF_SCOPE, "P-08")
         assert runner.r222(accepted) == {"accepted": False, "open": {"k08": "NOT RUN"}}
-    with monkeypatch.context() as patch:            # the sub-cell is judged too
-        patch.delitem(runner.OUT_OF_SCOPE, "WR-LR6-VERDICT")
-        assert runner.r222(accepted) == {"accepted": False, "open": {
-            "k10-ui-composed": "NOT RUN"}}
+    with monkeypatch.context() as patch:            # a sub-cell is judged too
+        patch.setattr(runner, "SUB_CELLS", {"k10-fixture": {
+            "parent": "k10", "lanes": ["WR-LR6-VERDICT"], "title": "t", "note": "n"}})
+        assert runner.r222(accepted) == {"accepted": False, "open": {"k10-fixture": "NOT RUN"}}
+        patch.setitem(runner.SUB_CELLS["k10-fixture"], "lanes", ["P-08"])
+        assert runner.r222(accepted) == {"accepted": True, "open": {}}
     failed = runner.classify(junit(*others, *everything("k08", "failure", k08)))
     assert runner.r222(failed) == {"accepted": False, "open": {"k08": "FAIL"}}, \
         "R234: an in-scope FAIL is never excused, whatever its message says"

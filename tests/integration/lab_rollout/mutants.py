@@ -78,7 +78,7 @@ NAMESPACE = "test_e8l_the_namespace_is_the_reserved_block"
 RERUN = "test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 SUB_CELL = "test_e8l_a_sub_cell_is_not_run_naming_its_lanes_and_its_parents_rerun"
 K09_BOUND = "test_e8l_k09s_breach_half_is_bound_and_no_longer_a_sub_cell"
-K10_UI = "test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun"
+K10_UI = "test_e8l_k10s_composed_ui_journey_is_bound_and_no_longer_a_sub_cell"
 R222 = "test_e8l_r222_accepts_only_a_not_run_out_of_local_scope"
 PLAN_PATH = "test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute"
 UNBOUND = tuple(re.findall(r"^def (test_k\d\d_\w+)\(", (REPO / P).read_text(), re.M))
@@ -133,16 +133,14 @@ MUTANTS: tuple[Mutant, ...] = (
        '"reason": f"NOT RUN[{\',\'.join(spec[\'lanes\'])}]",', '"reason": "NOT RUN",', SUB_CELL),
     _m("k09_breach_still_a_sub_cell", "k09's breach half is bound over 0054's Live "
        "(WR-LIVE-K09): no NOT RUN sub-cell beside it", R,
-       'SUB_CELLS = {\n    "k10-ui-composed": {',
-       'SUB_CELLS = {\n    "k09-breach": {"parent": "k09", "lanes": ["WR-C6-LIVE"], "title": "",'
-       ' "note": ""},\n    "k10-ui-composed": {', K09_BOUND),
-    _m("k10_ui_sub_cell_without_its_lane", "k10's UI journey sub-cell names the product WRs "
-       "its stand-ins wait on", R,
-       '"parent": "k10", "lanes": ["WR-LIVE-DECIDE", "WR-LR6-VERDICT"],',
-       '"parent": "k10", "lanes": ["WR-LIVE-DECIDE"],', K10_UI),
-    _m("k10_ui_sub_cell_dropped", "k10's UI journey over stand-ins is recorded, never prose-only",
-       R, '    "k10-ui-composed": {\n        "parent": "k10",',
-       '    "k09-breach-copy": {\n        "parent": "k09",', K10_UI),
+       "SUB_CELLS: dict[str, dict] = {}",
+       'SUB_CELLS: dict[str, dict] = {"k09-breach": {"parent": "k09", "lanes": ["WR-C6-LIVE"], '
+       '"title": "", "note": ""}}', K09_BOUND),
+    _m("k10_ui_still_a_sub_cell", "k10's UI journey is bound over the composed verdict and "
+       "`rollout decide` (WR-LR6-VERDICT, WR-LIVE-DECIDE): no NOT RUN sub-cell beside it", R,
+       "SUB_CELLS: dict[str, dict] = {}",
+       'SUB_CELLS: dict[str, dict] = {"k10-ui-composed": {"parent": "k10", "lanes": '
+       '["WR-LR6-VERDICT"], "title": "", "note": ""}}', K10_UI),
     # R222/R235: the runner's machine check (lab_evaluate's shape, with the sub-cells)
     _m("r222_in_scope_lane_excused", "a NOT RUN on a lane not ruled out of scope stays open", R,
        'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
@@ -164,11 +162,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "                  if not set(cell[\"lanes\"]) <= set(OUT_OF_SCOPE)})",
        "                  if False})", R222),
     _m("r222_gpu_in_scope", "k08's GPU target is ruled out of local scope (R222)", R,
-       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)",\n', "OUT_OF_SCOPE = {\n", R222),
-    _m("r222_landed_wr_still_excused", "a landed product WR (WR-C6-LIVE, merge #52) excuses "
-       "nothing", R, '                "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT"}',
-       '                "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT",\n'
-       '                "WR-C6-LIVE": "product WR: WR-C6-LIVE"}', R222),
+       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)"}', "OUT_OF_SCOPE = {}", R222),
+    _m("r222_landed_wr_still_excused", "a landed product WR (WR-LIVE-DECIDE, WR-LR6-VERDICT: "
+       "lab-rollout-7) excuses nothing", R,
+       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)"}',
+       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)",\n'
+       '                "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT"}', R222),
     _m("k10_plan_path_relative", "the plan path handed to `rollout launch` (cwd=API) is "
        "absolute (WR-LR5-RV2)", W, '    return workdir.resolve() / "plan.json"',
        '    return workdir / "plan.json"', PLAN_PATH),

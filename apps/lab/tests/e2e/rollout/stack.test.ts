@@ -1,9 +1,10 @@
 // LAB-E2E rollout = E8L k10's UI half: the Lab's releases page, served by the built Lab app and signed in
 // through its own form, over lab-api's /lab/v1/releases as the gateway composes it (LAB_RELEASES: D9's
-// real store, 0043's real proposal store, 0053's decisions; releases launched and decided by `rollout
-// launch|decide`'s own code - backend.py, key l4): the verdict shown, a proposal at the fence the page
-// showed through the page's own server action, the operator's approval, a guardrail and an emergency
-// rollback, and the unsafe variants. Skipped unless LAB_E2E_REAL=1 (Docker, l4):
+// real store, 0043's real proposal store, 0053's decisions, R2's verdict at read time over D9's Live and
+// the B2 report - WR-LR6-VERDICT; releases launched and decided by `rollout launch|decide`'s own code,
+// an expansion too - backend.py, key l4): the verdict shown, a proposal at the fence the page showed
+// through the page's own server action, the operator's approval, a guardrail and an emergency rollback,
+// and the unsafe variants. Skipped unless LAB_E2E_REAL=1 (Docker, l4):
 //   cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -25,6 +26,11 @@ test("E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollb
   const admin = await as("admin");
   const launch = async (tag: number) => (await door(s.api, "launch", { tag })).policy_ref as string;
   const step = async (ref: string, body: object) => (await door(s.api, "step", { policy_ref: ref, ...body })).action;
+  // healthy traffic past the plan's horizon and B2's report: the composed records' verdict (R2, read time)
+  const traffic = async (ref: string, report: string) => {
+    const got = await door(s.api, "traffic", { policy_ref: ref, report });
+    return { action: got.action, seen: JSON.stringify(got) };
+  };
   const decide = async (ref: string, approve: boolean) => (await door(s.api, "decide", { policy_ref: ref, approve })).result;
   const releases = async (b: Browser = admin) => (await b.get("/releases")).html;
   const shown = async (ref: string, b: Browser = admin) => {
@@ -36,22 +42,19 @@ test("E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollb
     (await b.submit("/releases", form((await shown(ref, from)).html, button))).location;
 
   await t.test("E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success", async () => {
-    await door(s.api, "composition", { as: "gateway" });
     // WR-R4-2 composed records, proposals and store (merge #50): the records refuse a release D9
-    // started without the plan its launcher stores first (R241, a 503 naming WR-C5-PLAN), and
-    // R3's variant listing is not composed (WR-C6-VARIANTS)
+    // started without the plan its launcher stores first (R241, a 503 naming WR-C5-PLAN)
     const planless = (await door(s.api, "launch", { tag: 9, planless: true })).policy_ref as string;
     // the refusal is WR-C5-PLAN's own, not any 503: the gateway's records port itself names it
     assert.match(String((await door(s.api, "probe")).refusal), /is not stored \(WR-C5-PLAN\)/);
-    for (const path of ["/releases", "/optimizations"]) {
-      const page = await admin.get(path);
-      assert.ok(page.text.includes(REFUSAL_COPY.unavailable) && forms(page.html).every((f) => !/Propose/.test(f.text)), path);
-    }
+    const page = await admin.get("/releases");
+    assert.ok(page.text.includes(REFUSAL_COPY.unavailable) && forms(page.html).every((f) => !/Propose/.test(f.text)));
+    // R3's variants are 0055's own listing (WR-C6-VARIANTS, merge #56): none is an empty list, not the releases' refusal
+    assert.match((await admin.get("/optimizations")).text, /No optimized variants registered yet\./);
     const consumer = await as("consumer");
     assert.ok((await consumer.get("/releases")).text.includes(ACCESS_COPY.denied));
     // the operator stops it: every later release is launched by `rollout launch`, its plan stored
     await door(s.api, "stop", { policy_ref: planless });
-    await door(s.api, "composition", { as: "journey" });
   });
 
   await t.test("E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose", async () => {
@@ -65,7 +68,8 @@ test("E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollb
 
   await t.test("E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence", async () => {
     const ref = await launch(2);
-    assert.equal(await step(ref, { report: "accept" }), "expand");
+    const judged = await traffic(ref, "accept");
+    assert.equal(judged.action, "expand", judged.seen);
     const before = await shown(ref);
     assert.deepEqual(before.forms.map((f) => f.text), ["Propose expansion", "Propose rollback"]);
     assert.deepEqual(before.forms[0].fields.filter(([k]) => !k.startsWith("$")), [["policyRef", ref], ["fence", "1"], ["kind", "expand"]]);
@@ -77,13 +81,15 @@ test("E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollb
     assert.equal(await decide(ref, true), "ok");
     const approved = await shown(ref);
     assert.match(approved.text, /Status expansion approved by an operator/);
-    assert.match(approved.text, new RegExp(`expand by ${w.operator} at \\S+ · evidence lab:run:\\S+, lab:run:`));
+    // `rollout decide` on R2's expand verdict (WR-LIVE-DECIDE): 0043's decision names the proposal, with R2's evidence
+    assert.match(approved.text, new RegExp(`expand by ${w.operator} at \\S+: operator:proposal, proposal:\\S+ · evidence lab:run:\\S+, lab:run:`));
     assert.match(approved.text, /Request —/);
   });
 
   await t.test("E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once", async () => {
     const ref = await launch(3);
-    assert.equal(await step(ref, { report: "inconclusive" }), "hold");
+    const judged = await traffic(ref, "inconclusive");
+    assert.equal(judged.action, "hold", judged.seen);
     const held = await shown(ref);
     assert.match(held.text, /Promotion Promotion blocked: the evaluation is inconclusive\./);
     assert.deepEqual(held.forms.map((f) => f.text), ["Propose rollback"], "an inconclusive verdict is never proposed for expansion");
@@ -96,7 +102,8 @@ test("E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollb
 
   await t.test("E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing", async () => {
     const ref = await launch(4);
-    assert.equal(await step(ref, { report: "accept" }), "expand");
+    const judged = await traffic(ref, "accept");
+    assert.equal(judged.action, "expand", judged.seen);
     const viewer = await as("viewer");
     assert.deepEqual((await shown(ref, viewer)).forms, [], "a viewer reads, and has no form");
     assert.equal(await propose(ref, /Propose rollback/, viewer), "/releases?refused=denied");

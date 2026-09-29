@@ -1,0 +1,93 @@
+TAP version 13
+# (node:661986) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/rollout/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+    # Subtest: E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success
+    ok 1 - E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success
+      ---
+      duration_ms: 606.248699
+      type: 'test'
+      ...
+    # Subtest: E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose
+    ok 2 - E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose
+      ---
+      duration_ms: 256.672899
+      type: 'test'
+      ...
+    # Subtest: E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence
+    not ok 3 - E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence
+      ---
+      duration_ms: 1326.179557
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/rollout/stack.test.ts:69:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        {"action":"hold","verdict":{"action":"hold","reasons":["before_horizon"],"evidence_refs":[],"evaluated_at":"2026-09-20T12:00:00Z"},"progress":{"observed_until":"2026-09-20T12:00:00Z","baseline":{"requests":1,"errors":0,"p99_ms":20},"candidate":{"requests":2,"errors":0,"p99_ms":20},"quality_covered":2,"spent":{"amount":"0.00000000","unit":"CREDIT"},"candidate_healthy":true,"assignments":[]}}
+        
+        'hold' !== 'expand'
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 'expand'
+      actual: 'hold'
+      operator: 'strictEqual'
+      stack: |-
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/rollout/stack.test.ts:72:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/rollout/stack.test.ts:69:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once
+    ok 4 - E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once
+      ---
+      duration_ms: 2551.176859
+      type: 'test'
+      ...
+    # Subtest: E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing
+    not ok 5 - E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing
+      ---
+      duration_ms: 1472.764152
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/rollout/stack.test.ts:102:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        {"action":"hold","verdict":{"action":"hold","reasons":["before_horizon"],"evidence_refs":[],"evaluated_at":"2026-09-20T12:00:00Z"},"progress":{"observed_until":"2026-09-20T12:00:00Z","baseline":{"requests":1,"errors":0,"p99_ms":20},"candidate":{"requests":2,"errors":0,"p99_ms":20},"quality_covered":2,"spent":{"amount":"0.00000000","unit":"CREDIT"},"candidate_healthy":true,"assignments":[]}}
+        
+        'hold' !== 'expand'
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 'expand'
+      actual: 'hold'
+      operator: 'strictEqual'
+      stack: |-
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/rollout/stack.test.ts:105:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/rollout/stack.test.ts:102:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    1..5
+not ok 1 - E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+  ---
+  duration_ms: 30728.893534
+  type: 'test'
+  location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/rollout/stack.test.ts:17:1'
+  failureType: 'subtestsFailed'
+  error: '2 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 6
+# suites 0
+# pass 3
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 53247.951709
