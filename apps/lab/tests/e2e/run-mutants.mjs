@@ -94,7 +94,7 @@ const STACK_MUTANTS = [
   stackMutant("improve", "E2E-S20", "an accepted import reads as ground truth", "lib/services/pipelines/view.ts", 'truth: l.method === "human" && l.groundTruth ?', 'truth: l.state === "accepted" ?', [S.i03]),
   stackMutant("improve", "E2E-S21", "an omitted label loses its reason", "lib/services/pipelines/view.ts", "omitted: e.omitted.map((x) => `${x.sampleId}: ${x.reason}`),", "omitted: e.omitted.map((x) => x.sampleId),", [S.i04]),
   stackMutant("improve", "E2E-S22", "a submitted manual run cannot be marked finished", "lib/services/pipelines/view.ts", '      if (r.state === "submitted" && manual(r)) actions.push("finish");\n', "", [S.i05]),
-  stackMutant("improve", "E2E-S23", "a checkpoint without its held-out evaluation reads as eligible", "lib/services/pipelines/view.ts", ': !onHoldout ? "Not evaluated on this run\'s pinned holdout: not eligible."', ': !onHoldout ? "Eligible candidate: not public and not promoted."', [S.i05]),
+  stackMutant("improve", "E2E-S23", "a checkpoint whose held-out evaluation is only queued reads as eligible", "lib/services/pipelines/view.ts", ': `Held-out evaluation ${e!.state}.`,', ': "Eligible candidate: not public and not promoted.",', [S.i05]),
   stackMutant("improve", "E2E-S24", "a refused label read shows an empty page instead of its refusal", "app/(provider)/annotations/page.tsx", "const failed = [imports, exports, labels, disputes].find((r) => r !== null && !r.ok);", "const failed = [imports, exports, labels, disputes].find(() => false);", [S.i06]),
 ];
 
