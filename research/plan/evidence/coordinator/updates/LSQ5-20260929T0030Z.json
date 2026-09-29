@@ -1,0 +1,47 @@
+{
+  "task": "LSQ5",
+  "lane": "lab-sql-lw5",
+  "slice": "LSQ5: E8L-F1/WR-E8L-2 (0045), endpoint_alias oracle (LSQ5-m1/m2), WR-E8L-4 (0046); items 3 (E8L's own rerun), 5 (WR-R4-1), 6 (SQL halves) blocked/filed",
+  "activity": "review",
+  "at": "2026-09-29T00:30:00Z",
+  "head": "98998ea",
+  "base": "9e6c01cd",
+  "worktree": ".claude/worktrees/codex-w5-lab-sql-lw5",
+  "branch": "codex/w5-lab-sql-lw5",
+  "owned_paths": [
+    "apps/app/supabase/migrations/0045_lab_serving_ref_identity.sql",
+    "apps/app/supabase/migrations/0046_lab_shadow_limit_operator.sql",
+    "apps/infrx-api/infrx/state/lab_control.py",
+    "apps/infrx-api/infrx/lab/control/fakes.py",
+    "apps/infrx-api/tests/d/test_d8_requests.py",
+    "apps/infrx-api/tests/d/test_l3sql_reads.py",
+    "apps/infrx-api/tests/d/test_upgrade_lab.py",
+    "apps/infrx-api/tests/d/code_mutants_d8.py",
+    "apps/infrx-api/tests/d/code_mutants_l3sql.py",
+    "tests/integration/test_harness.py",
+    "research/plan/evidence/d/LSQ5-5b99b52.md",
+    "research/plan/evidence/coordinator/updates/LSQ5-20260929T0030Z.json"
+  ],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=l3 pytest -q tests/d/test_d8_requests.py -k check_release_active", "exit": 0, "summary": "candidate resolved by deployment id; stale-digest and real-foreign-model cases pass"},
+    {"cmd": "INFRX_D_TASK=l3 pytest -q tests/d/test_l3sql_reads.py -v", "exit": 0, "summary": "4 passed incl. the new endpoint_alias oracle case"},
+    {"cmd": "INFRX_D_TASK=l3 pytest -q tests/l/control tests/l/access", "exit": 0, "summary": "85 passed, 2 skipped (fake + [pg])"},
+    {"cmd": "INFRX_D_TASK=r1 pytest -q tests/r/routing/test_routing_pg.py", "exit": 0, "summary": "2 passed, unchanged"},
+    {"cmd": "pytest -q tests/integration/test_harness.py -k migration_set", "exit": 0, "summary": "0045, 0046 pinned"},
+    {"cmd": "INFRX_D_TASK=l3 pytest -q tests/d/test_d8_requests.py test_d9_rollout.py test_upgrade_lab.py test_l3sql_reads.py test_l3sql_control.py test_l3sql_units.py test_operator_d10.py test_schema_postgres.py test_credit_schema.py", "exit": 2, "summary": "93 passed, 2 failed: both on the one known EXPECTED_FUNCTION_CALLERS gap (WR-CHECKS-1), nothing else"},
+    {"cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_l3sql.py tests/d/test_code_mutants_d8.py", "exit": 0, "summary": "215/215, 0 survivors, before the WR-E8L-4 commit"},
+    {"cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_d8.py -k q_active", "exit": 0, "summary": "6/6 killed (incl. new q_active_digest_ignored)"},
+    {"cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_d8.py -k q_shadow", "exit": 0, "summary": "3/3 killed"},
+    {"cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all pytest -q tests/d/test_code_mutants_l3sql.py -k l3r_alias", "exit": 0, "summary": "2/2 killed"},
+    {"cmd": "uvx ruff check --line-length 100 (every touched .py)", "exit": 0, "summary": "all checks passed"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 3, "pessimistic_h": 8, "confidence": "low", "basis": "remaining scope (WR-E8L-2b's fixture fix + full e8l rerun, WR-CHECKS-1's one line, items 5/6) depends mostly on inputs this lane could not read (COMPOSITION-2-b790f17.md, LAB-UI-SWAP-*.md do not exist at this base); this lane's own two delivered items took about what E8L's evidence estimated for the F1 fix alone, because verifying the JCS digest function byte-for-byte against Python was the bulk of the work", "at": "2026-09-29T00:30:00Z"},
+  "blockers": [
+    "WR-R4-1 and the WR-LSQ-C2A/C2B/N4-3/R2-3/B3-3 SQL halves (item 6) need research/plan/evidence/coordinator/COMPOSITION-2-b790f17.md and LAB-UI-SWAP-*.md, neither of which exists in this worktree at base 9e6c01cd or at HEAD"
+  ],
+  "wiring_requests": [
+    "WR-CHECKS-1 (tests/d/checks.py, track G/D10): add \"public.operator_raise_lab_shadow_limit(uuid,integer,text,text)\": {\"authenticated\"} to EXPECTED_FUNCTION_CALLERS (same pattern as the three existing operator_* entries); until then test_schema_postgres.py::test_dur_rls__the_execute_surface_is_enumerated and test_credit_schema.py::test_credit_privileges__service_reads_money_and_writes_through_seams fail on exactly this one line",
+    "WR-E8L-2b (lab-rollout/E8L): tests/integration/lab_rollout/lab_world.py's self.BASE/self.CAND/self.CAND_B build refs in the pre-0045 identity space (bare serving_version_id, a fake digest); under 0045's release_active none resolve to a real deployment, so every scenario asserting on lab.CAND/lab.CAND_B (not just k06) would newly refuse state_conflict on rerun. Give serving_2/serving_b real deployment revisions and build the refs with infrx.lab_serving_ref(deployment_revision_id), then rerun the e8l stack; k06 should get st_converge_skipped and leave KNOWN_FAIL"
+  ],
+  "evidence": ["research/plan/evidence/d/LSQ5-5b99b52.md"]
+}
