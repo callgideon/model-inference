@@ -410,7 +410,7 @@ def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, 
             propose(lab.q8.ADMIN, "expand").status_code
         assert refused == (403, 409), f"developer / expansion without a verdict: {refused}"
         # WR-LR5-RV3: an expansion's approval is refused while R1's aggregates are unreadable
-        # (WR-C5-LIVE, R240) and a rejection moves nothing. The route files no expansion
+        # (held while nothing is assigned: WR-LIVE-DECIDE, R240/R248) and a rejection moves nothing. The route files no expansion
         # without an expand verdict (the 409 above), so this one is filed through 0043's store.
         expand = str(uuid.uuid4())
         run(PgReleaseProposals(connect).propose(ref, provider_org_id=lab.NEMO, proposal_id=expand,
@@ -427,7 +427,8 @@ def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, 
             "held": {k: mine(held, k) for k in ("releases", "decisions", "proposals")},
             "dropped": {k: mine(dropped, k) for k in ("releases", "decisions", "proposals")},
             "d9": lab.decisions(ref), "listing": lab.listing()})
-        assert widened.returncode == 1 and "WR-C5-LIVE" in widened.stderr, widened.stderr[-1500:]
+        assert widened.returncode == 1 and "no admitted request is assigned" in widened.stderr, \
+            widened.stderr[-1500:]
         assert rejected.returncode == 0, rejected.stderr[-1500:]
         assert [(p["proposal_id"], p["state"]) for p in mine(held, "proposals")] == \
             [(expand, "proposed")], "a refused approval leaves the proposal pending"

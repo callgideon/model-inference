@@ -392,10 +392,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "        await controller.emergency_rollback(operator, policy, policy_ref, now=now, "
        "reason=reason)\n", "", K10_PORT),
     # WR-LR5-RV3: `rollout decide --reject` moves nothing; an expansion's approval is refused
-    # while R1's aggregates are unreadable (WR-C5-LIVE, R240)
+    # while nothing is assigned (WR-LIVE-DECIDE, R240/R248)
     _m("st_decide_reject_moves", "a rejection decides the proposal rejected and nothing else",
        LW, "        if not approve:\n", "        if False:\n", K10_PORT),
-    _m("st_decide_expand_approved", "an expansion's approval is refused (WR-C5-LIVE): no D9 "
+    _m("st_decide_expand_approved", "an expansion's approval is refused while nothing is assigned: no D9 "
        "decision, the alias unchanged", LW, '        if found["kind"] != "rollback":\n',
        "        if False:\n", K10_PORT),
     _m("st_claim_unmeasured", "an optimization is claimed only with measurements", R3,
