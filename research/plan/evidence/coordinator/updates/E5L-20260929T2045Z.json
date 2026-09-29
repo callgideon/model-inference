@@ -21,9 +21,9 @@
    "summary": "32 passed"
   },
   {
-   "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py -k 'not stack_mutant'",
+   "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py -rs (no -k; log E5L-raw-lo4/step1-mutants-layer1.log)",
    "exit": 0,
-   "summary": "73 passed (layer-1 mutants killed + well_formed + every_case + self-tests)"
+   "summary": "73 passed, 22 skipped (layer-1 mutants killed + well_formed + every_case + self-tests; the 22 stack mutants NOT RUN: no kept stack)"
   },
   {
    "cmd": "runner.py --out <dir> --only o01",

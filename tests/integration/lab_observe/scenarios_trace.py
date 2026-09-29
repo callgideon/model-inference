@@ -100,17 +100,22 @@ def test_o01_capture_turned_on_through_the_composition_switch(workdir):
     """WR-C6-CAPTURE (R250): `TRACE_PUMPS` on in the box (gateway and worker on one
     TRACE_SPOOL_DIR). alpha's key opted in under alpha's consent: its sync answer (the gateway's
     hook) and its async job's output (the worker's job spool) are shipped by the gateway's
-    lifespan with their pins and found by alpha only. beta's org consents but its key never
-    opted in: its request leaves nothing. alpha's sync prompt echoes its own token: the shipped
-    record holds the redaction, never the token (WR-LO4-RV1; the async half is the next case)."""
+    lifespan with their pins and found by alpha only; the async record holds the controlled
+    engine's answer (the job's output, WR-LO4-RV2). beta's org consents but its key never
+    opted in: its async and sync requests leave 0 envelopes (WR-LO4-RV3). alpha's sync prompt
+    echoes its own token: the shipped record holds the redaction, never the token (WR-LO4-RV1;
+    the async half is the next case)."""
     with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:
         alpha, beta = trip.world.alpha, trip.world.beta
         spool = capture_on(trip, workdir)
         sync = trip.send(alpha, "sync", echoing(alpha), None)
         assert sync.status_code == 200, sync.text[:200]
         echoed = sync.headers["inference-id"]
-        captured = {echoed, ow.served(trip, alpha, "o01-on")}
-        quiet = ow.served(trip, beta, "o01-beta")
+        job = ow.served(trip, alpha, "o01-on")
+        captured = {echoed, job}
+        beta_sync = trip.send(beta, "sync", world.TEXT, None)
+        assert beta_sync.status_code == 200, beta_sync.text[:200]
+        quiet = {ow.served(trip, beta, "o01-beta"), beta_sync.headers["inference-id"]}
         retention = trip.traces.retention
         world.wait_for(lambda: all(run(retention.find_traces(alpha.org_id, r))
                                    for r in captured), 60.0, "the gateway's ship pass")
@@ -120,10 +125,16 @@ def test_o01_capture_turned_on_through_the_composition_switch(workdir):
             assert (row.serving_version_id, row.rate_card_version) == pins_of(trip, request_id)
             assert b"Describe the van." in run(retention.read_content(alpha.org_id, request_id))
             assert run(retention.find_traces(beta.org_id, request_id)) == []
+        answer = trip.engine.control()["text"].encode()
+        assert answer in run(retention.read_content(alpha.org_id, job)), \
+            "async: the job's output is not in its shipped record"
         holds_no_token(trip, alpha, echoed, "sync")
-        time.sleep(12.0)                           # one more ship pass (every 10 s)
-        assert run(retention.find_traces(beta.org_id, quiet)) == []
-        assert trip.traces.rows("trace_envelopes", quiet) == 0
+        # one more ship pass (every 10 s): the box exposes no pass counter to wait on
+        time.sleep(12.0)
+        for request_id in quiet:
+            assert run(retention.find_traces(beta.org_id, request_id)) == []
+            assert trip.traces.rows("trace_envelopes", request_id) == 0, \
+                "a key that never opted in left a trace"
         assert all(trip.traces.rows("trace_envelopes", r) == 1 for r in captured)
         assert not any((spool / "jobs").iterdir()), "a shipped job spool was left"
 

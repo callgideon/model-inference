@@ -331,6 +331,9 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_capture_scrub_off", "an echoed bearer token is redacted in the shipped sync record "
        "(WR-LO4-RV1; HM1)", CAPTURE,
        "    return data.replace(token, REDACTED) if token else data", "    return data", O01_ON),
+    _m("st_job_output_dropped", "an async job's shipped record holds its output (WR-LO4-RV2)",
+       CAPTURE, "            if text:\n                capture.add(text.encode())",
+       "            if text:\n                pass", O01_ON),
     _m("st_ship_without_pins", "a shipped row carries the pins PostgreSQL admitted", SHIP,
        "serving_version_id=pins.serving_version_id if pins else None,",
        "serving_version_id=None,", O01_SHIP),
