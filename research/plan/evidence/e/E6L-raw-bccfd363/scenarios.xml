@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="2" tests="22" time="36.020" timestamp="2026-09-29T11:42:45.192895+00:00" hostname="rey-aws"><testcase classname="tests.integration.lab_evaluate.scenarios_checkpoint" name="test_j08_a_checkpoint_delivered_twice_is_one_receipt_and_one_run" file="tests/integration/lab_evaluate/scenarios_checkpoint.py" line="97" time="6.142" /><testcase classname="tests.integration.lab_evaluate.scenarios_checkpoint" name="test_j08_a_crash_before_the_decision_is_one_run_on_redelivery" file="tests/integration/lab_evaluate/scenarios_checkpoint.py" line="125" time="0.357" /><testcase classname="tests.integration.lab_evaluate.scenarios_data" name="test_j01_a_benchmark_with_bad_rows_is_refused_until_its_rejects_are_accepted" file="tests/integration/lab_evaluate/scenarios_data.py" line="21" time="0.357" /><testcase classname="tests.integration.lab_evaluate.scenarios_data" name="test_j01_a_replayed_upload_is_the_same_dataset_and_a_changed_one_conflicts" file="tests/integration/lab_evaluate/scenarios_data.py" line="49" time="0.162" /><testcase classname="tests.integration.lab_evaluate.scenarios_data" name="test_j02_finite_video_imports_with_its_cap_and_bundle_checks" file="tests/integration/lab_evaluate/scenarios_data.py" line="66" time="0.318" /><testcase classname="tests.integration.lab_evaluate.scenarios_data" name="test_j03_a_foreign_dataset_is_refused_at_import_resolve_and_schedule" file="tests/integration/lab_evaluate/scenarios_data.py" line="88" time="0.150" /><testcase classname="tests.integration.lab_evaluate.scenarios_data" name="test_j03_a_revoked_grant_stops_derivation_and_scheduling" file="tests/integration/lab_evaluate/scenarios_data.py" line="121" time="0.326" /><testcase classname="tests.integration.lab_evaluate.scenarios_data" name="test_j04_related_sources_are_placed_whole_and_deterministically" file="tests/integration/lab_evaluate/scenarios_data.py" line="162" time="0.892" /><testcase classname="tests.integration.lab_evaluate.scenarios_data" name="test_j04_a_leaking_base_is_refused_and_the_frozen_holdout_admits_no_relative" file="tests/integration/lab_evaluate/scenarios_data.py" line="196" time="0.757" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j05_a_worker_killed_mid_attempt_is_recovered_and_each_case_scored_once" file="tests/integration/lab_evaluate/scenarios_eval.py" line="77" time="0.902" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j05_duplicate_delivery_scores_each_case_once" file="tests/integration/lab_evaluate/scenarios_eval.py" line="101" time="0.819" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j05_a_cancel_mid_run_stops_spending" file="tests/integration/lab_evaluate/scenarios_eval.py" line="142" time="0.690" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j06_two_serving_versions_reproduce_the_frozen_benchmark" file="tests/integration/lab_evaluate/scenarios_eval.py" line="171" time="3.778" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j07_a_required_slice_regression_rejects_despite_an_aggregate_gain" file="tests/integration/lab_evaluate/scenarios_eval.py" line="201" time="2.051" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j07_a_clean_win_is_accepted_and_claimed_improved" file="tests/integration/lab_evaluate/scenarios_eval.py" line="212" time="1.675" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j07_a_missing_candidate_output_is_counted_not_dropped" file="tests/integration/lab_evaluate/scenarios_eval.py" line="223" time="1.892" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j07_an_unfinished_candidate_counts_its_missing_cases" file="tests/integration/lab_evaluate/scenarios_eval.py" line="239" time="1.576" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j07_tool_cases_are_recorded_and_not_comparable" file="tests/integration/lab_evaluate/scenarios_eval.py" line="273" time="1.077" /><testcase classname="tests.integration.lab_evaluate.scenarios_eval" name="test_j11_a_finite_video_case_reaches_the_dev_endpoint" file="tests/integration/lab_evaluate/scenarios_eval.py" line="306" time="0.609"><skipped type="pytest.skip" message="NOT RUN[L3] the imported clips reach H1; HttpDevEndpoint refuses media until L3's media path merges; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out &lt;dir&gt; --only j11">/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/tests/integration/lab_evaluate/lab_world.py:73: NOT RUN[L3] the imported clips reach H1; HttpDevEndpoint refuses media until L3's media path merges; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out &lt;dir&gt; --only j11</skipped></testcase><testcase classname="tests.integration.lab_evaluate.scenarios_pending" name="test_j10_the_provider_ui_launches_compares_and_cancels" file="tests/integration/lab_evaluate/scenarios_pending.py" line="50" time="0.000"><skipped type="pytest.skip" message="NOT RUN[lab-e2e] the provider evaluation UI (B4) over /lab/v1/evaluations (lab-api-2) runs in the Lab web, which this runner does not start; its browser leg is the lab-e2e harness (apps/lab/tests/e2e/evaluate/, `make lab-e2e`): launch, progress, cancel and the j07 comparison; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out &lt;dir&gt; --only j10">/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/tests/integration/lab_evaluate/lab_world.py:73: NOT RUN[lab-e2e] the provider evaluation UI (B4) over /lab/v1/evaluations (lab-api-2) runs in the Lab web, which this runner does not start; its browser leg is the lab-e2e harness (apps/lab/tests/e2e/evaluate/, `make lab-e2e`): launch, progress, cancel and the j07 comparison; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out &lt;dir&gt; --only j10</skipped></testcase><testcase classname="tests.integration.lab_evaluate.scenarios_workers" name="test_j09_the_eval_worker_process_killed_mid_run_loses_nothing" file="tests/integration/lab_evaluate/scenarios_workers.py" line="104" time="4.187"><failure message="AssertionError: ([('003339ee-4c69-4cf3-8226-08d04bbd66f4', 1, 'succeeded'), ('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired'), ('...c6fb4-ab4a-4615-8037-a1eb36f07a4f', 1, 'succeeded'), ('246726ec-5fd3-433f-8b05-1289829349d2', 1, 'succeeded'), ...], 2)&#10;assert (1 &gt;= 1 and 1 == 2)&#10; +  where 1 = len([('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired')])&#10; +  and   1 = len([('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired')])">lab = &lt;lab_evaluate.lab_world.Lab object at 0x7bb19b5bcec0&gt;, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/research/plan/evidence/e/E6L-raw-bccfd363/cases/test_j09_the_eval_worker_process_killed_mid_run_loses_nothing')
+
+    def test_j09_the_eval_worker_process_killed_mid_run_loses_nothing(lab, workdir):
+        try:
+            run(lab.store.put_evaluator(lw.SPEC, provider_org_id=lab.NEMO,
+                                        evaluator_id=lw.EVALUATOR_ID, actor="dev@nemo"))
+        except Exception as held:                    # noqa: BLE001 - write-once: already there
+            assert "conflict" in type(held).__name__.lower() or "exists" in str(held), held
+        serving = dev_serving_ref(lab)
+        frozen = lab.freeze(lab.run_payload(91, lab.dataset("text", 1).dataset_ref,
+                                            lab.harness_ref(1), serving, max_cases=6))
+        run_id, provider = frozen.run.run_id, lab.NEMO
+    
+        def event_pending() -&gt; int:
+            return lab.sql("select count(*) from infrx.lab_outbox where kind = 'eval_run' and "
+                           "payload-&gt;&gt;'run_id' = %s and acknowledged_at is null", run_id)[0][0]
+    
+        def cases(state: str) -&gt; int:
+            return lab.sql("select count(*) from infrx.lab_eval_cases where run_id = %s and "
+                           "state = %s", run_id, state)[0][0]
+    
+        assert event_pending() == 1, "freeze wrote the run's eval_run event"
+        gate, answered = threading.Event(), threading.Event()
+        with lw.endpoint("baseline") as (wallet, http), \
+                open(workdir / "worker.log", "wb") as log:
+            model = wallet.answer
+    
+            def held(prompt):
+                """The first call answers; the next ones are held mid-attempt (the kill)."""
+                if answered.is_set():
+                    gate.wait(60)
+                answered.set()
+                return model(prompt)
+            wallet.answer = held
+            url = http._url.removesuffix("/v1/chat/completions")
+            health = free_health_port()
+            with worker(worker_env(lab, url, health), log) as first:
+                until(lambda: ready(health), 60, "the worker's /readyz")
+                until(lambda: len(wallet.calls) &gt;= 2, 90, "a second model call in flight")
+                first.kill()                                      # SIGKILL mid-attempt
+                assert first.wait(30) == -signal.SIGKILL
+            gate.set()
+            leased = cases("leased")
+            assert leased &gt;= 1 and event_pending() == 1, (leased, event_pending())
+            lab.advance(31)                     # past the 30 s leases and the relay's window
+            health = free_health_port()
+            with worker(worker_env(lab, url, health), log) as second:
+                until(lambda: ready(health), 60, "the restarted worker's /readyz")
+                until(lambda: event_pending() == 0, 180, "the run finished and acknowledged",
+                      every=lambda: lab.advance(31))
+                second.send_signal(signal.SIGTERM)
+                assert second.wait(60) == 0, "SIGTERM is a clean exit"
+        status = run(lab.store.run_status(run_id, provider_org_id=provider))
+        results = lab.results(run_id)
+        attempts = lab.sql("select case_id::text, attempt, state from infrx.lab_eval_attempts "
+                           "where run_id = %s order by case_id, attempt", run_id)
+        expired = [a for a in attempts if a[2] == "expired"]
+        assert status["state"] == "succeeded", status
+        assert sorted(results) == sorted(frozen.cases), "every case scored, once each"
+        assert cases("done") == len(frozen.cases) and cases("leased") == 0
+&gt;       assert len(expired) &gt;= 1 and len(expired) == leased, (attempts, leased)
+E       AssertionError: ([('003339ee-4c69-4cf3-8226-08d04bbd66f4', 1, 'succeeded'), ('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired'), ('...c6fb4-ab4a-4615-8037-a1eb36f07a4f', 1, 'succeeded'), ('246726ec-5fd3-433f-8b05-1289829349d2', 1, 'succeeded'), ...], 2)
+E       assert (1 &gt;= 1 and 1 == 2)
+E        +  where 1 = len([('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired')])
+E        +  and   1 = len([('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired')])
+
+tests/integration/lab_evaluate/scenarios_workers.py:163: AssertionError</failure></testcase><testcase classname="tests.integration.lab_evaluate.scenarios_workers" name="test_j09_the_checkpoint_worker_drains_the_outbox_once" file="tests/integration/lab_evaluate/scenarios_workers.py" line="190" time="7.036" /></testsuite></testsuites>

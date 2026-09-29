@@ -1,0 +1,34 @@
+{
+ "clips": {
+  "clips/a.mp4": [
+   "train"
+  ],
+  "clips/b.mp4": [
+   "train"
+  ]
+ },
+ "placement": {
+  "F1a": "validation",
+  "F1b": "validation",
+  "F1c": "validation",
+  "F2a": "holdout",
+  "F2b": "holdout",
+  "S1": "train",
+  "S2": "train",
+  "S3": "train",
+  "S4": "train",
+  "S5": "train",
+  "S6": "holdout",
+  "S7": "validation",
+  "S8": "train"
+ },
+ "ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da6-0000-4000-8000-000000000028@sha256:a6e1744c849ef101d368224bce1a17b31dc483542389fba874248a11ca1c4ddc",
+ "review": [
+  [
+   "331b9bd0-d263-4c81-81a6-762dc9623860",
+   "7b692060-5988-4e51-868e-d8485b1429e7",
+   "ec659eec-ec81-4142-86ef-16c85f5be667"
+  ]
+ ],
+ "split": "sha256:d49f4d9b978ba81d316828de75a73f172fdaaf27b7889784871e13737c8fdd57"
+}

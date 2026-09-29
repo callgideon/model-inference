@@ -1,0 +1,95 @@
+{
+ "baseline_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000003d@sha256:f6cae0bbc3241b77e9199f8ee105cb42e9de708606ccb30c98836c6f8380ccbc",
+ "candidate_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000003f@sha256:2c5d13aec77f071998d5ba66562a80893895889d41ccfd178dd696ca0c121f2b",
+ "decision": {
+  "outcome": "reject",
+  "reasons": [
+   "slice math inferior"
+  ]
+ },
+ "estimates": {
+  "basis": "deterministic_metric",
+  "overall": {
+   "clusters": 20,
+   "diff": 0.2,
+   "high": 0.6186023095925519,
+   "improved": false,
+   "low": -0.2186023095925519,
+   "n": 20,
+   "verdict": "uncertain"
+  },
+  "slices": {
+   "math": {
+    "clusters": 6,
+    "diff": -1.0,
+    "high": -1.0,
+    "improved": false,
+    "low": -1.0,
+    "n": 6,
+    "verdict": "inferior"
+   }
+  }
+ },
+ "observed": {
+  "baseline": {
+   "costs": {
+    "CREDIT": "50.28000000"
+   },
+   "errors": 0,
+   "latency_ms": {
+    "max": 42,
+    "n": 20,
+    "p50": 24,
+    "p90": 29,
+    "p99": 42
+   },
+   "mean": 0.5,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "candidate": {
+   "costs": {
+    "CREDIT": "50.28000000"
+   },
+   "errors": 0,
+   "latency_ms": {
+    "max": 188,
+    "n": 20,
+    "p50": 30,
+    "p90": 96,
+    "p99": 188
+   },
+   "mean": 0.7,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "cost_delta": {
+   "CREDIT": "0.00000000"
+  },
+  "paired": 20,
+  "universe": 20
+ },
+ "pairing": {
+  "factors": [
+   "serving_ref"
+  ],
+  "kind": "single_factor",
+  "tag": null
+ },
+ "protocol": {
+  "confidence": 0.95,
+  "margin": 0.05,
+  "metric_source": "deterministic_metric",
+  "min_cases": 10,
+  "required_slices": {
+   "math": {
+    "margin": 0.0,
+    "min_cases": 5
+   }
+  }
+ },
+ "protocol_digest": "sha256:5a63aba5f370f36ca9cfe6cddda0960fb3537f355ee9892063eb6957c136b109",
+ "report_digest": "sha256:9e03e18f55e0e76858555507eb15dc3bfec3873a298c11bd1fcf93f097a92864",
+ "schema": "infrx.eval_report.1",
+ "universe_digest": "sha256:6e96cb0a140ece00989b0d2b33c951098801586ca02b50e3581f2813622d19c6"
+}

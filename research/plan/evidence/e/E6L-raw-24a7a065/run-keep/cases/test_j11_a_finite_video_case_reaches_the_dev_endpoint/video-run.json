@@ -1,0 +1,30 @@
+{
+ "report": {
+  "abandoned": [],
+  "attempts": {
+   "failed": 3
+  },
+  "cases": {
+   "failed": 3
+  },
+  "costs": {
+   "CREDIT": "0.00000000"
+  },
+  "created_at": "2026-09-20T12:00:31+00:00",
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da6-0000-4000-8000-000000000002@sha256:905c079d7e16311ba3ce4d3bda120cbe83914304ccb4434a2995c7ffe100ae31",
+  "failures": {
+   "4f715318-0b01-4792-80dc-9db1b40e7746": "invalid_request",
+   "51ceafd3-3f75-4053-858f-432059ed1fe1": "invalid_request",
+   "b38b1fb2-b9e2-41b1-852f-491de3b3c2a9": "invalid_request"
+  },
+  "run_id": "000007e6-0000-4000-8000-00000000006f",
+  "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000006f@sha256:b3ece7c2eab6d101dbe4b3a5f39c9c7470106c616240257a1debf01f772ccd8e",
+  "state": "failed",
+  "stopped": null,
+  "unrecorded": {
+   "CREDIT": "0.00000000"
+  },
+  "updated_at": "2026-09-20T12:00:31+00:00"
+ },
+ "results": {}
+}

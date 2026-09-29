@@ -1,0 +1,28 @@
+{
+ "checkpoint_id": "00000c3e-0000-4000-8000-000000001f41",
+ "decision": {
+  "000005b6-0000-4000-8000-000000000050": {
+   "reason": null,
+   "run_id": "457ded75-1dd3-4c6b-8f70-d3a646e93b83",
+   "state": "queued"
+  }
+ },
+ "deployer": [
+  {
+   "checkpoint_id": "00000c3e-0000-4000-8000-000000001f41",
+   "digest": "sha256:327e058edb80b68528404155b775d475a74ca8c92f987cbcd3ec07c4b376e5a0"
+  },
+  {
+   "checkpoint_id": "00000c3e-0000-4000-8000-000000001f41",
+   "digest": "sha256:327e058edb80b68528404155b775d475a74ca8c92f987cbcd3ec07c4b376e5a0"
+  }
+ ],
+ "receipt": {
+  "artifact_digest": "sha256:327e058edb80b68528404155b775d475a74ca8c92f987cbcd3ec07c4b376e5a0",
+  "checkpoint_id": "00000c3e-0000-4000-8000-000000001f41",
+  "external_run_ref": "lab:external_run:b0000001-0000-4000-8000-000000000001:00000e3e-0000-4000-8000-000000000050@sha256:5e9920ba56e99977a991282a00eb5932cdb50c4d1a68db1ec81688ada31166fd",
+  "received_at": "2026-09-20T12:00:00+00:00",
+  "state": "received"
+ },
+ "run_id": "457ded75-1dd3-4c6b-8f70-d3a646e93b83"
+}

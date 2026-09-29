@@ -1,0 +1,105 @@
+{
+ "task": "E6L",
+ "lane": "lab-evaluate-2",
+ "slice": "E6L final run under R222: make lab-evaluate on the tip after merge #42 + the 32 stack mutants on a kept e6l stack",
+ "activity": "review",
+ "head": "3d5ccf49 (code; evidence commit follows)",
+ "base": "8949ffb1",
+ "worktree": ".claude/worktrees/codex-w5-lab-evaluate-2",
+ "branch": "codex/w5-lab-evaluate-2",
+ "owned_paths": [
+  "tests/integration/lab_evaluate/",
+  "research/plan/evidence/e/E6L-*"
+ ],
+ "commands": [
+  {
+   "cmd": "make lab-evaluate (at 8949ffb1 via runner.py --keep)",
+   "exit": 1,
+   "summary": "gate FAIL: j10 E6L-BIND tripwire (B4 + lab-api-2 merged); j11 NOT RUN[L3]"
+  },
+  {
+   "cmd": "make lab-evaluate (at bccfd363)",
+   "exit": 2,
+   "summary": "runner exit 1: j09 eval case raced (leases counted before the killed worker's last commit)"
+  },
+  {
+   "cmd": "make lab-evaluate (at 24a7a065)",
+   "exit": 2,
+   "summary": "runner exit 3, gate NOT RUN: DATA-IMPORT/SPLIT/RIGHTS, EVAL-DURABLE, EVAL-REPRO, CHECKPOINT-IDEM PASS; EVAL-COMPARE NOT RUN (j07 PASS, j10 NOT RUN[lab-e2e], j11 NOT RUN[L3]); 0 FAIL; 20 passed 2 skipped; r222 accepted false, open j11"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e6l pytest -v tests/integration/lab_evaluate/test_mutants.py (kept stack, 3d5ccf49)",
+   "exit": 0,
+   "summary": "56 passed: 20/20 layer-1 + 32/32 stack mutants killed, 0 survivors (st_receipt_twice re-cut from dead 0029 code to 0034)"
+  },
+  {
+   "cmd": "pytest -q tests/integration/lab_evaluate",
+   "exit": 0,
+   "summary": "18 passed, 1 skipped"
+  },
+  {
+   "cmd": "uvx ruff check --line-length 100 tests/integration/lab_evaluate",
+   "exit": 0,
+   "summary": "all checks passed"
+  }
+ ],
+ "gate": {
+  "verdict": "NOT RUN",
+  "exit": 3,
+  "cells": {
+   "DATA-IMPORT": "PASS",
+   "DATA-SPLIT": "PASS",
+   "DATA-RIGHTS": "PASS",
+   "EVAL-DURABLE": "PASS",
+   "EVAL-REPRO": "PASS",
+   "EVAL-COMPARE": "NOT RUN",
+   "CHECKPOINT-IDEM": "PASS"
+  },
+  "tally": {
+   "PASS": 6,
+   "FAIL": 0,
+   "NOT RUN": 1
+  },
+  "scenarios": {
+   "PASS": 9,
+   "NOT RUN": 2
+  },
+  "not_run": {
+   "j10": {
+    "class": "lab-e2e UI",
+    "rerun": "make lab-e2e; then apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j10"
+   },
+   "j11": {
+    "class": "none (in local scope: L3 media path, WR-E6L-J11)",
+    "rerun": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j11"
+   }
+  },
+  "r222": {
+   "accepted": false,
+   "open": {
+    "j11": "NOT RUN"
+   }
+  }
+ },
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 3,
+  "pessimistic_h": 8,
+  "confidence": "low",
+  "basis": "0.5 h if the coordinator rules j11 a recorded product dependency (OUT_OF_SCOPE += L3); else WR-E6L-J11 in L3/B1 2-5 h + j11 bind 0.5-1 h + one verify round 47-234 min (session-03); j10 rides the lab-e2e lane",
+  "at": "2026-09-29T12:17:00Z"
+ },
+ "blockers": [
+  "j11 (EVAL-COMPARE finite video) NOT RUN on L3's media path (in local scope): R222 not met until a ruling or WR-E6L-J11"
+ ],
+ "wiring_requests": [
+  "WR-E6L-J11"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E6L-24a7a06.md",
+  "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json",
+  "research/plan/evidence/e/E6L-raw-24a7a065/mutants-all-final.log",
+  "research/plan/evidence/e/E6L-raw-bccfd363/verdict.json",
+  "research/plan/evidence/e/E6L-raw-8949ffb/run-0-base/verdict.json"
+ ]
+}

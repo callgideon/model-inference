@@ -75,6 +75,7 @@ GATE = "test_e6l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_doe
 NO_STACK = "test_e6l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e6l_the_namespace_is_the_reserved_block"
 RERUN = "test_e6l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
+R222 = "test_e6l_r222_accepts_only_a_not_run_out_of_local_scope"
 UNBOUND = tuple(re.findall(r"^def (test_j\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -112,8 +113,25 @@ MUTANTS: tuple[Mutant, ...] = (
        NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
-    _m("unbound_case_runs", "a case waiting on L3/B4/lab-api-2 is never a pass", P,
+    _m("unbound_case_runs", "a case waiting on the lab-e2e harness is never a pass", P,
        "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
+    # R222 (lab-evaluate-2): what the local acceptance excuses
+    _m("r222_in_scope_lane_excused", "a NOT RUN on in-scope work (L3's media path) stays open",
+       R, 'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       'return bool(entry["cases"]) and', R222),
+    _m("r222_out_of_scope_widened", "only the lab-e2e UI harness is out of scope for E6L", R,
+       'OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI"}',
+       'OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI", "L3": "GPU"}', R222),
+    _m("r222_never_run_excused", "a scenario with no case run is open", R,
+       'set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       "set(lanes) <= set(OUT_OF_SCOPE) and", R222),
+    _m("r222_any_reason_excuses", "every reason must be the scenario's own wait", R,
+       "    all(f\"NOT RUN[{','.join(lanes)}]\" in reason for reason in entry[\"reasons\"])",
+       "    any(f\"NOT RUN[{','.join(lanes)}]\" in reason for reason in entry[\"reasons\"])",
+       R222),
+    _m("r222_pass_is_open", "a PASS never keeps the gate from acceptance", R,
+       'if entry["status"] != PASS and not excused(sid, entry)}',
+       "if not excused(sid, entry)}", R222),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -125,6 +143,7 @@ B2 = "infrx/evaluation/reports/__init__.py"
 B3 = "infrx/evaluation/checkpoints/__init__.py"
 B1 = "infrx/evaluation/runner/__init__.py"
 D7 = "../app/supabase/migrations/0029_lab_data.sql"
+D7F = "../app/supabase/migrations/0034_lab_eval_followup.sql"
 
 J01_REFUSED = "test_j01_a_benchmark_with_bad_rows_is_refused_until_its_rejects_are_accepted"
 J01_REPLAY = "test_j01_a_replayed_upload_is_the_same_dataset_and_a_changed_one_conflicts"
@@ -208,8 +227,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "checkpoint)", B3,
        '    digest = hashlib.sha256(f"{subscription_id}:{checkpoint_id}".encode()).digest()',
        "    digest = uuid.uuid4().bytes", J08_TWICE, J08_CRASH),
+    # 0034 (lab-sql LW2) re-creates lab_receive_checkpoint: 0029's copy is dead code, so the
+    # mutant targets the live definition (lab-evaluate-2: it survived on 0029)
     _m("st_receipt_twice", "a redelivered checkpoint is the same receipt, no second event",
-       D7, "    return infrx.lab_receipt_json(c);\n  end if;\n"
+       D7F, "    return infrx.lab_receipt_json(c);\n  end if;\n"
            "  insert into infrx.lab_outbox (provider_org_id, kind, payload)\n"
            "  values (v_provider, 'checkpoint_received'",
        "  end if;\n  insert into infrx.lab_outbox (provider_org_id, kind, payload)\n"
