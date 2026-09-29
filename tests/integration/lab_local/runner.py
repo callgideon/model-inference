@@ -14,12 +14,14 @@
 4. **scenarios**: `scenarios_on.py` over the composition (`lab_world.composition`): the
    gateway + consumer worker + every Lab worker role + the control factory + the Lab web, every
    switch ON; each route family smoked with a real Lab session; the consumer path still serves.
-5. **lab-journeys**: the Lab app's real-route journeys that accept this key (tests/n's journey,
-   `LAB_N_REAL=1 INFRX_D_TASK=lab-on`); the key-pinned stack tests (r2, p1, b3, lab-v1m) are
-   NOT RUN, named with the exact rerun (their backends refuse any other key: WR-LDP-1).
+5. **lab-journeys**: the Lab app's real-route journeys on this key (`INFRX_D_TASK=lab-on`,
+   WR-LDP-1): datasets, releases, pipelines, evaluations, traces (pipelines/traces on this
+   block's teacher fake and ClickHouse, WR-LL2-1/2); a journey whose backend binds another
+   key's resource is NOT RUN naming its WR, with the owner's exact rerun.
 
 Every stage is PASS / FAIL / BLOCKED / INVALID / NOT RUN; the gate is the worst (FAIL > INVALID
 > BLOCKED > NOT RUN > PASS), exit 0 / 1 / 3 / 3 / 4, as E2C's gates.py. A skip is never a pass.
+verdict.json carries R222's machine check (R235): `r222.accepted` / `r222.open` / `r222.by_design`.
 Label: a controlled engine, fake teacher/connectors, a local Lab build and a Supabase stand-in;
 not Marlin quality, not GPU capacity, not hosted (Vercel/Supabase) behaviour.
 """
@@ -77,15 +79,51 @@ REQUIRED = {
     "o06": ("test_o06_the_consumer_path_serves_and_settles_once",),
     "o07": ("test_o07_the_lab_web_renders_every_page_family_signed_in",),
 }
-#: The Lab app's real-route journeys. `pinned`: the backend refuses any key but its own, so
-#: this gate cannot run it on `lab-on` (WR-LDP-1) - NOT RUN with the owner's exact rerun.
+#: The Lab app's real-route journeys; every backend accepts `lab-on` (WR-LDP-1). `foreign`:
+#: the backend also binds another key's resource, so this gate cannot run it on its own ports -
+#: NOT RUN naming the WR that lets it, with the owner's (`key`) exact rerun. `env`: what the
+#: backend reads instead of another key's resource (WR-LL2-1/2), from this block's lab_world.
 JOURNEYS = {
-    "datasets": {"file": "tests/n/journey.test.ts", "flag": "LAB_N_REAL", "pinned": None},
-    "releases": {"file": "tests/r/stack.test.ts", "flag": "LAB_R4_REAL", "pinned": "r2"},
-    "pipelines": {"file": "tests/p/stack.test.ts", "flag": "LAB_P4_REAL", "pinned": "p1"},
-    "evaluations": {"file": "tests/b/stack.test.ts", "flag": "LAB_B4_REAL", "pinned": "b3"},
-    "traces": {"file": "tests/v/list/stack.test.ts", "flag": "LAB_V1M_REAL",
-               "pinned": "lab-v1m"},
+    "datasets": {"file": "tests/n/journey.test.ts", "flag": "LAB_N_REAL", "key": "n3",
+                 "foreign": None},
+    "releases": {"file": "tests/r/stack.test.ts", "flag": "LAB_R4_REAL", "key": "r2",
+                 "foreign": None},
+    "pipelines": {"file": "tests/p/stack.test.ts", "flag": "LAB_P4_REAL", "key": "p1",
+                  "foreign": None,
+                  "env": lambda lw: {"LAB_P4_TEACHER_PORT": str(lw.TEACHER_PORT)}},
+    "evaluations": {"file": "tests/b/stack.test.ts", "flag": "LAB_B4_REAL", "key": "b3",
+                    "foreign": None},
+    "traces": {"file": "tests/v/list/stack.test.ts", "flag": "LAB_V1M_REAL", "key": "lab-v1m",
+               "foreign": None,
+               "env": lambda lw: {"LAB_V1M_CLICKHOUSE_URL": lw.clickhouse_url()}},
+}
+#: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, by class - a
+#: product WR per port name (the role's or family's missing work source), an external
+#: provider (P-10 teacher, P-11 training) or a GPU/staging target (P-08). The gate is re-run
+#: when one lands and the cell must then PASS.
+OUT_OF_SCOPE = {
+    "WR-B3-3": "product WR: WR-B3-3 (checkpoints role: registry adapter, L3 dev deployer)",
+    "WR-LSQ-9": "product WR: WR-LSQ-9 (rollout role's pass inputs)",
+    "WR-B4-2": "product WR: WR-B4-2 (evaluations: experiments, catalog, B3 ledger ports)",
+    "WR-LAB2-4": "product WR: WR-LAB2-4 (pipelines: the run listings)",
+    "WR-P4B-1": "product WR: WR-P4B-1 (teacher batches)",
+    "WR-R4-1": "product WR: WR-R4-1 (releases/optimizations read models)",
+    "WR-LL2-5": "product WR: WR-LL2-5 (the control factory's traces port, pilot._lab_traces: "
+                "unmounted without CLICKHOUSE_URL/S3_TRACE_BUCKET in its env)",
+    "P-10": "external teacher provider (P-10)", "P-11": "external training provider (P-11)",
+    "P-08": "GPU / staging target (P-08)",
+}
+#: FAILs that follow the rulings' design (R198, R237/R245), not a product finding: the e4-on
+#: pilot-box worker inherits LAB_EVAL_WORKER=true and refuses by name (LDP-F4); the
+#: all-switches App gateway on infrx_runtime is never on the box (LDP-F1 option (b)) -
+#: mutants.KNOWN_FAIL. R222 requires no FAIL cell and R234 never excuses one, so r222 keeps
+#: them open and only reports them under by_design until a ruling excuses them (0-LL2C-2;
+#: proposal LL2-BY-DESIGN in the E4ON evidence).
+BY_DESIGN = {
+    "tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_"
+    "waits_for_it": "R198 (LDP-F4): a consumer worker with LAB_EVAL_WORKER ON refuses by name",
+    "test_o05_every_lab_route_family_answers_a_lab_session":
+        "R237/R245 (LDP-F1 (b)): the all-switches App gateway is never the box's Lab server",
 }
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>o\d\d)_")
@@ -150,14 +188,15 @@ def pytest_verdict(code: int, counts: dict) -> tuple[str, str]:
 
 
 def journey_row(name: str, spec: dict) -> dict:
-    """A key-pinned journey is NOT RUN with the owner's exact rerun; never a pass."""
-    rerun = (f"cd apps/lab && {spec['flag']}=1 INFRX_D_TASK={spec['pinned'] or KEY} "
-             f"node --test {spec['file']}")
-    if spec["pinned"]:
-        return {"stage": f"journey:{name}", "status": NOT_RUN, "rerun": rerun,
-                "reason": f"NOT RUN[WR-LDP-1] its backend refuses every key but "
-                          f"{spec['pinned']}'s; this gate runs only on {KEY}"}
-    return {"stage": f"journey:{name}", "status": None, "rerun": rerun}
+    """A journey on another key's resource is NOT RUN with the owner's exact rerun."""
+    if spec["foreign"]:
+        wr, why = spec["foreign"]
+        return {"stage": f"journey:{name}", "status": NOT_RUN,
+                "rerun": f"cd apps/lab && {spec['flag']}=1 INFRX_D_TASK={spec['key']} "
+                         f"node --test {spec['file']}",
+                "reason": f"NOT RUN[{wr}] {why}; this gate runs only on {KEY}'s ports"}
+    return {"stage": f"journey:{name}", "status": None,
+            "rerun": f"cd apps/lab && {spec['flag']}=1 INFRX_D_TASK={KEY} node --test {spec['file']}"}
 
 
 def journey_status(code: int, text: str) -> str:
@@ -173,6 +212,46 @@ def journey_status(code: int, text: str) -> str:
 
 def gate(stages: list[dict]) -> str:
     return worst(stage["status"] for stage in stages)
+
+
+NOT_RUN_LANES = re.compile(r"NOT RUN\[([^\]]+)\]")
+
+
+def ruled(reason: str) -> bool:
+    """A NOT RUN reason whose every named lane is out of local scope (R222/R234)."""
+    found = NOT_RUN_LANES.search(reason or "")
+    return bool(found) and set(found.group(1).split(",")) <= set(OUT_OF_SCOPE)
+
+
+def r222(stages: list[dict], scenarios: dict) -> dict:
+    """R222/R235: accepted locally with nothing but PASS or a NOT RUN whose every reason names
+    only out-of-scope lanes. `open` = what keeps it from acceptance: every FAIL (R222: no FAIL
+    cell; R234), BLOCKED, INVALID or unruled NOT RUN; `by_design` = the open FAILs that are
+    exactly a BY_DESIGN case, with the design they follow - reported, never excused."""
+    still, excused = {}, {}
+    for sid, entry in scenarios.items():
+        def fine(name: str, status: str) -> bool:
+            mine = [r for r in entry["reasons"] if r.startswith(f"{name}: ")]
+            if status == FAIL and name in BY_DESIGN:
+                excused[name] = BY_DESIGN[name]
+            return status == PASS or (status == NOT_RUN and bool(mine)
+                                      and all(ruled(r) for r in mine))
+        cases = entry["cases"]
+        if not all([fine(name, status) for name, status in cases.items()]) or \
+                set(REQUIRED[sid]) - set(cases):
+            still[sid] = entry["status"]
+    for stage in stages:
+        name, status = stage["stage"], stage["status"]
+        if (name == "scenarios" and scenarios) or status == PASS or (status == NOT_RUN and ruled(stage.get("reason"))):
+            continue
+        counts = stage.get("counts") or {}
+        failed = counts.get("failed_ids") or []
+        if name == "e4-on" and status == FAIL and set(failed) <= set(BY_DESIGN) \
+                and not counts.get("errors") \
+                and not (counts.get("skipped") or counts.get("xfailed")):   # 0-LL2C-1
+            excused.update({case: why for case, why in BY_DESIGN.items() if case in failed})
+        still[name] = status
+    return {"accepted": not still, "open": still, "by_design": excused}
 
 
 def blocked_all(why: str) -> list[dict]:
@@ -270,12 +349,13 @@ def scenarios(out: Path, keyword: str | None) -> tuple[dict, dict]:
     return row, result
 
 
-def journeys(out: Path) -> list[dict]:
+def journeys(out: Path, lab_world) -> list[dict]:
     rows = []
     for name, spec in JOURNEYS.items():
         row = journey_row(name, spec)
         if row["status"] is None:
-            env = {**os.environ, spec["flag"]: "1", "INFRX_D_TASK": KEY}
+            env = {**os.environ, spec["flag"]: "1", "INFRX_D_TASK": KEY,
+                   **(spec["env"](lab_world) if "env" in spec else {})}
             code, seconds, log = logged(f"journey-{name}", ["node", "--test", spec["file"]],
                                         out, REPO / "apps" / "lab", env, 1800)
             row.update(exit=code, seconds=seconds, log=str(log),
@@ -284,11 +364,17 @@ def journeys(out: Path) -> list[dict]:
     return rows
 
 
-def pins() -> dict:
+def pins(out: Path | None = None) -> dict:
+    """The run's own raw dir (`out`, when inside the tree) is not dirt; anything else is,
+    other evidence included (1-LL2-RV-2)."""
     def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=REPO, capture_output=True,
                               text=True).stdout.strip()
-    return {"head": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain"))}
+    own = out.resolve() if out else None
+    skip = [f":!{own.relative_to(REPO.resolve()).as_posix()}"] \
+        if own and own.is_relative_to(REPO.resolve()) else []
+    return {"head": git("rev-parse", "HEAD"),
+            "dirty": bool(git("status", "--porcelain", "--", ".", *skip))}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -332,7 +418,7 @@ def main(argv: list[str] | None = None) -> int:
                     row, result = scenarios(out, args.keyword)
                     stages.append(row)
                 if "lab-journeys" in only:
-                    stages += journeys(out)
+                    stages += journeys(out, lab_world)
                 stages += [{"stage": name, "status": NOT_RUN, "reason": "not selected (--only)"}
                            for name in STAGES if name not in only]
     except run.Interrupted as stop:
@@ -345,14 +431,15 @@ def main(argv: list[str] | None = None) -> int:
         lock.close()
     verdict = gate(stages)
     payload = {
-        "task": "LAB-DEPLOY-PREP", "gate": "E4-ON (LAB-LOCAL: every switch ON)",
-        "verdict": verdict, "exit": EXIT[verdict],
+        "task": "I2L", "gate": "E4-ON (LAB-LOCAL: every switch ON)",
+        "verdict": verdict, "exit": EXIT[verdict], "r222": r222(stages, result or {}),
+        "scope": OUT_OF_SCOPE,
         "label": "real PostgreSQL/PostgREST/Valkey/ClickHouse/S3-compatible services (e3l block), "
                  "the merged code with every switch ON, a controlled engine, a judge fake as "
                  "the teacher, the manual-bundle training connector, a local Lab build behind "
                  "local TLS and a Supabase stand-in; not Marlin quality, not GPU capacity, not "
                  "hosted behaviour",
-        "pins": pins(), "namespace": NAMESPACE, "key": KEY,
+        "pins": pins(out), "namespace": NAMESPACE, "key": KEY,
         "started": started.isoformat(timespec="seconds"),
         "seconds": round(time.monotonic() - clock, 1),
         "stack": {"usable": usable, "why_not": why or None,
@@ -369,7 +456,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{stage['status']:>8}  {stage['stage']}")
     for entry in payload["scenarios"]:
         print(f"{entry['status']:>8}  {entry['id']}  {entry['title']}")
-    print(f"gate {verdict} -> {out / 'verdict.json'}")
+    print(f"r222 {payload['r222']}\ngate {verdict} -> {out / 'verdict.json'}")
     return EXIT[verdict]
 
 

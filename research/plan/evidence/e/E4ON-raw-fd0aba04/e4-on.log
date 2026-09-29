@@ -1,0 +1,111 @@
+........................................................................ [  2%]
+........................................................................ [  5%]
+................................................................s....... [  7%]
+.........................sss............................ss.............. [ 10%]
+............s........................................................... [ 12%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 25%]
+........................................................................ [ 27%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 35%]
+..................................................................s..... [ 37%]
+......s................................................................. [ 40%]
+........................................................................ [ 42%]
+s....................................................................... [ 45%]
+.................................s...ssss............................... [ 47%]
+........F..............................ss............................... [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 60%]
+........................................................................ [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 83%]
+........................................................................ [ 85%]
+........................................................................ [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 98%]
+................................................                         [100%]
+=================================== FAILURES ===================================
+__ test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it __
+
+box = <tests.w.test_worker_main.Box object at 0x747acbe36f60>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x747accad8290>
+
+    def test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it(box, monkeypatch):
+        """E3B's pilot box on this lane's services: `start("worker")` returns once `python -m
+        infrx.worker` answers `/readyz` 200, and `stop` drains it to exit 0."""
+        pilotbox = pilotbox_module(monkeypatch)
+        box.start_engine()
+        pilot = pilotbox.PilotBox(dict(box.settings), f"http://127.0.0.1:{box.engine_port}",
+                                  box.log.parent, 1)
+        try:
+>           pilot.start("worker", timeout=60)
+
+tests/w/test_worker_main.py:1024: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../tests/integration/backend/pilotbox.py:217: in start
+    self._wait_ready(role, ready, timeout)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <infrx_i2b_pilotbox.PilotBox object at 0x747acc91c770>, role = 'worker'
+url = 'http://127.0.0.1:41399/readyz', timeout = 60
+
+    def _wait_ready(self, role: str, url: str, timeout: float) -> None:
+        import httpx
+        end, last = time.monotonic() + timeout, ""
+        while time.monotonic() < end:
+            if self.processes[role].poll() is not None:
+>               raise RuntimeError(f"the {role} exited {self.processes[role].returncode}: "
+                                   f"{self.tail(role)}")
+E               RuntimeError: the worker exited 2: 2026-09-29 20:53:22,992 INFO botocore.credentials Found credentials in environment variables. | 2026-09-29 20:53:23,219 INFO botocore.credentials Found credentials in environment variables. | infrx.worker: refusing to start: INFRX_MODE='pilot': LAB_EVAL_WORKER needs an evaluator source (WR-B-2(b)) and a dev target source (WR-B-3)
+
+../../tests/integration/backend/pilotbox.py:224: RuntimeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+.venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/contracts/test_config_and_imports.py::test_each_lab_gate_owns_a_compose_block_below_the_band, argvalues type: enumerate
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/g/lab_evaluations/test_lab_evaluations_pg.py:96: task-local PostgreSQL unavailable: PostgreSQL only on the b3 task-local key (INFRX_D_TASK=b3)
+SKIPPED [1] tests/g/lab_pipelines/test_lab_pipelines_pg.py:81: task-local PostgreSQL unavailable: PostgreSQL only on the p1 task-local key (INFRX_D_TASK=p1)
+SKIPPED [1] tests/g/lab_pipelines/test_lab_teachers_composition_pg.py:87: task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/g/lab_pipelines/test_lab_teachers_pg.py:94: task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/g/lab_releases/test_lab_releases_composition_pg.py:57: task-local PostgreSQL unavailable: PostgreSQL only on the r2 task-local key (INFRX_D_TASK=r2)
+SKIPPED [1] tests/g/lab_releases/test_lab_releases_pg.py:78: task-local PostgreSQL unavailable: PostgreSQL only on the r2 task-local key (INFRX_D_TASK=r2)
+SKIPPED [1] tests/g/lab_traces/test_lab_traces_stack.py:70: no ClickHouse: start infrx-t2i-clickhouse on the tasklocal t2i block and export INFRX_LAB_API_STACK=1
+SKIPPED [1] tests/w/test_lab_workers_judge_pg.py:35: PostgreSQL only on the j2 task-local key
+SKIPPED [1] tests/w/test_lab_workers_teachers_pg.py:27: task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/w/test_prep_worker_mutants.py:77: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_w5_mutants.py:79: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:73: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:87: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:110: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:137: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_main_mutants.py:77: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_worker_traces_pg.py:91: WR-T-4 proof needs the t2f key and its stack (INFRX_D_TASK=t2f INFRX_T2F_STACK=1)
+1 failed, 2838 passed, 17 skipped, 3 warnings in 2025.50s (0:33:45)

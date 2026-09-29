@@ -1,0 +1,238 @@
+# E4-ON at fd0aba04 (lane lab-local-2, task I2L / LAB-INTERNAL-TESTING-PREP: WR-LW8-2 + WR-LCR-5's rerun)
+
+- Lane lab-local-2; branch `codex/w5-lab-local-2`; worktree `.claude/worktrees/codex-w5-lab-local-2`;
+  base `c77e75ac` (after merge #55: 0056 grants). Commits: `1a5be321` step 1 (R222 machine
+  check + o05's control-factory case judged against the owner login), `fd0aba04` step 2a (o07's
+  TLS race, clean pin), then this evidence.
+- Nothing touched the pilot box, AWS/SSM/S3, Vercel, hosted Supabase, product code, migrations
+  or a secret. Docker only on `lab-on` (57537–57539) and the borrowed e3l block under E3L's
+  runner lock (`/tmp/infrx-e3l.runner.lock`, free when taken); e5l/e8l/t2f/r2/b1/p3 and other
+  lanes' containers were not touched.
+
+## 1. Step 1 (fail-first, `1a5be321`)
+
+- `runner.r222(stages, scenarios)`: `r222.accepted/open/by_design` in verdict.json from
+  `OUT_OF_SCOPE` (a product WR per port name: WR-B3-3, WR-LSQ-9, WR-B4-2, WR-LAB2-4, WR-P4B-1,
+  WR-R4-1; P-10, P-11; P-08) and `BY_DESIGN` (R198's pilot-box worker case, R237's
+  all-switches App gateway). Red first against the recorded 28c9c2cc verdict: open = o04, o05,
+  e4-on and 4 journeys → `accepted: false`.
+- o05's control-factory case: the Lab login's answers == the owner login's
+  (`lab_world.judge_login`, R251); the `NOT RUN[SR-LCR-1]` marker dropped. Journeys run on
+  `lab-on` (WR-LDP-1 landed): datasets, releases, evaluations.
+
+## 2. Step 2: `make lab-local` for real
+
+### First run at 1a5be321 (kept: `E4ON-raw-1a5be321/`, pins dirty — the raw dir itself)
+Exit 1 FAIL, 1,413 s. Same as below except **o07 FAIL: `httpx.ConnectError [Errno 111]`** on
+`https://localhost:57061`. Finding (owned test code): `lab_world.lab_web` waited only for
+`next start` (ready in 125 ms) while the Caddy terminator had not bound its port yet (its log
+stops at the root-cert install; the same failure in `E4ON-raw-950a570b`). Fixed at `fd0aba04`:
+the Lab web is ready only once its https origin answers through the terminator (red first:
+the test saw only `http://127.0.0.1:<LAB_PORT>/` waited on). Also: every earlier verdict said
+`dirty: true` because the run writes its raw dir under research/plan/evidence; `pins()` now
+excludes that path (red first: `True is False`).
+
+### The run of record at fd0aba04: `GATE_ARGS=--keep make lab-local` → exit 2 (make) / runner exit 1 = FAIL
+`research/plan/evidence/e/E4ON-raw-fd0aba04/verdict.json`; started 20:21:40Z, 2,106 s;
+`pins: {head: fd0aba04…, dirty: false}`.
+
+| Stage | Verdict | Detail |
+|---|---|---|
+| stack | usable | E2 services in e3l (postgres, valkey, clickhouse, s3), migrations through 0056 |
+| lab-build | PASS | `pnpm build` (4.6 s, cached) |
+| e4-on | FAIL (by design) | tests/g tests/w tests/contracts tests/i/test_packaging.py, every switch ON (13 switches): **2,853 tests: 2,838 passed, 1 failed, 0 errors, 14 skipped** (skips: other keys' PG/ClickHouse/t2f, named). The one failure is R198's `tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it` (LDP-F4: the pilot-box worker inherits `LAB_EVAL_WORKER=true` and refuses by name). **The 35 WR-LDP-5 pins are green.** |
+| scenarios | FAIL (by design) | o01 PASS, o02 PASS, o03 NOT RUN[P-11], o04 PASS, o05 FAIL (R237 case only), o06 PASS, o07 NOT RUN[product WR] |
+| journey:datasets | PASS | `cd apps/lab && LAB_N_REAL=1 INFRX_D_TASK=lab-on node --test tests/n/journey.test.ts` |
+| journey:releases | PASS | `cd apps/lab && LAB_R4_REAL=1 INFRX_D_TASK=lab-on node --test tests/r/stack.test.ts` |
+| journey:evaluations | PASS | `cd apps/lab && LAB_B4_REAL=1 INFRX_D_TASK=lab-on node --test tests/b/stack.test.ts` |
+| journey:pipelines | NOT RUN[WR-LL2-1] | backend binds p2's teacher-fake port 57529. Rerun: `cd apps/lab && LAB_P4_REAL=1 INFRX_D_TASK=p1 node --test tests/p/stack.test.ts` |
+| journey:traces | NOT RUN[WR-LL2-2] | backend reads t2i's ClickHouse (57540). Rerun: `cd apps/lab && LAB_V1M_REAL=1 INFRX_D_TASK=lab-v1m node --test tests/v/list/stack.test.ts` |
+
+Scenario cells:
+
+- **o03** training NOT RUN[P-11] (refuses by name: no worker pass for the manual bundle,
+  R198/R211); eval, checkpoints, judge, annotation, rollout, datasets PASS. Rerun:
+  `tests/integration/lab-local.sh --reuse --only scenarios -k o03`.
+- **o04** both cases PASS: the control factory serves a Lab session, and is ready on
+  `infrx_lab_control` (LDP-F7 fixed).
+- **o05** all-switches App gateway: FAIL — every family typed 503 on `infrx_runtime` — R237/R245
+  by design (the box never runs it; `mutants.KNOWN_FAIL`). The Lab-routes gateway (owner
+  login, ROLLOUT_ROUTING and TRACE_PUMPS false per WR-LC-LOCAL): NOT RUN[WR-B4-2, WR-LAB2-4,
+  WR-R4-1] for evals/optimizations/pipelines; the rest 200. **The control factory on
+  `infrx_lab_control` answers exactly as on the owner login** (`cases/composition/o05-control-families.json`):
+  control, datasets, releases 200 on both; evals, pipelines, teacher-batches, optimizations the
+  same typed `503 {"refusal":"unavailable"}` on both → NOT RUN[WR-B4-2, WR-LAB2-4, WR-P4B-1,
+  WR-R4-1]; traces judged apart (404 on both: no ClickHouse backend in the control env). A
+  consumer key is refused on every family: PASS.
+- **o06** PASS: the consumer App path serves and settles once with every switch ON.
+- **o07** NOT RUN[WR-B4-2, WR-LAB2-4, WR-R4-1]: the Lab web (production build, https origin)
+  renders every page family signed in; /evaluations, /evaluations/checkpoints, /training,
+  /optimizations render the typed "records could not be read" state
+  (`cases/composition/o07-pages.json`). Rerun: `tests/integration/lab-local.sh --reuse --only scenarios -k o07`.
+
+### R222 machine check (verdict.json `r222`)
+
+`accepted: false`; `open: {journey:pipelines: NOT RUN, journey:traces: NOT RUN}`;
+`by_design`: the R198 e4-on case and the R237 o05 case. Every other non-PASS cell names only
+out-of-scope classes (product WR per port, P-11). ~~The gate is acceptable under R222 once
+WR-LL2-1/2 land (or once the coordinator rules LL2-SCOPE, below).~~ **Corrected in the fix
+round (§7): that overclaimed.** Recomputed at 04a48a2c: `open` also holds `o05: FAIL` and
+`e4-on: FAIL` (R222 allows no FAIL cell, R234 excuses none; the by-design FAILs are only
+reported until ruled, LL2-BY-DESIGN in §6), and the e4-on stage's 14 skipped cases (other
+keys' PostgreSQL b1/b3/p1/p2/r2/j2, t2i's ClickHouse, t2f) keep it open until they are ruled
+or run. No in-scope product FAIL remains.
+
+## 3. Step 3: the mutants on the kept stack (fd0aba04)
+
+`INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rs tests/integration/lab_local/test_mutants.py`
+→ exit 0, **56 passed, 0 skipped in 830 s**: 40 layer-1 mutants + 12 stack mutants killed
+(pristine baseline green on the kept stack, KNOWN_FAIL = the R237 o05 case), plus the 4 list
+checks (well-formed, every case covered, no false kill). 0 survivors. Log:
+`E4ON-raw-fd0aba04/mutants.log`. New this lane: `r222_*` (8), `login_*` (3),
+`st_control_families_set_role`, `lab_web_ready_before_its_origin`, `evidence_is_dirt`,
+`anything_is_clean`. The stack was then torn down (`lab-local.sh --reuse --only none`); no
+e3l/lab-on container left.
+
+## 4. Other checks
+
+| Command | Exit | Result |
+|---|---|---|
+| `pytest -q tests/integration/lab_local/test_lab_local_runner.py` | 0 | 21 passed (2 new cases red first) |
+| `pytest -q tests/integration/test_harness.py tests/integration/test_lab_package_isolation.py` + the above | 1 | 69 passed, 1 failed: the production guard on two files this lane does not own (WR-LL2-4, base red at c77e75ac) |
+| `make lab-local` at 1a5be321 | 2 (runner 1) | FAIL: o07 TLS race (fixed) |
+| `GATE_ARGS=--keep make lab-local` at fd0aba04 | 2 (runner 1) | FAIL by design only; r222 open = 2 journeys (§2) |
+
+Not run: `make api-test` whole (no product code changed; its E4 subset ran inside e4-on),
+`make lab-*` (apps/lab untouched).
+
+## 5. Wiring requests
+
+- **WR-LL2-1** (owner: the lane owning `apps/lab/tests/p/`; test harness, not product):
+  `apps/lab/tests/p/backend.py:109` binds the teacher fake to p2's port. Diff:
+  ```diff
+  -    fake = JudgeFake(port=local_services("p2")["teacher-fake"].host_port)
+  +    fake = JudgeFake(port=int(os.environ.get("LAB_P4_TEACHER_PORT")
+  +                              or local_services("p2")["teacher-fake"].host_port))
+  ```
+  Then (this lane, on landing): `runner.JOURNEYS["pipelines"]["foreign"] = None` and the
+  journey env gets `LAB_P4_TEACHER_PORT=<lab_world.TEACHER_PORT>`. Test: journey:pipelines PASS in `make lab-local`.
+- **WR-LL2-2** (owner: the lab-v1m lane, `apps/lab/tests/v/list/`; test harness): 
+  `apps/lab/tests/v/list/backend.py:76-78` reads t2i's ClickHouse. Diff:
+  ```diff
+  -    ch = dict(host="127.0.0.1", port=tasklocal.local_services("t2i")["clickhouse"].host_port,
+  -              username=CH_USER, password=CH_PASSWORD)
+  -    admin = clickhouse_connect.get_client(**ch, database="infrx_t2i")
+  +    url = os.environ.get("LAB_V1M_CLICKHOUSE_URL")      # http://user:pw@host:port/db
+  +    if url:
+  +        from urllib.parse import urlsplit
+  +        u = urlsplit(url)
+  +        ch = dict(host=u.hostname, port=u.port, username=u.username, password=u.password or "")
+  +        admin = clickhouse_connect.get_client(**ch, database=u.path.lstrip("/"))
+  +    else:
+  +        ch = dict(host="127.0.0.1", port=tasklocal.local_services("t2i")["clickhouse"].host_port,
+  +                  username=CH_USER, password=CH_PASSWORD)
+  +        admin = clickhouse_connect.get_client(**ch, database="infrx_t2i")
+  ```
+  Then (this lane): `JOURNEYS["traces"]` runs with `LAB_V1M_CLICKHOUSE_URL=lab_world.clickhouse_url()`
+  (the e3l block's ClickHouse). Test: journey:traces PASS.
+- **WR-LL2-3** (runbook §11, applied here as allowed: only the G1–G6 and L5 rows + one log line):
+  see `research/plan/consumer-v1/08-lab-internal-testing-rollout.md`.
+- **WR-LL2-4** (finding, not this lane's code; base red at c77e75ac):
+  `tests/integration/test_harness.py::test_nothing_in_this_directory_points_at_production` fails on
+  `tests/integration/backend/test_certify.py` ('callbill.ai') and
+  `tests/integration/ops/test_create_test_user.py` ('SUPABASE_SERVICE_ROLE_KEY', last touched
+  8cc9c8fb). Owner: the TEST-USER / backend-certify lanes — split the needles as
+  `lab_local/mutants.py` does, or allow-list the two files in the guard.
+- Standing product WRs this gate re-runs on landing (R234 ii): WR-B4-2, WR-LAB2-4, WR-P4B-1,
+  WR-R4-1 (o05/o07); P-11 (o03 training).
+
+## 6. Proposed ruling (propose, never number): LL2-SCOPE
+
+A Lab gate cell NOT RUN only because another lane's *test backend* hard-codes another tasklocal
+key's port is a harness wiring request: it stays in `r222.open` (the runner does not excuse it)
+until the WR lands — or the coordinator rules it out of local scope under R234 (ii), and this
+lane adds WR-LL2-1/2 to `OUT_OF_SCOPE`.
+
+### Proposed ruling (propose, never number): LL2-BY-DESIGN
+
+R198's pilot-box worker case (`tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it`,
+refusing by name: `LAB_EVAL_WORKER needs an evaluator source (WR-B-2(b)) and a dev target
+source (WR-B-3)`, e4-on.log:73) and R237/R245's all-switches App-gateway case
+(`test_o05_every_lab_route_family_answers_a_lab_session`) FAIL by the rulings' design. Proposal:
+the coordinator may excuse exactly these two cases, and only on their recorded refusal text
+(the junit failure message pinned, a crash or traceback in the same case stays open), with the
+e4-on stage excused only when it also has no skipped or quarantined case. Until ruled, the
+runner keeps them in `r222.open` and lists them under `r222.by_design`.
+
+## 7. Fix round (review 0-LL2C-1/2, head 04a48a2c)
+
+- **0-LL2C-2** (fixed): `runner.r222` no longer excuses any FAIL. A scenario or e4-on FAIL that
+  is exactly a `BY_DESIGN` case stays in `open` and is only reported under `by_design`
+  (option (a) of the finding; LL2-BY-DESIGN above is the proposal that would excuse them).
+  The test that accepted an o05 FAIL with any message now asserts `open == {o05: FAIL}`.
+- **0-LL2C-1** (fixed): the e4-on stage is reported under `by_design` only when every failed
+  id is R198's **and** it has no error, skipped or xfailed case; with skips it stays open with
+  an empty `by_design` (new cases in `test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case`).
+  The dead `failed and` guard is gone with its mutant (`set() <= BY_DESIGN` adds nothing).
+- New `test_lab_local_r222_the_fd0aba04_verdict_stays_open_after_the_journeys_land`: over
+  `E4ON-raw-fd0aba04/verdict.json`, r222 is open on {o05, e4-on, journey:pipelines,
+  journey:traces}; with the journeys set PASS (WR-LL2-1/2 landed) still not accepted, open
+  {o05, e4-on}. The reviewer's repro (`ll2c_repro.py`) now prints `accepted: False`.
+- Recomputed `r222` over the recorded fd0aba04 verdict (the raw `verdict.json` is left as
+  recorded): `accepted: false`, `open: {o05: FAIL, e4-on: FAIL, journey:pipelines: NOT RUN,
+  journey:traces: NOT RUN}`, `by_design: {test_o05_every_lab_route_family_answers_a_lab_session}`
+  (R198 not listed: the stage has 14 skips).
+- Tests first: the three r222 tests failed against 6f784b3d's runner (3 failed, 1 passed),
+  then `pytest tests/integration/lab_local/test_lab_local_runner.py` 22 passed.
+- Mutants: `INFRX_MUTANTS=all pytest tests/integration/lab_local/test_mutants.py` 46 passed,
+  12 skipped: 42 layer-1 mutants killed, 0 survivors (new: `r222_e4_skips_ignored`,
+  `r222_by_design_accepted`, `r222_e4_by_design_accepted`; removed: `r222_e4_no_failure_excused`,
+  now equivalent). The 12 stack mutants were not rerun (stack torn down after step 3; the fix
+  touches only `r222`, which no stack mutant exercises; last run 12/12 killed at fd0aba04).
+  The layer-1 copy now also carries the fd0aba04 verdict.
+- Not rerun: `make lab-local` (r222 is a pure function over the recorded verdict; the raw run
+  is unchanged).
+
+## Coordinator rulings (merge #61, `codex/w5-merge-61`)
+
+- **R257** (LL2-BY-DESIGN, §6): the E4-ON gate's two by-design FAILs - R198's pilot-box e4-on
+  case (`LAB_EVAL_WORKER` refuses by name on this release) and R237's all-switches App-gateway
+  o05 case - are reported under `r222.by_design`, never excused into PASS. The gate is accepted
+  when `r222.open` holds nothing but by_design cells whose recorded refusal text matches, every
+  other NOT RUN is a ruled class with its rerun, and the e4-on stage has no error, skipped or
+  xfailed case outside a ruled class.
+- **R258** (LL2-SCOPE, §6): a Lab gate cell NOT RUN only because another lane's test backend
+  hard-codes another key's port is a harness wiring request that stays in `r222.open` until it
+  lands - never an out-of-scope class.
+- Wirings in the same merge: WR-LL2-1 (`apps/lab/tests/p/backend.py`: `LAB_P4_TEACHER_PORT`,
+  default p2's teacher-fake), WR-LL2-2 (`apps/lab/tests/v/list/backend.py`:
+  `LAB_V1M_CLICKHOUSE_URL`, default t2i's); `runner.JOURNEYS` pipelines/traces run on `lab-on`
+  with `LAB_P4_TEACHER_PORT=lab_world.TEACHER_PORT` / `LAB_V1M_CLICKHOUSE_URL=lab_world.clickhouse_url()`;
+  WR-LL2-4 (the production guard's allow-list, one (file, needle) pair each, a negative case
+  kept); LL2C-3 (`lab_world.CONTROL_EXPECTED` pins each control-factory family on both logins:
+  a served family's 503 is FAIL), LL2C-4 (the e4-on errors guard's case + mutant), LL2C-5 (the
+  control factory's traces 404 is NOT RUN[WR-LL2-5], product WR: `pilot._lab_traces` unmounted
+  without `CLICKHOUSE_URL`/`S3_TRACE_BUCKET` in its env), 1-LL2-RV-2 (`pins(out)` skips only the
+  run's own raw dir).
+
+## Gate state on the tip (merge #61)
+
+- e4-on: 2838 passed / 1 failed (the R198 by-design case) / 14 skipped on other keys - the skips
+  are other lanes' task-local keys (b1/b3/p1/p2/r2/j2 PostgreSQL, t2i's ClickHouse, t2f) and stay
+  open until ruled or run (LL2C-1).
+- o01/o02/o04/o06 PASS.
+- o05: control-factory families equal on both logins; evals/teacher-batches/optimizations
+  NOT RUN[product WR: WR-B4-2, WR-LAB2-4, WR-P4B-1, WR-R4-1]; the all-switches App gateway FAIL
+  is R237's by-design case (R257).
+- o03 training NOT RUN[P-11]; o07 NOT RUN[product WR].
+- Journeys: datasets/releases/evaluations PASS; pipelines/traces → after WR-LL2-1/2 (landed in
+  this merge; the lab-local-3 rerun flips them).
+- Not run at the merge (≈35 min on a loaded host): `GATE_ARGS=--keep make lab-local`, then
+  `INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rs tests/integration/lab_local/test_mutants.py`
+  (the stack list: o05's control case now judges against `CONTROL_EXPECTED`).
+
+## Carried
+
+- **lab-local-3**: the real `make lab-local` rerun (journeys pipelines/traces on WR-LL2-1/2, o05
+  control on the pinned families) + the stack mutants; and the 14-skip question: run the skipped
+  keys' cases on their keys inside the composition, or rule them.

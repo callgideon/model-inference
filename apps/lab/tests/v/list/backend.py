@@ -3,8 +3,8 @@
 R176) served as merged, over the REAL L2 (`LabAccess` on `PgAccessStore`, grants through lab-sql's
 RPCs, the LAB-ACCESS world of `tests/l/access/worlds.py`) on the task-local PostgreSQL
 (`INFRX_D_TASK=lab-v1m`, port 57513), the registry (`PgServing`), T2I's projection and T3's
-deletion ledger on the pinned ClickHouse (`infrx-t2i-clickhouse`, the t2i block 57540, a database
-of its own per run). Objects are in memory. Test-only: the bearer-token-per-user stand-in for
+deletion ledger on the pinned ClickHouse (`infrx-t2i-clickhouse`, the t2i block 57540, or
+`LAB_V1M_CLICKHOUSE_URL`: lab-local's block, WR-LL2-2; a database of its own per run). Objects are in memory. Test-only: the bearer-token-per-user stand-in for
 `GoTrueSessions` (lab_auth's verifier) and `/_test/revoke` (the grantor's real revocation RPC).
 
     INFRX_D_TASK=lab-v1m uv run --frozen --project apps/infrx-api python apps/lab/tests/v/list/backend.py
@@ -73,9 +73,16 @@ def main() -> None:
     worlds.seed_pg(conn, dsn)
     w = worlds.PgWorld(conn, dsn)
 
-    ch = dict(host="127.0.0.1", port=tasklocal.local_services("t2i")["clickhouse"].host_port,
-              username=CH_USER, password=CH_PASSWORD)
-    admin = clickhouse_connect.get_client(**ch, database="infrx_t2i")
+    url = os.environ.get("LAB_V1M_CLICKHOUSE_URL")      # WR-LL2-2: http://user:pw@host:port/db
+    if url:
+        from urllib.parse import urlsplit
+        u = urlsplit(url)
+        ch = dict(host=u.hostname, port=u.port, username=u.username, password=u.password or "")
+        admin = clickhouse_connect.get_client(**ch, database=u.path.lstrip("/"))
+    else:
+        ch = dict(host="127.0.0.1", port=tasklocal.local_services("t2i")["clickhouse"].host_port,
+                  username=CH_USER, password=CH_PASSWORD)
+        admin = clickhouse_connect.get_client(**ch, database="infrx_t2i")
     database = f"lab_v1m_{uuid.uuid4().hex}"
     admin.command(f"CREATE DATABASE {database}")
     client = clickhouse_connect.get_client(**ch, database=database)

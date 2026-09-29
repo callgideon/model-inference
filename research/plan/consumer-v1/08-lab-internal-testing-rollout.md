@@ -324,13 +324,13 @@ reversal of Lab tables is never part of this runbook.
 
 | Step | Proof | Where it is recorded |
 |---|---|---|
-| G1–G6 | commands + exit codes; `E4ON-raw-<head7>/verdict.json` | coordinator log |
+| G1–G6 | commands + exit codes; `E4ON-raw-<head7>/verdict.json` — latest local E4-ON: `E4ON-raw-fd0aba04` (exit 1; `r222.accepted: false`, open journey:pipelines/traces NOT RUN[WR-LL2-1/2] plus o05/e4-on FAIL — the by-design cases stay open until ruled (proposal LL2-BY-DESIGN) and e4-on's 14 other-key skips until ruled or run; e4-on 2,838/2,853 passed, the one FAIL R198's by-design worker case; o01/o02/o04/o06 PASS; o05's all-switches App gateway R237 by design; pins clean) | coordinator log + `evidence/e/E4ON-fd0aba04.md` |
 | §2 (1) | `schema_proof.py` output, `known-good.json` diff, `known-good.py --list --applied 0051` exit 0 | evidence/i/KNOWN-GOOD-PROOF-4-* |
 | §2 (2) | the merged `hosted-migrate.sh` patch (bcb73cc1); `lab-migrate.sh` stops at condition 1, not 2, on the tree (`test_ldp__todays_hosted_migrate_carries_the_reviewed_patch`) | its commit |
 | §2 (3) | the window entry | coordinator log |
 | §2 a/b | `W6b PASS: COPY_DIGEST=…`, `W7 PASS: hosted 0001-0051` | `~/infrx-backups/migrate-*.log` + coordinator log |
 | §3 | `describe-parameters` name/type/version | coordinator log |
-| L5 | E4-ON o04 (both cases PASS; LDP-F7 fixed) + o05's control-factory case (expected PASS for datasets, pipelines, releases after lab-sql-lw8 (0056); evaluations/teachers/optimizations as their ports) + L5's printed lines | verdict.json + coordinator log |
+| L5 | E4-ON o04 (both cases PASS at fd0aba04; LDP-F7 fixed) + o05's control-factory case on `infrx_lab_control` answering exactly as the owner login (0056, R251; at fd0aba04: control, datasets, releases 200 on both; evaluations, pipelines, teacher-batches, optimizations the same typed 503 on both — NOT RUN[WR-B4-2, WR-LAB2-4, WR-P4B-1, WR-R4-1]) + L5's printed lines | verdict.json + coordinator log |
 | L7 | WR-LDP-7 merged + E4-ON o03 PASS on the per-role logins (NOT RUN today) | verdict.json |
 | L1–L7 | each step's printed lines (names only) + `60-lab-smoke.sh` after each | `/var/log/infrx-lab-rollout.log` + coordinator log |
 | §6 | Vercel deployment id, domain, Redirect URLs | P-08 record |
@@ -369,3 +369,5 @@ reversal of Lab tables is never part of this runbook.
   (R251); the tests/i/lab_control PG matrix shows the Lab login equal to the owner's, present
   records included; on the box only after a hosted apply (R151/R201). Nothing was run against
   the box, AWS, SSM, Vercel or hosted Supabase.
+- 2026-09-29 (lab-local-2, I2L rerun, WR-LW8-2/WR-LCR-5): §11 G1–G6 and L5 rows — `make lab-local` at fd0aba04 (`E4ON-raw-fd0aba04`): o04 both cases PASS; o05's control-factory case judges the Lab login against the owner login (datasets, releases 200; pipelines typed 503 as on the owner, WR-LAB2-4); the WR-LDP-5 pins green (one e4-on FAIL, R198 by design); `r222.accepted` false only on the pipelines/traces journeys (WR-LL2-1/2). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
+- 2026-09-29 (lab-local-2 fix round, 0-LL2C-1/2): §11 G1–G6 row — the runner's R222 check no longer excuses the by-design FAILs or an e4-on stage with skipped cases; recomputed over `E4ON-raw-fd0aba04` it stays open on o05, e4-on and the two journeys (`evidence/e/E4ON-fd0aba04.md` §7). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.

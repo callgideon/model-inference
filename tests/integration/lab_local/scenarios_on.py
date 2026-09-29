@@ -44,7 +44,7 @@ PAGES = {"/overview": "control-web", "/models": "control-web", "/deployments": "
          "/annotations": "pipelines", "/training": "pipelines", "/judge": "judge",
          "/releases": "releases", "/optimizations": "optimizations", "/datasets": "datasets",
          "/settings": "session"}
-UNAVAILABLE = '{"refusal":"unavailable"}'
+UNAVAILABLE = '{"refusal":"unavailable"}'   # lw.UNAVAILABLE without the status
 
 
 def split_pending(wrong: dict[str, str], family_of) -> tuple[dict, dict]:
@@ -192,29 +192,26 @@ def test_o05_the_lab_routes_gateway_serves_every_family(on):
     not_run_pending({family: PENDING_FAMILIES[family] for family in pending})
 
 
-#: LCR-F1: on infrx_lab_control every family but control is its typed 503 until SR-LCR-1
-#: (lane lab-sql-lw8) grants that login the families' D7/D8/D9 route-half functions.
-SR_LCR_1 = ("datasets", "evals", "pipelines", "teacher-batches", "releases", "optimizations")
-DATASETS_UNAVAILABLE = '{"detail":"the datasets service failed"}'
-
-
 def test_o05_the_control_factory_serves_every_family_on_its_own_login(on):
-    """WR-LDP-2 / R245: the control factory on 0043's `infrx_lab_control` (the box's only
-    /lab/v1/* server) answers control 200 and every other family 200 or its typed 503 - the
-    latter NOT RUN[SR-LCR-1] (LCR-F1), naming the ports still pending after it - never a
-    401/404/500. Traces is judged apart (its ClickHouse backend is not in this env)."""
+    """WR-LDP-2 / R245 / R251 (WR-LW8-2): the control factory on 0043's `infrx_lab_control`
+    (the box's only /lab/v1/* server) answers every family exactly as the same factory on the
+    owner login (0056 grants the login its routes' functions: no NOT RUN[SR-LCR-1] any more),
+    and each family answers what `lw.CONTROL_EXPECTED` pins for it (LL2C-3): control, datasets
+    and releases 200 (a regression to 503 is FAIL); evals/pipelines/teacher-batches/
+    optimizations their typed 503 and traces 404 (LL2C-5) - NOT RUN naming their lanes."""
     need(on, "lab-control-login")
+    need(on, "lab-control")
     if on.login_families is None:
         pytest.skip("BLOCKED[lab-control-login] the factory on its own login was not probed")
-    found = {f: v for f, v in on.login_families.items() if f != "traces"}
-    pending = {f: v for f, v in found.items() if f in SR_LCR_1 and v.startswith(
-        ("503 " + UNAVAILABLE, "503 " + DATASETS_UNAVAILABLE))}
-    wrong = {f: v for f, v in found.items() if f not in pending}
-    assert not wrong, f"families on {lw.CONTROL_LOGIN} not serving a Lab session: {wrong}"
-    if pending:
-        ports = sorted({PENDING_FAMILIES[f].split(" ")[0] for f in pending if f in PENDING_FAMILIES})
-        pytest.skip(f"NOT RUN[SR-LCR-1] typed unavailable on {lw.CONTROL_LOGIN} until lane "
-                    f"lab-sql-lw8 (LCR-F1), then the ports {ports}: {sorted(pending)}")
+    owner = _families(str(on.control.http.base_url), operate.session(operate.ADMIN_A),
+                      lambda s: s == 200)
+    (on.workdir / "o05-control-families.json").write_text(__import__("json").dumps(
+        {"infrx_lab_control": on.login_families, "owner": owner}, indent=1))
+    wrong, typed = lw.judge_login(on.login_families, owner)
+    assert not wrong, f"families on {lw.CONTROL_LOGIN} not serving as pinned: {wrong}"
+    if typed:
+        pytest.skip("NOT RUN[" + ",".join(sorted({lw.CONTROL_EXPECTED[f][1] for f in typed}))
+                    + f"] pinned until the lane lands: {sorted(typed)}")
 
 
 def test_o05_a_consumer_key_is_no_lab_session_on_any_family(on):

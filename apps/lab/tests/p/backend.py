@@ -12,7 +12,8 @@ provider (an uploaded artifact), B3 (an evaluation result), a connector that los
 (ambiguous), the grantor (a real revocation RPC) and the database clock (an export expiring).
 P4.b (J06): the teacher batches run P2 over the REAL D8 `PgTeacherLedger` (0042, on the same
 database: `lab_submission` on, a 100 PROVIDER_USD budget for the world's payer, C1's grant naming
-external_judging) and J2's `HttpJudgeProvider` to the local teacher fake on p2's port (57529);
+external_judging) and J2's `HttpJudgeProvider` to the local teacher fake on p2's port (57529, or
+`LAB_P4_TEACHER_PORT`: lab-local's block, WR-LL2-1);
 `/_test/teacher-mode` (the fake drops an answer: ambiguous) and `/_test/teacher-failures` (P2's
 collect logging per-item failures) stand in for the teacher and the collector.
 
@@ -106,7 +107,9 @@ def main() -> None:
     users = {"dev": l2.DEV, "admin": l2.ADMIN, "viewer": l2.VIEWER, "other_dev": l2.BOTH,
              "consumer": l2.C1}
     log, teacher_ledger = FakeLabelLog(), PgTeacherLedger(connect)
-    fake = JudgeFake(port=local_services("p2")["teacher-fake"].host_port)
+    # WR-LL2-1: lab-local passes its own block's teacher port; p2's teacher-fake otherwise.
+    fake = JudgeFake(port=int(os.environ.get("LAB_P4_TEACHER_PORT")
+                              or local_services("p2")["teacher-fake"].host_port))
     teachers = TeacherWiring(members=PgAccessStore(connect), ledger=teacher_ledger,
                              provider=HttpJudgeProvider(fake.url), store=store, objects=objects,
                              labels=p1.import_labels, log=log, rates=j1.TEST_RATES,
