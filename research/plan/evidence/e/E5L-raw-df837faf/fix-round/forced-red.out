@@ -1,0 +1,12 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+E   httpcore.ReadTimeout: timed out
+
+The above exception was the direct cause of the following exception:
+E   httpx.ReadTimeout: timed out
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/apps/infrx-api/.venv/lib/python3.12/site-packages/httpx/_transports/default.py:118: httpx.ReadTimeout: timed out
+=========================== short test summary info ============================
+FAILED ../../tests/integration/lab_observe/scenarios_trace.py::test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once
+1 failed, 17 deselected in 131.64s (0:02:11)
+
+--- stderr

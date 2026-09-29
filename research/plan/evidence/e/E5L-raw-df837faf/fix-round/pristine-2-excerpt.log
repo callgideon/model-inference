@@ -1,0 +1,2 @@
+E   lab_observe.lab_e2e_gate.HarnessError: cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/observe/stack.test.ts: HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1569626 checkout /tmp/lab-control-routes-pristine-8yt1e6wv); refusing to touch port 57503 or infrx-l4-postgres. Nothing was altered - wait for it, or run the two suites in sequence (08 §8 gives t
+FAILED ../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer

@@ -1,0 +1,21 @@
+...F.............                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_e5l_r222_accepts_only_a_not_run_out_of_local_scope ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7de4d536d580>
+
+    def test_e5l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
+        """R222/R234/R235, as lab_evaluate's runner computes it: the verdict's `r222` is accepted
+        with no FAIL and every NOT RUN waiting only on a ruled out-of-scope class, by its own
+        reason: o01 on WR-C6-CAPTURE (product WR: the gateway's capture seam and consent source,
+        COMPOSITION-6), a UI cell on the lab-e2e harness. A FAIL whatever its message, a NOT RUN on
+        in-scope work, a scenario never run or NOT RUN for another reason stays open."""
+>       assert runner.OUT_OF_SCOPE == {"LAB-E2E": "lab-e2e UI",
+               ^^^^^^^^^^^^^^^^^^^
+                                       "WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}
+E       AttributeError: module 'e5l_runner' has no attribute 'OUT_OF_SCOPE'
+
+tests/integration/lab_observe/test_e5l_runner.py:92: AttributeError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_observe/test_e5l_runner.py::test_e5l_r222_accepts_only_a_not_run_out_of_local_scope
+1 failed, 16 passed in 0.85s

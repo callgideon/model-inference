@@ -83,6 +83,44 @@ def test_e5l_a_scenarios_declared_lanes_are_the_lanes_its_not_run_case_names():
                      if spec["lanes"]}
 
 
+def test_e5l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
+    """R222/R234/R235, as lab_evaluate's runner computes it: the verdict's `r222` is accepted
+    with no FAIL and every NOT RUN waiting only on a ruled out-of-scope class, by its own
+    reason: o01 on WR-C6-CAPTURE (product WR: the gateway's capture seam and consent source,
+    COMPOSITION-6), a UI cell on the lab-e2e harness. A FAIL whatever its message, a NOT RUN on
+    in-scope work, a scenario never run or NOT RUN for another reason stays open."""
+    assert runner.OUT_OF_SCOPE == {"LAB-E2E": "lab-e2e UI",
+                                   "WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}
+    assert runner.SCENARIOS["o01"]["lanes"] == ["WR-C6-CAPTURE"]
+    assert runner.reproduce("o01") == ("apps/infrx-api/.venv/bin/python "
+                                       "tests/integration/lab_observe/runner.py --out <dir> --only o01")
+    wait = "NOT RUN[WR-C6-CAPTURE] no seam; rerun after the merge: x --only o01"
+    others = [c for sid in runner.SCENARIOS if sid != "o01" for c in everything(sid)]
+    o01 = [*everything("o01")[:2], (runner.REQUIRED["o01"][2], "skipped", wait)]
+    result = runner.classify(junit(*others, *o01))
+    assert runner.gate(result) == "NOT RUN", "accepted is not a PASS"
+    assert runner.r222(result) == {"accepted": True, "open": {}}
+    with monkeypatch.context() as patch:            # a NOT RUN on in-scope work stays open
+        patch.delitem(runner.OUT_OF_SCOPE, "WR-C6-CAPTURE")
+        assert runner.r222(result) == {"accepted": False, "open": {"o01": "NOT RUN"}}
+    o01[2] = (runner.REQUIRED["o01"][2], "failure", wait)       # R234: a FAIL is never excused
+    assert runner.r222(runner.classify(junit(*others, *o01))) == \
+        {"accepted": False, "open": {"o01": "FAIL"}}
+    assert runner.r222(runner.classify(junit(*others, *everything("o01")))) == \
+        {"accepted": True, "open": {}}
+    assert "o01" in runner.r222(runner.classify(junit(*others)))["open"], "never run is open"
+    result = runner.classify(junit(*others, *o01[:2], (o01[2][0], "skipped", wait)), only={"o02"})
+    assert "o01" in runner.r222(result)["open"], "every reason must be the scenario's own wait"
+    # the recorded bd13f72 verdict: o10's LAB-E2E wait is out of scope, COMPOSITION never was
+    recorded = json.loads((REPO / "research/plan/evidence/e/E5L-raw-bd13f72/gate/verdict.json")
+                          .read_text())
+    statuses = {s["id"]: {k: s[k] for k in ("status", "cases", "reasons", "lanes")}
+                for s in recorded["scenarios"]}
+    assert runner.r222(statuses) == {"accepted": False, "open": {"o01": "NOT RUN"}}
+    statuses["o01"] = {"status": "PASS", "cases": {}, "reasons": [], "lanes": []}
+    assert runner.r222(statuses) == {"accepted": True, "open": {}}
+
+
 def test_e5l_every_unbound_case_is_not_run_without_touching_a_stack():
     """The cases waiting on a lane skip NOT RUN before any stack call, with the exact rerun."""
     import scenarios_judge
