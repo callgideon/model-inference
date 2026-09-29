@@ -59,7 +59,9 @@ def unit(monkeypatch):
     (never to be used), and a recording connector: returns the calls `(dsn, set_role)`."""
     for name, value in {control_app.DATABASE_URL: LAB_DSN,
                         control_app.SUPABASE_URL: "http://127.0.0.1:1/",
-                        control_app.SUPABASE_KEY: "anon", "DATABASE_URL": RUNTIME_DSN}.items():
+                        control_app.SUPABASE_KEY: "anon", "DATABASE_URL": RUNTIME_DSN,
+                        "SUPABASE_URL": "http://runtime.invalid",
+                        "SUPABASE_SERVICE_ROLE_KEY": "service-role"}.items():
         monkeypatch.setenv(name, value)
     for name in SWITCHES:
         monkeypatch.setenv(name, "0")
@@ -79,13 +81,8 @@ def unit(monkeypatch):
             raise errors.InvalidApiKey("not a live session")
         return USER
 
-    class Ready:
-        async def db_now(self):
-            return 0
-
     monkeypatch.setattr(jobstore, "connector", connector)
     monkeypatch.setattr(lab_auth.GoTrueSessions, "user_id", user_id)
-    monkeypatch.setattr(control_app, "_store", lambda: Ready())
     return calls
 
 
@@ -110,8 +107,9 @@ def test_control_routes__every_lab_family_is_mounted_behind_the_session_with_no_
 def test_control_routes__a_session_reaches_each_family_on_the_lab_login_never_the_runtimes(unit):
     """LDP-F1 (b) / LDP-F7: a forwarded session reaches each family's handler, which reads its
     store on `INFRX_LAB_DATABASE_URL` with no `set role` - never the runtime's `DATABASE_URL`
-    (the `infrx_runtime` login holds no L2 grant), never `service_role`."""
+    (the `infrx_runtime` login holds no L2 grant), never `service_role`; `/readyz` too."""
     c = client()
+    assert c.get("/readyz").status_code == 503 and unit == [(LAB_DSN, False)]
     for family, path in FAMILIES.items():
         before = len(unit)
         c.get(path, headers={"authorization": f"Bearer {TOKEN}"})
@@ -150,11 +148,25 @@ def test_control_routes__the_lab_objects_are_the_workers_bucket_or_a_typed_503(u
     (`LAB_S3_BUCKET`, `lab_objects`); without the bucket every use is a typed 503
     (`DependencyUnavailable`), never an `AttributeError` the datasets surface renders as 400."""
     rt, _, _ = control_app._compose(control_app._settings(), store=None)
-    with pytest.raises(errors.DependencyUnavailable):
+    try:
         rt.lab_datasets.objects.get
+        refused = None
+    except Exception as died:              # noqa: BLE001 - compared, never a crash
+        refused = type(died)
+    assert refused is errors.DependencyUnavailable, refused
     from infrx.lab.workers import __main__ as workers
     seen = []
     monkeypatch.setattr(workers, "lab_objects", lambda mode, env: seen.append(mode) or "bucket")
     monkeypatch.setenv("LAB_S3_BUCKET", "lab-bucket")
     rt, _, _ = control_app._compose(control_app._settings(), store=None)
     assert rt.lab_datasets.objects == "bucket" and seen == [control_app.MODE]
+
+
+def test_control_routes__the_families_verify_sessions_with_the_labs_own_auth_settings(unit):
+    """Every family verifies the forwarded session at `INFRX_LAB_SUPABASE_URL` with the Lab's
+    publishable key - never the runtime's `SUPABASE_URL` or its service-role key."""
+    rt, _, _ = control_app._compose(control_app._settings(), store=None)
+    for family in ("lab_datasets", "lab_evaluations", "lab_pipelines", "lab_releases"):
+        sessions = getattr(rt, family).sessions
+        assert str(sessions.client.base_url) == "http://127.0.0.1:1", family
+        assert sessions.apikey == "anon", family
