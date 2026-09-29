@@ -35,6 +35,7 @@ IMPORTS = C + "the_datasets_role_works_the_durable_import_job_queue"
 ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
 DECIDE = C + "an_operator_decides_a_lab_proposal_through_d9s_cas"
+EXPAND = C + "an_expansion_is_approved_only_on_r2s_expand_verdict_over_live"
 LAUNCH = C + "a_release_is_launched_with_its_plan_stored_first"
 B2 = C + "a_running_release_is_stepped_on_its_stored_b2_report"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
@@ -274,8 +275,8 @@ MUTANTS: tuple[Mutant, ...] = (
        ROLLOUT),
     # WR-C6-LIVE (R244): D9's Live (0054) of the listed revision; nothing assigned is held
     _m("lw_rollout_empty_live_evaluated", "nothing assigned is held, never evaluated on zeros",
-       "    if current is None:\n        raise errors.DependencyUnavailable(",
-       "    if False:\n        raise errors.DependencyUnavailable(", ROLLOUT),
+       "    if current is None:\n        raise errors.DependencyUnavailable(\"no admitted",
+       "    if False:\n        raise errors.DependencyUnavailable(\"no admitted", ROLLOUT),
     _m("lw_rollout_live_of_the_policy", "the Live read is of the listed policy revision",
        "await releases.live(listing.policy_ref)", "await releases.live(listing.policy_id)",
        ROLLOUT),
@@ -368,8 +369,36 @@ MUTANTS: tuple[Mutant, ...] = (
        "            await proposals.decide(proposal_id, approve=False, decided_by=operator)",
        "            await proposals.decide(proposal_id, approve=True, decided_by=operator)",
        DECIDE),
-    _m("lw_decide_expand_without_live", "an expansion needs R2's verdict on R1's aggregates",
-       '        if found["kind"] != "rollback":\n', "        if False:\n", DECIDE),
+    _m("lw_decide_expand_without_live", "an expansion needs R2's expand verdict (R240)",
+       '        if found["kind"] != "rollback":\n', "        if False:\n", DECIDE, EXPAND),
+    # --- WR-LIVE-DECIDE (composition-7): an expansion on R2's expand verdict over D9's Live -----
+    _m("lw_expand_planless", "no stored plan refuses by name (WR-C5-PLAN)",
+       "    if raw is None:\n        raise errors.DependencyUnavailable(\"the release's plan is "
+       "not stored", "    if False:\n        raise errors.DependencyUnavailable(\"the release's "
+       "plan is not stored", EXPAND),
+    _m("lw_expand_plan_unfrozen", "the plan is the one D9 froze (its digest)",
+       "    if release.plan_digest != plan_digest(plan):\n", "    if False:\n", EXPAND),
+    _m("lw_expand_nothing_assigned", "nothing assigned is held, never evaluated on zeros",
+       "    if current is None:\n        raise errors.DependencyUnavailable(\"held:",
+       "    if False:\n        raise errors.DependencyUnavailable(\"held:", EXPAND),
+    _m("lw_expand_live_of_another", "the Live read is of the proposal's revision",
+       "    current = await releases.live(policy_ref)", '    current = await releases.live("")',
+       EXPAND),
+    _m("lw_expand_without_report", "the verdict is on the release's B2 report (R242)",
+       "    report, runs = await release_report(PgLabReads(connect), PgLabDataStore(connect), "
+       "provider,", "    report, runs = None, None\n    (PgLabReads(connect), "
+       "PgLabDataStore(connect), provider,", EXPAND),
+    _m("lw_expand_on_hold", "only R2's expand verdict is decided",
+       '    if verdict.action != "expand":\n', "    if False:\n", EXPAND),
+    _m("lw_expand_hold_unnamed", "a refused verdict names its action and reasons",
+       "f\"({', '.join(verdict.reasons)})\")", '"")', EXPAND),
+    _m("lw_expand_evidence_dropped", "the decision carries the verdict's evidence refs",
+       "    return list(verdict.evidence_refs)", "    return []", EXPAND),
+    _m("lw_expand_as_rollback", "an approved expansion is decided 'expand'",
+       '"decision": found["kind"],', '"decision": "rollback",', EXPAND),
+    _m("lw_expand_moves_the_alias", "an approved expansion moves no alias",
+       '        if found["kind"] == "expand":\n            return 0', '        if False:\n'
+       '            return 0', EXPAND),
     _m("lw_decide_other_actor", "the decision is the operator's",
        "await proposals.decide(proposal_id, approve=True, decided_by=operator, decision={",
        'await proposals.decide(proposal_id, approve=True, decided_by="ops", decision={', DECIDE),
