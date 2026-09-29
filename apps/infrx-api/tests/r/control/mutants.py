@@ -259,6 +259,8 @@ MUTANTS: tuple[Mutant, ...] = (
     m("r2_live_coverage_of_baseline", "quality coverage is the candidate's",
       'quality_covered=cand["quality_covered"]', 'quality_covered=arms["baseline"]'
       '["quality_covered"]', LIVE, file=D9),
+    m("r2_live_health_invented", "candidate health is read, never assumed (0-LIVE-1)",
+      'candidate_healthy=cand["candidate_healthy"]', "candidate_healthy=True", LIVE, file=D9),
     m("r2_live_clock_invented", "observed_until is the database clock at read",
       'observed_until=datetime.fromisoformat(cand["observed_until"])',
       "observed_until=datetime.now().astimezone()", LIVE, file=D9),

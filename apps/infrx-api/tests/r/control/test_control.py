@@ -502,10 +502,10 @@ def test_r2_live_is_read_per_arm_from_d9s_release_read(monkeypatch):
     from infrx.state.lab_rollout import PgReleaseStore
     asked, rows = [], []
 
-    def row(arm, requests, errors_, p99, covered, value, unit="CREDIT"):
+    def row(arm, requests, errors_, p99, covered, value, unit="CREDIT", healthy=True):
         return {"arm": arm, "requests": requests, "errors": errors_, "p99_ms": p99,
                 "spent": {"unit": unit, "value": value}, "quality_covered": covered,
-                "candidate_healthy": True, "observed_until": "2026-09-28T10:00:00+00:00"}
+                "candidate_healthy": healthy, "observed_until": "2026-09-28T10:00:00+00:00"}
 
     async def call(self, function, args):
         asked.append((function, args))
@@ -521,6 +521,8 @@ def test_r2_live_is_read_per_arm_from_d9s_release_read(monkeypatch):
                           quality_covered=500, candidate_healthy=True,
                           spent=lab.Amount(unit="CREDIT", value="10.00000000")), got
     assert asked == [("lab_release_live", {"policy_ref": POLICY_REF})] * 2
+    rows[:] = [row(a, 1, 0, 5, 0, "1.00000000", healthy=False) for a in ("baseline", "candidate")]
+    assert asyncio.run(store.live(POLICY_REF)).candidate_healthy is False  # 0-LIVE-1: read, not invented
     rows[:] = [row(a, 1, 0, 5, 0, "1.00000000", unit="USD") for a in ("baseline", "candidate")]
     with pytest.raises(errors.InvalidRequest, match="USD"):
         asyncio.run(store.live(POLICY_REF))

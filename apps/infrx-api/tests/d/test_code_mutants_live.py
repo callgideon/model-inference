@@ -212,9 +212,11 @@ def check_the_candidate_is_healthy_only_on_a_ready_deployment(conn) -> str:
     for tag, candidate in ((0x46, active), (0x47, ref_of(conn, retired_id)), (0x48, d9.CAND)):
         ref, body = launch(conn, tag, candidate)
         job(conn, ref, body, uid(1, tag << 4), candidate, "succeeded")
-        seen[tag] = [r["candidate_healthy"] for r in live(conn, ref)]
-    assert seen == {0x46: [True, True], 0x47: [False, False], 0x48: [False, False]}, seen
-    return "active healthy; retired and unknown deployments unhealthy"
+        seen[tag] = [r["candidate_healthy"] for r in live(conn, ref)] + \
+            [asyncio.run(store(conn).live(ref)).candidate_healthy]        # 0-LIVE-1: the port
+    assert seen == {0x46: [True, True, True], 0x47: [False, False, False],
+                    0x48: [False, False, False]}, seen
+    return "active healthy; retired and unknown deployments unhealthy, in SQL and on the store's Live"
 
 
 CHECKS = {c.__name__: c for c in (
