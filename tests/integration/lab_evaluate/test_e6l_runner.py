@@ -59,7 +59,30 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 11
     assert runner.SCENARIOS["j09"]["lanes"] == []
-    assert runner.SCENARIOS["j10"]["lanes"] == ["B4", "lab-api-2"]
+    assert runner.SCENARIOS["j10"]["lanes"] == ["lab-e2e"]
+    assert runner.SCENARIOS["j11"]["lanes"] == ["L3"]
+
+
+def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope():
+    """R222: the gate is accepted locally with no FAIL cell and every NOT RUN waiting only on
+    out-of-local-scope work (a GPU, staging, an external provider, the lab-e2e UI harness),
+    by its own NOT RUN reason. A NOT RUN on in-scope work (j11's L3 media path), a FAIL, or a
+    scenario NOT RUN for another reason (deselected, a case absent) is left open."""
+    assert runner.OUT_OF_SCOPE == {"lab-e2e": "lab-e2e UI"}
+    ui = "NOT RUN[lab-e2e] the UI; rerun after the merge: x --only j10"
+    base = [*(c for sid in runner.SCENARIOS if sid not in ("j10", "j11")
+              for c in everything(sid)), *everything("j10", "skipped", ui)]
+    result = runner.classify(junit(*base, *everything("j11", "skipped", "NOT RUN[L3] media")))
+    assert runner.r222(result) == {"accepted": False, "open": {"j11": "NOT RUN"}}
+    result = runner.classify(junit(*base, *everything("j11")))
+    assert runner.r222(result) == {"accepted": True, "open": {}}
+    assert runner.gate(result) == "NOT RUN", "accepted is not a PASS"
+    result = runner.classify(junit(*everything("j01")))
+    assert "j10" in runner.r222(result)["open"], "a scenario never run is open"
+    result = runner.classify(junit(*base, *everything("j11")), only={"j01"})
+    assert "j10" in runner.r222(result)["open"], "every reason must be the lane's wait"
+    result = runner.classify(junit(*base, *everything("j11", "failure", "AssertionError")))
+    assert runner.r222(result)["open"] == {"j11": "FAIL"}
 
 
 def test_e6l_the_required_cases_are_exactly_what_the_scenario_modules_define():

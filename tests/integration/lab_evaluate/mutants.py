@@ -75,6 +75,7 @@ GATE = "test_e6l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_doe
 NO_STACK = "test_e6l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e6l_the_namespace_is_the_reserved_block"
 RERUN = "test_e6l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
+R222 = "test_e6l_r222_accepts_only_a_not_run_out_of_local_scope"
 UNBOUND = tuple(re.findall(r"^def (test_j\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -112,8 +113,25 @@ MUTANTS: tuple[Mutant, ...] = (
        NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
-    _m("unbound_case_runs", "a case waiting on L3/B4/lab-api-2 is never a pass", P,
+    _m("unbound_case_runs", "a case waiting on the lab-e2e harness is never a pass", P,
        "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
+    # R222 (lab-evaluate-2): what the local acceptance excuses
+    _m("r222_in_scope_lane_excused", "a NOT RUN on in-scope work (L3's media path) stays open",
+       R, 'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       'return bool(entry["cases"]) and', R222),
+    _m("r222_out_of_scope_widened", "only the lab-e2e UI harness is out of scope for E6L", R,
+       'OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI"}',
+       'OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI", "L3": "GPU"}', R222),
+    _m("r222_never_run_excused", "a scenario with no case run is open", R,
+       'set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
+       "set(lanes) <= set(OUT_OF_SCOPE) and", R222),
+    _m("r222_any_reason_excuses", "every reason must be the scenario's own wait", R,
+       "    all(f\"NOT RUN[{','.join(lanes)}]\" in reason for reason in entry[\"reasons\"])",
+       "    any(f\"NOT RUN[{','.join(lanes)}]\" in reason for reason in entry[\"reasons\"])",
+       R222),
+    _m("r222_pass_is_open", "a PASS never keeps the gate from acceptance", R,
+       'if entry["status"] != PASS and not excused(sid, entry)}',
+       "if not excused(sid, entry)}", R222),
 )
 
 # ------------------------------------------------------------------ the stack list
