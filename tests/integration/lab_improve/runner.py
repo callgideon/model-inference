@@ -113,8 +113,9 @@ SCENARIOS = {
             "test_ids": ["PIPELINE-BUDGET"], "lanes": []},
     "i06": {"title": "the automatic training connector over TCP: a timeout after accept and a "
                      "lost poll never create a second paid job (R184); the reported cost "
-                     "settles once", "test_ids": ["TRAIN-RECOVER", "PIPELINE-BUDGET"],
-            "lanes": []},
+                     "settles once; an ambiguous run ends only on an operator's written "
+                     "confirmation, releasing its hold in the same move (WR-P3-R184/R192)",
+            "test_ids": ["TRAIN-RECOVER", "PIPELINE-BUDGET"], "lanes": []},
     "i07": {"title": "the I6 annotation and training worker processes: a batch and a training "
                      "run driven by `python -m infrx.lab.workers <role>`, killed and restarted",
             "test_ids": ["PIPELINE-BUDGET", "TRAIN-RECOVER"],
@@ -143,7 +144,8 @@ REQUIRED = {
     "i05": ("test_i05_a_duplicate_teacher_submit_is_one_paid_job",
             "test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted",
             "test_i05_the_budget_stops_the_batch_before_the_chunk_it_cannot_cover"),
-    "i06": ("test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job",),
+    "i06": ("test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job",
+            "test_i06_an_ambiguous_run_ends_only_on_an_operators_written_confirmation"),
     "i07": ("test_i07_the_annotation_worker_process_resumes_a_batch_once",
             "test_i07_the_training_worker_process_never_resubmits"),
     "i08": ("test_i08_the_provider_ui_drives_labels_to_an_eligible_candidate",),
@@ -245,6 +247,12 @@ def pytest_run(out: Path, keyword: str | None) -> tuple[dict, str]:
     junit, log = out / "scenarios.xml", out / "scenarios.log"
     files = sorted(str(path) for path in HERE.glob("scenarios_*.py"))
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
+            # WR-E7L-5's repo-root pytest.ini forces --import-mode=importlib, which does not
+            # auto-insert a collected file's own directory into sys.path; these scenario
+            # files rely on that (bare `import lab_world` after their own path.insert), so
+            # this subprocess - run against the live checkout, never a scratch copy - needs
+            # prepend mode back, overriding the root ini's addopts.
+            "--import-mode=prepend",
             "-o", "junit_family=xunit1", f"--junitxml={junit}", *files,
             *(["-k", keyword] if keyword else [])]
     env = {**os.environ, "INFRX_E2_NAMESPACE": NAMESPACE, "INFRX_E7L_OUT": str(out),

@@ -114,8 +114,8 @@ MUTANTS: tuple[Mutant, ...] = (
        '            "test_ids": ["PIPELINE-BUDGET"], "lanes": []},',
        '            "test_ids": ["PIPELINE-BUDGET"], "lanes": ["composition-2"]},', MATRIX),
     _m("a_required_case_renamed", "the required cases are the modules' cases", R,
-       '    "i06": ("test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job",),',
-       '    "i06": ("test_i06_a_lost_poll",),', REQUIRED),
+       '    "i06": ("test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job",',
+       '    "i06": ("test_i06_a_lost_poll",', REQUIRED),
     _m("another_namespace", "e7l runs in its own reserved block", R,
        'NAMESPACE = "e7l"', 'NAMESPACE = "e6l"', NAMESPACE),
     _m("an_endpoint_on_a_service_port", "the endpoints avoid E2's service ports", R,
@@ -143,6 +143,8 @@ P2 = "infrx/pipelines/teachers/__init__.py"
 P3 = "infrx/pipelines/training/__init__.py"
 N3 = "infrx/datasets/lineage/__init__.py"
 B2 = "infrx/evaluation/reports/__init__.py"
+M = "../app/supabase/migrations/"
+M42 = M + "0042_lab_d8_ledgers.sql"
 
 I01_LABELS = "test_i01_labels_keep_their_method_evidence_and_review"
 I01_TEACHER = "test_i01_the_teacher_never_sees_the_holdout_and_its_labels_stay_synthetic"
@@ -160,6 +162,7 @@ I05_DUP = "test_i05_a_duplicate_teacher_submit_is_one_paid_job"
 I05_AMBIGUOUS = "test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted"
 I05_BUDGET = "test_i05_the_budget_stops_the_batch_before_the_chunk_it_cannot_cover"
 I06 = "test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job"
+I06_CONFIRM = "test_i06_an_ambiguous_run_ends_only_on_an_operators_written_confirmation"
 I04_REGRANT = "test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training"
 #: cases that fail on this base (none since WR-E7L-3 fixed 0-E7L-1)
 FAILING: tuple[str, ...] = ()
@@ -262,6 +265,17 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "decides)", B2,
        '    inferior = [f"{name} inferior" for name, v in verdicts if v == "inferior"]',
        "    inferior = []", I02_BAD),
+    _m("st_ambiguous_fails_without_an_operator", "WR-P3-R184: only a profile with "
+       "is_operator ends an ambiguous run", M42,
+       "    if not exists (select 1 from public.profiles pr\n"
+       "                    where pr.id::text = v_fields->>'operator' and pr.is_operator) "
+       "then\n",
+       "    if false then\n", I06_CONFIRM),
+    _m("st_confirmed_failure_keeps_the_hold", "WR-P3-R192: the confirmed failure releases "
+       "the run's hold in the same move", M42,
+       "  if v_from = 'ambiguous' and v_target = 'failed' and exists (\n",
+       "  if false and v_from = 'ambiguous' and v_target = 'failed' and exists (\n",
+       I06_CONFIRM),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_iterate.py", "scenarios_faults.py")

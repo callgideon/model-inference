@@ -232,6 +232,12 @@ def pytest_run(out: Path, keyword: str | None) -> tuple[dict, str]:
     junit, log = out / "scenarios.xml", out / "scenarios.log"
     files = sorted(str(path) for path in HERE.glob("scenarios_*.py"))
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
+            # WR-E7L-5's repo-root pytest.ini forces --import-mode=importlib, which does not
+            # auto-insert a collected file's own directory into sys.path; these scenario
+            # files rely on that (bare `import lab_world` after their own path.insert), so
+            # this subprocess - run against the live checkout, never a scratch copy - needs
+            # prepend mode back, overriding the root ini's addopts.
+            "--import-mode=prepend",
             "-o", "junit_family=xunit1", f"--junitxml={junit}", *files,
             *(["-k", keyword] if keyword else [])]
     env = {**os.environ, "INFRX_E2_NAMESPACE": NAMESPACE, "INFRX_E3L_OUT": str(out),

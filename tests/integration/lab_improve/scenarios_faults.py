@@ -3,8 +3,10 @@
 submit through J2's path to the local teacher fake, and the automatic training connector's
 timeout after accept and lost poll against P3's protocol server over TCP.
 
-The i05 batches take ledgers of their own (P2's `TeacherLedger`, the D6J/D8 stand-in) so the
-session ledger i03 reconciles stays exact; the teacher fake is the session's.
+The i05 batches take ledgers of their own (P2's `TeacherLedger` fake, deliberately - each
+needs an isolated budget to inspect exact numbers) so the session ledger (D8/D6J's real
+`PgTeacherLedger`, WR-E7L-4) i03 reconciles through stays exact; the teacher fake is the
+session's.
 """
 from __future__ import annotations
 
@@ -146,7 +148,7 @@ def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdi
 # ------------------------------------------------------------------------------------ i05
 def own_ledger(lab, budget):
     from tests.p.teachers.fakes import TeacherLedger
-    return TeacherLedger({lab.payer: budget}, now=lab.judge.now)
+    return TeacherLedger({lab.payer: budget}, now=run(lab.judge.db_now()))
 
 
 def posts_for(lab, runs) -> list[dict]:
@@ -282,19 +284,19 @@ def test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job(lab, workdi
 
     def poll(connector):
         return p3.poll(lab.runs, connector, provider_org_id=lab.NEMO, external_run_id=ext)
-    held = (lab.NEMO, submit_key(ext))
+    held = submit_key(ext)
     with protocol_server(app) as url:
         with pytest.raises(errors.Forbidden):
             call(lambda c: submit(c, p3.ADVERTISED), url)       # hidden until P-11
         assert call(submit, url)["state"] == "ambiguous"
-        assert lab.runs.reservations[held]["state"] == "held"
+        assert lab.reservation(held)["state"] == "held"
         time.sleep(1.2)                                       # the answer is long gone
         resumed = call(submit, url)
         assert (resumed["state"], resumed.get("job_id")) == ("submitted", "job-1")
     with pytest.raises(httpx.TransportError):
         call(poll, url)                                       # the poll is lost
     assert run(lab.runs.get(ext, provider_org_id=lab.NEMO))["state"] == "submitted"
-    assert lab.runs.reservations[held]["state"] == "held"
+    assert lab.reservation(held)["state"] == "held"
     with protocol_server(app) as url:
         assert call(poll, url)["state"] == "submitted"        # still running
         app.state.jobs["job-1"].update(state="completed", cost="12.50000000")
@@ -302,7 +304,52 @@ def test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job(lab, workdi
         again = call(poll, url)
         after = call(submit, url)
     assert done["state"] == again["state"] == after["state"] == "completed"
-    assert lab.runs.reservations[held] == {"payer_ref": lab.payer, "limit": "25.00000000",
-                                           "state": "settled", "cost": "12.50000000"}
+    assert lab.reservation(held) == {"payer_ref": lab.payer, "amount": "25.00000000",
+                                     "state": "settled", "cost": "12.50000000"}
     assert (app.state.posts, len(app.state.jobs)) == (1, 1)
-    lw.save(workdir, "connector.json", {"run": done, "reservation": lab.runs.reservations[held]})
+    lw.save(workdir, "connector.json", {"run": done, "reservation": lab.reservation(held)})
+
+
+def test_i06_an_ambiguous_run_ends_only_on_an_operators_written_confirmation(lab, workdir):
+    """TRAIN-RECOVER (WR-P3-R184/R192): the platform never fails an ambiguous run on its own;
+    only a profile with `is_operator`, citing the provider's written confirmation that the key
+    was never received, may - and that one move releases the run's hold in the same
+    transaction (never a separate release call, never while still ambiguous)."""
+    import httpx
+    from infrx.pipelines import training as p3
+    from scenarios_iterate import labels1
+    from tests.p.training.world import protocol_app
+    one = labels1(lab)
+    ext, name = lw.uid(7, 0xe71), "protocol-test"
+    lab.prepare(one.ref, one.export, ext, connector=name)
+    app = protocol_app("accept_sleep", delay_s=1.0)
+
+    def call(fn, url, **kw):
+        async def go():
+            async with httpx.AsyncClient(base_url=url, timeout=0.3) as client:
+                return await fn(p3.HttpConnector(client, name), **kw)
+        return run(go())
+
+    def submit(connector):
+        return p3.submit(lab.store, lab.objects, lab.runs, connector, lab.directory,
+                         provider_org_id=lab.NEMO, user_id=lab.DEV, external_run_id=ext,
+                         advertised=frozenset({p3.MANUAL, name}))
+    held = submit_key(ext)
+    with protocol_server(app) as url:
+        assert call(submit, url)["state"] == "ambiguous"
+    assert lab.reservation(held)["state"] == "held"
+    fail = {"provider_org_id": lab.NEMO, "expected": "ambiguous", "target": "failed"}
+    with pytest.raises(lab.errors.StateConflict):
+        run(lab.runs.release(held, provider_org_id=lab.NEMO))   # never released while ambiguous
+    with pytest.raises(lab.errors.Forbidden):
+        run(lab.runs.move(ext, operator=lab.DEV, confirmation_ref="mail:e7l-i06", **fail))
+    with pytest.raises(lab.errors.InvalidRequest):
+        run(lab.runs.move(ext, operator=lab.OPERATOR, confirmation_ref=" ", **fail))
+    assert run(lab.runs.get(ext, provider_org_id=lab.NEMO))["state"] == "ambiguous"
+    assert lab.reservation(held)["state"] == "held"
+    confirmed = run(lab.runs.move(ext, operator=lab.OPERATOR,
+                                 confirmation_ref="mail:e7l-i06", **fail))
+    assert confirmed["state"] == "failed"
+    assert lab.reservation(held)["state"] == "released", \
+        "R184: the confirmed failure did not release the run's hold in the same move"
+    lw.save(workdir, "confirmation.json", {"run": confirmed, "reservation": lab.reservation(held)})
