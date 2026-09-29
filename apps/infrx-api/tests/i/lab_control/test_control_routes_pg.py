@@ -9,8 +9,9 @@ family's read runs as provider A's administrator.
     INFRX_D_TASK=l4 uv run --frozen pytest -q -s -m pg tests/i/lab_control
 
 Failure oracles: the unit not ready on its own login (LDP-F7); a member refused (401/404) or a
-family missing on it; any 500 (LDP-F3). A family the Lab login holds no grant for answers its
-typed 503 - recorded in the printed matrix, never excused as a pass of the family.
+family missing on it; any 500 (LDP-F3). SR-LCR-1 (0056, lab-sql-lw8): the Lab column equals the
+owner column for every family (LCR-F1 closed), each pinned in `EXPECTED`; a worker-only claim
+stays refused to the Lab login (42501).
 """
 from __future__ import annotations
 
@@ -33,6 +34,18 @@ _reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") == "l4" else
     "PostgreSQL only on the l4 task-local key (INFRX_D_TASK=l4)"
 DB, LAB_PASSWORD = f"{pgharness.DATABASE}_lcr", "infrx-l4-lab-control"
 A, ADMIN_A = worlds.PgWorld.A, worlds.PgWorld.ADMIN_A
+#: family -> (status, body prefix) on BOTH logins after 0056. A 503 here is a port the unit does
+#: not compose yet (evaluations' experiments: WR-B4-2; teachers off: P-10; R3's variants:
+#: WR-C6-VARIANTS), the same on the owner login - never a grant the Lab login lacks.
+EXPECTED = {
+    "control": (200, '{"data":[{"model_id":"nemostation/marlin-2b"'),
+    "datasets": (404, '{"detail":"not_found: no such Lab record for this provider"}'),
+    "evaluations": (503, '{"refusal":"unavailable"}'),
+    "pipelines": (404, '{"refusal":"not_found"}'),
+    "teacher-batches": (503, '{"refusal":"unavailable"}'),
+    "releases": (200, '{"data":{"releases":[],"decisions":[],"proposals":[]}}'),
+    "optimizations": (503, '{"refusal":"unavailable"}'),
+}
 
 
 @pytest.fixture(scope="module")
@@ -95,3 +108,10 @@ def test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_
             assert text in ('{"refusal":"unavailable"}',
                             '{"detail":"the datasets service failed"}'), (login, family, text)
     assert matrix["lab", "control"][0] == 200 and matrix["owner", "control"][0] == 200
+    got = {(login, f): (status, text[:len(EXPECTED[f][1])])
+           for (login, f), (status, text) in matrix.items()}
+    assert got == {(login, f): EXPECTED[f] for login in database for f in FAMILIES}, got
+    import psycopg
+    with psycopg.connect(database["lab"], autocommit=True) as lab:     # SR-LCR-1: routes only
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            lab.execute("select infrx.lab_import_job_claim('{}'::jsonb)")
