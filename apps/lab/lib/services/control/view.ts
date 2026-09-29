@@ -2,7 +2,7 @@
 import type { Role } from "../../auth/access.ts";
 import { holds, REFUSALS, type Aggregate, type Deployment, type Proposal, type Refusal } from "./port.ts";
 
-export type Action = "smoke" | "publish" | "rollback";
+export type Action = "smoke" | "publish";
 export type DeploymentRow = {
   id: string; model: string; serving: string; runtime: string; schema: string; rate: string; where: string;
   state: string; smoke: string; pending: string | null; actions: Action[];
@@ -14,10 +14,7 @@ export function deploymentRows(role: Role, deployments: Deployment[], proposals:
     const live = d.state === "active";
     const actions: Action[] = [];
     if (live && d.environment === "dev" && holds(role, "manage_dev_deployment")) actions.push("smoke");
-    if (live && !pending && holds(role, "propose_publication")) {
-      if (d.environment === "dev" && d.smoke === "passed") actions.push("publish");
-      if (d.environment === "prod" && d.visibility === "public") actions.push("rollback");
-    }
+    if (live && !pending && holds(role, "propose_publication") && d.environment === "dev" && d.smoke === "passed") actions.push("publish"); // a rollback is the operator's (E3L-F3)
     return {
       id: d.deploymentRevisionId, model: d.modelId, serving: `${d.servingVersionId}@${d.revisionLabel}`, runtime: d.runtime,
       schema: d.schemaVersion, rate: d.rateCardVersion ?? "unpriced", where: `${d.environment} · ${d.visibility}`,

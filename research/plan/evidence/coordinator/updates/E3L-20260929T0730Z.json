@@ -1,0 +1,39 @@
+{
+ "task": "E3L",
+ "slice": "J01/J02 (the Lab App journey) after WR-E3L-J",
+ "activity": "review",
+ "head": "e2d6eb52",
+ "worktree": ".claude/worktrees/codex-w5-lab-app-control",
+ "branch": "codex/w5-lab-app-control",
+ "owned_paths": [
+  "apps/lab/lib/services/control/",
+  "apps/lab/tests/l/ui/",
+  "infra/lab/app/lab.json",
+  "infra/lab/app/README.md",
+  "research/plan/evidence/l/"
+ ],
+ "commands": [
+  {
+   "cmd": "cd apps/lab && LAB_L4_REAL=1 INFRX_D_TASK=l4 node --test tests/l/ui/stack.test.ts",
+   "exit": 0,
+   "summary": "4/4: J01, J02 (rejection step fake-only, E3L-F4), consumer-only 403, on R186's factory over the real PgControlStore"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0,
+  "likely_h": 0.5,
+  "pessimistic_h": 1,
+  "confidence": "medium-high",
+  "basis": "J01/J02 no longer NOT RUN: green on the real L3 through the Lab's HTTP adapter (key l4); only E3L's own verify round remains; J02's rejection step waits on E3L-F4 (L3)",
+  "at": "2026-09-29T07:30Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "E3L-F4 to L3: no proposal rejection; a platform retire of a proposed_public revision 503s the provider's listings",
+  "E3L-F5 to L3: Deployment records do not say what is listed (proposed_public and rolled-back revisions read prod/public/active)"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/LAB-APP-CONTROL-e2d6eb5.md",
+  "research/plan/evidence/l/LAB-APP-CONTROL-raw-e2d6eb5/"
+ ]
+}
