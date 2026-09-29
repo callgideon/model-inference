@@ -397,13 +397,10 @@ def composition(workdir: Path):
             with operate.control_service(trip, workdir) as (control, _verifier):
                 control.env["INFRX_LAB_SUPABASE_URL"] = standin.url
                 control.env["INFRX_LAB_ORIGIN"] = LAB_ORIGIN
-                try:
-                    control.start(E3L_ENGINE_URL=trip.engine.base_url)
-                except (RuntimeError, AssertionError) as failed:
-                    refused["lab-control"] = str(failed)[:1500]
-                # LDP-R4: the same factory on its own login, 0043's infrx_lab_control (the
-                # one above stays on the owner login so the families it serves are judged
-                # apart from LDP-F5); o04's login case reads its readiness.
+                # LDP-R4: the same factory on its own login, 0043's infrx_lab_control, FIRST
+                # and alone (a later start would find the owner-login factory answering on
+                # the port it could not bind); killed, then the owner-login one below serves
+                # the families, judged apart from LDP-F5. o04's login case reads it.
                 (workdir / "control-login").mkdir(exist_ok=True)
                 own = operate.ControlService(trip, workdir / "control-login", standin.url)
                 own.env.update(control.env, INFRX_LAB_DATABASE_URL=lab_control_dsn(trip.world.database))
@@ -413,6 +410,10 @@ def composition(workdir: Path):
                     refused["lab-control-login"] = str(failed)[:1500]
                 finally:
                     own.kill()
+                try:
+                    control.start(E3L_ENGINE_URL=trip.engine.base_url)
+                except (RuntimeError, AssertionError) as failed:
+                    refused["lab-control"] = str(failed)[:1500]
                 yield types.SimpleNamespace(trip=trip, procs=procs, refused=refused,
                                             control=control, standin=standin, env=env,
                                             workdir=workdir, seam=seam, labgw=labgw)
