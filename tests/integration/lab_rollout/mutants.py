@@ -76,7 +76,8 @@ GATE = "test_e8l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_doe
 NO_STACK = "test_e8l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e8l_the_namespace_is_the_reserved_block"
 RERUN = "test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
-SUB_CELL = "test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun"
+SUB_CELL = "test_e8l_a_sub_cell_is_not_run_naming_its_lanes_and_its_parents_rerun"
+K09_BOUND = "test_e8l_k09s_breach_half_is_bound_and_no_longer_a_sub_cell"
 K10_UI = "test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun"
 R222 = "test_e8l_r222_accepts_only_a_not_run_out_of_local_scope"
 PLAN_PATH = "test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute"
@@ -124,14 +125,21 @@ MUTANTS: tuple[Mutant, ...] = (
        "DEAD_PORT = 57499", "DEAD_PORT = 57460", NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
-    _m("sub_cell_is_a_pass", "k09's unbound breach half is NOT RUN, never a pass", R,
+    _m("sub_cell_is_a_pass", "an unbound half of a scenario is NOT RUN, never a pass", R,
        '"parent_status": result[spec["parent"]]["status"],\n             "status": NOT_RUN,',
        '"parent_status": result[spec["parent"]]["status"],\n             "status": PASS,',
        SUB_CELL),
-    _m("sub_cell_without_its_lane", "the breach sub-cell names WR-C6-LIVE", R,
-       '"parent": "k09", "lanes": ["WR-C6-LIVE"],', '"parent": "k09", "lanes": [],', SUB_CELL),
-    _m("k10_ui_sub_cell_without_its_lane", "k10's UI journey sub-cell names WR-C6-LIVE", R,
-       '"parent": "k10", "lanes": ["WR-C6-LIVE"],', '"parent": "k10", "lanes": [],', K10_UI),
+    _m("sub_cell_without_its_lane", "a sub-cell's reason names its lanes", R,
+       '"reason": f"NOT RUN[{\',\'.join(spec[\'lanes\'])}]",', '"reason": "NOT RUN",', SUB_CELL),
+    _m("k09_breach_still_a_sub_cell", "k09's breach half is bound over 0054's Live "
+       "(WR-LIVE-K09): no NOT RUN sub-cell beside it", R,
+       'SUB_CELLS = {\n    "k10-ui-composed": {',
+       'SUB_CELLS = {\n    "k09-breach": {"parent": "k09", "lanes": ["WR-C6-LIVE"], "title": "",'
+       ' "note": ""},\n    "k10-ui-composed": {', K09_BOUND),
+    _m("k10_ui_sub_cell_without_its_lane", "k10's UI journey sub-cell names the product WRs "
+       "its stand-ins wait on", R,
+       '"parent": "k10", "lanes": ["WR-LIVE-DECIDE", "WR-LR6-VERDICT"],',
+       '"parent": "k10", "lanes": ["WR-LIVE-DECIDE"],', K10_UI),
     _m("k10_ui_sub_cell_dropped", "k10's UI journey over stand-ins is recorded, never prose-only",
        R, '    "k10-ui-composed": {\n        "parent": "k10",',
        '    "k09-breach-copy": {\n        "parent": "k09",', K10_UI),
@@ -156,7 +164,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "                  if not set(cell[\"lanes\"]) <= set(OUT_OF_SCOPE)})",
        "                  if False})", R222),
     _m("r222_gpu_in_scope", "k08's GPU target is ruled out of local scope (R222)", R,
-       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)", ', "OUT_OF_SCOPE = {", R222),
+       'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)",\n', "OUT_OF_SCOPE = {\n", R222),
+    _m("r222_landed_wr_still_excused", "a landed product WR (WR-C6-LIVE, merge #52) excuses "
+       "nothing", R, '                "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT"}',
+       '                "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT",\n'
+       '                "WR-C6-LIVE": "product WR: WR-C6-LIVE"}', R222),
     _m("k10_plan_path_relative", "the plan path handed to `rollout launch` (cwd=API) is "
        "absolute (WR-LR5-RV2)", W, '    return workdir.resolve() / "plan.json"',
        '    return workdir / "plan.json"', PLAN_PATH),
@@ -282,10 +294,15 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        WM, "    while True:\n        try:\n            await step()",
        "    while True:\n        await sleep(interval_s)\n        try:\n            await step()",
        K09_PASS),
-    _m("st_pass_held_is_failed", "a running release without R1's aggregates is held, not a "
-       "failure (NoLive, WR-C5-LIVE)", LW,
+    _m("st_pass_held_is_failed", "a running release with nothing assigned is held, not a "
+       "failure (nothing assigned, R244)", LW,
        "            except errors.DependencyUnavailable:\n                done[\"held\"] += 1\n",
        "", K09_PASS),
+    # WR-LIVE-K09: the pass evaluates a running release on D9's Live (0054, R244)
+    _m("st_pass_never_reads_live", "the pass reads the running release's Live from D9 (0054): "
+       "a failed terminal job assigned to its candidate is a breach rolled back once", LW,
+       "    current = await releases.live(listing.policy_ref)\n", "    current = None\n",
+       K09_PASS),
     _m("st_converge_by_full_ref", "R2 recognises a promoted candidate by serving identity "
        "(R216, E8L-F2): L3's promotion mints a fresh deployment revision", R2,
        "    return f\"{head.rpartition(':')[0]}@{digest}\"", "    return ref", K06_PROMOTED),

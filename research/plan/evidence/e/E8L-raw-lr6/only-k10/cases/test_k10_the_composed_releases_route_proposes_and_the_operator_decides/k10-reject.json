@@ -1,0 +1,113 @@
+{
+ "approve_expand": [
+  1,
+  "infrx.lab.workers: the proposal was not decided: dependency_unavailable: dependency_unavailable: an expansion is approved on R2's expand verdict over R1's aggregates (WR-C5-LIVE)\n"
+ ],
+ "d9": [],
+ "dropped": {
+  "decisions": [],
+  "proposals": [
+   {
+    "decided_at": "2026-09-20T12:00:00Z",
+    "fence": 1,
+    "kind": "expand",
+    "policy_ref": "lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-000000000002@sha256:8e0b80294b9d923b2ac5293b2f1732794281d0cb944c4f28c9a1311aa6fa5078",
+    "proposal_id": "e584e568-92bc-4ca1-82dd-909091a2f9e3",
+    "proposed_at": "2026-09-20T12:00:00Z",
+    "state": "rejected"
+   }
+  ],
+  "releases": [
+   {
+    "baseline_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:c0000004-0000-4000-8000-000000000004@sha256:69ce4608ad696a48f6ec410df30037ca82de8ffb9256bbabd096d9144097c5b4",
+    "candidates": [
+     {
+      "serving_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:00000de8-0000-4000-8000-00000000010c@sha256:39ddd03cf0fd0e38f3fb7ddd3dd39de9115984892e4bbb083f930e4836124b01",
+      "weight_bp": 5000
+     }
+    ],
+    "cohort": "account",
+    "endpoint_id": "c0000002-0000-4000-8000-000000000002",
+    "fence": 1,
+    "mode": "canary",
+    "plan": {
+     "budget": {
+      "amount": "10.00000000",
+      "unit": "CREDIT"
+     },
+     "horizon_s": 3600,
+     "max_error_rate": 0.05,
+     "max_lag_s": 300,
+     "max_p99_ms": 5000,
+     "max_skew_bp": 2000,
+     "min_quality_coverage": 0.5,
+     "min_requests": 20
+    },
+    "plan_digest": "sha256:773703938f58ac51e7e5cb7d948deab0675eec3bd1ccb5d363ea3e497b88f52a",
+    "policy_ref": "lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-000000000002@sha256:8e0b80294b9d923b2ac5293b2f1732794281d0cb944c4f28c9a1311aa6fa5078",
+    "progress": null,
+    "started_at": "2026-09-20T12:00:00Z",
+    "state": "running",
+    "verdict": null,
+    "version": 1
+   }
+  ]
+ },
+ "held": {
+  "decisions": [],
+  "proposals": [
+   {
+    "decided_at": null,
+    "fence": 1,
+    "kind": "expand",
+    "policy_ref": "lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-000000000002@sha256:8e0b80294b9d923b2ac5293b2f1732794281d0cb944c4f28c9a1311aa6fa5078",
+    "proposal_id": "e584e568-92bc-4ca1-82dd-909091a2f9e3",
+    "proposed_at": "2026-09-20T12:00:00Z",
+    "state": "proposed"
+   }
+  ],
+  "releases": [
+   {
+    "baseline_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:c0000004-0000-4000-8000-000000000004@sha256:69ce4608ad696a48f6ec410df30037ca82de8ffb9256bbabd096d9144097c5b4",
+    "candidates": [
+     {
+      "serving_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:00000de8-0000-4000-8000-00000000010c@sha256:39ddd03cf0fd0e38f3fb7ddd3dd39de9115984892e4bbb083f930e4836124b01",
+      "weight_bp": 5000
+     }
+    ],
+    "cohort": "account",
+    "endpoint_id": "c0000002-0000-4000-8000-000000000002",
+    "fence": 1,
+    "mode": "canary",
+    "plan": {
+     "budget": {
+      "amount": "10.00000000",
+      "unit": "CREDIT"
+     },
+     "horizon_s": 3600,
+     "max_error_rate": 0.05,
+     "max_lag_s": 300,
+     "max_p99_ms": 5000,
+     "max_skew_bp": 2000,
+     "min_quality_coverage": 0.5,
+     "min_requests": 20
+    },
+    "plan_digest": "sha256:773703938f58ac51e7e5cb7d948deab0675eec3bd1ccb5d363ea3e497b88f52a",
+    "policy_ref": "lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-000000000002@sha256:8e0b80294b9d923b2ac5293b2f1732794281d0cb944c4f28c9a1311aa6fa5078",
+    "progress": null,
+    "started_at": "2026-09-20T12:00:00Z",
+    "state": "running",
+    "verdict": null,
+    "version": 1
+   }
+  ]
+ },
+ "listing": [
+  2,
+  "00000de8-0000-4000-8000-00000000010c"
+ ],
+ "reject": [
+  0,
+  ""
+ ]
+}

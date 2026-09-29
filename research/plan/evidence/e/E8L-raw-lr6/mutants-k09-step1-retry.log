@@ -1,0 +1,40 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_____________ test_stack_mutant_is_killed[st_pass_held_is_failed] ______________
+
+mutant = Mutant(name='st_pass_held_is_failed', invariant='a running release with nothing assigned is held, not a failure (nothi...'', cases=('test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e8l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_pass_held_is_failed is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_rollout/scenarios_route.py::test_k10_the_releases_ui_over_the_real_route']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...est exit 1): ['../../tests/integration/lab_rollout/scenarios_route.py::test_k10_the_releases_ui_over_the_real_route']").killed
+
+tests/integration/lab_rollout/test_mutants.py:85: AssertionError
+____________ test_stack_mutant_is_killed[st_pass_never_reads_live] _____________
+
+mutant = Mutant(name='st_pass_never_reads_live', invariant="the pass reads the running release's Live from D9 (0054): a failed ...n', cases=('test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e8l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_pass_never_reads_live is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_rollout/scenarios_route.py::test_k10_the_releases_ui_over_the_real_route']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...est exit 1): ['../../tests/integration/lab_rollout/scenarios_route.py::test_k10_the_releases_ui_over_the_real_route']").killed
+
+tests/integration/lab_rollout/test_mutants.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_held_is_failed]
+FAILED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_never_reads_live]
+2 failed, 87 deselected in 113.53s (0:01:53)

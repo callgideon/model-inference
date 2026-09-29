@@ -1,0 +1,68 @@
+...........F.F.F                                                         [100%]
+=================================== FAILURES ===================================
+_________ test_e8l_k09s_breach_half_is_bound_and_no_longer_a_sub_cell __________
+
+    def test_e8l_k09s_breach_half_is_bound_and_no_longer_a_sub_cell():
+        """WR-LIVE-K09 (R244): k09's pass-loop case now sees a breach in D9's Live (0054) and rolls
+        it back once, so the breach half is k09's own case, not a NOT RUN sub-cell beside it."""
+        result = runner.classify(junit(*everything("k09")))
+        assert result["k09"]["status"] == "PASS"
+>       assert "k09-breach" not in {c["id"] for c in runner.sub_cells(result)}
+E       AssertionError: assert 'k09-breach' not in {'k09-breach', 'k10-ui-composed'}
+
+tests/integration/lab_rollout/test_e8l_runner.py:164: AssertionError
+____ test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun ____
+
+    def test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun():
+        """0-E8L-RV-1 / 1-LR5-F1: k10 PASS is the port half and the UI failing closed over the
+        gateway's own composition (E2E-R01); the page's proposal/approval journey (E2E-R02..R05)
+        runs over test-local adapters until R2's verdicts and R1's progress have a composed read,
+        so it is a NOT RUN sub-cell naming WR-C6-LIVE in verdict.json, never prose-only."""
+        result = runner.classify(junit(*everything("k10")))
+        assert result["k10"]["status"] == "PASS", "the sub-cell never lowers its parent"
+        cells = {c["id"]: c for c in runner.sub_cells(result)}
+>       assert set(cells) == {"k10-ui-composed"}
+E       AssertionError: assert {'k09-breach'...-ui-composed'} == {'k10-ui-composed'}
+E         
+E         Extra items in the left set:
+E         'k09-breach'
+E         Use -v to get more diff
+
+tests/integration/lab_rollout/test_e8l_runner.py:191: AssertionError
+___________ test_e8l_r222_accepts_only_a_not_run_out_of_local_scope ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7da27b0f79b0>
+
+    def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
+        """R222/R234/R235: the gate is accepted locally with no FAIL and every NOT RUN (sub-cells
+        included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), k09's breach
+        half on a product WR (WR-C6-LIVE) - by its own NOT RUN reason. A NOT RUN on in-scope work
+        (k10, composed since merge #50), a FAIL, or a scenario NOT RUN for another reason
+        (deselected, never run) stays open."""
+        assert runner.OUT_OF_SCOPE == {"P-08": "GPU (P-08 staging target)",
+                                       "WR-C6-LIVE": "product WR: WR-C6-LIVE"}
+        k08 = "NOT RUN[P-08] no allocated GPU; rerun after the merge: x --only k08"
+        others = [c for sid in runner.SCENARIOS if sid != "k08" for c in everything(sid)]
+        accepted = runner.classify(junit(*others, *everything("k08", "skipped", k08)))
+        assert runner.r222(accepted) == {"accepted": True, "open": {}}
+        assert runner.gate(accepted) == "NOT RUN", "accepted is not a PASS"
+        with monkeypatch.context() as patch:            # a lane not ruled out of scope stays open
+            patch.delitem(runner.OUT_OF_SCOPE, "P-08")
+            assert runner.r222(accepted) == {"accepted": False, "open": {"k08": "NOT RUN"}}
+        with monkeypatch.context() as patch:            # the sub-cell is judged too
+            patch.delitem(runner.OUT_OF_SCOPE, "WR-C6-LIVE")
+>           assert runner.r222(accepted) == {"accepted": False, "open": {
+                "k10-ui-composed": "NOT RUN"}}
+E           AssertionError: assert {'accepted': ...': 'NOT RUN'}} == {'accepted': ...': 'NOT RUN'}}
+E             
+E             Omitting 1 identical items, use -vv to show
+E             Differing items:
+E             {'open': {'k09-breach': 'NOT RUN', 'k10-ui-composed': 'NOT RUN'}} != {'open': {'k10-ui-composed': 'NOT RUN'}}
+E             Use -v to get more diff
+
+tests/integration/lab_rollout/test_e8l_runner.py:229: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_k09s_breach_half_is_bound_and_no_longer_a_sub_cell
+FAILED tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun
+FAILED tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_r222_accepts_only_a_not_run_out_of_local_scope
+3 failed, 13 passed in 0.18s

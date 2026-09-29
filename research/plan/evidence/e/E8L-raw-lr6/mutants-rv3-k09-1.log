@@ -1,0 +1,8 @@
+....                                                                     [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_held_is_failed]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_pass_never_reads_live]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_decide_reject_moves]
+PASSED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_decide_expand_approved]
+4 passed, 86 deselected in 250.02s (0:04:10)

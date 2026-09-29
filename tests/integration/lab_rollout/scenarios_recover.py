@@ -429,6 +429,11 @@ def test_k09_the_controller_process_restarted_mid_rollout(lab, workdir):
 FIRST_PASS_S = 30.0
 
 
+def lab_workers_pass_s() -> float:
+    from infrx.lab.workers.__main__ import ROLLOUT_PASS_S
+    return ROLLOUT_PASS_S
+
+
 def free_port() -> int:
     """A spare port of the e8l block for the worker's loopback health listener."""
     import socket
@@ -445,8 +450,9 @@ def test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas
     infrx.lab.workers rollout` (WR-R2-3, nothing injected: LAB_S3_BUCKET + LAB_OPERATOR_ID)
     reads the plan stored beside the release (`lab/<p>/releases/<policy_id>/plan.json`, D9's
     digest) and converges the alias to the baseline on its FIRST pass, with no second
-    decision. A running release beside it is held, never evaluated: R1's aggregates are
-    unreadable (NoLive) - the breach half waits on WR-C5-LIVE (evidence, not this case)."""
+    decision. A running release beside it with nothing assigned is held on that pass, never
+    evaluated on zeros; once a failed terminal job is assigned to its candidate, a later pass
+    sees the breach in D9's Live (0054, R244; WR-LIVE-K09) and rolls it back once."""
     import contextlib
     import os
     import signal
@@ -485,7 +491,7 @@ def test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas
         assert decided == [("rollback", "rolled_back", lw.CONTROLLER, ["latency"])]
         assert lab.listing()[1] == promoted, "the killed controller's alias left the candidate"
         store_plan(policy.policy_id)
-        # a running release beside it (one live per endpoint): R1's aggregates are unreadable
+        # a running release beside it (one live per endpoint): nothing assigned yet - held
         held, held_ref = lab.launch(lab.policy(weights=(5_000,), candidates=(lab.CAND,)),
                                     lw.plan())
         store_plan(held.policy_id)
@@ -505,6 +511,19 @@ def test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas
                 converged_after = round(time.monotonic() - began, 2)
                 break
             time.sleep(0.2)
+        # ponytail: the first pass steps the held release milliseconds after the converge;
+        # 2 s keeps the job out of that pass (so it is proven held on zero assignments)
+        time.sleep(2)
+        first = (run(lab.releases().release(held_ref)).state, lab.decisions(held_ref))
+        # WR-LIVE-K09 (R244): the breach - one failed terminal job assigned to its candidate
+        lab.assign_failed_job(held_ref, held.policy_id, lw.uid(1, 0x9b), lab.CAND)
+        breached_after = None
+        while time.monotonic() - began < FIRST_PASS_S + lab_workers_pass_s() + 15 \
+                and process.poll() is None:
+            if lab.decisions(held_ref):
+                breached_after = round(time.monotonic() - began, 2)
+                break
+            time.sleep(0.5)
         exited_early = process.poll()
         process.send_signal(signal.SIGTERM)
         stopped = process.wait(30)
@@ -513,7 +532,8 @@ def test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas
             "listing_before": listed, "promoted": promoted, "policy_candidate": candidate,
             "listing_after": lab.listing(), "converged_after_s": converged_after,
             "exited_early": exited_early, "exit_on_sigterm": stopped,
-            "decisions": lab.decisions(ref), "held": {
+            "decisions": lab.decisions(ref), "held_first_pass": first,
+            "breached_after_s": breached_after, "held": {
                 "state": run(lab.releases().release(held_ref)).state,
                 "decisions": lab.decisions(held_ref)}})
         text = (workdir / "rollout.log").read_text(errors="replace")
@@ -523,8 +543,11 @@ def test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas
             f"the alias did not converge within the first pass ({FIRST_PASS_S}s): "
             f"{lab.listing()} is not the baseline {listed}: {tail}")
         assert lab.decisions(ref) == decided, "the pass recorded a second decision"
-        assert run(lab.releases().release(held_ref)).state == "running" and \
-            lab.decisions(held_ref) == [], "a running release was evaluated without R1's data"
+        assert first == ("running", []), f"nothing assigned was evaluated, not held: {first}"
+        assert run(lab.releases().release(held_ref)).state == "rolled_back" and \
+            lab.decisions(held_ref) == [("rollback", "rolled_back", lw.CONTROLLER,
+                                         ["error_rate"])], \
+            f"the pass did not roll back the breach in D9's Live once: {lab.decisions(held_ref)}"
         assert stopped == 0, f"SIGTERM did not stop the role cleanly ({stopped}): {tail}"
         assert "rollout pass failed" not in text, text[-3000:]
     finally:

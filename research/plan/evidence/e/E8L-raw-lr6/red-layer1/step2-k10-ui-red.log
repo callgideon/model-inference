@@ -1,0 +1,51 @@
+.............F.F                                                         [100%]
+=================================== FAILURES ===================================
+____ test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun ____
+
+    def test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun():
+        """WR-LR5-1 (lab-rollout-6): the page's journey runs over the gateway's own composition
+        (records, 0043's proposals, D9; `rollout launch|decide`), except R2's hold/expand verdict of
+        a release D9 holds no decision for (no composed read: WR-LR6-VERDICT) and an expansion's
+        approval (`rollout decide` refuses it: WR-LIVE-DECIDE). Until both land, the journey is a
+        NOT RUN sub-cell naming them in verdict.json, never prose-only."""
+        result = runner.classify(junit(*everything("k10")))
+        assert result["k10"]["status"] == "PASS", "the sub-cell never lowers its parent"
+        cells = {c["id"]: c for c in runner.sub_cells(result)}
+        assert set(cells) == {"k10-ui-composed"}
+        cell = cells["k10-ui-composed"]
+>       assert (cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
+            == ("k10", "PASS", "NOT RUN", "NOT RUN[WR-LIVE-DECIDE,WR-LR6-VERDICT]")
+E       AssertionError: assert ('k10', 'PASS...[WR-C6-LIVE]') == ('k10', 'PASS...LR6-VERDICT]')
+E         
+E         At index 3 diff: 'NOT RUN[WR-C6-LIVE]' != 'NOT RUN[WR-LIVE-DECIDE,WR-LR6-VERDICT]'
+E         Use -v to get more diff
+
+tests/integration/lab_rollout/test_e8l_runner.py:194: AssertionError
+___________ test_e8l_r222_accepts_only_a_not_run_out_of_local_scope ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x760f64d40200>
+
+    def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
+        """R222/R234/R235: the gate is accepted locally with no FAIL and every NOT RUN (sub-cells
+        included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), k10's composed
+        UI journey on a product WR - by its own NOT RUN reason. A NOT RUN on in-scope work
+        (k10, composed since merge #50), a FAIL, or a scenario NOT RUN for another reason
+        (deselected, never run) stays open."""
+>       assert runner.OUT_OF_SCOPE == {"P-08": "GPU (P-08 staging target)",
+                                       "WR-LIVE-DECIDE": "product WR: WR-LIVE-DECIDE",
+                                       "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT"}
+E       AssertionError: assert {'P-08': 'GPU...: WR-C6-LIVE'} == {'P-08': 'GPU...-LR6-VERDICT'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Left contains 1 more item:
+E         {'WR-C6-LIVE': 'product WR: WR-C6-LIVE'}
+E         Right contains 2 more items:
+E         {'WR-LIVE-DECIDE': 'product WR: WR-LIVE-DECIDE',
+E          'WR-LR6-VERDICT': 'product WR: WR-LR6-VERDICT'}
+E         Use -v to get more diff
+
+tests/integration/lab_rollout/test_e8l_runner.py:216: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun
+FAILED tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_r222_accepts_only_a_not_run_out_of_local_scope
+2 failed, 14 passed in 0.09s

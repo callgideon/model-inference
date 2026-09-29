@@ -1,0 +1,1 @@
+{"horizon_s":3600,"min_requests":20,"max_error_rate":0.05,"max_p99_ms":5000,"max_skew_bp":2000,"min_quality_coverage":0.5,"max_lag_s":300,"budget":{"unit":"CREDIT","value":"10.00000000"},"protocol":{"confidence":0.95,"margin":0.05,"min_cases":10,"metric_source":"deterministic_metric","required_slices":{"math":{"margin":0.0,"min_cases":5}}}}

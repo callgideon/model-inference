@@ -1,0 +1,42 @@
+{
+ "comparison": {
+  "capabilities": {
+   "base": [
+    "finite_video",
+    "text"
+   ],
+   "variant": [
+    "finite_video",
+    "text"
+   ]
+  },
+  "optimization_claimed": true,
+  "outcome": "equivalent",
+  "performance": {
+   "memory_gib_delta": 0.0,
+   "p99_ms_delta": 0,
+   "sources": [
+    "marlin2b/results/e8l-base.json@0123abc",
+    "marlin2b/results/e8l-nvfp4.json@0123abc"
+   ],
+   "throughput_ratio": 1.5
+  },
+  "reasons": [],
+  "report_digest": "sha256:6c1ef22889738fb02fa5a0585575c2799c4be89b25fdf4c129bfcabc3fe36ee2",
+  "schema": "infrx.variant_comparison.1",
+  "variant_ref": "lab:variant:b0000001-0000-4000-8000-000000000001:000008c8-0000-4000-8000-000000000001@sha256:fc26c73bcb6140dcf4f3512bd7d53e9c1e0b3a6df135e61d468522ae6cebdd23"
+ },
+ "digest": "sha256:20606db4189672e75895bf12f123487b66ba8162a3be91a422b43bf2772a0133",
+ "variant": {
+  "base_serving_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:642ec564-aa54-4f6d-ab77-22ce76a0286f@sha256:642ec564aa549f6deb7722ce76a0286f171a25711c3d308c4c20f0b3e9c01660",
+  "changes": [
+   "checkpoint_digest:sha256:3333333333333333333333333333333333333333333333333333333333333333",
+   "quantization:nvfp4",
+   "hardware:B300"
+  ],
+  "provider_org_id": "b0000001-0000-4000-8000-000000000001",
+  "schema": "lab.optimization_variant.1",
+  "variant_id": "000008c8-0000-4000-8000-000000000001",
+  "variant_serving_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:cdea6743-28f2-4abc-96fc-1a289e04f2a4@sha256:cdea674328f28abc96fc1a289e04f2a44dfe71e0e745e16f941b155e73fccb99"
+ }
+}

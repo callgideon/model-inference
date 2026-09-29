@@ -1,0 +1,26 @@
+{
+ "cancelled": 0,
+ "command": "cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts",
+ "exit": 0,
+ "fail": 0,
+ "harness": null,
+ "pass": 6,
+ "record": {
+  "cell": "E8L k10",
+  "composed": {
+   "proposals": true,
+   "records": true,
+   "store": true
+  },
+  "stand_ins": [
+   "session verifier and PostgREST RPC door (stack.door)",
+   "the Lab objects in memory (l4 has no S3), handed to the control unit and to `rollout launch|decide` (run in process to share them)",
+   "R2's hold/expand verdict laid over the gateway's records while D9 holds no decision for the release (WR-LR6-VERDICT)",
+   "an expansion approved through R2's Controller.approve: `rollout decide` refuses it (WR-LIVE-DECIDE)",
+   "R1 aggregates as the step's input (no R1 traffic on l4)",
+   "L3's serving alias (R2's FakeServing)"
+  ],
+  "suite": "rollout"
+ },
+ "skipped": 0
+}

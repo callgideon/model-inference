@@ -1,0 +1,47 @@
+..F                                                                                                                                                                                                                                                                                                                                                                                                      [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+_________________________________________________________________________________________________________________________________________________________________________________ test_k10_the_releases_ui_over_the_real_route _________________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('research/plan/evidence/e/E8L-raw-lr6/only-k10-base/cases/test_k10_the_releases_ui_over_the_real_route')
+
+    def test_k10_the_releases_ui_over_the_real_route(workdir):
+        """k10's UI half (LAB-E2E): `apps/lab/tests/e2e/rollout` - the Lab releases page built and
+        served, signed in through its own form, over `/lab/v1/releases` on the l4 key: the page
+        fails closed on the gateway's own LAB_RELEASES composition, then D9's real store and 0043's
+        proposal store show R2's verdict, take a proposal at the fence the page showed through its
+        server action, the operator's approval and an emergency rollback, and refuse the unsafe
+        variants. A red suite fails this case; a green one is NOT RUN while the gateway's own
+        composition lacks a port (R238: a product WR naming it; WR-R4-2 composed all three at
+        merge #50)."""
+        e2e = _e2e()
+        got = e2e.run("rollout", workdir)
+        lw.save(workdir, "k10-ui.json", {k: v for k, v in got.items() if k != "tail"})
+>       absent = e2e.missing(got)
+                 ^^^^^^^^^^^^^^^^
+
+tests/integration/lab_rollout/scenarios_route.py:505: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = {'command': 'cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 1, ...}
+
+    def missing(got: dict) -> list[str]:
+        """Asserts the suite passed as a whole - every case ran and none failed - and answers the
+        ports the gateway's own composition does not carry yet (empty: the cell is bound for real)."""
+        if got["exit"] != 0 and got.get("harness"):
+>           raise HarnessError(f"{got['command']}: {got['harness']}")
+E           lab_rollout.lab_e2e_gate.HarnessError: cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts: HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1204764 checkout /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/rv-lw8b); refusing to touch port 57503 or infrx-l4-postgres. Nothing was a
+
+apps/lab/tests/e2e/gate.py:65: HarnessError
+=============================================================================================================================================================================================== warnings summary ===============================================================================================================================================================================================
+tests/integration/lab_rollout/scenarios_route.py::test_k10_the_composed_releases_route_proposes_and_the_operator_decides
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/integration/lab_rollout/scenarios_route.py::test_k10_the_composed_releases_route_proposes_and_the_operator_decides
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_rollout/scenarios_route.py::test_k10_the_releases_ui_over_the_real_route - lab_rollout.lab_e2e_gate.HarnessError: cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts: HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1204764 checkout /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktr...
+1 failed, 2 passed, 22 deselected, 2 warnings in 12.74s

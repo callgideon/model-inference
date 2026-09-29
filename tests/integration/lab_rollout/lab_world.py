@@ -282,6 +282,27 @@ class Lab:
                         "(policy_id) where o.policy_ref = %s and e.action <> 'start' "
                         "order by e.fence", ref)
 
+    def assign_failed_job(self, ref: str, policy_id: str, rid: str, serving: str) -> None:
+        """WR-LIVE-K09: one admitted CREDIT job, failed (`engine_error`) 10 ms after its
+        admission and settled at 0, that R1 assigned to `serving` under revision `ref` - the
+        shape of tests/d/test_code_mutants_live.py's `job`, copied (never imported across
+        test packages). A fixture written with `session_replication_role = replica`: D9's
+        read (0054) and the pass are under test, not admission or settlement."""
+        cc = self.cc
+        org = cc.personal_org(self.conn, cc.CONSUMER_1)
+        with self.conn.transaction():
+            self.conn.execute("set local session_replication_role = replica")
+            self.conn.execute(cc.credit_job(rid, f"e8l-{rid}", org, cc.PROVIDER_WALLET))
+            self.conn.execute(
+                "update infrx.jobs set state = 'failed', outcome_cause = 'engine_error', "
+                "settlement_state = 'settled', usage_certainty = 'authoritative', "
+                "result_ref = 'r', settled_at = admitted_at + interval '10 milliseconds', "
+                "debit = 0 where request_id = %s", (rid,))
+            self.conn.execute(
+                "insert into infrx.lab_rollout_assignments (policy_id, request_id, policy_ref, "
+                "cohort_digest, serving_ref, pinned_by) values (%s, %s, %s, %s, %s, 'cohort')",
+                (policy_id, rid, ref, "sha256:" + "c" * 64, serving))
+
     def controller(self, serving=None):
         from infrx.rollouts import control as r2
         return r2.Controller(self.releases(), serving or self.serving(), actor_id=CONTROLLER)

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="12.741" timestamp="2026-09-29T17:53:52.891489+00:00" hostname="rey-aws"><testcase classname="tests.integration.lab_rollout.scenarios_route" name="test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict" file="tests/integration/lab_rollout/scenarios_route.py" line="287" time="2.342" /><testcase classname="tests.integration.lab_rollout.scenarios_route" name="test_k10_the_composed_releases_route_proposes_and_the_operator_decides" file="tests/integration/lab_rollout/scenarios_route.py" line="327" time="4.337" /><testcase classname="tests.integration.lab_rollout.scenarios_route" name="test_k10_the_releases_ui_over_the_real_route" file="tests/integration/lab_rollout/scenarios_route.py" line="492" time="5.964"><failure message="lab_rollout.lab_e2e_gate.HarnessError: cd apps/lab &amp;&amp; LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts: HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1204764 checkout /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/rv-lw8b); refusing to touch port 57503 or infrx-l4-postgres. Nothing was a">workdir = PosixPath('research/plan/evidence/e/E8L-raw-lr6/only-k10-base/cases/test_k10_the_releases_ui_over_the_real_route')
+
+    def test_k10_the_releases_ui_over_the_real_route(workdir):
+        """k10's UI half (LAB-E2E): `apps/lab/tests/e2e/rollout` - the Lab releases page built and
+        served, signed in through its own form, over `/lab/v1/releases` on the l4 key: the page
+        fails closed on the gateway's own LAB_RELEASES composition, then D9's real store and 0043's
+        proposal store show R2's verdict, take a proposal at the fence the page showed through its
+        server action, the operator's approval and an emergency rollback, and refuse the unsafe
+        variants. A red suite fails this case; a green one is NOT RUN while the gateway's own
+        composition lacks a port (R238: a product WR naming it; WR-R4-2 composed all three at
+        merge #50)."""
+        e2e = _e2e()
+        got = e2e.run("rollout", workdir)
+        lw.save(workdir, "k10-ui.json", {k: v for k, v in got.items() if k != "tail"})
+&gt;       absent = e2e.missing(got)
+                 ^^^^^^^^^^^^^^^^
+
+tests/integration/lab_rollout/scenarios_route.py:505: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = {'command': 'cd apps/lab &amp;&amp; LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 1, ...}
+
+    def missing(got: dict) -&gt; list[str]:
+        """Asserts the suite passed as a whole - every case ran and none failed - and answers the
+        ports the gateway's own composition does not carry yet (empty: the cell is bound for real)."""
+        if got["exit"] != 0 and got.get("harness"):
+&gt;           raise HarnessError(f"{got['command']}: {got['harness']}")
+E           lab_rollout.lab_e2e_gate.HarnessError: cd apps/lab &amp;&amp; LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts: HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1204764 checkout /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/rv-lw8b); refusing to touch port 57503 or infrx-l4-postgres. Nothing was a
+
+apps/lab/tests/e2e/gate.py:65: HarnessError</failure></testcase></testsuite></testsuites>

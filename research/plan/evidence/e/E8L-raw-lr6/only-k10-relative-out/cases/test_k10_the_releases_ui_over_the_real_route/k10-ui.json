@@ -1,0 +1,10 @@
+{
+ "cancelled": 0,
+ "command": "cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts",
+ "exit": 0,
+ "fail": 0,
+ "harness": null,
+ "pass": 6,
+ "record": null,
+ "skipped": 0
+}

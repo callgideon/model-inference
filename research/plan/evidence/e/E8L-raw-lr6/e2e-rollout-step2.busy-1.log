@@ -1,0 +1,41 @@
+TAP version 13
+# (node:1266751) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Traceback (most recent call last):
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/backend.py", line 241, in <module>
+#     main()
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/backend.py", line 56, in main
+#     conn, dsn = stack.database("rollout")
+#                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/stack.py", line 57, in database
+#     pgharness.ensure()
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/infrx-api/tests/d/pgharness.py", line 206, in ensure
+#     _acquire_lock()
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/infrx-api/tests/d/pgharness.py", line 170, in _acquire_lock
+#     raise HarnessBusy(
+# tests.d.pgharness.HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1265904 checkout /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/rvlw8-scope); refusing to touch port 57503 or infrx-l4-postgres. Nothing was altered - wait for it, or run the two suites in sequence (08 §8 gives this task ONE port)
+# Subtest: E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+not ok 1 - E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+  ---
+  duration_ms: 5513.192728
+  type: 'test'
+  location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/rollout/stack.test.ts:16:1'
+  failureType: 'testCodeFailure'
+  error: 'backend exited 1: '
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    ChildProcess.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/lab/tests/e2e/harness.ts:154:39)
+    ChildProcess.emit (node:events:519:28)
+    ChildProcess._handle.onexit (node:internal/child_process:293:12)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5665.99625

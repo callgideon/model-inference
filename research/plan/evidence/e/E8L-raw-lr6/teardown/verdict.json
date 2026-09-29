@@ -1,0 +1,264 @@
+{
+  "task": "E8L",
+  "gate": "LAB-ROLLOUT-LOCAL",
+  "verdict": "NOT RUN",
+  "exit": 3,
+  "cells": {
+    "ROLLOUT-PIN": "NOT RUN",
+    "ROLLOUT-RECOVER": "NOT RUN",
+    "OPT-PARITY": "NOT RUN"
+  },
+  "r222": {
+    "accepted": false,
+    "open": {
+      "k01": "NOT RUN",
+      "k02": "NOT RUN",
+      "k03": "NOT RUN",
+      "k04": "NOT RUN",
+      "k05": "NOT RUN",
+      "k06": "NOT RUN",
+      "k07": "NOT RUN",
+      "k09": "NOT RUN",
+      "k10": "NOT RUN"
+    }
+  },
+  "label": "real PostgreSQL (every migration: D9 0033/0039/0043, D7, L3 0032), the merged R1/R2/R3/B2 code, G2's relay on its contract fakes, owned case records and synthetic endpoints; no real-model quality claim (P-07), no GPU parity, no public shadow/canary (P-12), not hosted behaviour",
+  "pins": {
+    "base": "993d481c",
+    "head": "d8b22e364b80b074b0bbf3cabcfae16c28394cb4",
+    "dirty": true,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    },
+    "fixtures_sha256": {
+      "lab_world.py": "86d1d9864863a7c09e94a1b76227bea0b9d3433cfbd27264737ef7f28ec02989",
+      "scenarios_parity.py": "dbfeb99938447b8a68e59e6e1cc5e13d0cf7f1f8240f6d7b3905e0abc892a21f",
+      "scenarios_pending.py": "3b83f79accd02976ef52960e02af6841405c7169e9fe01199254a8f96cee0191",
+      "scenarios_recover.py": "a7ff507cbb70d950293b3bbfeb266e51f397182910bcb52b8a23045b10c81cca",
+      "scenarios_route.py": "54db1671cf54dd13a861416c9ff19564ffe16672b1d10df3a44facd96f5a4ad6"
+    }
+  },
+  "namespace": "e8l",
+  "ports": {
+    "postgres": 57432,
+    "valkey": 57479,
+    "clickhouse_http": 57423,
+    "clickhouse_native": 57490,
+    "s3": 57400,
+    "fake_vllm": 57480
+  },
+  "started": "2026-09-29T18:47:33+00:00",
+  "seconds": 7.4,
+  "stack": {
+    "usable": true,
+    "why_not": "reused a kept stack",
+    "stages": [
+      {
+        "stage": "backend-teardown",
+        "status": "PASS",
+        "seconds": 0.5
+      },
+      {
+        "stage": "teardown",
+        "status": "PASS",
+        "seconds": 6.8
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "k01",
+      "title": "R1 off: a live 100% canary on D9 changes nothing - the composed gateway keeps the relay's own accept, D9 is never asked, no assignment row",
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k01",
+      "scope": {}
+    },
+    {
+      "id": "k02",
+      "title": "shadow on D9 through G2's relay: the user's answer, job, hold and settlement are today's; the candidate duplicate runs bounded on the provider-funded endpoint and is dropped",
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k02",
+      "scope": {}
+    },
+    {
+      "id": "k03",
+      "title": "canary and A/B on D9: stable arms across retries, bounded by weight, a raised weight keeps promised subjects (R179), pins, ineligible and session subjects never routed (R180), a store outage is 503 (R181)",
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k03",
+      "scope": {}
+    },
+    {
+      "id": "k04",
+      "title": "a guardrail breach rolls back exactly once through D9's CAS under two controllers; future admissions only; a controller killed before L3's alias CAS converges on restart with no second decision",
+      "test_ids": [
+        "ROLLOUT-RECOVER"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k04",
+      "scope": {}
+    },
+    {
+      "id": "k05",
+      "title": "non-inferiority and cost (B2): an accepting report is approved once; inconclusive blocks promotion; stale metrics or missing evidence hold; a slice regression under an aggregate gain rolls back; overspend rolls back and units never mix",
+      "test_ids": [
+        "ROLLOUT-RECOVER"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k05",
+      "scope": {}
+    },
+    {
+      "id": "k06",
+      "title": "a promoted candidate's alias rolls back through L3's CAS: the policy R1 routes is the one R2 converges",
+      "test_ids": [
+        "ROLLOUT-RECOVER"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k06",
+      "scope": {}
+    },
+    {
+      "id": "k07",
+      "title": "R3: a variant registered through W3's probe over HTTP, compared on a B2 report, stored through D7; incompatible variants and unmeasured load claims refused",
+      "test_ids": [
+        "OPT-PARITY"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k07",
+      "scope": {}
+    },
+    {
+      "id": "k08",
+      "title": "R3 parity measured on an allocated supported GPU target",
+      "test_ids": [
+        "OPT-PARITY"
+      ],
+      "lanes": [
+        "P-08"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_k08_parity_on_an_allocated_gpu_target": "NOT RUN"
+      },
+      "reasons": [
+        "test_k08_parity_on_an_allocated_gpu_target: NOT RUN[P-08] no allocated GPU target and no measured results on this base. Steps: serve.sh + bench.py for base and variant on the target, commit marlin2b/results/R3-parity-*, then k07 with those loads; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k08 /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rol"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k08",
+      "scope": {
+        "P-08": "GPU (P-08 staging target)"
+      }
+    },
+    {
+      "id": "k09",
+      "title": "the I7 controller process killed and restarted mid-rollout: the real emergency-rollback subcommand twice; the bare rollout role converges a rollback killed before the alias CAS on its first pass",
+      "test_ids": [
+        "ROLLOUT-RECOVER"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k09",
+      "scope": {}
+    },
+    {
+      "id": "k10",
+      "title": "the Lab releases page over the composed route: verdict, proposal, the operator's decision through D9 (`rollout decide`) and emergency rollback",
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k10",
+      "scope": {}
+    }
+  ],
+  "sub_cells": [
+    {
+      "id": "k10-ui-composed",
+      "parent": "k10",
+      "lanes": [
+        "WR-LIVE-DECIDE",
+        "WR-LR6-VERDICT"
+      ],
+      "title": "the releases page's proposal/approval journey over pilot.lab_releases' own records and proposals",
+      "note": "WR-LR5-1: E2E-R01..R05 run over the gateway's own composition, releases launched and decided by `rollout launch|decide`, except two stand-ins: R2's hold/expand verdict of a release D9 holds no decision for is laid over the records (no composed read, WR-LR6-VERDICT) and an expansion is approved through R2's Controller.approve (`rollout decide` refuses it, WR-LIVE-DECIDE)",
+      "parent_status": "NOT RUN",
+      "status": "NOT RUN",
+      "reason": "NOT RUN[WR-LIVE-DECIDE,WR-LR6-VERDICT]",
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k10"
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e8l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs --import-mode=prepend -o junit_family=xunit1 --junitxml=/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/research/plan/evidence/e/E8L-raw-lr6/teardown/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/tests/integration/lab_rollout/scenarios_parity.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/tests/integration/lab_rollout/scenarios_pending.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/tests/integration/lab_rollout/scenarios_recover.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/tests/integration/lab_rollout/scenarios_route.py -k test_k08_",
+      "exit": 0,
+      "seconds": 0.3,
+      "summary": "1 skipped, 24 deselected in 0.04s",
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/research/plan/evidence/e/E8L-raw-lr6/teardown/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/research/plan/evidence/e/E8L-raw-lr6/teardown/scenarios.xml",
+    "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/research/plan/evidence/e/E8L-raw-lr6/teardown/scenarios.log",
+    "case_artifacts": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-6/research/plan/evidence/e/E8L-raw-lr6/teardown/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir>"
+}
