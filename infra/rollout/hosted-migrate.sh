@@ -33,7 +33,7 @@ git diff --quiet "$RELEASE" HEAD -- "${INPUTS[@]}" || { echo "HEAD $(git rev-par
 PY=apps/infrx-api/.venv/bin/python
 HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscgsymzdykendbrc dbname=postgres sslmode=require"
 EXPECTED_PENDING="0027, 0028, 0029, 0030, 0031, 0032, 0033, 0034, 0035, 0036, 0037, 0038, 0039, 0040, 0041, 0042, 0043, 0044, 0045, 0046, 0047, 0048, 0049, 0050, 0051"   # R151/R201 window 2026-09-29 (operator: "deploy v1"): 0001-0026 -> 0001-0051, the Lab migrations
-EXPECTED_FLAGS="credit_admission=false legacy_usd_admission=true signup_grant=true"
+EXPECTED_FLAGS="credit_admission=true legacy_usd_admission=false signup_grant=true"   # hosted since the W7f CREDIT activation (2026-09-27); the Lab window changes no flag
 PORT=${PGPORT_LOCAL:-55697}
 BACKUP_ROOT=${BACKUP_ROOT:-$HOME/infrx-backups}
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
