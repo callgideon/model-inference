@@ -38,6 +38,7 @@ from ...d import pgharness
 from ...d import test_d7_lab_data as d7
 from ...d import test_d9_rollout as d9
 from ...d import test_l2sql_access as l2
+from ...d.test_code_mutants_live import job
 from ...r.control.test_control import plan
 from ...r.control.test_control_pg import DB, world  # noqa: F401
 from .test_lab_releases import Sessions, token
@@ -57,7 +58,8 @@ def run(coro):
 def test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides_on_d9(
         world, monkeypatch, tmp_path):
     """k10's port half: the release page lists D9's release with the stored plan and D7's
-    policy (no progress: R1's aggregates are not readable; no verdict before a decision); a
+    policy (no progress while nothing is assigned, then D9's Live once a job is - WR-LIVE-PAGE;
+    no verdict before a decision); a
     developer cannot propose, an expansion without an expand verdict is a 409, a rollback
     proposal is stored once (a second is a 409: 0043's one-pending index); the operator's
     approval is ONE D9 decision at the proposal's fence (the alias already on the baseline),
@@ -117,6 +119,17 @@ def test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides
     assert row["plan"]["budget"] == {"amount": plan().budget.value, "unit": plan().budget.unit}
     assert row["plan_digest"] == r2.plan_digest(plan()) and row["started_at"].endswith("Z")
     assert [d for d in page()["decisions"] if d["policy_ref"] in (ref, quiet)] == []
+    # WR-LIVE-PAGE (R244): one failed candidate job assigned - progress is D9's Live (0054)
+    job(world, ref, payload, d9.uid(1, 0x31), payload["candidates"][0]["serving_ref"],
+        "failed", ms=40)
+    shown = {r["policy_ref"]: r for r in page()["releases"]}
+    live = shown[ref]["progress"]
+    assert shown[quiet]["progress"] is None, "nothing assigned to it: null"
+    assert (live["candidate"], live["baseline"]["requests"], live["quality_covered"],
+            live["spent"], live["assignments"]) == (
+        {"requests": 1, "errors": 1, "p99_ms": 40}, 0, 0,
+        {"amount": "0.00000000", "unit": "CREDIT"}, []), live
+    assert live["observed_until"].endswith("Z") and live["candidate_healthy"] is False
 
     assert propose(l2.DEV, "rollback").status_code == 403
     assert propose(l2.ADMIN, "expand").status_code == 409         # no expand verdict

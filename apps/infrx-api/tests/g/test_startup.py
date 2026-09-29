@@ -509,8 +509,8 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
     three states the Lab shows, 0053's decisions), D7's policy revision and the plan its
     launcher stored beside it (WR-C5-PLAN), the proposals over 0043 (one pending per revision,
     the proposer the session's user), and D9 as the route's store - all on the gateway's
-    pool and Lab objects. R1's aggregates are not readable (WR-C5-LIVE): progress is null; the
-    verdict is D9's latest decision; a release whose plan is not stored, and R3's variant
+    pool and Lab objects. Nothing assigned yet (D9's Live is None): progress is null
+    (WR-LIVE-PAGE: tests/g/lab_releases); the verdict is D9's latest decision; a release whose plan is not stored, and R3's variant
     listing (not written), are a typed 503, never a guessed row."""
     import dataclasses
     from datetime import datetime, timezone
@@ -560,6 +560,9 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
                                 started_at=datetime(2026, 9, 27, 10, tzinfo=timezone.utc)),
                 latest_decision=Decision(decision="rollback", reasons=("error_rate",),
                                          evidence_refs=("run:x",), decided_by="op", at=at))]
+
+        async def live(self, policy_ref):
+            return None
 
         async def decisions(self, *, provider_org_id):
             return [{"policy_ref": ref, "decision": "rollback", "reasons": ["error_rate"],
