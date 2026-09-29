@@ -15,7 +15,7 @@
 | `910af683` | 4 C7-RV-6 | `gateway/pilot.py` `ReleaseRecords.releases` per-row fallback | fake case + p3 PG case; 5 fake mutants + 1 PG mutant; `page_progress_withheld` re-anchored |
 | `ed21f2ad` | 5 WR-C7-DOC | - | 08 §5 "Lab worker roles" row only |
 
-`pilot.py` lines touched (for lab-rollout-7, which edits the verdict in parallel): docstring of `ReleaseRecords` (+3 lines after "the verdict is D9's latest decision."); a `try: live, refused = await self.d9.live(item.policy_ref), None / except errors.InvalidRequest: live, refused = None, "unit_refused"` block inserted after `release, d = item.release, item.latest_decision`; `"progress": _progress(live),` (was `_progress(await self.d9.live(item.policy_ref))`); `if refused: out[-1].update(verdict=None, refused=refused)` after `out.append({...})`. The `"verdict": None if d is None else {...}` expression is unchanged (its anchors in tests/g/mutants.py:1155 and tests/integration/lab_rollout/mutants.py:378 still match).
+`pilot.py` lines touched (for lab-rollout-7, which edits the verdict in parallel): docstring of `ReleaseRecords` (+3 lines after "the verdict is D9's latest decision."); a `try: live, refused = await self.d9.live(item.policy_ref), None / except errors.InvalidRequest: live, refused = None, "unit_refused"` block inserted after `release, d = item.release, item.latest_decision`; `"progress": _progress(live),` (was `_progress(await self.d9.live(item.policy_ref))`); `if refused: out[-1].update(verdict=None, refused=refused)` after `out.append({...})`. The `"verdict": None if d is None else {...}` expression is unchanged (its anchors in tests/g/mutants.py:1155 and tests/integration/lab_rollout/mutants.py:378 still match). **Corrected in the fix round (1-C7G-RV-A):** this edit does NOT leave the parallel lanes unaffected - it conflicts textually with both `codex/w5-lab-rollout-7` (e65bbecf) and `codex/w5-lab-sql-lw9` (751ff6a2) in `pilot.py`, `tests/g/lab_releases/mutants.py` and `tests/g/lab_releases/test_lab_releases.py`, and on meaning with lab-rollout-7 (its verdict reads the same `live`); see "Fix round" for the merge note. Onto `claude/consumer-v1` alone it merges clean.
 
 ## Fail-first (red, recorded before each implementation; `apps/infrx-api`)
 
@@ -68,4 +68,52 @@
 - optimistic 0.5 h / likely 1 h / pessimistic 3 h; confidence medium.
 - Basis: one verify/fix round on a finished, test-only-heavy lane (47-234 min per session-03); WR-C7G-PREFLIGHT is a coordinator wiring (~0.3 h + the lab_pipeline mutant list).
 
+## Fix round (1-C7G-RV-A)
+
+The finding holds, and the conflicts are wider than it said: `git merge-tree --write-tree --name-only <lane> ffbf88c5` gives CONFLICT (content) in **three** files for each lane: `pilot.py`, `tests/g/lab_releases/mutants.py` **and** `tests/g/lab_releases/test_lab_releases.py`. `codex/w5-lab-rollout-7` is at e65bbecf and `codex/w5-lab-sql-lw9` at 751ff6a2 (local branches, no `origin/` refs here). Onto `claude/consumer-v1` (34e6ab91) the merge is clean.
+
+**Merge note for the coordinator.** Whichever of lab-rollout-7 or lab-sql-lw9 lands after this lane, the loop in `ReleaseRecords.releases` keeps **one** guarded `live` read ahead of every use of it:
+
+```python
+            release = item.release                      # (rollout-7 drops `d`: `verdict` reads it)
+            try:
+                live, refused = await self.d9.live(item.policy_ref), None
+            except errors.InvalidRequest:     # R248, C7-RV-6: this row only, typed
+                live, refused = None, "unit_refused"
+            out.append({
+                ...
+                "progress": _progress(live, None if live is None else          # lw9: no tally
+                                      await self.d9.tally(item.policy_ref)),   # for a refused row
+                "verdict": await self.verdict(provider_org_id, item, policy, full, live)})  # rollout-7
+            if refused:
+                out[-1].update(verdict=None, refused=refused)
+```
+
+- rollout-7's `release, live = item.release, await self.d9.live(...)` is **dropped**: that read is unguarded, and the R248 refusal would fail the listing again. Its `"verdict": await self.verdict(...)` line is kept **verbatim**, because its own mutant anchors on that exact line. `verdict()` with `live=None` does no read. It returns D9's decision (then nulled by the `update`) or None, so a refused row reads no B2 report.
+- For lw9, the walrus `_progress(live := await self.d9.live(...), ...)` becomes `_progress(live, ...)`, and the tally is read only when `live is not None`, so a refused row never calls it. lw9's `page_tally_unobserved` anchor (`None if live is None else\n`) still matches.
+- Re-anchors on the merged text: lw9's `page_progress_withheld` becomes `'"progress": _progress(live,'` → `'"progress": None and _progress(live,'`. With rollout-7 alone it stays `'"progress": _progress(live),'`. The `page_unit_*` anchors (`except errors.InvalidRequest:     # R248`, `live, refused = None, "unit_refused"`, `out[-1].update(verdict=None, refused=refused)`, `if refused:\n                out[-1].update(`) are unchanged under both resolutions.
+- `test_lab_releases.py`: take the other lane's side, then append this lane's `test_lab_releases__a_unit_refused_live_nulls_its_own_row_and_the_others_list` unchanged. The two lanes' functions interleave in the conflict hunks, so the file cannot be resolved hunk by hunk. As of 2e5f93a8 its fake D9 already answers `tally` (0058) and asserts a refused row reads none, so the case needs no edit after lw9. `ReleaseRecords(D9(), D7(), objects, None)` still builds after rollout-7 (`reads=None` default; the listed row carries a D9 decision, so `verdict()` reads no report).
+- The docstring combines both sentences: rollout-7's "the verdict is `verdict`'s (WR-LR6-VERDICT)" or lw9's WR-C7-TALLY `assignments` clause, plus this lane's R248 sentence.
+
+**Verified by trial merges in this worktree.** Each trial ran `git merge --no-commit --no-ff <lane>`, resolved the files as above, ran the checks, and then ran `git merge --abort`. Nothing was committed from a trial, and the tree was clean after each.
+
+| trial | command (apps/infrx-api) | result |
+|---|---|---|
+| + rollout-7 (e65bbecf) | `pytest -q tests/g/lab_releases/test_lab_releases.py` | 19 passed |
+| + rollout-7 | `INFRX_MUTANTS=all ... tests/g/lab_releases/test_mutants.py` | **57 passed, 1 skipped, 0 survivors**: `page_unit_refusal_fails_listing` still kills UNIT_REFUSED, and rollout-7's verdict mutants all die |
+| + rollout-7 | `INFRX_D_TASK=p3 ... test_lab_releases_unit_refused_pg.py`; `INFRX_MUTANTS=all INFRX_LAB_RELEASES_PG=1 INFRX_D_TASK=p3 ... test_mutants.py -k pg` | 1 passed; `page_unit_refusal_fails_listing_pg` PASSED (killed on real 0054) |
+| + lw9 (751ff6a2) | `pytest -q tests/g/lab_releases/test_lab_releases.py` | 15 passed |
+| + lw9 | `INFRX_MUTANTS=all ... tests/g/lab_releases/test_mutants.py` | **46 passed, 1 skipped, 0 survivors** (with the `page_progress_withheld` re-anchor) |
+| + lw9 | the PG case and the PG mutant, as above | 1 passed; `page_unit_refusal_fails_listing_pg` PASSED |
+
+A three-way trial (both lanes on top of this one) was not run, because it needs a committed intermediate merge. The block above is the union of the two verified resolutions.
+
+| check at 2e5f93a8 | result |
+|---|---|
+| `pytest -q tests/g/lab_releases/test_lab_releases.py`; `ruff check` | 15 passed; clean |
+| `INFRX_MUTANTS=all ... tests/g/lab_releases/test_mutants.py` | **44 passed, 1 skipped, 0 survivors** |
+
+Only a test fake changed in this round, with no code change, so E4 was not rerun. The E4 at ed21f2ad (2835/0 on p3) stands.
+
 - 2026-09-29: lab-c7-gaps lane evidence (C7-RV-1/2/4/5/6, WR-C7-DOC); E4 2835/0 on p3; local only.
+- 2026-09-29: fix round 1-C7G-RV-A: corrected the pilot.py line (conflicts with lab-rollout-7 and lab-sql-lw9) and added the merge note, verified by two trial merges; the test fake answers tally; local only.
