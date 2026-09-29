@@ -300,6 +300,13 @@ MEDIA = (
       file=S3),
     m("b1_presign_unprefixed", "the URL names the prefixed key",
       '"Key": self.prefix + key},', '"Key": key},', PRESIGN, file=S3),
+    # coordinator wirings at the lab-eval-media merge (WR-LEM-m1/m2/m3)
+    m("b1_clip_ref_unanchored", "a media ref is anchored at its end (nothing after the digest)",
+      "    if not re.fullmatch(re.escape(", "    if not re.match(re.escape(", CLIPS),
+    m("b1_clip_bool_ms", "a span of booleans is refused (bool is not a whole ms)",
+      "all(type(ms) is int for ms in span)", "all(isinstance(ms, int) for ms in span)", CLIPS),
+    m("b1_presign_head", "the presigned URL is a GET of the object, never a HEAD",
+      '"get_object", Params=', '"head_object", Params=', PRESIGN, file=S3),
 )
 MUTANTS += MEDIA
 

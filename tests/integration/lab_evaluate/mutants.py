@@ -295,6 +295,12 @@ STACK_MUTANTS += (
        B3, "    run_id = run_id_of(sub.subscription_id, event.checkpoint_id)\n",
        "    run_id = str(uuid.uuid4())\n", J09_CKPT),
 )
+# WR-E6L-J11 (lab-eval-media): j11, a finite-video case sent as its presigned URL
+STACK_MUTANTS += (
+    _m("st_clip_unsigned", "a clip reaches the dev endpoint as its presigned URL", B1,
+       "        media = [await clip_url(", "        media = media or [await clip_url(",
+       "test_j11_a_finite_video_case_reaches_the_dev_endpoint"),
+)
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_data.py", "scenarios_eval.py", "scenarios_checkpoint.py",
                   "scenarios_workers.py")
@@ -306,11 +312,9 @@ def case_names() -> set[str]:
 
 
 def stack_case_names() -> set[str]:
-    """Every running scenario case, except j11 (NOT RUN[L3]: H1 now gets the clip's media
-    (E6L-O1 fixed), and HttpDevEndpoint refuses media until L3's dev target merges)."""
+    """Every running scenario case (j11 runs since WR-E6L-J11, lab-eval-media)."""
     return {name for file in SCENARIO_FILES
-            for name in re.findall(r"^def (test_j\d\d_\w+)\(", (HERE / file).read_text(), re.M)} \
-        - {"test_j11_a_finite_video_case_reaches_the_dev_endpoint"}
+            for name in re.findall(r"^def (test_j\d\d_\w+)\(", (HERE / file).read_text(), re.M)}
 
 
 def _layer1(root: pathlib.Path) -> pathlib.Path:

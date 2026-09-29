@@ -576,10 +576,12 @@ def test_b1_only_the_runs_providers_clip_within_the_cap_is_signed() -> None:
     refused = ((f"lab/{OTHER}/media/{CLIP}", [0, 1000], "media_foreign"),
                (f"lab/{NEMO}/samples/{CLIP}", [0, 1000], "media_foreign"),
                (f"lab/{NEMO}/media/../{CLIP[:61]}", [0, 1000], "media_foreign"),
+               (f"{CLIP_REF}/x", [0, 1000], "media_foreign"),         # anchored at the end
                (CLIP_REF, [0, 82_001], "video_over_cap"),
                (CLIP_REF, [7, 7], "video_over_cap"),
                (CLIP_REF, [-1, 1000], "video_over_cap"),
                (CLIP_REF, [0.5, 1000], "video_over_cap"),
+               (CLIP_REF, [False, True], "video_over_cap"),           # a bool is not a ms
                (CLIP_REF, [0, 1000, 2000], "video_over_cap"),
                (CLIP_REF, runner._MISSING, "video_over_cap"))
     for ref, span, name in refused:
@@ -600,7 +602,11 @@ def test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object(monkeypatch)
                         ("AWS_SHARED_CREDENTIALS_FILE", "/nonexistent")):
         monkeypatch.setenv(name, value)
     store = S3ObjectStore.connect("b", "lab/", "http://127.0.0.1:9")
+    signed: list[str] = []                     # the operation signed: a GET, never a HEAD
+    store.client.meta.events.register("before-parameter-build.s3",
+                                      lambda event_name, **_: signed.append(event_name))
     url = urlsplit(run(store.presign("x/y", expires_s=600)))
+    assert signed == ["before-parameter-build.s3.GetObject"]
     query = parse_qs(url.query)
     assert url.path == "/b/lab/x/y"
     assert query.get("X-Amz-Algorithm") == ["AWS4-HMAC-SHA256"]
