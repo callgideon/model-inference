@@ -17,7 +17,7 @@ CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("p3_unknown_is_failed", "p3_ambiguous_unreconciled", "p3_consent_unchecked",
           "p3_late_checkpoint_accepted", "p3_digest_unchecked", "p3_eval_failed_accepted",
-          "p3_manual_reserves", "p3_export_ids_unchecked")
+          "p3_manual_reserves", "p3_export_ids_unchecked", "p3_submit_reads_d7_gate")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

@@ -37,6 +37,10 @@ DESC = "test_p1_holdout_descendants_never_reach_a_training_export"
 SUP = "test_p1_only_an_adjudication_supersedes"
 XVER = "test_p1_a_disagreement_across_versions_is_adjudicated"
 READ = "test_p1_a_label_export_expires_and_rereads_the_training_gate"
+REGRANT_IMPORT = "test_p1_a_regrant_imports_no_label_for_a_tombstoned_sample"
+REGRANT_SELECT = "test_p1_a_regrant_selects_no_tombstoned_sample"
+REGRANT_EXPORT = "test_p1_a_regrant_exports_no_tombstoned_sample"
+REGRANT_READ = "test_p1_a_regrant_rereads_no_tombstoned_line"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -84,8 +88,14 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p1_unreadable_labelled", "labels import through the access gate now",
       'if row["sample_id"] not in readable:', "if False:", GATES),
     m("p1_import_gate_is_training", "the import gate is provider_sharing",
-      'purpose="provider_sharing"))\n    done = Imported()',
-      'purpose="training"))\n    done = Imported()', GATES),
+      'purpose="provider_sharing")\n    done = Imported()',
+      'purpose="training")\n    done = Imported()', GATES),
+    m("p1_import_reads_d7_gate", "R193: an import gates on N3's permitted, not D7's alone",
+      "readable = await permitted(store, objects, dataset_ref, now=now,\n"
+      '                               provider_org_id=provider_org_id, purpose="provider_sharing")'
+      "\n    done = Imported()",
+      "readable = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,"
+      ' purpose="provider_sharing"))\n    done = Imported()', REGRANT_IMPORT),
     # --- P1.b review (role checks, rubric versions, one move per label)
     m("p1_any_member_reviews", "a reviewer is a current developer or above",
       "if membership is None or not membership.permits(capability, now, provider):",
@@ -169,6 +179,12 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- P1.b select (DATA-SPLIT, DATA-RIGHTS)
     m("p1_select_ignores_rights", "a selection reads the access gate now",
       "keep = set(sample_ids) & readable", "keep = set(sample_ids)", SEL),
+    m("p1_select_reads_d7_gate", "R193: a selection gates on N3's permitted, not D7's alone",
+      "readable = await permitted(store, objects, dataset_ref, now=now,\n"
+      '                               provider_org_id=provider_org_id, purpose="provider_sharing")'
+      "\n    keep = ",
+      "readable = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,"
+      ' purpose="provider_sharing"))\n    keep = ', REGRANT_SELECT),
     m("p1_select_moves_splits", "a selected sample keeps its split",
       '"splits": {n: [i for i in getattr(manifest.splits, n) if i in keep]',
       '"splits": {n: [i for i in getattr(manifest.splits, {"validation": "holdout", '
@@ -195,8 +211,13 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p1_export_rights_unchecked", "an export reads the training gate now",
       "elif sample.sample_id not in allowed:", "elif False:", EXP, GATES),
     m("p1_export_gate_is_access", "the export gate is training",
-      'purpose="training"))\n    _, holdout', 'purpose="provider_sharing"))\n'
+      'purpose="training")\n    _, holdout', 'purpose="provider_sharing")\n'
       "    _, holdout", GATES),
+    m("p1_export_reads_d7_gate", "R193: an export gates on N3's permitted, not D7's alone",
+      "allowed = await permitted(store, objects, dataset_ref, now=now,\n"
+      '                              provider_org_id=provider_org_id, purpose="training")',
+      "allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,"
+      ' purpose="training"))', REGRANT_EXPORT),
     m("p1_unaccepted_exported", "only accepted labels are examples",
       'if state == "accepted":', "if state in LIVE:", EXP),
     m("p1_disagreement_exported", "differing accepted labels are not an example",
@@ -223,6 +244,11 @@ MUTANTS: tuple[Mutant, ...] = (
       '"expires_at": "9999-12-31T00:00:00+00:00"}', READ),
     m("p1_export_never_expires", "an expired label export is Gone",
       'if now >= datetime.fromisoformat(record["expires_at"]):', "if False:", READ),
+    m("p1_read_export_reads_d7_gate", "R193: an export read gates on N3's permitted",
+      'allowed = await permitted(store, objects, record["dataset_ref"], now=now,\n'
+      '                              provider_org_id=provider_org_id, purpose="training")',
+      'allowed = set(await store.accessible_samples(record["dataset_ref"], '
+      'provider_org_id=provider_org_id, purpose="training"))', REGRANT_READ),
     m("p1_export_read_ungated", "a read re-reads the training gate",
       'if x["sample_id"] in allowed)', "if True)", READ),
     m("p1_methods_dropped", "the lineage names each example's methods",

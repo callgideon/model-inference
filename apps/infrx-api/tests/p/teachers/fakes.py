@@ -68,13 +68,15 @@ async def objects_for(store: Store) -> InMemoryObjectStore:
 
 
 class Labels:
-    """P1's `import_labels(store, log, *, provider_org_id, actor, dataset_ref, rubric_ref, rows)`:
+    """P1's `import_labels(store, log, *, objects, now, provider_org_id, actor, dataset_ref,
+    rubric_ref, rows)`:
     records every call; one ref per (dataset, row), as P1's content-addressed publish."""
 
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    async def __call__(self, store, log, *, provider_org_id, actor, dataset_ref, rubric_ref, rows):
+    async def __call__(self, store, log, *, objects, now, provider_org_id, actor, dataset_ref,
+                       rubric_ref, rows):
         rows = list(rows)
         self.calls.append({"provider_org_id": provider_org_id, "actor": actor,
                            "dataset_ref": dataset_ref, "rubric_ref": rubric_ref, "rows": rows})

@@ -20,7 +20,8 @@ idempotency key, for ever. A label enters with its record's state; `review:<ref>
 by F3's annotation machine once (a replay is the same event, another decision a conflict);
 `assign:` names a reviewer and the rubric version the review must cite; `adjudicate:` is one
 per sample. Rights are read at every call: import and select through the access gate
-(`provider_sharing`), export through the training gate.
+(`provider_sharing`), export through the training gate - both N3's `lineage.permitted`, so a
+re-grant never resurrects a tombstoned sample (R193).
 
 **Supersession is adjudication's alone.** A review accepts or rejects; only `adjudicate`
 supersedes. Disagreements and adjudication read the same lineage the export reads: every
@@ -50,6 +51,7 @@ from ...contracts.ids import UUID_RE
 from ...contracts.lab import records as lab
 from ...contracts.lab import states
 from ...contracts.v2.records import ProviderCapability
+from ...datasets.lineage import permitted
 from ...datasets.imports import sample_key, write_once
 from ...datasets.versions import MAX_EXPORT_TTL_S
 
@@ -124,13 +126,13 @@ def _annotation(provider: str, annotation_id: str, dataset_ref: str, sample, *, 
             "ground_truth": method == "human", "state": state}
 
 
-async def import_labels(store, log: LabelLog, *, provider_org_id: str, actor: str,
-                        dataset_ref: str, rubric_ref: str, rows) -> Imported:
+async def import_labels(store, log: LabelLog, *, objects, now: datetime, provider_org_id: str,
+                        actor: str, dataset_ref: str, rubric_ref: str, rows) -> Imported:
     """P1.a: every row published as an `imported`/`synthetic` label, or rejected."""
     manifest = await store.resolve(dataset_ref, provider_org_id=provider_org_id)
     samples = {s.sample_id: s for s in manifest.samples}
-    readable = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
-                                                  purpose="provider_sharing"))
+    readable = await permitted(store, objects, dataset_ref, now=now,
+                               provider_org_id=provider_org_id, purpose="provider_sharing")
     done = Imported()
     for n, row in enumerate(rows, 1):
         reason = _refusal(row, samples, readable)
@@ -323,13 +325,14 @@ async def adjudicate(store, log: LabelLog, members: Members, *, provider_org_id:
     return ref
 
 
-async def select(store, *, provider_org_id: str, actor: str, dataset_ref: str, sample_ids,
-                 dataset_id: str, version: int, created_at: str) -> str:
+async def select(store, *, objects, now: datetime, provider_org_id: str, actor: str,
+                 dataset_ref: str, sample_ids, dataset_id: str, version: int,
+                 created_at: str) -> str:
     """A new version of the chosen samples that the access gate allows now, each keeping
     its split (so a holdout sample stays holdout)."""
     manifest = await store.resolve(dataset_ref, provider_org_id=provider_org_id)
-    readable = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
-                                                  purpose="provider_sharing"))
+    readable = await permitted(store, objects, dataset_ref, now=now,
+                               provider_org_id=provider_org_id, purpose="provider_sharing")
     keep = set(sample_ids) & readable
     samples = [s for s in manifest.samples if s.sample_id in keep]
     return await store.publish({
@@ -378,8 +381,8 @@ async def export(store, log: LabelLog, objects, *, provider_org_id: str, dataset
     if not isinstance(export_id, str) or not UUID_RE.fullmatch(export_id):
         raise errors.InvalidRequest("an export id is a lowercase UUID")
     manifest = await store.resolve(dataset_ref, provider_org_id=provider_org_id)
-    allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,
-                                                 purpose="training"))
+    allowed = await permitted(store, objects, dataset_ref, now=now,
+                              provider_org_id=provider_org_id, purpose="training")
     _, holdout = await _lineage(store, provider_org_id, dataset_ref)
     _, labels = await _labels(store, log, provider_org_id, dataset_ref)
     accepted: dict[str, list[str]] = {}
@@ -439,9 +442,8 @@ async def read_export(store, objects, *, provider_org_id: str, export_id: str,
     record = json.loads(done)
     if now >= datetime.fromisoformat(record["expires_at"]):
         raise errors.Gone(f"label export {export_id} expired")
-    allowed = set(await store.accessible_samples(record["dataset_ref"],
-                                                 provider_org_id=provider_org_id,
-                                                 purpose="training"))
+    allowed = await permitted(store, objects, record["dataset_ref"], now=now,
+                              provider_org_id=provider_org_id, purpose="training")
     data = await objects.get(record["examples_key"]) or b""
     return b"".join(line + b"\n" for line, x in zip(data.splitlines(), record["lineage"])
                     if x["sample_id"] in allowed)

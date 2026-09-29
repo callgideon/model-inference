@@ -27,7 +27,7 @@ from ...n.imports.world import GRANT_ID, NEMO, grant_ref, run
 from ...n.versions.test_versions import derive, imported, uid
 from ..annotations.test_annotations import accept_all, label_rows, load
 from ..annotations.world import (ADMIN, DEV, GRANT_2, GRANT_3, NOW, VIEWER, FakeLabelLog,
-                                 members, rows)
+                                 members, rows, tombstone_regranted)
 from .world import (OPERATOR, PAYER, CheckpointStore, FakeEvaluations, FakeRunLedger, client,
                     descriptor, digest, protocol_app)
 
@@ -76,7 +76,8 @@ class World:
     def label_export(self, ref=None, n=1):
         """A P1 export of accepted labels on every train sample of `ref`."""
         ref, log = ref or self.ref, FakeLabelLog()
-        labels = load(self.store, log, ref, label_rows(self.manifest(ref).splits.train)).accepted
+        labels = load(self.store, log, ref, label_rows(self.manifest(ref).splits.train),
+                      objects=self.objects).accepted
         accept_all(self.store, log, self.access, ref, labels)
         return run(p1.export(self.store, log, self.objects, provider_org_id=NEMO,
                              dataset_ref=ref, export_id=uid(n, 0xe7), adapter="sft.1", now=NOW,
@@ -353,6 +354,27 @@ def test_p3_revoked_consent_stops_a_prepared_submission() -> None:
     with pytest.raises(errors.Forbidden):
         w.submit(http, advertised=ON)
     assert (w.run_state()["state"], w.reservation(), app.state.posts) == ("prepared", {}, 0)
+
+
+def test_p3_a_regrant_bundles_no_tombstoned_sample() -> None:
+    """Oracle (R193, 0-E7L-1): after a revocation, N3's tombstone and a re-grant, the
+    bundle leaves the tombstoned train sample out (listed as omitted)."""
+    w = World()
+    first = sorted(w.manifest().splits.train)[0]
+    tombstone_regranted(w.store, w.objects, first)
+    bundle = w.prepare()
+    assert first not in bundle["train"] and first in bundle["omitted"]
+
+
+def test_p3_a_regrant_submits_no_tombstoned_sample() -> None:
+    """Oracle (R193, E7L i04): a bundle prepared before the tombstone cannot be submitted
+    after the re-grant: Forbidden, still `prepared`."""
+    w = World()
+    bundle = w.prepare()
+    tombstone_regranted(w.store, w.objects, bundle["train"][0])
+    with pytest.raises(errors.Forbidden):
+        w.submit()
+    assert w.run_state()["state"] == "prepared"
 
 
 def test_p3_reported_cost_is_settled_exactly_or_unknown() -> None:

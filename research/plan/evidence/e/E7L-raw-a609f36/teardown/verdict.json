@@ -1,0 +1,217 @@
+{
+  "task": "E7L",
+  "gate": "LAB-IMPROVE-LOCAL",
+  "verdict": "NOT RUN",
+  "exit": 3,
+  "cells": {
+    "DATA-LINEAGE": "NOT RUN",
+    "PIPELINE-LINEAGE": "NOT RUN",
+    "PIPELINE-BUDGET": "NOT RUN",
+    "TRAIN-RECOVER": "NOT RUN"
+  },
+  "label": "real PostgreSQL (every migration incl. 0027-0043) and S3-compatible MinIO, the merged N1/N2/N3/P1/P2/P3/H1/B1/B2 code, D7 receipts, L2 grants and D6F feedback; D8's ledgers and B3's P3 evaluation port as test-side stand-ins (see lab_world); owned synthetic fixtures, a deterministic evaluator, synthetic serving endpoints, the local teacher fake and the manual/protocol training connectors; no real-model improvement claim (P-07), no live teacher (P-10) or managed training (P-11) evidence, not GPU capacity, not hosted",
+  "pins": {
+    "base": "b2906856",
+    "head": "a609f3683b8ccb51d31eb067328689da5b7199df",
+    "dirty": true,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    },
+    "fixtures_sha256": {
+      "improve.json": "137fea578c97ec24cd695b8f5847003b4ebbcba0a030a899634903de93023e01",
+      "improve.jsonl": "e16316ae0d40610a5d84e6f8f6898eda02eef9cb4a18f8686c743121214f44ba"
+    }
+  },
+  "namespace": "e7l",
+  "ports": {
+    "postgres": 57332,
+    "valkey": 57379,
+    "clickhouse_http": 57323,
+    "clickhouse_native": 57390,
+    "s3": 57300,
+    "fake_vllm": 57380
+  },
+  "started": "2026-09-28T21:41:57+00:00",
+  "seconds": 10.8,
+  "stack": {
+    "usable": true,
+    "why_not": "reused a kept stack",
+    "stages": [
+      {
+        "stage": "backend-teardown",
+        "status": "PASS",
+        "seconds": 0.9
+      },
+      {
+        "stage": "teardown",
+        "status": "PASS",
+        "seconds": 9.8
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "i01",
+      "title": "iteration 1 labels: human rows imported through P1 and a P2 teacher batch over J2's egress to the local teacher fake, published synthetic; review and correction; forged ground truth refused; the holdout never labelled by the teacher nor exported",
+      "test_ids": [
+        "PIPELINE-LINEAGE"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i01"
+    },
+    {
+      "id": "i02",
+      "title": "iteration 1 training: the train-only label export in a manual bundle that pins (never carries) the frozen holdout; checkpoints through P3/D7 receipts evaluated by B1/B2 on that holdout; the seeded bad checkpoint with the better training loss is rejected; no eligibility without the holdout run; missing and late checkpoints rejected",
+      "test_ids": [
+        "TRAIN-RECOVER",
+        "PIPELINE-LINEAGE"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i02"
+    },
+    {
+      "id": "i03",
+      "title": "iteration 2: the grantor's traces of candidate 1's serving selected through N3 under its grant (D6F corrections kept apart), derived over the frozen holdout, corrected, exported with both iterations' lineage, trained, evaluated on the same holdout; budgets reconcile per unit",
+      "test_ids": [
+        "DATA-LINEAGE",
+        "PIPELINE-LINEAGE",
+        "PIPELINE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i03"
+    },
+    {
+      "id": "i04",
+      "title": "a revocation mid-iteration: the annotation queue, the training submit and the export reads stop; reconcile tombstones; nothing is recalled or unlearned; a re-grant resurrects nothing",
+      "test_ids": [
+        "DATA-LINEAGE"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i04"
+    },
+    {
+      "id": "i05",
+      "title": "a duplicate teacher submit is one paid job; an ambiguous submit holds its reservation, is never resubmitted and reconciles from the teacher's record; the budget stops a batch before the chunk it cannot cover",
+      "test_ids": [
+        "PIPELINE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i05"
+    },
+    {
+      "id": "i06",
+      "title": "the automatic training connector over TCP: a timeout after accept and a lost poll never create a second paid job (R184); the reported cost settles once",
+      "test_ids": [
+        "TRAIN-RECOVER",
+        "PIPELINE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i06"
+    },
+    {
+      "id": "i07",
+      "title": "the I6 annotation and training worker processes: a batch and a training run driven by `python -m infrx.lab.workers <role>`, killed and restarted",
+      "test_ids": [
+        "PIPELINE-BUDGET",
+        "TRAIN-RECOVER"
+      ],
+      "lanes": [
+        "composition-2",
+        "WR-P2-4"
+      ],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i07"
+    },
+    {
+      "id": "i08",
+      "title": "the provider UI (P4): labels, review, export, bundle, checkpoint and eligibility over /lab/v1/pipelines",
+      "test_ids": [
+        "PIPELINE-LINEAGE"
+      ],
+      "lanes": [
+        "LAB_PIPELINES",
+        "P3-evaluations"
+      ],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i08"
+    },
+    {
+      "id": "i09",
+      "title": "the candidate proposed and approved through L3/L4 into a private or allocated staging deployment, its traces pinned to that serving version",
+      "test_ids": [
+        "DATA-LINEAGE"
+      ],
+      "lanes": [
+        "staging-target"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_i09_the_candidate_is_promoted_through_l3_l4_staging": "NOT RUN"
+      },
+      "reasons": [
+        "test_i09_the_candidate_is_promoted_through_l3_l4_staging: NOT RUN[staging-target] no private or allocated staging deployment for key e7l. Steps: register candidate 1 through L3, propose/approve it through L4/R2, collect its traces pinned to that serving version, then i03 over them; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i09 /home/rey/workspace/rey/code/model-inference/.claude/work"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i09"
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e7l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs -o junit_family=xunit1 --junitxml=/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-a609f36/teardown/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/tests/integration/lab_improve/scenarios_faults.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/tests/integration/lab_improve/scenarios_iterate.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/tests/integration/lab_improve/scenarios_pending.py -k test_i09_",
+      "exit": 0,
+      "seconds": 0.5,
+      "summary": "1 skipped, 20 deselected in 0.19s",
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-a609f36/teardown/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-a609f36/teardown/scenarios.xml",
+    "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-a609f36/teardown/scenarios.log",
+    "case_artifacts": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-a609f36/teardown/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir>"
+}

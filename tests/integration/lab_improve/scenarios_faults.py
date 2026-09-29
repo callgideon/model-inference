@@ -3,7 +3,7 @@
 submit through J2's path to the local teacher fake, and the automatic training connector's
 timeout after accept and lost poll against P3's protocol server over TCP.
 
-The i05 batches take ledgers of their own (J2's `FakeJudgeLedger`, the D6J stand-in) so the
+The i05 batches take ledgers of their own (P2's `TeacherLedger`, the D6J/D8 stand-in) so the
 session ledger i03 reconciles stays exact; the teacher fake is the session's.
 """
 from __future__ import annotations
@@ -116,13 +116,18 @@ def test_i04_a_regrant_leaves_the_n3_gate_closed(lab):
 
 
 def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdir):
-    """DATA-LINEAGE (transitive revocation): after the re-grant every training path must
-    still refuse the tombstoned samples - a new P1 label export and the prepared P3 run's
-    submit (N3: `permitted` is the one gate every export and external submission
-    re-checks). Today P1/P3 read D7's `accessible_samples` only: 0-E7L-1."""
+    """DATA-LINEAGE (transitive revocation, R193): after the re-grant every training path
+    must still refuse the tombstoned samples - the label queue, a new P1 label export, the
+    earlier export's read and the prepared P3 run's submit (N3: `permitted` is the one gate
+    every export and external submission re-checks). 0-E7L-1 until WR-E7L-3."""
     r = regranted(lab)
     try:
         leaks = []
+        queued = lab.import_labels(r.ref, [dict(row, method_version="e7l-r3") for row in r.rows])
+        if queued.accepted:
+            leaks.append(f"P1 queue imports {len(queued.accepted)} labels")
+        if lab.read_export(4):
+            leaks.append("P1 export read serves tombstoned lines")
         export = lab.export(r.ref, 5)
         shipped = sorted({x["sample_id"] for x in export["lineage"]} & set(r.samples))
         if shipped:
@@ -140,8 +145,8 @@ def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdi
 
 # ------------------------------------------------------------------------------------ i05
 def own_ledger(lab, budget):
-    from tests.j.submit import fakes as j2
-    return j2.FakeJudgeLedger({lab.payer: budget}, now=lab.judge.now)
+    from tests.p.teachers.fakes import TeacherLedger
+    return TeacherLedger({lab.payer: budget}, now=lab.judge.now)
 
 
 def posts_for(lab, runs) -> list[dict]:
