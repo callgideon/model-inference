@@ -134,7 +134,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "message says (WR-E6L-RV-1)", R, '        if entry["status"] != NOT_RUN:',
        "        if False:", R222),
     _m("r222_product_wr_dropped", "R234 (ii): j11 waiting on WR-E6L-J11 is out of local scope "
-       "(WR-E6L-SCOPE)", R, ', "L3": "product WR: WR-E6L-J11"}', "}", R222),
+       "(WR-E6L-SCOPE)", R, '"L3": "product WR: WR-E6L-J11"}', "}", R222),
 )
 
 # ------------------------------------------------------------------ the stack list
