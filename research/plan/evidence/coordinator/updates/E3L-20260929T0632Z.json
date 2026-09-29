@@ -1,0 +1,49 @@
+{
+  "task": "E3L",
+  "slice": "lab-operate-2: LAB-OPERATE-LOCAL rerun on the tip b816f974. (1) l05b and l10b turned from KNOWN_FAIL into plain cells (E3L-F1 fixed at merge #31, E3L-F2 at merge #34/0047), named by st_listing_version_constant and st_retry_proposes_again. (2) The route halves were bound on R186's factory over pilot.lab_operations' real ControlReads: l03b (POST register plus GET models/deployments, with refusals) and l04b (register -> smoke -> propose -> retry answers the same proposal -> operator approval -> listings; J01/J02's route half). The engine smoke is the R203 stand-in (control_box E3L_ENGINE_URL, until WR-L3-2). (3) make lab-operate at 5bec250c: gate PASS (exit 0), 12/12 scenarios, 24/24 cases, cells LAB-ACCESS PASS, LAB-PUBLISH PASS, SPLIT-CONTRACT PASS. The Lab App journey J01/J02 (apps/lab/tests/l/ui) is NOT RUN: the Lab has no HTTP control adapter (WR-E3L-J). Finding E3L-F3: FakeControl/J01/J02 diverge from the real L3 on provider rollback proposals, new-model registration and duplicate proposals (R214).",
+  "activity": "review",
+  "head": "5bec250c",
+  "worktree": ".claude/worktrees/codex-w5-lab-operate-2",
+  "branch": "codex/w5-lab-operate-2",
+  "owned_paths": [
+    "tests/integration/lab_operate/**",
+    "apps/lab/tests/l/ui/** (J01/J02 bind only; unchanged)",
+    "research/plan/evidence/e/E3L-*"
+  ],
+  "gate": {
+    "verdict": "PASS",
+    "exit": 0,
+    "cells": {"LAB-ACCESS": "PASS", "LAB-PUBLISH": "PASS", "SPLIT-CONTRACT": "PASS"},
+    "scenarios": {"l01": "PASS", "l02": "PASS", "l03": "PASS", "l04": "PASS", "l05": "PASS", "l06": "PASS",
+                  "l07": "PASS", "l08": "PASS", "l09": "PASS", "l10": "PASS", "l11": "PASS", "l12": "PASS"},
+    "not_run_outside_the_runner": {"J01": "NOT RUN: no Lab control http adapter (WR-E3L-J) + E3L-F3 re-cut; rerun cd apps/lab && LAB_L4_REAL=1 INFRX_D_TASK=l4 node --test tests/l/ui/stack.test.ts",
+                                   "J02": "NOT RUN: as J01"},
+    "raw": "research/plan/evidence/e/E3L-raw-5bec250c/verdict.json"
+  },
+  "commands": [
+    {"cmd": "make lab-operate (--out research/plan/evidence/e/E3L-raw-5bec250c)", "exit": 0, "summary": "gate PASS: 24 passed in 131 s, 12/12 scenarios, 3/3 cells PASS; clean tree before the run (pre-run-git.txt); Lab build VnecW4zoITbjdNvnBxb1X; stack torn down"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e3l python -m pytest -q -rs tests/integration/lab_operate/test_mutants.py (kept stack, code 5bec250c)", "exit": 0, "summary": "54 passed in 596 s, 0 survivors: 12 layer-1 + 38 stack mutants (9 new), list checks, 2 self-tests. Attempt 1 exit 1: 38 broken_runner, pristine baseline hit a 57080 bind collision (WR-E3L-2/O1), no survivor"},
+    {"cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q tests/i/lab", "exit": 0, "summary": "19 passed"},
+    {"cmd": "pytest -q tests/integration/lab_operate/test_e3l_runner.py tests/integration/lab_operate/test_mutants.py (+ INFRX_MUTANTS=all, no stack)", "exit": 0, "summary": "17 passed, 1 skipped / 16 passed, 38 skipped visibly (no kept stack)"},
+    {"cmd": "pytest -q tests/integration --co", "exit": 0, "summary": "652 collected, 0 errors"},
+    {"cmd": "INFRX_D_TASK=e3l make api-test", "exit": 2, "summary": "6639 passed, 173 skipped, 9 xfailed, 7 failed (1:22:30); all 7 = tests/d/test_outbox_relay.py[valkey] HarnessBusy on the foreign infrx-d2-valkey lock (rerun alone: ForeignContainer), none in this lane's paths; i8 lock free"},
+    {"cmd": "e3l teardown (run.backend_teardown + run.teardown)", "exit": 0, "summary": "no e3l container, volume or network left"}
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "medium-high",
+    "basis": "gate PASS with 0 survivors on the first gate attempt; remaining = one verify round (47-234 min, session-03); the J01/J02 rerun after WR-E3L-J is an L4/lab-app task (~1-2 h, rollouts http.ts + stack.test.ts analogue), not counted",
+    "at": "2026-09-29T06:32:34Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-E3L-J (L4/lab-app): apps/lab/lib/services/control/http.ts, an HTTP ControlPort over /lab/v1/control in the rollouts/http.ts style (forwarded session token, snake->camel, REASONS 401/403 denied, 404 not_found, 409 conflict, 422 invalid, else unavailable); controlPort() returns it when LAB_CONTROL_URL is set, else UNAVAILABLE; then J01/J02 are re-cut per E3L-F3 and rerun on l4",
+    "WR-E3L-2 (carried, user/root): reserve 57000-57599 in ip_local_reserved_ports; O1: E3C world.bind_retried budget >= tcp_fin_timeout (60 s) or the fake vLLM closes keep-alive connections on stop (E3C owner)"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E3L-5bec250.md",
+    "research/plan/evidence/e/E3L-raw-5bec250c/"
+  ]
+}

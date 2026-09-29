@@ -1,0 +1,6 @@
+...............s..                                                       [100%]
+17 passed, 1 skipped in 5.19s
+..............ssssssssssssssssssssssssssssssssssssss..                   [100%]
+=========================== short test summary info ============================
+SKIPPED [38] ../../tests/integration/lab_operate/test_mutants.py:74: NOT RUN: no kept e3l stack: run tests/integration/lab_operate/runner.py --keep first
+16 passed, 38 skipped in 17.44s
