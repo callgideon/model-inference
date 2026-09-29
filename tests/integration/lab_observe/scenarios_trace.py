@@ -56,9 +56,49 @@ def test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_
 
 
 def test_o01_capture_turned_on_through_the_composition_switch(workdir):
-    ow.not_run("o01", "WR-C6-CAPTURE", why="product WR (R234 ii): the gateway has no capture "
-               "seam on the request path and no consent source (consent_for None, every trace "
-               "policy off_mode_policy), so no served request reaches a spool (COMPOSITION-6)")
+    """WR-C6-CAPTURE (R250): `TRACE_PUMPS` on in the box (gateway and worker on one
+    TRACE_SPOOL_DIR). alpha's key opted in under alpha's consent: its sync answer (the gateway's
+    hook) and its async job's output (the worker's job spool) are shipped by the gateway's
+    lifespan with their pins and found by alpha only. beta's org consents but its key never
+    opted in: its request leaves nothing. No spool byte carries a bearer token."""
+    with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:
+        alpha, beta = trip.world.alpha, trip.world.beta
+        for tenant in (alpha, beta):
+            ow.sql(trip, "insert into infrx.consent_history (org_id, consent_version, "
+                         "trace_mode, content_retention_days, evaluation_consent, "
+                         "actor_principal, effective_at) select %s::uuid, coalesce(max("
+                         "consent_version), 0) + 1, 'full', 30, false, 'e5l', infrx.now() - "
+                         "interval '1 minute' from infrx.consent_history where org_id = %s::uuid",
+                   tenant.org_id, tenant.org_id)
+        ow.sql(trip, "update public.api_keys set trace_mode = 'full' where id = %s",
+               alpha.key_id)
+        spool = workdir / "trace-spool"
+        on = {"TRACE_PUMPS": "1", "TRACE_SPOOL_DIR": str(spool),
+              "CLICKHOUSE_URL": ow.limits(trip.traces).clickhouse_url,
+              "S3_TRACE_BUCKET": harness.S3_BUCKET}
+        trip.box.start("worker", **on)
+        trip.box.start("gateway", **on)
+        sync = trip.send(alpha, "sync", world.TEXT, None)
+        assert sync.status_code == 200, sync.text[:200]
+        captured = {sync.headers["inference-id"], ow.served(trip, alpha, "o01-on")}
+        quiet = ow.served(trip, beta, "o01-beta")
+        retention = trip.traces.retention
+        world.wait_for(lambda: all(run(retention.find_traces(alpha.org_id, r))
+                                   for r in captured), 60.0, "the gateway's ship pass")
+        for request_id in captured:
+            [row] = run(retention.find_traces(alpha.org_id, request_id))
+            assert row.mode == "full" and row.content_stored, row
+            assert (row.serving_version_id, row.rate_card_version) == pins_of(trip, request_id)
+            content = run(retention.read_content(alpha.org_id, request_id))
+            assert b"Describe the van." in content and alpha.secret.encode() not in content
+            assert run(retention.find_traces(beta.org_id, request_id)) == []
+        time.sleep(12.0)                           # one more ship pass (every 10 s)
+        assert run(retention.find_traces(beta.org_id, quiet)) == []
+        assert trip.traces.rows("trace_envelopes", quiet) == 0
+        assert all(trip.traces.rows("trace_envelopes", r) == 1 for r in captured)
+        spooled = b"".join(p.read_bytes() for p in spool.rglob("*") if p.is_file())
+        assert alpha.secret.encode() not in spooled and beta.secret.encode() not in spooled
+        assert not any((spool / "jobs").iterdir()), "a shipped job spool was left"
 
 
 # --- o02 feedback -------------------------------------------------------------------------
