@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 254,
- "updated": "2026-09-29T01:46:16Z",
+ "revision": 255,
+ "updated": "2026-09-29T01:46:45Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7398,6 +7398,75 @@
    "evidence": [],
    "commands": [],
    "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-SQL-LW6",
+   "task": "L3",
+   "slice": "(wave5 LW6 lane lab-sql-lw6, Sonnet) E3L-F2 per R205 → WR-R4-1 → SQL halves of WR-LSQ-C2A/C2B, WR-N4-3, WR-R2-3, WR-B3-3 → WR-E8L-3 → WR-DS5-1; migrations 0047+; workflow wf_252e43c0-f54; base eb561d5f",
+   "agent": "sonnet",
+   "branch": "codex/w5-lab-sql-lw6",
+   "worktree": ".claude/worktrees/codex-w5-lab-sql-lw6",
+   "base": "eb561d5f",
+   "head": null,
+   "isolation": {
+    "ports": "dlab 57500; l3 57502; r1 57532/57533; n3 57518/57519",
+    "prefix": "infrx-dlab-",
+    "db": "dlab"
+   },
+   "activity": "running",
+   "started": "2026-09-29T01:46:45Z",
+   "updated": "2026-09-29T01:46:45Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "lw5's undelivered items + two seams"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0047+_*.sql",
+    "infrx/state/lab_*.py",
+    "tests/d/**"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-ROLLOUT-2",
+   "task": "E8L",
+   "slice": "(wave5 LW6 lane lab-rollout-2, Sonnet) WR-E8L-2b (lab_world refs via infrx.lab_serving_ref) → k10/k09 binds → the full `make lab-rollout` rerun (k06 leaving KNOWN_FAIL); workflow wf_a16be147-993; base eb561d5f",
+   "agent": "sonnet",
+   "branch": "codex/w5-lab-rollout-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-rollout-2",
+   "base": "eb561d5f",
+   "head": null,
+   "isolation": {
+    "ports": "e8l 57400-57499",
+    "prefix": "infrx-e8l-",
+    "db": "e8l"
+   },
+   "activity": "running",
+   "started": "2026-09-29T01:46:45Z",
+   "updated": "2026-09-29T01:46:45Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "one fixture fix + two binds + one gate run"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_rollout/**",
+    "research/plan/evidence/e/E8L-*"
+   ],
    "wiring_requests": []
   }
  ],
