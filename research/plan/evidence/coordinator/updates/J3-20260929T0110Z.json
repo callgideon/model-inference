@@ -2,18 +2,18 @@
  "task": "J3",
  "slice": "WR-J3-D8-C: the judge role's report job publishes on PgJudgeLedger (j2 proof)",
  "activity": "review",
- "head": "2ddbc07b",
+ "head": "1e7d827a",
  "base": "3529168d",
  "worktree": ".claude/worktrees/codex-w5-composition-3",
  "branch": "codex/w5-composition-3",
- "at": "2026-09-29T01:10:00Z",
+ "at": "2026-09-29T01:49:00Z",
  "estimate": {
-  "optimistic_h": 0.5,
-  "likely_h": 1.5,
-  "pessimistic_h": 4,
+  "optimistic_h": 0.25,
+  "likely_h": 0.75,
+  "pessimistic_h": 2,
   "confidence": "medium",
-  "basis": "eight items done or filed, 0 survivors, E4 2800/0; composition-2 needed one tests-only fix round (~2 h); remaining = one verify round",
-  "at": "2026-09-29T01:10:00Z"
+  "basis": "fix round done (0-CMP3-1 tests-only fix + WR-C3-MK); make lab-compositions 7 passed at 1e7d827a; remaining = verify",
+  "at": "2026-09-29T01:49:00Z"
  },
  "evidence": [
   "research/plan/evidence/coordinator/COMPOSITION-3-2ddbc07.md"
@@ -38,7 +38,12 @@
   {
    "cmd": "INFRX_D_TASK=j2|r1|p2|p3 pytest <5 composition proofs>",
    "exit": 0,
-   "summary": "7 passed; each red with its composition broken (scratch)"
+   "summary": "7 passed; each red with its composition broken (scratch) [recorded at 832d21e1; stale at 2ddbc07b for j2, see fix round]"
+  },
+  {
+   "cmd": "make lab-compositions (p2/j2/r1/p3 keys) at 1e7d827a",
+   "exit": 0,
+   "summary": "7 passed; j2 proof was red at 2ddbc07b (0-CMP3-1), fixed at be4a8bc7"
   }
  ],
  "wiring_requests": [

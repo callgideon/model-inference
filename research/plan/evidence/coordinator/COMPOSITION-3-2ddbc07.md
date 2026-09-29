@@ -68,3 +68,17 @@ Not run: `make api-test` in full (1.5 h; E4 + rows 2-3 + every touched track's s
 
 ## Estimate (remaining for this lane to merge)
 optimistic 0.5 h / likely 1.5 h / pessimistic 4 h, confidence medium. Basis: all eight items done or filed with 0 survivors, E4 2800/0; composition-2 needed one fix round (~2 h, tests-only); the remaining work is one verify round.
+
+## Fix round (2026-09-29T01:49Z; code head 1e7d827a)
+- **0-CMP3-1 (major) - fixed.** Row 4 above recorded the j2 proof at 832d21e1; 1dff22ad (WR-N3-2a) later made `_traces` call `trace_retention(limits, url, objects)`, and the proof's two-argument fake then raised `RuntimeMisconfigured: INFRX_MODE='lab-judge': CLICKHOUSE_URL or S3_TRACE_BUCKET did not answer (TypeError)`. Rows 4 and the update JSONs' "7 passed" described that earlier head, not 2ddbc07b. Fail-first: `INFRX_D_TASK=j2 pytest tests/j/calibration/test_calibration_composition_pg.py` at 2ddbc07b → 1 failed (reproduced). Fix be4a8bc7: the fake is `lambda limits, url, objects=None: object()` → 1 passed. Tests-only; no product code changed.
+- **WR-C3-MK - landed** (1e7d827a, was filed as optional): `make lab-compositions` runs the five out-of-runner proofs, each on its key (p2, j2, r1, p3 for training + checkpoints since the foreign `infrx-b3-postgres` still holds b3). Docker-backed, so it is not in `check`, like `lab-operate`/`lab-evaluate`. A proof that goes stale is now one make target away from being caught.
+
+| # | Command | Head | Exit | Result |
+|---|---|---|---|---|
+| F1 | `INFRX_D_TASK=j2 pytest tests/j/calibration/test_calibration_composition_pg.py` | 2ddbc07b | 1 | 1 failed (TypeError → RuntimeMisconfigured) |
+| F2 | same | be4a8bc7 | 0 | 1 passed |
+| F3 | `make lab-compositions` | 1e7d827a | 0 | p2 1, j2 1, r1 2, p3 3 passed = **7 passed** |
+| F4 | `INFRX_D_TASK=j2 pytest -q tests/j tests/w/test_lab_workers.py` | 1e7d827a | 0 | 358 passed |
+| F5 | `INFRX_MUTANTS=all INFRX_D_TASK=j2 pytest -q tests/w/test_lab_workers_mutants.py` | 1e7d827a | 0 | 65 passed, 0 survivors |
+
+No other code changed, so the E4 rows (2800/0) and the other mutant lists above still hold. No named mutant was added: the finding is a stale fake, and the lw_report_* mutants still guard the seam at the fake level. After the run, no p2/p3/r1/j2 pgharness containers were left behind. Foreign leftovers were not touched.
