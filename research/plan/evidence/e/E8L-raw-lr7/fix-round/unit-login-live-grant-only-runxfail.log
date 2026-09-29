@@ -1,0 +1,90 @@
+DIAG InsufficientPrivilege permission denied for function lab_experiments
+F
+=================================== FAILURES ===================================
+_ test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict _
+
+world = <psycopg.Connection [IDLE] (host=127.0.0.1 port=57534 user=postgres database=infrx_r2_r2) at 0x7f40c5aba2d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f40c596b6e0>
+tmp_path = PosixPath('/tmp/pytest-of-rey/pytest-8373/test_lab_releases_composition_0')
+
+    @pytest.mark.xfail(strict=True, reason="WR-LR7-GRANT (lab-sql): 0056 grants infrx_lab_control "
+                       "no execute on lab_release_live / lab_experiments; strict - once the grant "
+                       "lands this XPASSes and fails: drop the marker")
+    def test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict(
+            world, monkeypatch, tmp_path):
+        """0-LR7-RV-1: the verdict's grant seam. The page composed on the Lab control unit's own
+        login (0043's `infrx_lab_control`, as the unit runs it) lists a running release with one
+        healthy assigned job: progress is D9's Live (0054's `lab_release_live`) and the verdict
+        R2's hold read at request time (B4's `lab_experiments`) - the same answer as the owner login."""
+        owner = pgharness.dsn(DB)
+        world.execute(f"alter role infrx_lab_control password '{LAB_PASSWORD}'")
+        lab = make_conninfo(owner, user="infrx_lab_control", password=LAB_PASSWORD)
+        public = run(PgControlStore(connector(owner)).deployment(cc.PUBLIC_DEPLOYMENT))
+        baseline = serving_ref(public, run(PgCatalogDirectory(connector(owner)).serving_revision(
+            public.serving_version_id)))
+        candidate = ref_of(world, cc.DEV_DEPLOYMENT)
+        monkeypatch.setattr(lab_workers, "lab_objects", lambda mode, env: OBJECTS)
+        stored = tmp_path / "plan.json"
+        stored.write_text(plan(horizon_s=1, min_requests=2, max_skew_bp=10_000).model_dump_json())
+        payload = {**d9.policy(d9.uid(35, 0xb0), weights=(1_000,), endpoint=d9.uid(35, 0xe0)),
+                   "baseline_ref": baseline,
+                   "candidates": [{"serving_ref": candidate, "weight_bp": 1_000}]}
+        ref = d7.publish(world, payload)
+        assert lab_workers.main(["rollout", "launch", "--policy-ref", ref, "--plan", str(stored),
+                                 "--reason", "canary 10%"],
+                                env={"LAB_DATABASE_URL": owner, "LAB_S3_BUCKET": "lab",
+                                     "LAB_OPERATOR_ID": OPERATOR}) == 0
+        job(world, ref, payload, d9.uid(1, 0x3e), candidate, "succeeded", ms=20)
+    
+        def shown(dsn: str, **unit) -> dict:              # the unit: `set_role=False`, as app.py
+            connect = connector(dsn, **unit)
+            app = FastAPI()
+            lr.register(app, support.runtime(), pilot.lab_releases(
+                connect, Sessions((l2.VIEWER,)), LabAccess(PgAccessStore(connect)), OBJECTS))
+            answer = TestClient(app, raise_server_exceptions=False).get(
+                lr.RELEASES_PATH, params={"provider_org_id": d9.NEMO},
+                headers={"authorization": f"Bearer {token(l2.VIEWER)}"})
+            assert answer.status_code == 200, answer.text
+            return {r["policy_ref"]: r for r in answer.json()["data"]["releases"]}[ref]
+    
+        mine = shown(owner)
+        assert mine["progress"]["candidate"]["requests"] == 1
+        assert mine["verdict"]["action"] == "hold", mine["verdict"]          # R2 evaluated it
+>       assert shown(lab, set_role=False) == mine
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/g/lab_releases/test_lab_releases_composition_pg.py:336: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dsn = 'user=infrx_lab_control password=infrx-r2-lab-control connect_timeout=10 dbname=infrx_r2_r2 host=127.0.0.1 port=57534'
+unit = {'set_role': False}
+
+    def shown(dsn: str, **unit) -> dict:              # the unit: `set_role=False`, as app.py
+        connect = connector(dsn, **unit)
+        app = FastAPI()
+        lr.register(app, support.runtime(), pilot.lab_releases(
+            connect, Sessions((l2.VIEWER,)), LabAccess(PgAccessStore(connect)), OBJECTS))
+        answer = TestClient(app, raise_server_exceptions=False).get(
+            lr.RELEASES_PATH, params={"provider_org_id": d9.NEMO},
+            headers={"authorization": f"Bearer {token(l2.VIEWER)}"})
+>       assert answer.status_code == 200, answer.text
+E       AssertionError: {"refusal":"unavailable"}
+E       assert 503 == 200
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests/g/lab_releases/test_lab_releases_composition_pg.py:330: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: InsufficientPrivilege
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/g/lab_releases/test_lab_releases_composition_pg.py::test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict
+1 failed, 2 deselected, 2 warnings in 4.00s

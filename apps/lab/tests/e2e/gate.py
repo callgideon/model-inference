@@ -36,7 +36,7 @@ def command(suite: str) -> str:
 def run(suite: str, out: Path) -> dict:
     """The suite once: {command, exit, pass, fail, skipped, cancelled, record, tail}."""
     import infrx
-    out = Path(out) / f"e2e-{suite}"
+    out = Path(out).resolve() / f"e2e-{suite}"          # node runs in apps/lab (WR-LR6-GATE-OUT)
     out.mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items() if k != "LAB_E2E_BUILT"}
     env.update(LAB_E2E_REAL="1", INFRX_D_TASK="l4", LAB_E2E_OUT=str(out),

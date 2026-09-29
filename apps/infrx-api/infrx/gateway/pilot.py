@@ -400,14 +400,14 @@ def _lab_2(deployment, connect, sessions, access, objects=None, teachers=None) -
 def lab_releases(connect, sessions, access, objects):
     """`LAB_RELEASES`: the read models over D9, D7 and the Lab objects, 0043's proposals and
     D9 as the route's store, on this pool."""
-    from ..state.lab_data import PgLabDataStore
+    from ..state.lab_data import PgLabDataStore, PgLabReads
     from ..state.lab_rollout import PgReleaseProposals, PgReleaseStore
     from ..state.lab_variants import PgLabVariants
     from .routes.lab_releases import LabReleases
     d9 = PgReleaseStore(connect)
     return LabReleases(sessions, access,
                        records=ReleaseRecords(d9, PgLabDataStore(connect), objects,
-                                              PgLabVariants(connect)),
+                                              PgLabVariants(connect), PgLabReads(connect)),
                        proposals=ReleaseProposals(PgReleaseProposals(connect)), store=d9)
 
 
@@ -439,13 +439,37 @@ class ReleaseRecords:
     with D7's policy revision and the plan its launcher stored (WR-C5-PLAN; none stored: a
     503 naming it, never a guessed plan); `progress` is D9's Live of the revision (0054, R244;
     WR-LIVE-PAGE), null only while nothing is assigned - no per-serving tally is readable yet,
-    so `assignments` is empty; the verdict is D9's latest decision. A Live R248 refuses (legacy
-    USD) nulls that row's progress and verdict with `refused: "unit_refused"`; the rest list
-    (C7-RV-6). Decisions are 0053's. R3's variants
-    are 0055's listing (WR-C6-VARIANTS): none is [], never a 503."""
+    so `assignments` is empty; the verdict is `verdict`'s (WR-LR6-VERDICT). A Live R248
+    refuses (legacy USD) nulls that row's progress and verdict with `refused: "unit_refused"`;
+    the rest list (C7-RV-6). Decisions are 0053's. R3's variants are 0055's listing
+    (WR-C6-VARIANTS): none is [], never a 503."""
 
-    def __init__(self, d9, store, objects, variants) -> None:
+    def __init__(self, d9, store, objects, variants, reads=None) -> None:
         self.d9, self.store, self.objects, self.lab_variants = d9, store, objects, variants
+        self.reads = reads                          # B4's experiments (0043): B2's report
+
+    async def verdict(self, provider_org_id: str, item, policy, plan, live) -> dict | None:
+        """WR-LR6-VERDICT: D9's latest decision; else, for a running release, R2's `evaluate`
+        at read time over the Live its progress shows (0054, at the database clock of that
+        read) and its B2 report (`release_report`, WR-C5-REPORT) - read-only, never recorded.
+        Null while nothing is assigned (R244) or R2 refuses the plan's unit (R248)."""
+        from ..lab.workers.__main__ import release_report
+        from ..rollouts.control import evaluate
+        d = item.latest_decision
+        if d is not None:
+            return {"action": d.decision, "reasons": list(d.reasons),
+                    "evidence_refs": list(d.evidence_refs), "evaluated_at": _z(d.at)}
+        if item.release.state != "running" or live is None:
+            return None
+        report, runs = await release_report(self.reads, self.store, provider_org_id, policy,
+                                            plan)
+        try:
+            v = evaluate(plan, policy, live, started_at=item.release.started_at,
+                         now=live.observed_until, report=report, runs=runs)
+        except errors.InvalidRequest:
+            return None
+        return {"action": v.action, "reasons": list(v.reasons),
+                "evidence_refs": list(v.evidence_refs), "evaluated_at": _z(live.observed_until)}
 
     async def releases(self, provider_org_id: str) -> list[dict]:
         from ..lab.workers.__main__ import plan_key
@@ -456,10 +480,11 @@ class ReleaseRecords:
             if raw is None:
                 raise errors.DependencyUnavailable(
                     f"the plan of {item.policy_ref} is not stored (WR-C5-PLAN)")
-            plan = Plan.model_validate_json(raw).model_dump(mode="json")
+            full = Plan.model_validate_json(raw)
+            plan = full.model_dump(mode="json")
             policy = await self.store.resolve(item.policy_ref, provider_org_id=provider_org_id)
-            release, d = item.release, item.latest_decision
-            try:
+            release = item.release
+            try:              # one Live read: the progress shown and the verdict judged on it
                 live, refused = await self.d9.live(item.policy_ref), None
             except errors.InvalidRequest:     # R248, C7-RV-6: this row only, typed
                 live, refused = None, "unit_refused"
@@ -478,9 +503,7 @@ class ReleaseRecords:
                                     "unit": plan["budget"]["unit"]}},
                 "started_at": _z(release.started_at),
                 "progress": _progress(live),
-                "verdict": None if d is None else {
-                    "action": d.decision, "reasons": list(d.reasons),
-                    "evidence_refs": list(d.evidence_refs), "evaluated_at": _z(d.at)}})
+                "verdict": await self.verdict(provider_org_id, item, policy, full, live)})
             if refused:
                 out[-1].update(verdict=None, refused=refused)
         return out

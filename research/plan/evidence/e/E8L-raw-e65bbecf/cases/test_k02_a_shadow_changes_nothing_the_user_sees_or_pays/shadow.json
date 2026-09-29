@@ -1,0 +1,41 @@
+{
+ "debited": "2.92000000",
+ "reply": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "Two people",
+     "role": "assistant"
+    }
+   }
+  ],
+  "created": 1789905600,
+  "id": "chatcmpl-50d5e966-2fc7-4ccc-a4ff-46156e5fb82c",
+  "model": "nemostation/marlin-2b",
+  "object": "chat.completion",
+  "usage": {
+   "completion_tokens": 5,
+   "prompt_tokens": 1200,
+   "total_tokens": 1205
+  }
+ },
+ "rows": [
+  {
+   "assigned_at": "2026-09-20T12:00:00+00:00",
+   "cohort_digest": "sha256:a2fc892c49c67158459dfa4ebe21eb0174f49ffb5f3123aab2508c5341009390",
+   "pinned_by": "cohort",
+   "policy_id": "000000b8-0000-4000-8000-00000000000f",
+   "policy_ref": "lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-00000000000f@sha256:7dc29f0ab3a94e7c6c77b79d9ece37b2f4b029d68fb90adc91ea87e45e305d5e",
+   "request_id": "50d5e966-2fc7-4ccc-a4ff-46156e5fb82c",
+   "serving_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:d0000003-0000-4000-8000-000000000003@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  }
+ ],
+ "runs": [
+  [
+   "lab:serving:b0000001-0000-4000-8000-000000000001:0000005e-0000-4000-8000-000000000003@sha256:39ddd03cf0fd0e38f3fb7ddd3dd39de9115984892e4bbb083f930e4836124b01",
+   "nemostation/marlin-2b@2026-09-28-cand"
+  ]
+ ]
+}

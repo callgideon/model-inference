@@ -401,7 +401,11 @@ def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_o
         async def resolve(self, ref, *, provider_org_id):
             return r2w.POLICY
 
-    records = pilot.ReleaseRecords(D9(), D7(), objects, None)   # variants: unread here
+    class Reads:                                     # B4: no experiment (WR-LR6-VERDICT)
+        async def experiments(self, *, provider_org_id):
+            return []
+
+    records = pilot.ReleaseRecords(D9(), D7(), objects, None, Reads())
     assert [r["progress"] for r in asyncio.run(records.releases(r2w.P))] == [None, None]
     assert asked == refs, "each release's Live is read for its own revision"
     lives[refs[0]] = r2w.live(requests=40, errors_=2, p99=950, covered=7, spent="3.50000000",
@@ -481,3 +485,140 @@ def test_lab_releases__a_unit_refused_live_nulls_its_own_row_and_the_others_list
             raise AssertionError(f"{type(failure).__name__} was listed as a row")
         except type(failure):
             pass
+
+
+def _verdict_world(state="running", decision=None, *, live=None, experiments=(),
+                   plan_unit="CREDIT"):
+    """`pilot.ReleaseRecords` over one release of R2's world: D9 (its listing, its Live - None:
+    nothing assigned), D7 (the policy, the two runs), the stored plan and B4's experiments
+    (`PgLabReads.experiments`). Answers (records, read): `read` counts what was read."""
+    import asyncio
+
+    from infrx.gateway import pilot
+    from infrx.lab.workers.__main__ import plan_key
+    from infrx.media.store import InMemoryObjectStore
+    from infrx.state.lab_rollout import Release, ReleaseListing
+    from tests.r.control import test_control as r2w
+
+    objects, read = InMemoryObjectStore(), {"live": 0, "experiments": 0}
+    plan = r2w.plan(budget={"unit": plan_unit, "value": "100.00000000"})
+    asyncio.run(objects.put_if_absent(plan_key(r2w.P, r2w.POLICY.policy_id),
+                                      plan.model_dump_json().encode(), "x"))
+    runs = {lab.ref_of(r): r for r in (r2w.BASE_RUN, r2w.CAND_RUN)}
+
+    class D9:
+        async def releases_in(self, states=(), *, provider_org_id):
+            return [ReleaseListing(policy_id=r2w.POLICY.policy_id, provider_org_id=r2w.P,
+                                   endpoint_id="e", policy_ref=r2w.POLICY_REF,
+                                   latest_decision=decision,
+                                   release=Release(state=state, fence=1, plan_digest="d",
+                                                   started_at=r2w.START))]
+
+        async def live(self, policy_ref):
+            assert policy_ref == r2w.POLICY_REF
+            read["live"] += 1
+            return live
+
+    class D7:
+        async def resolve(self, ref, *, provider_org_id):
+            return lab.parse(runs[ref]) if ref in runs else r2w.POLICY
+
+    class Reads:
+        async def experiments(self, *, provider_org_id):
+            read["experiments"] += 1
+            return list(experiments)
+
+    return pilot.ReleaseRecords(D9(), D7(), objects, None, Reads()), read
+
+
+def _experiment(outcome: str) -> dict:
+    """B4's experiment of R2's two runs under the plan's protocol, with B2's report."""
+    from tests.r.control import test_control as r2w
+    body = r2w.report(outcome)
+    digest = body.pop("report_digest")
+    return {"report": {"body": json.dumps(body), "report_digest": digest},
+            "protocol_digest": r2w.digest(r2w.PROTOCOL),
+            "baseline": {"run_ref": lab.ref_of(r2w.BASE_RUN)},
+            "candidate": {"run_ref": lab.ref_of(r2w.CAND_RUN)}}
+
+
+def test_lab_releases__a_running_releases_verdict_is_r2s_evaluate_now_when_d9_holds_none():
+    """WR-LR6-VERDICT: for a running release D9 holds no decision for, the page's verdict is
+    R2's `evaluate` at read time over D9's Live (0054) and the release's B2 report
+    (WR-C5-REPORT's selection), at the database clock of that Live: assigned healthy traffic
+    without a report holds on `no_report`; an accepting report bound to the policy's runs
+    expands with the report's two runs as evidence. Read-only: nothing is decided."""
+    import asyncio
+
+    from tests.r.control import test_control as r2w
+
+    records, read = _verdict_world(live=r2w.live(lag_s=0))
+    [row] = asyncio.run(records.releases(r2w.P))
+    assert row["verdict"] == {"action": "hold", "reasons": ["no_report"], "evidence_refs": [],
+                              "evaluated_at": "2026-09-28T10:00:00Z"}, row["verdict"]
+    assert read == {"live": 1, "experiments": 1}, "one Live read: the progress it was judged on"
+    records, _ = _verdict_world(live=r2w.live(lag_s=0), experiments=[_experiment("accept")])
+    [row] = asyncio.run(records.releases(r2w.P))
+    assert row["verdict"] == {"action": "expand", "reasons": [],
+                              "evidence_refs": [lab.ref_of(r2w.BASE_RUN),
+                                                lab.ref_of(r2w.CAND_RUN)],
+                              "evaluated_at": "2026-09-28T10:00:00Z"}, row["verdict"]
+    records, _ = _verdict_world(live=r2w.live(lag_s=60), experiments=[_experiment("accept")])
+    [row] = asyncio.run(records.releases(r2w.P))
+    assert (row["verdict"]["action"], row["verdict"]["reasons"]) == \
+        ("hold", ["before_horizon"]), "judged at the Live's own clock, never a later one"
+
+
+def test_lab_releases__nothing_assigned_or_a_refused_unit_reads_no_verdict():
+    """WR-LR6-VERDICT: null while nothing is assigned (D9's Live is None, R244: B2's report is
+    not even read) and when R2 refuses the plan's unit (R248: budgeted in another unit than
+    the jobs settled in) - a row with no verdict, never a failed listing."""
+    import asyncio
+
+    from tests.r.control import test_control as r2w
+
+    records, read = _verdict_world(experiments=[_experiment("accept")])
+    assert [r["verdict"] for r in asyncio.run(records.releases(r2w.P))] == [None]
+    assert read["experiments"] == 0, "nothing assigned: no report is read"
+    records, _ = _verdict_world(live=r2w.live(lag_s=0), experiments=[_experiment("accept")],
+                                plan_unit="PROVIDER_USD")
+    assert [r["verdict"] for r in asyncio.run(records.releases(r2w.P))] == [None]
+
+
+def test_lab_releases__a_decided_release_reads_d9s_decision_never_a_fresh_evaluation():
+    """WR-LR6-VERDICT: once D9 holds a decision for the release, the verdict is that decision
+    (its action, reasons, evidence and time) whatever R2 would say now - and a release that is
+    not running is never evaluated: no report is read."""
+    import asyncio
+
+    from infrx.state.lab_rollout import Decision
+    from tests.r.control import test_control as r2w
+
+    at = datetime(2026, 9, 28, 11, 30, 5, tzinfo=timezone.utc)
+    for state, action in (("approved", "expand"), ("rolled_back", "rollback")):
+        decided = Decision(decision=action, reasons=("operator:pager",), evidence_refs=("r",),
+                           decided_by="op", at=at)
+        records, read = _verdict_world(state, decided, live=r2w.live(lag_s=0),
+                                       experiments=[_experiment("reject")])
+        assert [r["verdict"] for r in asyncio.run(records.releases(r2w.P))] == [{
+            "action": action, "reasons": ["operator:pager"], "evidence_refs": ["r"],
+            "evaluated_at": "2026-09-28T11:30:05Z"}], state
+        assert read["experiments"] == 0, state
+    records, read = _verdict_world("approved", live=r2w.live(lag_s=0),
+                                   experiments=[_experiment("reject")])
+    assert [r["verdict"] for r in asyncio.run(records.releases(r2w.P))] == [None]
+    assert read["experiments"] == 0
+
+
+def test_lab_releases__the_composed_records_read_b4s_experiments_on_the_pool():
+    """WR-LR6-VERDICT: `LAB_RELEASES`' records read B2's report through B4's experiments
+    (`PgLabReads`, 0043) on the gateway's pool - the verdict's second input beside D9's Live."""
+    import dataclasses
+
+    from infrx.gateway import pilot
+    from infrx.state.lab_data import PgLabReads
+
+    settings = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                               lab_releases=True))
+    x = pilot._lab(settings, connect="pool", objects=object())["lab_releases"]
+    assert type(x.records.reads) is PgLabReads and x.records.reads._connect == "pool"

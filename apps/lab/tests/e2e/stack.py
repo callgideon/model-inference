@@ -2,9 +2,9 @@
 57503) serving, on ONE port, the Lab routes and the Supabase endpoints the Lab web calls.
 
 * the Lab routes: R186's control factory (`infrx.lab.control.app:create_app`: `/readyz`,
-  `/lab/v1/control` over L3) plus the suite's surface composed by the gateway's own
-  `pilot._lab` with that one switch ON in this process only (LAB_EVALS / LAB_PIPELINES /
-  LAB_RELEASES); the session verifier is the real `lab_auth.GoTrueSessions`, pointed here.
+  `/lab/v1/control` over L3 and every Lab family through the gateway's own `pilot._lab`,
+  WR-LDP-2); a suite's family is served through the unit's own composition of it
+  (`unit_app`); the session verifier is the real `lab_auth.GoTrueSessions`, pointed here.
 * the Supabase stand-in (the stack runs no GoTrue or PostgREST, R203/R223's one stand-in):
   `/auth/v1/token` (password sign-in), `/auth/v1/user` and `/auth/v1/logout` for this
   world's users, and `/rest/v1/rpc/<fn>`, which runs the REAL `public.<fn>` of the migrated
@@ -24,7 +24,6 @@ import os
 import socket
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 API = Path(os.environ.get("INFRX_API_DIR") or Path(__file__).resolve().parents[3] / "infrx-api")
 sys.path.insert(0, str(API))
@@ -76,15 +75,40 @@ def control_app(dsn: str, url: str):
     return control.create_app()
 
 
-def composed(switch: str, dsn: str, url: str, objects=None) -> dict:
-    """The gateway's own Lab composition (`pilot._lab`) with `switch` ON and every other Lab
-    switch off: what `LAB_<X>=1` mounts, over this database and this door."""
+class Switch:
+    """A Lab family's ports as the control unit mounts them: its own composition (`own`), or a
+    suite's journey over it (`current`) - the unit's route, never a second one beside it."""
+
+    def __init__(self, own) -> None:
+        self.own = self.current = own
+
+    def __getattr__(self, name):
+        return getattr(self.current, name)
+
+
+def unit_app(dsn: str, url: str, family: str, objects=None):
+    """R186's factory (`control_app`) with `family` (a `pilot._lab_2` key: lab_evaluations,
+    lab_pipelines, lab_releases) mounted through a `Switch` over the unit's own composition
+    of it (WR-LR6-E2E-SHADOW: the unit mounts every family first, WR-LDP-2). `objects` (in
+    memory: l4 has no S3) reach the unit through `LAB_S3_BUCKET`'s seam (`lab_objects`).
+    Answers (app, switch)."""
     from infrx.gateway import pilot
-    from infrx.state.jobstore import connector
-    deployment = SimpleNamespace(**{s: s == switch for s in SWITCHES}, lab_teachers=False,
-                                 lab_checkpoints=False)
-    settings = SimpleNamespace(deployment=deployment, supabase_url=url, supabase_key="anon")
-    return pilot._lab(settings, connector(dsn), objects)
+    from infrx.lab.workers import __main__ as lab_workers
+    if objects is not None:
+        lab_workers.lab_objects = lambda mode, env: objects
+        os.environ["LAB_S3_BUCKET"] = "l4-in-memory"
+    lab_2, mounted = pilot._lab_2, {}
+
+    def swapped(*args, **kwargs):
+        lab = lab_2(*args, **kwargs)
+        mounted[family] = lab[family] = Switch(lab[family])
+        return lab
+    pilot._lab_2 = swapped
+    try:
+        app = control_app(dsn, url)
+    finally:
+        pilot._lab_2 = lab_2
+    return app, mounted[family]
 
 
 def door(app, dsn: str, users: dict[str, str]) -> None:

@@ -1,0 +1,10 @@
+E       TypeError: ReleaseRecords.__init__() takes 5 positional arguments but 6 were given
+        the jobs settled in) - a row with no verdict, never a failed listing."""
+E       TypeError: ReleaseRecords.__init__() takes 5 positional arguments but 6 were given
+E       TypeError: ReleaseRecords.__init__() takes 5 positional arguments but 6 were given
+E       AttributeError: 'ReleaseRecords' object has no attribute 'reads'
+FAILED tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_running_releases_verdict_is_r2s_evaluate_now_when_d9_holds_none
+FAILED tests/g/lab_releases/test_lab_releases.py::test_lab_releases__nothing_assigned_or_a_refused_unit_reads_no_verdict
+FAILED tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_decided_release_reads_d9s_decision_never_a_fresh_evaluation
+FAILED tests/g/lab_releases/test_lab_releases.py::test_lab_releases__the_composed_records_read_b4s_experiments_on_the_pool
+4 failed, 14 passed, 2 warnings in 1.03s

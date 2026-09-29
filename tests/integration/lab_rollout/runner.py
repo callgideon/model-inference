@@ -66,7 +66,7 @@ def _sibling(name: str):
 
 
 NAMESPACE = "e8l"
-BASE = "6ee21d2f"            # the base of the E8L lane this runner last measured (merge #52)
+BASE = "33547abd"            # the base of the E8L lane this runner last measured (#56 + LR6 + C7)
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
 EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}
@@ -150,26 +150,13 @@ REQUIRED = {
 }
 #: Halves of a scenario that exist in the matrix but are not bound yet (R222: recorded in
 #: verdict.json, never prose-only). NOT RUN always; they do not lower their parent's status.
-SUB_CELLS = {
-    "k10-ui-composed": {
-        "parent": "k10", "lanes": ["WR-LIVE-DECIDE", "WR-LR6-VERDICT"],
-        "title": "the releases page's proposal/approval journey over pilot.lab_releases' own "
-                 "records and proposals",
-        "note": "WR-LR5-1: E2E-R01..R05 run over the gateway's own composition, releases "
-                "launched and decided by `rollout launch|decide`, except two stand-ins: R2's "
-                "hold/expand verdict of a release D9 holds no decision for is laid over the "
-                "records (no composed read, WR-LR6-VERDICT) and an expansion is approved "
-                "through R2's Controller.approve (`rollout decide` refuses it, WR-LIVE-DECIDE)"},
-}
+SUB_CELLS: dict[str, dict] = {}     # k10's journey is bound (WR-LR6-VERDICT, WR-LIVE-DECIDE)
 #: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
-#: reason class - k08's GPU target (P-08) and product WRs. k09's breach half is bound over
-#: 0054's Live (WR-LIVE-K09, R244): k09's own case, no sub-cell. k10 is in local scope since
-#: WR-R4-2 is composed (merge #50): its UI half PASSes through LAB-E2E (R238) or stays open;
-#: the journey's two stand-ins wait on product WRs (sub-cell k10-ui-composed, R234 ii).
-#: The gate is re-run when a dependency lands and the cell must then PASS.
-OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)",
-                "WR-LIVE-DECIDE": "product WR: WR-LIVE-DECIDE",
-                "WR-LR6-VERDICT": "product WR: WR-LR6-VERDICT"}
+#: reason class - k08's GPU target (P-08). k09's breach half is bound over 0054's Live
+#: (WR-LIVE-K09, R244); k10 is in local scope since WR-R4-2 is composed (merge #50), and its UI
+#: journey is bound over the composed verdict and `rollout decide` (lab-rollout-7): no product
+#: WR is excused. The gate is re-run when a dependency lands and the cell must then PASS.
+OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)"}
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>k\d\d)_")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[")

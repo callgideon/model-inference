@@ -1,0 +1,180 @@
+TAP version 13
+# (node:834841) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: E2E-I i08 the pipeline surface drives labels to a checkpoint through the provider UI
+    # Subtest: E2E-I01 as the gateway composes LAB_PIPELINES today: the annotations page reads, the training page fails closed
+    not ok 1 - E2E-I01 as the gateway composes LAB_PIPELINES today: the annotations page reads, the training page fails closed
+      ---
+      duration_ms: 364.776913
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:34:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        The expression evaluated to a falsy value:
+        
+          assert.ok(page.text.includes("No labels for this dataset version yet.") && page.text.includes("No label imports yet."))
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:38:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:34:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-I02 labels imported through the page's form: accepted rows listed as not ground truth, rejected rows with their reason
+    not ok 2 - E2E-I02 labels imported through the page's form: accepted rows listed as not ground truth, rejected rows with their reason
+      ---
+      duration_ms: 190.408184
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:41:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        one form matching /Import labels/, found 0: Sign out | Dataset version Open
+        
+        0 !== 1
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 1
+      actual: 0
+      operator: 'strictEqual'
+      stack: |-
+        form (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/harness.ts:74:10)
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:43:45)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:41:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-I03 an administrator assigns the reviewer, the developer accepts each label: an accepted import is still not ground truth
+    not ok 3 - E2E-I03 an administrator assigns the reviewer, the developer accepts each label: an accepted import is still not ground truth
+      ---
+      duration_ms: 185.670413
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:51:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        one form matching /Assign a reviewer/, found 0: Sign out | Dataset version Open
+        
+        0 !== 1
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 1
+      actual: 0
+      operator: 'strictEqual'
+      stack: |-
+        form (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/harness.ts:74:10)
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:53:51)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:51:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-I04 a train-only export through the page's form: train samples in its lineage, the held-out label omitted with its reason
+    not ok 4 - E2E-I04 a train-only export through the page's form: train samples in its lineage, the held-out label omitted with its reason
+      ---
+      duration_ms: 175.675202
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:66:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        one form matching /Export training labels/, found 0: Sign out | Dataset version Open
+        
+        0 !== 1
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 1
+      actual: 0
+      operator: 'strictEqual'
+      stack: |-
+        form (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/harness.ts:74:10)
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:67:44)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:66:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation
+    not ok 5 - E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation
+      ---
+      duration_ms: 119.296678
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:76:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        one form matching /Prepare a training bundle/, found 0: Sign out
+        
+        0 !== 1
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 1
+      actual: 0
+      operator: 'strictEqual'
+      stack: |-
+        form (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/harness.ts:74:10)
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:79:52)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:76:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels
+    not ok 6 - E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels
+      ---
+      duration_ms: 374.51361
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:116:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        one form matching /Import labels/, found 0: Sign out | Dataset version Open
+        
+        0 !== 1
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 1
+      actual: 0
+      operator: 'strictEqual'
+      stack: |-
+        form (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/harness.ts:74:10)
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:121:19)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:116:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    1..6
+not ok 1 - E2E-I i08 the pipeline surface drives labels to a checkpoint through the provider UI
+  ---
+  duration_ms: 12630.069816
+  type: 'test'
+  location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/improve/stack.test.ts:19:1'
+  failureType: 'subtestsFailed'
+  error: '6 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 7
+# suites 0
+# pass 0
+# fail 7
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 13747.418396

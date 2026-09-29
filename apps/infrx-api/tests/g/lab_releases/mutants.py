@@ -33,6 +33,11 @@ UNWIRED, BODY = C + "an_unwired_port_is_unavailable_after_the_access_checks", \
     C + "a_body_is_json_and_exactly_a_proposal"
 PROGRESS = C + "a_releases_progress_is_d9s_live_null_only_before_one_is_observed"
 UNIT_REFUSED = C + "a_unit_refused_live_nulls_its_own_row_and_the_others_list"
+V_NOW = C + "a_running_releases_verdict_is_r2s_evaluate_now_when_d9_holds_none"
+V_NULL = C + "nothing_assigned_or_a_refused_unit_reads_no_verdict"
+V_D9 = C + "a_decided_release_reads_d9s_decision_never_a_fresh_evaluation"
+V_POOL = C + "the_composed_records_read_b4s_experiments_on_the_pool"
+NOT_RUNNING = '        if item.release.state != "running" or live is None:\n            return None\n'
 ADMIN = ("        who = await lab_actor(request, x.sessions, x.access,\n"
          "                              Cap.read_aggregate_health)"
          "          # the role: `propose`\n")
@@ -43,8 +48,9 @@ REQUIRE = "    require(who, Cap.propose_publication)\n"
 BODY_READ = "        wanted = await lab_body(request, rt, ProposalRequest)\n"
 
 
-def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, old, new, *cases, file=F, dies_by=()) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=dies_by)
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -159,6 +165,49 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("page_tally_invented", "no per-serving tally is invented",
        '"assignments": []}', '"assignments": [{"requests": live.candidate.requests}]}',
        PROGRESS, file=P),
+    # WR-LR6-VERDICT (lab-rollout-7): R2's verdict at read time when D9 holds no decision
+    _m("verdict_never_evaluated", "a running release D9 holds no decision for reads R2's "
+       "verdict now, not null", NOT_RUNNING, "        if True:\n            return None\n",
+       V_NOW, file=P),
+    _m("verdict_of_nothing_assigned", "nothing assigned is null (R244), never an evaluation "
+       "of no Live (R2 would read the arms of None)", NOT_RUNNING,
+       NOT_RUNNING.replace(" or live is None", ""), V_NULL, file=P,
+       dies_by=("AttributeError",)),
+    _m("verdict_of_a_settled_release", "a release that is not running is never evaluated",
+       NOT_RUNNING, NOT_RUNNING.replace('item.release.state != "running" or ', ""), V_D9,
+       file=P),
+    _m("verdict_ignores_d9s_decision", "D9's decision is the verdict once it holds one",
+       '        if d is not None:\n            return {"action": d.decision,',
+       '        if False:\n            return {"action": d.decision,', V_D9, file=P),
+    _m("verdict_unit_refusal_fails_the_listing", "R2's unit refusal is a null verdict (R248), "
+       "never a failed listing", "        except errors.InvalidRequest:\n            return None\n",
+       "        except errors.NotFound:\n            return None\n", V_NULL, file=P),
+    _m("verdict_at_the_wall_clock", "judged at the database clock of the Live it shows",
+       "now=live.observed_until, report=report",
+       'now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc), '
+       "report=report", V_NOW, file=P),
+    _m("verdict_without_its_report", "B2's report is the verdict's second input",
+       "now=live.observed_until, report=report", "now=live.observed_until, report=None",
+       V_NOW, file=P),
+    _m("verdict_reasons_dropped", "R2's reasons are shown",
+       'return {"action": v.action, "reasons": list(v.reasons),',
+       'return {"action": v.action, "reasons": [],', V_NOW, file=P),
+    _m("verdict_evidence_dropped", "an expand verdict carries the report's runs as evidence",
+       '"evidence_refs": list(v.evidence_refs), "evaluated_at": _z(live.observed_until)}',
+       '"evidence_refs": [], "evaluated_at": _z(live.observed_until)}', V_NOW, file=P),
+    _m("verdict_time_not_the_lives", "evaluated_at is the Live's observation time",
+       '"evidence_refs": list(v.evidence_refs), "evaluated_at": _z(live.observed_until)}',
+       '"evidence_refs": list(v.evidence_refs), "evaluated_at": _z(item.release.started_at)}',
+       V_NOW, file=P),
+    _m("verdict_reads_another_live", "the verdict is judged on the Live the progress shows",
+       '"verdict": await self.verdict(provider_org_id, item, policy, full, live)',
+       '"verdict": await self.verdict(provider_org_id, item, policy, full,\n'
+       '                                              await self.d9.live(item.policy_ref))',
+       V_NOW, file=P),
+    _m("verdict_reads_absent", "LAB_RELEASES reads B4's experiments (0043)",
+       "PgLabReads(connect)),", "None),", V_POOL, file=P),
+    _m("verdict_reads_off_the_pool", "the experiments are read on the gateway's pool",
+       "PgLabReads(connect)),", "PgLabReads(None)),", V_POOL, file=P),
 )
 
 

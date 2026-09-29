@@ -1,0 +1,15 @@
+{
+  "suite": "evaluate",
+  "cell": "E6L j10",
+  "composed": {
+    "store": true,
+    "experiments": false,
+    "catalog": false,
+    "ledger": false
+  },
+  "stand_ins": [
+    "session verifier and PostgREST RPC door (stack.door)",
+    "experiments/catalog/B3 ledger: the route suite's fakes (WR-B4-2, WR-LAB2-2, WR-B3-1 to compose)",
+    "B1's worker and B2's report (test doors)"
+  ]
+}

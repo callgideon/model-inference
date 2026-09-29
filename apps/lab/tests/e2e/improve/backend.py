@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """LAB-E2E improve (E7L i08's provider-UI half, WR-C4-UI): the Lab's annotations and training
-pages over lab-api's `/lab/v1/pipelines` as the gateway composes it with LAB_PIPELINES on
-(`pilot._lab`: D7, D8's REAL label log and run ledger, L2, the Lab objects, P3's evaluation
-port over B3/B1), beside R186's control factory, on the task-local PostgreSQL (l4): D8's seeded
-world plus an imported 8-sample benchmark (as `tests/p/backend.py`), a 100 PROVIDER_USD budget
-for the world's payer. The Lab objects are in memory (the l4 key has no S3).
+pages over lab-api's `/lab/v1/pipelines` as the Lab's control unit composes it (R186's factory,
+WR-LDP-2: `pilot._lab`, D7, D8's REAL label log and run ledger, L2, the Lab objects, P3's
+evaluation port over B3/B1; WR-LR6-E2E-SHADOW: the unit's own route, served through
+`stack.unit_app`), on the task-local PostgreSQL (l4): D8's seeded world plus an imported
+8-sample benchmark (as `tests/p/backend.py`), a 100 PROVIDER_USD budget for the world's payer.
+The Lab objects are in memory (the l4 key has no S3), handed to the unit through
+`LAB_S3_BUCKET`'s seam.
 
-The gateway's composition answers 503 for the run and checkpoint listings the training page
+The unit's composition answers 503 for the run and checkpoint listings the training page
 reads (`pilot.RunLedger`, WR-LAB2-4): `/_test/composition {"as": "gateway"}` serves exactly it;
 `{"as": "journey"}` adds those two listings over the same D8/D7 rows (`Listing`, E7L's i08
 stand-in, plus the run listing over `lab_external_runs`). `world.composed` says whether the
@@ -38,7 +40,6 @@ def main() -> None:
     from infrx.contracts.v2 import fixtures as v2fix
     from infrx.evaluation import checkpoints
     from infrx.evaluation.runner import evaluator_ref
-    from infrx.gateway.routes import lab_pipelines as lp
     from infrx.lab.access import LabAccess
     from infrx.lab.control.operations import serving_ref
     from infrx.pipelines import training
@@ -52,7 +53,6 @@ def main() -> None:
     from tests.d import test_d7_lab_data as d7
     from tests.d import test_d8_ledgers as d8
     from tests.d import test_l2sql_access as l2
-    from tests.g import support
     from tests.n.imports.world import NEMO, chunks, fixture, run
     from tests.n.versions.test_versions import uid
     from tests.p.annotations.world import RUBRIC, rows
@@ -73,11 +73,11 @@ def main() -> None:
     splits = run(store.resolve(ref, provider_org_id=NEMO)).splits
 
     sock, url = stack.listen()
-    app = stack.control_app(dsn, url)
+    app, switch = stack.unit_app(dsn, url, "lab_pipelines", objects)
     users = {"dev": l2.DEV, "admin": l2.ADMIN, "viewer": l2.VIEWER, "other_dev": l2.BOTH,
              "consumer": l2.C1}
     stack.door(app, dsn, users)
-    gateway = stack.composed("lab_pipelines", dsn, url, objects)["lab_pipelines"]
+    gateway = switch.own
 
     async def listed(ledger) -> bool:
         try:
@@ -118,16 +118,6 @@ def main() -> None:
 
     journey = dataclasses.replace(gateway, ledger=Listing(gateway.ledger))
     composed = {"listings": run(listed(gateway.ledger)), "suites": gateway.evals.suites is not None}
-
-    class Switch:
-        """The mounted `LabPipelines`: the gateway's own composition, or the journey's."""
-        current = gateway
-
-        def __getattr__(self, name):
-            return getattr(self.current, name)
-
-    switch = Switch()
-    lp.register(app, support.runtime(), switch)
 
     @app.post("/_test/composition")
     async def composition(body: dict):

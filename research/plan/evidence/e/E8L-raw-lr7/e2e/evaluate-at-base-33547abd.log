@@ -1,0 +1,238 @@
+TAP version 13
+# (node:826423) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+#   from starlette.testclient import TestClient as TestClient  \# noqa
+# Subtest: E2E-E j10 the provider UI launches, compares and cancels
+    # Subtest: E2E-E01 as the gateway composes LAB_EVALS today, the page fails closed: nothing listed, nothing to launch
+    ok 1 - E2E-E01 as the gateway composes LAB_EVALS today, the page fails closed: nothing listed, nothing to launch
+      ---
+      duration_ms: 208.966967
+      type: 'test'
+      ...
+    # Subtest: E2E-E02 a launch through the page's form lands on the experiment: its declared protocol and two queued runs
+    not ok 2 - E2E-E02 a launch through the page's form lands on the experiment: its declared protocol and two queued runs
+      ---
+      duration_ms: 143.072595
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:38:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        The expression evaluated to a falsy value:
+        
+          assert.ok(page.text.includes("No experiments yet.") && page.text.includes("No runs yet."))
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:40:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:38:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-E03 progress and a cancel come from the records: a running run is cancelled once, a finished run offers none
+# ERROR:    Exception in ASGI application
+# Traceback (most recent call last):
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 411, in run_asgi
+#     result = await app(  \# type: ignore[func-returns-value]
+#              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+#     return await self.app(scope, receive, send)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+#     await super().__call__(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+#     await self.middleware_stack(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+#     raise exc
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+#     await self.app(scope, receive, _send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+#     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+#     raise exc
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+#     await app(scope, receive, sender)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+#     await self.app(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/routing.py", line 670, in __call__
+#     await self.middleware_stack(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2734, in app
+#     await route.handle(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1281, in handle
+#     await super().handle(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/routing.py", line 280, in handle
+#     await self.app(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 158, in app
+#     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+#     raise exc
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+#     await app(scope, receive, sender)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 144, in app
+#     response = await f(request)
+#                ^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 706, in app
+#     raw_response = await run_endpoint_function(
+#                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 352, in run_endpoint_function
+#     return await dependant.call(**values)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/backend.py", line 105, in state
+#     (body["state"], body["run_id"]))
+#                     ~~~~^^^^^^^^^^
+# KeyError: 'run_id'
+    not ok 3 - E2E-E03 progress and a cancel come from the records: a running run is cancelled once, a finished run offers none
+      ---
+      duration_ms: 7.263753
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:54:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        state: Internal Server Error
+        
+        500 !== 200
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 200
+      actual: 500
+      operator: 'strictEqual'
+      stack: |-
+        door (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/harness.ts:205:10)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:56:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:54:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+# ERROR:    Exception in ASGI application
+# Traceback (most recent call last):
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 411, in run_asgi
+#     result = await app(  \# type: ignore[func-returns-value]
+#              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+#     return await self.app(scope, receive, send)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+#     await super().__call__(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+#     await self.middleware_stack(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+#     raise exc
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+#     await self.app(scope, receive, _send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+#     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+#     raise exc
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+#     await app(scope, receive, sender)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+#     await self.app(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/routing.py", line 670, in __call__
+#     await self.middleware_stack(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2734, in app
+#     await route.handle(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1281, in handle
+#     await super().handle(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/routing.py", line 280, in handle
+#     await self.app(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 158, in app
+#     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+#     raise exc
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+#     await app(scope, receive, sender)
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 144, in app
+#     response = await f(request)
+#                ^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 706, in app
+#     raw_response = await run_endpoint_function(
+#                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 352, in run_endpoint_function
+#     return await dependant.call(**values)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/backend.py", line 111, in settle
+#     experiments.rows[(NEMO, body["experiment_id"])]["report"] = body["report"]
+#     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# KeyError: ('b0000001-0000-4000-8000-000000000001', '')
+    # Subtest: E2E-E04 the comparison is B2's stored report as the view reads it: outcome, reasons, every estimate with its interval
+    not ok 4 - E2E-E04 the comparison is B2's stored report as the view reads it: outcome, reasons, every estimate with its interval
+      ---
+      duration_ms: 6.815385
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:72:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        settle: Internal Server Error
+        
+        500 !== 200
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 200
+      actual: 500
+      operator: 'strictEqual'
+      stack: |-
+        door (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/harness.ts:205:10)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:73:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:72:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    # Subtest: E2E-E05 a viewer, another provider and a consumer-only account see and launch nothing that is not theirs
+    not ok 5 - E2E-E05 a viewer, another provider and a consumer-only account see and launch nothing that is not theirs
+      ---
+      duration_ms: 348.270675
+      type: 'test'
+      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:83:11'
+      failureType: 'testCodeFailure'
+      error: |-
+        one form matching /Queue baseline and candidate runs/, found 0: Sign out
+        
+        0 !== 1
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 1
+      actual: 0
+      operator: 'strictEqual'
+      stack: |-
+        form (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/harness.ts:74:10)
+        TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:88:20)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async TestContext.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:83:3)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+      ...
+    1..5
+not ok 1 - E2E-E j10 the provider UI launches, compares and cancels
+  ---
+  duration_ms: 14335.091559
+  type: 'test'
+  location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/lab/tests/e2e/evaluate/stack.test.ts:17:1'
+  failureType: 'subtestsFailed'
+  error: '4 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 6
+# suites 0
+# pass 1
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 17240.027743

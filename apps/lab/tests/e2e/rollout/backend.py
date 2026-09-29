@@ -10,14 +10,16 @@ held in memory (l4 has no S3) and handed to the unit through `LAB_S3_BUCKET`'s s
 (`lab_objects`). A release is launched by `rollout launch`'s own code (`launch_release`: the
 plan stored write-once, then D9 starts it, R241) and a proposal decided by `rollout decide`'s
 (`decide_proposal`: 0043's decision at the proposal's fence, then R2's stop), in this process
-so they write the objects the unit reads. What no composed read holds is laid over the
-records, and nothing else: R2's `hold`/`expand` verdict of a running release D9 holds no
-decision for (the composed verdict is D9's latest decision; WR-LR6-VERDICT), and an
-expansion's approval, which `rollout decide` refuses (WR-LIVE-DECIDE), goes through R2's
-`Controller.approve` with 0043's decide RPC as its transition. Test-only doors: `/_test/probe`
-(the records port's own refusal), `/_test/composition` (the verdict laid over, or not),
-`/_test/launch`, `/_test/stop`, `/_test/step` (R2's pass on R1's aggregates as given),
-`/_test/decide`.
+so they write the objects the unit reads - an expansion too (WR-LIVE-DECIDE: approved only on
+R2's `expand` verdict over D9's Live and the B2 report). The page's verdict of a running
+release is the composed records' own (WR-LR6-VERDICT: R2's `evaluate` at read time over D9's
+Live and the release's B2 report): `/_test/traffic` writes R1's assignments and the admitted
+jobs they name as rows (tests/d's job fixture; no R1 traffic on l4) and B4's experiment with
+B2's report of the release's two runs. Nothing is laid over the records. Test-only doors:
+`/_test/probe` (the records port's own refusal), `/_test/launch`, `/_test/stop`,
+`/_test/traffic`, `/_test/step` (R2's rollback pass on R1's aggregates as given),
+`/_test/decide`. `composed` names the ports of the composition the control unit mounts
+(`stack.unit_app`, LR6-RV-4).
 
     INFRX_D_TASK=l4 uv run --frozen --project apps/infrx-api python apps/lab/tests/e2e/rollout/backend.py
 """
@@ -31,12 +33,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import stack  # noqa: E402
 
-Z = "%Y-%m-%dT%H:%M:%SZ"
 PORTS = ("records", "proposals", "store")
 
 
 def main() -> None:
     import tempfile
+    import uuid
 
     from infrx.contracts import errors
     from infrx.contracts.lab import records as lab
@@ -45,31 +47,35 @@ def main() -> None:
     from infrx.media.store import InMemoryObjectStore
     from infrx.rollouts import control as r2
     from infrx.state.jobstore import connector
-    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_data import PgLabDataStore, PgLabReads
     from infrx.state.lab_rollout import PgLabRolloutStore, PgReleaseProposals, PgReleaseStore
     from tests.b.runner.world import EVALUATOR_ID, SPEC, harness, manifest, uid
+    from tests.d import checks_credit as cc
     from tests.d import test_d7_lab_data as d7
     from tests.d import test_d9_rollout as d9
     from tests.d import test_l2sql_access as l2
+    from tests.d.test_code_mutants_live import job, ref_of
     from tests.r.control import test_control as r2w
 
     conn, dsn = stack.database("rollout")
     d9.seed(conn)
+    # the seed freezes the database clock (admission's world); the journey runs on the wall
+    # clock `rollout decide` evaluates an expansion at (R2's max_lag_s against D9's Live)
+    conn.execute("select infrx_test.unfreeze()")
     connect = connector(dsn)
     store, pg, NEMO = PgReleaseStore(connect), PgReleaseProposals(connect), d9.NEMO
-    data = PgLabDataStore(connect)
+    data, reads = PgLabDataStore(connect), PgLabReads(connect)
+    candidate = ref_of(conn, cc.DEV_DEPLOYMENT)            # ready_private: R247's healthy arm
     sock, url = stack.listen()
     # the Lab objects of the control unit's composition and of `rollout launch|decide`, in
     # process; R2's stop converges the release's own alias (the d9 world lists no endpoint)
     objects, serving = InMemoryObjectStore(), [None]
-    lab_workers.lab_objects = lambda mode, env: objects
     pilot.control_serving = lambda connect, principal: serving[0]
-    os.environ["LAB_S3_BUCKET"] = "l4-in-memory"
-    app = stack.control_app(dsn, url)
+    app, unit = stack.unit_app(dsn, url, "lab_releases", objects)
     users = {"admin": l2.ADMIN, "dev": l2.DEV, "viewer": l2.VIEWER, "other_dev": l2.BOTH,
              "consumer": l2.C1}
     stack.door(app, dsn, users)
-    gateway = stack.composed("lab_releases", dsn, url, objects)["lab_releases"]
+    gateway = unit.own
     composed = {name: getattr(gateway, name) is not None for name in PORTS}
 
     async def suite() -> dict:
@@ -82,7 +88,9 @@ def main() -> None:
         return {**r2w.BASE_RUN, "provider_org_id": NEMO, "dataset_ref": dataset,
                 "harness_ref": harness_ref, "evaluator_ref": evaluator}
 
-    base_run, plan = asyncio.run(suite()), r2w.plan()
+    # R2's plan, small enough for a few rows of traffic to reach its horizon and evidence
+    base_run = asyncio.run(suite())
+    plan = r2w.plan(horizon_s=1, min_requests=2, max_skew_bp=10_000)
     launched: dict[str, dict] = {}              # policy_ref -> policy, R2's last verdict, alias
     plan_path = Path(tempfile.mkdtemp(prefix="lab-e2e-rollout-")) / "plan.json"
     plan_path.write_text(plan.model_dump_json())
@@ -90,46 +98,12 @@ def main() -> None:
     # R2's stop converges the release's own alias (FakeServing: the d9 world lists no endpoint)
     env = {"LAB_DATABASE_URL": dsn, "LAB_S3_BUCKET": "l4-in-memory"}
 
-    def runs_of(policy) -> tuple[dict, dict]:
-        return ({**base_run, "serving_ref": policy.baseline_ref},
-                {**base_run, "run_id": r2w.CAND_RUN["run_id"],
-                 "serving_ref": policy.candidates[0].serving_ref,
-                 "idempotency_key": r2w.CAND_RUN["idempotency_key"]})
-
-    overlaid, composed_releases = [False], pilot.ReleaseRecords.releases
-
-    async def releases(self, provider_org_id):
-        """The composed records, with R2's hold/expand verdict of a running release laid over
-        one D9 holds no decision for (WR-LR6-VERDICT) while the journey runs."""
-        rows = await composed_releases(self, provider_org_id)
-        for row in rows if overlaid[0] else ():
-            verdict = launched.get(row["policy_ref"], {}).get("verdict")
-            if row["verdict"] is None and verdict is not None:
-                row["verdict"] = {"action": verdict.action, "reasons": list(verdict.reasons),
-                                  "evidence_refs": list(verdict.evidence_refs),
-                                  "evaluated_at": r2w.HORIZON.strftime(Z)}
-        return rows
-    pilot.ReleaseRecords.releases = releases
-
-    class Decided:
-        """R2's `ReleaseStore` for an expansion's approval: its transition is the proposal's own
-        decide RPC (0043: 0039's CAS at the fence the proposal was filed at)."""
-
-        def __init__(self, proposal_id: str) -> None:
-            self.proposal_id = proposal_id
-
-        async def release(self, ref):
-            return await store.release(ref)
-
-        async def transition(self, ref, *, fence, to, decision, reasons):
-            await pg.decide(self.proposal_id, approve=True, decided_by=r2w.OPERATOR,
-                            decision=decision, reasons=tuple(reasons))
-            return (await store.release(ref)).fence
-
-    @app.post("/_test/composition")
-    async def composition(body: dict):
-        overlaid[0] = {"gateway": False, "journey": True}[body["as"]]
-        return {"as": body["as"]}
+    def runs_of(policy, tag: int) -> tuple[dict, dict]:
+        """The release's own baseline and candidate evaluation runs (B2's report binds them)."""
+        return tuple({**base_run, "run_id": d9.uid(tag, arm), "serving_ref": serving,
+                      "idempotency_key": f"run:{d9.uid(tag, arm)}"}
+                     for arm, serving in ((0x1e, policy.baseline_ref),
+                                          (0x1f, policy.candidates[0].serving_ref)))
 
     @app.post("/_test/probe")
     async def probe(body: dict):
@@ -144,7 +118,9 @@ def main() -> None:
         """A canary revision published through D7, launched by `rollout launch` (its plan
         stored first, R241) - or, `planless`, started in D9 without its launcher."""
         tag = int(body["tag"])
-        payload = d9.policy(d9.uid(tag, 0xb0), weights=(1_000,), endpoint=d9.uid(tag, 0xe0))
+        payload = {**d9.policy(d9.uid(tag, 0xb0), weights=(1_000,), endpoint=d9.uid(tag, 0xe0)),
+                   "baseline_ref": d9.serving(10 + tag),     # its own: B4's experiment is its
+                   "candidates": [{"serving_ref": candidate, "weight_bp": 1_000}]}
         policy, ref = lab.parse(payload), d7.publish(conn, payload)
         if body.get("planless"):
             await store.start(ref, provider_org_id=NEMO, plan_digest=r2.plan_digest(plan),
@@ -153,11 +129,39 @@ def main() -> None:
             code = await lab_workers.launch_release({**env, "LAB_OPERATOR_ID": d9.USER}, ref,
                                                     str(plan_path), "canary 10%")
             assert code == 0, f"rollout launch exited {code}"
-        for run in runs_of(policy):
+        for run in runs_of(policy, tag):
             assert d7.publish(conn, run) == lab.ref_of(run)
-        launched[ref] = {"policy": policy, "verdict": None,
+            d7.ok(conn, "lab_create_run", {"provider_org_id": NEMO, "run_ref": lab.ref_of(run)})
+        launched[ref] = {"policy": policy, "payload": payload, "tag": tag,
                          "serving": r2w.FakeServing(current=policy.candidates[0].serving_ref)}
         return {"policy_ref": ref}
+
+    @app.post("/_test/traffic")
+    async def traffic(body: dict):
+        """Healthy traffic past the plan's horizon and B2's `report` of the release's runs:
+        two candidate jobs (each with an operator's feedback) and one baseline job assigned to
+        the release (0054 reads them as its Live), B4's experiment of the two runs under the
+        plan's protocol and B2's report stored in D7. Answers the composed records' verdict."""
+        ref = body["policy_ref"]
+        rel = launched[ref]
+        base, cand = runs_of(rel["policy"], rel["tag"])
+        n = rel["tag"] * 10
+        for i, serving in ((1, candidate), (2, candidate), (3, rel["policy"].baseline_ref)):
+            job(conn, ref, rel["payload"], d9.uid(n + i, 0x9c), serving, "succeeded", ms=20,
+                feedback=("operator",) if serving == candidate else ())
+        await reads.put_experiment(str(uuid.uuid4()), provider_org_id=NEMO,
+                                   protocol=plan.protocol,
+                                   protocol_digest=r2w.digest(plan.protocol),
+                                   baseline_run_ref=lab.ref_of(base),
+                                   candidate_run_ref=lab.ref_of(cand), actor=d9.USER)
+        await data.put_eval_report(r2w.report(body["report"], base_run=base, cand_run=cand),
+                                   provider_org_id=NEMO, actor=d9.USER)
+        started = (await store.release(ref)).started_at        # the horizon, on the DB clock
+        now = conn.execute("select infrx.now()").fetchone()[0]
+        await asyncio.sleep(max(0.0, plan.horizon_s - (now - started).total_seconds()) + 0.1)
+        [row] = [r for r in await gateway.records.releases(NEMO) if r["policy_ref"] == ref]
+        return {"action": (row["verdict"] or {}).get("action"), "verdict": row["verdict"],
+                "progress": row["progress"]}
 
     @app.post("/_test/stop")
     async def stop(body: dict):
@@ -170,38 +174,22 @@ def main() -> None:
 
     @app.post("/_test/step")
     async def step(body: dict):
-        """One R2 controller pass on R1's aggregates as given (and B2's report, if any)."""
+        """One R2 controller pass on R1's aggregates as given: a guardrail breach."""
         rel = launched[body["policy_ref"]]
-        live, runs = r2w.live(errors_=body.get("errors", 20)), runs_of(rel["policy"])
-        rep = None if body.get("report") is None else r2w.report(body["report"], base_run=runs[0],
-                                                                 cand_run=runs[1])
+        live, runs = r2w.live(errors_=body.get("errors", 20)), runs_of(rel["policy"], rel["tag"])
         ctl = r2.Controller(store, rel["serving"], actor_id=r2w.CONTROLLER)
         verdict = await ctl.step(rel["policy"], body["policy_ref"], plan, live, now=r2w.HORIZON,
-                                 report=rep, runs=runs)
-        if verdict.action in ("rollback", "hold", "expand"):
-            rel["verdict"] = verdict
+                                 report=None, runs=runs)
         return {"action": verdict.action}
 
     @app.post("/_test/decide")
     async def decide(body: dict):
-        """The operator decides a release's pending proposal: `rollout decide` (a rollback or
-        a rejection), or R2's approval of an expansion with its evidence (WR-LIVE-DECIDE)."""
+        """The operator decides a release's pending proposal through `rollout decide`: a
+        rollback, a rejection, or an expansion (on R2's expand verdict, WR-LIVE-DECIDE)."""
         rows = await pg.proposals(provider_org_id=NEMO)
         p = next(r for r in rows if r["policy_ref"] == body["policy_ref"]
                  and r["state"] == "proposed")
-        rel = launched[p["policy_ref"]]
-        if p["kind"] == "expand" and body["approve"]:
-            ctl = r2.Controller(Decided(p["proposal_id"]), rel["serving"],
-                                actor_id=r2w.CONTROLLER)
-            runs = runs_of(rel["policy"])
-            try:
-                await ctl.approve(r2w.OPERATOR, rel["policy"], p["policy_ref"], plan, r2w.live(),
-                                  now=r2w.HORIZON, report=r2w.report(base_run=runs[0],
-                                                                     cand_run=runs[1]), runs=runs)
-            except errors.StateConflict:
-                return {"result": "conflict"}
-            return {"result": "ok"}
-        serving[0] = rel["serving"]
+        serving[0] = launched[p["policy_ref"]]["serving"]
         code = await lab_workers.decide_proposal({**env, "LAB_OPERATOR_ID": r2w.OPERATOR},
                                                  p["policy_ref"], str(p["proposal_id"]),
                                                  bool(body["approve"]), "proposal")
@@ -212,11 +200,9 @@ def main() -> None:
              "stand_ins": ["session verifier and PostgREST RPC door (stack.door)",
                            "the Lab objects in memory (l4 has no S3), handed to the control "
                            "unit and to `rollout launch|decide` (run in process to share them)",
-                           "R2's hold/expand verdict laid over the gateway's records while D9 "
-                           "holds no decision for the release (WR-LR6-VERDICT)",
-                           "an expansion approved through R2's Controller.approve: `rollout "
-                           "decide` refuses it (WR-LIVE-DECIDE)",
-                           "R1 aggregates as the step's input (no R1 traffic on l4)",
+                           "R1's assignments and the admitted jobs they name written as rows "
+                           "(tests/d's job fixture; no R1 traffic on l4)",
+                           "R1 aggregates as the rollback step's input (/_test/step)",
                            "L3's serving alias (R2's FakeServing)"]}
     stack.serve(app, sock, world, conn.close)
 

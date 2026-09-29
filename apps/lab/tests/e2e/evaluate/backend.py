@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """LAB-E2E evaluate (E6L j10): the Lab's evaluation pages over lab-api's `/lab/v1/evaluations`
-as the gateway composes it with LAB_EVALS on (`pilot._lab`: D7's REAL `PgLabDataStore`, B1's
-freeze, the REAL L2), beside R186's control factory, on the task-local PostgreSQL (l4), D7's
-seeded world.
+as the Lab's control unit composes it (R186's factory, WR-LDP-2: `pilot._lab`, D7's REAL
+`PgLabDataStore`, B1's freeze, the REAL L2; WR-LR6-E2E-SHADOW: the unit's own route, served
+through `stack.unit_app`), on the task-local PostgreSQL (l4), D7's seeded world.
 
-The gateway's composition carries no experiments, catalog or B3 ledger port yet (WR-B4-2,
-WR-LAB2-2, WR-B3-1: their SQL is 0043's, their adapters are not written):
+That composition carries no experiments, catalog or B3 ledger port yet (WR-B4-2, WR-LAB2-2,
+WR-B3-1: their SQL is 0043's, their adapters are not written):
 `/_test/composition {"as": "gateway"}` serves exactly it; `{"as": "journey"}` fills those three
 with the route suite's own fakes (`tests/g/lab_evaluations`, as `tests/b/backend.py`) over the
-same real D7/B1/L2. `world.composed` says which ports the gateway's own composition carries, so
+same real D7/B1/L2. `world.composed` says which ports the unit's own composition carries, so
 the gate reports NOT RUN until it carries them. Test-only doors: `/_test/state` (B1's worker
 moving a run on, under D7's own state trigger) and `/_test/settle` (B2's stored report).
 
@@ -35,7 +35,6 @@ def main() -> None:
     from tests.b.runner.world import EVALUATOR_ID, SPEC, harness, manifest, uid
     from tests.d import test_d7_lab_data as d7
     from tests.d import test_l2sql_access as l2
-    from tests.g import support
     from tests.g.lab_evaluations.test_lab_evaluations import (CANDIDATE, EVALUATOR, SERVING,
                                                                Experiments, Ledger)
 
@@ -74,24 +73,14 @@ def main() -> None:
             return SPEC
 
     sock, url = stack.listen()
-    app = stack.control_app(dsn, url)
+    app, switch = stack.unit_app(dsn, url, "lab_evaluations")
     users = {"dev": DEV, "viewer": l2.VIEWER, "other_dev": l2.BOTH, "consumer": l2.C1}
     stack.door(app, dsn, users)
-    gateway = stack.composed("lab_evals", dsn, url)["lab_evaluations"]
+    gateway = switch.own
     composed = {name: getattr(gateway, name) is not None for name in PORTS}
     experiments = Experiments()
     journey = dataclasses.replace(gateway, experiments=experiments, ledger=Ledger(),
                                   catalog=Catalog())
-
-    class Switch:
-        """The mounted `LabEvaluations`: the gateway's own composition, or the journey's."""
-        current = gateway
-
-        def __getattr__(self, name):
-            return getattr(self.current, name)
-
-    switch = Switch()
-    le.register(app, support.runtime(), switch)
 
     @app.post("/_test/composition")
     async def composition(body: dict):
