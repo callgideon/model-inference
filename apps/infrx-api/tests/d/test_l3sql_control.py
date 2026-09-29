@@ -56,7 +56,9 @@ RACE_B = "c000000e-0000-4000-8000-00000000000e"
 CARD1, CARD2, CARD3 = cc.CARD, "rc_marlin2b_s2", "rc_marlin2b_s2b"
 RPCS = ("lab_control_endpoint", "lab_control_transition", "lab_control_propose",
         "lab_control_dev_key", "lab_control_publish", "lab_control_rollback",
-        "lab_control_fund", "lab_control_events")
+        "lab_control_fund", "lab_control_events",
+        "lab_control_reject", "lab_control_operator")                     # 0052 (E3L-F4)
+OPS = "e1000000-0000-4000-8000-0000000000f0"          # a platform operator (0052's door)
 
 
 def seed(conn) -> None:
@@ -122,6 +124,11 @@ def fund(provider: str = OTHER, amount: str = "250",
          op: str = "0f000000-0000-4000-8000-00000000000f") -> dict:
     return {"provider_org_id": provider, "amount": amount, "operation_id": op,
             "actor": "ops@infrx", "reason": "preview budget"}
+
+
+def reject(revision: str = NEW, **over) -> dict:
+    return {"deployment_revision_id": revision, "actor": "operator:ops", "reason": "not ready",
+            **over}
 
 
 def events(conn, provider: str = NEMO) -> list[dict]:
@@ -391,6 +398,70 @@ def check_the_dev_wallet_opens_at_zero_and_is_funded_only_by_audited_allocation(
     return "opens at 0, one audited allocation per operation, replay-safe"
 
 
+@rolled_back
+def check_an_operator_rejects_only_an_open_proposal(conn) -> str:
+    """E3L-F4 (0052 `lab_control_reject`): an open proposal leaves `proposed_public` for
+    `retired` (its row keeps the immutable `public`: the store reads it back private), audited
+    as the operator's `lab_transition` with the reason; no listing moves; a blank reason or an
+    unattributed rejection is refused and moves nothing; a listed, a dev or an unknown revision
+    is refused; a rejected proposal is never rejected again nor published. (Its own proposal
+    NEW of D2: the publish race commits P2 or P3, whichever wins.)"""
+    validated(conn)
+    ok(conn, "lab_control_propose", {"proposal": proposal(), "source_revision_id": D2,
+                                     "actor": "admin@nemo"})
+    for bad in (reject(reason=" "), reject(actor="")):
+        assert refusal(conn, "lab_control_reject", bad) == "invalid_request", bad
+    assert state(conn, NEW) == "proposed_public", "a refused rejection moved the proposal"
+    seen = listed(conn)
+    got = {r: refusal(conn, "lab_control_reject", reject(r)) for r in (seen, D2, RETRY_ID)}
+    assert got == {seen: "state_conflict", D2: "state_conflict", RETRY_ID: "not_found"}, got
+    versions = "select max(version), count(*) from infrx.catalog_listings"
+    before = conn.execute(versions).fetchone()
+    row = ok(conn, "lab_control_reject", reject())
+    assert (row["deployment_revision_id"], row["state"], row["visibility"]) == (
+        NEW, "retired", "public"), row
+    assert (state(conn, NEW), state(conn, seen), state(conn, D2)) == (
+        "retired", "active", "ready_private")
+    assert listed(conn) == seen and conn.execute(versions).fetchone() == before
+    e = events(conn)[-1]
+    assert (e["action"], e["actor"], e["subject"], e["before"], e["after"]) == (
+        "lab_transition", "operator:ops", NEW, {"state": "proposed_public"},
+        {"state": "retired", "reason": "not ready"}), e
+    assert refusal(conn, "lab_control_reject", reject()) == "state_conflict", "rejected twice"
+    assert refusal(conn, "lab_control_publish", publish(NEW, "rc_rejected", expected=before[0])) \
+        == "state_conflict", "a rejected proposal was published"
+    return "open proposals only -> retired, audited with the reason; listings untouched"
+
+
+@rolled_back
+def check_the_operator_door_is_the_profiles_bit_on_the_control_login(conn) -> str:
+    """E3L-F4 (0052 `lab_control_operator`): a user is an operator exactly when the profile
+    says so (a provider administrator, a consumer or an unknown user is not); the control
+    factory's own login and the platform role execute both 0052 doors (a browser session
+    neither: `check_browser_roles_reach_nothing`)."""
+    validated(conn)
+    ok(conn, "lab_control_propose", {"proposal": proposal(), "source_revision_id": D2,
+                                     "actor": "admin@nemo"})
+    conn.execute("insert into auth.users (id, email) values (%s, 'ops-l3@example.com')", (OPS,))
+    conn.execute("update public.profiles set is_operator = true where id = %s", (OPS,))
+    who = {OPS: True, l2.ADMIN: False, l2.C1: False, l2.NOBODY: False}
+    got = {u: ok(conn, "lab_control_operator", {"user_id": u})["operator"] for u in who}
+    assert got == who, got
+    def as_role(role: str):
+        try:
+            with conn.transaction():
+                conn.execute(f"set local role {role}")
+                got = (call(conn, "lab_control_operator", {"user_id": OPS})["operator"],
+                       call(conn, "lab_control_reject", reject())["state"])
+                raise psycopg.Rollback()
+        except psycopg.Error as refused:
+            return refused.sqlstate
+        return got
+    answers = {role: as_role(role) for role in ("infrx_lab_control", "service_role")}
+    assert answers == dict.fromkeys(answers, (True, "retired")), answers
+    return "the profile's operator bit; both doors on the control login and service_role"
+
+
 def _race(conn, fn: str, calls: list[dict]) -> list:
     """Each call from its own connection, released together: its listing version or code."""
     gate, answers = threading.Barrier(len(calls)), [None] * len(calls)
@@ -550,6 +621,8 @@ CHECKS = {c.__name__: c for c in (
     check_rollback_is_a_new_listing_and_admitted_jobs_keep_their_pins,
     check_the_dev_wallet_opens_at_zero_and_is_funded_only_by_audited_allocation,
     check_two_operators_racing_publish_once, check_a_proposal_retry_race_of_the_same_source_proposes_once,
+    check_an_operator_rejects_only_an_open_proposal,
+    check_the_operator_door_is_the_profiles_bit_on_the_control_login,
     check_the_store_composes)}
 
 
