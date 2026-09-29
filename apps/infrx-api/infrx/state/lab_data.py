@@ -271,6 +271,14 @@ class PgLabImportJobs:
         return await self._call("lab_import_job", {"job_id": job_id,
                                                    "provider_org_id": provider_org_id})
 
+    async def requeue(self, job_id: str, *, new_job_id: str, provider_org_id: str,
+                      actor: str) -> dict[str, Any]:
+        """WR-C6-REQUEUE (0055): the provider's failed job again as `new_job_id`, naming its
+        predecessor (which stays failed); a replay answers the one successor."""
+        return await self._call("lab_import_requeue", {
+            "job_id": job_id, "new_job_id": new_job_id, "provider_org_id": provider_org_id,
+            "actor": actor})
+
 
 # --- WR-N4-2 / WR-B4-2 reads (`0043_lab_reads_and_proposals.sql`) ---------------------------
 class PgLabReads:
