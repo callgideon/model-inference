@@ -1,0 +1,105 @@
+{
+  "task": "E8L",
+  "lane": "lab-rollout-2",
+  "slice": "WR-E8L-2b + k09 (real emergency-rollback subprocess) + k10 (NOT RUN reason refined) + E8L-F3 fix",
+  "activity": "review",
+  "at": "2026-09-29T02:30:00Z",
+  "head": "d68a1ddf",
+  "base": "eb561d5f",
+  "worktree": ".claude/worktrees/codex-w5-lab-rollout-2",
+  "branch": "codex/w5-lab-rollout-2",
+  "owned_paths": [
+    "tests/integration/lab_rollout/",
+    "research/plan/evidence/e/E8L-*"
+  ],
+  "commands": [
+    {
+      "cmd": "pytest -q tests/integration/lab_rollout (before WR-E8L-2b, base eb561d5f unmodified)",
+      "exit": 1,
+      "summary": "15 passed, 2 failed (broken_runner: pristine baseline fails test_k09_the_controller_process_restarted_mid_rollout - the k09 fail-first), 1 skipped"
+    },
+    {
+      "cmd": "runner.py --keep --out .../e8l-run1 (first real run, BASE mistakenly made real)",
+      "exit": 1,
+      "summary": "k01/k04/k07/k09/k08/k10 as expected; k02/k03/k05/k06 FAIL - all diffs in the baseline ref segment"
+    },
+    {
+      "cmd": "pytest -q tests/integration/lab_rollout (after reverting BASE to the opaque stand-in)",
+      "exit": 0,
+      "summary": "17 passed, 1 skipped"
+    },
+    {
+      "cmd": "uvx ruff check --line-length 100 tests/integration/lab_rollout",
+      "exit": 0,
+      "summary": "all checks passed"
+    },
+    {
+      "cmd": "runner.py --reuse --keep --out .../e8l-run2 (real run, BASE reverted)",
+      "exit": 1,
+      "summary": "gate FAIL: k01-k05/k07 PASS, k06 FAIL (E8L-F2, new finding), k08/k09/k10 NOT RUN as designed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest -q test_mutants.py (full, first pass)",
+      "exit": 1,
+      "summary": "52 passed, 1 failed: st_rolled_back_still_routes survived (E8L-F3: anchor superseded by 0045, base drift not caused by this lane)"
+    },
+    {
+      "cmd": "targeted re-check after moving the anchor to 0045 (-k st_rolled_back_still_routes or every_case or well_formed)",
+      "exit": 0,
+      "summary": "3 passed"
+    },
+    {
+      "cmd": "make lab-rollout (final real run at d68a1ddf)",
+      "exit": 1,
+      "summary": "gate FAIL: k01-k05/k07 PASS, k06 FAIL (E8L-F2), k08-k10 NOT RUN; evidence research/plan/evidence/e/E8L-raw-d68a1ddf/"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest -q test_mutants.py (full, final)",
+      "exit": 0,
+      "summary": "53 passed in 331s, 0 survivors"
+    },
+    {
+      "cmd": "runner.py --reuse --only k08 --out .../teardown (tear the stack down)",
+      "exit": 3,
+      "summary": "removed infrx-e8l-{clickhouse,postgres,s3,valkey}; docker ps -a has none left"
+    },
+    {
+      "cmd": "pytest -q tests/integration/lab_rollout (final, no stack)",
+      "exit": 0,
+      "summary": "17 passed, 1 skipped"
+    },
+    {
+      "cmd": "uvx ruff check --line-length 100 tests/integration/lab_rollout (final)",
+      "exit": 0,
+      "summary": "all checks passed"
+    },
+    {
+      "cmd": "make -n lab-rollout",
+      "exit": 0,
+      "summary": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <abs>/research/plan/evidence/e/E8L-raw-d68a1ddf"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "WR-E8L-2b (LSQ5's own estimate: small fixture change + one full rerun) plus k09/k10 binding and the E8L-F3 base-drift fix all took about one focused session (real e8l runs ~55-95s each, full mutant list ~5.5min each, three full mutant runs + two real runs this session); remaining is make api-test (INFRX_D_TASK=e8l, ~90 min per prior evidence, queued separately) plus one verify round",
+    "at": "2026-09-29T02:30:00Z"
+  },
+  "blockers": [
+    "make api-test with INFRX_D_TASK=e8l not yet run this session (queued, ~90 min per prior evidence)",
+    "WR-E8L-7 (pilot.control_serving still composes NoControlReads, so a real emergency-rollback process cannot converge the alias) - product code, not this lane's to fix",
+    "WR-E8L-8 / E8L-F2 (Controller._converge compares candidate membership by full ref, not serving identity, so a real promotion never matches its own candidate) - product code (infrx/rollouts/control), not this lane's to fix; k06 stays KNOWN_FAIL",
+    "k10 stays NOT RUN: WR-R4-1's lab-sql half/WR-R4-2 (release read models + proposal store) absent, and apps/lab/tests/e2e/rollout/ (coordinator-assigned, outside owned paths) does not exist"
+  ],
+  "wiring_requests": [
+    "WR-E8L-7 (composition-2 or lab-sql): wire the real ControlReads (PgControlStore.endpoint_alias/listing_versions, merged as 0044) into pilot.control_serving instead of NoControlReads(), so a real emergency-rollback process can converge the alias",
+    "WR-E8L-8 (R2, product code): Controller._converge's candidate-set membership test should compare by serving identity (provider + servingVersion/digest), not the full ref, so a real promotion (a fresh deployment_revision_id for the same servingVersion) is recognised as the policy's own candidate - see the proposed ruling in E8L-d68a1ddf.md",
+    "Carried forward from E8L-2334e6a.md: WR-E8L-3 (ControlReads stand-in swap, same store WR-E8L-7 needs), WR-E8L-6 (tests/i/mutants.py _layout's I8 tuple, not re-checked this session)"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E8L-d68a1ddf.md",
+    "research/plan/evidence/e/E8L-raw-d68a1ddf/"
+  ]
+}

@@ -113,13 +113,15 @@ SCENARIOS = {
                      "claims refused", "test_ids": ["OPT-PARITY"], "lanes": []},
     "k08": {"title": "R3 parity measured on an allocated supported GPU target",
             "test_ids": ["OPT-PARITY"], "lanes": ["P-08"]},
-    "k09": {"title": "the I7 controller process killed and restarted mid-rollout",
-            "test_ids": ["ROLLOUT-RECOVER"], "lanes": ["composition-2"]},
+    "k09": {"title": "the I7 controller process killed and restarted mid-rollout: the real "
+                     "emergency-rollback subcommand twice; the pass loop waits on WR-R2-3",
+            "test_ids": ["ROLLOUT-RECOVER"], "lanes": []},
     "k10": {"title": "the Lab releases UI: verdict, proposal, approval and emergency rollback",
             "test_ids": ["ROLLOUT-PIN"], "lanes": ["lab-ui-swap"]},
 }
 REQUIRED = {
-    "k01": ("test_k01_routing_off_serves_todays_request_over_a_live_release",),
+    "k01": ("test_k01_routing_off_serves_todays_request_over_a_live_release",
+            "test_k01_a_candidate_ref_resolves_through_0045_and_matches_l3s_own_computation"),
     "k02": ("test_k02_a_shadow_changes_nothing_the_user_sees_or_pays",),
     "k03": ("test_k03_a_subject_keeps_its_arm_and_each_admission_is_one_d9_row",
             "test_k03_candidate_traffic_is_bounded_and_a_raised_weight_keeps_its_subjects",
