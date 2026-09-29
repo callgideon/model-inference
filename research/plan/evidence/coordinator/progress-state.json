@@ -8230,7 +8230,7 @@
   {
    "id": "W5-MERGE-40",
    "task": null,
-   "slice": "merge batch #40 (Opus): known-good-reproof 21b3f93d (+WR-KGR-1/2, the SHAPE-keys case, R224)",
+   "slice": "merge batch #40 (Opus): known-good-reproof 21b3f93d (+WR-KGR-1/2, the SHAPE-keys case, R224); workflow wf_95eb8ac4-3c7",
    "agent": "opus",
    "branch": "codex/w5-merge-40",
    "worktree": ".claude/worktrees/codex-w5-merge-40",
