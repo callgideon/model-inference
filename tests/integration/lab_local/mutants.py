@@ -62,10 +62,12 @@ REQUIRED = "test_lab_local_the_required_cases_are_what_the_scenario_module_defin
 KEY = "test_lab_local_the_key_is_tasklocal_in_the_lab_band_and_the_block_is_e3ls_lock"
 WEB = "test_lab_local_the_lab_web_gets_lab_jsons_names_and_no_service_key"
 PENDING = "test_lab_local_pending_roles_are_proven_to_refuse_by_name"
+JOURNEY = "test_lab_local_a_journey_passes_only_when_every_case_ran_and_passed"
+CONTROL_LOGIN = "test_lab_local_the_control_factory_runs_on_its_own_login_never_the_owner"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("a_switch_left_off", "EVERY switch is ON in the composition", W,
-       '"LAB_CHECKPOINTS", "LAB_DATASETS")', '"LAB_CHECKPOINTS")', SWITCHES),
+       '"LAB_DATASETS", "LAB_TEACHERS")', '"LAB_DATASETS")', SWITCHES),
     _m("a_switch_on_as_false", "a switch ON is `true`", W,
        '{**{name: "true" for name in', '{**{name: "false" for name in', SWITCHES),
     _m("xfail_is_a_pass", "an xfail is never a pass", R,
@@ -110,6 +112,21 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lab_web_on_http", "the Lab origin is https (production refuses http)", W,
        'LAB_ORIGIN = f"https://localhost:{LAB_TLS_PORT}"',
        'LAB_ORIGIN = f"http://localhost:{LAB_TLS_PORT}"', WEB),
+    _m("journey_always_passes", "a journey passes only when it ran and passed", R,
+       "                       status=journey_status(code, log.read_text(errors=\"replace\")))",
+       "                       status=PASS)", JOURNEY),
+    _m("journey_skips_pass", "a skipped journey case is BLOCKED", R,
+       'return PASS if count("tests") and count("pass") == count("tests") else BLOCKED',
+       'return PASS if count("tests") and count("fail") == 0 else BLOCKED', JOURNEY),
+    _m("journey_empty_passes", "a journey that ran no case is BLOCKED", R,
+       'return PASS if count("tests") and count("pass")', 'return PASS if count("pass")', JOURNEY),
+    _m("control_on_the_owner", "the control factory runs on infrx_lab_control (LDP-R4)", W,
+       'CONTROL_LOGIN = "infrx_lab_control"', 'CONTROL_LOGIN = "postgres"', CONTROL_LOGIN),
+    _m("teacher_url_unset", "LAB_TEACHER_URL is the local teacher fake", W,
+       '            "LAB_TEACHER_URL": f"http://127.0.0.1:{TEACHER_PORT}",\n            "LAB_CHECKPOINT_KEYS"',
+       '            "LAB_CHECKPOINT_KEYS"', SWITCHES),
+    _m("lab_web_without_control", "the Lab web reaches the control factory", W,
+       'return {"LAB_CONTROL_URL": control or control_url(), ', 'return {', WEB),
     _m("a_served_role_pending", "eval, judge and datasets must start; only named lanes "
        "pend", W, '    "rollout": ("WR-LSQ-9", "the rollout pass needs"),\n',
        '    "rollout": ("WR-LSQ-9", "the rollout pass needs"),\n'

@@ -158,6 +158,17 @@ def journey_row(name: str, spec: dict) -> dict:
     return {"stage": f"journey:{name}", "status": None, "rerun": rerun}
 
 
+def journey_status(code: int, text: str) -> str:
+    """node --test's summary: FAIL on a non-zero exit; PASS only when it ran cases and every
+    one passed (a skipped, todo or cancelled case, no case or no summary is BLOCKED)."""
+    def count(kind: str) -> int:
+        found = re.search(rf"^# {kind} (\d+)$", text, re.M)
+        return int(found.group(1)) if found else 0
+    if code:
+        return FAIL
+    return PASS if count("tests") and count("pass") == count("tests") else BLOCKED
+
+
 def gate(stages: list[dict]) -> str:
     return worst(stage["status"] for stage in stages)
 
@@ -264,11 +275,8 @@ def journeys(out: Path) -> list[dict]:
             env = {**os.environ, spec["flag"]: "1", "INFRX_D_TASK": KEY}
             code, seconds, log = logged(f"journey-{name}", ["node", "--test", spec["file"]],
                                         out, REPO / "apps" / "lab", env, 1800)
-            text = log.read_text(errors="replace")
-            skipped = re.search(r"^# skipped (\d+)", text, re.M)
             row.update(exit=code, seconds=seconds, log=str(log),
-                       status=FAIL if code else (BLOCKED if skipped and skipped.group(1) != "0"
-                                                 else PASS))
+                       status=journey_status(code, log.read_text(errors="replace")))
         rows.append(row)
     return rows
 

@@ -65,17 +65,15 @@ world, stack, harness = operate.world, operate.stack, operate.harness
 #: forgets fails layer 1.
 GATEWAY_SWITCHES = ("FEEDBACK_API", "TRACE_EXPORT_API", "LAB_CONTROL", "LAB_TRACES",
                     "ROLLOUT_ROUTING", "LAB_EVALS", "LAB_PIPELINES", "LAB_RELEASES",
-                    "LAB_CHECKPOINTS", "LAB_DATASETS")
+                    "LAB_CHECKPOINTS", "LAB_DATASETS", "LAB_TEACHERS")
 WORKER_SWITCHES = ("TRACE_PUMPS", "LAB_EVAL_WORKER")
 #: Switches the brief names that this base does not carry yet: recorded, never claimed.
-PENDING_SWITCHES = {"LAB_TEACHERS": "composition-4 (6bffa2e8, merge batch #36) is not on this "
-                                    "base: no setting reads it"}
+PENDING_SWITCHES: dict[str, str] = {}
 ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets")
 #: Roles whose work source is not on this base: R198 says each refuses by name (exit 2, R211:
 #: never restarted). Each case proves that refusal and stays NOT RUN until the lane lands.
 PENDING_ROLES = {
     "checkpoints": ("WR-B3-3", "registry adapter and L3's dev deployer"),
-    "annotation": ("WR-P2-4", "annotation has no worker pass"),
     "training": ("P-11", "training has no worker pass"),
     "rollout": ("WR-LSQ-9", "the rollout pass needs"),
 }
@@ -93,6 +91,7 @@ LAB_ORIGIN = f"https://localhost:{LAB_TLS_PORT}"
 STANDIN_URL = f"http://127.0.0.1:{STANDIN_PORT}"
 GATEWAY_URL = f"http://127.0.0.1:{stack.GATEWAY_PORT}"
 TLS_CONTAINER = "infrx-e3llab-tls"   # not `infrx-e3l-*`: E2's guard would call it foreign
+CONTROL_LOGIN = "infrx_lab_control"   # 0043 (WR-I2L-4) + 0044: the control factory's login
 CHECKPOINT_KEY = "lab-local-key"
 CHECKPOINT_SECRET = "6c61622d6c6f63616c2d636865636b706f696e742d7365637265742d3030303031"
 
@@ -107,6 +106,7 @@ def switch_env(spool: Path) -> dict[str, str]:
     return {**{name: "true" for name in GATEWAY_SWITCHES + WORKER_SWITCHES},
             "CLICKHOUSE_URL": clickhouse_url(), "S3_TRACE_BUCKET": stack.media_bucket(),
             "TRACE_SPOOL_DIR": str(spool),
+            "LAB_TEACHER_URL": f"http://127.0.0.1:{TEACHER_PORT}",
             "LAB_CHECKPOINT_KEYS": json.dumps({CHECKPOINT_KEY: {
                 "provider_org_id": operate.PROVIDER_A, "secret": CHECKPOINT_SECRET}})}
 
@@ -260,6 +260,7 @@ def role_env(role: str, trip, lab_dsn: str, spool: Path) -> dict[str, str]:
             "LAB_EVAL_ENDPOINT_URL": trip.box.url + "/v1",
             "LAB_EVAL_ENDPOINT_KEY": trip.world.alpha.secret,
             "JUDGE_PROVIDER_URL": f"http://127.0.0.1:{TEACHER_PORT}",
+            "LAB_TEACHER_URL": f"http://127.0.0.1:{TEACHER_PORT}",
             "CLICKHOUSE_URL": clickhouse_url(), "S3_TRACE_BUCKET": stack.media_bucket(),
             "LAB_OPERATOR_ID": operate.OPERATOR,
             "LAB_ANNOTATION_TEACHER": "dry-run", "LAB_TRAINING_CONNECTOR": "manual-bundle",
@@ -303,9 +304,35 @@ def lab_tls(workdir: Path):
         subprocess.run(["docker", "rm", "-f", TLS_CONTAINER], capture_output=True)
 
 
-def lab_web_env(api_url: str, supabase_url: str) -> dict[str, str]:
+def control_url(port: int | None = None) -> str:
+    """The control factory's base URL: the port `ControlService.start` bound (the first free
+    of E3L's CONTROL_PORTS), its first by default (the build inlines no server name)."""
+    return f"http://127.0.0.1:{port or operate.CONTROL_PORTS[0]}"
+
+
+def lab_control_dsn(database: str, connect=None) -> str:
+    """LDP-R4: the control factory on its own login, 0043's `infrx_lab_control` (noinherit,
+    connection limit 10, exactly its grants), given LOGIN and a fresh password here as the
+    operator does out of band (never the owner DSN). The password stays in memory and the
+    factory's environment."""
+    import secrets
+    from urllib.parse import urlsplit
+
+    from psycopg import sql
+    if connect is None:
+        import psycopg
+        connect = psycopg.connect
+    owner, secret = harness.pg_dsn(database), secrets.token_hex(16)
+    with connect(owner, autocommit=True) as conn:
+        conn.execute(sql.SQL("alter role {} login password {}").format(
+            sql.Identifier(CONTROL_LOGIN), sql.Literal(secret)))
+    parts = urlsplit(owner)
+    return owner.replace(f"{parts.username}:{parts.password}@", f"{CONTROL_LOGIN}:{secret}@", 1)
+
+
+def lab_web_env(api_url: str, supabase_url: str, control: str | None = None) -> dict[str, str]:
     """The Lab web's names (infra/lab/app/lab.json `lab-web`), every API URL set."""
-    return {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "/tmp"),
+    return {"LAB_CONTROL_URL": control or control_url(), "PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "/tmp"),
             "NEXT_TELEMETRY_DISABLED": "1", "NEXT_PUBLIC_LAB_URL": LAB_ORIGIN,
             "NEXT_PUBLIC_SUPABASE_URL": supabase_url,
             "NEXT_PUBLIC_SUPABASE_ANON_KEY": stack.jwt("anon", ttl_s=12 * 3600),
@@ -370,6 +397,7 @@ def composition(workdir: Path):
             with operate.control_service(trip, workdir) as (control, _verifier):
                 control.env["INFRX_LAB_SUPABASE_URL"] = standin.url
                 control.env["INFRX_LAB_ORIGIN"] = LAB_ORIGIN
+                control.env["INFRX_LAB_DATABASE_URL"] = lab_control_dsn(trip.world.database)
                 try:
                     control.start(E3L_ENGINE_URL=trip.engine.base_url)
                 except (RuntimeError, AssertionError) as failed:
@@ -386,14 +414,14 @@ def composition(workdir: Path):
 
 
 @contextlib.contextmanager
-def lab_web(workdir: Path, api_url: str, supabase_url: str):
+def lab_web(workdir: Path, api_url: str, supabase_url: str, control: str | None = None):
     """`next start` on the runner's production build, behind the TLS terminator."""
     lab = harness.REPO_ROOT / "apps" / "lab"
     if not (lab / ".next" / "BUILD_ID").exists():
         world.invalid("the Lab web is not built: the runner's lab-build stage makes it")
     proc = spawn("lab-web", [str(lab / "node_modules" / ".bin" / "next"), "start", "-H",
                              "127.0.0.1", "-p", str(LAB_PORT)],
-                 lab_web_env(api_url, supabase_url), workdir, lab)
+                 lab_web_env(api_url, supabase_url, control), workdir, lab)
     try:
         with lab_tls(workdir) as origin:
             why = wait_ready(proc, f"http://127.0.0.1:{LAB_PORT}/", 90.0)

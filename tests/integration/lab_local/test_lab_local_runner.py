@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 import importlib.util
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -62,6 +63,7 @@ def test_lab_local_every_deployment_switch_is_on_in_the_composition():
     assert not set(lw.PENDING_SWITCHES) & switches
     env = lw.switch_env(Path("/nonexistent-spool"))
     assert all(env[name] == "true" for name in on)
+    assert env.get("LAB_TEACHER_URL") == f"http://127.0.0.1:{lw.TEACHER_PORT}"   # the local fake
 
 
 def test_lab_local_a_skip_is_never_a_pass_and_names_its_kind():
@@ -163,6 +165,7 @@ def test_lab_local_the_lab_web_gets_lab_jsons_names_and_no_service_key():
         (REPO / "infra" / "lab" / "app" / "lab.json").read_text())["env"]["lab-web"]}
     env = lw.lab_web_env("http://gw", "http://sb")
     assert set(env) - {"PATH", "HOME", "NEXT_TELEMETRY_DISABLED"} == declared
+    assert env["LAB_CONTROL_URL"] == lw.control_url()
     assert not any("SERVICE_ROLE" in name for name in env)
     assert env["NEXT_PUBLIC_LAB_URL"].startswith("https://")
 
@@ -175,3 +178,48 @@ def test_lab_local_pending_roles_are_proven_to_refuse_by_name():
     assert {"eval", "judge", "datasets"}.isdisjoint(lw.PENDING_ROLES)
     for lane, marker in lw.PENDING_ROLES.values():
         assert lane and marker
+
+
+def test_lab_local_a_journey_passes_only_when_every_case_ran_and_passed(tmp_path, monkeypatch):
+    """journeys() through a stubbed `node`: a non-zero exit is FAIL; a skipped, todo or
+    cancelled case, no case at all, or no summary is BLOCKED; only all-passed is PASS."""
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (stub / "node").write_text('#!/bin/sh\nprintf "%b" "$JOURNEY_OUT"\nexit "$JOURNEY_EXIT"\n')
+    (stub / "node").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stub}{os.pathsep}{os.environ['PATH']}")
+    (tmp_path / "apps" / "lab").mkdir(parents=True)          # node's cwd, as in the tree
+    monkeypatch.setattr(runner, "REPO", tmp_path)
+    summary = "# tests {}\\n# pass {}\\n# fail {}\\n# skipped {}\\n# todo 0\\n"
+    for code, text, want in ((1, summary.format(2, 1, 1, 0), runner.FAIL),
+                             (0, summary.format(2, 0, 0, 2), runner.BLOCKED),
+                             (0, summary.format(0, 0, 0, 0), runner.BLOCKED),
+                             (0, "no summary\\n", runner.BLOCKED),
+                             (0, summary.format(3, 3, 0, 0), runner.PASS)):
+        monkeypatch.setenv("JOURNEY_OUT", text)
+        monkeypatch.setenv("JOURNEY_EXIT", str(code))
+        rows = {row["stage"]: row for row in runner.journeys(tmp_path)}
+        assert rows["journey:datasets"]["status"] == want, (code, text)
+
+
+def test_lab_local_the_control_factory_runs_on_its_own_login_never_the_owner():
+    """LDP-R4: the control DSN is 0043's `infrx_lab_control` with a fresh password set as the
+    operator does (ALTER ROLE ... LOGIN PASSWORD), never the owner login."""
+    lw = world()
+    done = []
+
+    class Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, statement):
+            done.append(statement)
+
+    dsn = lw.lab_control_dsn("lab_local_x", connect=lambda *a, **k: Conn())
+    owner = lw.harness.pg_dsn("lab_local_x")
+    assert dsn.startswith("postgresql://infrx_lab_control:") and dsn != owner
+    assert dsn.split("@", 1)[1] == owner.split("@", 1)[1]
+    assert len(done) == 1 and "infrx_lab_control" in repr(done[0]) and "login" in repr(done[0])

@@ -130,6 +130,8 @@ def test_o03_the_datasets_role_starts(on):
 
 def test_o04_the_control_factory_serves_a_lab_session(on):
     assert "lab-control" not in on.refused, f"the control factory refused: {on.refused.get('lab-control')}"
+    assert on.control.env["INFRX_LAB_DATABASE_URL"].startswith(
+        f"postgresql://{lw.CONTROL_LOGIN}:"), "premise: the control factory's own login (LDP-R4)"
     answer = on.control.call("GET", "deployments", operate.session(operate.DEV_A))
     assert answer.status_code == 200, f"{answer.status_code} {answer.text[:300]}"
     refused = on.control.call("GET", "deployments", operate.session(operate.DEV_B))
@@ -207,7 +209,8 @@ def test_o06_the_consumer_path_serves_and_settles_once(on):
 def test_o07_the_lab_web_renders_every_page_family_signed_in(on):
     import httpx
     need(on, "lab-gateway")
-    with lw.lab_web(on.workdir, on.labgw.url, on.standin.url) as web:
+    with lw.lab_web(on.workdir, on.labgw.url, on.standin.url,
+                    str(on.control.http.base_url).rstrip("/")) as web:
         assert web.why is None, f"the Lab web did not start: {web.why}"
         cookie = (f"{lw.session_cookie(operate.ADMIN_A)}; "
                   f"infrx-lab-workspace={A}")
