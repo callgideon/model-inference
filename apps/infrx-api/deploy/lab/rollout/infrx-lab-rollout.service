@@ -19,7 +19,9 @@ StartLimitBurst=5
 
 [Service]
 User=ubuntu
-# Its own env file (ubuntu, 0600): the database, object store and allowlist only - no adapter,
+# Its own env file (ubuntu, 0600): the database, object store (LAB_S3_BUCKET, LAB_S3_ENDPOINT)
+# and allowlist, plus LAB_OPERATOR_ID (the UUID principal R2's pass decides as, WR-C5-PREFLIGHT;
+# the role exits 2 without it or the bucket) only - no adapter,
 # no budget, no cloud credential (the preflight refuses AWS_* and every adapter setting), so it
 # cannot buy capacity; nothing is mounted, so it cannot start containers either.
 EnvironmentFile=/etc/infrx-lab/rollout.env

@@ -59,7 +59,8 @@
       {"name": "LAB_TRAINING_CONNECTOR_TOKEN", "exposure": "secret", "purpose": "the connector's purpose-specific token (non-default adapter only)"},
       {"name": "LAB_TRAINING_BUDGET_USD", "exposure": "server", "purpose": "the training USD budget, above 0 and within the P-11 approval's cap"},
       {"name": "LAB_TRAINING_PAYER_REF", "exposure": "server", "purpose": "exactly the P-11 approval's named payer"},
-      {"name": "LAB_ROLLOUT_CONCURRENCY", "exposure": "server", "purpose": "rollout controller concurrency (pool_budget.py role default 1)"}
+      {"name": "LAB_ROLLOUT_CONCURRENCY", "exposure": "server", "purpose": "rollout controller concurrency (pool_budget.py role default 1)"},
+      {"name": "LAB_OPERATOR_ID", "exposure": "server", "purpose": "the rollout role's principal id (a UUID) that R2's pass and emergency-rollback record their decisions under (WR-C5-PREFLIGHT); unset = the rollout role exits 2"}
     ],
     "lab-edge": [
       {"name": "INFRX_LAB_CONTROL_SITE", "exposure": "server", "purpose": "the control origin's address in the App edge (default the placeholder above)"},

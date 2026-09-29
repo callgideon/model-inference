@@ -16,7 +16,9 @@ StartLimitBurst=5
 [Service]
 User=ubuntu
 # Its own env file (mode 0600): LAB_DATABASE_URL (the transaction pooler, 6543), the role's
-# concurrency and object-store names; never the gateway's /etc/marlin2b-gateway.env.
+# concurrency and object-store names (LAB_S3_BUCKET, required since WR-B3-3: the Lab registry
+# reads lab://<provider>/ artifacts; + LAB_S3_ENDPOINT); never the gateway's
+# /etc/marlin2b-gateway.env.
 EnvironmentFile=/etc/infrx-lab/checkpoints.env
 ExecStartPre=-/usr/bin/docker rm -f infrx-lab-checkpoints
 # Resource bounds: memory, CPU (and a quarter of the default CPU weight, so inference wins
