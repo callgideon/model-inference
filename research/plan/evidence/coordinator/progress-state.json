@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 301,
- "updated": "2026-09-29T15:49:26Z",
+ "revision": 302,
+ "updated": "2026-09-29T16:14:54Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8758,11 +8758,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T13:12:28Z",
-   "updated": "2026-09-29T15:49:26Z",
+   "updated": "2026-09-29T16:14:54Z",
    "blocker": null,
-   "next_action": "merge batch #51 (WR-LCR-1..5, minors, R245) → SR-LCR-1 via lab-sql-lw8 (0056)",
+   "next_action": "SR-LCR-1 (lab-sql-lw8) closes LCR-F1; then the `make lab-local` o05 control-factory rerun; 40-lab-control.sh LAB_S3_BUCKET input (I2L owner) carried",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9052,22 +9052,22 @@
   {
    "id": "W5-MERGE-51",
    "task": null,
-   "slice": "merge batch #51 (Opus): lab-control-routes a01c0a91 (+WR-LCR-1..5, lens minors, R245); workflow wf_196928e9-2a6",
+   "slice": "merge batch #51 (Opus): lab-control-routes a01c0a91 (+WR-LCR-1..5, lens minors, R245); workflow wf_196928e9-2a6; integrated (R245 on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-51",
    "worktree": ".claude/worktrees/codex-w5-merge-51",
    "base": "3f2ff579",
-   "head": null,
+   "head": "7c470106",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T15:49:26Z",
-   "updated": "2026-09-29T15:49:26Z",
+   "updated": "2026-09-29T16:14:54Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → the control unit serves every family (typed-503 until 0056)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
