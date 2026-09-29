@@ -65,9 +65,9 @@ def test_every_case_is_covered_by_a_mutant():
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
 def test_mutant_is_killed(mutant):
-    result = mutation_list.run_mutant(mutant)
+    result = _settled(mutant)
     support.blocked_off_linux(result)              # E2C (RV-12)
-    if (why := _not_run(result)) is not None:      # I-HARNESS-KEY
+    if (why := _not_run(mutant, result)) is not None:  # I-HARNESS-KEY
         pytest.skip(f"{why}: {mutant.name}")
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
                            f"{result.detail}. The cases {list(mutant.cases)} do not prove "
@@ -138,10 +138,31 @@ def _i8_busy() -> bool:
         os.close(fd)                               # closing releases a lock we took
 
 
-def _not_run(result, busy=_i8_busy) -> str | None:
-    """A mutant whose cases were all skipped proved nothing; while the i8 lock is held that
-    is the harness being busy (conftest's NOT RUN skip), reported as such, never a kill."""
-    if "its cases were skipped" in result.detail and busy():
+# The files whose cases take the i8_stack fixture (conftest.py), the only ones it can skip.
+I8_FILES = frozenset(f"tests/i/{name}.py" for name in
+                     ("test_pooler", "test_observe", "test_privilege_probe", "test_rollback_drill"))
+
+
+def _skipped_i8(mutant, result) -> bool:
+    return ("its cases were skipped" in result.detail
+            and bool(mutation_list.files_for(mutant.cases) & I8_FILES))
+
+
+def _settled(mutant, run=mutation_list.run_mutant, busy=_i8_busy):
+    """Review 0-F1: the copy may have been refused the lock by a holder that has released it
+    by now; a skipped i8 mutant with the lock free is rerun once, so the verdict is a real
+    run. ponytail: a lock that changes hands again during the rerun still races; loop if seen."""
+    result = run(mutant)
+    if _skipped_i8(mutant, result) and not busy():
+        result = run(mutant)
+    return result
+
+
+def _not_run(mutant, result, busy=_i8_busy) -> str | None:
+    """A mutant whose i8 cases were all skipped proved nothing; while the i8 lock is held that
+    is the harness being busy (conftest's NOT RUN skip), reported as such, never a kill. A
+    skip in a mutant that names no i8 case stays misdeclared (review 0-F2)."""
+    if _skipped_i8(mutant, result) and busy():
         return f"NOT RUN (i8 harness busy): another run holds {I8_LOCK}"
     return None
 
@@ -182,21 +203,39 @@ def test_a_held_i8_harness_leaves_the_baseline_green(layout, green):
 
 
 R = mutation_list.Result
+SKIPPED = R(mutation_list.Outcome.misdeclared, "its cases were skipped: 1 skipped")
+I8_MUTANT = mutation_list.Mutant("i8", "nothing", mutation_list.P, "x", "y", SEAM_CASES[:1])
+PLAIN_MUTANT = mutation_list.Mutant("plain", "nothing", mutation_list.P, "x", "y", SEAM_CASES[1:])
 NOT_RUN_CASES = (
-    ("skipped while held", R(mutation_list.Outcome.misdeclared, "its cases were skipped: 1 skipped"),
-     lambda: True, True),
-    ("skipped while free", R(mutation_list.Outcome.misdeclared, "its cases were skipped: 1 skipped"),
-     lambda: False, False),
-    ("killed while held", R(mutation_list.Outcome.killed, "1 failed"), lambda: True, False),
-    ("survived while held", R(mutation_list.Outcome.survived, "1 passed"), lambda: True, False),
+    ("skipped while held", I8_MUTANT, SKIPPED, lambda: True, True),
+    ("skipped while free", I8_MUTANT, SKIPPED, lambda: False, False),
+    ("killed while held", I8_MUTANT, R(mutation_list.Outcome.killed, "1 failed"), lambda: True, False),
+    ("survived while held", I8_MUTANT, R(mutation_list.Outcome.survived, "1 passed"), lambda: True, False),
+    # review 0-F2: a skip in a mutant that names no i8 case is misdeclared, lock or not
+    ("non-i8 skipped while held", PLAIN_MUTANT, SKIPPED, lambda: True, False),
 )
 
 
-@pytest.mark.parametrize("name,result,busy,skipped", NOT_RUN_CASES, ids=[c[0] for c in NOT_RUN_CASES])
-def test_only_a_skipped_mutant_is_not_run_and_only_while_i8_is_held(name, result, busy, skipped):
-    """Oracle: a survivor or a kill hidden as NOT RUN, or a skip reported as a pass when
-    the lock is free."""
-    assert (_not_run(result, busy) is not None) is skipped, name
+@pytest.mark.parametrize("name,mutant,result,busy,skipped", NOT_RUN_CASES,
+                         ids=[c[0] for c in NOT_RUN_CASES])
+def test_only_a_skipped_i8_mutant_is_not_run_and_only_while_i8_is_held(name, mutant, result,
+                                                                      busy, skipped):
+    """Oracle: a survivor, a kill or a non-i8 misdeclaration hidden as NOT RUN, or a skip
+    reported as a pass when the lock is free."""
+    assert (_not_run(mutant, result, busy) is not None) is skipped, name
+
+
+def test_a_lock_that_changes_hands_mid_run_is_rerun_not_misdeclared():
+    """Review 0-F1 oracle: the copy's i8 cases were skipped as busy, the holder released
+    the lock before the probe; the old code asserted `misdeclared`. A rerun gives the real
+    result."""
+    results = iter((SKIPPED, R(mutation_list.Outcome.killed, "1 failed")))
+    runs = []
+    result = _settled(I8_MUTANT, run=lambda m: runs.append(m) or next(results),
+                      busy=lambda: False)
+    assert result.killed and len(runs) == 2
+    held = _settled(I8_MUTANT, run=lambda m: SKIPPED, busy=lambda: True)
+    assert _not_run(I8_MUTANT, held, lambda: True) is not None     # held: NOT RUN, no rerun
 
 
 def test_the_busy_probe_sees_another_runs_lock():
