@@ -37,6 +37,8 @@ C = "lab/control/__init__.py"
 F = "lab/control/fakes.py"
 OPS = "lab/control/operations.py"
 APP = "lab/control/app.py"
+ROUTE = "gateway/routes/lab_control.py"
+STORE = "state/lab_control.py"
 
 SEAM = "test_lab_control__a_provider_never_mutates_another_providers_registry"
 ROLES = "test_lab_control__roles_bound_every_operation"
@@ -59,6 +61,9 @@ O_APP_REG = "test_operations__the_lab_apps_registration_shape_registers"
 O_SERVING = "test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins"
 O_APP = "test_control_app__serves_readiness_and_no_consumer_route"
 O_MOUNT = "test_control_app__mounts_only_the_lab_routers_on_its_own_settings"
+O_REJECT = "test_operations__an_operator_rejects_a_proposal_and_it_publishes_nothing"
+O_TERMINAL = "test_operations__a_retired_proposal_lists_as_a_terminal_row"
+O_ROUTE = "test_control_route__only_an_operator_rejects_a_proposal"
 READ_GUARD = ("        await self.control.access.require(actor.user_id, actor.provider_org_id,\n"
               "                                          ProviderCapability.read_aggregate_health)\n")
 
@@ -178,7 +183,8 @@ MUTANTS: tuple[Mutant, ...] = (
        READ_GUARD + "        return [await self._deployment(d)",
        "        return [await self._deployment(d)", O_ACTOR),
     _m("proposals_unguarded", "the proposal list is a current member's", OPS,
-       READ_GUARD + "        events = await", "        events = await", O_ACTOR),
+       READ_GUARD + "        return await self._proposals(", "        return await self._proposals(",
+       O_ACTOR),
     _m("register_role_after_lookup", "a role without registration learns no model name", OPS,
        "        await self.control.access.require(user, provider, ProviderCapability.manage_dev_deployment)\n",
        "", O_ACTOR),
@@ -271,6 +277,53 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("allocation_replayed_twice", "a replayed operation id appends nothing",
        F, "        if prior is not None:\n            return prior\n",
        "        if False:\n            return prior\n", WALLET),
+    # --- E3L-F4: the operator's rejection ---------------------------------------------------
+    _m("reject_unnamed", "a rejection is audited under the operator who made it", C,
+       "        return await self.store.reject(deployment_revision_id, actor=operator.principal,",
+       '        return await self.store.reject(deployment_revision_id, actor="operator",',
+       O_REJECT),
+    _m("reject_reason_dropped", "a rejection records the operator's reason", C,
+       "        return await self.store.reject(deployment_revision_id, actor=operator.principal,\n"
+       "                                       reason=reason)",
+       "        return await self.store.reject(deployment_revision_id, actor=operator.principal,\n"
+       '                                       reason="rejected")', O_REJECT),
+    _m("reject_any_state", "only an open proposal is rejected (never twice, never a listed one)",
+       F, "        if d.state is not S.proposed_public:    # never twice, never a listed",
+       "        if False:    # never twice, never a listed", O_REJECT),
+    _m("reject_without_reason", "a rejection states its reason", F,
+       "        if not 1 <= len(reason.strip()) <= 500:\n", "        if False:\n", O_REJECT),
+    _m("rejected_stays_public", "a retired revision is never public (PgControlStore's read)", F,
+       '            "state": S.retired, "visibility": v2.Visibility.private})',
+       '            "state": S.retired})', O_REJECT),
+    _m("reject_unaudited_start", "the audit keeps the state a rejection moved from", F,
+       '                    before={"state": S.proposed_public.value})',
+       "                    before=None)", O_REJECT),
+    _m("operator_bit_ignored", "only a platform operator is one", F,
+       "        return user_id in self.operators", "        return True", O_REJECT),
+    _m("operator_door_open", "the operator door refuses a non-operator", OPS,
+       "        if not await self.control.store.operator(user_id):\n", "        if False:\n",
+       O_REJECT, O_ROUTE),
+    _m("operator_principal_claimed", "the audited actor is the operator's own user", OPS,
+       'principal=f"operator:{user_id}")', 'principal="operator")', O_REJECT),
+    _m("reject_anything", "only one of the Lab's proposals is rejected", OPS,
+       "        if not mine:\n            raise errors.NotFound(\"no such proposal\")\n", "",
+       O_REJECT),
+    _m("rejection_undated", "a rejected proposal carries the operator's instant", OPS,
+       '        rejected = {e.subject: e.at for e in events if e.action == "lab_transition"',
+       '        rejected = {e.subject: e.at for e in events if False', O_REJECT, O_ROUTE),
+    _m("reject_body_before_operator", "the operator is checked before the body is read (R175)",
+       ROUTE, "        operator = await operations().operator(\n"
+       "            await lab_auth.authenticate(request, control.sessions))\n"
+       "        decision = await body(request, Rejection)\n",
+       "        decision = await body(request, Rejection)\n"
+       "        operator = await operations().operator(\n"
+       "            await lab_auth.authenticate(request, control.sessions))\n", O_ROUTE),
+    _m("reject_reason_optional", "a rejection body names its reason", ROUTE,
+       "    reason: str = Field(min_length=1, max_length=500)",
+       '    reason: str = "declined"', O_ROUTE),
+    _m("reject_unmounted", "the operator's rejection is served", ROUTE,
+       '    @app.post(CONTROL_PREFIX + "/proposals/{proposal_id}/reject")\n',
+       '    @app.post(CONTROL_PREFIX + "/proposals/{proposal_id}/reject-x")\n', O_ROUTE),
 )
 
 #: The service's edits, killed by the same cases on PostgreSQL (after L3-SQL merges).
@@ -280,7 +333,20 @@ MUTANTS: tuple[Mutant, ...] = (
 PG_EQUIVALENT = frozenset({"dev_revision_of_any_environment"})
 PG_MUTANTS: tuple[Mutant, ...] = tuple(
     dataclasses.replace(m, name=f"pg_{m.name}") for m in MUTANTS
-    if (m.file == C and m.name not in PG_EQUIVALENT) or m.file == APP)
+    if (m.file == C and m.name not in PG_EQUIVALENT) or m.file == APP) + (
+    # E3L-F4: PgControlStore's own decisions, killed by the same cases on PostgreSQL only
+    _m("pg_store_retired_read_public", "a retired revision reads back private, never a "
+       "ValidationError (E3L-F4)", STORE, '    if doc["state"] == "retired":\n',
+       "    if False:\n", O_TERMINAL),
+    _m("pg_store_reason_dropped", "the store sends the operator's reason", STORE,
+       '"deployment_revision_id": deployment_revision_id, "actor": actor,\n'
+       '            "reason": reason}))',
+       '"deployment_revision_id": deployment_revision_id, "actor": actor,\n'
+       '            "reason": ""}))', O_REJECT),
+    _m("pg_store_operator_bit_ignored", "the store answers the profile's operator bit", STORE,
+       '        return (await self._call("lab_control_operator", {"user_id": user_id}))'
+       '["operator"]', "        return True", O_REJECT),
+)
 
 
 def case_names() -> set[str]:

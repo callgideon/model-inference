@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from infrx.contracts.v2.money_units import Credit
-from infrx.contracts.v2.records import (DeploymentState, Environment, RateCardSnapshot)
+from infrx.contracts.v2.records import (DeploymentState, Environment, RateCardSnapshot,
+                                        Visibility)
 from infrx.state.lab_control import PgControlStore
 
 from .test_adapter_units import _Conn
@@ -83,3 +84,20 @@ def test_reads__a_malformed_id_is_absent_without_a_query() -> None:
     assert _ok(store.model_provider("nope")) is None
     assert _ok(store.endpoint_alias("nope")) is None
     assert conn.sent == [], conn.sent
+
+
+def test_reject__sends_the_operator_and_reason_and_reads_the_terminal_row_private() -> None:
+    """E3L-F4: `reject` carries the operator and the reason; the retired proposal the RPC
+    answers (its row still `public`, 0007's immutable visibility) reads back as a private
+    record - never a ValidationError; the operator door asks the profile of a uuid only."""
+    retired = {**ROW, "environment": "prod", "visibility": "public", "state": "retired"}
+    store, conn = _store(retired, {"operator": True})
+    row = _ok(store.reject(D, actor="operator:u", reason="not ready"))
+    assert (row.state, row.visibility) == (DeploymentState.retired, Visibility.private)
+    assert _ok(store.operator(D)) is True
+    assert _ok(store.operator("nope")) is False
+    assert [_sent(conn, n) for n in range(2)] == [
+        ("lab_control_reject", {"deployment_revision_id": D, "actor": "operator:u",
+                                "reason": "not ready"}),
+        ("lab_control_operator", {"user_id": D})]
+    assert len(conn.sent) == 2, conn.sent

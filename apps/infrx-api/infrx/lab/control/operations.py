@@ -43,6 +43,9 @@ class ControlOperations(Protocol):
     async def register(self, actor: Actor, registration: Registration) -> Deployment: ...
     async def smoke(self, actor: Actor, deployment_revision_id: str) -> Deployment: ...
     async def propose(self, actor: Actor, kind: str, deployment_revision_id: str) -> Proposal: ...
+    async def operator(self, user_id: str) -> OperatorSession: ...
+    async def reject(self, operator: OperatorSession, proposal_id: str,
+                     reason: str) -> Proposal: ...
 
 
 class ControlReads(Protocol):
@@ -103,9 +106,17 @@ class Operations:
     async def proposals(self, actor: Actor) -> list[Proposal]:
         await self.control.access.require(actor.user_id, actor.provider_org_id,
                                           ProviderCapability.read_aggregate_health)
-        events = await self.control.store.events(actor.provider_org_id)
+        return await self._proposals(actor.provider_org_id)
+
+    async def _proposals(self, provider_org_id: str) -> list[Proposal]:
+        """Every `lab_propose` of the provider; a proposal no operator listed and no longer
+        `proposed_public` is `rejected` (E3L-F4: the operator's decision, or the platform's
+        retirement - then with no instant)."""
+        events = await self.control.store.events(provider_org_id)
         published = {e.after.get("deployment_revision_id"): e.at for e in events
                      if e.action == "lab_publish"}
+        rejected = {e.subject: e.at for e in events if e.action == "lab_transition"
+                    and (e.before or {}).get("state") == S.proposed_public}
         found = []
         for e in (e for e in events if e.action == "lab_propose"):
             d = await self.control.store.deployment(e.subject)
@@ -114,8 +125,30 @@ class Operations:
                      else "approved" if decided else "rejected")
             found.append(Proposal(proposal_id=e.subject, kind="publish",
                                   deployment_revision_id=e.after["source"], state=state,
-                                  proposed_at=e.at, decided_at=decided))
+                                  proposed_at=e.at,
+                                  decided_at=decided or rejected.get(e.subject)))
         return found
+
+    # --- the operator's door (E3L-F4) ---------------------------------------------------
+    async def operator(self, user_id: str) -> OperatorSession:
+        """The session user as a platform operator (`profiles.is_operator`), audited as
+        `operator:<user_id>` (0025's naming); anyone else is `forbidden`."""
+        if not await self.control.store.operator(user_id):
+            raise errors.Forbidden("an operator decides a proposal")
+        return OperatorSession(ops=None, principal=f"operator:{user_id}")
+
+    async def reject(self, operator: OperatorSession, proposal_id: str,
+                     reason: str) -> Proposal:
+        """Decline a provider's open publication proposal; anything that is not one of the
+        Lab's proposals is `not_found`."""
+        d = await self.control.store.deployment(proposal_id)
+        mine = d and [p for p in await self._proposals(d.provider_org_id)
+                      if p.proposal_id == proposal_id]
+        if not mine:
+            raise errors.NotFound("no such proposal")
+        await self.control.reject(operator, proposal_id, reason=reason)
+        return next(p for p in await self._proposals(d.provider_org_id)
+                    if p.proposal_id == proposal_id)
 
     async def register(self, actor: Actor, registration: Registration) -> Deployment:
         """A new serving revision of the provider's model over its pinned weights, then its
