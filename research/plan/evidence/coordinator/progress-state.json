@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 277,
- "updated": "2026-09-29T07:46:58Z",
+ "revision": 278,
+ "updated": "2026-09-29T08:00:11Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7945,11 +7945,11 @@
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T07:05:47Z",
-   "updated": "2026-09-29T07:46:58Z",
+   "updated": "2026-09-29T08:00:11Z",
    "blocker": null,
-   "next_action": "merge batch #38 (Opus; WR-LAC-1/2, R223) → E3L-F4/F5 in lab-control-2",
+   "next_action": "J02 rejection on the real L3 after lab-control-2",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -8082,22 +8082,22 @@
   {
    "id": "W5-MERGE-38",
    "task": null,
-   "slice": "merge batch #38 (Opus): lab-app-control 62d5130c (+WR-LAC-1/2, R223); workflow wf_fe012911-849",
+   "slice": "merge batch #38 (Opus): lab-app-control 62d5130c (+WR-LAC-1/2, R223); workflow wf_fe012911-849; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-38",
    "worktree": ".claude/worktrees/codex-w5-merge-38",
    "base": "97b3689b",
-   "head": null,
+   "head": "82a34950",
    "isolation": {
     "ports": "l4 57503",
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T07:46:58Z",
-   "updated": "2026-09-29T07:46:58Z",
+   "updated": "2026-09-29T08:00:11Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
