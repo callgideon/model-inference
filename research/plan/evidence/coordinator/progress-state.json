@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 315,
- "updated": "2026-09-29T20:21:25Z",
+ "revision": 316,
+ "updated": "2026-09-29T21:31:03Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9476,22 +9476,22 @@
   {
    "id": "W5-LAB-OBSERVE-4",
    "task": "E5L",
-   "slice": "WR-LC-O01: o01 bound over the capture seam (TRACE_PUMPS on in the box processes; consented traces ship, no secret in any spool byte); `--only o01` + full `make lab-observe` 18/0/0 (Opus); workflow wf_21e2ad0c-d51",
+   "slice": "WR-LC-O01: o01 bound over the capture seam (TRACE_PUMPS on in the box processes; consented traces ship, no secret in any spool byte); `--only o01` + full `make lab-observe` 18/0/0 (Opus); workflow wf_21e2ad0c-d51; ACCEPT_WITH_FIXES at 5cd59091 (o01 bound over the seam; make lab-observe 18/0/0 at c25405cc, then with the token echoed 18/1/0 — the async half FAILs honestly on R8 → lab-capture-2; 23 stack mutants)",
    "agent": "opus",
    "branch": "codex/w5-lab-observe-4",
    "worktree": ".claude/worktrees/codex-w5-lab-observe-4",
    "base": "be6b2fde",
-   "head": "d439fc01",
+   "head": "5cd59091",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T19:01:01Z",
-   "updated": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T21:31:03Z",
    "blocker": null,
-   "next_action": "resumed by run id 2026-09-29T20:15Z (the limit lifted)",
+   "next_action": "merge batch #58 (RV-2/RV-3, R254) → o01 sync PASS; async-echo FAIL until lab-capture-2",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9641,6 +9641,39 @@
     "apps/infrx-api/infrx/state/lab_variants.py",
     "apps/infrx-api/tests/l3sql/",
     "research/plan/evidence/l/LAB-SQL-LW9-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-58",
+   "task": null,
+   "slice": "merge batch #58 (Opus): lab-observe-4 5cd59091 (+RV-2 output assertion, RV-3 beta sync, evidence minors, R254)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-58",
+   "worktree": ".claude/worktrees/codex-w5-merge-58",
+   "base": "34e6ab91",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T21:31:03Z",
+   "updated": "2026-09-29T21:31:03Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → E5L on the tip: o01 sync PASS, async-echo FAIL[WR-LO4-R8]",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_observe/",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/e/E5L-c25405c.md"
    ],
    "wiring_requests": []
   }
