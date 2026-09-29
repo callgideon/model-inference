@@ -1,5 +1,11 @@
 # LAB-SQL-LW8: SR-LCR-1 (LCR-F1 closed): 0056 grants the Lab control login its families' route halves (`6f28a64`)
 
+> **Correction (fix round, head `8ae508e6`, finding 0-LW8-R1):** the grant at `6f28a64c` missed
+> 0041's `lab_blocked_samples` / `lab_permitted_samples`. The datasets and pipelines families
+> still answered 503 on the Lab login once a record existed, so LCR-F1 was **not** closed at
+> `6f28a64c`. 0056 now grants 32 functions and the login executes 45. "30" below is the
+> pre-fix count, kept as history. See "Fix round" at the end. Apply WR-LW8-1 only from `8ae508e6`.
+
 Lane lab-sql-lw8 (wave LW6, task L3 / lab-sql), branch `codex/w5-lab-sql-lw8`, base `3f2ff579`,
 implementation head `6f28a64c` (evidence commit on top). Opus implementer. Nothing hosted, no box,
 no AWS/SSM/S3/Vercel, no secrets; task-local docker on key l4 (57503) only.
@@ -160,3 +166,56 @@ and `tests/d/test_code_mutants_lw8.py` pins the set."
 optimistic 0.3 h / likely 0.75 h / pessimistic 2 h, confidence medium. Basis: lane work done
 (0 survivors); remaining = coordinator merge (conflict on the PG matrix with #51: take this
 side) + WR-LW8-3 reconciliation with 0055 (≈15 min) + one `make lab-local` rerun (≈45 min).
+
+## Fix round (0-LW8-R1, tests `dd4391dd` → grant `8ae508e6`)
+
+**Finding.** `PgLabDataStore.restrictions` always returns `PgSampleRestrictions`. On the unit,
+`lineage.status` (GET `versions/{ref}`) runs `infrx.lab_blocked_samples`. `lineage.permitted` runs
+`infrx.lab_permitted_samples`, and it is reached from `versions.derive` / `export` / `read_part`,
+from pipelines `import_labels` / `select` / `export`, and from training `prepare`. Neither
+function was in 0056. The matrix missed the gap because every family probe stops at
+`lab_resolve`'s 404 for the absent `ds@1`. The exact-set pin in `test_code_mutants_lw8.py`
+locked the gap in.
+
+**Fix.**
+- 0056 grants `infrx.lab_blocked_samples(jsonb)` and `infrx.lab_permitted_samples(jsonb)`, with
+  the datasets header line extended.
+- `GRANTED` gains both, and the new mutant `lw8_drop_permitted` is killed by HOLDS.
+- The l4 PG case now runs both functions on the Lab login. Anything but 42501 counts as
+  granted.
+
+**`lab_bound_samples` / `lab_tombstone_samples`: decided, not granted.** These are 0041's writes.
+Their only callers are `lineage.select` (the datasets worker's reconcile, `lab/workers/__main__.py`
+`_datasets`), `lineage.tombstone` (T3's deletion hook, WR-N3-2a) and `lineage.backfill` (one-shot).
+No route handler reaches them. The exact-set check refuses them to the login as "extra".
+
+Fail-first (tests commit, 0056 unchanged), l4:
+- `INFRX_D_TASK=l4 uv run --frozen pytest -q -m pg tests/i/lab_control/test_control_routes_pg.py`
+  → exit 1: `Failed: lab_blocked_samples: 42501 on the Lab login`.
+- `INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_code_mutants_lw8.py -k "not sql_mutant"`
+  → exit 1, 3 failed:
+  - HOLDS `missing ['lab_blocked_samples', 'lab_permitted_samples']`
+  - BROWSER `{'lab_permitted_samples': ['service_role'], 'lab_blocked_samples': ['service_role']}`
+  - list guard `misdeclared SQL anchors: ['lw8_drop_permitted: 0']`
+
+After the fix (`8ae508e6`), from `apps/infrx-api`, l4:
+
+| # | Command | Exit | Result |
+|---|---|---|---|
+| F1 | `INFRX_MUTANTS=all INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_code_mutants_lw8.py` | 0 | 14 passed: 3 checks, 3 guards, **8 mutants killed, 0 survivors** |
+| F2 | `INFRX_D_TASK=l4 uv run --frozen pytest -q -m pg tests/i/lab_control` | 0 | 1 passed: lab = owner = `EXPECTED`, worker claim 42501, both 0041 reads run |
+| F3 | `INFRX_D_TASK=l4 INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_control` | 0 | 29 passed (the lab_control mutant list: 0 survivors) |
+| F4 | root: `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/test_harness.py -k migration_set` | 0 | 1 passed |
+| F5 | `INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_l3sql_reads.py tests/d/test_d8_requests.py tests/d/test_upgrade_lab.py tests/d/test_l3sql_control.py tests/d/test_c2rpc_units.py tests/d/test_l2sql_access.py tests/d/test_c2rpc_content.py tests/i/lab_control/test_control_routes.py` | 0 | 65 passed (every suite that pins 0041 or `infrx_lab_control`) |
+| F6 | `uv run --frozen ruff check` on the two test files | 0 | clean |
+| F7 | reviewer's probe `rv-lw8b-probe_pg.py`, copied temporarily into `tests/g/lab_datasets/` (not committed), `INFRX_D_TASK=l4` | 0 | 2 passed. Owner and lab give the same statuses: GET `versions/{ref}` 200, POST `exports` 200, POST `pipelines/label-imports` 201. Direct SQL: `lab_blocked_samples ok`, `lab_permitted_samples ok` |
+
+The whole `tests/integration/test_harness.py` has 1 failure, `test_nothing_in_this_directory_points_at_production`.
+It fails on files that are already on base `3f2ff579` (`lab_local/mutants.py`, `backend/test_certify.py`,
+`ops/test_create_test_user.py`), so this lane did not cause it and does not own it. `make api-test` was not rerun. The
+fix changes only two grants, and F5 covers every suite that pins them.
+
+**Corrected WR-LW8-1 texts.** In the WR-LW8-1 texts above, read "30 route halves" as **32**, and
+apply them only from `8ae508e6`. Families that reach 0041 through lineage (datasets
+versions/derive/export, pipelines label imports/select/export, training prepare) are now served
+on the unit. Without that, LCR-F1 was not closed. The proposed ruling is unchanged.

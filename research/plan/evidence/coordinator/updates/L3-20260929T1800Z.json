@@ -1,15 +1,75 @@
-{"task": "L3", "slice": "SR-LCR-1 (lab-sql-lw8): 0056_lab_control_grants.sql, LCR-F1 closed", "activity": "review",
- "head": "6f28a64c", "worktree": ".claude/worktrees/codex-w5-lab-sql-lw8", "branch": "codex/w5-lab-sql-lw8",
- "owned_paths": ["apps/app/supabase/migrations/0056_lab_control_grants.sql", "tests/integration/test_harness.py", "apps/infrx-api/tests/d/test_code_mutants_lw8.py", "Makefile", "apps/infrx-api/tests/i/lab_control/test_control_routes_pg.py", "research/plan/evidence/l/LAB-SQL-LW8-6f28a64.md"],
+{
+ "task": "L3",
+ "slice": "SR-LCR-1 (lab-sql-lw8): 0056_lab_control_grants.sql (32 route halves after fix round 0-LW8-R1), LCR-F1 closed at 8ae508e6",
+ "activity": "review",
+ "head": "8ae508e6",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw8",
+ "branch": "codex/w5-lab-sql-lw8",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0056_lab_control_grants.sql",
+  "tests/integration/test_harness.py",
+  "apps/infrx-api/tests/d/test_code_mutants_lw8.py",
+  "Makefile",
+  "apps/infrx-api/tests/i/lab_control/test_control_routes_pg.py",
+  "research/plan/evidence/l/LAB-SQL-LW8-6f28a64.md"
+ ],
  "commands": [
-  {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_code_mutants_lw8.py", "exit": 0, "summary": "13 passed; 7 SQL mutants killed, 0 survivors"},
-  {"cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q -m pg tests/i/lab_control", "exit": 0, "summary": "1 passed; lab column = owner column = EXPECTED (red before 0056: datasets/pipelines/releases 503)"},
-  {"cmd": "INFRX_MUTANTS=all INFRX_LAB_API_PG=1 INFRX_D_TASK=l4 uv run --frozen pytest -q tests/i/lab_control/test_mutants.py", "exit": 0, "summary": "22 passed, 0 survivors (clean run; two earlier runs broken_runner under l4 lock contention)"},
-  {"cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_d8_requests.py tests/d/test_l3sql_reads.py tests/d/test_l3sql_control.py tests/d/test_upgrade_lab.py tests/d/test_l2sql_access.py tests/d/test_upgrade_split.py tests/d/test_c6_reads.py", "exit": 0, "summary": "52 passed"},
-  {"cmd": "tests/integration/test_harness.py -k migration_set", "exit": 0, "summary": "1 passed"},
-  {"cmd": "INFRX_D_TASK=l4 make api-test", "exit": 2, "summary": "6771 passed, 7 failed (all test_outbox_relay[valkey] HarnessBusy on the shared d2 valkey lock), 176 skipped; rerun of test_outbox_relay 20 passed"}],
- "estimate": {"optimistic_h": 0.3, "likely_h": 0.75, "pessimistic_h": 2, "confidence": "medium",
-  "basis": "lane done with 0 survivors; remaining = coordinator merge (PG matrix conflict with #51: take the post-grant side) + WR-LW8-3 reconcile with lw7's 0055 (~15 min) + one make lab-local rerun (~45 min)", "at": "2026-09-29T18:00Z"},
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/test_code_mutants_lw8.py",
+   "exit": 0,
+   "summary": "14 passed; 8 SQL mutants killed, 0 survivors (red before the grant: 3 failed)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q -m pg tests/i/lab_control",
+   "exit": 0,
+   "summary": "1 passed; lab = owner = EXPECTED; worker claim 42501; lab_blocked/permitted_samples run on the Lab login (red before: 42501)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_control",
+   "exit": 0,
+   "summary": "29 passed, 0 survivors"
+  },
+  {
+   "cmd": "tests/integration/test_harness.py -k migration_set",
+   "exit": 0,
+   "summary": "1 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q tests/d/{test_l3sql_reads,test_d8_requests,test_upgrade_lab,test_l3sql_control,test_c2rpc_units,test_l2sql_access,test_c2rpc_content}.py tests/i/lab_control/test_control_routes.py",
+   "exit": 0,
+   "summary": "65 passed"
+  },
+  {
+   "cmd": "reviewer probe rv-lw8b-probe_pg.py (temporary copy, l4)",
+   "exit": 0,
+   "summary": "2 passed; lab = owner: versions 200, exports 200, label-imports 201"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.3,
+  "likely_h": 0.75,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "fix round done, 0 survivors; remaining = coordinator merge + WR-LW8-3 reconcile with 0055 (~15 min) + one make lab-local rerun (~45 min)",
+  "at": "2026-09-29T19:00Z"
+ },
  "blockers": [],
- "wiring_requests": ["WR-LW8-1 runbook 08 SR-LCR-1 rows -> served (text in evidence)", "WR-LW8-2 make lab-local o05 control-factory rerun", "WR-LW8-3 lw7's 0055 route functions need the infrx_lab_control grant + GRANTED/BEFORE update"],
- "evidence": ["research/plan/evidence/l/LAB-SQL-LW8-6f28a64.md"]}
+ "wiring_requests": [
+  "WR-LW8-1 runbook 08 SR-LCR-1 rows -> served (text in evidence; '30' reads 32; apply only from 8ae508e6)",
+  "WR-LW8-2 make lab-local o05 control-factory rerun",
+  "WR-LW8-3 lw7's 0055 route functions need the infrx_lab_control grant + GRANTED/BEFORE update"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/LAB-SQL-LW8-6f28a64.md"
+ ],
+ "fix_round": {
+  "findings": {
+   "0-LW8-R1": "fixed"
+  },
+  "commits": [
+   "dd4391dd tests first (red)",
+   "8ae508e6 0056 + lab_blocked_samples/lab_permitted_samples"
+  ],
+  "decided": "lab_bound_samples/lab_tombstone_samples not granted: callers lineage.select/tombstone/backfill are worker/T3 only"
+ }
+}
