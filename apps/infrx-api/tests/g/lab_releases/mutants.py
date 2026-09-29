@@ -259,7 +259,8 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        "            except errors.Conflict:     # R248", PG_CASE, file=P),
     _m("verdict_never_evaluated_pg", "a running release's verdict is R2's evaluate over real "
        "0054 and B4's experiments, not null", NOT_RUNNING,
-       "        if True:\n            return None\n", COMP_PG_CASE, file=P),
+       "        if True:\n            return None\n", COMP_PG_CASE, file=P,
+       dies_by=("TypeError",)),       # the case reads the null verdict's action
     _m("verdict_reads_absent_pg", "LAB_RELEASES composes B4's experiments (0043) on real "
        "PostgreSQL", "PgLabReads(connect)),", "None),", COMP_PG_CASE, file=P),
 )
