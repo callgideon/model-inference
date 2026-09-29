@@ -1,0 +1,95 @@
+.F                                                                                                                                                                                                                                                                                                                                                                                                       [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+_________________________________________________________________________________________________________________________________________________________________ test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas _________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_rollout.lab_world.Lab object at 0x7d824d353530>, workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...8e137e1f2b/scratchpad/k09/red-stub/cases/test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas')
+
+    def test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas(lab, workdir):
+        """WR-C5-K09 (R216, R228): a controller records D9's rollback and dies before L3's alias
+        CAS - the alias still serves the candidate the policy names. The bare `python -m
+        infrx.lab.workers rollout` (WR-R2-3, nothing injected: LAB_S3_BUCKET + LAB_OPERATOR_ID)
+        reads the plan stored beside the release (`lab/<p>/releases/<policy_id>/plan.json`, D9's
+        digest) and converges the alias to the baseline on its FIRST pass, with no second
+        decision. A running release beside it is held, never evaluated: R1's aggregates are
+        unreadable (NoLive) - the breach half waits on WR-C5-LIVE (evidence, not this case)."""
+        import contextlib
+        import os
+        import signal
+        import subprocess
+        import sys
+        import time
+        import uuid
+        harness = lw.harness
+        s3, prefix = harness.s3_client(), f"{harness.OBJECT_PREFIX}{uuid.uuid4().hex}/"
+        with contextlib.suppress(Exception):                # already there
+            s3.create_bucket(Bucket=harness.S3_BUCKET)
+    
+        def store_plan(policy_id: str) -> None:
+            s3.put_object(Bucket=harness.S3_BUCKET, ContentType="application/json",
+                          Key=f"{prefix}lab/{lab.NEMO}/releases/{policy_id}/plan.json",
+                          Body=lw.plan().model_dump_json().encode())
+    
+        listed = lab.listing()
+        base = lab.sql("select infrx.lab_serving_ref(%s)", listed[1])[0][0]
+        promoted = lab.promote(lab.q8.W["serving_2"], 0x9a)
+        candidate = lab.sql("select infrx.lab_serving_ref(%s)", promoted)[0][0]
+        # the policy names the candidate as L3's alias reads it: a later pass matches named refs
+        # only (R216); a promotion under another deployment revision is the operator's stop's
+        policy, ref = lab.launch({**lab.policy(weights=(5_000,), candidates=(candidate,)),
+                                  "baseline_ref": base}, lw.plan())
+        now = lab.now()
+        counts = {(policy.policy_id, "candidate"): 20, (policy.policy_id, "baseline"): 20}
+        killed = lab.controller(Partitioned(lab.serving(), fail=1))
+        process = None
+        try:
+            with pytest.raises(ConnectionError):
+                run(killed.step(policy, ref, lw.plan(),
+                                lw.live(counts, policy.policy_id, now=now, p99=5_001), now=now))
+            decided = lab.decisions(ref)
+            assert run(lab.releases().release(ref)).state == "rolled_back"
+            assert decided == [("rollback", "rolled_back", lw.CONTROLLER, ["latency"])]
+            assert lab.listing()[1] == promoted, "the killed controller's alias left the candidate"
+            store_plan(policy.policy_id)
+            # a running release beside it (one live per endpoint): R1's aggregates are unreadable
+            held, held_ref = lab.launch(lab.policy(weights=(5_000,), candidates=(lab.CAND,)),
+                                        lw.plan())
+            store_plan(held.policy_id)
+            env = {**{k: v for k, v in os.environ.items()
+                      if not k.startswith(("AWS_", "LAB_", "DATABASE_", "S3_", "INFRX_"))},
+                   **lw.stack.s3_env(), "LAB_DATABASE_URL": lab.dsn,
+                   "LAB_WORKER_HEALTH_PORT": str(free_port()), "LAB_S3_BUCKET": harness.S3_BUCKET,
+                   "LAB_S3_ENDPOINT": harness.s3_endpoint(), "LAB_S3_PREFIX": prefix,
+                   "LAB_OPERATOR_ID": lw.CONTROLLER}
+            log = open(workdir / "rollout.log", "wb")
+            began = time.monotonic()
+            process = subprocess.Popen([sys.executable, "-m", "infrx.lab.workers", "rollout"],
+                                       cwd=lw.API, env=env, stdout=log, stderr=subprocess.STDOUT)
+            converged_after = None
+            while time.monotonic() - began < FIRST_PASS_S and process.poll() is None:
+                if lab.listing()[1] == listed[1]:
+                    converged_after = round(time.monotonic() - began, 2)
+                    break
+                time.sleep(0.2)
+            exited_early = process.poll()
+            process.send_signal(signal.SIGTERM)
+            stopped = process.wait(30)
+            log.close()
+            lw.save(workdir, "pass.json", {
+                "listing_before": listed, "promoted": promoted, "policy_candidate": candidate,
+                "listing_after": lab.listing(), "converged_after_s": converged_after,
+                "exited_early": exited_early, "exit_on_sigterm": stopped,
+                "decisions": lab.decisions(ref), "held": {
+                    "state": run(lab.releases().release(held_ref)).state,
+                    "decisions": lab.decisions(held_ref)}})
+            text = (workdir / "rollout.log").read_text(errors="replace")
+            tail = text[-1500:]
+>           assert exited_early is None, f"the rollout role exited {exited_early}: {tail}"
+E           AssertionError: the rollout role exited 2: 2026-09-29 11:43:41,691 INFO botocore.credentials Found credentials in environment variables.
+E             infrx.lab.workers: refusing to start: INFRX_MODE='lab-rollout': STUB (pre-WR-R2-3): the rollout pass needs every running or rolled-back D9 release with its frozen plan
+E             
+E           assert 2 is None
+
+tests/integration/lab_rollout/scenarios_recover.py:521: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_rollout/scenarios_recover.py::test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas - AssertionError: the rollout role exited 2: 2026-09-29 11:43:41,691 INFO botocore.credentials Found credentials in environment variables.
+1 failed, 1 passed, 22 deselected in 10.87s

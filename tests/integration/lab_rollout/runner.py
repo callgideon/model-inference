@@ -114,7 +114,8 @@ SCENARIOS = {
     "k08": {"title": "R3 parity measured on an allocated supported GPU target",
             "test_ids": ["OPT-PARITY"], "lanes": ["P-08"]},
     "k09": {"title": "the I7 controller process killed and restarted mid-rollout: the real "
-                     "emergency-rollback subcommand twice; the pass loop waits on WR-R2-3",
+                     "emergency-rollback subcommand twice; the bare rollout role converges a "
+                     "rollback killed before the alias CAS on its first pass",
             "test_ids": ["ROLLOUT-RECOVER"], "lanes": []},
     "k10": {"title": "the Lab releases UI: verdict, proposal, approval and emergency rollback",
             "test_ids": ["ROLLOUT-PIN"], "lanes": ["lab-ui-swap"]},
@@ -140,7 +141,8 @@ REQUIRED = {
     "k07": ("test_k07_a_variant_is_probed_compared_and_stored",
             "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"),
     "k08": ("test_k08_parity_on_an_allocated_gpu_target",),
-    "k09": ("test_k09_the_controller_process_restarted_mid_rollout",),
+    "k09": ("test_k09_the_controller_process_restarted_mid_rollout",
+            "test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas"),
     "k10": ("test_k10_the_releases_ui_over_the_real_route",
             "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict"),
 }
