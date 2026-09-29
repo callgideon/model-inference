@@ -21,17 +21,22 @@ never runs in a consumer process.
                meters provider_dev), LAB_EVAL_ENDPOINT_KEY (the dev endpoint's credential).
                Evaluators: D7's `lab_evaluator` for the provider the ref names (WR-COMP-1,
                0034). Targets: `DevTargets` over L3's rows (WR-COMP-2; no ControlReads needed).
-* `checkpoints` B3's `on_checkpoint` per `checkpoint_received` event over D8's checkpoint
-               ledger (0042); needs a registry adapter and L3's dev deployer (WR-B3-3), so it
-               refuses until they exist (otherwise every checkpoint would be rejected).
+* `checkpoints` LAB_S3_BUCKET: B3's `on_checkpoint` per `checkpoint_received` event over D8's
+               checkpoint ledger (0042), with the Lab registry of the event's own provider
+               (`lab://<provider>/<path>`) and L3's dev deployer over 0044's reads (WR-B3-3).
 * `judge`      JUDGE_PROVIDER_URL, CLICKHOUSE_URL, S3_TRACE_BUCKET (+ JUDGE_MODE, default
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
-               and T3's retention; its pass moves silent `submitting` runs to `ambiguous`;
+               and T3's retention; its passes move silent `submitting` runs to `ambiguous`
+               and reconcile/collect every provider's ambiguous/submitted runs (WR-LSQ-C2A);
                `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
-               every provider with a lineage, every page (WR-N3-2's pull half).
-* `rollout`    `emergency-rollback` (LAB_OPERATOR_ID of the invoking shell): R2's operator
-               stop over D9 and L3. The pass loop refuses until its inputs are readable.
+               every provider with a lineage, every page (WR-N3-2's pull half), and N1's
+               imports from 0051's durable job queue (WR-N4-3).
+* `rollout`    LAB_S3_BUCKET, LAB_OPERATOR_ID (the controller's audited principal): R2's
+               `Controller.step` every 30 s for every running or rolled-back D9 release on
+               the plan stored beside it (WR-R2-3; a running one only on R1's aggregates,
+               held while unreadable). `emergency-rollback` (LAB_OPERATOR_ID of the invoking
+               shell): R2's operator stop over D9 and L3.
 * `annotation` LAB_S3_BUCKET, LAB_TEACHER_URL (the local teacher fake until P-10; + JUDGE_MODE):
                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
                submitted chunk run of every approved teacher batch (WR-P4B-2).
@@ -72,8 +77,9 @@ REFUSED = 2
 DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_BUCKET"
 TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
 NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
-         "checkpoints": (), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
-         "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,), "rollout": (),
+         "checkpoints": (BUCKET,), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
+         "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,),
+         "rollout": (BUCKET, "LAB_OPERATOR_ID"),
          "datasets": (BUCKET, *TRACES)}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
 #: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
@@ -81,8 +87,11 @@ LAB_PREFIX = "infrx/"
 # ponytail: fixed cadences, as the consumer worker's Lab pumps.
 JUDGE_PASS_S = 60.0
 JUDGE_SILENT_S = 300                  # a `submitting` run silent this long is `ambiguous`
+JUDGE_BATCH = 100                     # runs per provider, state and pass (oldest first)
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
+IMPORT_PASS_S = 5.0                   # 0051's import-job queue, claimed
 TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
+ROLLOUT_PASS_S = 30.0                 # R2's controller pass over the live releases
 PROBE_TIMEOUT_S = 5.0
 
 
@@ -244,7 +253,9 @@ def _eval(mode, env, connect, objects, worker_id, **_):
 class Checkpoints:
     """The Lab outbox's `checkpoint_received` handler: B3's decision, once per delivery
     (B3 makes a redelivery the same run). `CapacityExhausted` reaches the relay, which hands
-    the event back for later; another kind is not this handler's (it stays pending)."""
+    the event back for later; another kind is not this handler's. A checkpoint without B3's
+    signed event is P3's (the Lab route decided it; its receipt wrote the same kind): done.
+    `registries(provider)` is the registry adapters for that provider's events."""
 
     def __init__(self, store, ledger, access, registries, deployer) -> None:
         self.store, self.ledger, self.access = store, ledger, access
@@ -253,28 +264,34 @@ class Checkpoints:
     async def enqueue(self, event) -> bool:
         if event.kind != "checkpoint_received":
             raise errors.InvalidRequest(f"no checkpoints worker handles {event.kind}")
+        checkpoint_id, provider = event.payload["checkpoint_id"], event.provider_org_id
+        try:
+            await self.ledger.event(checkpoint_id, provider_org_id=provider)
+        except errors.NotFound:
+            return True
         await checkpoints.on_checkpoint(
-            event.payload["checkpoint_id"], provider_org_id=event.provider_org_id,
-            ledger=self.ledger, store=self.store, registries=self.registries,
-            deployer=self.deployer, access=self.access)
+            checkpoint_id, provider_org_id=provider, ledger=self.ledger, store=self.store,
+            registries=self.registries(provider), deployer=self.deployer, access=self.access)
         return True
 
 
 def _checkpoints(mode, env, connect, objects, worker_id, registries=None, deployer=None):
-    if not registries or deployer is None:
-        raise RuntimeMisconfigured(mode, detail="checkpoints needs a registry adapter and "
-                                   "L3's dev deployer (WR-B3-3): without them B3 would reject "
-                                   "every checkpoint")
+    """WR-B3-3: the Lab registry over the role's objects and L3's dev deployer over
+    `PgControlStore` (0044's reads) unless a test passes its own."""
     from ...lab.access import LabAccess
     from ...state.lab_access import PgAccessStore
+    from ...state.lab_control import PgControlStore
     from ...state.lab_data import PgLabDataStore
     from ...state.outbox import OutboxRelay
     ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connect)
     store = PgLabDataStore(connect)
-    # ponytail: one relay per role over one outbox: an event of the other role's kind is
-    # refused and handed out again after the window (a `kinds` filter is WR-LSQ-C2B's).
-    relay = OutboxRelay(store, Checkpoints(store, ledger, LabAccess(PgAccessStore(connect)),
-                                           registries, deployer),
+    per_provider = (lambda _: registries) if registries else \
+        partial(checkpoints.lab_registry, objects)
+    deployer = deployer or checkpoints.DevDeployer(PgControlStore(connect))
+    # R215 / WR-LSQ-C2B: this role's relay claims its own kind only
+    relay = OutboxRelay(worker_main.Kinds(store, ("checkpoint_received",)),
+                        Checkpoints(store, ledger, LabAccess(PgAccessStore(connect)),
+                                    per_provider, deployer),
                         worker_id=f"{worker_id}-relay")
     return {"lab_checkpoints": lambda: every(worker_main.LAB_PUMP_S, relay.pump,
                                              "lab checkpoints")}, None
@@ -296,10 +313,51 @@ def _judge(mode, env, connect, objects, worker_id, **_):
     wiring = JudgeWiring(access=LabAccess(PgAccessStore(connect)), ledger=ledger,
                          provider=provider, retention=retention, rates=APPROVED_RATES,
                          settings=limits)
-    # ponytail: collect/reconcile need D6J's listing of submitted/ambiguous runs (lab-sql,
-    # WR-LSQ-C2A); until then a run is collected by the door that submitted it.
     return {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
-                                         "judge sweep")}, wiring
+                                         "judge sweep"),
+            "judge_collect": lambda: every(JUDGE_PASS_S, lambda: judge_pass(
+                wiring, partial(provider_ids, connect)), "judge collect")}, wiring
+
+
+async def provider_ids(connect) -> list[str]:
+    """Every provider org, on the role's login.
+    ponytail: one select until lab-sql lists the providers with work (WR-C5-PROVIDERS)."""
+    conn = await connect()
+    try:
+        cursor = await conn.execute("select provider_org_id::text from infrx.provider_orgs "
+                                    "order by 1")
+        return [row[0] for row in await cursor.fetchall()]
+    finally:
+        await conn.close()
+
+
+async def judge_pass(wiring, providers) -> dict[str, int]:
+    """WR-LSQ-C2A: for every provider, D6J's `ambiguous` runs (`runs_in`, 0049) are looked up
+    by their submit key - the provider's record moves the run to `submitted`; none leaves it
+    as it is (R184/R192: never resubmitted or released by the platform) - then every
+    `submitted` run is J2's `collect`. A teacher run (consented by its dataset ref) is the
+    annotation role's. One run's failure is counted; the next still runs."""
+    from ...judge import submit
+    done = {"reconciled": 0, "waiting": 0, "collected": 0, "failed": 0}
+    ledger = wiring.ledger
+    for provider in await providers():
+        for state in ("ambiguous", "submitted"):
+            for run in await ledger.runs_in((state,), JUDGE_BATCH, provider_org_id=provider):
+                if run.consent.grant_id.startswith("lab:"):
+                    continue
+                try:
+                    if state == "submitted":
+                        await submit.collect(run.run_id, wiring=wiring)
+                        done["collected"] += 1
+                    elif (external := await wiring.provider.lookup(run.submit_key)) is None:
+                        done["waiting"] += 1
+                    else:
+                        await ledger.record_submission(run.run_id, external)
+                        done["reconciled"] += 1
+                except Exception:             # noqa: BLE001 - the next run still runs
+                    log.exception("judge pass failed for one run")
+                    done["failed"] += 1
+    return done
 
 
 class JudgeReport:
@@ -358,15 +416,72 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
                 log.exception("lineage reconcile failed for one provider")
                 report["failed"] += 1
         return report
+    from ...datasets import imports
+    from ...state.lab_data import PgLabDataStore, PgLabImportJobs
+    jobs, store = PgLabImportJobs(connect), PgLabDataStore(connect)
     return {"lineage_reconcile": lambda: every(LINEAGE_PASS_S, reconcile_all,
-                                               "lineage reconcile")}, None
+                                               "lineage reconcile"),
+            "import_jobs": lambda: every(IMPORT_PASS_S, lambda: imports.work(
+                jobs, store, objects, worker_id=worker_id), "import jobs")}, None
 
 
-def _rollout(mode, env, connect, objects, worker_id, **_):
-    raise RuntimeMisconfigured(mode, detail="the rollout pass needs every running or "
-                               "rolled-back D9 release with its frozen plan, R1's live "
-                               "aggregates, the stored B2 report and L3's alias reads "
-                               "(WR-LSQ-9): none is readable yet; emergency-rollback works")
+class NoLive:
+    """R1's `Live` aggregates for a running release. R1 records assignments only: no error,
+    latency, spend or health aggregate per arm is readable (WR-C5-LIVE), so a running
+    release is held - never evaluated on invented numbers."""
+
+    async def __call__(self, listing):
+        raise errors.DependencyUnavailable("R1's live aggregates are not readable (WR-C5-LIVE)")
+
+
+def plan_key(provider_org_id: str, policy_id: str) -> str:
+    """R2's full `Plan` of a release, stored write-once beside it by its launcher (D9 keeps
+    only its digest, which `Controller` checks)."""
+    return f"lab/{provider_org_id}/releases/{policy_id}/plan.json"
+
+
+async def rollout_pass(objects, store, releases, controller, live) -> dict[str, int]:
+    """WR-R2-3: `Controller.step` for every running or rolled-back D9 release of every
+    provider with a release under `lab/<p>/releases/`, on its stored plan and D7's policy.
+    A running release needs R1's aggregates (held while unreadable); a rolled-back one only
+    converges (R216). ponytail: no stored B2 report is linked to a release yet
+    (WR-C5-REPORT), so none is passed and a running release holds `no_report`; the wall
+    clock is `now`, D9's CAS orders the decisions."""
+    from ...rollouts.control import Plan
+    done = {"stepped": 0, "held": 0, "failed": 0}
+    providers = sorted({key.split("/")[1] for key in await objects.keys("lab/")
+                        if key.split("/")[2:3] == ["releases"]})
+    for provider in providers:
+        for item in await releases.releases_in(("running", "rolled_back"),
+                                               provider_org_id=provider):
+            try:
+                raw = await objects.get(plan_key(provider, item.policy_id))
+                if raw is None:
+                    done["held"] += 1
+                    continue
+                current = await live(item) if item.release.state == "running" else None
+                policy = await store.resolve(item.policy_ref, provider_org_id=provider)
+                await controller.step(policy, item.policy_ref, Plan.model_validate_json(raw),
+                                      current, now=datetime.now(timezone.utc))
+                done["stepped"] += 1
+            except errors.DependencyUnavailable:
+                done["held"] += 1
+            except Exception:                 # noqa: BLE001 - the next release still runs
+                log.exception("rollout pass failed for one release")
+                done["failed"] += 1
+    return done
+
+
+def _rollout(mode, env, connect, objects, worker_id, live=None, **_):
+    from ...gateway.pilot import control_serving
+    from ...rollouts.control import Controller
+    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_rollout import PgReleaseStore
+    operator, releases = env["LAB_OPERATOR_ID"], PgReleaseStore(connect)
+    controller = Controller(releases, control_serving(connect, operator), actor_id=operator)
+    store, live = PgLabDataStore(connect), live or NoLive()
+    return {"rollout_pass": lambda: every(ROLLOUT_PASS_S, lambda: rollout_pass(
+        objects, store, releases, controller, live), "rollout pass")}, controller
 
 
 def _annotation(mode, env, connect, objects, worker_id, **_):
@@ -461,7 +576,8 @@ BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
 
 def compose(role: str, env, *, objects=None, **sources) -> Worker:
     """The role's passes and readiness from its environment. `objects` is for tests only;
-    `sources` are the checkpoints role's `registries`/`deployer` (WR-B3-3). Raises
+    `sources` replace the checkpoints role's `registries`/`deployer` and the rollout role's
+    `live` in tests. Raises
     `RuntimeMisconfigured` naming what cannot serve; nothing connects but the bucket."""
     mode = f"lab-{role}"
     if role not in BUILD:

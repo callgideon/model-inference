@@ -31,6 +31,10 @@ BURST = "test_b3_a_burst_is_bounded_by_concurrency_and_budget_with_visible_skips
 CRASH = "test_b3_a_crash_between_receipt_and_dispatch_never_queues_paid_work_twice"
 EVALS = "test_b3_p3_evaluations_freeze_one_b1_run_on_the_bundles_dataset_and_answer_d7s_state"
 REVOKED = "test_b3_a_revoked_owner_or_grant_is_a_visible_skip"
+DEPLOYER = ("test_b3_l3s_dev_deployer_serves_only_the_providers_ready_private_dev_revision_"
+            "of_the_digest")
+REGISTRY = "test_b3_the_lab_registry_reads_only_the_events_own_providers_objects"
+SUITES = "test_b3_the_production_suite_is_the_receipts_run_subscription_on_l3s_dev_serving"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -173,6 +177,48 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p3_evals_not_the_owner", "the run is frozen as the suite's owner",
       "access=self.access, user_id=sub.owner_user_id,", "access=self.access, user_id=sub.provider_org_id,",
       EVALS),
+    # --- WR-B3-3 / WR-C4-B3-SUITES (composition-5): the production sources
+    m("b3_deployer_any_digest", "only a revision pinning the checkpoint's digest serves it",
+      "                    and digest in (*s.weight_shard_digests, s.adapter_digest)}",
+      "                    }", DEPLOYER),
+    m("b3_deployer_weights_only", "an adapter checkpoint is served by the adapter's revision",
+      "digest in (*s.weight_shard_digests, s.adapter_digest)}", "digest in s.weight_shard_digests}",
+      DEPLOYER),
+    m("b3_deployer_foreign_serving", "another provider's serving revision never serves",
+      "                    if s.provider_org_id == provider_org_id\n", "                    if True\n",
+      DEPLOYER),
+    m("b3_deployer_foreign_revision", "another provider's dev revision never serves",
+      "in servings and d.provider_org_id == provider_org_id", "in servings", DEPLOYER),
+    m("b3_deployer_any_environment", "only a dev revision serves a checkpoint",
+      "                    and d.environment is Environment.dev and d.visibility",
+      "                    and d.visibility", DEPLOYER),
+    m("b3_deployer_public", "only a private revision serves a checkpoint",
+      " and d.visibility is Visibility.private\n", "\n", DEPLOYER),
+    m("b3_deployer_unvalidated", "only a validated (ready_private) revision serves",
+      "                    and d.state is DeploymentState.ready_private):",
+      "                    ):", DEPLOYER),
+    m("b3_deployer_oldest", "the newest ready revision serves",
+      "        for d in reversed(await self.reads.provider_deployments(provider_org_id)):",
+      "        for d in await self.reads.provider_deployments(provider_org_id):", DEPLOYER),
+    m("b3_deployer_absent_not_found", "a checkpoint no revision serves yet waits (503)",
+      '        raise errors.DependencyUnavailable("no ready private dev revision serves this "',
+      '        raise errors.NotFound("no ready private dev revision serves this "', DEPLOYER),
+    m("b3_registry_any_provider", "the Lab registry reads only the event's provider's objects",
+      "        if provider != provider_org_id:\n            return b\"\"\n", "", REGISTRY),
+    m("b3_registry_missing_none", "a missing object is no bytes, never None",
+      '        return await objects.get(f"lab/{provider}/{path}") or b""',
+      '        return await objects.get(f"lab/{provider}/{path}")', REGISTRY),
+    m("b3_suites_no_receipt", "a checkpoint without this provider's receipt is not found",
+      "        if found is None:\n            raise errors.NotFound(\"no such checkpoint for this "
+      "provider\")\n", "", SUITES, dies_by=("TypeError",)),
+    m("b3_suites_newest", "the oldest subscription of the receipt's run evaluates it",
+      "        return subs[0], await deployer.deploy(", "        return subs[-1], await deployer.deploy(",
+      SUITES),
+    m("b3_suites_unsubscribed", "no subscription is a typed 503, nothing deployed",
+      "        if not subs:\n", "        if False:\n", SUITES, dies_by=("IndexError",)),
+    m("b3_suites_digest_unpinned", "the deployer serves the receipt's digest",
+      "                                              digest=digest)",
+      "                                              digest=\"\")", SUITES),
 )
 
 

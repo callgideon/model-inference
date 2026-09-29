@@ -23,6 +23,7 @@ from infrx.contracts import errors
 from infrx.evaluation import checkpoints
 from infrx.lab.access import LabAccess
 from infrx.lab.workers import __main__ as lab_workers
+from infrx.media.store import InMemoryObjectStore
 from infrx.state.jobstore import connector
 from infrx.state.lab_access import PgAccessStore
 from infrx.state.lab_pipeline import PgCheckpointLedger
@@ -62,7 +63,9 @@ def test_b3_pg_the_composed_checkpoints_role_decides_on_d8s_ledger(world, monkey
     monkeypatch.setattr(lab_workers, "every", lambda interval_s, step, what: (
         steps.__setitem__(what, step), never())[1])
     worker = lab_workers.compose("checkpoints", {"LAB_DATABASE_URL": dsn,
-                                                 "LAB_WORKER_HEALTH_PORT": "9"},
+                                                 "LAB_WORKER_HEALTH_PORT": "9",
+                                                 "LAB_S3_BUCKET": "unused"},
+                                 objects=InMemoryObjectStore(),
                                  registries={"mem": w.registry.fetch}, deployer=w.deployer)
     worker.tasks["lab_checkpoints"]().close()
     pump = steps["lab checkpoints"]

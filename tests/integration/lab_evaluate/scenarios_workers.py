@@ -9,8 +9,14 @@ SIGKILLed mid-attempt, and a restarted worker (after the DB clock passed the lea
 relay window) recovers the leases and finishes the run: every case scored once, the event
 acknowledged once, the killed attempts `expired`; SIGTERM then exits 0.
 
-j09's checkpoint half stays NOT RUN (`scenarios_pending.py`): the checkpoints role refuses
-until L3's dev deployer and a registry adapter exist (WR-B3-3).
+j09's checkpoint half (bound, composition batch 5, WR-B3-3): the real `python -m
+infrx.lab.workers checkpoints` with nothing injected - D8's checkpoint ledger (0042), the Lab
+registry over this stack's MinIO (`lab://<provider>/...`) and L3's dev deployer over 0044's
+reads, the checkpoint's digest pinned by a READY private dev revision registered in L3's rows.
+A signed checkpoint is received once; the worker decides it (one queued D7 run, served by that
+revision, one `eval_run` event, the receipt `evaluated`); the event is then released and
+delivered again (a relay redelivery) and the second delivery changes nothing; the queued
+run's `eval_run` event is never claimed by this role (R215, its own kinds only).
 """
 from __future__ import annotations
 
@@ -64,8 +70,8 @@ def worker_env(lab, endpoint_url: str, health: int) -> dict[str, str]:
 
 
 @contextlib.contextmanager
-def worker(env: dict[str, str], log):
-    process = subprocess.Popen([sys.executable, "-m", "infrx.lab.workers", "eval"],
+def worker(env: dict[str, str], log, role: str = "eval"):
+    process = subprocess.Popen([sys.executable, "-m", "infrx.lab.workers", role],
                                cwd=lw.API, env=env, stdout=log, stderr=subprocess.STDOUT)
     try:
         yield process
@@ -160,3 +166,120 @@ def test_j09_the_eval_worker_process_killed_mid_run_loses_nothing(lab, workdir):
     lw.save(workdir, "worker.json", {"run_id": run_id, "serving_ref": serving,
                                      "status": status, "attempts": attempts,
                                      "wallet_calls": len(wallet.calls), "leased_at_kill": leased})
+
+
+def l3_checkpoint_revision(lab, n: int, digest: str) -> str:
+    """L3's rows for a checkpoint: a serving revision of the seed's model pinning `digest` as
+    its weights and its READY private dev revision on the seed's dev endpoint (A3's registry,
+    as L3's register/create_dev/validate leave them). Answers L3's serving ref."""
+    from infrx.contracts.v2 import fixtures as v2fix
+    from infrx.lab.control.operations import serving_ref
+    from infrx.state.jobstore import connector
+    from infrx.state.operations import PgRegistry
+    registry = PgRegistry(connector(lab.dsn))
+    serving = v2fix.model("serving_revision.json").model_copy(update={
+        "serving_version_id": lw.uid(n, 0xd5), "model_version_id": lw.uid(n, 0xd6),
+        "weight_shard_digests": (digest,), "revision_label": f"ckpt-{n}"})
+    dev = v2fix.model("deployment_revision_private_dev.json").model_copy(update={
+        "deployment_revision_id": lw.uid(n, 0xde),
+        "serving_version_id": serving.serving_version_id})
+    run(registry.put(serving))
+    run(registry.put(dev))
+    return serving_ref(dev, serving)
+
+
+def test_j09_the_checkpoint_worker_drains_the_outbox_once(lab, workdir):
+    import hashlib
+    import json
+    import secrets
+
+    from infrx.contracts.lab import records
+    from infrx.evaluation import checkpoints
+    from infrx.state.jobstore import connector
+    from infrx.state.lab_pipeline import PgCheckpointLedger
+    from tests.b.checkpoints.world import safetensors
+    n, provider = 92, lab.NEMO
+    ledger = PgCheckpointLedger(connector(lab.dsn))
+    dataset = lab.dataset("text", 1).dataset_ref
+    external_id = lw.uid(n, 0xe3e)
+    external = lab.publish({
+        "schema": "lab.external_run.1", "provider_org_id": provider,
+        "external_run_id": external_id, "purpose": "training", "connector": "manual-bundle",
+        "dataset_ref": dataset, "submit_key": records.submit_key(external_id),
+        "state": "prepared",
+        "budget": {"limit": {"unit": "PROVIDER_USD", "value": "40.00000000"},
+                   "reserved": {"unit": "PROVIDER_USD", "value": "0.00000000"},
+                   "payer_ref": f"lab:payer:{provider}:{lw.uid(n, 0xfa6)}@sha256:" + "0" * 64}})
+    sub = run(checkpoints.subscribe(ledger, lab.store, {
+        "subscription_id": lw.uid(n, 0x5b6), "provider_org_id": provider,
+        "external_run_ref": external, "dataset_ref": dataset,
+        "harness_ref": lab.harness_ref(1), "evaluator_ref": lw.EVALUATOR(provider),
+        "evaluator": lw.SPEC, "seed": 7, "max_cases": 20,
+        "run_limit": {"unit": "CREDIT", "value": "100.00000000"},
+        "limit": {"unit": "CREDIT", "value": "1000.00000000"}, "max_active": 5,
+        "policy": "every"}, access=lab.access, user_id=lab.DEV))
+    data = safetensors(n)
+    digest = "sha256:" + hashlib.sha256(data).hexdigest()
+    run(lab.objects.put_if_absent(f"lab/{provider}/checkpoints/j09/1.safetensors", data,
+                                  "application/octet-stream"))
+    expected = l3_checkpoint_revision(lab, n, digest)
+    secret, checkpoint = secrets.token_bytes(32), lw.uid(n, 0xc3e)
+    body = json.dumps({
+        "schema": checkpoints.EVENT_SCHEMA, "provider_org_id": provider, "key_id": "j09",
+        "checkpoint_id": checkpoint, "external_run_ref": external, "step": 1,
+        "artifact": {"uri": f"lab://{provider}/checkpoints/j09/1.safetensors",
+                     "digest": digest},
+        "issued_at": lab.sql("select infrx.now()")[0][0].strftime("%Y-%m-%dT%H:%M:%SZ")}).encode()
+    receipt = run(checkpoints.receive(body, checkpoints.sign(body, secret),
+                                      keys={"j09": (provider, secret)}.get, ledger=ledger,
+                                      store=lab.store))
+    assert receipt["state"] == "received"
+    run_id = checkpoints.run_id_of(sub.subscription_id, checkpoint)
+
+    def acknowledged() -> bool:
+        return lab.sql("select acknowledged_at is not null from infrx.lab_outbox where kind = "
+                       "'checkpoint_received' and payload->>'checkpoint_id' = %s",
+                       checkpoint) == [(True,)]
+
+    def counts() -> tuple:
+        return tuple(lab.sql(sql, key)[0][0] for sql, key in (
+            ("select count(*) from infrx.lab_checkpoint_receipts where checkpoint_id = %s",
+             checkpoint),
+            ("select count(*) from infrx.lab_outbox where kind = 'checkpoint_received' "
+             "and payload->>'checkpoint_id' = %s", checkpoint),
+            ("select count(*) from infrx.lab_checkpoint_decisions where checkpoint_id = %s",
+             checkpoint),
+            ("select count(*) from infrx.lab_eval_runs where run_id = %s", run_id),
+            ("select count(*) from infrx.lab_outbox where kind = 'eval_run' "
+             "and payload->>'run_id' = %s", run_id)))
+
+    env = {**worker_env(lab, "http://127.0.0.1:9", 0)}
+    for name in ("LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"):
+        env.pop(name)
+    with open(workdir / "checkpoints-worker.log", "wb") as log:
+        health = free_health_port()
+        with worker({**env, "LAB_WORKER_HEALTH_PORT": str(health)}, log,
+                    "checkpoints") as process:
+            until(lambda: ready(health), 60, "the checkpoints worker's /readyz")
+            until(acknowledged, 60, "the checkpoint_received event decided and acknowledged")
+            first = counts()
+            lab.sql("update infrx.lab_outbox set acknowledged_at = null, claimed_at = null, "
+                    "claimed_by = null where kind = 'checkpoint_received' and "
+                    "payload->>'checkpoint_id' = %s", checkpoint)      # released: redelivered
+            until(acknowledged, 60, "the redelivered event acknowledged again")
+            process.send_signal(signal.SIGTERM)
+            assert process.wait(60) == 0, "SIGTERM is a clean exit"
+    assert first == counts() == (1, 1, 1, 1, 1), (first, counts())
+    assert lab.sql("select claimed_by from infrx.lab_outbox where kind = 'eval_run' and "
+                   "payload->>'run_id' = %s", run_id) == [(None,)], \
+        "R215: the checkpoints role never claims the eval role's event"
+    assert lab.sql("select state, run_id::text from infrx.lab_checkpoint_decisions where "
+                   "checkpoint_id = %s", checkpoint) == [("queued", run_id)]
+    assert lab.sql("select state from infrx.lab_checkpoint_receipts where checkpoint_id = %s",
+                   checkpoint) == [("evaluated",)]
+    status = run(lab.store.run_status(run_id, provider_org_id=provider))
+    assert run(lab.store.resolve(status["run_ref"], provider_org_id=provider)).serving_ref \
+        == expected, "the run is served by L3's dev revision of the checkpoint's digest"
+    lw.save(workdir, "checkpoint-worker.json", {"checkpoint_id": checkpoint, "run_id": run_id,
+                                                "serving_ref": expected, "counts": first,
+                                                "status": status})

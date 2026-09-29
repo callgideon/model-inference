@@ -503,7 +503,7 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
     assert sorted(every) == sorted(LAB_2)
 
 
-def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
+def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers(monkeypatch):
     """WR-P1-D8-C / WR-P3-D8-C: `LAB_PIPELINES` composes P1's label log (D8's `PgLabelLog`)
     and P3's run ledger (D8's `PgRunLedger`: the CAS and the named payer's PROVIDER_USD
     reservation on D6J's budget, `lab_submission`-gated in SQL) on the pool, over the Lab
@@ -516,6 +516,10 @@ def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
     from infrx.gateway import pilot
     from infrx.state.lab_pipeline import PgLabelLog, PgRunLedger
 
+    from infrx.evaluation import checkpoints
+    production, asked = checkpoints.production_suites, []
+    monkeypatch.setattr(checkpoints, "production_suites",
+                        lambda connect: (asked.append(connect), production(connect))[1])
     settings = support.settings(deployment=dataclasses.replace(support.BUILD,
                                                                lab_pipelines=True))
     objects = relay_support.World().objects
@@ -529,14 +533,10 @@ def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
         died = outcome(lambda: asyncio.run(listing("p")))
         assert type(died) is errors.DependencyUnavailable, died
     # WR-E7L-1 / WR-B3-EVALS: P3's evaluation port is B3/B1's over the same D7 store, Lab
-    # objects and L2; with no suite source or dev deployer (WR-B3-3) it freezes nothing (503)
+    # objects and L2; WR-C4-B3-SUITES: its suites are the production ones on the same pool
     from infrx.evaluation.checkpoints import Evaluations
-    assert type(x.evals) is Evaluations and x.evals.suites is None
+    assert type(x.evals) is Evaluations and x.evals.suites is not None and asked == ["pool"]
     assert (x.evals.store, x.evals.objects, x.evals.access) == (x.store, objects, x.access)
-    ask = {"provider_org_id": "p", "checkpoint_id": "c", "dataset_ref": "d",
-           "split": "holdout", "holdout_sha256": "0" * 64}
-    assert type(outcome(lambda: asyncio.run(x.evals.evaluate(**ask)))) is \
-        errors.DependencyUnavailable
     assert asyncio.run(x.evals.evaluation(provider_org_id="p", checkpoint_id="c")) is None
 
 

@@ -15,7 +15,7 @@ from infrx.evaluation import checkpoints
 from infrx.evaluation.runner import Limits, Runner
 
 from ..runner.world import DEPLOYMENT, VIEWER, DevWallet, uid
-from .world import DEV, NEMO, NOW, OTHER, Crash, World, safetensors, timedelta
+from .world import DEV, NEMO, NOW, OTHER, Crash, World, safetensors, sha, timedelta
 
 
 def run(coro):
@@ -328,3 +328,114 @@ def test_b3_p3_evaluations_freeze_one_b1_run_on_the_bundles_dataset_and_answer_d
         == hashlib.sha256(records.canonical([])).hexdigest()
     with pytest.raises(errors.InvalidRequest):
         run(ev.evaluate(checkpoint_id=uid(9, 0xc3), **{**ask, "split": "train"}))
+
+
+# ------------------------------------------ WR-B3-3 / WR-C4-B3-SUITES: the production sources
+class Reads:
+    """L3's `ControlReads` (0044) as the dev deployer reads them - answering every row it
+    holds, so a row of another provider reaches the deployer's own check."""
+
+    def __init__(self, servings, deployments) -> None:
+        self.servings, self.deployments = servings, deployments
+
+    async def provider_servings(self, provider_org_id):
+        return list(self.servings)
+
+    async def provider_deployments(self, provider_org_id):
+        return list(self.deployments)
+
+
+def l3_rows(digest: str, **deployment):
+    """The fixture serving revision pinning `digest` as its one weight shard, and its private
+    dev revision (ready) changed by `deployment`."""
+    from infrx.contracts.v2 import fixtures as v2fix
+    serving = v2fix.model("serving_revision.json").model_copy(
+        update={"weight_shard_digests": (digest,)})
+    dev = v2fix.model("deployment_revision_private_dev.json").model_copy(update=deployment)
+    return serving, dev
+
+
+def test_b3_l3s_dev_deployer_serves_only_the_providers_ready_private_dev_revision_of_the_digest():
+    """WR-B3-3: a checkpoint is served by its provider's newest READY private dev revision
+    whose serving revision pins the checkpoint's digest (a weight shard or the adapter); the
+    answer is L3's serving ref (what the eval worker's `DevTargets` resolves). Another
+    digest, provider, environment, visibility or state serves nothing: a typed 503, so the
+    event is handed out again until L3 validated the revision."""
+    from infrx.contracts.v2.records import DeploymentState, Environment, Visibility
+    from infrx.lab.control.operations import serving_ref
+    digest = sha(safetensors(1))
+    serving, dev = l3_rows(digest)
+    old = dev.model_copy(update={"deployment_revision_id": uid(1, 0xde0)})
+    deployer = checkpoints.DevDeployer(Reads([serving], [old, dev]))
+    ask = {"provider_org_id": dev.provider_org_id, "checkpoint_id": uid(1, 0xc3), "uri": "x",
+           "digest": digest}
+    assert run(deployer.deploy(**ask)) == serving_ref(dev, serving)
+    adapter = serving.model_copy(update={"adapter_digest": sha(b"adapter")})
+    assert run(checkpoints.DevDeployer(Reads([adapter], [dev])).deploy(
+        **{**ask, "digest": sha(b"adapter")})) == serving_ref(dev, adapter)
+    for change in ({"provider_org_id": OTHER}, {"environment": Environment.prod},
+                   {"visibility": Visibility.public}, {"state": DeploymentState.draft}):
+        broken = checkpoints.DevDeployer(Reads([serving], [dev.model_copy(update=change)]))
+        with pytest.raises(errors.DependencyUnavailable):
+            run(broken.deploy(**ask))
+    with pytest.raises(errors.DependencyUnavailable):
+        run(deployer.deploy(**{**ask, "digest": sha(b"other")}))
+    foreign = serving.model_copy(update={"provider_org_id": OTHER})
+    with pytest.raises(errors.DependencyUnavailable):
+        run(checkpoints.DevDeployer(Reads([foreign], [dev])).deploy(**ask))
+
+
+def test_b3_the_lab_registry_reads_only_the_events_own_providers_objects():
+    """WR-B3-3: `lab://<provider>/<path>` is the Lab object `lab/<provider>/<path>` of the
+    event's OWN provider; another provider's, a pathless or a missing one is no bytes (so the
+    checkpoint is rejected `digest_mismatch`), never read."""
+    from infrx.media.store import InMemoryObjectStore
+    objects = InMemoryObjectStore()
+    run(objects.put_if_absent(f"lab/{NEMO}/ckpt/a.safetensors", b"mine", "x"))
+    run(objects.put_if_absent(f"lab/{OTHER}/ckpt/a.safetensors", b"theirs", "x"))
+    fetch = checkpoints.lab_registry(objects, NEMO)["lab"]
+    assert run(fetch(f"lab://{NEMO}/ckpt/a.safetensors")) == b"mine"
+    for uri in (f"lab://{OTHER}/ckpt/a.safetensors", f"lab://{NEMO}/ckpt/none",
+                f"lab://{NEMO}", f"lab://{NEMO}/"):
+        assert run(fetch(uri)) == b"", uri
+
+
+def test_b3_the_production_suite_is_the_receipts_run_subscription_on_l3s_dev_serving():
+    """WR-C4-B3-SUITES: P3's checkpoint is evaluated by B3's subscription of the external run
+    its D7 receipt names (the oldest one), served where L3's dev deployer serves the
+    receipt's digest. No receipt of this provider: not found; no subscription: a typed 503
+    (nothing frozen)."""
+    w = World()
+    e = w.event(1)
+    receive(w, e)
+    subscribe(w, w.subscription(1))
+    subscribe(w, w.subscription(2))
+    asked = []
+
+    class Deployer:
+        async def deploy(self, **kw):
+            asked.append(kw)
+            return "lab:serving:x"
+    suite = checkpoints.suites(receipts_of(w), w.ledger, Deployer())
+    sub, serving = run(suite(provider_org_id=NEMO, checkpoint_id=e["checkpoint_id"]))
+    assert sub.subscription_id == w.subscription(1)["subscription_id"] and serving == \
+        "lab:serving:x"
+    assert asked == [{"provider_org_id": NEMO, "checkpoint_id": e["checkpoint_id"], "uri": "",
+                      "digest": e["artifact"]["digest"]}]
+    with pytest.raises(errors.NotFound):
+        run(suite(provider_org_id=OTHER, checkpoint_id=e["checkpoint_id"]))
+    lone = World()
+    receive(lone, lone.event(1))
+    with pytest.raises(errors.DependencyUnavailable):
+        run(checkpoints.suites(receipts_of(lone), lone.ledger, Deployer())(
+            provider_org_id=NEMO, checkpoint_id=lone.event(1)["checkpoint_id"]))
+    assert len(asked) == 1
+
+
+def receipts_of(w: World):
+    """D7's receipt read (external run, digest) over the fake store, provider-scoped."""
+    async def receipt(checkpoint_id, *, provider_org_id):
+        found = w.store.receipts.get(checkpoint_id)
+        return None if found is None or found["provider"] != provider_org_id else (
+            found["external_run_ref"], found["artifact_digest"])
+    return receipt

@@ -318,11 +318,26 @@ def lab_eval(mode, connect, objects, evaluators, targets, worker_id) -> dict:
     store = PgLabDataStore(connect)
     # ponytail: the pump awaits each run, so a run longer than `redelivery_s` is handed to
     # another worker process too; D7's leases make that a duplicate delivery (B1's drill).
-    relay = OutboxRelay(store, EvalRuns(store, objects, evaluators, targets,
-                                        worker_id=f"{worker_id}-lab"),
+    relay = OutboxRelay(Kinds(store, ("eval_run",)),
+                        EvalRuns(store, objects, evaluators, targets,
+                                 worker_id=f"{worker_id}-lab"),
                         worker_id=f"{worker_id}-lab-relay")
     return {"lab_eval": lambda: every(LAB_PUMP_S, relay.pump, "lab eval"),
             "lab_recover": lambda: every(LAB_RECOVER_S, store.recover, "lab recover")}
+
+
+class Kinds:
+    """R215 / WR-LSQ-C2B: D7's outbox as one role's relay sees it - `dispatch_pending` claims
+    only `kinds` (0050), so a role never claims, refuses and redelivers another's events."""
+
+    def __init__(self, store, kinds) -> None:
+        self.store, self.kinds = store, tuple(kinds)
+
+    def __getattr__(self, name):
+        return getattr(self.store, name)
+
+    async def dispatch_pending(self, **kw):
+        return await self.store.dispatch_pending(**kw, kinds=self.kinds)
 
 
 RUN_FINAL = ("succeeded", "failed", "cancelled")

@@ -111,7 +111,7 @@ SCENARIOS = {
             "lanes": []},
     "j09": {"title": "the I5 eval and checkpoint worker processes: a worker killed mid-run, the "
                      "outbox drained once", "test_ids": ["EVAL-DURABLE", "CHECKPOINT-IDEM"],
-            "lanes": ["L3"]},
+            "lanes": []},
     "j10": {"title": "the provider UI: launch, progress, cancel, compare with slices and "
                      "uncertainty", "test_ids": ["EVAL-COMPARE"], "lanes": ["B4", "lab-api-2"]},
     "j11": {"title": "a finite-video case reaches the dev endpoint through H1/B1",

@@ -13,7 +13,8 @@ python3 runs it from the deployed checkout, so the approvals are the deployed co
   (connector, P-11) roles only - that role's adapter, endpoint, token, USD budget and payer;
   the annotation role also `LAB_TEACHER_URL` (WR-C4-PREFLIGHT: the approved teacher batches'
   collector, `http://` to the local teacher fake only until P-10; its host may be in
-  `LAB_EGRESS_ALLOW`).
+  `LAB_EGRESS_ALLOW`); the rollout role also `LAB_OPERATOR_ID` (WR-C5-PREFLIGHT: the UUID
+  principal id R2's pass records its decisions under).
   Anything else (a consumer secret, another purpose's token, cloud credentials, a proxy
   override in any letter case, a `DOCKER_*`, `PYTHON*` or `LD_*` setting: EnvironmentFile=
   reaches every Exec line of the unit) is refused. A bare `NAME` line is refused: docker's
@@ -84,6 +85,8 @@ def allowed_names(role: str) -> set[str]:
         names |= {ADAPTERS[role][0], *paid_names(role)}
     if role == "annotation":
         names.add("LAB_TEACHER_URL")
+    if role == "rollout":                  # WR-C5-PREFLIGHT: R2's pass acts as this principal
+        names.add("LAB_OPERATOR_ID")
     return names
 
 
