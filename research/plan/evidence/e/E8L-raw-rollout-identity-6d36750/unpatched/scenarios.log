@@ -1,0 +1,76 @@
+F                                                                                                                                                                                                                                                                                                                                                                                                        [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+__________________________________________________________________________________________________________________________________________________________________________ test_k06_an_emergency_rollback_moves_a_promoted_alias_back __________________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_rollout.lab_world.Lab object at 0x7ee33ddcac60>, workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-47...-0b8e137e1f2b/scratchpad/ri/k06/../out-k06-unpatched/cases/test_k06_an_emergency_rollback_moves_a_promoted_alias_back')
+
+    def test_k06_an_emergency_rollback_moves_a_promoted_alias_back(lab, workdir):
+        """Approved on an accepting report, the operator promotes the candidate (L3: the alias's
+        next listing serves serving_2 on the same endpoint); the operator's emergency rollback
+        then records one D9 decision and moves the alias back to the baseline deployment through
+        L3's CAS. The policy is the one R1 routes: its candidate ref must be what L3's alias reads
+        as the candidate, or the rollback leaves the alias on it.
+    
+        E8L-F2 (KNOWN_FAIL, still open after WR-E8L-2b): the candidate's own ref (`lab.CAND`, a
+        real private/dev deployment revision, correctly resolved through 0045's `release_active`
+        since R208) and the promoted deployment's ref (`lab.promote`'s own fresh
+        `deployment_revision_id`, mirroring `operations.py`'s real `propose()`, which always mints
+        `str(uuid.uuid4())`) share the same servingVersion and digest but never the same deployment
+        id - so `Controller._converge`'s `current not in candidates` (a full-ref set membership
+        test) can never see the promoted alias as "this policy's candidate", whatever identity
+        scheme the ref uses. See `mutants.py`'s `KNOWN_FAIL` comment for the proposed direction."""
+        policy, ref, r, runs = launched(lab, 0x6a)
+        listed = lab.listing()
+        at = horizon(lab, ref)
+        report = lab.report(runs, "improving", lw.PROTOCOL)
+        run(lab.controller().approve(lw.OPERATOR, policy, ref, lw.plan(),
+                                     lw.live(r.counts, policy.policy_id, now=at), now=at,
+                                     report=report, runs=runs))
+        lab.promote(lab.q8.W["serving_2"], 1)
+        serving = lab.serving()
+        try:
+            promoted = run(serving.serving(policy.endpoint_id))
+>           run(lab.controller().emergency_rollback(lw.OPERATOR, policy, ref, now=at,
+                                                    reason="e8l drill"))
+
+tests/integration/lab_rollout/scenarios_recover.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_rollout/lab_world.py:94: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+apps/infrx-api/infrx/rollouts/control/__init__.py:283: in emergency_rollback
+    await self._converge(policy, policy_ref)
+apps/infrx-api/infrx/rollouts/control/__init__.py:237: in _converge
+    await self._serving.rollback(policy.endpoint_id, fence=fence,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <infrx.lab.control.operations.Serving object at 0x7ee339716ae0>, endpoint_id = 'c0000002-0000-4000-8000-000000000002', fence = 2, to_serving_ref = 'lab:serving:b0000001-0000-4000-8000-000000000001:d0000003-0000-4000-8000-000000000003@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+reason = 'rollback lab:policy:b0000001-0000-4000-8000-000000000001:000000b8-0000-4000-8000-000000000001@sha256:5ebd1ae6ffcc2d901900515dc11276bbea13d9c831c2d46f8fcf5cd1ea9465be'
+
+    async def rollback(self, endpoint_id: str, *, fence: int, to_serving_ref: str,
+                       reason: str) -> int:
+        """The newest listing version serving `to_serving_ref`, re-listed only if it is
+        earlier and the alias is still at `fence` (the store's CAS: `StateConflict` on a
+        stale fence, `NotFound` for a version that is not earlier)."""
+        alias, versions = await self._versions(endpoint_id)
+        for listing in reversed(versions):    # the store refuses the current and later ones
+            if await self._ref(listing) == to_serving_ref:
+                return (await self.control.rollback(
+                    self.operator, alias, to_version=listing.version, expected_version=fence,
+                    reason=reason)).version
+>       raise errors.NotFound("no earlier listing of this alias serves that ref")
+E       infrx.contracts.errors.NotFound: not_found: no earlier listing of this alias serves that ref
+
+apps/infrx-api/infrx/lab/control/operations.py:224: NotFound
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_rollout/scenarios_recover.py::test_k06_an_emergency_rollback_moves_a_promoted_alias_back - infrx.contracts.errors.NotFound: not_found: no earlier listing of this alias serves that ref
+1 failed, 20 deselected in 9.48s

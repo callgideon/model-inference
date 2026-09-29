@@ -1,0 +1,21 @@
+diff --git a/tests/integration/lab_rollout/scenarios_recover.py b/tests/integration/lab_rollout/scenarios_recover.py
+index 5a191833..853bc304 100644
+--- a/tests/integration/lab_rollout/scenarios_recover.py
++++ b/tests/integration/lab_rollout/scenarios_recover.py
+@@ -256,8 +256,15 @@ def test_k06_an_emergency_rollback_moves_a_promoted_alias_back(lab, workdir):
+     id - so `Controller._converge`'s `current not in candidates` (a full-ref set membership
+     test) can never see the promoted alias as "this policy's candidate", whatever identity
+     scheme the ref uses. See `mutants.py`'s `KNOWN_FAIL` comment for the proposed direction."""
+-    policy, ref, r, runs = launched(lab, 0x6a)
+     listed = lab.listing()
++    # the baseline R2 rolls back to is the alias's listed deployment in L3's own ref form
++    # (R188/R208), not the opaque stand-in: L3's rollback resolves it against its listings
++    base = lab.sql("select infrx.lab_serving_ref(%s)", listed[1])[0][0]
++    policy, ref = lab.launch({**lab.policy(weights=(5_000,), candidates=(lab.CAND,)),
++                              "baseline_ref": base}, lw.plan())
++    r = router(lab)
++    traffic(lab, r, 40, 2, 0x6a)
++    runs = lab.runs(0x6a, base, lab.CAND)
+     at = horizon(lab, ref)
+     report = lab.report(runs, "improving", lw.PROTOCOL)
+     run(lab.controller().approve(lw.OPERATOR, policy, ref, lw.plan(),
