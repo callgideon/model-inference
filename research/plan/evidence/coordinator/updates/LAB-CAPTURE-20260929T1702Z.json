@@ -1,0 +1,83 @@
+{
+  "task": "I2L-OBS",
+  "slice": "WR-C6-CAPTURE (lab-capture, LW6): consent source, request-path capture hook, worker async-output spools, gateway lifespan ship; TRACE_PUMPS off by default",
+  "activity": "review",
+  "head": "5f6a0564",
+  "worktree": ".claude/worktrees/codex-w5-lab-capture",
+  "branch": "codex/w5-lab-capture",
+  "owned_paths": [
+    "apps/infrx-api/infrx/gateway/capture.py",
+    "apps/infrx-api/infrx/gateway/routes/ingress.py",
+    "apps/infrx-api/infrx/worker/__main__.py (trace_pumps role + capture_jobs)",
+    "apps/infrx-api/tests/t/capture/",
+    "research/plan/evidence/t/LAB-CAPTURE-*"
+  ],
+  "declared_out_of_ownership": [
+    "apps/infrx-api/infrx/gateway/pilot.py (13 lines; the brief's pilot wiring + lifespan ship)",
+    "apps/infrx-api/tests/w/test_worker_main.py, worker_main_mutants.py, test_worker_traces_pg.py (the ship step moved out of trace_pumps)"
+  ],
+  "commands": [
+    {
+      "cmd": "pytest -q tests/t/capture/test_capture.py (each step's tests first)",
+      "exit": 1,
+      "summary": "RED x3: module absent; 8 failed (no hook); 9 failed + pilot TypeError + worker trace_ship still composed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=t2f INFRX_MUTANTS=all pytest -q tests/t/capture/test_mutants.py",
+      "exit": 0,
+      "summary": "74 passed: 64 subprocess + 5 in-process PostgreSQL mutants killed, 0 survivors"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_worker_main_mutants.py",
+      "exit": 0,
+      "summary": "88 passed, 7 skipped (PG list needs INFRX_M_S3_ENDPOINT)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=t2f pytest tests/g/test_mutants.py -k '<116 pilot/ingress mutants> or well_formed or every_case'",
+      "exit": 0,
+      "summary": "118 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=t2f INFRX_T2F_STACK=1 pytest -q tests/t/capture tests/w/test_worker_traces_pg.py tests/t/ship tests/t/feedback",
+      "exit": 0,
+      "summary": "86 passed, 20 skipped (t2i stack, PG mutants outside =all); capture stack proof + worker traces on real ClickHouse/MinIO"
+    },
+    {
+      "cmd": "E4: INFRX_D_TASK=t2f INFRX_D2_VALKEY_PORT=57545 ... pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py",
+      "exit": 0,
+      "summary": "2822 passed, 27 skipped, 0 failed (base collects 2849 here; the brief's >=2826 is the post-composition-6 tip's count)"
+    },
+    {
+      "cmd": "make api-test (t2f)",
+      "exit": 1,
+      "summary": "6708 passed, 176 skipped, 43 failed: all tests/i/test_mutants pristine-baseline refusals, i8 harness could not bind ephemeral-range port 55450 (TIME-WAIT held by another process); no tests/i/deploy/infra file changed"
+    },
+    {
+      "cmd": "INFRX_E5L_PROJECT=e5l4 runner.py --out <scratch> --only o01 (scratch tree + WR-LC-O01)",
+      "exit": 3,
+      "summary": "BLOCKED: e5l ports held by a kept idle foreign stack (checkout scratchpad/rv-lo3); nothing touched"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2.5,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "3 steps done fail-first, 0 mutant survivors (74 + 88 + 118), E4 0 failed, t2f real-stack proofs green; remaining = one verify round (composition analogues 1-2 h) + WR-LC-O01 applied and o01 rerun when e5l frees (~0.5 h)",
+    "at": "20260929T1702Z"
+  },
+  "blockers": [
+    "E5L o01 real run: the e5l port block is held by a kept foreign stack (infrx-e5l-*, checkout .../scratchpad/rv-lo3); rerun `apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01` with WR-LC-O01 applied once it is released"
+  ],
+  "wiring_requests": [
+    "WR-LC-O01 (lab-observe files): bind o01's switch case - scenarios_trace.py, runner.py lanes [], test_e5l_runner.py no unbound case, mutants.py O01_ON + st_capture_switch_ignored + st_capture_key_opt_in_ignored + a_lane_undeclared re-cut; exact diff research/plan/evidence/t/LAB-CAPTURE-5f6a056-o01.diff",
+    "WR-LC-MAKE (Makefile): api-mutants += tests/t/capture/test_mutants.py (INFRX_D_TASK for its PG half); stack proofs += INFRX_D_TASK=t2f INFRX_T2F_STACK=1 tests/t/capture/test_capture_stack.py",
+    "WR-LC-DOC (08 \u00a75 TRACE_PUMPS row, config.py trace_pumps comment, deploy/preflight.py NOT_SETTABLE text): capture + ship in the gateway, retention + projection + async spools in the worker; text in the evidence",
+    "WR-LC-HOSTED (before any hosted enable): runtime-login read of consent (RPC infrx.trace_consent, 0054 LOCAL-ONLY) and one shared TRACE_SPOOL_DIR mount for both units",
+    "Proposed ruling (unnumbered): trace capture writes where the output is produced; only the gateway ships (text in the evidence)"
+  ],
+  "evidence": [
+    "research/plan/evidence/t/LAB-CAPTURE-5f6a056.md",
+    "research/plan/evidence/t/LAB-CAPTURE-5f6a056-o01.diff"
+  ]
+}
