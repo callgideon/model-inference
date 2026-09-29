@@ -8082,7 +8082,7 @@
   {
    "id": "W5-MERGE-38",
    "task": null,
-   "slice": "merge batch #38 (Opus): lab-app-control 62d5130c (+WR-LAC-1/2, R223)",
+   "slice": "merge batch #38 (Opus): lab-app-control 62d5130c (+WR-LAC-1/2, R223); workflow wf_fe012911-849",
    "agent": "opus",
    "branch": "codex/w5-merge-38",
    "worktree": ".claude/worktrees/codex-w5-merge-38",
@@ -8114,7 +8114,7 @@
   {
    "id": "W5-LAB-CONTROL-2",
    "task": "L3",
-   "slice": "(wave5 LW6 lane lab-control-2, Opus) E3L-F4 operator rejection of a publication proposal (0052) → E3L-F5 the Deployment record says what is listed; base 97b3689b",
+   "slice": "(wave5 LW6 lane lab-control-2, Opus) E3L-F4 operator rejection of a publication proposal (0052) → E3L-F5 the Deployment record says what is listed; base 97b3689b; workflow wf_548e56bc-0d3",
    "agent": "opus",
    "branch": "codex/w5-lab-control-2",
    "worktree": ".claude/worktrees/codex-w5-lab-control-2",
