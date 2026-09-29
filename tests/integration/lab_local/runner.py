@@ -448,6 +448,7 @@ def key_held(key: str, wait_s: float = 0.0, services: dict | None = None) -> str
     def why() -> str | None:
         for name, svc in services.items():
             with socket.socket() as probe:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)   # TIME-WAIT is free
                 try:
                     probe.bind(("127.0.0.1", svc.host_port))
                 except OSError:
