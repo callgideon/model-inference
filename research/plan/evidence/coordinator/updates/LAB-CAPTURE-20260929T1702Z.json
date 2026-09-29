@@ -2,7 +2,7 @@
   "task": "I2L-OBS",
   "slice": "WR-C6-CAPTURE (lab-capture, LW6): consent source, request-path capture hook, worker async-output spools, gateway lifespan ship; TRACE_PUMPS off by default",
   "activity": "review",
-  "head": "5f6a0564",
+  "head": "5083cf43",
   "worktree": ".claude/worktrees/codex-w5-lab-capture",
   "branch": "codex/w5-lab-capture",
   "owned_paths": [
@@ -56,6 +56,21 @@
       "cmd": "INFRX_E5L_PROJECT=e5l4 runner.py --out <scratch> --only o01 (scratch tree + WR-LC-O01)",
       "exit": 3,
       "summary": "BLOCKED: e5l ports held by a kept idle foreign stack (checkout scratchpad/rv-lo3); nothing touched"
+    },
+    {
+      "cmd": "pytest -q tests/t/capture/test_capture.py (fix round, new cases first at 3aa8b1d0)",
+      "exit": 1,
+      "summary": "RED: 2 failed (remote URL verbatim, replay recorded), 40 passed; R1 case passed = oracle had no killer"
+    },
+    {
+      "cmd": "INFRX_D_TASK=t2f INFRX_MUTANTS=all pytest -q tests/t/capture/test_mutants.py (fix round)",
+      "exit": 0,
+      "summary": "80 passed, 0 survivors (+hook_credential_scrubbed_once, hook_remote_url_verbatim/_keeps_query/_keeps_userinfo, hook_every_string_is_a_url, hook_captures_a_replay)"
+    },
+    {
+      "cmd": "E4 (fix round): INFRX_D_TASK=t2f pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py",
+      "exit": 0,
+      "summary": "2822 passed, 27 skipped, 0 failed (unchanged)"
     }
   ],
   "estimate": {
@@ -64,7 +79,7 @@
     "pessimistic_h": 6,
     "confidence": "medium",
     "basis": "3 steps done fail-first, 0 mutant survivors (74 + 88 + 118), E4 0 failed, t2f real-stack proofs green; remaining = one verify round (composition analogues 1-2 h) + WR-LC-O01 applied and o01 rerun when e5l frees (~0.5 h)",
-    "at": "20260929T1702Z"
+    "at": "20260929T-fix-round"
   },
   "blockers": [
     "E5L o01 real run: the e5l port block is held by a kept foreign stack (infrx-e5l-*, checkout .../scratchpad/rv-lo3); rerun `apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01` with WR-LC-O01 applied once it is released"
@@ -74,10 +89,28 @@
     "WR-LC-MAKE (Makefile): api-mutants += tests/t/capture/test_mutants.py (INFRX_D_TASK for its PG half); stack proofs += INFRX_D_TASK=t2f INFRX_T2F_STACK=1 tests/t/capture/test_capture_stack.py",
     "WR-LC-DOC (08 \u00a75 TRACE_PUMPS row, config.py trace_pumps comment, deploy/preflight.py NOT_SETTABLE text): capture + ship in the gateway, retention + projection + async spools in the worker; text in the evidence",
     "WR-LC-HOSTED (before any hosted enable): runtime-login read of consent (RPC infrx.trace_consent, 0054 LOCAL-ONLY) and one shared TRACE_SPOOL_DIR mount for both units",
-    "Proposed ruling (unnumbered): trace capture writes where the output is produced; only the gateway ships (text in the evidence)"
+    "Proposed ruling (unnumbered): trace capture writes where the output is produced; only the gateway ships (text in the evidence)",
+    "WR-LC-LOCAL (lab_local owner, applied by the merge lane): the Lab-routes gateway starts with TRACE_PUMPS=\"false\" (it is not the capture gateway; the main one holds the TRACE_SPOOL_DIR lock); exact diff research/plan/evidence/t/LAB-CAPTURE-WR-LC-LOCAL.diff; rerun `make lab-local` on the merged tree before this lane merges",
+    "WR-LC-PILOT / WR-LC-W (coordinator: ratify as brief-directed wiring OR re-home): research/plan/evidence/t/LAB-CAPTURE-WR-LC-PILOT.diff (pilot.py + worker compose()) and LAB-CAPTURE-WR-LC-W.diff (tests/w); if re-homed the merge lane reruns the G/W mutant lists"
   ],
   "evidence": [
     "research/plan/evidence/t/LAB-CAPTURE-5f6a056.md",
-    "research/plan/evidence/t/LAB-CAPTURE-5f6a056-o01.diff"
-  ]
+    "research/plan/evidence/t/LAB-CAPTURE-5f6a056-o01.diff",
+    "research/plan/evidence/t/LAB-CAPTURE-WR-LC-LOCAL.diff",
+    "research/plan/evidence/t/LAB-CAPTURE-WR-LC-PILOT.diff",
+    "research/plan/evidence/t/LAB-CAPTURE-WR-LC-W.diff"
+  ],
+  "fix_round": {
+    "fixed": [
+      "0-LC-R1",
+      "0-LC-R2",
+      "0-LC-R3"
+    ],
+    "open": {
+      "0-LC-R4": "o01 PASS not claimed; e5l still held; WR-LC-O01 pending",
+      "0-LC-R5": "coordinator ratification or WR-LC-PILOT/WR-LC-W",
+      "1-LC-RS-1": "WR-LC-LOCAL filed; make lab-local owed on the merged tree",
+      "1-LC-RS-2": "coordinator ratification or WR-LC-PILOT/WR-LC-W"
+    }
+  }
 }

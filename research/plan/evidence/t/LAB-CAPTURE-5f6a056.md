@@ -131,3 +131,22 @@ Optimistic 1 h, likely 2.5 h, pessimistic 6 h; confidence medium. Basis:
 - the E4 regression had 0 failed;
 - the real-stack proofs passed on t2f;
 - what remains is one verify round (the composition-3/-4/-5/-6 analogues each took 1-2 h), plus coordinator application of WR-LC-O01 and the o01 rerun once the e5l block is released (about 0.5 h: one `--only o01` run is about 15-25 min).
+
+## Fix round (2026-09-29, one round, head after it: see the update JSON; fix commit 5083cf43)
+
+Tests first: the three new cases ran red at 3aa8b1d0 before the fix. R2 and R3 failed. The R1 case passed at head, which was the defect: its oracle had no killing mutant. Raw logs are in the lane scratch `lc/`: fix-red.log, fix-mutants.log, fix-t.log and fix-e4.log.
+
+| Finding | Status | What changed / where it goes |
+|---|---|---|
+| 0-LC-R1 credential scrubbed once | fixed | Added `test_a_credential_repeated_in_one_part_is_scrubbed_everywhere`: the token appears twice in one prompt plus once in the echoed answer, and the spool must hold 3 × `[credential]` and no token. Added mutant `hook_credential_scrubbed_once` (`replace(token, REDACTED, 1)`), which is killed. |
+| 0-LC-R2 remote media URL verbatim | fixed | `capture.redacted` now cuts every `url` field (the media parts' key) that is not `data:` down to `scheme://host/path`, dropping the query, the fragment and `user:pass@`. Inline `data:` still becomes its digest. Text is untouched. The worker's job records use the same `request_line`, so the fix covers them too. Added case `test_a_remote_media_url_is_spooled_without_its_query_or_credentials` and mutants `hook_remote_url_verbatim`, `hook_remote_url_keeps_query`, `hook_remote_url_keeps_userinfo` and `hook_every_string_is_a_url`. |
+| 0-LC-R3 replay writes a 2nd record | fixed | `GatewayCapture.response` returns an answer carrying `Idempotency-Replayed` unwrapped, so the original request's record stands. Added case `test_an_idempotent_replay_writes_no_second_record` and mutant `hook_captures_a_replay`. |
+| 0-LC-R4 o01 not PASSED | open (coordinator) | Unchanged: `infrx-e5l-*` is still up on 57132/57123/57190/57100/57179. WR-LC-O01 still applies. WR-C6-CAPTURE's o01 PASS is **not claimed**. |
+| 0-LC-R5 / 1-LC-RS-2 pilot.py + tests/w edits | open (coordinator) | Two options: ratify these edits as brief-directed wiring, or re-home them. The exact re-home diffs (`git diff f9e6a14e..5f6a0564 -- <paths>`) are `LAB-CAPTURE-WR-LC-PILOT.diff` (pilot.py + worker/__main__.py; the compose() hunk is the out-of-ownership part) and `LAB-CAPTURE-WR-LC-W.diff` (tests/w). If re-homed, the merge lane reruns the G/W mutant lists. The fix round touched neither file. |
+| 1-LC-RS-1 lab_local Lab-routes gateway refuses the spool lock | WR filed, rerun owed | `LAB-CAPTURE-WR-LC-LOCAL.diff` (`git apply --check` clean on claude/consumer-v1 1c63776d) passes `TRACE_PUMPS="false"` to the Lab-routes gateway's start (lab_world.py:381), because it is not the capture gateway. The merge lane applies it and must run `make lab-local` on the merged tree before this lane merges. It was not run here: that needs the lab-on key's stack, which this lane does not own. |
+
+Commands (all on task-local key t2f):
+- `pytest -q tests/t/capture/test_capture.py` at 3aa8b1d0 + new cases: 2 failed, 40 passed (red). After the fix: 42 passed.
+- `INFRX_D_TASK=t2f INFRX_MUTANTS=all pytest -q tests/t/capture/test_mutants.py`: **80 passed, 0 survivors** (74 before plus 6 new).
+- `INFRX_D_TASK=t2f pytest -q tests/t --deselect tests/t/capture/test_mutants.py`: 167 passed, 34 skipped (stack-gated).
+- E4 with every switch OFF, `INFRX_D_TASK=t2f pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py`: **2822 passed, 27 skipped, 0 failed**, identical to the step-4 count.
