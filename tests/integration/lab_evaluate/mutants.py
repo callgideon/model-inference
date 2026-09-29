@@ -4,7 +4,7 @@ runner (`apps/infrx-api/tests/contracts/mutants.py`, a private copy whose Python
 check is relaxed for the SQL targets, as E3L's and track I's).
 
 * `MUTANTS` (layer 1, no stack): the runner's classification, cells, gate and exit codes, the
-  NOT RUN vocabulary, and the unbound j09/j10 cases (never a pass once they stop skipping).
+  NOT RUN vocabulary, and the unbound j09 case (never a pass once it stops skipping).
 * `STACK_MUTANTS` (E6L.c, "intentional defects are detected"): the product decisions the
   journey guards - N1's quarantine, replay and grant binding, N2's families, leak refusal and
   frozen holdout, D7's provider scoping, rights read and receipt dedup (0029), H1's pairing
@@ -112,7 +112,7 @@ MUTANTS: tuple[Mutant, ...] = (
        NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
-    _m("unbound_case_runs", "a case waiting on L3/B4/lab-api-2 is never a pass", P,
+    _m("unbound_case_runs", "a case waiting on L3 is never a pass", P,
        "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
     _m("checkpoint_tripwire_blind", "the checkpoint half binds when the role composes", P,
        '        return "WR-B3-3" not in str(refused)', "        return True",
@@ -257,13 +257,20 @@ STACK_MUTANTS += (
     _m("st_worker_other_objects", "the eval role reads the Lab objects where they are",
        LAB_WORKERS, 'env.get("LAB_S3_PREFIX") or LAB_PREFIX,', "LAB_PREFIX,", J09_EVAL),
 )
+# LAB-E2E: j10, the provider UI - cancelling a finished run must come back refused
+J10_UI = "test_j10_the_provider_ui_launches_compares_and_cancels"
+STACK_MUTANTS += (
+    _m("st_evaluations_cancel_a_finished_run", "a finished run is never cancelled (the page's "
+       "second cancel is a conflict)", "infrx/gateway/routes/lab_evaluations.py",
+       '    if status["state"] not in LIVE:', "    if False:", J10_UI),
+)
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_data.py", "scenarios_eval.py", "scenarios_checkpoint.py",
                   "scenarios_workers.py")
 
 
 def case_names() -> set[str]:
-    """The layer-1 cases: the runner's own, and the unbound j09/j10 cases."""
+    """The layer-1 cases: the runner's own, and the unbound j09 case."""
     return set(re.findall(r"^def (test_\w+)\(", (REPO / LAYER1_FILES[0]).read_text(), re.M)) \
         | set(UNBOUND)
 
@@ -299,7 +306,7 @@ def _stack(root: pathlib.Path) -> pathlib.Path:
 
 RUNNER = Runner(name="e6l", targets=LAYER1_FILES, package="", layout=_layer1)
 #: the kept stack's identity, handed to the copy (harness.working_dir / STATE_FILE seams)
-STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE")
+STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_LAB_DIR")
 STACK_RUNNER = Runner(name="e6l-stack", package="", layout=_stack, env=STACK_ENV,
                       timeout_s=1800,
                       targets=tuple(f"../../tests/integration/lab_evaluate/{f}"
@@ -318,6 +325,7 @@ def claim_the_kept_stack() -> str | None:
         return f"no kept e6l stack: run {lab_world.RUNNER} --keep first"
     os.environ["INFRX_E2_CHECKOUT"] = lab_world.harness.working_dir()
     os.environ["INFRX_E2_STATE_FILE"] = str(lab_world.harness.STATE_FILE)
+    os.environ["INFRX_LAB_DIR"] = str(REPO / "apps" / "lab")      # j10's UI suite (LAB-E2E)
     return None
 
 

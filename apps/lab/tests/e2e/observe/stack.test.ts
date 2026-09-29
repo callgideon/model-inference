@@ -72,5 +72,5 @@ test("E2E-O o10 the Lab review panel renders the provider trace route's answer",
     const after = await page(ids.granted);
     assert.ok(after.text.includes(CONTENT_COPY.metadata_only) && !after.text.includes("Organization") && !after.text.includes("Show content"));
   });
-  record("observe", { cell: "E5L o10", stand_ins: s.world.stand_ins, composed: true });
+  record("observe", { cell: "E5L o10", stand_ins: s.world.stand_ins, composed: {} });
 });

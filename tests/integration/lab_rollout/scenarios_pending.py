@@ -1,5 +1,5 @@
-"""E8L k08, k10: the legs that wait - NOT RUN, never a pass, each naming what it waits on and
-the exact rerun. Each case states the steps it will run once bound. (k09's I7 entry point
+"""E8L k08: the leg that waits - NOT RUN, never a pass, naming what it waits on and the exact
+rerun. (k10's UI half is bound in `scenarios_route.py` to `apps/lab/tests/e2e/rollout`, LAB-E2E.) Each case states the steps it will run once bound. (k09's I7 entry point
 landed with composition-2: its case moved to `scenarios_recover.py`, bound for the
 emergency-rollback subcommand and NOT RUN for the pass loop alone - WR-R2-3.)
 
@@ -10,10 +10,6 @@ emergency-rollback subcommand and NOT RUN for the pass loop alone - WR-R2-3.)
   one load profile for each into `marlin2b/results/R3-parity-<variant>/` on the experiment
   branch (the directory's other E1B/E4B/M4 results are not a variant pair), commit, then
   k07's compare with those two load records (`<exp>/results/...@<sha>`).
-* k10 (lab-ui-swap): the Lab releases UI (`apps/lab/app/(provider)/releases`) over the real
-  `/lab/v1/releases` route, driven by a coordinator-assigned e2e suite
-  (`apps/lab/tests/e2e/rollout/`): the R2 verdict shown, an expansion proposed at the fence,
-  the operator's approval, an emergency rollback.
 """
 from __future__ import annotations
 
@@ -60,28 +56,4 @@ def test_k08_parity_on_an_allocated_gpu_target():
     waits("k08", "P-08", why="no allocated GPU target and no measured results on this base. "
                              "Steps: serve.sh + bench.py for base and variant on the target, "
                              "commit marlin2b/results/R3-parity-*, then k07 with those loads")
-    unbound()
-
-
-def test_k10_the_releases_ui_over_the_real_route():
-    """lab-ui-swap (#17) landed `apps/lab/app/(provider)/releases` and WR-R4-1's
-    `/lab/v1/releases` route mount (LAB_RELEASES, off), but `pilot._lab_2` composes
-    `LabReleases(sessions, access)` with no records/proposal port (WR-R4-1's lab-sql half,
-    WR-R4-2): every read and the one write answer 503 today, so the route exists but has
-    nothing real to show yet - and no coordinator-assigned e2e suite drives it. The store's
-    listing the records port will read (0048's `lab_releases_in`) is bound for real in
-    `scenarios_route`'s k10 read-half case."""
-    suite = lw.REPO / "apps" / "lab" / "tests" / "e2e" / "rollout"
-    releases_route = lw.API / "infrx" / "gateway" / "routes" / "lab_releases.py"
-    assert releases_route.exists(), "WR-R4-1's route module is gone: re-check this tripwire"
-    assert not suite.exists(), "the releases e2e suite landed: bind this case"
-    waits("k10", "lab-ui-swap", why="/lab/v1/releases is mounted (LAB_RELEASES, off) but "
-                                    "pilot._lab_2 composes LabReleases with no records or "
-                                    "proposal port (WR-R4-1 lab-sql half, WR-R4-2): every "
-                                    "call answers 503, and apps/lab/tests/e2e/rollout/ (the "
-                                    "coordinator-assigned suite this scenario drives) does "
-                                    "not exist on this base. Steps: land the read models and "
-                                    "proposal store, then verdict, proposal at the fence, "
-                                    "approval, emergency rollback through "
-                                    "apps/lab/tests/e2e/rollout/")
     unbound()

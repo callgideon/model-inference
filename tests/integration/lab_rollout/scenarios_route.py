@@ -323,3 +323,35 @@ def test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict(lab, work
     decision = rolled[0].latest_decision
     assert (decision.decision, decision.decided_by) == ("rollback", lw.OPERATOR), decision
     assert every == rolled
+
+
+def _e2e():
+    """LAB-E2E's gate half (`apps/lab/tests/e2e/gate.py`), by path under this package's name
+    (R213); a mutant copy has no apps/lab, so INFRX_LAB_DIR names the checkout's."""
+    import importlib.util
+    import os
+    from pathlib import Path
+    lab = Path(os.environ.get("INFRX_LAB_DIR") or lw.REPO / "apps" / "lab")
+    spec = importlib.util.spec_from_file_location("lab_rollout.lab_e2e_gate",
+                                                  lab / "tests" / "e2e" / "gate.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_k10_the_releases_ui_over_the_real_route(workdir):
+    """k10's UI half (LAB-E2E): `apps/lab/tests/e2e/rollout` - the Lab releases page built and
+    served, signed in through its own form, over `/lab/v1/releases` on the l4 key: the page
+    fails closed on the gateway's own LAB_RELEASES composition, then D9's real store and 0043's
+    proposal store show R2's verdict, take a proposal at the fence the page showed through its
+    server action, the operator's approval and an emergency rollback, and refuse the unsafe
+    variants. A red suite fails this case; a green one is NOT RUN while the gateway's own
+    composition lacks the records/proposal ports (WR-R4-1 lab-sql half, WR-R4-2)."""
+    e2e = _e2e()
+    got = e2e.run("rollout", workdir)
+    lw.save(workdir, "k10-ui.json", {k: v for k, v in got.items() if k != "tail"})
+    absent = e2e.missing(got)
+    if absent:
+        lw.not_run("k10", "WR-R4-2", why=f"{e2e.command('rollout')} passed "
+                   f"({got['pass']} cases) over D9 and 0043 with test-local records/proposal "
+                   f"adapters, but pilot._lab_2 composes LabReleases without {absent}")

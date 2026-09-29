@@ -174,7 +174,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '    "o08": ("test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled",),',
        '    "o08": ("test_o08_a_timed_out_submit",),', REQUIRED),
     _m("a_lane_undeclared", "a scenario waiting on a lane declares it", R,
-       '"lanes": ["LAB-E2E"]}', '"lanes": []}', LANES),
+       '"lanes": ["COMPOSITION"]}', '"lanes": []}', LANES),
     _m("another_namespace", "e5l runs in its own reserved block", R,
        'NAMESPACE = "e5l"', 'NAMESPACE = "e3l"', NAMESPACE),
     _m("judge_fake_on_the_gateway_port", "the judge fake has a port of its own", W,
@@ -223,6 +223,7 @@ O09_PROJECTOR = "test_o09_a_projector_killed_after_its_insert_redelivers_and_pro
 O09_WORKER = "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once"
 O03_ROUTE = "test_o03_the_lab_traces_route_through_the_real_gateway"
 O04_PG = "test_o04_the_judge_ledger_is_d6js_postgresql_ledger"
+O10 = "test_o10_the_lab_review_panel_renders_the_routes_answer"             # LAB-E2E
 ROUTE, CONSENT = "infrx/gateway/routes/lab_traces.py", "infrx/state/lab_consent.py"
 J3 = "infrx/judge/calibration/report.py"
 #: Cases that FAIL on this base (a product finding, recorded in the evidence): no mutant can
@@ -294,6 +295,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        O04_PG),
     _m("st_j3_limited_results_calibrate", "a limited result never enters the calibration",
        J3, "        elif result.limited:", "        elif False:", O04_PG),
+    # LAB-E2E: o10, the review panel - a deleted request never reaches the provider's list
+    _m("st_traces_route_ignores_deletion", "a request its owner deleted is gone from the Lab "
+       "list and page", ROUTE, "            if REQUEST in scopes or not t3.metadata_live(",
+       "            if not t3.metadata_live(", O10),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 
@@ -349,7 +354,8 @@ def _stack(root: pathlib.Path) -> pathlib.Path:
 
 RUNNER = Runner(name="e5l", targets=LAYER1_FILES, package="", layout=_layer1)
 #: the kept stack's identity, handed to the copy (harness.working_dir / STATE_FILE seams)
-STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_E5L_PROJECT")
+STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_E5L_PROJECT",
+             "INFRX_LAB_DIR")
 STACK_RUNNER = Runner(name="e5l-stack", package="", layout=_stack, env=STACK_ENV,
                       timeout_s=1800,
                       targets=tuple(f"../../tests/integration/lab_observe/{f}" for f in (
@@ -369,6 +375,7 @@ def claim_the_kept_stack() -> str | None:
                 "--keep first (the same INFRX_E5L_PROJECT)")
     os.environ["INFRX_E2_CHECKOUT"] = observe_world.harness.working_dir()
     os.environ["INFRX_E2_STATE_FILE"] = str(observe_world.harness.STATE_FILE)
+    os.environ["INFRX_LAB_DIR"] = str(REPO / "apps" / "lab")      # o10's UI suite (LAB-E2E)
     return None
 
 

@@ -91,7 +91,7 @@ def test_e5l_every_unbound_case_is_not_run_without_touching_a_stack():
                for name in dir(module) if name.startswith("test_o")
                and "not_run(" in (HERE / f"{module.__name__}.py").read_text().split(
                    f"def {name}(")[1].split("\ndef ")[0]]
-    assert len(unbound) == 2, [case.__name__ for case in unbound]
+    assert len(unbound) == 1, [case.__name__ for case in unbound]   # o01; o10 bound (LAB-E2E)
     for case in unbound:
         with pytest.raises(pytest.skip.Exception) as skipped:
             case(None)

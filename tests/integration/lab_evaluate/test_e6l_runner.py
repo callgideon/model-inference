@@ -59,7 +59,9 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 11
     assert runner.SCENARIOS["j09"]["lanes"] == ["L3"]
-    assert runner.SCENARIOS["j10"]["lanes"] == ["B4", "lab-api-2"]
+    assert runner.SCENARIOS["j10"]["lanes"] == ["WR-B4-2", "WR-LAB2-2", "WR-B3-1"], (
+        "j10 runs apps/lab/tests/e2e/evaluate (LAB-E2E); NOT RUN until the gateway's own "
+        "LAB_EVALS composition carries the experiments, catalog and ledger ports")
 
 
 def test_e6l_the_required_cases_are_exactly_what_the_scenario_modules_define():

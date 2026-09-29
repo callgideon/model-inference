@@ -84,7 +84,7 @@ SCENARIOS = {
                      "worker mid-traffic", "test_ids": ["TRACE-RECOVER", "FEEDBACK-ACK"],
             "lanes": []},
     "o10": {"title": "the Lab review panel renders the traces route's answer (browser flow)",
-            "test_ids": ["CONSOLE-FLOWS"], "lanes": ["LAB-E2E"]},
+            "test_ids": ["CONSOLE-FLOWS"], "lanes": []},
 }
 REQUIRED = {
     "o01": ("test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace",

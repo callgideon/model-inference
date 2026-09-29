@@ -186,3 +186,37 @@ def test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate(lab, wo
     assert approved.json()["evaluation"]["state"] == "succeeded"
     lw.save(workdir, "i08.json", {"prepared": prepared.json(), "checkpoint": got,
                                   "approved": approved.json(), "report": report})
+
+
+def _e2e():
+    """LAB-E2E's gate half (`apps/lab/tests/e2e/gate.py`), by path under this package's name
+    (R213); a mutant copy has no apps/lab, so INFRX_LAB_DIR names the checkout's."""
+    import importlib.util
+    from pathlib import Path
+    lab = Path(os.environ.get("INFRX_LAB_DIR") or lw.REPO / "apps" / "lab")
+    spec = importlib.util.spec_from_file_location("lab_improve.lab_e2e_gate",
+                                                  lab / "tests" / "e2e" / "gate.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_i08_the_provider_ui_drives_labels_to_a_checkpoint(workdir):
+    """i08's provider-UI half (WR-C4-UI, LAB-E2E): `apps/lab/tests/e2e/improve` - the Lab's
+    annotations and training pages built and served, signed in through their own form, over
+    `/lab/v1/pipelines` as the gateway composes it with LAB_PIPELINES on (D8's label log and
+    run ledger, D7, L2) on the l4 key: labels imported (a forged ground truth and a foreign
+    sample refused with their reasons), assigned and reviewed, a train-only export, the manual
+    bundle prepared, submitted and finished, a checkpoint returned and never eligible without
+    its held-out evaluation, and the unsafe variants. The run and checkpoint listings are
+    WR-LAB2-4's stand-in, as the API half's (`Listing`); a red suite fails this case, a green
+    one is NOT RUN while P3's evaluation port has no B3 suite source composed (WR-B3-3)."""
+    e2e = _e2e()
+    got = e2e.run("improve", workdir)
+    lw.save(workdir, "i08-ui.json", {k: v for k, v in got.items() if k != "tail"})
+    absent = [port for port in e2e.missing(got) if port != "listings"]
+    if absent:
+        lw.not_run("i08", "WR-B3-3", why=f"{e2e.command('improve')} passed ({got['pass']} "
+                   f"cases) through the returned checkpoint, but the gateway's own "
+                   f"LAB_PIPELINES composition lacks {absent}: the held-out evaluation and the "
+                   f"approval to an eligible candidate are not reachable from the page")

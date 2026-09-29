@@ -73,11 +73,11 @@ const EMPTY = "{ ok: true, value: [] as unknown as T }";
 const stackMutant = (suite, ...args) => ({ suite, ...m(...args) });
 const STACK_MUTANTS = [
   stackMutant("observe", "E2E-S01", "a lost capture loses its reason in the list", LIST, "content: state === \"lost\" ? `${CONTENT_LABEL.lost}: ${reason}` : CONTENT_LABEL[state],", "content: CONTENT_LABEL[state],", [S.o01]),
-  stackMutant("observe", "E2E-S02", "an ungranted request reads as expired content", DETAIL, '  if (d.access === "metadata") return "metadata_only";\n', "", [S.o01, S.o04]),
+  stackMutant("observe", "E2E-S02", "an ungranted request reads as expired content", DETAIL, 'if (d.access === "metadata") return "metadata_only";', 'if (d.access === "metadata") return "expired";', [S.o01, S.o04]),
   stackMutant("observe", "E2E-S03", "content is loaded without being asked for", "app/(provider)/requests/[id]/page.tsx", 'const wanted = (await searchParams).content === "1";', "const wanted = true;", [S.o02]),
   stackMutant("observe", "E2E-S04", "a refused list reads as not found, whatever the reason", LIST, 'message: result.reason === "not_found" ? LIST_COPY.not_found : TRACE_COPY[result.reason]', "message: LIST_COPY.not_found", [S.o03]),
   stackMutant("observe", "E2E-S05", "a consumer-only account gets a workspace chooser", ACCESS, '  if (workspaces.length === 0) return { kind: "denied" };\n', "", [S.o03]),
-  stackMutant("observe", "E2E-S06", "a metadata-only record shows an organization", DETAIL, 'if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', 'if (true) rows.push(["Organization", (d as { grantor_org_id?: string }).grantor_org_id ?? ""]', [S.o04]),
+  stackMutant("observe", "E2E-S06", "a metadata-only record shows an organization", DETAIL, 'if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', 'rows.push(["Organization", "—"]);\n  if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', [S.o04]),
   stackMutant("rollout", "E2E-S07", "an unavailable releases service reads as an empty list", "lib/services/rollouts/http.ts", 'if (!response.ok) return { ok: false, reason: REASONS[response.status] ?? "unavailable" };', `if (!response.ok) return ${EMPTY};`, [S.r01]),
   stackMutant("rollout", "E2E-S08", "a rolled-back release still offers a rollback", "lib/services/rollouts/view.ts", 'if (r.state !== "rolled_back") actions.push("rollback");', 'actions.push("rollback");', [S.r02]),
   stackMutant("rollout", "E2E-S09", "a decided proposal still reads as pending", "lib/services/rollouts/view.ts", 'x.policyRef === r.policyRef && x.state === "proposed"', "x.policyRef === r.policyRef", [S.r03, S.r05]),
