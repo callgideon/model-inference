@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-29 11:35Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 287, updated 2026-09-29 11:35Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-29 12:35Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 288, updated 2026-09-29 12:35Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -30,9 +30,9 @@ Remaining, in order:
 
 - Integration branch `claude/consumer-v1` (head `ef37d72a`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
-- Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 8 active lanes, 2 reserved.
-- Validation: 0 error(s), 37 warning(s).
+- Lowest open band: V4 measured backend; bands with active work: V2, V4, V5, V6.
+- Agent slots: 16 total, 13 active lanes, 2 reserved.
+- Validation: 0 error(s), 65 warning(s).
 
 ### Actionable blockers
 
@@ -51,7 +51,6 @@ Remaining, in order:
 
 ### Next ready work
 
-- `E6L` Prove imported benchmark to candidate decision end to end (no lane assigned)
 - `X1` Specify a bounded live-video workload and trial contract (no lane assigned)
 - `X3` Specify a robot/task and inference freshness contract (no lane assigned)
 - `X5` Qualify a non-NVIDIA backend investment (no lane assigned)
@@ -63,9 +62,9 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 
 | Category | Implemented/integrated | Active | Acceptance cells PASS |
 |---|---|---|---|
-| Backend corrections | 12 / 14 | none | BACKEND-LOCAL 7/7; BACKEND-READY 0/6 |
+| Backend corrections | 12 / 14 | I8 | BACKEND-LOCAL 7/7; BACKEND-READY 0/6 |
 | App completion | 8 / 12 | I2A | APP-LOCAL 17/17; APP-PILOT 0/5 |
-| Activated post-launch (Lab / later) | 46 / 52 | I2L | n/a |
+| Activated post-launch (Lab / later) | 46 / 52 | E6L, E8L, I2L, I7 | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
 
 ## Milestones and ETA
@@ -90,8 +89,8 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | **LW2** M0 services, M1/M2 foundations | 11 / 11 | lab-sql: D6J (implemented) → L3-SQL (slice) → D9 (implemented); lab-access: L3 (implemented); lab-app: L4 (implemented) → V1M (implemented); datasets: N1 (implemented) → N2 (implemented); trace-ship: T2F (implemented) → T3 (implemented); feedback: G4F (implemented) → C3F (implemented) | W5-DATASETS (complete), W5-TRACE-SHIP-LW2 (complete), W5-FEEDBACK (complete), W5-LAB-SQL-LW2 (complete), W5-LAB-ACCESS-LW2 (complete), W5-LAB-APP-LW2 (complete), W5-FEEDBACK-C3F (complete), W5-LAB-API (complete), W5-COMPOSITION (complete), W5-L3-INTEGRATION (complete), W5-V1M (complete), V1M (complete), W5-LAB-SQL-LW5 (complete), W5-LAB-SQL-LW6 (complete), W5-LAB-APP-CONTROL (complete), W5-LAB-CONTROL-2 (complete) | EXIT MET: merged: D6J, L3, D9, L4, V1M, N1, N2, T2F, T3, G4F, C3F | done: exit met |
 | **LW3** M0 gate, runner, judge, content | 10 / 10 | lab-sql: C2-RPC (slice) → D8 (implemented); lab-operate: I2L (implemented) → E3L (implemented); eval-runner: B1 (implemented) → B2 (implemented); judge: J2 (implemented) → C3L (implemented); content: C2 (implemented) → G4T (implemented); rollout-routing: R1 (implemented) | W5-EVAL-RUNNER (review), W5-LAB-OPERATE (complete), W5-JUDGE (complete), W5-CONTENT (complete), W5-ROLLOUT-ROUTING (complete), W5-LAB-SQL-LW3 (complete), W5-LAB-SQL-INTEGRATION (complete), W5-E3L-BIND (complete), W5-E3L-F1 (complete), W5-LAB-OPERATE-2 (complete), W5-LAB-APP-CONTROL (complete), W5-LAB-DEPLOY-PREP (running) | EXIT MET: E3L green on one SHA plus I2L packaging (the local half of LAB-OPERATE; staging waits on P-08); B1, B2, J2, C3L, C2, G4T, D8, R1 merged | done: exit met |
 | **LW4** M1 UI, M2 ops, M3 labels, M4 control | 12 / 12 | eval-ops: B3 (implemented) → I5 (implemented); trace-ui: V2 (implemented) → V3 (implemented); judge: J3 (implemented) → P2 (implemented); datasets: N3 (implemented) → N4 (implemented); pipelines: P1 (implemented) → P3 (implemented); rollout-control: R2 (implemented) → R3 (implemented) | W5-PIPELINES (complete), W5-ROLLOUT-CONTROL (complete), W5-DATASETS-LW4 (complete), W5-EVAL-OPS (complete), W5-TRACE-UI (complete), W5-JUDGE-LW4 (complete), W5-LAB-SQL-LW4 (complete), W5-LAB-SQL-INTEGRATION-2 (complete), W5-DATASETS-LW5 (complete) | EXIT MET: all 12 merged | done: exit met |
-| **LW5** M1/M2 gates, UIs, workers | 5 / 7 | lab-observe: I2L-OBS (slice) → E5L (planned); eval-ui: B4 (implemented); lab-evaluate: E6L (planned); pipeline-ui: P4 (implemented); release-ui: R4 (implemented); lab-workers: I6 (implemented) → I7 (implemented) | W5-EVAL-UI (complete), W5-PIPELINE-UI (complete), W5-RELEASE-UI (complete), W5-LAB-WORKERS (complete), W5-LAB-OBSERVE (review), W5-LAB-EVALUATE (review), W5-LAB-API-2 (complete), W5-COMPOSITION-2 (complete), W5-LAB-UI-SWAP (complete), W5-PIPELINE-UI-2 (complete), W5-DATASETS-LW5 (complete), W5-COMPOSITION-3 (complete), W5-LAB-SQL-LW5 (complete), W5-LAB-OBSERVE-2 (complete) | PENDING (not implemented: E5L, E6L; gate lane lab-observe is not complete; gate lane lab-evaluate is not complete): LAB-OBSERVE local (E5L + I2L with the worker extension; staging waits on P-08); LAB-EVALUATE-LOCAL (E6L) accepted; P4, R4, I6, I7 merged | forecast: 2026-09-29 14:41Z – 2026-09-30 02:23Z (likely 2026-09-29 17:17Z); effort 5.6 / 11.4 / 25.7 h, wall-clock 3.1 / 5.7 / 14.8 h, longest lane W5-LAB-OBSERVE, confidence medium |
-| **LW6** M3/M4 gates | 1 / 2 | lab-improve: E7L (implemented); lab-rollout: E8L (planned) | W5-LAB-IMPROVE (review), W5-LAB-ROLLOUT (review), W5-PIPELINES-LINEAGE (complete), W5-LAB-IMPROVE-2 (complete), W5-LAB-SQL-LW6 (complete), W5-LAB-ROLLOUT-2 (complete), W5-ROLLOUT-IDENTITY (complete), W5-COMPOSITION-4 (complete), W5-LAB-ROLLOUT-3 (complete), W5-COMPOSITION-5 (complete), W5-LAB-DEPLOY-PREP (running), W5-LAB-CONTROL-2 (complete), W5-KNOWN-GOOD-REPROOF (complete), W5-LAB-E2E (running) | PENDING (not implemented: E8L; gate lane lab-improve is not complete; gate lane lab-rollout is not complete): LAB-IMPROVE-LOCAL, LAB-ROLLOUT-LOCAL, then COMPLETE-LOCAL | forecast: 2026-09-29 14:41Z – 2026-09-29 22:29Z (likely 2026-09-29 17:17Z); effort 3.1 / 5.7 / 10.9 h, wall-clock 3.1 / 5.7 / 10.9 h, longest lane W5-LAB-ROLLOUT, confidence medium |
+| **LW5** M1/M2 gates, UIs, workers | 5 / 7 | lab-observe: I2L-OBS (slice) → E5L (planned); eval-ui: B4 (implemented); lab-evaluate: E6L (planned); pipeline-ui: P4 (implemented); release-ui: R4 (implemented); lab-workers: I6 (implemented) → I7 (implemented) | W5-EVAL-UI (complete), W5-PIPELINE-UI (complete), W5-RELEASE-UI (complete), W5-LAB-WORKERS (complete), W5-LAB-OBSERVE (review), W5-LAB-EVALUATE (review), W5-LAB-API-2 (complete), W5-COMPOSITION-2 (complete), W5-LAB-UI-SWAP (complete), W5-PIPELINE-UI-2 (complete), W5-DATASETS-LW5 (complete), W5-COMPOSITION-3 (complete), W5-LAB-SQL-LW5 (complete), W5-LAB-OBSERVE-2 (complete), W5-LAB-EVALUATE-2 (running), W5-COMPOSITION-6 (running) | PENDING (not implemented: E5L, E6L; gate lane lab-observe is not complete; gate lane lab-evaluate is not complete): LAB-OBSERVE local (E5L + I2L with the worker extension; staging waits on P-08); LAB-EVALUATE-LOCAL (E6L) accepted; P4, R4, I6, I7 merged | forecast: 2026-09-29 15:41Z – 2026-09-30 03:23Z (likely 2026-09-29 18:17Z); effort 7.4 / 14.5 / 31.4 h, wall-clock 3.1 / 5.7 / 14.8 h, longest lane W5-LAB-OBSERVE, confidence medium |
+| **LW6** M3/M4 gates | 1 / 2 | lab-improve: E7L (implemented); lab-rollout: E8L (planned) | W5-LAB-IMPROVE (review), W5-LAB-ROLLOUT (review), W5-PIPELINES-LINEAGE (complete), W5-LAB-IMPROVE-2 (complete), W5-LAB-SQL-LW6 (complete), W5-LAB-ROLLOUT-2 (complete), W5-ROLLOUT-IDENTITY (complete), W5-COMPOSITION-4 (complete), W5-LAB-ROLLOUT-3 (complete), W5-COMPOSITION-5 (complete), W5-LAB-DEPLOY-PREP (running), W5-LAB-CONTROL-2 (complete), W5-KNOWN-GOOD-REPROOF (complete), W5-LAB-E2E (running), W5-LAB-ROLLOUT-4 (review) | PENDING (not implemented: E8L; gate lane lab-improve is not complete; gate lane lab-rollout is not complete): LAB-IMPROVE-LOCAL, LAB-ROLLOUT-LOCAL, then COMPLETE-LOCAL | forecast: 2026-09-29 15:41Z – 2026-09-29 23:29Z (likely 2026-09-29 18:17Z); effort 4.2 / 7.5 / 14 h, wall-clock 3.1 / 5.7 / 10.9 h, longest lane W5-LAB-ROLLOUT, confidence medium |
 | **C1** callbacks (conditional, any time after APP-PILOT) | 0 / 1 | lab-sql: G5-SQL (slice); callbacks: G5 (planned) | none | PENDING (not implemented: G5; gate lane callbacks is not in the overlay): API-CALLBACK; APP-LOCAL conditional (tasks.json:4668) rerun | unknown: no live lane for G5 |
 | **C2** fleet (conditional) | 0 / 1 | fleet: I4 (planned) | none | PENDING (not implemented: I4; gate lane fleet is not in the overlay): FLEET-GATE | unknown: no live lane for I4 |
 | **C3** expansion (conditional) | 0 / 3 | video: X2 (planned); robotics: X4 (planned); alt-backend: X6 (planned) | none | PENDING (not implemented: X2, X4, X6): per-task oracles | unknown: no live lane for X2, X4, X6 |
@@ -111,14 +110,14 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 |---|---|---|---|---|
 | RV-01 | fixed | F2C (complete), G7 (complete), A3 (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-02 | fixed | D10 (complete), M5 (complete), E1C (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
-| RV-03 | fixed | D10 (complete), M6 (complete), I8 (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
+| RV-03 | fixed | D10 (complete), M6 (complete), I8 (running), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-04 | open | S3 (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
 | RV-05 | fixed | F2C (complete), D10 (complete), W5 (complete), G7 (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-06 | fixed | C0 (complete), C3A (complete), A2 (complete), A3 (complete), U1R (complete), U2 (complete), U3 (complete), U4 (complete), E3A (queued) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-07 | fixed | E1C (complete), M5 (complete), G7 (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-08 | open | E1C (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
-| RV-09 | open | D10 (complete), I8 (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
-| RV-10 | open | I8 (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
+| RV-09 | open | D10 (complete), I8 (running), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
+| RV-10 | open | I8 (running), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
 | RV-11 | fixed | F2C (complete), D10 (complete), G7 (complete), U4 (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-12 | fixed | E2C (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 
@@ -137,7 +136,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (110.8 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (111.8 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -334,6 +333,11 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W5-MERGE-42 | support merge batch #42 (Opus): composition-5 6c092e92 (+WR-C5-PREFLIGHT, WR-C5-MK, R226–R230); workflow wf_71ca3135-5f8; integrated (§10 sorted: R226–R230 between R225 and R231) | complete | codex/w5-merge-42 | 073c58fe → c3911979 | ports p3 57530/57531; l4 57503, prefix infrx-p3-, db p3 | 2026-09-29 11:35Z | — | 0.5–3 h remaining (likely 1.5 h), confidence medium, estimated 2026-09-29 10:25Z; basis: single-lane batch with the E4 regression |
 | W5-LAB-E2E | support (wave5 LW6 lane lab-e2e, Opus) one Lab browser/route e2e harness under apps/lab/tests/e2e binding the four gates' UI cells: E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; `make lab-e2e`; base 073c58fe; workflow wf_a9a9b058-dda | running | codex/w5-lab-e2e | 073c58fe → — | ports l4 57503; the gate stacks via their runners, prefix infrx-l4-, db l4 | 2026-09-29 10:25Z | handback → 2 lenses → one fix round → merge → the four UI cells | 4–14 h remaining (likely 7 h), confidence low, estimated — — STALE; basis: four suites over the real stores + four runner binds |
 | W5-MERGE-43 | support merge batch #43 (Opus): lab-control-2 d2565c4f (0052 local-only; +WR-LC2-1/2, R231–R233); workflow wf_f6b062a6-f2b; the L4-X29 re-cut 902ed4f6; integrated | complete | codex/w5-merge-43 | f918dd89 → 902ed4f6 | ports l3 57502; dlab 57500; l4 57503, prefix infrx-l3-, db l3 | 2026-09-29 11:16Z | — | 0.5–3 h remaining (likely 1.5 h), confidence medium, estimated 2026-09-29 10:46Z; basis: single-lane batch with the Lab suites |
+| W5-KNOWN-GOOD-REPROOF-2 | I8 known-good re-proof through 0052 (R151 condition 1 for the next window; Opus); workflow wf_c9f38cac-130 | running | codex/w5-known-good-reproof-2 | e9e32e0e → 68ba65fe | ports stand-ins on task-local keys, prefix infrx-e3b2d-/infrx-d10-, db e3b2d/d10 | 2026-09-29 12:34Z | handback → merge batch; then the 0052 hosted window (operator-held) | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-29 10:46Z; basis: single-lane batch with the Lab suites |
+| W5-LAB-EVALUATE-2 | E6L E6L final `make lab-evaluate` + the 32 stack mutants on the e6l stack (Opus); workflow wf_59139ae8-acb | running | codex/w5-lab-evaluate-2 | 8949ffb1 → 3d5ccf49 | ports e6l stack, prefix infrx-e6l-, db e6l | 2026-09-29 12:34Z | handback → merge batch → E6L flips under R222 | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-29 10:46Z; basis: single-lane batch with the Lab suites |
+| W5-LAB-ROLLOUT-4 | E8L WR-C5-K09 bound; k09 PASS on the real e8l stack; `make lab-rollout` k01–k07 + k09 PASS, k08/k10-UI/k09-breach NOT RUN; 65 mutants 0 survivors; ACCEPT at 2b5a9446 (Opus); workflow wf_75539654-ab3 | review | codex/w5-lab-rollout-4 | 8949ffb1 → 2b5a9446 | ports e8l stack, prefix infrx-e8l-, db e8l | 2026-09-29 12:34Z | merge batch #44 running → E8L flips under R222 at integration | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-29 10:46Z; basis: single-lane batch with the Lab suites |
+| W5-COMPOSITION-6 | I7 WR-COMP-4, WR-R4-2, WR-C5-N4-ROUTE/RECEIPT/PROVIDERS/PLAN/REPORT/LIVE, #42 minors, every switch OFF (Opus); workflow wf_0f1297c2-881 | running | codex/w5-composition-6 | 8949ffb1 → 868ff366 | ports p3/j2/n3/r2 task-local, prefix infrx-<key>-, db task-local | 2026-09-29 12:34Z | handback → merge batch → E5L o01 rerun → E5L flips under R222 | 3–8 h remaining (likely 5 h), confidence medium, estimated 2026-09-29 10:46Z; basis: single-lane batch with the Lab suites |
+| W5-MERGE-44 | support merge batch #44 (Opus): lab-rollout-4 2b5a9446 (+WR-LR4-A/B evidence + verdict sub-cell; no rulings); workflow wf_e457199b-855 | running | codex/w5-merge-44 | 8949ffb1 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 12:34Z | integrate → E8L implemented (R222) | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-29 10:46Z; basis: single-lane batch with the Lab suites |
 
 ### Queues and locks
 
@@ -356,15 +360,21 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: stale estimate: lane W5-LAB-ROLLOUT estimated at 2026-09-28T19:41:40Z (older than 6 h)
 - warning: stale estimate: lane W5-LAB-DEPLOY-PREP estimated at an unknown time (older than 6 h)
 - warning: stale estimate: lane W5-LAB-E2E estimated at an unknown time (older than 6 h)
+- warning: lane W5-LAB-ROLLOUT-4 is review before start dependencies E6L with no deviation recorded
 - warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: E4C (queued) and W5-LAB-OBSERVE (review) both own research/plan/evidence/e/ / research/plan/evidence/e/E5L-*
 - warning: overlapping writers: E4C (queued) and W5-LAB-EVALUATE (review) both own research/plan/evidence/e/ / research/plan/evidence/e/E6L-*
 - warning: overlapping writers: E4C (queued) and W5-LAB-IMPROVE (review) both own research/plan/evidence/e/ / research/plan/evidence/e/E7L-*
 - warning: overlapping writers: E4C (queued) and W5-LAB-ROLLOUT (review) both own research/plan/evidence/e/ / research/plan/evidence/e/E8L-*
+- warning: overlapping writers: E4C (queued) and W5-KNOWN-GOOD-REPROOF-2 (running) both own tests/integration/backend/ / tests/integration/backend/
+- warning: overlapping writers: E4C (queued) and W5-LAB-EVALUATE-2 (running) both own research/plan/evidence/e/ / research/plan/evidence/e/
+- warning: overlapping writers: E4C (queued) and W5-LAB-ROLLOUT-4 (review) both own research/plan/evidence/e/ / research/plan/evidence/e/
 - warning: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
 - warning: overlapping writers: I2A (review) and W5-LAB-OBSERVE (review) both own infra/ / infra/lab/observe/
 - warning: overlapping writers: I2A (review) and W5-LAB-DEPLOY-PREP (running) both own infra/ / infra/lab/rollout/**
+- warning: overlapping writers: I2A (review) and W5-KNOWN-GOOD-REPROOF-2 (running) both own infra/ / infra/
+- warning: overlapping writers: I2A (review) and W5-COMPOSITION-6 (running) both own infra/ / infra/lab/
 - warning: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
 - warning: overlapping writers: E3A (queued) and W5-LAB-OBSERVE (review) both own tests/integration/ / tests/integration/lab_observe/
 - warning: overlapping writers: E3A (queued) and W5-LAB-EVALUATE (review) both own tests/integration/ / tests/integration/lab_evaluate/
@@ -372,16 +382,38 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: overlapping writers: E3A (queued) and W5-LAB-ROLLOUT (review) both own tests/integration/ / tests/integration/lab_rollout/
 - warning: overlapping writers: E3A (queued) and W5-LAB-DEPLOY-PREP (running) both own tests/integration/ / tests/integration/lab-local.sh
 - warning: overlapping writers: E3A (queued) and W5-LAB-E2E (running) both own tests/integration/ / tests/integration/lab_*/
+- warning: overlapping writers: E3A (queued) and W5-KNOWN-GOOD-REPROOF-2 (running) both own tests/integration/ / tests/integration/backend/
+- warning: overlapping writers: E3A (queued) and W5-LAB-EVALUATE-2 (running) both own tests/integration/ / tests/integration/lab_evaluate/
+- warning: overlapping writers: E3A (queued) and W5-LAB-ROLLOUT-4 (review) both own tests/integration/ / tests/integration/lab_rollout/
 - warning: overlapping writers: I3 (queued) and W5-LAB-OBSERVE (review) both own infra/ / infra/lab/observe/ (+1 more)
 - warning: overlapping writers: I3 (queued) and W5-LAB-EVALUATE (review) both own tests/integration/ / tests/integration/lab_evaluate/
 - warning: overlapping writers: I3 (queued) and W5-LAB-IMPROVE (review) both own tests/integration/ / tests/integration/lab_improve/
 - warning: overlapping writers: I3 (queued) and W5-LAB-ROLLOUT (review) both own tests/integration/ / tests/integration/lab_rollout/
 - warning: overlapping writers: I3 (queued) and W5-LAB-DEPLOY-PREP (running) both own infra/ / infra/lab/rollout/** (+1 more)
 - warning: overlapping writers: I3 (queued) and W5-LAB-E2E (running) both own tests/integration/ / tests/integration/lab_*/
+- warning: overlapping writers: I3 (queued) and W5-KNOWN-GOOD-REPROOF-2 (running) both own infra/ / infra/ (+1 more)
+- warning: overlapping writers: I3 (queued) and W5-LAB-EVALUATE-2 (running) both own tests/integration/ / tests/integration/lab_evaluate/
+- warning: overlapping writers: I3 (queued) and W5-LAB-ROLLOUT-4 (review) both own tests/integration/ / tests/integration/lab_rollout/
+- warning: overlapping writers: I3 (queued) and W5-COMPOSITION-6 (running) both own infra/ / infra/lab/
 - warning: overlapping writers: W5-LAB-OBSERVE (review) and W5-LAB-E2E (running) both own tests/integration/lab_observe/ / tests/integration/lab_*/
+- warning: overlapping writers: W5-LAB-OBSERVE (review) and W5-KNOWN-GOOD-REPROOF-2 (running) both own infra/lab/observe/ / infra/ (+1 more)
+- warning: overlapping writers: W5-LAB-OBSERVE (review) and W5-LAB-EVALUATE-2 (running) both own research/plan/evidence/e/E5L-* / research/plan/evidence/e/
+- warning: overlapping writers: W5-LAB-OBSERVE (review) and W5-LAB-ROLLOUT-4 (review) both own research/plan/evidence/e/E5L-* / research/plan/evidence/e/
+- warning: overlapping writers: W5-LAB-OBSERVE (review) and W5-COMPOSITION-6 (running) both own infra/lab/observe/ / infra/lab/ (+1 more)
 - warning: overlapping writers: W5-LAB-EVALUATE (review) and W5-LAB-E2E (running) both own tests/integration/lab_evaluate/ / tests/integration/lab_*/ (+1 more)
+- warning: overlapping writers: W5-LAB-EVALUATE (review) and W5-LAB-EVALUATE-2 (running) both own tests/integration/lab_evaluate/ / tests/integration/lab_evaluate/ (+2 more)
+- warning: overlapping writers: W5-LAB-EVALUATE (review) and W5-LAB-ROLLOUT-4 (review) both own apps/lab/tests/e2e/evaluate/ / apps/lab/tests/e2e/ (+1 more)
 - warning: overlapping writers: W5-LAB-IMPROVE (review) and W5-LAB-E2E (running) both own tests/integration/lab_improve/ / tests/integration/lab_*/
+- warning: overlapping writers: W5-LAB-IMPROVE (review) and W5-LAB-EVALUATE-2 (running) both own research/plan/evidence/e/E7L-* / research/plan/evidence/e/
+- warning: overlapping writers: W5-LAB-IMPROVE (review) and W5-LAB-ROLLOUT-4 (review) both own research/plan/evidence/e/E7L-* / research/plan/evidence/e/
 - warning: overlapping writers: W5-LAB-ROLLOUT (review) and W5-LAB-E2E (running) both own tests/integration/lab_rollout/ / tests/integration/lab_*/
+- warning: overlapping writers: W5-LAB-ROLLOUT (review) and W5-LAB-EVALUATE-2 (running) both own research/plan/evidence/e/E8L-* / research/plan/evidence/e/
+- warning: overlapping writers: W5-LAB-ROLLOUT (review) and W5-LAB-ROLLOUT-4 (review) both own tests/integration/lab_rollout/ / tests/integration/lab_rollout/ (+1 more)
+- warning: overlapping writers: W5-LAB-DEPLOY-PREP (running) and W5-KNOWN-GOOD-REPROOF-2 (running) both own infra/lab/rollout/** / infra/
+- warning: overlapping writers: W5-LAB-DEPLOY-PREP (running) and W5-COMPOSITION-6 (running) both own infra/lab/rollout/** / infra/lab/
+- warning: overlapping writers: W5-LAB-E2E (running) and W5-LAB-EVALUATE-2 (running) both own apps/lab/tests/e2e/** / apps/lab/tests/e2e/ (+1 more)
+- warning: overlapping writers: W5-LAB-E2E (running) and W5-LAB-ROLLOUT-4 (review) both own apps/lab/tests/e2e/** / apps/lab/tests/e2e/ (+1 more)
+- warning: overlapping writers: W5-KNOWN-GOOD-REPROOF-2 (running) and W5-COMPOSITION-6 (running) both own infra/ / infra/lab/ (+1 more)
 - warning: 72 update file(s) not applied yet: B1-20260928T1130Z.json, B3-20260928T1130Z.json, B3-20260928T2030Z.json, B4-20260928T1030Z.json, B4-20260928T1620Z.json, C2-20260927T2100Z.json, C2-20260928T1130Z.json, C2-20260928T2030Z.json, COMPOSITION-2-20260928T2040Z.json, COMPOSITION-2-20260928T2059Z.json, COMPOSITION-20260927T2310Z.json, COMPOSITION-3-20260929T0110Z.json, COMPOSITION-4-20260929T0540Z.json, COMPOSITION-5-20260929T2330Z.json, D8-20260928T1310Z.json, D8-20260928T1530Z.json, E3L-20260928T2316Z.json, E3L-20260929T0632Z.json, E3L-20260929T0730Z.json, E3L-20260929T1019Z.json, E3L-F1-20260929T0136Z.json, E5L-20260929T1040Z.json, E6L-20260929T2330Z.json, E7L-20260928T2030Z.json, E7L-20260928T2347Z.json, E7L-20260929T0000Z.json, E7L-20260929T0540Z.json, E7L-20260929T1500Z.json, E7L-20260929T1730Z.json, E7L-20260929T2000Z.json, E8L-20260928T1907Z.json, E8L-20260928T2000Z.json, E8L-20260929T0230Z.json, E8L-20260929T0440Z.json, E8L-20260929T0852Z.json, E8L-20260929T2330Z.json, G4T-20260927T2100Z.json, I5-20260928T2040Z.json, I6-20260928T2040Z.json, I7-20260928T2040Z.json, I8-20260928T2337Z.json, I8-20260929T0917Z.json, J2-20260928T1130Z.json, J3-20260928T0831Z.json, J3-20260928T2030Z.json, J3-20260929T0110Z.json, L3-20260928T2029Z.json, L3-20260929T1019Z.json, L4-20260929T0730Z.json, LSQ5-20260929T0030Z.json, LSQ5-20260929T0230Z.json, LSQ6-20260929T0322Z.json, N3-20260928T2030Z.json, N3-20260928T2335Z.json, P1-20260928T2030Z.json, P2-20260928T0831Z.json, P2-20260928T2030Z.json, P2-20260929T0110Z.json, P3-20260928T2030Z.json, P4-20260928T1030Z.json, P4-20260928T1620Z.json, P4-20260928T2100Z.json, R1-20260927T2300Z.json, R1-20260928T1130Z.json, R1-20260928T2030Z.json, R2-20260928T1130Z.json, R3-20260928T1130Z.json, R4-20260928T1030Z.json, R4-20260928T1620Z.json, TRACKER-WAVES-20260928T2052Z.json, V1M-20260928T1123Z.json, WR-C3L-2-20260928T0831Z.json (run apply-updates)
 
 ## Pending inputs
@@ -666,10 +698,10 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | `R4` | Build release experiments and optimization comparison UI | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I5` | Package dataset and evaluation workers for independent deployment | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I6` | Package annotation and training integration workers | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `I7` | Package release controls and optimization evidence operations | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `E6L` | Prove imported benchmark to candidate decision end to end | Activated post-launch (Lab / later) | planned | unassigned | ready: start dependencies met |
+| `I7` | Package release controls and optimization evidence operations | Activated post-launch (Lab / later) | implemented | running | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
+| `E6L` | Prove imported benchmark to candidate decision end to end | Activated post-launch (Lab / later) | planned | running | active: lane active |
 | `E7L` | Prove the second authorized improvement iteration | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `E8L` | Prove controlled rollout and optimization evidence | Activated post-launch (Lab / later) | planned | complete | complete: every lane complete; the coordinator updates the manifest status from the evidence |
+| `E8L` | Prove controlled rollout and optimization evidence | Activated post-launch (Lab / later) | planned | review | active: started before E6L (see lane deviation) |
 | `X1` | Specify a bounded live-video workload and trial contract | Activated post-launch (Lab / later) | planned | unassigned | ready: start dependencies met |
 | `X3` | Specify a robot/task and inference freshness contract | Activated post-launch (Lab / later) | planned | unassigned | ready: start dependencies met |
 | `X5` | Qualify a non-NVIDIA backend investment | Activated post-launch (Lab / later) | planned | unassigned | ready: start dependencies met |
@@ -692,7 +724,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | `G7` | Align public capability discovery, alias pricing and persisted result expiry | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G8` | Prove headless consumer CREDIT operations and safe activation | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E1C` | Repair upload client and deliver valid resumable dataset/load measurement | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `I8` | Operate continuously with bounded DB pools, durable artifacts and real rollback | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
+| `I8` | Operate continuously with bounded DB pools, durable artifacts and real rollback | Backend corrections | implemented | running | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E3C` | Integrate corrective backend with real services and process faults | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E4C` | Certify repaired CREDIT backend on final Marlin deployment | Backend corrections | planned | queued | ready: start dependencies met |
 | `U4` | Expose owned consumer request detail and result lifecycle | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |

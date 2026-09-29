@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 287,
- "updated": "2026-09-29T11:35:08Z",
+ "revision": 288,
+ "updated": "2026-09-29T12:35:26Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8410,6 +8410,166 @@
     "optimistic_h": 0.5,
     "likely_h": 1.5,
     "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "single-lane batch with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-KNOWN-GOOD-REPROOF-2",
+   "task": "I8",
+   "slice": "known-good re-proof through 0052 (R151 condition 1 for the next window; Opus); workflow wf_c9f38cac-130",
+   "agent": "opus",
+   "branch": "codex/w5-known-good-reproof-2",
+   "worktree": ".claude/worktrees/codex-w5-known-good-reproof-2",
+   "base": "e9e32e0e",
+   "head": "68ba65fe",
+   "isolation": {
+    "ports": "stand-ins on task-local keys",
+    "prefix": "infrx-e3b2d-/infrx-d10-",
+    "db": "e3b2d/d10"
+   },
+   "activity": "running",
+   "started": "2026-09-29T11:20:00Z",
+   "updated": "2026-09-29T12:34:54Z",
+   "blocker": null,
+   "next_action": "handback → merge batch; then the 0052 hosted window (operator-held)",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "single-lane batch with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-EVALUATE-2",
+   "task": "E6L",
+   "slice": "E6L final `make lab-evaluate` + the 32 stack mutants on the e6l stack (Opus); workflow wf_59139ae8-acb",
+   "agent": "opus",
+   "branch": "codex/w5-lab-evaluate-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-evaluate-2",
+   "base": "8949ffb1",
+   "head": "3d5ccf49",
+   "isolation": {
+    "ports": "e6l stack",
+    "prefix": "infrx-e6l-",
+    "db": "e6l"
+   },
+   "activity": "running",
+   "started": "2026-09-29T12:50:00Z",
+   "updated": "2026-09-29T12:34:54Z",
+   "blocker": null,
+   "next_action": "handback → merge batch → E6L flips under R222",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "single-lane batch with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-ROLLOUT-4",
+   "task": "E8L",
+   "slice": "WR-C5-K09 bound; k09 PASS on the real e8l stack; `make lab-rollout` k01–k07 + k09 PASS, k08/k10-UI/k09-breach NOT RUN; 65 mutants 0 survivors; ACCEPT at 2b5a9446 (Opus); workflow wf_75539654-ab3",
+   "agent": "opus",
+   "branch": "codex/w5-lab-rollout-4",
+   "worktree": ".claude/worktrees/codex-w5-lab-rollout-4",
+   "base": "8949ffb1",
+   "head": "2b5a9446",
+   "isolation": {
+    "ports": "e8l stack",
+    "prefix": "infrx-e8l-",
+    "db": "e8l"
+   },
+   "activity": "review",
+   "started": "2026-09-29T12:50:00Z",
+   "updated": "2026-09-29T12:34:54Z",
+   "blocker": null,
+   "next_action": "merge batch #44 running → E8L flips under R222 at integration",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "single-lane batch with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-COMPOSITION-6",
+   "task": "I7",
+   "slice": "WR-COMP-4, WR-R4-2, WR-C5-N4-ROUTE/RECEIPT/PROVIDERS/PLAN/REPORT/LIVE, #42 minors, every switch OFF (Opus); workflow wf_0f1297c2-881",
+   "agent": "opus",
+   "branch": "codex/w5-composition-6",
+   "worktree": ".claude/worktrees/codex-w5-composition-6",
+   "base": "8949ffb1",
+   "head": "868ff366",
+   "isolation": {
+    "ports": "p3/j2/n3/r2 task-local",
+    "prefix": "infrx-<key>-",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-09-29T12:50:00Z",
+   "updated": "2026-09-29T12:34:54Z",
+   "blocker": null,
+   "next_action": "handback → merge batch → E5L o01 rerun → E5L flips under R222",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "single-lane batch with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-44",
+   "task": null,
+   "slice": "merge batch #44 (Opus): lab-rollout-4 2b5a9446 (+WR-LR4-A/B evidence + verdict sub-cell; no rulings); workflow wf_e457199b-855",
+   "agent": "opus",
+   "branch": "codex/w5-merge-44",
+   "worktree": ".claude/worktrees/codex-w5-merge-44",
+   "base": "8949ffb1",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T12:34:54Z",
+   "updated": "2026-09-29T12:34:54Z",
+   "blocker": null,
+   "next_action": "integrate → E8L implemented (R222)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
     "confidence": "medium",
     "basis": "single-lane batch with the Lab suites",
     "at": "2026-09-29T10:46:04Z"
