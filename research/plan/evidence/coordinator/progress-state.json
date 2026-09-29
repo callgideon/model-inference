@@ -8390,7 +8390,7 @@
   {
    "id": "W5-MERGE-43",
    "task": null,
-   "slice": "merge batch #43 (Opus): lab-control-2 d2565c4f (0052 local-only; +WR-LC2-1/2, R231–R233)",
+   "slice": "merge batch #43 (Opus): lab-control-2 d2565c4f (0052 local-only; +WR-LC2-1/2, R231–R233); workflow wf_f6b062a6-f2b",
    "agent": "opus",
    "branch": "codex/w5-merge-43",
    "worktree": ".claude/worktrees/codex-w5-merge-43",
