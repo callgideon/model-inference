@@ -112,7 +112,10 @@ async def clip_url(objects, provider_org_id: str, media_ref: str, span: Any) -> 
     """WR-E6L-J11: H1's media ref as what the dev deployment's gateway fetches - a presigned
     GET of the run provider's own Lab media object (R227's rule for `lab/<provider>/`), live
     `PRESIGN_S`, with the span as a media fragment (`#t=<start s>,<end s>`), since a gateway
-    `video_url` part is exactly `{url}` (R58). The URL is a bearer credential: never logged."""
+    `video_url` part is exactly `{url}` (R58). The URL is a bearer credential: never logged.
+    ponytail: the fragment is advisory - fetchers drop it, so the gateway gets (and caps) the
+    whole stored object; the span binds only once N1 stores cut clips or the gateway takes a
+    span field (WR-LEM-3)."""
     if not re.fullmatch(re.escape(media_key(provider_org_id, "")) + "[0-9a-f]{64}", media_ref):
         raise errors.InvalidRequest("media_foreign: a run sends only its provider's Lab media")
     if not (isinstance(span, list) and len(span) == 2

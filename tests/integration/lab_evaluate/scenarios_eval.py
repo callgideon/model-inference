@@ -310,7 +310,10 @@ def test_j11_a_finite_video_case_reaches_the_dev_endpoint(lab, workdir):
     each in-cap case (V1-V3; V4's 83 s and the bad bundle paths were rejected at import) is one
     request whose one `video_url` part is a 600 s presigned GET of this provider's Lab media
     object with the case's span as its fragment. Fetched from MinIO here, as the gateway
-    would, each URL answers the bytes of the fixture's clip for that span."""
+    would, each URL answers the bytes of the whole source object; the span is advisory (#t=,
+    which fetchers drop) until N1 stores cut clips or the gateway takes a span, so V1 and V2
+    send the same bytes. This proves the clip reaches the endpoint, not that the span or the
+    cap is enforced on the bytes (WR-LEM-3)."""
     import hashlib
     from urllib.parse import parse_qs, urlsplit
 
