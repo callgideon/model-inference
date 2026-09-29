@@ -1,0 +1,31 @@
+{
+  "task": "COMPOSITION-6",
+  "slice": "LW6 composition batch 6: WR-R4-2, WR-C5-N4-ROUTE, WR-C5-RECEIPT, WR-C5-PROVIDERS (+0-F2), WR-C5-PLAN, WR-C5-REPORT, lens minors 0-F1/1-C5-2/0-F3 + the LAB_OPERATOR_ID preflight case; WR-COMP-4 blocked, WR-C5-LIVE needs rulings",
+  "activity": "review",
+  "head": "a6cbba5d",
+  "worktree": ".claude/worktrees/codex-w5-composition-6",
+  "branch": "codex/w5-composition-6",
+  "owned_paths": ["apps/app/supabase/migrations/0053_lab_composition_reads.sql (LOCAL-ONLY)",
+                  "apps/infrx-api/infrx/gateway/pilot.py", "apps/infrx-api/infrx/gateway/routes/lab_releases.py",
+                  "apps/infrx-api/infrx/gateway/routes/lab_datasets.py", "apps/infrx-api/infrx/lab/workers/__main__.py",
+                  "apps/infrx-api/infrx/datasets/imports/__init__.py", "apps/infrx-api/infrx/evaluation/checkpoints/__init__.py",
+                  "apps/infrx-api/infrx/state/{lab_rollout,lab_data,lab_consent}.py (additions)",
+                  "apps/infrx-api/tests/{d,g,w,n,r,i/lab_pipeline,b/checkpoints} (see evidence)",
+                  "research/plan/08-contracts-v1-encoding.md §5 Lab worker roles row"],
+  "commands": [
+    {"cmd": "fail-first per item (tests written first)", "exit": 1, "summary": "red recorded per item in the evidence"},
+    {"cmd": "INFRX_D_TASK=p3 INFRX_D2_VALKEY_PORT=57531 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py (E4, every switch OFF)", "exit": 0, "summary": "2828 passed, 28 skipped, 0 failed"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=j2 pytest tests/g/test_mutants.py", "exit": 0, "summary": "491 killed (1 misdeclared anchor re-cut in a6cbba5d, rerun killed), 0 survivors"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=r2 pytest tests/w/test_lab_workers_mutants.py tests/g/lab_datasets tests/g/lab_releases tests/n/imports tests/i/lab_pipeline tests/b/checkpoints mutant lists + tests/d/test_code_mutants_c6.py", "exit": 0, "summary": "412 passed, 0 survivors (incl. 12 SQL mutants of 0053)"},
+    {"cmd": "INFRX_D_TASK=r2 pytest tests/d/test_c6_* test_d9_* test_d7_* test_d6j_judge test_upgrade_lab tests/r tests/g/lab_releases", "exit": 0, "summary": "177 passed, 4 skipped (r1-only)"},
+    {"cmd": "INFRX_D_TASK=n3 / p3 / j2 composition PG proofs", "exit": 0, "summary": "5 / 5 / 2+7 passed"},
+    {"cmd": "make -n lab-compositions", "exit": 0, "summary": "11 pytest lines (new PG files: WR-C6-MK)"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 4, "confidence": "medium",
+               "basis": "6/8 WR items done with fail-first, 903 mutants 0 survivors, E4 2828/0, real-service proofs on r2/n3/p3/j2; composition-3/-4/-5 each needed one ~1-2 h fix round; remaining = one verify round. WR-COMP-4 (T/G lane) and WR-C5-LIVE (after rulings) excluded.",
+               "at": "2026-09-29T13:15Z"},
+  "blockers": ["WR-COMP-4: no consent source and no request-path capture seam on this base (T/G lane, WR-C6-CAPTURE); E5L o01 stays NOT RUN",
+               "WR-C5-LIVE: R2 Live's spend unit, quality coverage and candidate health need rulings (WR-C6-LIVE); rollout_routing OFF until P-12"],
+  "wiring_requests": ["WR-C6-MK", "WR-C6-CAPTURE", "WR-C6-LIVE", "WR-C6-VARIANTS", "WR-C6-K10", "WR-C6-REQUEUE", "WR-C6-B1-FLAKE"],
+  "evidence": ["research/plan/evidence/coordinator/COMPOSITION-6-a6cbba5.md"]
+}
