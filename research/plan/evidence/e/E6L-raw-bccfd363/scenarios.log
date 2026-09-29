@@ -1,0 +1,99 @@
+..................ssF.                                                                                                                                                                                                                                                                                                                                                                                   [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+________________________________________________________________________________________________________________________________________________________________________ test_j09_the_eval_worker_process_killed_mid_run_loses_nothing _________________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_evaluate.lab_world.Lab object at 0x7bb19b5bcec0>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/research/plan/evidence/e/E6L-raw-bccfd363/cases/test_j09_the_eval_worker_process_killed_mid_run_loses_nothing')
+
+    def test_j09_the_eval_worker_process_killed_mid_run_loses_nothing(lab, workdir):
+        try:
+            run(lab.store.put_evaluator(lw.SPEC, provider_org_id=lab.NEMO,
+                                        evaluator_id=lw.EVALUATOR_ID, actor="dev@nemo"))
+        except Exception as held:                    # noqa: BLE001 - write-once: already there
+            assert "conflict" in type(held).__name__.lower() or "exists" in str(held), held
+        serving = dev_serving_ref(lab)
+        frozen = lab.freeze(lab.run_payload(91, lab.dataset("text", 1).dataset_ref,
+                                            lab.harness_ref(1), serving, max_cases=6))
+        run_id, provider = frozen.run.run_id, lab.NEMO
+    
+        def event_pending() -> int:
+            return lab.sql("select count(*) from infrx.lab_outbox where kind = 'eval_run' and "
+                           "payload->>'run_id' = %s and acknowledged_at is null", run_id)[0][0]
+    
+        def cases(state: str) -> int:
+            return lab.sql("select count(*) from infrx.lab_eval_cases where run_id = %s and "
+                           "state = %s", run_id, state)[0][0]
+    
+        assert event_pending() == 1, "freeze wrote the run's eval_run event"
+        gate, answered = threading.Event(), threading.Event()
+        with lw.endpoint("baseline") as (wallet, http), \
+                open(workdir / "worker.log", "wb") as log:
+            model = wallet.answer
+    
+            def held(prompt):
+                """The first call answers; the next ones are held mid-attempt (the kill)."""
+                if answered.is_set():
+                    gate.wait(60)
+                answered.set()
+                return model(prompt)
+            wallet.answer = held
+            url = http._url.removesuffix("/v1/chat/completions")
+            health = free_health_port()
+            with worker(worker_env(lab, url, health), log) as first:
+                until(lambda: ready(health), 60, "the worker's /readyz")
+                until(lambda: len(wallet.calls) >= 2, 90, "a second model call in flight")
+                first.kill()                                      # SIGKILL mid-attempt
+                assert first.wait(30) == -signal.SIGKILL
+            gate.set()
+            leased = cases("leased")
+            assert leased >= 1 and event_pending() == 1, (leased, event_pending())
+            lab.advance(31)                     # past the 30 s leases and the relay's window
+            health = free_health_port()
+            with worker(worker_env(lab, url, health), log) as second:
+                until(lambda: ready(health), 60, "the restarted worker's /readyz")
+                until(lambda: event_pending() == 0, 180, "the run finished and acknowledged",
+                      every=lambda: lab.advance(31))
+                second.send_signal(signal.SIGTERM)
+                assert second.wait(60) == 0, "SIGTERM is a clean exit"
+        status = run(lab.store.run_status(run_id, provider_org_id=provider))
+        results = lab.results(run_id)
+        attempts = lab.sql("select case_id::text, attempt, state from infrx.lab_eval_attempts "
+                           "where run_id = %s order by case_id, attempt", run_id)
+        expired = [a for a in attempts if a[2] == "expired"]
+        assert status["state"] == "succeeded", status
+        assert sorted(results) == sorted(frozen.cases), "every case scored, once each"
+        assert cases("done") == len(frozen.cases) and cases("leased") == 0
+>       assert len(expired) >= 1 and len(expired) == leased, (attempts, leased)
+E       AssertionError: ([('003339ee-4c69-4cf3-8226-08d04bbd66f4', 1, 'succeeded'), ('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired'), ('...c6fb4-ab4a-4615-8037-a1eb36f07a4f', 1, 'succeeded'), ('246726ec-5fd3-433f-8b05-1289829349d2', 1, 'succeeded'), ...], 2)
+E       assert (1 >= 1 and 1 == 2)
+E        +  where 1 = len([('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired')])
+E        +  and   1 = len([('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired')])
+
+tests/integration/lab_evaluate/scenarios_workers.py:163: AssertionError
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- Captured stderr call ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55540)
+Traceback (most recent call last):
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/apps/infrx-api/tests/b/runner/world.py", line 338, in do_POST
+    return self._send(200, {"choices": [{"index": 0, "message": {
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/apps/infrx-api/tests/b/runner/world.py", line 317, in _send
+    self.wfile.write(data)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_evaluate/scenarios_workers.py::test_j09_the_eval_worker_process_killed_mid_run_loses_nothing - AssertionError: ([('003339ee-4c69-4cf3-8226-08d04bbd66f4', 1, 'succeeded'), ('0635945f-6966-4efc-85d4-40b1f857d85e', 1, 'expired'), ('...c6fb4-ab4a-4615-8037-a1eb36f07a4f', 1, 'succeeded'), ('246726ec-5fd3-433f-8b05-1289829349d2', 1, 'succeeded'), ...], 2)
+SKIPPED [1] tests/integration/lab_evaluate/lab_world.py:73: NOT RUN[L3] the imported clips reach H1; HttpDevEndpoint refuses media until L3's media path merges; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j11
+SKIPPED [1] tests/integration/lab_evaluate/lab_world.py:73: NOT RUN[lab-e2e] the provider evaluation UI (B4) over /lab/v1/evaluations (lab-api-2) runs in the Lab web, which this runner does not start; its browser leg is the lab-e2e harness (apps/lab/tests/e2e/evaluate/, `make lab-e2e`): launch, progress, cancel and the j07 comparison; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j10
+1 failed, 19 passed, 2 skipped in 36.03s

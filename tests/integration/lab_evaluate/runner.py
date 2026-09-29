@@ -113,7 +113,7 @@ SCENARIOS = {
                      "outbox drained once", "test_ids": ["EVAL-DURABLE", "CHECKPOINT-IDEM"],
             "lanes": []},
     "j10": {"title": "the provider UI: launch, progress, cancel, compare with slices and "
-                     "uncertainty", "test_ids": ["EVAL-COMPARE"], "lanes": ["B4", "lab-api-2"]},
+                     "uncertainty", "test_ids": ["EVAL-COMPARE"], "lanes": ["lab-e2e"]},
     "j11": {"title": "a finite-video case reaches the dev endpoint through H1/B1",
             "test_ids": ["EVAL-COMPARE"], "lanes": ["L3"]},
 }
@@ -141,6 +141,13 @@ REQUIRED = {
     "j10": ("test_j10_the_provider_ui_launches_compares_and_cancels",),
     "j11": ("test_j11_a_finite_video_case_reaches_the_dev_endpoint",),
 }
+#: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
+#: reason class (a GPU, staging, an external provider; R234 (i) `lab-e2e UI`: j10's browser
+#: leg, rerun `make lab-e2e` then `--only j10`; R234 (ii) `product WR`: j11 waits on
+#: WR-E6L-J11 (L3's media path, lane lab-eval-media), rerun
+#: `apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir>
+#: --only j11`). The gate is re-run when the dependency lands and the cell must then PASS.
+OUT_OF_SCOPE = {"lab-e2e": "lab-e2e UI", "L3": "product WR: WR-E6L-J11"}
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>j\d\d)_")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[")
@@ -209,6 +216,20 @@ def cells(result: dict) -> dict:
 
 def gate(result: dict) -> str:
     return worst(entry["status"] for entry in result.values())
+
+
+def r222(result: dict) -> dict:
+    """R222: accepted locally with nothing but PASS, and NOT RUN whose every reason is the
+    scenario's own wait on out-of-local-scope lanes. `open` = what keeps it from acceptance."""
+    def excused(sid: str, entry: dict) -> bool:
+        lanes = SCENARIOS[sid]["lanes"]
+        if entry["status"] != NOT_RUN:        # R234: an in-scope FAIL is never excused
+            return False
+        return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and \
+            all(f"NOT RUN[{','.join(lanes)}]" in reason for reason in entry["reasons"])
+    still = {sid: entry["status"] for sid, entry in result.items()
+             if entry["status"] != PASS and not excused(sid, entry)}
+    return {"accepted": not still, "open": still}
 
 
 def reproduce(sid: str | None = None) -> str:
@@ -325,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     verdict = gate(result)
     payload = {
         "task": "E6L", "gate": "LAB-EVALUATE-LOCAL",
-        "verdict": verdict, "exit": EXIT[verdict], "cells": cells(result),
+        "verdict": verdict, "exit": EXIT[verdict], "cells": cells(result), "r222": r222(result),
         "label": "real PostgreSQL (every migration, D7 0029) and S3-compatible MinIO, the merged "
                  "N1/N2/H1/B1/B2/B3 code, owned synthetic fixtures, a deterministic evaluator and "
                  "synthetic dev endpoints; no real-model quality claim (P-07), not GPU capacity, "
@@ -335,7 +356,9 @@ def main(argv: list[str] | None = None) -> int:
         "seconds": round(time.monotonic() - clock, 1),
         "stack": {"usable": usable, "why_not": why or None,
                   "stages": [{k: s[k] for k in ("stage", "status", "seconds")} for s in report.stages]},
-        "scenarios": [{"id": sid, **SCENARIOS[sid], **entry, "reproduce": reproduce(sid)}
+        "scenarios": [{"id": sid, **SCENARIOS[sid], **entry, "reproduce": reproduce(sid),
+                       "scope": {lane: OUT_OF_SCOPE.get(lane, "local (in scope)")
+                                 for lane in SCENARIOS[sid]["lanes"]}}
                       for sid, entry in result.items()],
         "lock": {"path": str(LOCK), "held": held}, "runs": runs,
         "evidence": {"junit": str(out / "scenarios.xml"), "log": str(out / "scenarios.log"),
@@ -345,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
     (out / "verdict.json").write_text(json.dumps(payload, indent=2, default=str))
     for entry in payload["scenarios"]:
         print(f"{entry['status']:>8}  {entry['id']}  {entry['title']}")
-    print(f"cells {payload['cells']}\ngate {verdict} -> {out / 'verdict.json'}")
+    print(f"cells {payload['cells']}\nr222 {payload['r222']}\ngate {verdict} -> {out / 'verdict.json'}")
     return EXIT[verdict]
 
 

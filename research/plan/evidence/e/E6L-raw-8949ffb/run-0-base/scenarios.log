@@ -1,0 +1,17 @@
+..................sF..                                                                                                                                                                                                                                                                                                                                                                                   [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+____________________________________________________________________________________________________________________________________________________________________________ test_j10_the_provider_ui_launches_compares_and_cancels ____________________________________________________________________________________________________________________________________________________________________________
+
+    def test_j10_the_provider_ui_launches_compares_and_cancels():
+        parts = {"B4": lw.REPO / "apps" / "lab" / "app" / "(provider)" / "evaluations",
+                 "lab-api-2": lw.API / "infrx" / "gateway" / "routes" / "lab_evaluations.py"}
+        absent = [lane for lane, path in parts.items() if not path.exists()]
+>       assert absent, "B4 and lab-api-2 landed: bind apps/lab/tests/e2e/evaluate/"
+E       AssertionError: B4 and lab-api-2 landed: bind apps/lab/tests/e2e/evaluate/
+E       assert []
+
+tests/integration/lab_evaluate/scenarios_pending.py:55: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_evaluate/scenarios_pending.py::test_j10_the_provider_ui_launches_compares_and_cancels - AssertionError: B4 and lab-api-2 landed: bind apps/lab/tests/e2e/evaluate/
+SKIPPED [1] tests/integration/lab_evaluate/lab_world.py:73: NOT RUN[L3] the imported clips reach H1; HttpDevEndpoint refuses media until L3's media path merges; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j11
+1 failed, 20 passed, 1 skipped in 39.65s

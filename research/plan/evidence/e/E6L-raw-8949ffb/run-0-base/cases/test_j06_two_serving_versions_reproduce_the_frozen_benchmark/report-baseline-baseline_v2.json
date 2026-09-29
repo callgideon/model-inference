@@ -1,0 +1,93 @@
+{
+ "baseline_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000003d@sha256:4507f47560f93a46e411378d0d8565dde6a75b66bc86d637d71c2ce4d6f37bff",
+ "candidate_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000003e@sha256:99c5ba42b24561af5b9769579ae6de83407171f4f660a3f8c70eddc137b22d8a",
+ "decision": {
+  "outcome": "accept",
+  "reasons": []
+ },
+ "estimates": {
+  "basis": "deterministic_metric",
+  "overall": {
+   "clusters": 20,
+   "diff": 0.0,
+   "high": 0.0,
+   "improved": false,
+   "low": 0.0,
+   "n": 20,
+   "verdict": "non_inferior"
+  },
+  "slices": {
+   "math": {
+    "clusters": 6,
+    "diff": 0.0,
+    "high": 0.0,
+    "improved": false,
+    "low": 0.0,
+    "n": 6,
+    "verdict": "non_inferior"
+   }
+  }
+ },
+ "observed": {
+  "baseline": {
+   "costs": {
+    "CREDIT": "50.28000000"
+   },
+   "errors": 0,
+   "latency_ms": {
+    "max": 35,
+    "n": 20,
+    "p50": 28,
+    "p90": 34,
+    "p99": 35
+   },
+   "mean": 0.5,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "candidate": {
+   "costs": {
+    "CREDIT": "50.28000000"
+   },
+   "errors": 0,
+   "latency_ms": {
+    "max": 35,
+    "n": 20,
+    "p50": 26,
+    "p90": 31,
+    "p99": 35
+   },
+   "mean": 0.5,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "cost_delta": {
+   "CREDIT": "0.00000000"
+  },
+  "paired": 20,
+  "universe": 20
+ },
+ "pairing": {
+  "factors": [
+   "serving_ref"
+  ],
+  "kind": "single_factor",
+  "tag": null
+ },
+ "protocol": {
+  "confidence": 0.95,
+  "margin": 0.05,
+  "metric_source": "deterministic_metric",
+  "min_cases": 10,
+  "required_slices": {
+   "math": {
+    "margin": 0.0,
+    "min_cases": 5
+   }
+  }
+ },
+ "protocol_digest": "sha256:5a63aba5f370f36ca9cfe6cddda0960fb3537f355ee9892063eb6957c136b109",
+ "report_digest": "sha256:2e9bce213ca9a1d40ece1268a858f3a2a49c7a058ba7c8bdd204a11b0aca4eae",
+ "schema": "infrx.eval_report.1",
+ "universe_digest": "sha256:6e96cb0a140ece00989b0d2b33c951098801586ca02b50e3581f2813622d19c6"
+}

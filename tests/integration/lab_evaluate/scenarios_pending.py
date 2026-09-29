@@ -2,12 +2,12 @@
 its lane and the exact rerun. The case states the steps it will run once bound. (j09's
 checkpoint half is bound in `scenarios_workers.py`, composition batch 5, WR-B3-3.)
 
-* j10 (B4 + lab-api-2): the provider UI (`apps/lab/app/(provider)/{evaluations,experiments}/`,
-  B4, merged on the tip in batch #7) over the gateway's `/lab/v1/evaluations` route
-  (`infrx/gateway/routes/lab_evaluations.py`, lab-api-2, codex/w5-lab-api-2), driven against
-  this stack's comparison: launch, progress, cancel, and the j07 report shown with its
-  slices, uncertainty and missing cases (`apps/lab/tests/e2e/evaluate/`). NOT RUN names
-  whichever of the two is absent.
+* j10 (lab-e2e, R222's "lab-e2e UI" class): the provider UI (`apps/lab/app/(provider)/
+  {evaluations,experiments}/`, B4) over the gateway's `/lab/v1/evaluations` route
+  (`infrx/gateway/routes/lab_evaluations.py`, lab-api-2), both merged, driven against this
+  stack's comparison: launch, progress, cancel, and the j07 report shown with its slices,
+  uncertainty and missing cases. The browser leg is the lab-e2e lane's harness
+  (`apps/lab/tests/e2e/evaluate/`); NOT RUN until it lands, then this case must be bound.
 """
 from __future__ import annotations
 
@@ -49,11 +49,11 @@ def unbound():
 
 
 def test_j10_the_provider_ui_launches_compares_and_cancels():
-    parts = {"B4": lw.REPO / "apps" / "lab" / "app" / "(provider)" / "evaluations",
-             "lab-api-2": lw.API / "infrx" / "gateway" / "routes" / "lab_evaluations.py"}
-    absent = [lane for lane, path in parts.items() if not path.exists()]
-    assert absent, "B4 and lab-api-2 landed: bind apps/lab/tests/e2e/evaluate/"
-    waits("j10", *absent, why="the provider evaluation UI or its /lab/v1/evaluations route "
-                              "is not on this base. Steps: launch, progress, cancel and the "
-                              "j07 comparison through apps/lab/tests/e2e/evaluate/")
+    suite = lw.REPO / "apps" / "lab" / "tests" / "e2e" / "evaluate"
+    assert not suite.exists(), "lab-e2e landed: bind j10 to apps/lab/tests/e2e/evaluate/"
+    waits("j10", "lab-e2e", why="the provider evaluation UI (B4) over /lab/v1/evaluations "
+                                "(lab-api-2) runs in the Lab web, which this runner does not "
+                                "start; its browser leg is the lab-e2e harness "
+                                "(apps/lab/tests/e2e/evaluate/, `make lab-e2e`): launch, "
+                                "progress, cancel and the j07 comparison")
     unbound()

@@ -1,0 +1,41 @@
+FF..........                                                             [100%]
+=================================== FAILURES ===================================
+____ test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases _____
+
+    def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
+        """The cells are exactly tasks.json E6L's test_ids, each carried by a scenario; the brief's
+        journey is all there: text/tool and finite-video import, split traps, rights, the durable
+        run with its faults, two serving versions, compare/decide, checkpoints, the I5 workers
+        and the UI leg."""
+        tasks = json.loads((REPO / "research/plan/tasks.json").read_text())
+        e6l = next(task for task in tasks["tasks"] if task["id"] == "E6L")
+        assert tuple(e6l["test_ids"]) == runner.TEST_IDS
+        for tid in runner.TEST_IDS:
+            assert any(tid in spec["test_ids"] for spec in runner.SCENARIOS.values()), tid
+        assert set(runner.REQUIRED) == set(runner.SCENARIOS)
+        assert len(runner.SCENARIOS) == 11
+        assert runner.SCENARIOS["j09"]["lanes"] == []
+>       assert runner.SCENARIOS["j10"]["lanes"] == ["lab-e2e"]
+E       AssertionError: assert ['B4', 'lab-api-2'] == ['lab-e2e']
+E         
+E         At index 0 diff: 'B4' != 'lab-e2e'
+E         Left contains one more item: 'lab-api-2'
+E         Use -v to get more diff
+
+tests/integration/lab_evaluate/test_e6l_runner.py:62: AssertionError
+___________ test_e6l_r222_accepts_only_a_not_run_out_of_local_scope ____________
+
+    def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope():
+        """R222: the gate is accepted locally with no FAIL cell and every NOT RUN waiting only on
+        out-of-local-scope work (a GPU, staging, an external provider, the lab-e2e UI harness),
+        by its own NOT RUN reason. A NOT RUN on in-scope work (j11's L3 media path), a FAIL, or a
+        scenario NOT RUN for another reason (deselected, a case absent) is left open."""
+>       assert runner.OUT_OF_SCOPE == {"lab-e2e": "lab-e2e UI"}
+               ^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'e6l_runner' has no attribute 'OUT_OF_SCOPE'
+
+tests/integration/lab_evaluate/test_e6l_runner.py:71: AttributeError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_evaluate/test_e6l_runner.py::test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases
+FAILED tests/integration/lab_evaluate/test_e6l_runner.py::test_e6l_r222_accepts_only_a_not_run_out_of_local_scope
+2 failed, 10 passed in 0.16s

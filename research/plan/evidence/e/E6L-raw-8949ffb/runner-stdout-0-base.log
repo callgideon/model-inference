@@ -1,0 +1,16 @@
+[ok  ] preflight: {"docker": "29.6.2", "images": {"postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb678…
+[ok  ] services: {"containers": ["infrx-e6l-clickhouse", "infrx-e6l-postgres", "infrx-e6l-s3", "infrx-e6l-valkey"], "versions": {"postgres": "PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit", "valkey": "8.1.1…
+[ok  ] migrate: {"applied": [["0001_init.sql", "b31ab5ad6117a88005cfa9dfbb878b15bcefba135b5d3151eaf2d8171831d2bc"], ["0002_seed_models.sql", "9f186e47ad8c88a1b7a97555f5ad0d6a49c3c3d5b8a66b78247e823fca629d38"], ["0003_pilot_durable_schem…
+    PASS  j01  owned text/tool benchmark imported through N1 onto D7 + MinIO: bad rows quarantined and refused until accepted; a replay is the same dataset, a changed upload conflicts
+    PASS  j02  owned finite-video benchmark: clips in the import bundle, the 82 s cap, missing and non-video clips refused
+    PASS  j03  a foreign dataset is refused at import, resolve and schedule; a revoked grant stops derivation and scheduling
+    PASS  j04  split traps: related sources placed whole and deterministically; a leaking base refused; the frozen holdout admits no relative
+    PASS  j05  B1 on real D7 through HttpDevEndpoint: a worker killed mid-attempt, a duplicate delivery, a cancel mid-run
+    PASS  j06  two serving versions reproduce the frozen benchmark; the same run payload is the same run
+    PASS  j07  compare -> decide: a required-slice regression rejects despite an aggregate gain, a clean win is accepted, a missing output is counted, tool cases are visible and not comparable
+    PASS  j08  a checkpoint delivered twice is one receipt and one run; a crash before the decision is one run on redelivery
+    PASS  j09  the I5 eval and checkpoint worker processes: a worker killed mid-run, the outbox drained once
+    FAIL  j10  the provider UI: launch, progress, cancel, compare with slices and uncertainty
+ NOT RUN  j11  a finite-video case reaches the dev endpoint through H1/B1
+cells {'DATA-IMPORT': 'PASS', 'DATA-SPLIT': 'PASS', 'DATA-RIGHTS': 'PASS', 'EVAL-DURABLE': 'PASS', 'EVAL-REPRO': 'PASS', 'EVAL-COMPARE': 'FAIL', 'CHECKPOINT-IDEM': 'PASS'}
+gate FAIL -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/research/plan/evidence/e/E6L-raw-8949ffb/run-0-base/verdict.json

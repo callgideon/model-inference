@@ -1,0 +1,41 @@
+{
+ "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da6-0000-4000-8000-00000000000a@sha256:9de28e163bde7becf263804c5795713e40e33394e64e47d9ffef1a7c4e61bbec",
+ "fixtures": {
+  "benchmark.json": "1b59cca80258f26a7646a56ba2ed1f393fb28172bb3fd1f494e0e853ba101398",
+  "families.jsonl": "94d38edccb320910565b2095baeed65a7407cc06a3ff80a4f9c4f501e5028140",
+  "split_additions.jsonl": "b9767c431e5bbf18f88a09ea5a3e98a69d82ee8237a22317fcb50cbcc0c5b0e9",
+  "split_base.jsonl": "777ac8c32fd28248605501bd2639eeefebfc17b0cbde43b00731da270fdacb53",
+  "split_leaky.jsonl": "404a7e5cd7761c3508fdb413f01b9de09fe06584e4b86f8e7098b21171a86672",
+  "text.jsonl": "c533cf1e76f3e324a7b789ab4d77500db021f5e966d5427fc4a40e21a67eb6f3",
+  "tools.jsonl": "5a31f208ab0ae330bce91140c60455f376222ca1e72df3448ac5e6a005e62970",
+  "video.jsonl": "666989fb21a8f385ee738a8ec1896830df1a52b5bb882fdb1aad6fcf53cc2c21"
+ },
+ "rejected": [
+  {
+   "detail": "not_json",
+   "line": 21,
+   "reason": "not_json"
+  },
+  {
+   "detail": "not_object",
+   "line": 22,
+   "reason": "not_object"
+  },
+  {
+   "detail": "no 'q'",
+   "line": 23,
+   "reason": "missing_field"
+  },
+  {
+   "detail": "the same content as line 1",
+   "line": 24,
+   "reason": "duplicate"
+  },
+  {
+   "detail": "text content",
+   "line": 25,
+   "reason": "bad_content"
+  }
+ ],
+ "source_ref": "lab:source:b0000001-0000-4000-8000-000000000001:000001e6-0000-4000-8000-00000000000a@sha256:c533cf1e76f3e324a7b789ab4d77500db021f5e966d5427fc4a40e21a67eb6f3"
+}

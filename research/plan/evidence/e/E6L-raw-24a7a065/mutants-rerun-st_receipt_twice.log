@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/apps/infrx-api/.venv/bin/python
+rootdir: /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2
+configfile: pytest.ini
+plugins: anyio-4.15.1
+collecting ... collected 56 items / 53 deselected / 3 selected
+
+tests/integration/lab_evaluate/test_mutants.py::test_the_lists_are_well_formed PASSED [ 33%]
+tests/integration/lab_evaluate/test_mutants.py::test_every_case_is_covered_by_a_mutant PASSED [ 66%]
+tests/integration/lab_evaluate/test_mutants.py::test_stack_mutant_is_killed[st_receipt_twice] PASSED [100%]
+
+====================== 3 passed, 53 deselected in 43.43s =======================
