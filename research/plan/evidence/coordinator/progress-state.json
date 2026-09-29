@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 247,
- "updated": "2026-09-28T23:44:00Z",
+ "revision": 248,
+ "updated": "2026-09-29T00:04:39Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -6700,11 +6700,11 @@
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-28T20:38:50Z",
-   "updated": "2026-09-28T23:33:11Z",
+   "updated": "2026-09-29T00:04:39Z",
    "blocker": null,
-   "next_action": "merge batch #24 (wf_38099086-cdf, Sonnet; R202) → WR-P4B-1 lab_teachers switch → composition-4",
+   "next_action": "WR-P4B-1 lab_teachers switch + a P2 collect() caller → composition-4",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -7117,22 +7117,22 @@
   {
    "id": "W5-MERGE-24",
    "task": null,
-   "slice": "merge batch #24 (Sonnet): pipeline-ui-2 66f1db34 (+R202); workflow wf_38099086-cdf",
+   "slice": "merge batch #24 (Sonnet): pipeline-ui-2 66f1db34 (+R202); workflow wf_38099086-cdf; integrated",
    "agent": "sonnet",
    "branch": "codex/w5-merge-24",
    "worktree": ".claude/worktrees/codex-w5-merge-24",
    "base": "ad828a2d",
-   "head": null,
+   "head": "b5e84451",
    "isolation": {
     "ports": "p2 57528/57529 (lane-owned)",
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-28T23:33:11Z",
-   "updated": "2026-09-28T23:33:11Z",
+   "updated": "2026-09-29T00:04:39Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
