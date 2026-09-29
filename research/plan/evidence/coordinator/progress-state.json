@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 270,
- "updated": "2026-09-29T06:39:35Z",
+ "revision": 271,
+ "updated": "2026-09-29T06:45:06Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7649,11 +7649,11 @@
     "prefix": "infrx-r2-",
     "db": "r2"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T02:47:48Z",
-   "updated": "2026-09-29T06:25:19Z",
+   "updated": "2026-09-29T06:45:06Z",
    "blocker": null,
-   "next_action": "merge batch #35 (Opus; WR-E8L-9/10, R216) → the lab-rollout rerun lane",
+   "next_action": "lab-rollout-3 (the E8L rerun)",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -7797,22 +7797,22 @@
   {
    "id": "W5-MERGE-35",
    "task": null,
-   "slice": "merge batch #35 (Opus): rollout-identity 9aacd8f0 (+WR-E8L-9 k06 world patch, WR-E8L-10, R216); workflow wf_5ed91a10-b9a",
+   "slice": "merge batch #35 (Opus): rollout-identity 9aacd8f0 (+WR-E8L-9 k06 world patch, WR-E8L-10, R216); workflow wf_5ed91a10-b9a; integrated 57a779af",
    "agent": "opus",
    "branch": "codex/w5-merge-35",
    "worktree": ".claude/worktrees/codex-w5-merge-35",
    "base": "1ecaceee",
-   "head": null,
+   "head": "1d0dbc08",
    "isolation": {
     "ports": "r2 57534",
     "prefix": "infrx-r2-",
     "db": "r2"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T06:25:19Z",
-   "updated": "2026-09-29T06:25:19Z",
+   "updated": "2026-09-29T06:45:06Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 → lab-rollout-3",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
