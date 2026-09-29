@@ -580,6 +580,7 @@ def test_b1_only_the_runs_providers_clip_within_the_cap_is_signed() -> None:
                (CLIP_REF, [7, 7], "video_over_cap"),
                (CLIP_REF, [-1, 1000], "video_over_cap"),
                (CLIP_REF, [0.5, 1000], "video_over_cap"),
+               (CLIP_REF, [0, 1000, 2000], "video_over_cap"),
                (CLIP_REF, runner._MISSING, "video_over_cap"))
     for ref, span, name in refused:
         with pytest.raises(errors.InvalidRequest, match=name):
@@ -602,4 +603,5 @@ def test_b1_the_s3_store_presigns_a_bounded_sigv4_get_of_one_object(monkeypatch)
     url = urlsplit(run(store.presign("x/y", expires_s=600)))
     query = parse_qs(url.query)
     assert url.path == "/b/lab/x/y"
-    assert query["X-Amz-Expires"] == ["600"] and query["X-Amz-Algorithm"] == ["AWS4-HMAC-SHA256"]
+    assert query.get("X-Amz-Algorithm") == ["AWS4-HMAC-SHA256"]
+    assert query.get("X-Amz-Expires") == ["600"]
