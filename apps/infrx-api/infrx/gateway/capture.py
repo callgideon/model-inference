@@ -29,6 +29,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from collections import OrderedDict
@@ -57,6 +58,10 @@ JOBS_DIR = "jobs"
 REMEMBER = 1024
 #: What the caller's credential becomes wherever it appears in a trace.
 REDACTED = b"[credential]"
+#: Every credential this platform mints (`operations.service.new_secret`, the console's
+#: lib/keys.ts: `sk-infrx-` + 40 base62). The worker never holds the caller's token, so a
+#: job record is scrubbed of the whole family (lens R8), wherever it appears.
+KEY_SHAPE = re.compile(rb"sk-infrx-[A-Za-z0-9_-]+")
 
 
 class Wall:
@@ -147,6 +152,11 @@ def scrub(data: bytes, token: bytes) -> bytes:
     """The credential out of one part. ponytail: a token split across two SSE frames is not
     matched; the relay's frames are whole JSON chunks, so an echoed token lies inside one."""
     return data.replace(token, REDACTED) if token else data
+
+
+def scrub_keys(data: bytes) -> bytes:
+    """Every minted credential out of one part of a job record (R8): the worker's scrub."""
+    return KEY_SHAPE.sub(REDACTED, data)
 
 
 def request_line(request, token: bytes = b"") -> bytes:
@@ -351,9 +361,9 @@ class JobCapture:
         try:
             capture = sink.open(request.request_id, request.org_id,
                                 request.trace_policy.trace_mode, request.deadline_at)
-            capture.add(request_line(request))
+            capture.add(scrub_keys(request_line(request)))
             if text:
-                capture.add(text.encode())
+                capture.add(scrub_keys(text.encode()))
             await capture.finish(envelope(request, capture, self.limits, text is not None))
             await sink.flush()
         finally:

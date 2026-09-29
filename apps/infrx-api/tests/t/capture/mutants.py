@@ -62,6 +62,7 @@ JOB_MINIMAL = "test_a_minimal_async_job_is_recorded_metadata_only"
 REFUSED = "test_a_refused_completion_spools_nothing_and_raises_as_before"
 JOB_FAILS = "test_a_worker_capture_failure_never_fails_the_job"
 REMEMBER = "test_the_worker_remembers_a_bounded_number_of_jobs"
+JOB_CREDENTIAL = "test_an_async_jobs_record_holds_no_credential"
 SHIP_BOTH = "test_the_gateway_ships_its_own_spool_and_every_finished_job_spool"
 HELD = "test_a_job_spool_still_being_written_is_left_to_its_writer"
 PUMP = "test_the_pump_ships_every_interval_until_stopped"
@@ -260,6 +261,19 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("job_spool_in_the_gateways_directory", "job spools live under jobs/, never beside the "
        "gateway's segments", C, "Path(root) / JOBS_DIR, limits or DEFAULTS",
        "Path(root), limits or DEFAULTS", ASYNC_OUT),
+    # --- lens R8: the job record holds no credential -----------------------------------
+    _m("job_credential_in_the_request", "the job record's request half holds no key", C,
+       "            capture.add(scrub_keys(request_line(request)))",
+       "            capture.add(request_line(request))", JOB_CREDENTIAL),
+    _m("job_credential_in_the_output", "the job record's output holds no key", C,
+       "                capture.add(scrub_keys(text.encode()))",
+       "                capture.add(text.encode())", JOB_CREDENTIAL),
+    _m("job_scrub_first_only", "every occurrence of a key is scrubbed", C,
+       "    return KEY_SHAPE.sub(REDACTED, data)", "    return KEY_SHAPE.sub(REDACTED, data, count=1)",
+       JOB_CREDENTIAL),
+    _m("job_scrub_one_shape_only", "a key-prefixed token of any length is scrubbed", C,
+       'KEY_SHAPE = re.compile(rb"sk-infrx-[A-Za-z0-9_-]+")',
+       'KEY_SHAPE = re.compile(rb"sk-infrx-[A-Za-z0-9]{40}")', JOB_CREDENTIAL),
     # --- (c) the gateway ships -----------------------------------------------------------
     _m("ship_never_ships_jobs", "the gateway ships the job spools too", C,
        "        return reports + await ship_jobs(self.shipper, self.root / JOBS_DIR, self.limits)",

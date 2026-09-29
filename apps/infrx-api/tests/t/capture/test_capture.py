@@ -587,6 +587,24 @@ def test_a_worker_capture_failure_never_fails_the_job(tmp_path):
     assert settled == "settled"
 
 
+def test_an_async_jobs_record_holds_no_credential(tmp_path):
+    """Oracle (lens R8, merge #54): the worker never holds the caller's bearer token, so a
+    scrub by "the caller's token" scrubs nothing there - `my key is <TOKEN>` in the prompt
+    and `echo <TOKEN>` in the output reach the job spool verbatim. Every occurrence, in
+    both halves, is `[credential]`, and a minted key (`sk-infrx-` + 40) too."""
+    from infrx.operations import service
+    client, composed, calls = gateway(tmp_path / "gw", TraceMode.full)
+    client.post(support.CHAT_PATH, headers={**support.AUTH, "prefer": "respond-async"},
+                json=said(f"my key is {support.TOKEN} yes {support.TOKEN}"))
+    run(composed.close())
+    minted = service.new_secret()
+    worked(tmp_path, calls[0], text=f"echo {support.TOKEN} and {minted}")
+    [spool] = job_spools(tmp_path)
+    [content] = recover(spool).contents
+    assert support.TOKEN.encode() not in content and minted.encode() not in content
+    assert content.count(capture.REDACTED) == 4, content
+
+
 def test_the_worker_remembers_a_bounded_number_of_jobs(tmp_path):
     """Oracle: an attempt that never completes (killed, lease lost) held for ever."""
     request = admitted(tmp_path, TraceMode.full)
