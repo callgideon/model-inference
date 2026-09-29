@@ -7485,7 +7485,7 @@
   {
    "id": "W5-MERGE-30",
    "task": null,
-   "slice": "merge batch #30 (Sonnet): composition-3 655ad324 (+WR-LSQ-9-C, 1-C3-1, R210–R212)",
+   "slice": "merge batch #30 (Sonnet): composition-3 655ad324 (+WR-LSQ-9-C, 1-C3-1, R210–R212); workflow wf_332bd457-b02",
    "agent": "sonnet",
    "branch": "codex/w5-merge-30",
    "worktree": ".claude/worktrees/codex-w5-merge-30",
