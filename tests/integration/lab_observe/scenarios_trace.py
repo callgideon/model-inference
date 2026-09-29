@@ -56,11 +56,9 @@ def test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_
 
 
 def test_o01_capture_turned_on_through_the_composition_switch(workdir):
-    ow.not_run("o01", "COMPOSITION", why="capture off -> on in the box needs the gateway's "
-               "spool sink (WR-COMP-4), still absent: the worker's TRACE_PUMPS switch merged, "
-               "but the gateway builds no trace sink either way (config.py trace_pumps), so "
-               "nothing a served request does reaches a spool; TRACE-BOUNDS' peak-budget "
-               "accumulation is only observable there")
+    ow.not_run("o01", "WR-C6-CAPTURE", why="product WR (R234 ii): the gateway has no capture "
+               "seam on the request path and no consent source (consent_for None, every trace "
+               "policy off_mode_policy), so no served request reaches a spool (COMPOSITION-6)")
 
 
 # --- o02 feedback -------------------------------------------------------------------------
@@ -293,6 +291,11 @@ def test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_onc
         trip.box.kill("worker")
         time.sleep(1.0)
         trip.box.start("worker")
+        # The premise, before anything waits: the first worker may finish the job before its
+        # kill, and then only the sync call below would notice a missing worker - by the
+        # client's 120 s ReadTimeout, not an assertion (0-LO3-RV-1).
+        worker = trip.box.processes.get("worker")
+        assert worker is not None and worker.poll() is None, "premise: the worker came back"
         request_id = accepted.json()["request_id"]
         # A kill after the first worker claimed a phase leaves the job waiting for that lease to
         # expire (inference 120 s, preparation 30 s) before the new worker may claim it: the

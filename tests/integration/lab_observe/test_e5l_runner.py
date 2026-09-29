@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -81,6 +82,101 @@ def test_e5l_a_scenarios_declared_lanes_are_the_lanes_its_not_run_case_names():
             named.setdefault(sid, set()).update(re.findall(r'"([A-Z0-9-]+)"', args))
     assert named == {sid: set(spec["lanes"]) for sid, spec in runner.SCENARIOS.items()
                      if spec["lanes"]}
+
+
+def test_e5l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
+    """R222/R234/R235, as lab_evaluate's runner computes it: the verdict's `r222` is accepted
+    with no FAIL and every NOT RUN waiting only on a ruled out-of-scope class, by its own
+    reason: o01 on WR-C6-CAPTURE (product WR: the gateway's capture seam and consent source,
+    COMPOSITION-6), a UI cell on the lab-e2e harness. A FAIL whatever its message, a NOT RUN on
+    in-scope work, a scenario never run or NOT RUN for another reason stays open."""
+    assert runner.OUT_OF_SCOPE == {"LAB-E2E": "lab-e2e UI",
+                                   "WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}
+    assert runner.SCENARIOS["o01"]["lanes"] == ["WR-C6-CAPTURE"]
+    assert runner.reproduce("o01") == ("apps/infrx-api/.venv/bin/python "
+                                       "tests/integration/lab_observe/runner.py --out <dir> --only o01")
+    wait = "NOT RUN[WR-C6-CAPTURE] no seam; rerun after the merge: x --only o01"
+    others = [c for sid in runner.SCENARIOS if sid != "o01" for c in everything(sid)]
+    o01 = [*everything("o01")[:2], (runner.REQUIRED["o01"][2], "skipped", wait)]
+    result = runner.classify(junit(*others, *o01))
+    assert runner.gate(result) == "NOT RUN", "accepted is not a PASS"
+    assert runner.r222(result) == {"accepted": True, "open": {}}
+    with monkeypatch.context() as patch:            # a NOT RUN on in-scope work stays open
+        patch.delitem(runner.OUT_OF_SCOPE, "WR-C6-CAPTURE")
+        assert runner.r222(result) == {"accepted": False, "open": {"o01": "NOT RUN"}}
+    o01[2] = (runner.REQUIRED["o01"][2], "failure", wait)       # R234: a FAIL is never excused
+    assert runner.r222(runner.classify(junit(*others, *o01))) == \
+        {"accepted": False, "open": {"o01": "FAIL"}}
+    assert runner.r222(runner.classify(junit(*others, *everything("o01")))) == \
+        {"accepted": True, "open": {}}
+    assert "o01" in runner.r222(runner.classify(junit(*others)))["open"], "never run is open"
+    result = runner.classify(junit(*others, *o01[:2], (o01[2][0], "skipped", wait)), only={"o02"})
+    assert "o01" in runner.r222(result)["open"], "every reason must be the scenario's own wait"
+    # the recorded bd13f72 verdict: o10's LAB-E2E wait is out of scope, COMPOSITION never was
+    recorded = json.loads((REPO / "research/plan/evidence/e/E5L-raw-bd13f72/gate/verdict.json")
+                          .read_text())
+    statuses = {s["id"]: {k: s[k] for k in ("status", "cases", "reasons", "lanes")}
+                for s in recorded["scenarios"]}
+    assert runner.r222(statuses) == {"accepted": False, "open": {"o01": "NOT RUN"}}
+    statuses["o01"] = {"status": "PASS", "cases": {}, "reasons": [], "lanes": []}
+    assert runner.r222(statuses) == {"accepted": True, "open": {}}
+    # WR-LO3-RV4: the reason names the scenario's own lanes, not any NOT RUN (a stale class) ...
+    o01[2] = (runner.REQUIRED["o01"][2], "skipped", wait.replace("WR-C6-CAPTURE", "COMPOSITION"))
+    assert runner.r222(runner.classify(junit(*others, *o01)))["open"] == {"o01": "NOT RUN"}
+    # ... and every lane is a ruled class, not merely one of them
+    mixed = {"status": "NOT RUN", "cases": {"c": "NOT RUN"},
+             "lanes": ["WR-C6-CAPTURE", "COMPOSITION"],
+             "reasons": ["c: NOT RUN[WR-C6-CAPTURE,COMPOSITION] x --only o01"]}
+    assert runner.r222({**statuses, "o01": mixed})["open"] == {"o01": "NOT RUN"}
+    # every reason, each carrying the rerun, must be the wait (not just one of them)
+    other = {**mixed, "lanes": ["WR-C6-CAPTURE"],
+             "reasons": [f"c: {wait}", "d: skipped for another reason; x --only o01"]}
+    assert runner.r222({**statuses, "o01": other})["open"] == {"o01": "NOT RUN"}
+
+
+def test_e5l_o01s_recorded_reason_keeps_its_rerun_inside_the_cut():
+    """WR-LO3-RV2 (R253): o01's real NOT RUN, as pytest's JUnit records it (the message, then
+    the skip's location text), goes through case_status and classify: the recorded reason still
+    carries reproduce('o01') after the 400-char cut, so r222 excuses it; a reason that lost its
+    rerun stays open, never silently excused."""
+    import scenarios_trace
+    with pytest.raises(pytest.skip.Exception) as skipped:
+        scenarios_trace.test_o01_capture_turned_on_through_the_composition_switch(None)
+    message = str(skipped.value)
+    case = ET.Element("testcase", classname="x", name=runner.REQUIRED["o01"][2])
+    ET.SubElement(case, "skipped", type="pytest.skip", message=message).text = \
+        f"{HERE / 'scenarios_trace.py'}:59: {message}"
+    status, reason = runner.case_status(case)
+    assert status == "NOT RUN" and runner.reproduce("o01") in reason, reason
+    others = [c for sid in runner.SCENARIOS if sid != "o01" for c in everything(sid)]
+    suites = ET.fromstring(junit(*others, *everything("o01")[:2]))
+    suites.find("testsuite").append(case)
+    result = runner.classify(ET.tostring(suites, encoding="unicode"))
+    [recorded] = result["o01"]["reasons"]
+    assert runner.reproduce("o01") in recorded, recorded
+    assert runner.r222(result) == {"accepted": True, "open": {}}
+    result["o01"]["reasons"] = [recorded.split(" --only o01")[0]]      # cut before its rerun
+    assert runner.r222(result)["open"] == {"o01": "NOT RUN"}
+
+
+def test_e5l_the_verdict_carries_r222_and_each_scenarios_scope(monkeypatch, tmp_path):
+    """WR-LO3-RV3 (R235): verdict.json carries `r222` and, per scenario, the ruled class of each
+    lane it waits on. Through main with the namespace lock held elsewhere: no stack call."""
+    def busy(*_):
+        raise BlockingIOError
+    monkeypatch.setattr(runner.fcntl, "flock", busy)
+    monkeypatch.setattr(runner, "LOCK", tmp_path / "lock")
+    monkeypatch.setattr(runner, "pins", lambda harness: {})
+    monkeypatch.setenv("INFRX_E2_NAMESPACE", "e5l")
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    assert runner.main(["--out", str(tmp_path / "v")]) == runner.EXIT["BLOCKED"]
+    verdict = json.loads((tmp_path / "v" / "verdict.json").read_text())
+    assert verdict.get("r222") == {"accepted": False,
+                                   "open": {sid: "BLOCKED" for sid in runner.SCENARIOS}}
+    scope = {entry["id"]: entry.get("scope") for entry in verdict["scenarios"]}
+    assert scope == {sid: {lane: runner.OUT_OF_SCOPE.get(lane, "local (in scope)")
+                           for lane in spec["lanes"]} for sid, spec in runner.SCENARIOS.items()}
+    assert scope["o01"] == {"WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}
 
 
 def test_e5l_every_unbound_case_is_not_run_without_touching_a_stack():
