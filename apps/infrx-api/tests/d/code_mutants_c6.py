@@ -15,6 +15,7 @@ FILE = "0053_lab_composition_reads.sql"
 DB = f"{pgharness.DATABASE}_c6mut"
 ROLES = "check_browser_roles_reach_nothing"
 DECISIONS = "check_decisions_are_the_providers_own_oldest_first"
+RECEIPT = "check_a_checkpoint_receipt_is_read_for_its_own_provider"
 
 
 def _s(name, old, new, check, why, **kw):
@@ -37,6 +38,14 @@ SQL_MUTANTS = (
        "the decision history reads backwards"),
     _s("c6_decisions_reasons_lost", "'reasons', to_jsonb(e.reasons),", "'reasons', '[]'::jsonb,",
        DECISIONS, "a rollback shows no reason"),
+    # --- WR-C5-RECEIPT
+    _s("c6_receipt_any_provider", "   where r.provider_org_id = (p_args->>'provider_org_id')::uuid\n"
+       "     and r.checkpoint_id", "   where r.checkpoint_id", RECEIPT,
+       "B3 evaluates another provider's checkpoint under the asker's suite"),
+    _s("c6_receipt_browser_reads", "     and r.checkpoint_id = (p_args->>'checkpoint_id')::uuid\n$$;\n",
+       "     and r.checkpoint_id = (p_args->>'checkpoint_id')::uuid\n$$;\ngrant usage on schema "
+       "infrx to authenticated;\ngrant execute on function infrx.lab_checkpoint_receipt(jsonb) "
+       "to authenticated;\n", ROLES, "a browser session reads checkpoint digests and runs"),
 )
 
 

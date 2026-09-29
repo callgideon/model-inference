@@ -197,6 +197,14 @@ class PgLabDataStore:
             "provider_org_id": provider_org_id, "checkpoint_id": checkpoint_id,
             "external_run_ref": external_run_ref, "artifact_digest": artifact_digest})
 
+    async def checkpoint_receipt(self, checkpoint_id: str, *,
+                                 provider_org_id: str) -> tuple[str, str] | None:
+        """WR-C5-RECEIPT (0053): (external run, artifact digest) of the provider's checkpoint,
+        or None for another provider's or an unknown id."""
+        found = await self._call("lab_checkpoint_receipt", {
+            "provider_org_id": provider_org_id, "checkpoint_id": checkpoint_id})
+        return None if found is None else (found["external_run_ref"], found["artifact_digest"])
+
     async def transition_checkpoint(self, checkpoint_id: str, state: str, *,
                                     provider_org_id: str) -> dict[str, Any]:
         return await self._call("lab_checkpoint_transition", {

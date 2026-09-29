@@ -15,6 +15,7 @@ import asyncio
 import pytest
 from infrx.state import migrations
 from infrx.state.jobstore import connector
+from infrx.state.lab_data import PgLabDataStore
 from infrx.state.lab_rollout import PgReleaseStore
 
 from . import checks_credit as cc
@@ -27,7 +28,7 @@ pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_c6"
 NEMO, OTHER, uid, ok, t = d9.NEMO, d9.OTHER, d9.uid, d9.ok, d9.t
-RPCS = ("lab_release_decisions",)
+RPCS = ("lab_release_decisions", "lab_checkpoint_receipt")
 seed = d9.seed
 
 
@@ -82,9 +83,35 @@ def check_decisions_are_the_providers_own_oldest_first(conn) -> str:
     return "own provider only, decisions only, oldest first, [] for none; the store reads it"
 
 
+def check_a_checkpoint_receipt_is_read_for_its_own_provider(conn) -> str:
+    """WR-C5-RECEIPT: a checkpoint's D7 receipt - its external run and artifact digest - read
+    for the provider that received it; another provider asking for the same id, or an id
+    never received, reads nothing. Commits (the store reads on its own connection)."""
+    with conn.transaction():
+        dataset = t.publish(conn, t.manifest(uid(1, 0xc6), n=1, tag=0xc6))
+        ext = t.publish(conn, t.external_run(uid(2, 0xc6), dataset))
+    checkpoint = uid(3, 0xc6)
+    ok(conn, "lab_receive_checkpoint", {"provider_org_id": NEMO, "checkpoint_id": checkpoint,
+                                        "external_run_ref": ext,
+                                        "artifact_digest": f"sha256:{'c6' * 32}"})
+    got = ok(conn, "lab_checkpoint_receipt", {"provider_org_id": NEMO,
+                                              "checkpoint_id": checkpoint})
+    assert (got or {}).get("external_run_ref") == ext, got
+    assert got["artifact_digest"] == f"sha256:{'c6' * 32}", got
+    for asker, wanted in ((OTHER, checkpoint), (NEMO, uid(4, 0xc6))):
+        assert ok(conn, "lab_checkpoint_receipt", {"provider_org_id": asker,
+                                                   "checkpoint_id": wanted}) is None, asker
+    store = PgLabDataStore(connector(pgharness.dsn(conn.info.dbname)))
+    assert asyncio.run(store.checkpoint_receipt(checkpoint, provider_org_id=NEMO)) == \
+        (ext, f"sha256:{'c6' * 32}")
+    assert asyncio.run(store.checkpoint_receipt(checkpoint, provider_org_id=OTHER)) is None
+    return "own provider only; none for another provider or an unknown id; the store reads it"
+
+
 CHECKS = {c.__name__: c for c in (
     check_browser_roles_reach_nothing,
-    check_decisions_are_the_providers_own_oldest_first)}
+    check_decisions_are_the_providers_own_oldest_first,
+    check_a_checkpoint_receipt_is_read_for_its_own_provider)}
 
 
 # ----------------------------------------------------------------------------- tests
