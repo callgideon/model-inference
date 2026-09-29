@@ -37,6 +37,7 @@ STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
 DECIDE = C + "an_operator_decides_a_lab_proposal_through_d9s_cas"
 EXPAND = C + "an_expansion_is_approved_only_on_r2s_expand_verdict_over_live"
 LAUNCH = C + "a_release_is_launched_with_its_plan_stored_first"
+OBJECTS = C + "the_lab_objects_are_the_gateways_media_location_or_refused"
 B2 = C + "a_running_release_is_stepped_on_its_stored_b2_report"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
 ANNOT = C + "the_annotation_role_collects_teacher_batches_with_n2s_redaction"
@@ -356,6 +357,20 @@ MUTANTS: tuple[Mutant, ...] = (
        "              file=sys.stderr)\n        return 1\n", "        raise\n", LAUNCH),
     _m("lw_launch_unparsed", "launch names its plan",
        '    if args.command == "launch" and not args.plan:\n', "    if False:\n", LAUNCH),
+    # --- WR-LR5-3 (composition-7, R249): the Lab objects are the gateway's media location ------
+    _m("lw_objects_media_ignored", "a differing media location refuses at start",
+       "    if media[0] and media != (", "    if False and media != (", OBJECTS),
+    _m("lw_objects_media_unset_refused", "a unit naming no media location connects",
+       "    if media[0] and media != (", "    if media != (", OBJECTS),
+    _m("lw_objects_media_prefix_ignored", "the media prefix is compared (default infrx/)",
+       'env.get("S3_MEDIA_PREFIX") or LAB_PREFIX)', "LAB_PREFIX)", OBJECTS),
+    _m("lw_objects_lab_prefix_undefaulted", "an unset LAB_S3_PREFIX is infrx/ when compared",
+       'env.get("LAB_S3_PREFIX") or LAB_PREFIX):', 'env.get("LAB_S3_PREFIX")):', OBJECTS),
+    _m("lw_objects_media_unstripped", "the media bucket is compared as a setting (trimmed)",
+       '(env.get("S3_MEDIA_BUCKET") or "").strip(),', '(env.get("S3_MEDIA_BUCKET") or ""),',
+       OBJECTS),
+    _m("lw_objects_refusal_unnamed", "the refusal names both locations and WR-C5-PLAN",
+       '"S3_MEDIA_BUCKET/S3_MEDIA_PREFIX (WR-C5-PLAN)")', '"the media location")', OBJECTS),
     # --- WR-R4-2 (composition-6): the operator decides a Lab proposal through D9's CAS ---------
     _m("lw_decide_without_operator", "a decision names its operator",
        '    mode, needs = "lab-rollout", (DATABASE, "LAB_OPERATOR_ID")',

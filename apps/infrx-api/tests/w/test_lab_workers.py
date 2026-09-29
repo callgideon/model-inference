@@ -1017,6 +1017,38 @@ def test_lab_workers__an_expansion_is_approved_only_on_r2s_expand_verdict_over_l
     assert (approved, rolled) == ([], []), "a second CAS or an alias move for an expansion"
 
 
+def test_lab_workers__the_lab_objects_are_the_gateways_media_location_or_refused(monkeypatch):
+    """WR-LR5-3 (R249): a release's plan is written through `lab_objects` (LAB_S3_BUCKET /
+    LAB_S3_PREFIX, unset prefix `infrx/`) and read by the page through the gateway's
+    `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX`. When the unit names the media location and it
+    differs (bucket or prefix), the role refuses at start naming both settings and WR-C5-PLAN,
+    before any bucket is asked; the same location, or none named, connects and probes."""
+    from infrx.media import s3
+    connected = []
+
+    class Store:
+        def probe(self):
+            pass
+    monkeypatch.setattr(s3.S3ObjectStore, "connect", classmethod(
+        lambda cls, bucket, prefix, endpoint="": connected.append((bucket, prefix)) or Store()))
+    lab = {"LAB_S3_BUCKET": "media"}
+
+    def objects(**env):
+        return outcome(lambda: lab_workers.lab_objects("lab-rollout", {**lab, **env}))
+    for differing in ({"S3_MEDIA_BUCKET": "other"},
+                      {"S3_MEDIA_BUCKET": "media", "S3_MEDIA_PREFIX": "elsewhere/"},
+                      {"S3_MEDIA_BUCKET": "media", "LAB_S3_PREFIX": "lab/"}):
+        died = objects(**differing)
+        assert type(died) is RuntimeMisconfigured, (differing, died)
+        assert all(name in str(died) for name in ("LAB_S3_BUCKET", "S3_MEDIA_BUCKET",
+                                                    "WR-C5-PLAN")), died
+    assert connected == [], "a differing location asked a bucket"
+    for same in ({}, {"S3_MEDIA_BUCKET": "media"},
+                 {"S3_MEDIA_BUCKET": " media ", "S3_MEDIA_PREFIX": "p/", "LAB_S3_PREFIX": "p/"}):
+        assert type(objects(**same)) is Store, same
+    assert connected == [("media", "infrx/"), ("media", "infrx/"), ("media", "p/")]
+
+
 # ------------------------------------------------------------ annotation / training (WR-I6-3)
 def test_lab_workers__training_has_no_pass_and_a_teacher_host_needs_its_approval():
     """P3's runs are started by the Lab route and the manual bundle has no platform job, so
