@@ -291,6 +291,11 @@ def test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_onc
         trip.box.kill("worker")
         time.sleep(1.0)
         trip.box.start("worker")
+        # The premise, before anything waits: the first worker may finish the job before its
+        # kill, and then only the sync call below would notice a missing worker - by the
+        # client's 120 s ReadTimeout, not an assertion (0-LO3-RV-1).
+        worker = trip.box.processes.get("worker")
+        assert worker is not None and worker.poll() is None, "premise: the worker came back"
         request_id = accepted.json()["request_id"]
         # A kill after the first worker claimed a phase leaves the job waiting for that lease to
         # expire (inference 120 s, preparation 30 s) before the new worker may claim it: the
