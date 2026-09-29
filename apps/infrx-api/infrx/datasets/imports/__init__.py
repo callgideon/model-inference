@@ -471,8 +471,8 @@ async def work(jobs, store, objects, *, worker_id: str, limit: int = 1,
                 accept_rejects=task["accept_rejects"]))
         except ImportRejected as rejected:
             result, error = vars(rejected.report), "rejected"
-        except errors.DomainError as refused:
-            error = str(refused).removeprefix(f"{refused.code}: ")
+        except errors.DomainError as refusal:
+            error = str(refusal).removeprefix(f"{refusal.code}: ")
         except Exception:                    # noqa: BLE001 - the lease lapses: claimed again
             logging.getLogger(__name__).exception("import job %s did not finish", job_id)
             done["retry"] += 1
