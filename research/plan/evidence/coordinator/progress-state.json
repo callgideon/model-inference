@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 322,
- "updated": "2026-09-29T21:57:57Z",
+ "revision": 323,
+ "updated": "2026-09-29T22:06:54Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9588,11 +9588,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T20:21:25Z",
-   "updated": "2026-09-29T21:37:34Z",
+   "updated": "2026-09-29T22:06:54Z",
    "blocker": null,
-   "next_action": "merge batch #60 (WR-C7G-PREFLIGHT, F1/F3/F4, R255–R256)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9716,22 +9716,22 @@
   {
    "id": "W5-MERGE-60",
    "task": null,
-   "slice": "merge batch #60 (Opus): lab-c7-gaps ae83ab2b (+WR-C7G-PREFLIGHT, F1/F3/F4, R255–R256)",
+   "slice": "merge batch #60 (Opus): lab-c7-gaps ae83ab2b (+WR-C7G-PREFLIGHT, F1/F3/F4, R255–R256); integrated (R255–R256 sorted between R254 and R257)",
    "agent": "opus",
    "branch": "codex/w5-merge-60",
    "worktree": ".claude/worktrees/codex-w5-merge-60",
    "base": "b88a733c",
-   "head": null,
+   "head": "7d4da084",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T21:37:34Z",
-   "updated": "2026-09-29T21:37:34Z",
+   "updated": "2026-09-29T22:06:54Z",
    "blocker": null,
-   "next_action": "integrate (sort §10); pilot.py conflicts with lab-rollout-7 / lab-sql-lw9 resolved at their merges",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
