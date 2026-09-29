@@ -1,0 +1,22 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_stack_mutant_is_killed[st_releases_route_ignores_the_fence] _______
+
+mutant = Mutant(name='st_releases_route_ignores_the_fence', invariant="a proposal names the revision D9 holds now (the page's s...anted.fence:', new='    if False:', cases=('test_k10_the_releases_ui_over_the_real_route',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e8l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_releases_route_ignores_the_fence is misdeclared: its cases were skipped: 1 skipped, 21 deselected in 17.97s
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail='its cases were skipped: 1 skipped, 21 deselected in 17.97s').killed
+
+tests/integration/lab_rollout/test_mutants.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_releases_route_ignores_the_fence]
+1 failed, 59 deselected in 97.47s (0:01:37)

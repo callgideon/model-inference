@@ -1,0 +1,51 @@
+{
+ "task": "E7L",
+ "activity": "review",
+ "head": "2299b82",
+ "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+ "branch": "codex/w5-lab-e2e",
+ "owned_paths": [
+  "apps/lab/tests/e2e/**",
+  "Makefile (lab-e2e target + .PHONY)",
+  "tests/integration/lab_{observe,evaluate,improve,rollout}/ (UI cell binds)",
+  "research/plan/evidence/e/LAB-E2E-*"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/LAB-E2E-2299b82.md",
+  "research/plan/evidence/e/LAB-E2E-raw-2299b82",
+  "research/plan/evidence/e/LAB-E2E-raw-9e485b3",
+  "research/plan/evidence/e/LAB-E2E-raw-c2b88a2"
+ ],
+ "slice": "i08's provider-UI half (WR-C4-UI) bound to apps/lab/tests/e2e/improve (LAB-E2E)",
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --only i01,i08 --out research/plan/evidence/e/LAB-E2E-raw-9e485b3/e7l-i01-i08",
+   "exit": 3,
+   "summary": "i01 PASS; i08 API half PASS; i08 UI NOT RUN[WR-B3-3] (suite 7/7 passed)"
+  },
+  {
+   "cmd": "... runner.py --only i08",
+   "exit": 1,
+   "summary": "F1: the API half alone FAILs (503: the suite stand-in imports the benchmark inside the route's loop); UI NOT RUN[WR-B3-3]"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l pytest tests/integration/lab_improve/test_mutants.py -k st_import_accepts_forged_ground_truth (kept e7l)",
+   "exit": 0,
+   "summary": "killed at 2299b82"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "i08-UI flips when WR-B3-3 reaches pilot._lab_2 (merge #42?); F1 one line",
+  "at": "2026-09-29T12:14:01Z"
+ },
+ "blockers": [
+  "WR-B3-3"
+ ],
+ "wiring_requests": [
+  "WR-LE2E-2 lab_improve scenarios_surface i08 API half: warm lab.benchmark (F1: --only i08 FAILs alone)"
+ ]
+}

@@ -1,0 +1,24 @@
+=== 2026-09-29T11:37:52Z lab_rollout keep (e8l)
+keep exit 3
+mutant exit 0 in 118s
+.                                                                        [100%]
+1 passed, 59 deselected in 117.62s (0:01:57)
+teardown exit 3
+no e8l containers left
+=== 2026-09-29T11:41:24Z lab_evaluate keep (e6l)
+SKIP: e6l containers exist
+=== 2026-09-29T11:41:24Z lab_improve keep (e7l)
+keep exit 1
+mutant exit 0 in 118s
+.                                                                        [100%]
+1 passed, 49 deselected in 117.24s (0:01:57)
+teardown exit 1
+no e7l containers left
+=== 2026-09-29T11:45:09Z lab_observe keep (e5l)
+keep exit 3
+mutant exit 0 in 307s
+.                                                                        [100%]
+1 passed, 69 deselected in 306.28s (0:05:06)
+teardown exit 3
+no e5l containers left
+=== done 2026-09-29T11:52:28Z

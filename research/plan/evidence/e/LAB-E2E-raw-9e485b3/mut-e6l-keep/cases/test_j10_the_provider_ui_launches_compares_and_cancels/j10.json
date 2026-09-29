@@ -1,0 +1,23 @@
+{
+ "cancelled": 0,
+ "command": "cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/evaluate/stack.test.ts",
+ "exit": 0,
+ "fail": 0,
+ "pass": 6,
+ "record": {
+  "cell": "E6L j10",
+  "composed": {
+   "catalog": false,
+   "experiments": false,
+   "ledger": false,
+   "store": true
+  },
+  "stand_ins": [
+   "session verifier and PostgREST RPC door (stack.door)",
+   "experiments/catalog/B3 ledger: the route suite's fakes (WR-B4-2, WR-LAB2-2, WR-B3-1 to compose)",
+   "B1's worker and B2's report (test doors)"
+  ],
+  "suite": "evaluate"
+ },
+ "skipped": 0
+}

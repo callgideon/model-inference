@@ -1,0 +1,29 @@
+=== 2026-09-29T11:26:54Z lab_rollout keep (e8l)
+keep exit 3
+mutant exit 1 in 97s
+FAILED tests/integration/lab_rollout/test_mutants.py::test_stack_mutant_is_killed[st_releases_route_ignores_the_fence]
+1 failed, 59 deselected in 97.47s (0:01:37)
+teardown exit 3
+no e8l containers left
+=== 2026-09-29T11:29:39Z lab_evaluate keep (e6l)
+keep exit 3
+mutant exit 0 in 60s
+.                                                                        [100%]
+1 passed, 50 deselected in 60.16s (0:01:00)
+teardown exit 3
+no e6l containers left
+=== 2026-09-29T11:31:27Z lab_improve keep (e7l)
+keep exit 1
+mutant exit 0 in 65s
+.                                                                        [100%]
+1 passed, 49 deselected in 65.40s (0:01:05)
+teardown exit 1
+no e7l containers left
+=== 2026-09-29T11:33:26Z lab_observe keep (e5l)
+keep exit 1
+mutant exit 0 in 147s
+.                                                                        [100%]
+1 passed, 69 deselected in 147.03s (0:02:27)
+teardown exit 3
+no e5l containers left
+=== done 2026-09-29T11:36:31Z
