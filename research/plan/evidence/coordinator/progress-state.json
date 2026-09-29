@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 306,
- "updated": "2026-09-29T17:41:54Z",
+ "revision": 307,
+ "updated": "2026-09-29T17:54:33Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8915,22 +8915,22 @@
   {
    "id": "W5-LAB-CAPTURE",
    "task": "T2",
-   "slice": "WR-C6-CAPTURE: consent source, request-path capture hook, gateway lifespan ship, worker job-output spool; E5L o01 PASS (Opus); workflow wf_3e391ba8-499",
+   "slice": "WR-C6-CAPTURE: consent source, request-path capture hook, gateway lifespan ship, worker job-output spool; E5L o01 PASS (Opus); workflow wf_3e391ba8-499; REJECT at fea8a4fd with only coordinator items open (o01 blocked by a held e5l stack; composition-root edits ratified) — merged as ACCEPT_WITH_FIXES; 80 capture mutants 0 survivors; E4 2822/0",
    "agent": "opus",
    "branch": "codex/w5-lab-capture",
    "worktree": ".claude/worktrees/codex-w5-lab-capture",
    "base": "f9e6a14e",
-   "head": null,
+   "head": "fea8a4fd",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T13:59:28Z",
-   "updated": "2026-09-29T13:59:28Z",
+   "updated": "2026-09-29T17:54:33Z",
    "blocker": null,
-   "next_action": "handback → merge batch → o01 rerun → E5L fully PASS",
+   "next_action": "merge batch #54 (ratified composition-root edits; WR-LC-LOCAL/MAKE/DOC; R250) → lab-observe-4 runs o01 once e5l is free",
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 12,
@@ -9255,6 +9255,43 @@
     "apps/infrx-api/tests/g/lab_releases/",
     "apps/infrx-api/tests/b/runner/",
     "research/plan/evidence/coordinator/COMPOSITION-7-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-54",
+   "task": null,
+   "slice": "merge batch #54 (Opus): lab-capture fea8a4fd (+ratification, WR-LC-LOCAL/MAKE/DOC, minors, R250)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-54",
+   "worktree": ".claude/worktrees/codex-w5-merge-54",
+   "base": "381a4093",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T17:54:33Z",
+   "updated": "2026-09-29T17:54:33Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → lab-observe-4 (o01 PASS)",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "Makefile",
+    "apps/infrx-api/infrx/config.py",
+    "apps/infrx-api/deploy/preflight.py",
+    "tests/integration/lab_local/",
+    "apps/infrx-api/tests/t/capture/",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/t/LAB-CAPTURE-5f6a056.md"
    ],
    "wiring_requests": []
   }
