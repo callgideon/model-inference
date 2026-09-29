@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 304,
- "updated": "2026-09-29T17:30:35Z",
+ "revision": 305,
+ "updated": "2026-09-29T17:39:14Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8995,11 +8995,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T14:59:31Z",
-   "updated": "2026-09-29T17:30:35Z",
+   "updated": "2026-09-29T17:39:14Z",
    "blocker": null,
-   "next_action": "merge batch #53 (RV-2/RV-3, WR-LR5-3 runbook rule, R249) → lab-rollout-6 (WR-LIVE-K09 + WR-LR5-1) after #52",
+   "next_action": "lab-rollout-6 after #52: WR-LIVE-K09 (k09 breach), WR-LR5-1 (drop the journey stand-ins → k10-ui-composed), the RV-3 real-stack run; k08 needs P-08",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9157,22 +9157,22 @@
   {
    "id": "W5-MERGE-53",
    "task": null,
-   "slice": "merge batch #53 (Opus): lab-rollout-5 bd257bfa (+RV-2/RV-3 cases, WR-LR5-3 runbook rule, evidence minors, R249); workflow wf_b5775e74-ee4",
+   "slice": "merge batch #53 (Opus): lab-rollout-5 bd257bfa (+RV-2/RV-3 cases, WR-LR5-3 runbook rule, evidence minors, R249); workflow wf_b5775e74-ee4; integrated (R249 on the tip; R246–R248 with #52)",
    "agent": "opus",
    "branch": "codex/w5-merge-53",
    "worktree": ".claude/worktrees/codex-w5-merge-53",
    "base": "84841859",
-   "head": null,
+   "head": "4bd006df",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T17:30:35Z",
-   "updated": "2026-09-29T17:30:35Z",
+   "updated": "2026-09-29T17:39:14Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → E8L k10 PASS on the tip",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
