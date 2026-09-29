@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 303,
- "updated": "2026-09-29T17:25:03Z",
+ "revision": 304,
+ "updated": "2026-09-29T17:30:35Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8984,22 +8984,22 @@
   {
    "id": "W5-LAB-ROLLOUT-5",
    "task": "E8L",
-   "slice": "WR-C6-K10: k10's port half over pilot.lab_releases + rollout decide; k10-UI rerun through the e2e suite (WR-R4-2 composed); the merged-tree k09 mutant kill on a kept e8l stack (Opus); workflow wf_14e58283-d59",
+   "slice": "WR-C6-K10: k10's port half over pilot.lab_releases + rollout decide; k10-UI rerun through the e2e suite (WR-R4-2 composed); the merged-tree k09 mutant kill on a kept e8l stack (Opus); workflow wf_14e58283-d59; ACCEPT_WITH_FIXES at bd257bfa (k10 port half over pilot.lab_releases with real launch/decide processes; k10-UI PASS; k09 mutant killed; make lab-rollout k01–k07/k09/k10 PASS, r222 accepted; 82 mutants)",
    "agent": "opus",
    "branch": "codex/w5-lab-rollout-5",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout-5",
    "base": "993d481c",
-   "head": null,
+   "head": "bd257bfa",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T14:59:31Z",
-   "updated": "2026-09-29T14:59:31Z",
+   "updated": "2026-09-29T17:30:35Z",
    "blocker": null,
-   "next_action": "handback → merge → E8L k10 PASS",
+   "next_action": "merge batch #53 (RV-2/RV-3, WR-LR5-3 runbook rule, R249) → lab-rollout-6 (WR-LIVE-K09 + WR-LR5-1) after #52",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9151,6 +9151,40 @@
     "apps/infrx-api/tests/d/test_code_mutants_live.py",
     "research/plan/08-contracts-v1-encoding.md",
     "research/plan/evidence/r/LAB-LIVE-1f68d35.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-53",
+   "task": null,
+   "slice": "merge batch #53 (Opus): lab-rollout-5 bd257bfa (+RV-2/RV-3 cases, WR-LR5-3 runbook rule, evidence minors, R249)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-53",
+   "worktree": ".claude/worktrees/codex-w5-merge-53",
+   "base": "84841859",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T17:30:35Z",
+   "updated": "2026-09-29T17:30:35Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → E8L k10 PASS on the tip",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_rollout/",
+    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/e/E8L-c581c59.md"
    ],
    "wiring_requests": []
   }
