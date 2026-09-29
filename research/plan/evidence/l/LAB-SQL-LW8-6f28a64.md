@@ -219,3 +219,28 @@ fix changes only two grants, and F5 covers every suite that pins them.
 apply them only from `8ae508e6`. Families that reach 0041 through lineage (datasets
 versions/derive/export, pipelines label imports/select/export, training prepare) are now served
 on the unit. Without that, LCR-F1 was not closed. The proposed ruling is unchanged.
+
+## Coordinator rulings
+
+- **R251** (08 §10, numbered at the merge on `codex/w5-merge-55`): `infrx_lab_control` executes
+  exactly the functions the control unit's route handlers call (0043/0052's, 0056's) and never a
+  worker's claim, lease or submission; the teacher-batch approval's in-request submission counts
+  as a route's call. A later Lab migration that gives a route a new function grants it to this
+  login in the same file; `tests/d/test_code_mutants_lw8.py` pins the set.
+- Merge wirings (same merge): WR-LW8-R3 / 1-LW8-R1: 0056 also grants the teacher approval's six
+  ledger functions (`lab_teacher_reserve`, `lab_judge_begin_submit`, `lab_teacher_record_sent`,
+  `lab_judge_release`, `lab_judge_quarantine`, `lab_judge_record_submission`; traced
+  `approve_teachers` → `run_batch` → `send` → `PgTeacherLedger`/`PgJudgeLedger`), `GRANTED`
+  gains them, and the mutant `lw8_drop_teacher_reserve` is killed by HOLDS. WR-LW8-R2: the
+  tests/i/lab_control PG case `present_records_answer_alike_on_both_logins` seeds a dataset
+  version, a running release and a teacher batch per login through the owner login and compares
+  both logins; the teacher reserve dropped makes the lab column's approval a 503.
+
+## Carried
+
+- **WR-LW8-2**: the `make lab-local` o05 control-factory rerun → lane lab-local-2 after this merge.
+- **WR-LW8-3**: 0055's variants listing and import requeue functions → lab-sql-lw7's merge
+  (whichever of 0055/0056 merges second grants them and updates `GRANTED`).
+- **0-LW8-R4** (note): l4 contention. lab-sql-lw7's E4, lab-rollout-5 and a merge clone shared
+  l4 during this lane; the harness lock serialised them (HarnessBusy, broken_runner copies
+  rerun), and nothing was touched.

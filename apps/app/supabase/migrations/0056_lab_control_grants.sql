@@ -7,7 +7,7 @@
 -- grants only; no table, function or other role's privilege is touched (service_role keeps
 -- 0004's default EXECUTE; anon, authenticated and infrx_runtime gain nothing). Worker-only
 -- claims (import-job claim/heartbeat/finish, evaluation leases and attempts, the outbox pass,
--- judge and teacher submission work) stay refused to this login.
+-- J2's judge runs and the teacher collect/failure log) stay refused to this login.
 -- LOCAL-ONLY (R150/R151/R201): never applied hosted; the number is the next free at merge.
 --
 --   datasets        lab_resolve, lab_publish, lab_accessible_samples (lineage status),
@@ -23,7 +23,14 @@
 --                   lab_receive_checkpoint, lab_checkpoint_transition, 0053's
 --                   lab_checkpoint_receipt; D8's lab_checkpoint_subscriptions; B1's freeze:
 --                   lab_put_evaluator, lab_create_run); teacher batches (read: lab_judge_run,
---                   lab_teacher_failures)
+--                   lab_teacher_failures) and the approval (WR-LW8-R3: with LAB_TEACHERS on,
+--                   POST teacher-batches/{id}/approve runs the submission in-request -
+--                   routes/lab_pipelines.approve_teachers -> pipelines.teachers.run_batch ->
+--                   judge.submit.send -> D8's PgTeacherLedger / J2's PgJudgeLedger:
+--                   lab_teacher_reserve (0042), lab_judge_begin_submit, lab_teacher_record_sent
+--                   (0042), lab_judge_release, lab_judge_quarantine,
+--                   lab_judge_record_submission (0036); collect's lab_judge_record_results /
+--                   lab_judge_settle / lab_teacher_record_failures stay the worker's)
 --   releases        lab_releases_in (0048), lab_release (0039), lab_release_decisions (0053),
 --                   lab_release_proposals, lab_propose_release (0043)
 --   checkpoints     lab_checkpoint_record_event (D8) beside D7's receive above
@@ -44,6 +51,9 @@ grant execute on function
   infrx.lab_pipeline_note(jsonb), infrx.lab_pipeline_noted(jsonb),
   infrx.lab_checkpoint_record_event(jsonb), infrx.lab_checkpoint_subscriptions(jsonb),
   infrx.lab_judge_run(jsonb), infrx.lab_teacher_failures(jsonb),
+  infrx.lab_teacher_reserve(jsonb), infrx.lab_judge_begin_submit(jsonb),
+  infrx.lab_teacher_record_sent(jsonb), infrx.lab_judge_release(jsonb),
+  infrx.lab_judge_quarantine(jsonb), infrx.lab_judge_record_submission(jsonb),
   infrx.lab_releases_in(jsonb), infrx.lab_release(jsonb), infrx.lab_release_decisions(jsonb),
   infrx.lab_release_proposals(jsonb), infrx.lab_propose_release(jsonb)
   to infrx_lab_control;

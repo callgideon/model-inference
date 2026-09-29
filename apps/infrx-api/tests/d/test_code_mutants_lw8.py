@@ -39,7 +39,10 @@ GRANTED = frozenset({
     "lab_pipeline_noted", "lab_checkpoint_record_event", "lab_checkpoint_subscriptions",
     "lab_judge_run", "lab_teacher_failures", "lab_releases_in", "lab_release",
     "lab_release_decisions", "lab_release_proposals", "lab_propose_release",
-    "lab_blocked_samples", "lab_permitted_samples"})
+    "lab_blocked_samples", "lab_permitted_samples",
+    # WR-LW8-R3: the teacher-batch approval's in-request submission (LAB_TEACHERS on)
+    "lab_teacher_reserve", "lab_judge_begin_submit", "lab_teacher_record_sent",
+    "lab_judge_release", "lab_judge_quarantine", "lab_judge_record_submission"})
 #: One worker-only claim: an import job is claimed by the I5 datasets pool, never a route.
 WORKER_CLAIM = "lab_import_job_claim"
 
@@ -126,6 +129,10 @@ SQL_MUTANTS = (
        "  infrx.lab_blocked_samples(jsonb), infrx.lab_permitted_samples(jsonb),",
        "  infrx.lab_blocked_samples(jsonb),", HOLDS,
        "a version's derive/export and every label import answer 503 on the unit (0-LW8-R1)"),
+    _s("lw8_drop_teacher_reserve",
+       "  infrx.lab_teacher_reserve(jsonb), infrx.lab_judge_begin_submit(jsonb),",
+       "  infrx.lab_judge_begin_submit(jsonb),", HOLDS,
+       "an administrator's teacher-batch approval answers 503 on the unit (WR-LW8-R3)"),
     _s("lw8_grant_worker_claim", "infrx.lab_import_job(jsonb),",
        f"infrx.lab_import_job(jsonb), infrx.{WORKER_CLAIM}(jsonb),", WORKER,
        "the route login claims the datasets pool's import jobs"),
