@@ -1,0 +1,37 @@
+{
+ "task": "I2L",
+ "slice": "lab-control-routes (LW6): WR-LDP-2 (every Lab family on the control unit through pilot._lab, the unit is the switch, R237) + LDP-F1 option (b) + LDP-F3 (datasets typed 503) + LDP-F7 (set_role=False on the Lab login)",
+ "activity": "review",
+ "head": "79537d3e",
+ "worktree": ".claude/worktrees/codex-w5-lab-control-routes",
+ "branch": "codex/w5-lab-control-routes",
+ "owned_paths": [
+  "apps/infrx-api/infrx/lab/control/",
+  "apps/infrx-api/infrx/gateway/routes/lab_datasets.py (the 503 only)",
+  "apps/infrx-api/tests/i/lab_control/",
+  "research/plan/evidence/l/LAB-CONTROL-ROUTES-*"
+ ],
+ "commands": [
+  {"cmd": "uv run --frozen pytest -q tests/i/lab_control (fail-first at d04d5bd6)", "exit": 1, "summary": "5 failed: datasets 404, set_role None, no rt.lab_datasets"},
+  {"cmd": "uv run --frozen pytest -q tests/i/lab_control", "exit": 0, "summary": "6 passed, 1 skipped (PG case)"},
+  {"cmd": "INFRX_D_TASK=l4 pytest -q -s -m pg tests/i/lab_control", "exit": 0, "summary": "1 passed; infrx_lab_control: readyz 200, control 200, other families typed 503 (LCR-F1 grants), never 401/500"},
+  {"cmd": "INFRX_MUTANTS=all pytest -q tests/i/lab_control/test_mutants.py (fake; and INFRX_LAB_API_PG=1 INFRX_D_TASK=l4)", "exit": 0, "summary": "22 passed each: 19 mutants, 0 survivors"},
+  {"cmd": "INFRX_MUTANTS=all pytest tests/i/lab/test_mutants.py tests/g/lab_datasets/test_mutants.py; INFRX_D_TASK=l4 tests/l/control/test_mutants.py", "exit": 0, "summary": "i/lab + g/lab_datasets green; l/control 117 passed (its PG mutants on l4; on d1 they were ForeignContainer)"},
+  {"cmd": "INFRX_D_TASK=dlab pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py (every switch OFF)", "exit": 0, "summary": "2822 passed, 0 failed, 27 skipped"},
+  {"cmd": "INFRX_D_TASK=dlab make api-test", "exit": 0, "summary": "6714 passed, 0 failed, 175 skipped, 9 xfailed"},
+  {"cmd": "scratch worktree (79537d3e + codex/w5-lab-deploy-prep 02ec83ac) make lab-local", "exit": 2, "summary": "E4-ON FAIL on known findings only: o04 both PASS (LDP-F7 fixed), o05 all-switches gateway 503s (LDP-F1 by design, datasets 503 not 500), e4-on same 36 failing ids as 28c9c2cc"}
+ ],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "lane done with 0 survivors; remaining = merge + WR-LCR-1..5 (~15 min each) + one make lab-local rerun (~45 min); SR-LCR-1 is lab-sql's (analogue D10-0025 1/2/5 h, not counted)", "at": "2026-09-29T15:00Z"},
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LCR-1 Makefile api-mutants: add tests/i/lab_control/test_mutants.py",
+  "WR-LCR-2 lab-control.caddy: datasets path 64 MiB request_body, other /lab/v1/* 1 MiB (diff in evidence; caddy validate OK)",
+  "WR-LCR-3 infra/lab/app/lab.json + README: LAB_S3_BUCKET, LAB_S3_ENDPOINT, LAB_CHECKPOINT_KEYS under lab-control",
+  "WR-LCR-4 runbook 08-lab-internal-testing-rollout.md (#47): families served by the control unit, LDP-F1/F3/F7 status, LAB_*_API_URL = control origin, optional LAB_S3_BUCKET in L5",
+  "WR-LCR-5 tests/integration/lab_local (#47): drop O04_LOGIN from KNOWN_FAIL; add an o05 case on the control factory",
+  "SR-LCR-1 lab-sql: grant infrx_lab_control EXECUTE on the families' D7/D8/D9 route-half functions (LCR-F1)"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/LAB-CONTROL-ROUTES-79537d3.md"
+ ]
+}

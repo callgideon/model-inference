@@ -8,9 +8,17 @@ the runtime's `DATABASE_URL` or service-role key - the way `pilot._lab` composes
 `lab_control` over L3 (`Operations`), and `lab_traces` only when `CLICKHOUSE_URL` and
 `S3_TRACE_BUCKET` are set (one without the other is refused by `pilot._lab_traces`).
 A missing `INFRX_LAB_*` setting refuses startup by name (`RuntimeMisconfigured`).
+
+WR-LDP-2 (R237: the box serves the Lab only from its own units): every other Lab family -
+datasets, evaluations, pipelines (teacher batches included), releases/optimizations and,
+given `LAB_CHECKPOINT_KEYS`, the checkpoint receiver - is `pilot._lab`'s composition on this
+login. No `LAB_*` switch but `LAB_TEACHERS` (P-10 teacher egress, default off) is read for
+them: this unit is the switch, so the App gateway keeps every Lab switch OFF. Its connections never `set role` (LDP-F7: the Lab login is a member of
+no role). The Lab objects are the Lab workers' (`LAB_S3_BUCKET`); without it, `NoObjects`.
 """
 from __future__ import annotations
 
+import dataclasses
 import os
 import time
 from types import SimpleNamespace
@@ -34,6 +42,13 @@ class NoEngine:
         raise errors.DependencyUnavailable("the engine smoke adapter is not wired (WR-L3-2)")
 
 
+class NoObjects:
+    """Without `LAB_S3_BUCKET` every use of the Lab objects is a typed 503."""
+
+    def __getattr__(self, name):
+        raise errors.DependencyUnavailable("the Lab objects are not configured (LAB_S3_BUCKET)")
+
+
 def _settings() -> dict[str, str]:
     values = {name: os.environ.get(name, "").strip() for name in REQUIRED}
     missing = tuple(name for name, value in values.items() if not value)
@@ -47,7 +62,7 @@ def _store():
     runtime's `DATABASE_URL`)."""
     from ...state.jobstore import connector
     from ...state.lab_control import PgControlStore
-    return PgControlStore(connector(os.environ[DATABASE_URL]))
+    return PgControlStore(connector(os.environ[DATABASE_URL], set_role=False))
 
 
 def _compose(lab: dict[str, str], store):
@@ -62,7 +77,7 @@ def _compose(lab: dict[str, str], store):
     from ...state.jobstore import connector
     from ...state.lab_access import PgAccessStore
     from ..access import LabAccess
-    settings, connect = from_env(), connector(lab[DATABASE_URL])
+    settings, connect = from_env(), connector(lab[DATABASE_URL], set_role=False)
     # ponytail: process-lifetime client, as in `pilot._lab`.
     sessions = GoTrueSessions(httpx.AsyncClient(base_url=lab[SUPABASE_URL].rstrip("/"),
                                                 timeout=httpx.Timeout(5, connect=2)),
@@ -72,7 +87,25 @@ def _compose(lab: dict[str, str], store):
     pilot = settings.pilot
     traces = _lab_traces(settings, connect, sessions, access) \
         if pilot.clickhouse_url.strip() or pilot.s3_trace_bucket.strip() else None
-    return SimpleNamespace(settings=settings, clock=time.time), control, traces
+    return SimpleNamespace(settings=settings, clock=time.time,
+                           **_families(settings, lab, connect)), control, traces
+
+
+def _families(settings, lab: dict[str, str], connect) -> dict:
+    """WR-LDP-2: `pilot._lab`'s families (control and traces are composed above) with the
+    Lab's own session verifier, every family on - the unit is the switch (R237)."""
+    from ...gateway.pilot import _lab, _lab_checkpoints
+    from ..workers.__main__ import lab_objects
+    deployment = dataclasses.replace(
+        settings.deployment, lab_control=False, lab_traces=False, lab_datasets=True,
+        lab_evals=True, lab_pipelines=True, lab_releases=True,
+        lab_checkpoints=bool(settings.deployment.lab_checkpoint_keys.strip()))
+    unit = dataclasses.replace(settings, deployment=deployment,
+                               supabase_url=lab[SUPABASE_URL].rstrip("/"),
+                               supabase_key=lab[SUPABASE_KEY])
+    objects = lab_objects(MODE, os.environ) if os.environ.get("LAB_S3_BUCKET", "").strip() \
+        else NoObjects()
+    return {**_lab(unit, connect, objects), **_lab_checkpoints(unit, connect)}
 
 
 def create_app() -> FastAPI:
@@ -88,8 +121,11 @@ def create_app() -> FastAPI:
             return JSONResponse({"status": "unavailable"}, status_code=503)
         return {"status": "ready"}
 
-    from ...gateway.routes import lab_control, lab_traces
+    from ...gateway.routes import (lab_checkpoints, lab_control, lab_datasets,
+                                   lab_evaluations, lab_pipelines, lab_releases, lab_traces)
     rt, control, traces = _compose(lab, store)
     lab_control.register(app, rt, control)
     lab_traces.register(app, rt, traces)
+    for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints):
+        family.register(app, rt)
     return app

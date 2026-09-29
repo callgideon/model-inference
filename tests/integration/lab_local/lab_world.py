@@ -345,9 +345,11 @@ def lab_web_env(api_url: str, supabase_url: str, control: str | None = None) -> 
 
 
 @contextlib.contextmanager
-def composition(workdir: Path):
+def composition(workdir: Path, login_probe=None):
     """Everything above up, every switch ON. Yields a namespace with the trip, the processes
-    and why each one that did not come up refused (the findings; never patched here)."""
+    and why each one that did not come up refused (the findings; never patched here).
+    `login_probe(url)` runs against the control factory on its own login while it is up
+    (WR-LCR-5: the box's only /lab/v1/* server, R245); its answer is `login_families`."""
     spool = workdir / "spool"
     spool.mkdir(parents=True, exist_ok=True)
     env = switch_env(spool)
@@ -404,8 +406,11 @@ def composition(workdir: Path):
                 (workdir / "control-login").mkdir(exist_ok=True)
                 own = operate.ControlService(trip, workdir / "control-login", standin.url)
                 own.env.update(control.env, INFRX_LAB_DATABASE_URL=lab_control_dsn(trip.world.database))
+                login_families = None
                 try:
                     own.start(E3L_ENGINE_URL=trip.engine.base_url)
+                    if login_probe is not None:
+                        login_families = login_probe(str(own.http.base_url))
                 except (RuntimeError, AssertionError) as failed:
                     refused["lab-control-login"] = str(failed)[:1500]
                 finally:
@@ -416,7 +421,8 @@ def composition(workdir: Path):
                     refused["lab-control"] = str(failed)[:1500]
                 yield types.SimpleNamespace(trip=trip, procs=procs, refused=refused,
                                             control=control, standin=standin, env=env,
-                                            workdir=workdir, seam=seam, labgw=labgw)
+                                            workdir=workdir, seam=seam, labgw=labgw,
+                                            login_families=login_families)
         finally:
             for proc in procs.values():
                 proc.stop()

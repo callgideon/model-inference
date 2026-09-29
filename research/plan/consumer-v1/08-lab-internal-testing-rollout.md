@@ -31,17 +31,18 @@ what works. On this base, **with no gateway switch turned on** (§5 rule 1):
 | `/judge` (configure, budget, calibration, dry-run request) | the Lab web + 0036/0037 RPC doors | **yes** (dry_run only, §5 rule 4) |
 | `/lab/v1/control` API (register, listings, smoke, proposals) | the control service (`infrx-lab-control`, :8003) | **yes, API only**; the Lab web's control pages (`/overview`, `/models`, `/deployments`) say "unavailable" until WR-E3L-J (lab-app-control lane) gives apps/lab an HTTP control adapter |
 | `/requests` (traces) | the control service with `CLICKHOUSE_URL` + `S3_TRACE_BUCKET` | **no** until the trace projection is deployed (T2I/T3; not on the box) |
-| `/datasets`, `/annotations`, `/training`, `/evaluations`, `/releases`, `/optimizations` | the gateway's Lab routes only (`LAB_DATASETS`, `LAB_PIPELINES`, `LAB_EVALS`, `LAB_RELEASES`) | **no**: those switches are NOT_SETTABLE on the hosted gateway (`deploy/preflight.py`). Needs WR-LDP-2 (mount them in the control factory, so the App gateway keeps every Lab switch OFF); then evals/pipelines/releases still answer "unavailable" until WR-B4-2 / WR-LAB2-4 / WR-R4-1/2 / WR-P4B-1 merge (E4-ON o05/o07) |
+| `/datasets`, `/annotations`, `/training`, `/evaluations`, `/releases`, `/optimizations` | the control service (`infrx-lab-control`, :8003) - every family, WR-LDP-2 (lab-control-routes, R245); the App gateway's Lab switches stay OFF (NOT_SETTABLE, `deploy/preflight.py`) | **no**: datasets/annotations/training/evaluations/releases answer "unavailable" on the box until SR-LCR-1 (lane lab-sql-lw8) grants `infrx_lab_control` their D7/D8/D9 functions (LCR-F1), and evals/pipelines/releases further until WR-B4-2 / WR-LAB2-4 / WR-R4-1/2 / WR-P4B-1; never a 500 (LDP-F3 fixed). Proof: `make lab-local` o05's control-factory case (E4-ON o05/o07) |
 | Worker role `eval` | `infrx-lab-eval` | starts ready locally (E4-ON o03) — **on the owner login only**; on the box it needs its own login (WR-LDP-7, §3) |
 | Worker roles `judge`, `datasets` | `infrx-lab-{judge,datasets}` | **no on this box**: each requires `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` (`infrx.lab.workers` NEEDS) and the trace projection is not deployed; without them the entry point refuses (exit 2), so 50-lab-role.sh refuses the SPEC first. They start locally (o03) only because the composition gives every role a ClickHouse |
 | Worker role `annotation` | `infrx-lab-annotation` | has its teacher-collect pass on this base (needs `LAB_S3_BUCKET` + `LAB_TEACHER_URL` = the local teacher fake only, P-10); not for internal testing (§5 rule 3) |
 | Worker roles `checkpoints`, `training`, `rollout` | their units | **refuse by name** (exit 2, R198/R211) until WR-B3-3 / P-11 / WR-LSQ-9 |
 
-E4-ON FAILs that block turning the gateway's Lab switches on (never do it on this base):
-**LDP-F1** — with `ROLLOUT_ROUTING` ON the gateway must run on `infrx_runtime`, which holds no
-grant on L2's `infrx.lab_*` RPCs, so every Lab route refuses (503) and **LDP-F3** — the datasets
-route lets that store error escape as a 500 instead of the typed refusal. Evidence:
-`research/plan/evidence/i/LAB-DEPLOY-PREP-<head7>.md`.
+The gateway's Lab switches are never turned on (R237/R245): **LDP-F1** is resolved by design
+(option (b), lab-control-routes) — the App gateway never serves the Lab; `infrx_runtime` holds no
+`infrx.lab_*` grant and gets none, and the control unit serves every family on its own login.
+**LDP-F3** is fixed (a datasets store fault is the typed 503, never a 500) and **LDP-F7** too
+(`set_role=False`). Evidence: `research/plan/evidence/i/LAB-DEPLOY-PREP-<head7>.md`,
+`research/plan/evidence/l/LAB-CONTROL-ROUTES-79537d3.md`.
 
 ## 1. Go / no-go (all local, at `RELEASE`, before any AWS call)
 
@@ -129,7 +130,7 @@ then check with `aws ssm describe-parameters --parameter-filters Key=Name,Values
 
 | Parameter (proposed name) | Holds | Read by |
 |---|---|---|
-| `/model-inference/lab/control_database_url` | the control service's own login DSN (`infrx_lab_control`, 0044; transaction pooler :6543) | 40-lab-control.sh → `INFRX_LAB_DATABASE_URL` |
+| `/model-inference/lab/control_database_url` | the control service's own login DSN (`infrx_lab_control`, 0044; the direct or the transaction pooler :6543 DSN) | 40-lab-control.sh → `INFRX_LAB_DATABASE_URL` |
 | `/model-inference/lab/supabase_anon_key` | the project's publishable anon key (not a secret, kept with the rest) | 40-lab-control.sh → `INFRX_LAB_SUPABASE_ANON_KEY` |
 | `/model-inference/lab/<role>_database_url` (eval; judge, datasets once the traces exist) | each role's own Lab login DSN (:6543; never the runtime's `DATABASE_URL`, never the owner) | 50-lab-role.sh → `LAB_DATABASE_URL` |
 | `/model-inference/lab/eval_endpoint_key` | the provider_dev key the eval role meters its dev endpoint with (a provider_dev wallet: starts at 0 CREDIT, funded only through the audited operator path) | 50-lab-role.sh → `LAB_EVAL_ENDPOINT_KEY` |
@@ -139,13 +140,14 @@ The role logins: one per role, created by the lab-sql lane's role migration or t
 (`grant` shape as 0021's dedicated logins); until a role has its own login, **do not** switch it
 on with the owner DSN. **No such login exists yet** (WR-LDP-7): E4-ON proves the roles only on the
 owner login (o03), and the control factory on `infrx_lab_control` (0043/0044) in o04's login
-case since the fix round — which FAILs locally (**LDP-F7**: `infrx.lab.control.app` composes
-`connector(INFRX_LAB_DATABASE_URL)` with I8's port rule, so off the transaction pooler it runs
-`set role service_role`, which `infrx_lab_control` is refused, and `/readyz` answers 503; on
-:6543 it sets nothing). So `control_database_url` **must** be the :6543 pooler DSN, and L5's
-proof is L5's own readyz line on the box until WR-I2L-4b (`set_role=False`, as 0043 says) lands
-and o04's login case PASSes; L7 waits for WR-LDP-7 and an E4-ON run
-whose o03 uses those logins. Proof: each `describe-parameters` line.
+case, which PASSes since lab-control-routes (**LDP-F7 fixed**: `infrx.lab.control.app` connects
+with `set_role=False`, so it never runs `set role` on either port). So `control_database_url`
+may be the direct or the :6543 DSN, and L5's proof is E4-ON o04's login case (PASS) plus L5's own
+readyz line on the box. The control env may carry an optional `LAB_S3_BUCKET=<Lab bucket>` (the
+workers' bucket) so datasets/pipelines/releases reach the Lab objects (unset: those uses answer
+503, `NoObjects`); `40-lab-control.sh` takes no such name on this base (a follow-up for its I2L
+owner), and never `LAB_CHECKPOINT_KEYS` for internal testing (§5 rule 3). L7 waits for
+WR-LDP-7 and an E4-ON run whose o03 uses those logins. Proof: each `describe-parameters` line.
 
 ## 4. The box, in order (each step through `infra/rollout/ssm.sh`, as root)
 
@@ -195,7 +197,7 @@ is idempotent and logs to `/var/log/infrx-lab-rollout.log`.
 | Root directory | `apps/lab`; "Include files outside the root directory" ON (it imports `packages/shared` by `file:`) |
 | Framework / install / build | Next.js; `pnpm install --frozen-lockfile`; `pnpm build`; Node ≥ 22.18 |
 | Production domain | `lab.callbill.ai` (⚠️ TO BE VERIFIED by P-08) |
-| Env (Production) | `NEXT_PUBLIC_LAB_URL=https://lab.callbill.ai`, `NEXT_PUBLIC_SUPABASE_URL=<the App's project URL>`, `NEXT_PUBLIC_SUPABASE_ANON_KEY=<its publishable key>`; server-only: `LAB_TRACES_API_URL=https://lab-control.callbill.ai` (once traces are served), `LAB_DATASETS_API_URL`, `LAB_EVALS_API_URL`, `LAB_PIPELINES_API_URL`, `LAB_RELEASES_API_URL` = the same control origin **after WR-LDP-2** (unset until then: those pages say "unavailable") |
+| Env (Production) | `NEXT_PUBLIC_LAB_URL=https://lab.callbill.ai`, `NEXT_PUBLIC_SUPABASE_URL=<the App's project URL>`, `NEXT_PUBLIC_SUPABASE_ANON_KEY=<its publishable key>`; server-only: `LAB_TRACES_API_URL=https://lab-control.callbill.ai` (once traces are served), `LAB_DATASETS_API_URL`, `LAB_EVALS_API_URL`, `LAB_PIPELINES_API_URL`, `LAB_RELEASES_API_URL` = `https://lab-control.callbill.ai` (WR-LDP-2 landed; those pages say "unavailable" until SR-LCR-1 and their ports, §0) |
 | Never | `SUPABASE_SERVICE_ROLE_KEY` or any other secret; `LAB_CONTROL_PREVIEW` / `LAB_PIPELINES_PREVIEW` (dev only, ignored in production) |
 
 `NEXT_PUBLIC_*` are inlined at build: set them before the first production build, and rebuild
@@ -279,10 +281,15 @@ reversal of Lab tables is never part of this runbook.
 
 - **WR-LDP-1** (Lab app lanes): `apps/lab/tests/{r,p,b,v/list}/backend.py` accept `INFRX_D_TASK=lab-on`
   so `make lab-local` runs their real-route journeys on its own key (today NOT RUN, key-pinned).
-- **WR-LDP-2** (composition lane): mount `lab_datasets`, `lab_evaluations`, `lab_pipelines`,
-  `lab_releases` in `infrx.lab.control.app` (the gateway's `pilot._lab`/`_lab_2` composition on
-  `INFRX_LAB_DATABASE_URL`), so the box serves every Lab family from the control unit and the
-  App gateway keeps every Lab switch OFF (WR-I2L-2b's rule).
+- **WR-LDP-2** — **done** (lab-control-routes, R245): `infrx.lab.control.app` mounts
+  `lab_datasets`, `lab_evaluations`, `lab_pipelines`, `lab_releases` and (with
+  `LAB_CHECKPOINT_KEYS`) the checkpoint receiver through `pilot._lab` on
+  `INFRX_LAB_DATABASE_URL`; the App gateway keeps every Lab switch OFF. **WR-LCR-2** (done at
+  the same merge): `lab-control.caddy` bounds dataset paths at 64 MiB, every other `/lab/v1/*`
+  call at 1 MiB.
+- **SR-LCR-1** (lane lab-sql-lw8, **LCR-F1**): on `infrx_lab_control` every family but control
+  answers its typed 503 until a Lab-only migration grants that login EXECUTE on the families'
+  D7/D8/D9 route-half functions; then rerun `make lab-local` (o05's control-factory case).
 - **WR-LDP-3** (I2L owner): declare in `infra/lab/app/lab.json` `lab-workers` the names the
   entry point reads that are not listed there (`LAB_S3_PREFIX`, `LAB_EVAL_ENDPOINT_URL`,
   `LAB_EVAL_ENDPOINT_KEY`, `LAB_EVAL_CONCURRENCY`, `LAB_CHECKPOINTS_CONCURRENCY`,
@@ -291,22 +298,19 @@ reversal of Lab tables is never part of this runbook.
   **landed on the tip** (bcb73cc1; its post-check is `*"0051 lab_import_jobs"$'\n'"nothing
   pending"`, the form `lab-migrate.sh` checks) — and its W7 maintenance precondition for an
   additive Lab-only window (open).
-- **LDP-F7** (I2L owner, WR-I2L-4b): `infrx.lab.control.app` `_store()`/`_compose()` build
-  `connector(dsn)` without `set_role=False`, so on a direct (non-:6543) DSN the factory sets
-  `service_role`, which `infrx_lab_control` (a member of no role) is refused: `/readyz` 503.
-  E4-ON o04's login case (KNOWN_FAIL until fixed).
+- **LDP-F7** — **fixed** (lab-control-routes): `_store()`/`_compose()` connect with
+  `set_role=False`; E4-ON o04's login case PASSes (out of KNOWN_FAIL).
 - **WR-LDP-7** (lab-sql lane): one dedicated login per Lab worker role (`infrx_lab_eval`, then
   `infrx_lab_judge`, `infrx_lab_datasets`), noinherit, a connection limit, each granted exactly
   what its `infrx.lab.workers` composition calls (as 0043 does for `infrx_lab_control`), and
   `lab_world.role_env` switched to them so E4-ON o03 proves the roles on the box's logins. Until
   then o03 is proven on the owner login only and L7 does not run.
-- **LDP-F1** (lab-sql + composition): with `ROLLOUT_ROUTING` ON the gateway runs on
-  `infrx_runtime`, which holds no EXECUTE on L2's `infrx.lab_*` RPCs → every gateway Lab route
-  503. Either grant the membership/read RPCs to `infrx_runtime` or serve the Lab only from the
-  control unit (WR-LDP-2).
+- **LDP-F1** — **resolved by design** (option (b), R237/R245): the Lab is served only from the
+  control unit; `infrx_runtime` holds none of the 150 `infrx.lab_*` grants and gets none. E4-ON
+  o05's all-switches gateway case stays KNOWN_FAIL as the never-on-the-box configuration.
 - **LDP-F2 = WR-E3L-J** (lab-app-control lane, running): apps/lab has no HTTP control adapter.
-- **LDP-F3** (G/datasets owner): `lab_datasets` lets a store `InsufficientPrivilege` escape as a
-  500; the other Lab families answer the typed 503.
+- **LDP-F3** — **fixed** (lab-control-routes): a datasets store fault is the typed 503 `the
+  datasets service failed`, its exception type logged, never its message.
 
 ## 11. Proof table
 
@@ -318,7 +322,7 @@ reversal of Lab tables is never part of this runbook.
 | §2 (3) | the window entry | coordinator log |
 | §2 a/b | `W6b PASS: COPY_DIGEST=…`, `W7 PASS: hosted 0001-0051` | `~/infrx-backups/migrate-*.log` + coordinator log |
 | §3 | `describe-parameters` name/type/version | coordinator log |
-| L5 | E4-ON o04 (owner-login case PASS; `infrx_lab_control` case FAIL = LDP-F7 until WR-I2L-4b) + L5's printed lines on the :6543 DSN | verdict.json + coordinator log |
+| L5 | E4-ON o04 (both cases PASS; LDP-F7 fixed) + o05's control-factory case (NOT RUN[SR-LCR-1] until lab-sql-lw8) + L5's printed lines | verdict.json + coordinator log |
 | L7 | WR-LDP-7 merged + E4-ON o03 PASS on the per-role logins (NOT RUN today) | verdict.json |
 | L1–L7 | each step's printed lines (names only) + `60-lab-smoke.sh` after each | `/var/log/infrx-lab-rollout.log` + coordinator log |
 | §6 | Vercel deployment id, domain, Redirect URLs | P-08 record |
@@ -340,3 +344,9 @@ reversal of Lab tables is never part of this runbook.
   and keeps exit 5 for the pending roles. §3/§10/§11: the control factory is proven on
   `infrx_lab_control`, the roles only on the owner login until WR-LDP-7. `LAB_TEACHERS` is on
   the base (OFF on the box). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
+- 2026-09-29 (lab-control-routes merge, codex/w5-merge-51, WR-LCR-4): §0/§3/§6/§10/§11 — the
+  control unit serves every Lab family (WR-LDP-2, R245); LDP-F1 resolved by design (b), LDP-F3
+  and LDP-F7 fixed; `control_database_url` may be the direct or the :6543 DSN; optional
+  `LAB_S3_BUCKET` for the control env; Vercel `LAB_{DATASETS,EVALS,PIPELINES,RELEASES}_API_URL`
+  = `https://lab-control.callbill.ai`; families typed-unavailable on the box until SR-LCR-1
+  (lab-sql-lw8, LCR-F1). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.

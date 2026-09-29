@@ -66,7 +66,8 @@ def on(tmp_path_factory):
     out = os.environ.get("INFRX_LAB_LOCAL_OUT")
     workdir = Path(out) / "cases" / "composition" if out else tmp_path_factory.mktemp("on")
     workdir.mkdir(parents=True, exist_ok=True)
-    with lw.composition(workdir) as composed:
+    probe = lambda url: _families(url, operate.session(operate.ADMIN_A), lambda s: s == 200)  # noqa: E731
+    with lw.composition(workdir, login_probe=probe) as composed:
         yield composed
 
 
@@ -138,8 +139,8 @@ def test_o04_the_control_factory_serves_a_lab_session(on):
 
 def test_o04_the_control_factory_is_ready_on_its_own_login(on):
     """LDP-R4: the factory on 0043's `infrx_lab_control` (the box's L5 login), not the owner,
-    answers /readyz. (LDP-F7: off the transaction pooler it `set role service_role`, which that
-    login is refused: a finding for I2L's WR-I2L-4b, never patched here.)"""
+    answers /readyz off the transaction pooler (LDP-F7 fixed by lab-control-routes: no
+    `set role` on the Lab login)."""
     assert "lab-control-login" not in on.refused, \
         f"the control factory on {lw.CONTROL_LOGIN}: {on.refused.get('lab-control-login')}"
 
@@ -189,6 +190,31 @@ def test_o05_the_lab_routes_gateway_serves_every_family(on):
         wrong["checkpoints"] = type(failed).__name__
     assert not wrong, f"route families not serving a Lab session: {wrong}"
     not_run_pending({family: PENDING_FAMILIES[family] for family in pending})
+
+
+#: LCR-F1: on infrx_lab_control every family but control is its typed 503 until SR-LCR-1
+#: (lane lab-sql-lw8) grants that login the families' D7/D8/D9 route-half functions.
+SR_LCR_1 = ("datasets", "evals", "pipelines", "teacher-batches", "releases", "optimizations")
+DATASETS_UNAVAILABLE = '{"detail":"the datasets service failed"}'
+
+
+def test_o05_the_control_factory_serves_every_family_on_its_own_login(on):
+    """WR-LDP-2 / R245: the control factory on 0043's `infrx_lab_control` (the box's only
+    /lab/v1/* server) answers control 200 and every other family 200 or its typed 503 - the
+    latter NOT RUN[SR-LCR-1] (LCR-F1), naming the ports still pending after it - never a
+    401/404/500. Traces is judged apart (its ClickHouse backend is not in this env)."""
+    need(on, "lab-control-login")
+    if on.login_families is None:
+        pytest.skip("BLOCKED[lab-control-login] the factory on its own login was not probed")
+    found = {f: v for f, v in on.login_families.items() if f != "traces"}
+    pending = {f: v for f, v in found.items() if f in SR_LCR_1 and v.startswith(
+        ("503 " + UNAVAILABLE, "503 " + DATASETS_UNAVAILABLE))}
+    wrong = {f: v for f, v in found.items() if f not in pending}
+    assert not wrong, f"families on {lw.CONTROL_LOGIN} not serving a Lab session: {wrong}"
+    if pending:
+        ports = sorted({PENDING_FAMILIES[f].split(" ")[0] for f in pending if f in PENDING_FAMILIES})
+        pytest.skip(f"NOT RUN[SR-LCR-1] typed unavailable on {lw.CONTROL_LOGIN} until lane "
+                    f"lab-sql-lw8 (LCR-F1), then the ports {ports}: {sorted(pending)}")
 
 
 def test_o05_a_consumer_key_is_no_lab_session_on_any_family(on):

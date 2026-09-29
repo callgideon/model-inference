@@ -50,6 +50,9 @@ Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
 | `INFRX_LAB_SUPABASE_URL` | server | the project whose Lab session tokens it verifies |
 | `INFRX_LAB_SUPABASE_ANON_KEY` | server | the publishable anon key the control service presents as `apikey` when it verifies a Lab session token (`infrx.lab.control.app`); never the service-role key |
 | `INFRX_LAB_ORIGIN` | server | the Lab web origin whose sessions it accepts |
+| `LAB_S3_BUCKET` | server | the Lab objects (the Lab workers' bucket, instance-role credentials) the datasets, pipelines and releases families read and write; unset = those uses answer 503 (`NoObjects`) |
+| `LAB_S3_ENDPOINT` | server | that bucket's endpoint (optional) |
+| `LAB_CHECKPOINT_KEYS` | **secret** | the checkpoint receiver's key directory (WR-B3-2); set = `POST /lab/v1/checkpoints` is served by this unit, unset = not mounted |
 
 Lab edge: `INFRX_LAB_CONTROL_SITE` (the control origin's address; default the placeholder in
 `lab.json`) and `INFRX_LAB_CONTROL_UPSTREAM` (local drill only; unset on the box).

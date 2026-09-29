@@ -149,11 +149,12 @@ O02_SEAM = "test_o02_the_consumer_workers_lab_seam_refuses_by_name"
 O03 = {role: f"test_o03_the_{role}_role_starts" for role in
        ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets")}
 O04 = "test_o04_the_control_factory_serves_a_lab_session"
-#: LDP-F7: the factory on infrx_lab_control refuses /readyz off the pooler (set role).
+#: LDP-F7 (fixed by lab-control-routes): the factory is ready on infrx_lab_control off the pooler.
 O04_LOGIN = "test_o04_the_control_factory_is_ready_on_its_own_login"
 O05_ALL = "test_o05_every_lab_route_family_answers_a_lab_session"
 O05_LAB = "test_o05_the_lab_routes_gateway_serves_every_family"
 O05_KEY = "test_o05_a_consumer_key_is_no_lab_session_on_any_family"
+O05_CONTROL = "test_o05_the_control_factory_serves_every_family_on_its_own_login"
 O06 = "test_o06_the_consumer_path_serves_and_settles_once"
 O07 = "test_o07_the_lab_web_renders_every_page_family_signed_in"
 
@@ -175,6 +176,11 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_control_never_ready", "the control factory answers ready on its database", CONTROL,
        '        return {"status": "ready"}',
        '        return JSONResponse({"status": "ready"}, status_code=503)', O04),
+    _m("st_control_login_sets_role", "the control factory never sets a role on its own login "
+       "(LDP-F7)", CONTROL, "connector(os.environ[DATABASE_URL], set_role=False)",
+       "connector(os.environ[DATABASE_URL])", O04_LOGIN),
+    _m("st_control_families_unmounted", "the control factory serves every Lab family (WR-LDP-2)",
+       CONTROL, "        family.register(app, rt)\n", "        pass\n", O05_CONTROL),
     _m("st_datasets_unmounted", "LAB_DATASETS ON mounts the datasets family", PILOT,
        "    rt.lab_datasets = lab_datasets if deployment.lab_datasets else None",
        "    rt.lab_datasets = None", O05_LAB, O07),
@@ -186,11 +192,11 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "                router.shadow(pending, request)\n        return answer",
        "                router.shadow(pending, request)\n        return None", O06),
 )
-#: E4-ON's FAIL on this base (LDP-F1: the all-switches gateway runs on infrx_runtime, which
-#: holds no grant on L2's RPCs, so every Lab route refuses; LDP-F3 datasets answers 500): a
-#: finding filed with the owning lanes, kept out of the stack list's pristine baseline (E8L's
-#: KNOWN_FAIL rule) until fixed.
-KNOWN_FAIL: set[str] = {O05_ALL, O04_LOGIN}
+#: E4-ON's standing FAIL: the all-switches App gateway on infrx_runtime is R237's
+#: never-on-the-box configuration (LDP-F1 resolved by design, option (b): that login holds no
+#: lab_* grant, so every Lab route refuses typed; LDP-F3 fixed, no 500). Kept out of the stack
+#: list's pristine baseline (E8L's KNOWN_FAIL rule); the box's Lab server is O05_CONTROL.
+KNOWN_FAIL: set[str] = {O05_ALL}
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIOS = "../../tests/integration/lab_local/scenarios_on.py"
 
