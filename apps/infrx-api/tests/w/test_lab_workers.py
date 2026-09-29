@@ -51,7 +51,7 @@ ENV = {"eval": {**LAB, "LAB_EVAL_ENDPOINT_URL": "http://127.0.0.1:9",
        "checkpoints": dict(LAB),
        "judge": {**BASE, "JUDGE_PROVIDER_URL": "http://127.0.0.1:9", **TRACES},
        "annotation": {**LAB, "LAB_TEACHER_URL": "http://127.0.0.1:9"}, "training": dict(LAB),
-       "rollout": dict(BASE),
+       "rollout": {**LAB, "LAB_OPERATOR_ID": "00000090-0000-4000-8000-000000000090"},
        "datasets": {**LAB, **TRACES}}
 
 
@@ -455,13 +455,83 @@ def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(mo
 
 
 # ------------------------------------------------------------------ rollout (WR-I7-1)
-def test_lab_workers__the_rollout_pass_refuses_until_its_inputs_exist():
-    """R2's pass needs every running or rolled-back D9 release with its frozen plan and R1's
-    live aggregates and the stored report: none is readable on this base, so the controller
-    unit refuses rather than report ready and do nothing (WR-LSQ-9-C wires L3's alias reads
-    for the operator surfaces via the real `PgControlStore`; this pass still needs R1/B2)."""
-    with pytest.raises(RuntimeMisconfigured, match="WR-LSQ-9"):
-        composed("rollout")
+def listing(provider, n, state):
+    from infrx.state.lab_rollout import Release, ReleaseListing
+    return ReleaseListing(policy_id=f"pol-{provider}-{n}", provider_org_id=provider,
+                          endpoint_id="e", policy_ref=f"ref-{provider}-{n}",
+                          release=Release(state=state, fence=1, plan_digest="d",
+                                          started_at=datetime(2026, 9, 29, tzinfo=timezone.utc)),
+                          latest_decision=None)
+
+
+def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored_plan(
+        monkeypatch):
+    """WR-R2-3: every ROLLOUT_PASS_S the rollout role runs R2's `Controller.step` (over D9's
+    `PgReleaseStore` and L3's serving control, acting as `LAB_OPERATOR_ID`) for every running
+    or rolled-back D9 release (`releases_in`) of every provider with a release under
+    `lab/<p>/releases/`, on the plan stored beside it (`plan.json`; R2 refuses one whose
+    digest is not D9's) and D7's policy record. A running release is evaluated on R1's live
+    aggregates; while they are unreadable (`DependencyUnavailable`) it is held, never
+    evaluated on invented numbers. A rolled-back release only converges (R216: step, never the
+    operator's stop). A release without its plan is held; one failure is counted and the
+    next release still runs."""
+    from infrx.rollouts import control as r2
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_rollout import PgReleaseStore
+    from tests.r.control.test_control import plan
+    objects, stepped, asked = InMemoryObjectStore(), [], []
+    stored = plan().model_dump_json().encode()
+    for key in ("lab/p1/releases/pol-p1-1/plan.json", "lab/p1/releases/pol-p1-2/plan.json",
+                "lab/p1/releases/pol-p1-3/plan.json", "lab/p2/releases/pol-p2-1/plan.json"):
+        asyncio.run(objects.put_if_absent(key, stored, "application/json"))
+    asyncio.run(objects.put_if_absent("lab/p3/releases/pol-p3-1/other.json", b"{}", "x"))
+    asyncio.run(objects.put_if_absent("lab/p4/datasets/x.json", b"{}", "x"))
+
+    async def releases_in(self, states=(), *, provider_org_id):
+        asked.append((self._connect, tuple(states), provider_org_id))
+        return {"p1": [listing("p1", 1, "running"), listing("p1", 2, "rolled_back"),
+                       listing("p1", 3, "running")],
+                "p2": [listing("p2", 1, "running")],
+                "p3": [listing("p3", 1, "running")]}.get(provider_org_id, [])
+
+    async def resolve(self, ref, *, provider_org_id):
+        if ref == "ref-p2-1":
+            raise errors.NotFound("gone")
+        return ("policy", ref, provider_org_id)
+
+    async def step(self, policy, policy_ref, plan_, live, *, now, report=None, runs=None):
+        stepped.append((self, policy, policy_ref, plan_, live, report, runs))
+        return r2.Verdict("hold", ())
+
+    async def live(item):
+        if item.policy_id == "pol-p1-3":
+            raise errors.DependencyUnavailable("R1's aggregates")
+        return ("live", item.policy_id)
+    monkeypatch.setattr(PgReleaseStore, "releases_in", releases_in)
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(r2.Controller, "step", step)
+    steps = captured_steps(monkeypatch)
+    worker = lab_workers.compose("rollout", ENV["rollout"], objects=objects, live=live)
+    worker.tasks["rollout_pass"]().close()
+    interval, pump = steps["rollout pass"]
+    assert interval == lab_workers.ROLLOUT_PASS_S
+    report = asyncio.run(pump())
+    assert report == {"stepped": 2, "held": 2, "failed": 1}
+    assert [p for _, _, p in asked] == ["p1", "p2", "p3"]
+    assert {s for _, s, _ in asked} == {("running", "rolled_back")}
+    (ctl, policy, ref, plan_, live_, rep, runs), (ctl2, _, ref2, _, live2, _, _) = stepped
+    assert (policy, ref, plan_, live_) == (("policy", "ref-p1-1", "p1"), "ref-p1-1", plan(),
+                                           ("live", "pol-p1-1"))
+    assert (ref2, live2) == ("ref-p1-2", None) and (rep, runs) == (None, None)
+    assert type(ctl._store) is PgReleaseStore and ctl._actor == ENV["rollout"]["LAB_OPERATOR_ID"]
+    assert ctl._store._connect is asked[0][0] is ctl._serving.reads._connect
+    assert ctl2 is ctl
+    # without an injected source R1's aggregates are unreadable: every running release held
+    stepped.clear()
+    bare = lab_workers.compose("rollout", ENV["rollout"], objects=objects)
+    bare.tasks["rollout_pass"]().close()
+    assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 1, "held": 4, "failed": 0}
+    assert [s[2] for s in stepped] == ["ref-p1-2"]
 
 
 def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkeypatch):

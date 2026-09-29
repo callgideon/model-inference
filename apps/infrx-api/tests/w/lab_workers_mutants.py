@@ -30,7 +30,7 @@ CKPT = C + "a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_it_back"
 JUDGE = C + "the_judge_is_j2_on_its_ledger_dry_run_by_default"
 SWEEP = C + "the_judge_pass_sweeps_silent_submissions"
 DATASETS = C + "datasets_reconcile_every_providers_lineage_page_by_page"
-ROLLOUT = C + "the_rollout_pass_refuses_until_its_inputs_exist"
+ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
 ANNOT = C + "the_annotation_role_collects_teacher_batches_with_n2s_redaction"
@@ -189,10 +189,43 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if existing is not None:\n            await self.deleted(existing)\n"
        "            return existing\n", PUSH, file=T3),
     # --- rollout ------------------------------------------------------------------------------------
-    _m("lw_rollout_pass_idle", "the rollout pass refuses rather than idle",
-       '    raise RuntimeMisconfigured(mode, detail="the rollout pass needs every running or "',
-       '    return {}, None\n    raise RuntimeMisconfigured(mode, detail="the rollout pass needs '
-       'every running or "', ROLLOUT),
+    # WR-R2-3 (composition-5): the pass loop
+    _m("lw_rollout_operator_optional", "the controller's principal is required",
+       '         "rollout": (BUCKET, "LAB_OPERATOR_ID"),', '         "rollout": (BUCKET,),',
+       SETTINGS),
+    _m("lw_rollout_cadence", "the controller pass runs every ROLLOUT_PASS_S",
+       "every(ROLLOUT_PASS_S, lambda: rollout_pass(", "every(LINEAGE_PASS_S, lambda: rollout_pass(",
+       ROLLOUT),
+    _m("lw_rollout_other_actor", "R2's decisions are the named principal's",
+       "control_serving(connect, operator), actor_id=operator)",
+       'control_serving(connect, operator), actor_id="controller")', ROLLOUT),
+    _m("lw_rollout_serving_off_the_pool", "L3's serving control is on the role's database",
+       "control_serving(connect, operator), actor_id", 'control_serving(connector(""), operator), actor_id',
+       ROLLOUT),
+    _m("lw_rollout_every_state", "only running and rolled-back releases are stepped",
+       'releases.releases_in(("running", "rolled_back"),', "releases.releases_in((),", ROLLOUT),
+    _m("lw_rollout_any_prefix", "a provider is one with a release under lab/<p>/releases/",
+       '                        if key.split("/")[2:3] == ["releases"]})',
+       "                        })", ROLLOUT),
+    _m("lw_rollout_planless_stepped", "a release without its stored plan is held",
+       "                if raw is None:\n", "                if False:\n", ROLLOUT),
+    _m("lw_rollout_invented_live", "a running release is evaluated only on R1's aggregates",
+       'current = await live(item) if item.release.state == "running" else None',
+       "current = None", ROLLOUT),
+    _m("lw_rollout_live_by_default", "without R1's aggregates a running release is held",
+       "    store, live = PgLabDataStore(connect), live or NoLive()",
+       "    store, live = PgLabDataStore(connect), live or (lambda item: asyncio.sleep(0, item))",
+       ROLLOUT),
+    _m("lw_rollout_held_is_failed", "an unreadable input holds, it is not a failure",
+       "            except errors.DependencyUnavailable:\n                done[\"held\"] += 1\n", "",
+       ROLLOUT),
+    _m("lw_rollout_one_failure_stops_all", "one release's failure never stops the pass",
+       '                log.exception("rollout pass failed for one release")\n'
+       '                done["failed"] += 1\n',
+       '                raise\n', ROLLOUT),
+    _m("lw_rollout_policy_foreign", "the policy is D7's record of the release's provider",
+       "store.resolve(item.policy_ref, provider_org_id=provider)",
+       'store.resolve(item.policy_ref, provider_org_id="")', ROLLOUT),
     _m("lw_rollback_without_operator", "an emergency rollback names its operator",
        '    values = settings(mode, env, (DATABASE, "LAB_OPERATOR_ID"))',
        "    values = settings(mode, env, (DATABASE,))", STOP),

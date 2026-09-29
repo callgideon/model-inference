@@ -30,8 +30,11 @@ never runs in a consumer process.
                `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
                every provider with a lineage, every page (WR-N3-2's pull half).
-* `rollout`    `emergency-rollback` (LAB_OPERATOR_ID of the invoking shell): R2's operator
-               stop over D9 and L3. The pass loop refuses until its inputs are readable.
+* `rollout`    LAB_S3_BUCKET, LAB_OPERATOR_ID (the controller's audited principal): R2's
+               `Controller.step` every 30 s for every running or rolled-back D9 release on
+               the plan stored beside it (WR-R2-3; a running one only on R1's aggregates,
+               held while unreadable). `emergency-rollback` (LAB_OPERATOR_ID of the invoking
+               shell): R2's operator stop over D9 and L3.
 * `annotation` LAB_S3_BUCKET, LAB_TEACHER_URL (the local teacher fake until P-10; + JUDGE_MODE):
                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
                submitted chunk run of every approved teacher batch (WR-P4B-2).
@@ -73,7 +76,8 @@ DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_B
 TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
 NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
          "checkpoints": (BUCKET,), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
-         "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,), "rollout": (),
+         "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,),
+         "rollout": (BUCKET, "LAB_OPERATOR_ID"),
          "datasets": (BUCKET, *TRACES)}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
 #: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
@@ -83,6 +87,7 @@ JUDGE_PASS_S = 60.0
 JUDGE_SILENT_S = 300                  # a `submitting` run silent this long is `ambiguous`
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
 TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
+ROLLOUT_PASS_S = 30.0                 # R2's controller pass over the live releases
 PROBE_TIMEOUT_S = 5.0
 
 
@@ -370,11 +375,63 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
                                                "lineage reconcile")}, None
 
 
-def _rollout(mode, env, connect, objects, worker_id, **_):
-    raise RuntimeMisconfigured(mode, detail="the rollout pass needs every running or "
-                               "rolled-back D9 release with its frozen plan, R1's live "
-                               "aggregates, the stored B2 report and L3's alias reads "
-                               "(WR-LSQ-9): none is readable yet; emergency-rollback works")
+class NoLive:
+    """R1's `Live` aggregates for a running release. R1 records assignments only: no error,
+    latency, spend or health aggregate per arm is readable (WR-C5-LIVE), so a running
+    release is held - never evaluated on invented numbers."""
+
+    async def __call__(self, listing):
+        raise errors.DependencyUnavailable("R1's live aggregates are not readable (WR-C5-LIVE)")
+
+
+def plan_key(provider_org_id: str, policy_id: str) -> str:
+    """R2's full `Plan` of a release, stored write-once beside it by its launcher (D9 keeps
+    only its digest, which `Controller` checks)."""
+    return f"lab/{provider_org_id}/releases/{policy_id}/plan.json"
+
+
+async def rollout_pass(objects, store, releases, controller, live) -> dict[str, int]:
+    """WR-R2-3: `Controller.step` for every running or rolled-back D9 release of every
+    provider with a release under `lab/<p>/releases/`, on its stored plan and D7's policy.
+    A running release needs R1's aggregates (held while unreadable); a rolled-back one only
+    converges (R216). ponytail: no stored B2 report is linked to a release yet
+    (WR-C5-REPORT), so none is passed and a running release holds `no_report`; the wall
+    clock is `now`, D9's CAS orders the decisions."""
+    from ...rollouts.control import Plan
+    done = {"stepped": 0, "held": 0, "failed": 0}
+    providers = sorted({key.split("/")[1] for key in await objects.keys("lab/")
+                        if key.split("/")[2:3] == ["releases"]})
+    for provider in providers:
+        for item in await releases.releases_in(("running", "rolled_back"),
+                                               provider_org_id=provider):
+            try:
+                raw = await objects.get(plan_key(provider, item.policy_id))
+                if raw is None:
+                    done["held"] += 1
+                    continue
+                current = await live(item) if item.release.state == "running" else None
+                policy = await store.resolve(item.policy_ref, provider_org_id=provider)
+                await controller.step(policy, item.policy_ref, Plan.model_validate_json(raw),
+                                      current, now=datetime.now(timezone.utc))
+                done["stepped"] += 1
+            except errors.DependencyUnavailable:
+                done["held"] += 1
+            except Exception:                 # noqa: BLE001 - the next release still runs
+                log.exception("rollout pass failed for one release")
+                done["failed"] += 1
+    return done
+
+
+def _rollout(mode, env, connect, objects, worker_id, live=None, **_):
+    from ...gateway.pilot import control_serving
+    from ...rollouts.control import Controller
+    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_rollout import PgReleaseStore
+    operator, releases = env["LAB_OPERATOR_ID"], PgReleaseStore(connect)
+    controller = Controller(releases, control_serving(connect, operator), actor_id=operator)
+    store, live = PgLabDataStore(connect), live or NoLive()
+    return {"rollout_pass": lambda: every(ROLLOUT_PASS_S, lambda: rollout_pass(
+        objects, store, releases, controller, live), "rollout pass")}, controller
 
 
 def _annotation(mode, env, connect, objects, worker_id, **_):
@@ -469,7 +526,8 @@ BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
 
 def compose(role: str, env, *, objects=None, **sources) -> Worker:
     """The role's passes and readiness from its environment. `objects` is for tests only;
-    `sources` replace the checkpoints role's `registries`/`deployer` in tests. Raises
+    `sources` replace the checkpoints role's `registries`/`deployer` and the rollout role's
+    `live` in tests. Raises
     `RuntimeMisconfigured` naming what cannot serve; nothing connects but the bucket."""
     mode = f"lab-{role}"
     if role not in BUILD:
