@@ -1,0 +1,26 @@
+{
+ "task": "E6L",
+ "slice": "WR-E6L-J11 (lane lab-eval-media): finite-video dispatch; j11 PASS",
+ "activity": "review",
+ "head": "9938ad6c",
+ "worktree": ".claude/worktrees/codex-w5-lab-eval-media",
+ "branch": "codex/w5-lab-eval-media",
+ "owned_paths": ["apps/infrx-api/infrx/evaluation/runner/", "apps/infrx-api/infrx/media/s3.py",
+                 "apps/infrx-api/tests/b/runner/", "tests/integration/lab_evaluate/scenarios_eval.py",
+                 "research/plan/evidence/e/E6L-J11-*"],
+ "commands": [
+  {"cmd": "pytest -q tests/b/runner/test_runner.py (new cases, old code)", "exit": 1, "summary": "4 failed / 18 passed (seam red)"},
+  {"cmd": "pytest -q tests/b/runner/test_runner.py", "exit": 0, "summary": "22 passed"},
+  {"cmd": "INFRX_MUTANTS=all pytest -v tests/b/runner/test_mutants.py", "exit": 0, "summary": "93 passed: 91/91 mutants killed (73->91), 0 survivors"},
+  {"cmd": "INFRX_D_TASK=b1 pytest -q tests/b tests/h tests/i/lab_eval tests/m/test_s3.py", "exit": 0, "summary": "157 passed, 25 skipped (other keys)"},
+  {"cmd": "INFRX_D_TASK=b1 pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py", "exit": 0, "summary": "E4: 2826 passed / 0 failed, 23 skipped"},
+  {"cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out research/plan/evidence/e/E6L-J11-raw-9938ad6/run --only j11", "exit": 3, "summary": "j11 PASS (exit 3 = others not selected); e6l stack torn down"}
+ ],
+ "estimate": {"optimistic_h": 0.25, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium",
+              "basis": "WR-LEM-1/2 small edits + one E6L stack-mutant run (656 s last run) + one verify round (47-234 min, session-03)",
+              "at": "2026-09-29T13:20Z"},
+ "blockers": [],
+ "wiring_requests": ["WR-LEM-1: tests/integration/lab_evaluate/mutants.py - stop excluding j11 in stack_case_names; add st_clip_unsigned naming j11",
+                     "WR-LEM-2: tests/integration/lab_evaluate/runner.py - SCENARIOS['j11']['lanes'] ['L3'] -> []"],
+ "evidence": ["research/plan/evidence/e/E6L-J11-9938ad6.md", "research/plan/evidence/e/E6L-J11-raw-9938ad6/"]
+}
