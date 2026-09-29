@@ -109,7 +109,7 @@
   "pessimistic_h": 4,
   "confidence": "medium",
   "basis": "merge with #33 + WR-E8L-9/10 + one E8L rerun; session-03 merge-lane analogues; measured 57.1 s runner on reused stack",
-  "at": "2026-09-29T07:40Z"
+  "at": "2026-09-29T06:21Z"
  },
  "blockers": [],
  "wiring_requests": [
