@@ -159,7 +159,12 @@ REVERT = "test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_
 SITE_CASE = "test_ldp__the_site_reaches_the_edge_only_after_it_validates_with_the_apps"
 AGREE = "test_ldp__each_role_the_step_enables_can_start_on_the_names_it_allows"
 R151 = "test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions"
-TODAY = "test_ldp__todays_hosted_migrate_is_refused_for_the_lab_apply"
+TODAY = "test_ldp__todays_hosted_migrate_carries_the_reviewed_patch"
+SECRET_CASE = "test_ldp__every_secret_is_refused_as_a_literal"
+NEEDS_CASE = "test_ldp__a_spec_without_a_name_the_role_needs_is_refused_before_any_change"
+
+SECRETS = (" LAB_DATABASE_URL LAB_EVAL_ENDPOINT_KEY LAB_ANNOTATION_TEACHER_TOKEN "
+           "LAB_TRAINING_CONNECTOR_TOKEN CLICKHOUSE_URL")     # 50-lab-role.sh's `secrets=`
 
 STEP_MUTANTS: tuple[Mutant, ...] = (
     _m("step_not_strict", "every step stops on its first failure", ST + "60-lab-smoke.sh",
@@ -210,7 +215,19 @@ STEP_MUTANTS: tuple[Mutant, ...] = (
     _m("preflight_skipped", "the paid-adapter roles' preflight judges the staged file",
        ST + "50-lab-role.sh", '"$staged" \\\n    || die 3', '"$staged" \\\n    || true', STAGED),
     _m("refusal_is_a_generic_failure", "a refusal by name is exit 5, apart from exit 4",
-       ST + "50-lab-role.sh", '[ "$status" != 2 ] || die 5', '[ "$status" != 2 ] || die 4', REFUSES),
+       ST + "50-lab-role.sh", '    || die 5 "$role refused by name', '    || die 4 "$role refused by name',
+       REFUSES),
+    _m("served_refusal_is_a_pending_lane", "only a pending role's exit 2 is exit 5 (LDP-R3)",
+       ST + "50-lab-role.sh", 'pending=" checkpoints training rollout "',
+       'pending=" checkpoints training rollout eval "', REFUSES),
+    _m("role_needs_unchecked", "a SPEC without a name the role needs is refused (LDP-R3)",
+       ST + "50-lab-role.sh", '  [[ $seen == *" $need "* ]] || die 2', '  true || die 2', NEEDS_CASE),
+    _m("role_needs_drift", "the step's needs are infrx.lab.workers NEEDS (LDP-R3)",
+       ST + "50-lab-role.sh", 'needs="JUDGE_PROVIDER_URL CLICKHOUSE_URL S3_TRACE_BUCKET"',
+       'needs="JUDGE_PROVIDER_URL S3_TRACE_BUCKET"', AGREE, NEEDS_CASE),
+    *(_m(f"secret_literal_{name.lower()}", f"{name} is never a literal (LDP-R2)",
+         ST + "50-lab-role.sh", f'secrets="{SECRETS} "', f'secrets="{SECRETS} "'.replace(
+             f" {name} ", " "), SECRET_CASE) for name in SECRETS.split()),
     _m("smoke_skips_the_app", "the smoke always checks the App", ST + "60-lab-smoke.sh",
        'check "App gateway" 8001\n', "", SMOKE),
     _m("smoke_passes_unready", "an unready switch fails the smoke", ST + "60-lab-smoke.sh",
@@ -234,7 +251,11 @@ STEP_MUTANTS: tuple[Mutant, ...] = (
     _m("r151_no_window", "condition 3: an operator window", GATE,
        'stop "condition 3:', 'true "condition 3:', R151),
     _m("r151_any_pending", "condition 2: the reviewed EXPECTED_PENDING", GATE,
-       '[ "$current" = "$pending" ] || stop', 'true || stop', R151, TODAY),
+       '[ "$current" = "$pending" ] || stop', 'true || stop', R151),
+    _m("r151_no_post_check", "condition 2: the W7 post-check names the newest (LDP-R1)", GATE,
+       'grep -qF "$post" "$HOSTED_MIGRATE" || stop', 'true || stop', R151),
+    _m("r151_post_check_file_name", "the post-check is migrate.py plan's `NNNN name` (LDP-R1)",
+       GATE, 'post="*\\"${stem:0:4} ${stem:5}\\"', 'post="*\\"${stem}\\"', TODAY),
     _m("r151_no_known_good", "condition 1: a KNOWN-GOOD target at the newest migration", GATE,
        '  || stop "condition 1:', '  || true "condition 1:', R151),
 )

@@ -10,7 +10,8 @@
 #      rollback target KNOWN-GOOD at the release's newest migration (a schema_proof through it,
 #      recorded in infra/rollout/known-good.json after infra/runbooks/schema_proof.py);
 #   2. the reviewed EXPECTED_PENDING patch: hosted-migrate.sh's EXPECTED_PENDING is exactly the
-#      release's migrations after --hosted-at, and its W7 post-check names the newest file;
+#      release's migrations after --hosted-at, and its W7 post-check is `*"NNNN name"$'\n'"nothing
+#      pending")` for the newest file (migrate.py plan's form: a space, not the file's underscore);
 #   3. an operator window tied to I2L/P-08: --window <ref> (logged with the run).
 # --hosted-at is what `migrate.py plan` reported on hosted (never guessed). Then hosted-migrate.sh
 # runs as it always does (its own exit codes: 10 before any hosted write, 20 after one).
@@ -37,7 +38,9 @@ pending=$(awk -v at="$HOSTED_AT" 'substr($0, 1, 4) > at { printf "%s%s", sep, su
 # 2. the reviewed EXPECTED_PENDING patch
 current=$(sed -n 's/^EXPECTED_PENDING="\([^"]*\)".*/\1/p' "$HOSTED_MIGRATE")
 [ "$current" = "$pending" ] || stop "condition 2: $HOSTED_MIGRATE EXPECTED_PENDING is '$current', not '$pending': apply the reviewed patch (runbook §2)"
-grep -q "${newest%.sql}" "$HOSTED_MIGRATE" || stop "condition 2: $HOSTED_MIGRATE's W7 post-check does not name ${newest%.sql} (runbook §2 patch)"
+stem=${newest%.sql}
+post="*\"${stem:0:4} ${stem:5}\"\$'\\n'\"nothing pending\")"      # migrate.py plan's "NNNN name" form
+grep -qF "$post" "$HOSTED_MIGRATE" || stop "condition 2: $HOSTED_MIGRATE's W7 post-check is not $post (runbook §2 patch)"
 # 1. the known-good re-proof
 "$PY" "$KNOWN_GOOD" --list --applied "${newest:0:4}" > /dev/null \
   || stop "condition 1: no rollback target is KNOWN-GOOD at ${newest:0:4}: rerun infra/runbooks/schema_proof.py and record its schema_proof (runbook §2)"

@@ -96,6 +96,24 @@ def allowed_names(role: str) -> set[str]:
     return set(line.replace("$common", " ".join(common)).split())
 
 
+def needed_names(role: str) -> set[str]:
+    """The names 50-lab-role.sh refuses a SPEC without for ROLE (its `needs=`)."""
+    text = (STEPS / "50-lab-role.sh").read_text()
+    block = re.search(rf'^  {role}\) names=.*?;;', text, re.M | re.S).group(0)
+    return set(re.search(r'needs="([^"]*)"', block).group(1).split())
+
+
+#: What each role requires to start (infrx.lab.workers NEEDS) as a SPEC that satisfies it.
+NEEDS_SPEC = {"LAB_S3_BUCKET": "LAB_S3_BUCKET:=b", "LAB_EVAL_ENDPOINT_URL": "LAB_EVAL_ENDPOINT_URL:=https://e/v1",
+              "LAB_EVAL_ENDPOINT_KEY": "LAB_EVAL_ENDPOINT_KEY=/k", "JUDGE_PROVIDER_URL": "JUDGE_PROVIDER_URL:=http://127.0.0.1:9",
+              "CLICKHOUSE_URL": "CLICKHOUSE_URL=/ch", "S3_TRACE_BUCKET": "S3_TRACE_BUCKET:=t",
+              "LAB_TEACHER_URL": "LAB_TEACHER_URL:=http://127.0.0.1:9"}
+#: Every name 50-lab-role.sh must refuse as a literal (a DSN with its password, a key, a
+#: token): held here, not read from the step, so dropping one from its list goes red.
+SECRETS = {"LAB_DATABASE_URL": "eval", "LAB_EVAL_ENDPOINT_KEY": "eval", "CLICKHOUSE_URL": "judge",
+           "LAB_ANNOTATION_TEACHER_TOKEN": "annotation", "LAB_TRAINING_CONNECTOR_TOKEN": "training"}
+
+
 # --- every step ------------------------------------------------------------------------------
 def test_ldp__every_step_is_strict_bash_on_the_releases_own_helpers():
     """Each step stops on the first failure (`set -euo pipefail`), is valid bash as ssm.sh sends
@@ -211,8 +229,9 @@ def test_ldp__a_role_env_file_is_its_switch_and_carries_only_its_names(tmp_path)
     env_file = root / "etc/infrx-lab/eval.env"
     for role, bad in (("eval", spec + " SUPABASE_SERVICE_ROLE_KEY=/x"),
                       ("eval", spec.replace("LAB_EVAL_ENDPOINT_KEY=/", "LAB_EVAL_ENDPOINT_KEY:=/")),
-                      ("judge", "LAB_DATABASE_URL=/a JUDGE_MODE:=live"),
-                      ("eval", "LAB_S3_BUCKET:=lab-bucket"),
+                      ("judge", "LAB_DATABASE_URL=/a JUDGE_PROVIDER_URL:=http://127.0.0.1:9 "
+                                "CLICKHOUSE_URL=/ch S3_TRACE_BUCKET:=t JUDGE_MODE:=live"),
+                      ("eval", spec.replace("LAB_DATABASE_URL=/model-inference/lab/eval_dsn ", "")),
                       ("trainer", spec)):
         done = run("50-lab-role.sh", stub, root, **{**base, "ROLE": role, "SPEC": bad})
         assert done.returncode == 2, (role, bad, done.stderr)
@@ -248,7 +267,8 @@ def test_ldp__a_budget_or_preflight_refusal_replaces_nothing(tmp_path):
     assert [p.name for p in (root / "etc/infrx-lab").iterdir() if "staged" in p.name] == []
     (stub / "python3.fail-once").touch()                   # eval: no preflight; the budget fails
     done = run("50-lab-role.sh", stub, root, STATE="on", ROLE="eval", RELEASE=head(),
-               SPEC="LAB_DATABASE_URL=/a LAB_S3_BUCKET:=b")
+               SPEC="LAB_DATABASE_URL=/a LAB_S3_BUCKET:=b LAB_EVAL_ENDPOINT_URL:=https://e/v1 "
+                    "LAB_EVAL_ENDPOINT_KEY=/k")
     assert done.returncode == 3 and "budget" in done.stderr
     assert not (root / "etc/infrx-lab/eval.env").exists()
     assert calls(stub, "systemctl") == []
@@ -265,6 +285,10 @@ def test_ldp__a_role_that_refuses_by_name_is_exit_5_and_other_unreadiness_exit_4
     assert done.returncode == 5 and "R198" in done.stderr
     (stub / "systemctl.out").write_text("1")
     assert run("50-lab-role.sh", stub, root, **args).returncode == 4
+    (stub / "systemctl.out").write_text("2")                # LDP-R3: a served role's exit 2
+    done = run("50-lab-role.sh", stub, root, **{**args, "ROLE": "eval", "SPEC": " ".join(
+        ["LAB_DATABASE_URL=/a", *(NEEDS_SPEC[n] for n in sorted(needed_names("eval")))])})
+    assert done.returncode == 4 and "R198" not in done.stderr and "settings" in done.stderr
 
 
 def test_ldp__the_smoke_checks_every_switch_that_is_on_and_the_app(tmp_path):
@@ -339,18 +363,21 @@ def test_ldp__each_role_the_step_enables_can_start_on_the_names_it_allows():
     for role in workers.ROLES:
         needs = {workers.DATABASE, *workers.NEEDS[role]}
         assert needs <= allowed_names(role), (role, needs - allowed_names(role))
+        assert needed_names(role) == set(workers.NEEDS[role]), role      # LDP-R3
         assert "SUPABASE_SERVICE_ROLE_KEY" not in allowed_names(role)
 
 
 # --- the R151 gate ------------------------------------------------------------------------------
-def gate(tmp_path, *, pending: str, known_good: int, window: str | None = "P-08:2026-10-01"):
+def gate(tmp_path, *, pending: str, known_good: int, window: str | None = "P-08:2026-10-01",
+         post: str = "0028 lab_x"):
     """lab-migrate.sh with hosted-migrate.sh, known-good.py and the migrations stubbed."""
     migrations = tmp_path / "migrations"
     migrations.mkdir()
     for name in ("0026_fence.sql", "0027_lab_access.sql", "0028_lab_x.sql"):
         (migrations / name).write_text("select 1;\n")
     hosted = tmp_path / "hosted-migrate.sh"
-    hosted.write_text(f'#!/usr/bin/env bash\nEXPECTED_PENDING="{pending}"\n# 0028_lab_x post-check\n'
+    hosted.write_text(f'#!/usr/bin/env bash\nEXPECTED_PENDING="{pending}"\n'
+                      f'case "$POST" in *"{post}"$\'\\n\'"nothing pending") ;; esac\n'
                       f'echo "hosted-migrate $*" > {tmp_path}/ran\n')
     hosted.chmod(0o755)
     kg = tmp_path / "known-good.py"
@@ -369,7 +396,9 @@ def test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions(tmp_path):
     runs); with all three, hosted-migrate.sh runs exactly as it always does."""
     for case, kw in (("window", {"pending": "0027, 0028", "known_good": 0, "window": None}),
                      ("pending", {"pending": "0019, 0020", "known_good": 0}),
-                     ("known-good", {"pending": "0027, 0028", "known_good": 1})):
+                     ("known-good", {"pending": "0027, 0028", "known_good": 1}),
+                     ("post-check", {"pending": "0027, 0028", "known_good": 0,
+                                     "post": "0026 fence"})):
         sub = tmp_path / case
         sub.mkdir()
         done = gate(sub, **kw)
@@ -381,11 +410,45 @@ def test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions(tmp_path):
         ["hosted-migrate", "--release", "a" * 40, "--through", "w6b"]
 
 
-def test_ldp__todays_hosted_migrate_is_refused_for_the_lab_apply():
-    """The tree as it stands: hosted-migrate.sh's EXPECTED_PENDING is W7's 0019-0026, so the
-    Lab apply (0027 on) is refused until the reviewed patch lands (R151 condition 2)."""
+def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():
+    """LDP-R1, the tree as it stands: hosted-migrate.sh carries the reviewed R151 patch
+    (EXPECTED_PENDING 0027-0051, its W7 post-check `*"0051 lab_import_jobs"`), so condition 2
+    holds and the gate stops only at condition 1 here (a KNOWN_GOOD that refuses: nothing
+    after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's)."""
+    newest = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))[-1]
     done = subprocess.run(["bash", str(ROLLOUT / "lab-migrate.sh"), "--release", "a" * 40,
                            "--hosted-at", "0026", "--window", "P-08:dry"], capture_output=True,
-                          text=True, cwd=REPO, env={**os.environ, "KNOWN_GOOD": "/bin/true",
+                          text=True, cwd=REPO, env={**os.environ, "KNOWN_GOOD": "/bin/false",
                                                     "PY": "/usr/bin/env"})
-    assert done.returncode == 2 and "condition 2" in done.stderr, done.stderr
+    assert done.returncode == 2 and "condition 1" in done.stderr, done.stderr
+    assert f"at {newest.name[:4]}" in done.stderr, done.stderr
+
+
+def test_ldp__every_secret_is_refused_as_a_literal(tmp_path):
+    """LDP-R2: each secret name (the role's DSN with its password, keys, tokens, the
+    ClickHouse URL) given as `NAME:=literal` is refused before any change or SSM read."""
+    stub, root = box(tmp_path)
+    install_units(root)
+    for name, role in SECRETS.items():
+        literal = f"{name}:=postgresql://u:{SECRET}@h/d"
+        spec = " ".join(dict.fromkeys(
+            [literal if name == "LAB_DATABASE_URL" else "LAB_DATABASE_URL=/a", literal]))
+        done = run("50-lab-role.sh", stub, root, STATE="on", ROLE=role, RELEASE=head(), SPEC=spec)
+        assert done.returncode == 2 and f"{name} is a secret" in done.stderr, (name, done.stderr)
+        clean(done)
+    assert not list((root / "etc/infrx-lab").glob("*.env")) and calls(stub, "aws") == []
+
+
+def test_ldp__a_spec_without_a_name_the_role_needs_is_refused_before_any_change(tmp_path):
+    """LDP-R3: judge and datasets need CLICKHOUSE_URL and S3_TRACE_BUCKET (and the others their
+    NEEDS); a SPEC without one is exit 2 naming it, never a started unit that exits 2 and is
+    misreported as a pending lane."""
+    stub, root = box(tmp_path)
+    install_units(root)
+    for role in ("judge", "datasets", "eval", "annotation"):
+        full = ["LAB_DATABASE_URL=/a", *(NEEDS_SPEC[n] for n in sorted(needed_names(role)))]
+        for missing in sorted(needed_names(role)):
+            spec = " ".join(s for s in full if s != NEEDS_SPEC[missing])
+            done = run("50-lab-role.sh", stub, root, STATE="on", ROLE=role, RELEASE=head(), SPEC=spec)
+            assert done.returncode == 2 and missing in done.stderr, (role, missing, done.stderr)
+    assert not list((root / "etc/infrx-lab").glob("*.env")) and calls(stub, "systemctl") == []

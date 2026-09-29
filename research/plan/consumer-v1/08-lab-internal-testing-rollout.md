@@ -32,8 +32,10 @@ what works. On this base, **with no gateway switch turned on** (§5 rule 1):
 | `/lab/v1/control` API (register, listings, smoke, proposals) | the control service (`infrx-lab-control`, :8003) | **yes, API only**; the Lab web's control pages (`/overview`, `/models`, `/deployments`) say "unavailable" until WR-E3L-J (lab-app-control lane) gives apps/lab an HTTP control adapter |
 | `/requests` (traces) | the control service with `CLICKHOUSE_URL` + `S3_TRACE_BUCKET` | **no** until the trace projection is deployed (T2I/T3; not on the box) |
 | `/datasets`, `/annotations`, `/training`, `/evaluations`, `/releases`, `/optimizations` | the gateway's Lab routes only (`LAB_DATASETS`, `LAB_PIPELINES`, `LAB_EVALS`, `LAB_RELEASES`) | **no**: those switches are NOT_SETTABLE on the hosted gateway (`deploy/preflight.py`). Needs WR-LDP-2 (mount them in the control factory, so the App gateway keeps every Lab switch OFF); then evals/pipelines/releases still answer "unavailable" until WR-B4-2 / WR-LAB2-4 / WR-R4-1/2 / WR-P4B-1 merge (E4-ON o05/o07) |
-| Worker roles `eval`, `judge`, `datasets` | `infrx-lab-{eval,judge,datasets}` | start ready locally (E4-ON o03) |
-| Worker roles `checkpoints`, `annotation`, `training`, `rollout` | their units | **refuse by name** (exit 2, R198/R211) until WR-B3-3 / WR-P2-4 (composition-4) / P-11 / WR-LSQ-9 |
+| Worker role `eval` | `infrx-lab-eval` | starts ready locally (E4-ON o03) — **on the owner login only**; on the box it needs its own login (WR-LDP-6, §3) |
+| Worker roles `judge`, `datasets` | `infrx-lab-{judge,datasets}` | **no on this box**: each requires `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` (`infrx.lab.workers` NEEDS) and the trace projection is not deployed; without them the entry point refuses (exit 2), so 50-lab-role.sh refuses the SPEC first. They start locally (o03) only because the composition gives every role a ClickHouse |
+| Worker role `annotation` | `infrx-lab-annotation` | has its teacher-collect pass on this base (needs `LAB_S3_BUCKET` + `LAB_TEACHER_URL` = the local teacher fake only, P-10); not for internal testing (§5 rule 3) |
+| Worker roles `checkpoints`, `training`, `rollout` | their units | **refuse by name** (exit 2, R198/R211) until WR-B3-3 / P-11 / WR-LSQ-9 |
 
 E4-ON FAILs that block turning the gateway's Lab switches on (never do it on this base):
 **LDP-F1** — with `ROLLOUT_ROUTING` ON the gateway must run on `infrx_runtime`, which holds no
@@ -129,13 +131,16 @@ then check with `aws ssm describe-parameters --parameter-filters Key=Name,Values
 |---|---|---|
 | `/model-inference/lab/control_database_url` | the control service's own login DSN (`infrx_lab_control`, 0044; transaction pooler :6543) | 40-lab-control.sh → `INFRX_LAB_DATABASE_URL` |
 | `/model-inference/lab/supabase_anon_key` | the project's publishable anon key (not a secret, kept with the rest) | 40-lab-control.sh → `INFRX_LAB_SUPABASE_ANON_KEY` |
-| `/model-inference/lab/<role>_database_url` (eval, judge, datasets) | each role's own Lab login DSN (:6543; never the runtime's `DATABASE_URL`) | 50-lab-role.sh → `LAB_DATABASE_URL` |
+| `/model-inference/lab/<role>_database_url` (eval; judge, datasets once the traces exist) | each role's own Lab login DSN (:6543; never the runtime's `DATABASE_URL`, never the owner) | 50-lab-role.sh → `LAB_DATABASE_URL` |
 | `/model-inference/lab/eval_endpoint_key` | the provider_dev key the eval role meters its dev endpoint with (a provider_dev wallet: starts at 0 CREDIT, funded only through the audited operator path) | 50-lab-role.sh → `LAB_EVAL_ENDPOINT_KEY` |
-| `/model-inference/lab/clickhouse_url` | only when the trace projection exists (judge, datasets roles) | 50-lab-role.sh → `CLICKHOUSE_URL` |
+| `/model-inference/lab/clickhouse_url` | only when the trace projection exists (judge, datasets roles; both **require** it with `S3_TRACE_BUCKET`, a literal bucket name) | 50-lab-role.sh → `CLICKHOUSE_URL` |
 
 The role logins: one per role, created by the lab-sql lane's role migration or the operator
 (`grant` shape as 0021's dedicated logins); until a role has its own login, **do not** switch it
-on with the owner DSN. Proof: each `describe-parameters` line.
+on with the owner DSN. **No such login exists yet** (WR-LDP-6): E4-ON proves the roles only on the
+owner login (o03), and the control factory on `infrx_lab_control` (0043/0044, o04 since the fix
+round). So L5's proof is E4-ON o04 on `infrx_lab_control`; L7 waits for WR-LDP-6 and an E4-ON run
+whose o03 uses those logins. Proof: each `describe-parameters` line.
 
 ## 4. The box, in order (each step through `infra/rollout/ssm.sh`, as root)
 
@@ -149,14 +154,15 @@ on with the owner DSN. Proof: each `describe-parameters` line.
 | L5s | smoke | `infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh` | `PASS App gateway`, `PASS App worker`, `PASS Lab control` |
 | L6 | the control origin on the edge | `infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on RELEASE=$RELEASE` (DNS A record `lab-control.callbill.ai` → the box first, P-08) | `Lab site installed and the edge reloaded`; then from the host: `curl -s -o /dev/null -w '%{http_code}' https://lab-control.callbill.ai/lab/v1/control/models` = 401 (no session) and with `-H 'Authorization: Bearer sk-x'` = 401 `invalid_audience` |
 | L6s | smoke | 60-lab-smoke.sh again + `infra/rollout/verify-external.sh` (the App's external checks) | all PASS; App external `failures: 0` |
-| L7 | one role at a time: `eval`, then `judge`, then `datasets` | `infra/rollout/ssm.sh infra/lab/rollout/steps/50-lab-role.sh STATE=on ROLE=eval RELEASE=$RELEASE SPEC="LAB_DATABASE_URL=/model-inference/lab/eval_database_url LAB_S3_BUCKET:=<Lab bucket> LAB_EVAL_ENDPOINT_URL:=https://marlin2b.callbill.ai/v1 LAB_EVAL_ENDPOINT_KEY=/model-inference/lab/eval_endpoint_key"` (judge: `JUDGE_PROVIDER_URL:=<P-10 approved host>`, `JUDGE_MODE:=dry_run`; datasets: `LAB_S3_BUCKET`, and the trace names only once T is deployed) | `wrote /etc/infrx-lab/eval.env: INFRX_IMAGE LAB_DATABASE_URL …`, `eval ON: 127.0.0.1:8012/readyz 200`; the pooler budget printed no FAIL |
+| L7 | **`eval` only on this box** (after WR-LDP-6 gives it its own login); `judge`, then `datasets` only once `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` exist (the trace projection deployed) | `infra/rollout/ssm.sh infra/lab/rollout/steps/50-lab-role.sh STATE=on ROLE=eval RELEASE=$RELEASE SPEC="LAB_DATABASE_URL=/model-inference/lab/eval_database_url LAB_S3_BUCKET:=<Lab bucket> LAB_EVAL_ENDPOINT_URL:=https://marlin2b.callbill.ai/v1 LAB_EVAL_ENDPOINT_KEY=/model-inference/lab/eval_endpoint_key"` (later, judge: `JUDGE_PROVIDER_URL:=<P-10 approved host> CLICKHOUSE_URL=/model-inference/lab/clickhouse_url S3_TRACE_BUCKET:=<trace bucket> JUDGE_MODE:=dry_run`; datasets: `LAB_S3_BUCKET:=… CLICKHOUSE_URL=/model-inference/lab/clickhouse_url S3_TRACE_BUCKET:=…`). The step refuses (exit 2, before any change) a SPEC without a name the role needs | `wrote /etc/infrx-lab/eval.env: INFRX_IMAGE LAB_DATABASE_URL …`, `eval ON: 127.0.0.1:8012/readyz 200`; the pooler budget printed no FAIL |
 | L7s | smoke after **each** role | 60-lab-smoke.sh | the new role PASS, App PASS |
 | L8 | record | release, Lab image id, parameter names + versions, which switches are ON, the smoke outputs | coordinator log entry |
 
 Exit codes the steps share: 2 refused before any change; 3 a preflight/budget refusal (nothing
-replaced); 4 started but not ready (the unit's journal; the step's `STATE=off` turns it back
-off); 5 the role refused by name (R198: its work source is not on this release — expected for
-`checkpoints`, `annotation`, `training`, `rollout` today; R211: it is not restarted). Every step
+replaced); 4 started but not ready, or a served role (`eval`, `judge`, `datasets`, `annotation`)
+exited 2 refusing its settings (the unit's journal names them; the step's `STATE=off` turns it
+back off); 5 a pending role refused by name (R198: its work source is not on this release —
+`checkpoints`, `training`, `rollout` today; R211: it is not restarted). Every step
 is idempotent and logs to `/var/log/infrx-lab-rollout.log`.
 
 ## 5. Switch-on order and rules
@@ -165,11 +171,13 @@ is idempotent and logs to `/var/log/infrx-lab-rollout.log`.
    `LAB_TRACES`, `ROLLOUT_ROUTING`, `LAB_EVALS`, `LAB_PIPELINES`, `LAB_RELEASES`, `LAB_DATASETS`,
    `LAB_CHECKPOINTS`; and `TRACE_PUMPS`, `LAB_EVAL_WORKER` on the consumer worker). They are
    NOT_SETTABLE by `install.sh --set` on purpose, E4-ON found LDP-F1/F3 with them ON, and the Lab
-   is served by its own units. (`LAB_TEACHERS` is not on this base: composition-4.)
-2. Order: L5 control → L6 site → L7 `eval` → `judge` → `datasets`. The smoke (60) after each;
+   is served by its own units. `LAB_TEACHERS` (composition-4, now on the base) stays OFF too.
+2. Order: L5 control → L6 site → L7 `eval` (then `judge` → `datasets` only once the trace
+   projection gives them `CLICKHOUSE_URL` + `S3_TRACE_BUCKET`). The smoke (60) after each;
    any FAIL = that switch OFF again (its `STATE=off`) before anything else.
-3. Never switch on `checkpoints`, `annotation`, `training`, `rollout` for testing: they refuse
-   by name (exit 5 here) until their lanes land; a refusal is harmless but proves nothing.
+3. Never switch on `checkpoints`, `annotation`, `training`, `rollout` for testing:
+   `checkpoints`/`training`/`rollout` refuse by name (exit 5 here) until their lanes land;
+   `annotation` only collects approved teacher batches from the local fake (P-10).
 4. Paid work stays off: `JUDGE_MODE` is `dry_run` (50-lab-role refuses anything else), the
    annotation teacher is `dry-run`, the training connector `manual-bundle` (P-10/P-11 approvals
    are separate). Lab paid work is USD with a named payer; CREDIT is never converted.
@@ -274,8 +282,15 @@ reversal of Lab tables is never part of this runbook.
   entry point reads that are not listed there (`LAB_S3_PREFIX`, `LAB_EVAL_ENDPOINT_URL`,
   `LAB_EVAL_ENDPOINT_KEY`, `LAB_EVAL_CONCURRENCY`, `LAB_CHECKPOINTS_CONCURRENCY`,
   `LAB_DATASETS_CONCURRENCY`; the judge's are in `infra/lab/observe/observe.json`).
-- **WR-LDP-4** (I/rollout lane): the reviewed `hosted-migrate.sh` patch of §2 condition 2, and
-  its W7 maintenance precondition for an additive Lab-only window.
+- **WR-LDP-4** (I/rollout lane): the reviewed `hosted-migrate.sh` patch of §2 condition 2 —
+  **landed on the tip** (bcb73cc1; its post-check is `*"0051 lab_import_jobs"$'\n'"nothing
+  pending"`, the form `lab-migrate.sh` checks) — and its W7 maintenance precondition for an
+  additive Lab-only window (open).
+- **WR-LDP-6** (lab-sql lane): one dedicated login per Lab worker role (`infrx_lab_eval`, then
+  `infrx_lab_judge`, `infrx_lab_datasets`), noinherit, a connection limit, each granted exactly
+  what its `infrx.lab.workers` composition calls (as 0043 does for `infrx_lab_control`), and
+  `lab_world.role_env` switched to them so E4-ON o03 proves the roles on the box's logins. Until
+  then o03 is proven on the owner login only and L7 does not run.
 - **LDP-F1** (lab-sql + composition): with `ROLLOUT_ROUTING` ON the gateway runs on
   `infrx_runtime`, which holds no EXECUTE on L2's `infrx.lab_*` RPCs → every gateway Lab route
   503. Either grant the membership/read RPCs to `infrx_runtime` or serve the Lab only from the
@@ -290,10 +305,12 @@ reversal of Lab tables is never part of this runbook.
 |---|---|---|
 | G1–G6 | commands + exit codes; `E4ON-raw-<head7>/verdict.json` | coordinator log |
 | §2 (1) | `schema_proof.py` output, `known-good.json` diff, `known-good.py --list --applied 0051` exit 0 | evidence/i/KNOWN-GOOD-PROOF-4-* |
-| §2 (2) | the merged `hosted-migrate.sh` patch | its commit |
+| §2 (2) | the merged `hosted-migrate.sh` patch (bcb73cc1); `lab-migrate.sh` stops at condition 1, not 2, on the tree (`test_ldp__todays_hosted_migrate_carries_the_reviewed_patch`) | its commit |
 | §2 (3) | the window entry | coordinator log |
 | §2 a/b | `W6b PASS: COPY_DIGEST=…`, `W7 PASS: hosted 0001-0051` | `~/infrx-backups/migrate-*.log` + coordinator log |
 | §3 | `describe-parameters` name/type/version | coordinator log |
+| L5 | E4-ON o04 PASS with the control factory on `infrx_lab_control` (fix round) + L5's printed lines | verdict.json + coordinator log |
+| L7 | WR-LDP-6 merged + E4-ON o03 PASS on the per-role logins (NOT RUN today) | verdict.json |
 | L1–L7 | each step's printed lines (names only) + `60-lab-smoke.sh` after each | `/var/log/infrx-lab-rollout.log` + coordinator log |
 | §6 | Vercel deployment id, domain, Redirect URLs | P-08 record |
 | §7 | the membership select (ids), each tester's workspace list | P-08 record |
@@ -307,3 +324,10 @@ reversal of Lab tables is never part of this runbook.
   in `tests/i/lab/mutants.py`); the E4-ON composition is `make lab-local`
   (`tests/integration/lab_local/`). Nothing was run against the box, AWS, SSM, Vercel or hosted
   Supabase.
+- 2026-09-29 (fix round, LDP-R1/R3/R4/RSI-1): §2 condition 2 is on the tip (bcb73cc1) and
+  condition 1's re-proof too (aafd387e); `lab-migrate.sh` checks the post-check in migrate.py
+  plan's `NNNN name` form. §0/§4 L7/§5: judge and datasets require `CLICKHOUSE_URL` and
+  `S3_TRACE_BUCKET`, so this box runs `eval` only; step 50 refuses a SPEC missing a needed name
+  and keeps exit 5 for the pending roles. §3/§10/§11: the control factory is proven on
+  `infrx_lab_control`, the roles only on the owner login until WR-LDP-6. `LAB_TEACHERS` is on
+  the base (OFF on the box). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
