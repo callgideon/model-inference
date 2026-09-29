@@ -1,0 +1,47 @@
+{
+ "task": "P2",
+ "slice": "WR-P2-D8-C: teacher_wiring on D8's PgTeacherLedger (p2 proof)",
+ "activity": "review",
+ "head": "2ddbc07b",
+ "base": "3529168d",
+ "worktree": ".claude/worktrees/codex-w5-composition-3",
+ "branch": "codex/w5-composition-3",
+ "at": "2026-09-29T01:10:00Z",
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "eight items done or filed, 0 survivors, E4 2800/0; composition-2 needed one tests-only fix round (~2 h); remaining = one verify round",
+  "at": "2026-09-29T01:10:00Z"
+ },
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-3-2ddbc07.md"
+ ],
+ "blockers": [],
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/pilot.py",
+  "apps/infrx-api/infrx/worker/__main__.py",
+  "apps/infrx-api/infrx/lab/workers/__main__.py",
+  "apps/infrx-api/infrx/lab/control/app.py",
+  "apps/infrx-api/infrx/traces/ship/shipper.py",
+  "apps/infrx-api/infrx/traces/retention/policy.py",
+  "apps/infrx-api/deploy/lab/{eval,observe,pipelines,rollout}/infrx-lab-*.service",
+  "apps/infrx-api/tests/{w,g/test_startup.py,g/mutants.py,i/lab,p/teachers,p/training,j/calibration,r/routing,b/checkpoints}"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first per item (8 seams)",
+   "exit": 1,
+   "summary": "each red at base as recorded"
+  },
+  {
+   "cmd": "INFRX_D_TASK=j2|r1|p2|p3 pytest <5 composition proofs>",
+   "exit": 0,
+   "summary": "7 passed; each red with its composition broken (scratch)"
+  }
+ ],
+ "wiring_requests": [
+  "WR-P2-D8-Cb"
+ ]
+}

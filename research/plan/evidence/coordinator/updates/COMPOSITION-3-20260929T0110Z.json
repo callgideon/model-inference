@@ -1,0 +1,76 @@
+{
+ "task": "COMPOSITION-3",
+ "lane": "composition-3",
+ "slice": "LW5 composition batch 3: WR-P2-D8-C, WR-J3-D8-C, WR-R1-3-C, WR-P3/P1/B3-D8-C, WR-C2-2b, WR-N3-2a (2b filed: no door), WR-LAB-API-2c, 0-F5, E4 regression (switches off)",
+ "activity": "review",
+ "head": "2ddbc07b",
+ "base": "3529168d",
+ "worktree": ".claude/worktrees/codex-w5-composition-3",
+ "branch": "codex/w5-composition-3",
+ "at": "2026-09-29T01:10:00Z",
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "eight items done or filed, 0 survivors, E4 2800/0; composition-2 needed one tests-only fix round (~2 h); remaining = one verify round",
+  "at": "2026-09-29T01:10:00Z"
+ },
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-3-2ddbc07.md"
+ ],
+ "blockers": [],
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/pilot.py",
+  "apps/infrx-api/infrx/worker/__main__.py",
+  "apps/infrx-api/infrx/lab/workers/__main__.py",
+  "apps/infrx-api/infrx/lab/control/app.py",
+  "apps/infrx-api/infrx/traces/ship/shipper.py",
+  "apps/infrx-api/infrx/traces/retention/policy.py",
+  "apps/infrx-api/deploy/lab/{eval,observe,pipelines,rollout}/infrx-lab-*.service",
+  "apps/infrx-api/tests/{w,g/test_startup.py,g/mutants.py,i/lab,p/teachers,p/training,j/calibration,r/routing,b/checkpoints}"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first per item (8 seams)",
+   "exit": 1,
+   "summary": "each red at base as recorded"
+  },
+  {
+   "cmd": "INFRX_D_TASK=j2|r1|p2|p3 pytest <5 composition proofs>",
+   "exit": 0,
+   "summary": "7 passed; each red with its composition broken (scratch)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r1 ... pytest tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "E4: 2800 passed, 22 skipped, 0 failed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all G/worker/contracts/lab-workers/lab_datasets/lab_checkpoints lists (r1)",
+   "exit": 0,
+   "summary": "1177 passed, 7 skipped (MinIO), 0 survivors"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all p/teachers p/training j j/calibration r/routing b/checkpoints i/lab t/retention t/ship",
+   "exit": 0,
+   "summary": "439 passed, 9 skipped (T stacks), 0 survivors"
+  },
+  {
+   "cmd": "ruff check <changed .py>",
+   "exit": 0,
+   "summary": "clean"
+  }
+ ],
+ "wiring_requests": [
+  "WR-P2-D8-Cb",
+  "WR-J3-D8-Cb",
+  "WR-R1-3-Cb",
+  "WR-N3-2a-door",
+  "WR-N3-2b",
+  "WR-LAB2-4",
+  "WR-B3-EVALS",
+  "WR-C3-DOC",
+  "WR-C3-MK"
+ ]
+}
