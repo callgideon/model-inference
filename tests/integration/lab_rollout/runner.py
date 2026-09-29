@@ -141,7 +141,8 @@ REQUIRED = {
             "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"),
     "k08": ("test_k08_parity_on_an_allocated_gpu_target",),
     "k09": ("test_k09_the_controller_process_restarted_mid_rollout",),
-    "k10": ("test_k10_the_releases_ui_over_the_real_route",),
+    "k10": ("test_k10_the_releases_ui_over_the_real_route",
+            "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict"),
 }
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>k\d\d)_")

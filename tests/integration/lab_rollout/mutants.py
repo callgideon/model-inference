@@ -106,8 +106,8 @@ MUTANTS: tuple[Mutant, ...] = (
        '"test_ids": ["ROLLOUT-PIN"], "lanes": ["lab-ui-swap"]},',
        '"test_ids": ["ROLLOUT-PIN"], "lanes": []},', MATRIX),
     _m("a_required_case_renamed", "the required cases are the modules' cases", R,
-       '    "k10": ("test_k10_the_releases_ui_over_the_real_route",),',
-       '    "k10": ("test_k10_the_releases_ui",),', REQUIRED),
+       '    "k10": ("test_k10_the_releases_ui_over_the_real_route",\n',
+       '    "k10": ("test_k10_the_releases_ui",\n', REQUIRED),
     _m("another_namespace", "e8l runs in its own reserved block", R,
        'NAMESPACE = "e8l"', 'NAMESPACE = "e6l"', NAMESPACE),
     _m("an_endpoint_on_a_service_port", "the synthetic endpoints avoid E2's service ports", R,
@@ -131,6 +131,7 @@ G = "infrx/gateway/pilot.py"
 D9 = "../app/supabase/migrations/0043_lab_reads_and_proposals.sql"
 D44 = "../app/supabase/migrations/0044_lab_control_reads.sql"
 D45 = "../app/supabase/migrations/0045_lab_serving_ref_identity.sql"
+D48 = "../app/supabase/migrations/0048_lab_release_listing.sql"
 L3S = "infrx/state/lab_control.py"
 
 K01 = "test_k01_routing_off_serves_todays_request_over_a_live_release"
@@ -151,6 +152,7 @@ K05_GAPS = "test_k05_missing_or_stale_evidence_never_expands"
 K05_SPEND = "test_k05_overspend_rolls_back_and_units_never_mix"
 K06_PROMOTED = "test_k06_an_emergency_rollback_moves_a_promoted_alias_back"
 K06_READS = "test_k06_the_worlds_alias_read_is_the_real_control_store_on_its_login"
+K10_LISTING = "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict"
 K07_STORED = "test_k07_a_variant_is_probed_compared_and_stored"
 K07_REFUSED = "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"
 
@@ -265,6 +267,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "    if live.spent.amount > plan.budget.amount:", "    if False:", K05_SPEND),
     # (no `st_units_mix`: without R2's unit check, `lab.Amount` itself refuses to compare
     # CREDIT with PROVIDER_USD (TypeError) - the money type backstops it, equivalent here)
+    _m("st_listing_ignores_the_state", "the release listing narrows to the asked states "
+       "(0048's lab_releases_in)", D48,
+       "          or o.state = any(array(select jsonb_array_elements_text(p_args->'states'))))",
+       "          or true)", K10_LISTING),
     _m("st_claim_unmeasured", "an optimization is claimed only with measurements", R3,
        '"optimization_claimed": outcome == "equivalent" and performance is not None}',
        '"optimization_claimed": outcome == "equivalent"}', K07_STORED),
