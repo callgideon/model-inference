@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 286,
- "updated": "2026-09-29T11:16:24Z",
+ "revision": 287,
+ "updated": "2026-09-29T11:35:08Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7994,11 +7994,11 @@
     "prefix": "infrx-b1-",
     "db": "b1"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T07:34:02Z",
-   "updated": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T11:35:08Z",
    "blocker": null,
-   "next_action": "merge batch #42 (Opus; WR-C5-PREFLIGHT, WR-C5-MK, R226–R230) → lab-evaluate-2 (E6L final), lab-rollout-4 (WR-C5-K09), composition-6 (WR-COMP-4, WR-R4-2, WR-C5-N4-ROUTE, the C5 halves)",
+   "next_action": "lab-evaluate-2 (E6L final), lab-rollout-4 (k09), composition-6 (C5 halves)",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
@@ -8324,22 +8324,22 @@
   {
    "id": "W5-MERGE-42",
    "task": null,
-   "slice": "merge batch #42 (Opus): composition-5 6c092e92 (+WR-C5-PREFLIGHT, WR-C5-MK, R226–R230); workflow wf_71ca3135-5f8",
+   "slice": "merge batch #42 (Opus): composition-5 6c092e92 (+WR-C5-PREFLIGHT, WR-C5-MK, R226–R230); workflow wf_71ca3135-5f8; integrated (§10 sorted: R226–R230 between R225 and R231)",
    "agent": "opus",
    "branch": "codex/w5-merge-42",
    "worktree": ".claude/worktrees/codex-w5-merge-42",
    "base": "073c58fe",
-   "head": null,
+   "head": "c3911979",
    "isolation": {
     "ports": "p3 57530/57531; l4 57503",
     "prefix": "infrx-p3-",
     "db": "p3"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T10:25:45Z",
-   "updated": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T11:35:08Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge (R226–R230 after R225 at integration) → lab-evaluate-2, lab-rollout-4, composition-6",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
