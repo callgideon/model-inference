@@ -375,12 +375,12 @@ def _annotation(mode, env, connect, objects, worker_id, **_):
                                    "its P-10 approval")
     from ...datasets.versions import redact_content
     try:
-        limits = validate_pilot(pilot_from_env(env))
+        pilot = validate_pilot(pilot_from_env(env))
     except ValueError as refused:
         raise RuntimeMisconfigured(mode, detail=str(refused)) from None
     try:
         wiring = teacher_wiring(connect, objects, provider_url=env["LAB_TEACHER_URL"],
-                                settings=limits, redact=redact_content)
+                                settings=pilot, redact=redact_content)
     except errors.DomainError:            # names the setting, never its value
         raise RuntimeMisconfigured(mode, detail="LAB_TEACHER_URL: teacher egress is the local "
                                                 "teacher fake until P-10") from None

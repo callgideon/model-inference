@@ -131,7 +131,10 @@ MUTANTS: tuple[Mutant, ...] = (
        'provider_org_id=c["provider_org_id"], org_id=c["org_id"],',
        'provider_org_id=c["provider_org_id"], org_id=c["provider_org_id"],', REPORT),
     _m("lw_report_one_failure_stops_all", "one configuration's failure does not skip the next",
-       '                done["failed"] += 1\n', "                raise\n", REPORT),
+       '                log.exception("judge report failed for one configuration")\n'
+       '                done["failed"] += 1\n',
+       '                log.exception("judge report failed for one configuration")\n'
+       "                raise\n", REPORT),
     # --- datasets ----------------------------------------------------------------------------------
     _m("lw_lineage_every_prefix", "only providers with a lineage are reconciled",
        '                   if key.split("/")[2:3] == ["lineage"]})',
@@ -206,10 +209,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_annotation_teacher_url_optional", "the annotation role needs its teacher's URL",
        '"annotation": (BUCKET, "LAB_TEACHER_URL"),', '"annotation": (BUCKET,),', SETTINGS),
     _m("lw_annotation_unredacted", "the collected teacher saw only N2's redaction (WR-P2-4)",
-       "settings=limits, redact=redact_content)", "settings=limits, redact=str)", ANNOT),
+       "settings=pilot, redact=redact_content)", "settings=pilot, redact=str)", ANNOT),
     _m("lw_annotation_live_by_default", "the role's judge mode is its environment's (dry run)",
-       "settings=limits, redact=redact_content)",
-       'settings=limits.replace(judge_mode="live"), redact=redact_content)', ANNOT),
+       "settings=pilot, redact=redact_content)",
+       'settings=pilot.replace(judge_mode="live"), redact=redact_content)', ANNOT),
     _m("lw_annotation_other_host_escapes", "another teacher host refuses by the setting's name",
        '    except errors.DomainError:            # names the setting, never its value\n'
        '        raise RuntimeMisconfigured(mode, detail="LAB_TEACHER_URL: teacher egress is the local "',
