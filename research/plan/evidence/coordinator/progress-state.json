@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 283,
- "updated": "2026-09-29T10:25:45Z",
+ "revision": 284,
+ "updated": "2026-09-29T10:30:56Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8045,11 +8045,11 @@
     "prefix": "infrx-e5l2-",
     "db": "e5l"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T07:34:02Z",
-   "updated": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T10:30:56Z",
    "blocker": null,
-   "next_action": "merge batch #41 (Opus; WR-OBS-6, R225) → o01 after composition-6 (WR-COMP-4), o10 after lab-e2e → E5L under R222",
+   "next_action": "o01 after composition-6 (WR-COMP-4); o10 after lab-e2e; then E5L under R222",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -8285,22 +8285,22 @@
   {
    "id": "W5-MERGE-41",
    "task": null,
-   "slice": "merge batch #41 (Opus): lab-observe-2 84dacef4 (E5L 16/0/2; +WR-OBS-6, R225); workflow wf_e8af0ed9-1b6",
+   "slice": "merge batch #41 (Opus): lab-observe-2 84dacef4 (E5L 16/0/2; +WR-OBS-6, R225); workflow wf_e8af0ed9-1b6; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-41",
    "worktree": ".claude/worktrees/codex-w5-merge-41",
    "base": "073c58fe",
-   "head": null,
+   "head": "007deee4",
    "isolation": {
     "ports": "none",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T10:25:45Z",
-   "updated": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T10:30:56Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge (R225 before R226 at integration)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
