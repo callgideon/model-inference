@@ -445,7 +445,25 @@ def lab_web(workdir: Path, api_url: str, supabase_url: str, control: str | None 
                  lab_web_env(api_url, supabase_url, control), workdir, lab)
     try:
         with lab_tls(workdir) as origin:
-            why = wait_ready(proc, f"http://127.0.0.1:{LAB_PORT}/", 90.0)
+            # the terminator binds its port after `next start` is up (o07 at 1a5be321)
+            why = wait_ready(proc, f"http://127.0.0.1:{LAB_PORT}/", 90.0) or \
+                wait_ready(proc, f"{origin}/", 30.0, verify=False)
             yield types.SimpleNamespace(proc=proc, origin=origin, why=why)
     finally:
         proc.stop()
+
+
+UNAVAILABLE = '503 {"refusal":"unavailable"}'
+
+
+def judge_login(login: dict, owner: dict, pending) -> tuple[dict, dict]:
+    """R251 (WR-LW8-2): each family's answer on `infrx_lab_control` is the same factory's on
+    the owner login (0056 grants the login its routes' functions); a family that is not 200
+    is only a pending family's typed 503. `login`/`owner`: the non-200 answers by family.
+    (wrong, typed): a difference or any other answer is wrong; typed is NOT RUN."""
+    wrong = {f: f"{login.get(f, '200')} on {CONTROL_LOGIN}, {owner.get(f, '200')} on the owner"
+             for f in set(login) | set(owner) if login.get(f) != owner.get(f)}
+    typed = {f: v for f, v in owner.items()
+             if f not in wrong and f in pending and v.startswith(UNAVAILABLE)}
+    wrong.update({f: v for f, v in owner.items() if f not in wrong and f not in typed})
+    return wrong, typed

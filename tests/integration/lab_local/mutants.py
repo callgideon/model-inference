@@ -64,6 +64,13 @@ WEB = "test_lab_local_the_lab_web_gets_lab_jsons_names_and_no_service_key"
 PENDING = "test_lab_local_pending_roles_are_proven_to_refuse_by_name"
 JOURNEY = "test_lab_local_a_journey_passes_only_when_every_case_ran_and_passed"
 CONTROL_LOGIN = "test_lab_local_the_control_factory_runs_on_its_own_login_never_the_owner"
+R222_RECORDED = "test_lab_local_r222_the_recorded_28c9c2cc_verdict_is_not_accepted"
+R222_CLASSES = "test_lab_local_r222_excuses_only_the_ruled_classes"
+R222_E4 = "test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case"
+R222_FD = "test_lab_local_r222_the_fd0aba04_verdict_stays_open_after_the_journeys_land"
+AS_OWNER = "test_lab_local_the_control_login_answers_as_the_owner_login"
+TLS_READY = "test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers"
+PIN_CLEAN = "test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("a_switch_left_off", "EVERY switch is ON in the composition", W,
@@ -95,8 +102,50 @@ MUTANTS: tuple[Mutant, ...] = (
        '    if counts["tests"] == 0:', '    if counts["tests"] < 0:', PYTEST_STAGE),
     _m("an_e4_suite_dropped", "the E4 subset is the composition lanes' regression", R,
        '"tests/g", "tests/w", "tests/contracts",', '"tests/g", "tests/contracts",', E4),
-    _m("pinned_journey_runs", "a key-pinned journey is NOT RUN, never run on its key", R,
-       "    if spec[\"pinned\"]:\n        return", "    if False:\n        return", PINNED),
+    _m("pinned_journey_runs", "a journey on another key's resource is NOT RUN, never run", R,
+       '    if spec["foreign"]:\n        wr, why', '    if False:\n        wr, why', PINNED),
+    _m("a_runnable_journey_skipped", "every journey whose backend accepts lab-on runs (WR-LDP-1)",
+       R, '"key": "r2",\n                 "foreign": None}',
+       '"key": "r2",\n                 "foreign": ("WR-X", "x")}', PINNED),
+    _m("r222_fail_excused", "an in-scope FAIL is never excused (R234)", R,
+       "            return status == PASS or (status == NOT_RUN",
+       "            return status != NOT_RUN or (status == NOT_RUN", R222_CLASSES, R222_RECORDED),
+    _m("r222_any_not_run_excused", "a NOT RUN is excused only when every lane it names is "
+       "out of scope", R,
+       '    return bool(found) and set(found.group(1).split(",")) <= set(OUT_OF_SCOPE)',
+       "    return bool(found)", R222_CLASSES, R222_RECORDED),
+    _m("r222_unmarked_skip_excused", "a NOT RUN without a named class stays open", R,
+       "(status == NOT_RUN and bool(mine)", "(status == NOT_RUN", R222_CLASSES),
+    _m("r222_absent_required_ignored", "a scenario missing a required case stays open", R,
+       " or \\\n                set(REQUIRED[sid]) - set(cases):", ":", R222_CLASSES, R222_RECORDED),
+    _m("r222_e4_any_failure_excused", "only the by-design e4-on failure is reported as such", R,
+       "and set(failed) <= set(BY_DESIGN)", "", R222_E4),
+    _m("r222_e4_skips_ignored", "an e4-on stage with skipped cases is never reported as only "
+       "its by-design FAIL (0-LL2C-1)", R,
+       "                and not (counts.get(\"skipped\") or counts.get(\"xfailed\")):",
+       "                and True:", R222_E4),
+    _m("r222_by_design_accepted", "a by-design FAIL stays open until ruled (R222, 0-LL2C-2)",
+       R, "                excused[name] = BY_DESIGN[name]\n",
+       "                excused[name] = BY_DESIGN[name]\n                return True\n",
+       R222_CLASSES, R222_FD),
+    _m("r222_e4_by_design_accepted", "the e4-on by-design FAIL stays open until ruled "
+       "(0-LL2C-2)", R, "            excused.update({case: why for case, why in "
+       "BY_DESIGN.items() if case in failed})\n",
+       "            excused.update({case: why for case, why in BY_DESIGN.items() if case in "
+       "failed})\n            continue\n", R222_E4, R222_FD),
+    _m("r222_stages_ignored", "a stage that did not pass keeps the gate open", R,
+       "        still[name] = status\n", "        pass\n", R222_E4, R222_RECORDED),
+    _m("r222_always_accepted", "accepted is computed, never asserted", R,
+       '{"accepted": not still,', '{"accepted": True,', R222_CLASSES, R222_RECORDED),
+    _m("login_judged_alone", "the Lab login answers as the owner login (R251)", W,
+       "for f in set(login) | set(owner) if login.get(f) != owner.get(f)}",
+       "for f in set(login) | set(owner) if False}", AS_OWNER),
+    _m("login_any_typed_family_pending", "only a pending family's typed 503 is NOT RUN", W,
+       "if f not in wrong and f in pending and v.startswith(UNAVAILABLE)}",
+       "if f not in wrong and v.startswith(UNAVAILABLE)}", AS_OWNER),
+    _m("login_any_503_pending", "a store fault's 503 is no typed unavailability", W,
+       "and f in pending and v.startswith(UNAVAILABLE)}",
+       'and f in pending and v.startswith("503")}', AS_OWNER),
     _m("a_required_case_renamed", "the required cases are the module's cases", R,
        '    "o04": ("test_o04_the_control_factory_serves_a_lab_session",\n',
        '    "o04": ("test_o04_the_control_factory_serves",\n', REQUIRED),
@@ -108,7 +157,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '"lab-on": {"postgres": 57437, "valkey": 57538, "valkey-q": 57539}', KEY),
     _m("lab_web_holds_the_service_key", "the Lab web holds no service-role key", W,
        '            "NEXT_PUBLIC_SUPABASE_ANON_KEY": stack.jwt("anon", ttl_s=12 * 3600),',
-       '            "SUPABASE_SERVICE_ROLE_KEY": stack.jwt("service_role"),', WEB),
+       '            "SUPABASE_SERVICE' '_ROLE_KEY": stack.jwt("service_role"),', WEB),  # split: test_harness' needle
     _m("lab_web_on_http", "the Lab origin is https (production refuses http)", W,
        'LAB_ORIGIN = f"https://localhost:{LAB_TLS_PORT}"',
        'LAB_ORIGIN = f"http://localhost:{LAB_TLS_PORT}"', WEB),
@@ -127,6 +176,14 @@ MUTANTS: tuple[Mutant, ...] = (
        '            "LAB_CHECKPOINT_KEYS"', SWITCHES),
     _m("lab_web_without_control", "the Lab web reaches the control factory", W,
        'return {"LAB_CONTROL_URL": control or control_url(), ', 'return {', WEB),
+    _m("lab_web_ready_before_its_origin", "the Lab web is ready once its https origin "
+       "answers (o07's race)", W, ' or \\\n                wait_ready(proc, f"{origin}/", 30.0, verify=False)',
+       "", TLS_READY),
+    _m("evidence_is_dirt", "the run's own evidence never makes the pin dirty", R,
+       '"--porcelain", "--", ".", ":!research/plan/evidence"))}', '"--porcelain"))}', PIN_CLEAN),
+    _m("anything_is_clean", "a stray file outside the evidence is dirty", R,
+       '"dirty": bool(git("status", "--porcelain",', '"dirty": False and bool(git("status", "--porcelain",',
+       PIN_CLEAN),
     _m("a_served_role_pending", "eval, judge and datasets must start; only named lanes "
        "pend", W, '    "rollout": ("WR-LSQ-9", "the rollout pass needs"),\n',
        '    "rollout": ("WR-LSQ-9", "the rollout pass needs"),\n'
@@ -179,6 +236,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_control_login_sets_role", "the control factory never sets a role on its own login "
        "(LDP-F7)", CONTROL, "connector(os.environ[DATABASE_URL], set_role=False)",
        "connector(os.environ[DATABASE_URL])", O04_LOGIN),
+    _m("st_control_families_set_role", "the families on the Lab login never set a role "
+       "(R245): they answer as on the owner login", CONTROL,
+       "connector(lab[DATABASE_URL], set_role=False)", "connector(lab[DATABASE_URL])",
+       O05_CONTROL),
     _m("st_control_families_unmounted", "the control factory serves every Lab family (WR-LDP-2)",
        CONTROL, "        family.register(app, rt)\n", "        pass\n", O05_CONTROL),
     _m("st_datasets_unmounted", "LAB_DATASETS ON mounts the datasets family", PILOT,
@@ -215,6 +276,10 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
     operate._layer1(root)
     (root / "infra" / "lab" / "app").mkdir(parents=True)
     shutil.copy2(REPO / "infra" / "lab" / "app" / "lab.json", root / "infra/lab/app/lab.json")
+    for head in ("28c9c2cc", "fd0aba04"):                         # R222_RECORDED, R222_FD
+        recorded = f"research/plan/evidence/e/E4ON-raw-{head}/verdict.json"
+        (root / recorded).parent.mkdir(parents=True)
+        shutil.copy2(REPO / recorded, root / recorded)
     return root
 
 

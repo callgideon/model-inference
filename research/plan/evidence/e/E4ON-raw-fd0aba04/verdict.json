@@ -1,0 +1,252 @@
+{
+  "task": "I2L",
+  "gate": "E4-ON (LAB-LOCAL: every switch ON)",
+  "verdict": "FAIL",
+  "exit": 1,
+  "r222": {
+    "accepted": false,
+    "open": {
+      "journey:pipelines": "NOT RUN",
+      "journey:traces": "NOT RUN"
+    },
+    "by_design": {
+      "test_o05_every_lab_route_family_answers_a_lab_session": "R237/R245 (LDP-F1 (b)): the all-switches App gateway is never the box's Lab server",
+      "tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it": "R198 (LDP-F4): a consumer worker with LAB_EVAL_WORKER ON refuses by name"
+    }
+  },
+  "scope": {
+    "WR-B3-3": "product WR: WR-B3-3 (checkpoints role: registry adapter, L3 dev deployer)",
+    "WR-LSQ-9": "product WR: WR-LSQ-9 (rollout role's pass inputs)",
+    "WR-B4-2": "product WR: WR-B4-2 (evaluations: experiments, catalog, B3 ledger ports)",
+    "WR-LAB2-4": "product WR: WR-LAB2-4 (pipelines: the run listings)",
+    "WR-P4B-1": "product WR: WR-P4B-1 (teacher batches)",
+    "WR-R4-1": "product WR: WR-R4-1 (releases/optimizations read models)",
+    "P-10": "external teacher provider (P-10)",
+    "P-11": "external training provider (P-11)",
+    "P-08": "GPU / staging target (P-08)"
+  },
+  "label": "real PostgreSQL/PostgREST/Valkey/ClickHouse/S3-compatible services (e3l block), the merged code with every switch ON, a controlled engine, a judge fake as the teacher, the manual-bundle training connector, a local Lab build behind local TLS and a Supabase stand-in; not Marlin quality, not GPU capacity, not hosted behaviour",
+  "pins": {
+    "head": "fd0aba0498348fe50dead2b7545a6aba9a2a3b37",
+    "dirty": false
+  },
+  "namespace": "e3l",
+  "key": "lab-on",
+  "started": "2026-09-29T20:21:40+00:00",
+  "seconds": 2106.4,
+  "stack": {
+    "usable": true,
+    "why_not": null,
+    "stages": [
+      {
+        "stage": "preflight",
+        "status": "PASS",
+        "seconds": 11.4
+      },
+      {
+        "stage": "services",
+        "status": "PASS",
+        "seconds": 15.2
+      },
+      {
+        "stage": "migrate",
+        "status": "PASS",
+        "seconds": 1.2
+      }
+    ]
+  },
+  "stages": [
+    {
+      "stage": "lab-build",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 4.6,
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/research/plan/evidence/e/E4ON-raw-fd0aba04/lab-build.log",
+      "build_id": "app1xWNw1b8WdSRd_MuUa"
+    },
+    {
+      "stage": "e4-on",
+      "status": "FAIL",
+      "exit": 1,
+      "seconds": 2031.4,
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/research/plan/evidence/e/E4ON-raw-fd0aba04/e4-on.log",
+      "counts": {
+        "tests": 2853,
+        "passed": 2838,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 14,
+        "xfailed": 0,
+        "skip_reasons": {
+          "task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)": 4,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)": 3,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the r2 task-local key (INFRX_D_TASK=r2)": 2,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the b3 task-local key (INFRX_D_TASK=b3)": 1,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the p1 task-local key (INFRX_D_TASK=p1)": 1,
+          "no ClickHouse: start infrx-t2i-clickhouse on the tasklocal t2i block and export INFRX_LAB_API_STACK=1": 1,
+          "PostgreSQL only on the j2 task-local key": 1,
+          "WR-T-4 proof needs the t2f key and its stack (INFRX_D_TASK=t2f INFRX_T2F_STACK=1)": 1
+        },
+        "xfail_reasons": {},
+        "failed_ids": [
+          "tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it"
+        ],
+        "empty_params": [
+          "tests.w.test_prep_worker_mutants::test_pg_mutant_is_killed[NOTSET]",
+          "tests.w.test_w5_mutants::test_pg_mutant_is_killed[NOTSET]",
+          "tests.w.test_worker_main_mutants::test_pg_mutant_is_killed[NOTSET]"
+        ]
+      },
+      "reason": "exit 1: 1 failed, 0 errors",
+      "switches_on": [
+        "FEEDBACK_API",
+        "TRACE_EXPORT_API",
+        "LAB_CONTROL",
+        "LAB_TRACES",
+        "ROLLOUT_ROUTING",
+        "LAB_EVALS",
+        "LAB_PIPELINES",
+        "LAB_RELEASES",
+        "LAB_CHECKPOINTS",
+        "LAB_DATASETS",
+        "LAB_TEACHERS",
+        "TRACE_PUMPS",
+        "LAB_EVAL_WORKER"
+      ],
+      "pending_switches": {}
+    },
+    {
+      "stage": "scenarios",
+      "status": "FAIL",
+      "exit": 1,
+      "seconds": 19.4,
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/research/plan/evidence/e/E4ON-raw-fd0aba04/scenarios.log",
+      "junit": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/research/plan/evidence/e/E4ON-raw-fd0aba04/scenarios.xml"
+    },
+    {
+      "stage": "journey:datasets",
+      "status": "PASS",
+      "rerun": "cd apps/lab && LAB_N_REAL=1 INFRX_D_TASK=lab-on node --test tests/n/journey.test.ts",
+      "exit": 0,
+      "seconds": 6.5,
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/research/plan/evidence/e/E4ON-raw-fd0aba04/journey-datasets.log"
+    },
+    {
+      "stage": "journey:releases",
+      "status": "PASS",
+      "rerun": "cd apps/lab && LAB_R4_REAL=1 INFRX_D_TASK=lab-on node --test tests/r/stack.test.ts",
+      "exit": 0,
+      "seconds": 8.6,
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/research/plan/evidence/e/E4ON-raw-fd0aba04/journey-releases.log"
+    },
+    {
+      "stage": "journey:pipelines",
+      "status": "NOT RUN",
+      "rerun": "cd apps/lab && LAB_P4_REAL=1 INFRX_D_TASK=p1 node --test tests/p/stack.test.ts",
+      "reason": "NOT RUN[WR-LL2-1] its backend binds p2's teacher-fake port (57529); this gate runs only on lab-on's ports"
+    },
+    {
+      "stage": "journey:evaluations",
+      "status": "PASS",
+      "rerun": "cd apps/lab && LAB_B4_REAL=1 INFRX_D_TASK=lab-on node --test tests/b/stack.test.ts",
+      "exit": 0,
+      "seconds": 7.9,
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/research/plan/evidence/e/E4ON-raw-fd0aba04/journey-evaluations.log"
+    },
+    {
+      "stage": "journey:traces",
+      "status": "NOT RUN",
+      "rerun": "cd apps/lab && LAB_V1M_REAL=1 INFRX_D_TASK=lab-v1m node --test tests/v/list/stack.test.ts",
+      "reason": "NOT RUN[WR-LL2-2] its backend reads t2i's ClickHouse (infrx-t2i-clickhouse, the t2i block); this gate runs only on lab-on's ports"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "o01",
+      "title": "the gateway starts with every gateway switch ON on the dedicated runtime login",
+      "status": "PASS",
+      "cases": {
+        "test_o01_the_gateway_is_ready_with_every_switch_on": "PASS"
+      },
+      "reasons": []
+    },
+    {
+      "id": "o02",
+      "title": "the consumer worker starts with TRACE_PUMPS and LAB_EVAL_WORKER ON",
+      "status": "PASS",
+      "cases": {
+        "test_o02_the_consumer_worker_is_ready_with_its_switches_on": "PASS",
+        "test_o02_the_consumer_workers_lab_seam_refuses_by_name": "PASS"
+      },
+      "reasons": []
+    },
+    {
+      "id": "o03",
+      "title": "every Lab worker role starts from its own env (or refuses by name)",
+      "status": "NOT RUN",
+      "cases": {
+        "test_o03_the_eval_role_starts": "PASS",
+        "test_o03_the_checkpoints_role_starts": "PASS",
+        "test_o03_the_judge_role_starts": "PASS",
+        "test_o03_the_annotation_role_starts": "PASS",
+        "test_o03_the_training_role_starts": "NOT RUN",
+        "test_o03_the_rollout_role_starts": "PASS",
+        "test_o03_the_datasets_role_starts": "PASS"
+      },
+      "reasons": [
+        "test_o03_the_training_role_starts: NOT RUN[P-11] lab-training refuses by name until its work source lands (R198/R211): botocore.credentials Found credentials in environment variables. | infrx.lab.workers: refusing to start: INFRX_MODE='lab-training': training has no worker pass: the manual-bundle run is prepared, submitted and finished through the Lab route /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/tests/integration/lab_local/scenarios_on.py:105: NOT RUN[P-11] lab-training refuses by name until its work source lands (R198/R211): botocore.credentials Found credentials in environment vari"
+      ]
+    },
+    {
+      "id": "o04",
+      "title": "the Lab control factory serves a real Lab session",
+      "status": "PASS",
+      "cases": {
+        "test_o04_the_control_factory_serves_a_lab_session": "PASS",
+        "test_o04_the_control_factory_is_ready_on_its_own_login": "PASS"
+      },
+      "reasons": []
+    },
+    {
+      "id": "o05",
+      "title": "every Lab route family answers a real Lab session and refuses a consumer key",
+      "status": "FAIL",
+      "cases": {
+        "test_o05_every_lab_route_family_answers_a_lab_session": "FAIL",
+        "test_o05_the_lab_routes_gateway_serves_every_family": "NOT RUN",
+        "test_o05_the_control_factory_serves_every_family_on_its_own_login": "NOT RUN",
+        "test_o05_a_consumer_key_is_no_lab_session_on_any_family": "PASS"
+      },
+      "reasons": [
+        "test_o05_every_lab_route_family_answers_a_lab_session: AssertionError: route families not serving a Lab session (all switches ON): {'control': '503 {\"refusal\":\"unavailable\"}', 'traces': '503 {\"refusal\":\"unavailable\"}', 'evals': '503 {\"refusal\":\"unavailable\"}', 'pipelines': '503 {\"refusal\":\"unavailable\"}', 'teacher-batches': '503 {\"refusal\":\"unavailable\"}', 'releases': '503 {\"refusal\":\"unavailable\"}', 'optimizations': '503 {\"refusal\":\"unavailable\"}', 'datasets': '503 {\"detail\":\"the datasets service failed\"}'}\nassert not {'control': '503 {\"refusal\":\"unavailable\"}', 'traces': '503 {\"refusal\":\"unavailable\"}', 'evals': '503 {\"refusal\":\"unavailable\"}', ",
+        "test_o05_the_lab_routes_gateway_serves_every_family: NOT RUN[WR-B4-2,WR-LAB2-4,WR-R4-1] typed unavailable until the lane lands: ['evals', 'optimizations', 'pipelines'] /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/tests/integration/lab_local/scenarios_on.py:59: NOT RUN[WR-B4-2,WR-LAB2-4,WR-R4-1] typed unavailable until the lane lands: ['evals', 'optimizations', 'pipelines']",
+        "test_o05_the_control_factory_serves_every_family_on_its_own_login: NOT RUN[WR-B4-2,WR-LAB2-4,WR-P4B-1,WR-R4-1] typed unavailable until the lane lands: ['evals', 'optimizations', 'pipelines', 'teacher-batches'] /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/tests/integration/lab_local/scenarios_on.py:59: NOT RUN[WR-B4-2,WR-LAB2-4,WR-P4B-1,WR-R4-1] typed unavailable until the lane lands: ['evals', 'optimizations', 'pipelines', 'teacher-batches']"
+      ]
+    },
+    {
+      "id": "o06",
+      "title": "the consumer App path serves and settles once with every switch ON",
+      "status": "PASS",
+      "cases": {
+        "test_o06_the_consumer_path_serves_and_settles_once": "PASS"
+      },
+      "reasons": []
+    },
+    {
+      "id": "o07",
+      "title": "the Lab web (production build, https origin) renders each page family signed in",
+      "status": "NOT RUN",
+      "cases": {
+        "test_o07_the_lab_web_renders_every_page_family_signed_in": "NOT RUN"
+      },
+      "reasons": [
+        "test_o07_the_lab_web_renders_every_page_family_signed_in: NOT RUN[WR-B4-2,WR-LAB2-4,WR-R4-1] typed unavailable until the lane lands: ['evals', 'optimizations', 'pipelines'] /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-2/tests/integration/lab_local/scenarios_on.py:59: NOT RUN[WR-B4-2,WR-LAB2-4,WR-R4-1] typed unavailable until the lane lands: ['evals', 'optimizations', 'pipelines']"
+      ]
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e3l.runner.lock",
+    "held": true
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_local/runner.py --out <dir>"
+}

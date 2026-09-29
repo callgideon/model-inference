@@ -125,16 +125,19 @@ def test_lab_local_the_e4_subset_is_the_composition_lanes_regression():
 
 
 def test_lab_local_a_key_pinned_journey_is_not_run_with_its_owners_exact_rerun():
-    """A Lab journey whose backend refuses this key is NOT RUN (never skipped silently or
-    run on another lane's port); an unpinned one runs on lab-on."""
+    """WR-LDP-1 landed: every Lab journey whose backend accepts lab-on runs on it; one whose
+    backend binds another key's resource (p2's teacher-fake port, t2i's ClickHouse) is NOT RUN
+    naming its WR with the owner's exact rerun (never skipped silently or run on that key)."""
     for name, spec in runner.JOURNEYS.items():
         row = runner.journey_row(name, spec)
-        if spec["pinned"]:
+        if spec["foreign"]:
             assert row["status"] == runner.NOT_RUN, name
-            assert f"INFRX_D_TASK={spec['pinned']}" in row["rerun"] and "WR-LDP-1" in row["reason"]
+            assert f"INFRX_D_TASK={spec['key']}" in row["rerun"]
+            assert row["reason"].startswith(f"NOT RUN[{spec['foreign'][0]}] "), name
         else:
             assert row["status"] is None and f"INFRX_D_TASK={runner.KEY}" in row["rerun"]
-    assert runner.JOURNEYS["datasets"]["pinned"] is None
+    assert {n for n, s in runner.JOURNEYS.items() if not s["foreign"]} == \
+        {"datasets", "releases", "evaluations"}
 
 
 def test_lab_local_the_required_cases_are_what_the_scenario_module_defines():
@@ -223,3 +226,148 @@ def test_lab_local_the_control_factory_runs_on_its_own_login_never_the_owner():
     assert dsn.startswith("postgresql://infrx_lab_control:") and dsn != owner
     assert dsn.split("@", 1)[1] == owner.split("@", 1)[1]
     assert len(done) == 1 and "infrx_lab_control" in repr(done[0]) and "login" in repr(done[0])
+
+
+RECORDED = REPO / "research" / "plan" / "evidence" / "e" / "E4ON-raw-28c9c2cc" / "verdict.json"
+R198_CASE = "tests.w.test_worker_main::" \
+    "test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it"
+
+
+def recorded(path: Path = RECORDED) -> tuple[list, dict]:
+    payload = json.loads(path.read_text())
+    return payload["stages"], {entry["id"]: entry for entry in payload["scenarios"]}
+
+
+def test_lab_local_r222_the_recorded_28c9c2cc_verdict_is_not_accepted():
+    """R222/R235 over the recorded E4-ON at 28c9c2cc: o04's login FAIL (LDP-F7), o05 without
+    its control-factory case, the e4-on pins (WR-LDP-5) and the WR-LDP-1 journeys keep it open;
+    o03's refusing roles (product WRs, P-11) and o07's typed-unavailable ports do not."""
+    check = runner.r222(*recorded())
+    assert check["accepted"] is False
+    assert set(check["open"]) == {"o04", "o05", "e4-on", "journey:releases",
+                                  "journey:pipelines", "journey:evaluations", "journey:traces"}
+
+
+def _green() -> tuple[list, dict]:
+    """A verdict where every stage and scenario PASSes (the r222 fixtures edit one thing)."""
+    scenarios = runner.classify(junit(*everything()))
+    stages = [{"stage": name, "status": runner.PASS} for name in
+              ("lab-build", "e4-on", "scenarios", *(f"journey:{j}" for j in runner.JOURNEYS))]
+    return stages, scenarios
+
+
+def test_lab_local_r222_excuses_only_the_ruled_classes():
+    """accepted only when every non-PASS cell is a NOT RUN naming ruled lanes only; any FAIL,
+    BLOCKED, INVALID or an absent required case stays open (R222: no FAIL cell; R234: an
+    in-scope FAIL is never excused). A by-design FAIL (R198, R237) is only reported under
+    by_design until a ruling excuses it (0-LL2C-2)."""
+    stages, scenarios = _green()
+    assert runner.r222(stages, scenarios) == {"accepted": True, "open": {}, "by_design": {}}
+    o03, o05 = runner.REQUIRED["o03"][1], runner.REQUIRED["o05"][0]
+
+    def one(name, kind, message):
+        return runner.classify(junit(*[c for c in everything() if c[0] != name],
+                                     (name, kind, message)))
+    assert runner.r222(stages, one(o03, "skipped", "NOT RUN[WR-B3-3] refuses"))["accepted"]
+    assert runner.r222(stages, one(o03, "skipped", "NOT RUN[P-11] no pass"))["accepted"]
+    for message in ("NOT RUN[WR-ZZZ] unruled", "NOT RUN[WR-B3-3,WR-ZZZ] mixed",
+                    "skipped with no class", "", "BLOCKED[gateway] down"):
+        assert runner.r222(stages, one(o03, "skipped", message))["open"] == \
+            {"o03": runner.classify(junit(*[c for c in everything() if c[0] != o03],
+                                            (o03, "skipped", message)))["o03"]["status"]}
+    assert runner.r222(stages, one(o03, "failure", "AssertionError: x"))["open"] == \
+        {"o03": runner.FAIL}
+    known = runner.r222(stages, one(o05, "failure", "AssertionError: 503 on every family"))
+    assert not known["accepted"] and known["open"] == {"o05": runner.FAIL}   # R222: no FAIL
+    assert known["by_design"] == {o05: runner.BY_DESIGN[o05]}    # reported, pending a ruling
+    dropped = runner.classify(junit(*[c for c in everything() if c[0] != o05]))
+    assert runner.r222(stages, dropped)["open"] == {"o05": runner.NOT_RUN}
+
+
+def test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case():
+    """The e4-on stage's FAIL stays open (R222: no FAIL cell, 0-LL2C-2); it is reported under
+    by_design only when every failed id is R198's (LDP-F4) and nothing was skipped or
+    quarantined - a skip is another key's case that never ran (0-LL2C-1)."""
+    stages, scenarios = _green()
+
+    def e4(failed_ids, status=runner.FAIL, skipped=0, xfailed=0):
+        rows = [row for row in stages if row["stage"] != "e4-on"]
+        return rows + [{"stage": "e4-on", "status": status,
+                        "counts": {"failed_ids": failed_ids, "errors": 0,
+                                   "skipped": skipped, "xfailed": xfailed}}]
+    by_design = runner.r222(e4([R198_CASE]), scenarios)
+    assert by_design == {"accepted": False, "open": {"e4-on": runner.FAIL},
+                         "by_design": {R198_CASE: runner.BY_DESIGN[R198_CASE]}}
+    for extra in ({"skipped": 1}, {"xfailed": 1}):
+        hidden = runner.r222(e4([R198_CASE], **extra), scenarios)
+        assert hidden == {"accepted": False, "open": {"e4-on": runner.FAIL}, "by_design": {}}
+    mixed = runner.r222(e4([R198_CASE, "tests.g.x::test_y"]), scenarios)
+    assert mixed["open"] == {"e4-on": runner.FAIL} and mixed["by_design"] == {}
+    assert runner.r222(e4([]), scenarios)["open"] == {"e4-on": runner.FAIL}
+    assert runner.r222(e4([], runner.BLOCKED), scenarios)["open"] == {"e4-on": runner.BLOCKED}
+
+
+RECORDED_FD = REPO / "research" / "plan" / "evidence" / "e" / "E4ON-raw-fd0aba04" / "verdict.json"
+
+
+def test_lab_local_r222_the_fd0aba04_verdict_stays_open_after_the_journeys_land():
+    """0-LL2C-1/2 over the recorded fd0aba04 run: with WR-LL2-1/2's journeys PASS, the e4-on
+    stage (R198's FAIL + 14 other keys' skips) and o05's by-design FAIL still keep it open."""
+    stages, scenarios = recorded(RECORDED_FD)
+    check = runner.r222(stages, scenarios)
+    assert set(check["open"]) == {"o05", "e4-on", "journey:pipelines", "journey:traces"}
+    for row in stages:
+        if row["stage"].startswith("journey:"):
+            row["status"] = runner.PASS
+    landed = runner.r222(stages, scenarios)
+    assert landed["accepted"] is False and set(landed["open"]) == {"o05", "e4-on"}
+    assert set(landed["by_design"]) == {"test_o05_every_lab_route_family_answers_a_lab_session"}
+
+
+def test_lab_local_the_control_login_answers_as_the_owner_login():
+    """R251/WR-LW8-2: on infrx_lab_control each family answers exactly as the same factory on
+    the owner login; a family that is not 200 is only its pending typed 503 (NOT RUN), never a
+    difference (LCR-F1's shape), a 500 or a typed 503 of a family that is not pending."""
+    lw = world()
+    typed = '503 {"refusal":"unavailable"}'
+    failed = '503 {"detail":"the datasets service failed"}'
+    assert lw.judge_login({"evals": typed}, {"evals": typed}, {"evals"}) == ({}, {"evals": typed})
+    wrong, pending = lw.judge_login({"datasets": failed}, {}, {"datasets"})
+    assert set(wrong) == {"datasets"} and pending == {}
+    assert set(lw.judge_login({"datasets": failed}, {"datasets": failed}, {"datasets"})[0]) \
+        == {"datasets"}
+    assert set(lw.judge_login({"control": typed}, {"control": typed}, {"evals"})[0]) == {"control"}
+
+
+def test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers(tmp_path, monkeypatch):
+    """o07 at 1a5be321/950a570b: `next start` was ready in 125 ms while the TLS terminator had
+    not bound its port yet (ConnectError). The Lab web is ready only when its https origin
+    answers through the terminator too, not only its loopback http."""
+    import contextlib
+    import types
+    lw = world()
+    (tmp_path / "apps" / "lab" / ".next").mkdir(parents=True)
+    (tmp_path / "apps" / "lab" / ".next" / "BUILD_ID").write_text("x")
+    monkeypatch.setattr(lw.harness, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(lw, "spawn", lambda *a, **k: types.SimpleNamespace(stop=lambda: None))
+    monkeypatch.setattr(lw, "lab_tls", lambda workdir: contextlib.nullcontext(lw.LAB_ORIGIN))
+    waited = []
+    monkeypatch.setattr(lw, "wait_ready", lambda proc, url, timeout=60.0, verify=True:
+                        waited.append((url, verify)))
+    with lw.lab_web(tmp_path, "http://gw", "http://sb") as web:
+        assert web.why is None
+    assert (f"{lw.LAB_ORIGIN}/", False) in waited, waited
+
+
+def test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty(tmp_path, monkeypatch):
+    """The verdict dir lives under research/plan/evidence (make lab-local): the run's own
+    output is not a dirty tree (every earlier verdict said dirty: true); anything else is."""
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    monkeypatch.setattr(runner, "REPO", tmp_path)
+    raw = tmp_path / "research" / "plan" / "evidence" / "e" / "E4ON-raw-x"
+    raw.mkdir(parents=True)
+    (raw / "verdict.json").write_text("{}")
+    assert runner.pins()["dirty"] is False
+    (tmp_path / "stray.py").write_text("")
+    assert runner.pins()["dirty"] is True
