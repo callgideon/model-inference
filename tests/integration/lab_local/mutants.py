@@ -72,6 +72,10 @@ AS_OWNER = "test_lab_local_the_control_login_answers_as_the_owner_login"
 TLS_READY = "test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers"
 PIN_CLEAN = "test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty"
 JOURNEY_ENV = "test_lab_local_pipelines_and_traces_run_on_this_blocks_teacher_and_clickhouse"
+KEYED = "test_lab_local_an_e4_skip_on_another_key_runs_on_that_key_or_is_not_run_by_name"
+KEY_FREE = "test_lab_local_a_key_is_free_only_with_its_ports_unbound_and_its_lock_free"
+KEYED_B9 = "test_lab_local_every_e4_skip_at_b94fd337_is_planned_on_its_key"
+KEYED_AUX = "test_lab_local_a_keyed_stack_that_fails_to_start_is_removed_and_recorded"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("a_switch_left_off", "EVERY switch is ON in the composition", W,
@@ -132,26 +136,74 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("r222_absent_required_ignored", "a scenario missing a required case stays open", R,
        " or \\\n                set(REQUIRED[sid]) - set(cases):", ":", R222_CLASSES, R222_RECORDED),
     _m("r222_e4_any_failure_excused", "only the by-design e4-on failure is reported as such", R,
-       "and set(failed) <= set(BY_DESIGN)", "", R222_E4),
-    _m("r222_e4_skips_ignored", "an e4-on stage with skipped cases is never reported as only "
-       "its by-design FAIL (0-LL2C-1)", R,
-       "                and not (counts.get(\"skipped\") or counts.get(\"xfailed\")):",
-       "                and True:", R222_E4),
-    _m("r222_by_design_accepted", "a by-design FAIL stays open until ruled (R222, 0-LL2C-2)",
-       R, "                excused[name] = BY_DESIGN[name]\n",
-       "                excused[name] = BY_DESIGN[name]\n                return True\n",
-       R222_CLASSES, R222_FD),
-    _m("r222_e4_by_design_accepted", "the e4-on by-design FAIL stays open until ruled "
-       "(0-LL2C-2)", R, "            excused.update({case: why for case, why in "
-       "BY_DESIGN.items() if case in failed})\n",
-       "            excused.update({case: why for case, why in BY_DESIGN.items() if case in "
-       "failed})\n            continue\n", R222_E4, R222_FD),
+       "and all(by_design(case, failures.get(case)) for case in failed)", "and True", R222_E4),
+    _m("r222_e4_skips_ignored", "an e4-on stage with a case skipped and not run on its key is "
+       "never reported as only its by-design FAIL (0-LL2C-1, R257)", R,
+       '                and set(stage.get("skipped_ids") or ()) <= ran \\\n',
+       "                and True \\\n", R222_E4),
+    _m("r222_e4_unnamed_skips_ignored", "a skip the verdict counts but does not name keeps "
+       "e4-on open", R, 'and len(stage.get("skipped_ids") or ()) == counts.get("skipped", 0):',
+       "and True:", R222_E4),
+    _m("r222_by_design_accepted", "a by-design FAIL stays in open, reported (R257, 0-LL2C-2)",
+       R, '            still[sid] = entry["status"]\n            excused.update(found)',
+       "            excused.update(found)", R222_CLASSES),
+    _m("r222_e4_by_design_accepted", "the e4-on by-design FAIL stays in open, reported (R257)",
+       R, "            only.add(name)\n", "            only.add(name)\n            continue\n",
+       R222_E4),
+    _m("r222_e4_empty_failed_accepted", "an e4-on FAIL with no failed ids is never accepted "
+       "(0-LL3R-2)", R, "and status == FAIL and failed \\", "and status == FAIL \\", R222_E4),
     _m("r222_e4_errors_ignored", "an e4-on stage with an error is never reported as only its "
        "by-design FAIL (LL2C-4)", R, 'and not counts.get("errors")', "and True", R222_E4),
+    _m("r222_any_refusal_text", "a by-design FAIL counts only on its recorded refusal text "
+       "(R257: another traceback stays open)", R,
+       "    return case in REFUSAL and bool(REFUSAL[case].fullmatch(message or \"\"))",
+       "    return case in REFUSAL", R222_CLASSES, R222_E4),
+    _m("r222_r198_text_drifted", "R198's pinned text is the recorded one", R,
+       'r"a dev target source \\(WR-B-3\\)", re.S),', 'r"a dev target source", re.S),',
+       R222_FD),
+    _m("r222_o05_text_drifted", "R237's pinned text is the recorded one", R,
+       '"optimizations")) +', '"optimizations", "datasets")) +', R222_CLASSES, R222_FD),
+    _m("r222_by_design_never_accepted", "only-by-design cells accept the gate (R257)", R,
+       "            only.add(sid)\n", "", R222_CLASSES, R222_FD),
+    _m("r222_e4_by_design_never_accepted", "an e4-on stage with only R198's FAIL accepts "
+       "(R257)", R, "            only.add(name)\n        still", "        still", R222_E4,
+       R222_FD),
+    _m("keyed_key_env_dropped", "a keyed case runs on its own key (INFRX_D_TASK)", R,
+       '                                        {**env, **plan["env"]}, 1800)',
+       "                                        env, 1800)", KEYED),
+    _m("keyed_held_key_used", "a held key is NOT RUN[KEY-HELD], never run over", R,
+       "        if held:\n", "        if False:\n", KEYED),
+    _m("keyed_verdict_asserted", "a keyed rerun passes only when each case ran and passed", R,
+       "        status, reason = pytest_verdict(code, counts)\n        rows.append",
+       "        status, reason = PASS, \"\"\n        rows.append", KEYED),
+    _m("keyed_aux_not_started", "t2i/t2f's ClickHouse/S3 are started for their cases", R,
+       "            aux(key, started)\n", "            pass\n", KEYED),
+    _m("keyed_aux_failure_leaks", "a container started before a later start fails is removed "
+       "(0-LL3R-1)", R, "        started.append(svc.container)\n", "", KEYED_AUX),
+    _m("keyed_aux_failure_aborts", "a keyed stack that fails to start is an INVALID row, not an "
+       "abort before verdict.json (0-LL3R-1)", R, "        except Exception as error:",
+       "        except KeyError as error:", KEYED_AUX),
+    _m("keyed_t2i_stack_unset", "t2i's case reads its ClickHouse only with "
+       "INFRX_LAB_API_STACK=1", R, '("t2i", {"INFRX_LAB_API_STACK": "1"})', '("t2i", {})',
+       KEYED),
+    _m("keyed_empty_params_rerun", "an empty parameter set is no skip to rerun (gates)", R,
+       "                    and not message.startswith(gates.EMPTY_PARAMS):", ":", KEYED),
+    _m("keyed_unlisted_rerun", "only KEYED modules are rerun", R,
+       "        if module in KEYED:\n            key, env = KEYED[module]",
+       "        if True:\n            key, env = KEYED.get(module, (\"d1\", {}))", KEYED),
+    _m("keyed_decide_unplanned", "composition-7's decide case runs on r1 (b94fd337's 15th "
+       "skip)", R, '    "tests.w.test_lab_workers_decide_pg": ("r1", {"INFRX_D_TASK": "r1"}),', "",
+       KEYED_B9),
+    _m("key_port_unprobed", "a key whose port is bound is another lane's", R,
+       '                    return f"{key}\'s {name} port {svc.host_port} is bound"',
+       "                    pass", KEY_FREE),
+    _m("key_lock_unprobed", "a key whose harness lock is held is another lane's", R,
+       '                        return f"{lock} is held"', "                        pass",
+       KEY_FREE),
     _m("r222_stages_ignored", "a stage that did not pass keeps the gate open", R,
        "        still[name] = status\n", "        pass\n", R222_E4, R222_RECORDED),
     _m("r222_always_accepted", "accepted is computed, never asserted", R,
-       '{"accepted": not still,', '{"accepted": True,', R222_CLASSES, R222_RECORDED),
+       '{"accepted": set(still) <= only,', '{"accepted": True,', R222_CLASSES, R222_RECORDED),
     _m("login_judged_alone", "the Lab login answers as the owner login (R251)", W,
        "for f in set(login) | set(owner) if login.get(f) != owner.get(f)}",
        "for f in set(login) | set(owner) if False}", AS_OWNER),
@@ -304,6 +356,10 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
         recorded = f"research/plan/evidence/e/E4ON-raw-{head}/verdict.json"
         (root / recorded).parent.mkdir(parents=True)
         shutil.copy2(REPO / recorded, root / recorded)
+    for head in ("fd0aba04", "b94fd337"):                         # KEYED, R222_FD, KEYED_B9
+        xml = f"research/plan/evidence/e/E4ON-raw-{head}/e4-on.xml"
+        (root / xml).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO / xml, root / xml)
     return root
 
 

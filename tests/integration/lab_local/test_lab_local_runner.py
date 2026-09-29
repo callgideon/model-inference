@@ -12,6 +12,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 if str(REPO / "apps" / "infrx-api") not in sys.path:      # `infrx`, as harness.api_on_path
@@ -41,8 +43,10 @@ BLOCK_STUB = types.SimpleNamespace(TEACHER_PORT=57062,
 
 def junit(*cases: tuple[str, str, str]) -> str:
     """(name, kind, message): kind '' pass, 'failure', 'error', 'skipped', 'xfail'."""
+    from xml.sax.saxutils import escape
     body = []
     for name, kind, message in cases:
+        message = escape(message, {'"': "&quot;", "\n": "&#10;"})
         inner = ""
         if kind == "xfail":
             inner = f'<skipped type="pytest.xfail" message="{message}"/>'
@@ -258,6 +262,16 @@ def test_lab_local_the_control_factory_runs_on_its_own_login_never_the_owner():
 RECORDED = REPO / "research" / "plan" / "evidence" / "e" / "E4ON-raw-28c9c2cc" / "verdict.json"
 R198_CASE = "tests.w.test_worker_main::" \
     "test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it"
+R198_REFUSAL = ("RuntimeError: the worker exited 2: 2026-09-29 20:53:22,992 INFO botocore.credentials"
+                " Found credentials in environment variables. | infrx.worker: refusing to "
+                "start: INFRX_MODE='pilot': LAB_EVAL_WORKER needs an evaluator source "
+                "(WR-B-2(b)) and a dev target source (WR-B-3)")
+O05_REFUSAL = ("AssertionError: route families not serving a Lab session (all switches ON): "
+               "{" + ", ".join(f"'{f}': '503 {{\"refusal\":\"unavailable\"}}'" for f in
+                               ("control", "traces", "evals", "pipelines", "teacher-batches",
+                                "releases", "optimizations"))
+               + ", 'datasets': '503 {\"detail\":\"the datasets service failed\"}'}"
+               + "\nassert not {'control': ...}")
 
 
 def recorded(path: Path = RECORDED) -> tuple[list, dict]:
@@ -304,33 +318,54 @@ def test_lab_local_r222_excuses_only_the_ruled_classes():
                                             (o03, "skipped", message)))["o03"]["status"]}
     assert runner.r222(stages, one(o03, "failure", "AssertionError: x"))["open"] == \
         {"o03": runner.FAIL}
-    known = runner.r222(stages, one(o05, "failure", "AssertionError: 503 on every family"))
-    assert not known["accepted"] and known["open"] == {"o05": runner.FAIL}   # R222: no FAIL
-    assert known["by_design"] == {o05: runner.BY_DESIGN[o05]}    # reported, pending a ruling
+    other = runner.r222(stages, one(o05, "failure", "AssertionError: 503 on every family"))
+    assert other == {"accepted": False, "open": {"o05": runner.FAIL}, "by_design": {}}  # R257
+    known = runner.r222(stages, one(o05, "failure", O05_REFUSAL))
+    assert known["open"] == {"o05": runner.FAIL}        # R257: reported, never a PASS ...
+    assert known["by_design"] == {o05: runner.BY_DESIGN[o05]} and known["accepted"]   # ... ok
     dropped = runner.classify(junit(*[c for c in everything() if c[0] != o05]))
     assert runner.r222(stages, dropped)["open"] == {"o05": runner.NOT_RUN}
 
 
 def test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case():
-    """The e4-on stage's FAIL stays open (R222: no FAIL cell, 0-LL2C-2); it is reported under
-    by_design only when every failed id is R198's (LDP-F4) and nothing was skipped or
-    quarantined - a skip is another key's case that never ran (0-LL2C-1)."""
+    """R257: the e4-on stage's FAIL stays in open and is reported under by_design only when
+    every failed id is R198's with its recorded refusal text (a traceback in the same case
+    stays open), nothing errored or was quarantined, and every skipped case ran on its own key
+    (an `e4-on@<key>` row); the gate is then accepted. A key-held row is no ruled class."""
     stages, scenarios = _green()
 
-    def e4(failed_ids, status=runner.FAIL, skipped=0, xfailed=0, errors=0):
+    def e4(failed_ids, status=runner.FAIL, skipped=(), xfailed=0, errors=0, text=R198_REFUSAL,
+           keyed=()):
         rows = [row for row in stages if row["stage"] != "e4-on"]
         return rows + [{"stage": "e4-on", "status": status,
                         "counts": {"failed_ids": failed_ids, "errors": errors,
-                                   "skipped": skipped, "xfailed": xfailed}}]
+                                   "skipped": len(skipped), "xfailed": xfailed},
+                        "skipped_ids": list(skipped),
+                        "failures": {case: text for case in failed_ids}}, *keyed]
     by_design = runner.r222(e4([R198_CASE]), scenarios)
-    assert by_design == {"accepted": False, "open": {"e4-on": runner.FAIL},
+    assert by_design == {"accepted": True, "open": {"e4-on": runner.FAIL},
                          "by_design": {R198_CASE: runner.BY_DESIGN[R198_CASE]}}
-    for extra in ({"skipped": 1}, {"xfailed": 1}, {"errors": 1}):     # LL2C-4: an error too
+    for extra in ({"skipped": ["tests.g.x::test_y"]}, {"xfailed": 1}, {"errors": 1},  # LL2C-4
+                  {"text": "RuntimeError: the worker exited 1: Traceback (most recent call"}):
         hidden = runner.r222(e4([R198_CASE], **extra), scenarios)
         assert hidden == {"accepted": False, "open": {"e4-on": runner.FAIL}, "by_design": {}}
+    skip = "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__x"
+    ran = {"stage": "e4-on@b1", "status": runner.PASS, "cases": [skip]}
+    assert runner.r222(e4([R198_CASE], skipped=[skip], keyed=[ran]), scenarios)["accepted"]
+    held = {**ran, "status": runner.NOT_RUN, "reason": "NOT RUN[KEY-HELD] b1's lock is held"}
+    kept = runner.r222(e4([R198_CASE], skipped=[skip], keyed=[held]), scenarios)
+    assert kept["accepted"] is False and \
+        kept["open"] == {"e4-on": runner.FAIL, "e4-on@b1": runner.NOT_RUN}
+    unnamed = e4([R198_CASE])            # a skip the verdict counts but does not name
+    unnamed[-1]["counts"]["skipped"] = 1
+    assert not runner.r222(unnamed, scenarios)["accepted"]
+    elsewhere = {**ran, "cases": ["tests.w.other::test_z"]}
+    assert not runner.r222(e4([R198_CASE], skipped=[skip], keyed=[elsewhere]),
+                           scenarios)["accepted"]
     mixed = runner.r222(e4([R198_CASE, "tests.g.x::test_y"]), scenarios)
     assert mixed["open"] == {"e4-on": runner.FAIL} and mixed["by_design"] == {}
-    assert runner.r222(e4([]), scenarios)["open"] == {"e4-on": runner.FAIL}
+    assert runner.r222(e4([]), scenarios) == {"accepted": False,                # 0-LL3R-2
+                                              "open": {"e4-on": runner.FAIL}, "by_design": {}}
     assert runner.r222(e4([], runner.BLOCKED), scenarios)["open"] == {"e4-on": runner.BLOCKED}
 
 
@@ -349,6 +384,16 @@ def test_lab_local_r222_the_fd0aba04_verdict_stays_open_after_the_journeys_land(
     landed = runner.r222(stages, scenarios)
     assert landed["accepted"] is False and set(landed["open"]) == {"o05", "e4-on"}
     assert set(landed["by_design"]) == {"test_o05_every_lab_route_family_answers_a_lab_session"}
+    # R257 over the recorded texts: with the 14 skips run on their keys, only the by-design
+    # FAILs stay (the pinned refusal texts are the recorded ones).
+    e4 = next(row for row in stages if row["stage"] == "e4-on")
+    skipped, failures = runner.outcomes(RECORDED_FD.parent / "e4-on.xml")
+    e4.update(skipped_ids=skipped, failures=failures)
+    stages += [{"stage": f"e4-on@{key}", "status": runner.PASS, "cases": plan["cases"]}
+               for key, plan in runner.keyed_plan(skipped).items()]
+    ran = runner.r222(stages, scenarios)
+    assert ran["accepted"] is True and set(ran["open"]) == {"o05", "e4-on"}
+    assert set(ran["by_design"]) == set(runner.BY_DESIGN)
 
 
 def test_lab_local_the_control_login_answers_as_the_owner_login():
@@ -412,3 +457,137 @@ def test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty(tmp_path, mo
     (evidence / "E4ON-x.md").unlink()
     (tmp_path / "stray.py").write_text("")
     assert runner.pins(raw)["dirty"] is True
+
+
+RECORDED_FD_XML = RECORDED_FD.parent / "e4-on.xml"
+#: fd0aba04's 14 e4-on skips by the key each one names (`INFRX_D_TASK=`, t2i's ClickHouse).
+FD_KEYS = {"b1": 4, "b3": 1, "p1": 1, "p2": 3, "r2": 2, "j2": 1, "t2i": 1, "t2f": 1}
+
+
+def test_lab_local_an_e4_skip_on_another_key_runs_on_that_key_or_is_not_run_by_name(
+        tmp_path, monkeypatch):
+    """The 14 cases fd0aba04's e4-on skipped for another lane's key are rerun on that key with
+    every switch ON (its own harness starts its PostgreSQL; t2i/t2f's ClickHouse/S3 here),
+    exactly those node ids; a held key is NOT RUN[KEY-HELD] with the exact rerun, never run on
+    it; a skip of an unlisted module is not planned (it stays open); never d1/e8l/l3."""
+    skipped, failures = runner.outcomes(RECORDED_FD_XML)
+    assert len(skipped) == 14 and set(failures) == {R198_CASE}      # empty params excluded
+    assert failures[R198_CASE].startswith("RuntimeError: the worker exited 2: ")
+    plan = runner.keyed_plan([*skipped, "tests.g.unlisted::test_x"])
+    assert {key: len(p["cases"]) for key, p in plan.items()} == FD_KEYS
+    assert sorted(c for p in plan.values() for c in p["cases"]) == sorted(skipped)
+    for key, p in plan.items():
+        want = {} if key == "t2i" else {"INFRX_D_TASK": key}
+        assert {k: v for k, v in p["env"].items() if k == "INFRX_D_TASK"} == want, key
+        assert p["nodes"] == [runner.node(c) for c in p["cases"]]
+        assert all(n.startswith("tests/") and ".py::test_" in n for n in p["nodes"])
+    assert plan["t2i"]["env"] == {"INFRX_LAB_API_STACK": "1"}
+    assert plan["t2f"]["env"] == {"INFRX_D_TASK": "t2f", "INFRX_T2F_STACK": "1"}
+    assert not {"d1", "e8l", "l3", runner.KEY} & {key for key, _ in runner.KEYED.values()}
+
+    runs, started = {}, []
+
+    def logged(name, argv, out, cwd, env, timeout):
+        runs[name] = (argv, env)
+        junit = next(a.split("=", 1)[1] for a in argv if a.startswith("--junitxml="))
+        Path(junit).write_text(junit_file(argv))
+        return 0, 0.0, out / f"{name}.log"
+    monkeypatch.setattr(runner, "logged", logged)
+    monkeypatch.setattr(runner, "key_held", lambda key, wait_s=0: "t2f's lock is held"
+                        if key == "t2f" else None)
+    monkeypatch.setattr(runner, "aux", lambda key, into: started.append(key))
+    rows = {row["stage"]: row for row in
+            runner.e4_keyed(tmp_path, {"INFRX_D_TASK": runner.KEY, "LAB_X": "true"}, skipped)}
+    assert set(rows) == {f"e4-on@{key}" for key in FD_KEYS}
+    held = rows["e4-on@t2f"]
+    assert held["status"] == runner.NOT_RUN and "e4-on@t2f" not in {f"e4-on@{k}" for k in runs}
+    assert held["reason"] == "NOT RUN[KEY-HELD] t2f's lock is held"
+    assert held["rerun"].startswith("cd apps/infrx-api && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 ")
+    assert held["rerun"].endswith(" ".join(plan["t2f"]["nodes"]))
+    assert set(runs) == {f"e4-on@{key}" for key in FD_KEYS if key != "t2f"}
+    for key in set(FD_KEYS) - {"t2f"}:
+        argv, env = runs[f"e4-on@{key}"]
+        assert argv[-len(plan[key]["nodes"]):] == plan[key]["nodes"], key
+        assert env["LAB_X"] == "true" and env["INFRX_D_TASK"] == \
+            plan[key]["env"].get("INFRX_D_TASK", runner.KEY)
+        assert rows[f"e4-on@{key}"]["status"] == \
+            (runner.BLOCKED if key == "j2" else runner.PASS), key   # a skip on its key too
+    assert sorted(started) == sorted(set(FD_KEYS) - {"t2f"})
+
+
+
+def test_lab_local_a_keyed_stack_that_fails_to_start_is_removed_and_recorded(
+        tmp_path, monkeypatch):
+    """0-LL3R-1: when t2i's second `docker run` fails, the ClickHouse already started is removed
+    (never left to hold the key forever) and the stage is an INVALID[harness] row, not an
+    exception that aborts the gate before verdict.json is written."""
+    import subprocess
+    import httpx
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if argv[:2] == ["docker", "run"] and sum(c[:2] == ["docker", "run"] for c in calls) == 2:
+            raise subprocess.CalledProcessError(125, argv, stderr=b"port is already allocated")
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+    monkeypatch.setattr(runner.subprocess, "run", run)
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: types.SimpleNamespace(status_code=200))
+    monkeypatch.setattr(runner, "key_held", lambda key, wait_s=0: None)
+    monkeypatch.setattr(runner, "logged", lambda *a, **k: pytest.fail("ran without its stack"))
+    try:
+        rows = runner.e4_keyed(tmp_path, {}, ["tests.g.lab_traces.test_lab_traces_stack::test_x"])
+    except subprocess.CalledProcessError as escaped:
+        rows = [{"stage": "escaped", "status": repr(escaped)}]  # asserted below, not raised
+    first = calls[0][calls[0].index("--name") + 1]
+    assert ["docker", "rm", "-f", "-v", first] in calls
+    assert [r["stage"] for r in rows] == ["e4-on@t2i"] and rows[0]["status"] == runner.INVALID
+    assert rows[0]["reason"].startswith("INVALID[harness] ") and "CalledProcessError" in \
+        rows[0]["reason"] and rows[0]["rerun"]
+
+def junit_file(argv) -> str:
+    """A passing junit for the node ids in argv (classname as pytest writes it)."""
+    cases = [a for a in argv if "::" in a]
+    body = "".join(f'<testcase classname="{c.split("::")[0][:-3].replace("/", ".")}" '
+                   f'name="{c.split("::")[1]}">'
+                   + ('<skipped message="x"/>' if "judge" in c else "")      # j2: skipped
+                   + '</testcase>' for c in cases)
+    return f"<testsuites><testsuite>{body}</testsuite></testsuites>"
+
+
+def test_lab_local_a_key_is_free_only_with_its_ports_unbound_and_its_lock_free(tmp_path):
+    """A key is used only when free: a bound port or a held harness lock (/tmp/<container>-
+    <port>.lock, pgharness's) is the lane's, and the case is NOT RUN, never run over it."""
+    import fcntl
+    import socket
+    Service = types.SimpleNamespace
+    with socket.socket() as bound:
+        bound.bind(("127.0.0.1", 0))
+        bound.listen()
+        port = bound.getsockname()[1]
+        busy = {"postgres": Service(host_port=port, container=f"infrx-lltest{os.getpid()}-pg")}
+        assert "port" in (runner.key_held("lltest", services=busy) or "")
+    free = {"postgres": Service(host_port=port, container=f"infrx-lltest{os.getpid()}-pg")}
+    assert runner.key_held("lltest", services=free) is None
+    lock = Path("/tmp") / f"infrx-lltest{os.getpid()}-pg-{port}.lock"
+    try:
+        with lock.open("w") as held:
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            assert "lock" in (runner.key_held("lltest", services=free) or "")
+        assert runner.key_held("lltest", services=free) is None
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+RECORDED_B9 = REPO / "research" / "plan" / "evidence" / "e" / "E4ON-raw-b94fd337"
+
+
+def test_lab_local_every_e4_skip_at_b94fd337_is_planned_on_its_key():
+    """b94fd337's e4-on skipped 15 cases: fd0aba04's 14 plus composition-7's
+    `test_lab_workers_decide_pg` (r2|r1, planned on r1: r2 is the busier key); every one is
+    planned on a key, so no skip is left open for want of a KEYED line."""
+    skipped, failures = runner.outcomes(RECORDED_B9 / "e4-on.xml")
+    plan = runner.keyed_plan(skipped)
+    assert len(skipped) == 15 and sorted(c for p in plan.values() for c in p["cases"]) == \
+        sorted(skipped)
+    assert plan["r1"]["env"] == {"INFRX_D_TASK": "r1"} and len(plan["r1"]["cases"]) == 1
+    assert plan["r1"]["cases"][0].startswith("tests.w.test_lab_workers_decide_pg::")

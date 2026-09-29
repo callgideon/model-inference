@@ -10,7 +10,9 @@
    through run.py's preflight/services/migrate. `--reuse` keeps a stack `--keep` left.
 2. **lab-build**: `pnpm build` in apps/lab with the composition's public names inlined.
 3. **e4-on**: the consumer E4 subset (tests/g tests/w tests/contracts tests/i/test_packaging.py)
-   with every switch ON in its environment, the D harness on `lab-on`, MinIO the stack's.
+   with every switch ON in its environment, the D harness on `lab-on`, MinIO the stack's. A
+   case skipped only for another lane's key (`KEYED`) reruns on that key with the same
+   switches (`e4-on@<key>`) when the key is free, else NOT RUN[KEY-HELD] with its rerun.
 4. **scenarios**: `scenarios_on.py` over the composition (`lab_world.composition`): the
    gateway + consumer worker + every Lab worker role + the control factory + the Lab web, every
    switch ON; each route family smoked with a real Lab session; the consumer path still serves.
@@ -32,6 +34,8 @@ import fcntl
 import json
 import os
 import re
+import shlex
+import socket
 import subprocess
 import sys
 import time
@@ -125,6 +129,42 @@ BY_DESIGN = {
     "test_o05_every_lab_route_family_answers_a_lab_session":
         "R237/R245 (LDP-F1 (b)): the all-switches App gateway is never the box's Lab server",
 }
+#: R257: a by-design FAIL is reported only on its recorded refusal text (a crash or another
+#: traceback in the same case stays open, never by_design): R198's at fd0aba04 (e4-on.log),
+#: R237's o05 message at fd0aba04 (scenarios.xml), each family's typed 503 on infrx_runtime.
+REFUSAL = {
+    "tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_"
+    "waits_for_it": re.compile(
+        r"RuntimeError: the worker exited 2: .*\| infrx\.worker: refusing to start: "
+        r"INFRX_MODE='pilot': LAB_EVAL_WORKER needs an evaluator source \(WR-B-2\(b\)\) and "
+        r"a dev target source \(WR-B-3\)", re.S),
+    "test_o05_every_lab_route_family_answers_a_lab_session": re.compile(re.escape(
+        "AssertionError: route families not serving a Lab session (all switches ON): {" +
+        ", ".join(f"'{f}': '503 {{\"refusal\":\"unavailable\"}}'" for f in
+                  ("control", "traces", "evals", "pipelines", "teacher-batches", "releases",
+                   "optimizations")) +
+        ", 'datasets': '503 {\"detail\":\"the datasets service failed\"}'}") + r"(\n.*)?",
+        re.S),
+}
+#: fd0aba04's e4-on skips: cases that run only on another lane's tasklocal key, by module ->
+#: (the key, what the case reads to run on it). Their own harness starts the key's PostgreSQL
+#: (pgharness, under the key's port lock); the key's ClickHouse/S3 are started here (`aux`).
+#: An unlisted module's skip is never rerun: it stays open. Never d1, e8l or l3 (other lanes').
+KEYED = {
+    "tests.g.lab_evaluations.test_lab_evaluations_pg": ("b3", {"INFRX_D_TASK": "b3"}),
+    "tests.g.lab_pipelines.test_lab_pipelines_pg": ("p1", {"INFRX_D_TASK": "p1"}),
+    "tests.g.lab_pipelines.test_lab_teachers_composition_pg": ("p2", {"INFRX_D_TASK": "p2"}),
+    "tests.g.lab_pipelines.test_lab_teachers_pg": ("p2", {"INFRX_D_TASK": "p2"}),
+    "tests.w.test_lab_workers_teachers_pg": ("p2", {"INFRX_D_TASK": "p2"}),
+    "tests.g.lab_releases.test_lab_releases_composition_pg": ("r2", {"INFRX_D_TASK": "r2"}),
+    "tests.g.lab_releases.test_lab_releases_pg": ("r2", {"INFRX_D_TASK": "r2"}),
+    "tests.w.test_lab_workers_decide_pg": ("r1", {"INFRX_D_TASK": "r1"}),   # r2|r1 (b94fd337)
+    "tests.w.test_lab_workers_judge_pg": ("j2", {"INFRX_D_TASK": "j2"}),
+    "tests.w.test_worker_lab_eval_pg": ("b1", {"INFRX_D_TASK": "b1"}),
+    "tests.g.lab_traces.test_lab_traces_stack": ("t2i", {"INFRX_LAB_API_STACK": "1"}),
+    "tests.w.test_worker_traces_pg": ("t2f", {"INFRX_D_TASK": "t2f", "INFRX_T2F_STACK": "1"}),
+}
+KEY_WAIT_S = float(os.environ.get("INFRX_LAB_LOCAL_KEY_WAIT_S", "900"))
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>o\d\d)_")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[")
@@ -223,35 +263,54 @@ def ruled(reason: str) -> bool:
     return bool(found) and set(found.group(1).split(",")) <= set(OUT_OF_SCOPE)
 
 
+def by_design(case: str, message: str) -> bool:
+    """R257: a BY_DESIGN case failing with its recorded refusal text, nothing else."""
+    return case in REFUSAL and bool(REFUSAL[case].fullmatch(message or ""))
+
+
 def r222(stages: list[dict], scenarios: dict) -> dict:
-    """R222/R235: accepted locally with nothing but PASS or a NOT RUN whose every reason names
-    only out-of-scope lanes. `open` = what keeps it from acceptance: every FAIL (R222: no FAIL
-    cell; R234), BLOCKED, INVALID or unruled NOT RUN; `by_design` = the open FAILs that are
-    exactly a BY_DESIGN case, with the design they follow - reported, never excused."""
-    still, excused = {}, {}
+    """R222/R235/R257: accepted locally when `open` holds nothing but by-design cells. `open` =
+    every FAIL (R222: no FAIL cell; R234), BLOCKED, INVALID or unruled NOT RUN cell - a
+    by-design FAIL is reported there, never excused into PASS; `by_design` = the FAILs that
+    are exactly a BY_DESIGN case on its recorded refusal text. A cell is by-design only when
+    nothing else in it is open; e4-on's skips count only when each ran on its key (KEYED)."""
+    still, excused, only = {}, {}, set()
     for sid, entry in scenarios.items():
+        found = {}
+
         def fine(name: str, status: str) -> bool:
             mine = [r for r in entry["reasons"] if r.startswith(f"{name}: ")]
-            if status == FAIL and name in BY_DESIGN:
-                excused[name] = BY_DESIGN[name]
+            if status == FAIL and mine and by_design(name, mine[0][len(name) + 2:]):
+                found[name] = BY_DESIGN[name]
+                return True
             return status == PASS or (status == NOT_RUN and bool(mine)
                                       and all(ruled(r) for r in mine))
         cases = entry["cases"]
         if not all([fine(name, status) for name, status in cases.items()]) or \
                 set(REQUIRED[sid]) - set(cases):
             still[sid] = entry["status"]
+        elif found:
+            still[sid] = entry["status"]
+            excused.update(found)
+            only.add(sid)
+    ran = {case for stage in stages if stage["stage"].startswith("e4-on@")
+           for case in stage.get("cases", ())}
     for stage in stages:
         name, status = stage["stage"], stage["status"]
         if (name == "scenarios" and scenarios) or status == PASS or (status == NOT_RUN and ruled(stage.get("reason"))):
             continue
         counts = stage.get("counts") or {}
         failed = counts.get("failed_ids") or []
-        if name == "e4-on" and status == FAIL and set(failed) <= set(BY_DESIGN) \
-                and not counts.get("errors") \
-                and not (counts.get("skipped") or counts.get("xfailed")):   # 0-LL2C-1
-            excused.update({case: why for case, why in BY_DESIGN.items() if case in failed})
+        failures = stage.get("failures") or {}
+        if name == "e4-on" and status == FAIL and failed \
+                and all(by_design(case, failures.get(case)) for case in failed) \
+                and not counts.get("errors") and not counts.get("xfailed") \
+                and set(stage.get("skipped_ids") or ()) <= ran \
+                and len(stage.get("skipped_ids") or ()) == counts.get("skipped", 0):
+            excused.update({case: BY_DESIGN[case] for case in failed})
+            only.add(name)
         still[name] = status
-    return {"accepted": not still, "open": still, "by_design": excused}
+    return {"accepted": set(still) <= only, "open": still, "by_design": excused}
 
 
 def blocked_all(why: str) -> list[dict]:
@@ -307,9 +366,8 @@ def lab_build(out: Path, lab_world) -> dict:
             "build_id": build.read_text().strip() if code == 0 and build.exists() else None}
 
 
-def e4_on(out: Path, lab_world) -> dict:
-    """The E4 subset with every switch ON (and what each needs on this stack) in its env."""
-    junit = out / "e4-on.xml"
+def e4_env(out: Path, lab_world) -> dict:
+    """Every switch ON (and what each needs on this stack) - the e4-on and e4-on@<key> env."""
     spool = out / "e4-on-spool"
     spool.mkdir(exist_ok=True)
     from infrx.contracts.tasklocal import local_services
@@ -321,6 +379,31 @@ def e4_on(out: Path, lab_world) -> dict:
            "INFRX_M_S3_ENDPOINT": lab_world.harness.s3_endpoint(), "INFRX_M_S3_LOCAL_CREDS": "1",
            "INFRX_M_S3_BUCKET": lab_world.stack.media_bucket()}   # the n-track's objects (else infrx-n1)
     env.pop("INFRX_E2_NAMESPACE", None)          # the suites use their own harnesses
+    return env
+
+
+def outcomes(junit: Path) -> tuple[list[str], dict[str, str]]:
+    """(skipped ids, {failed id: message}) as gates.junit_counts names them (no empty-params
+    or xfail entry among the skips)."""
+    sys.path.insert(0, str(HERE.parent))
+    import gates
+    skipped, failures = [], {}
+    for case in ET.parse(junit).getroot().iter("testcase"):
+        node_id = f"{case.get('classname')}::{case.get('name')}"
+        for child in case:
+            message = child.get("message") or child.text or ""
+            if child.tag in ("failure", "error"):
+                failures[node_id] = message
+            elif child.tag == "skipped" and child.get("type") != "pytest.xfail" \
+                    and not message.startswith(gates.EMPTY_PARAMS):
+                skipped.append(node_id)
+    return skipped, failures
+
+
+def e4_on(out: Path, lab_world) -> dict:
+    """The E4 subset with every switch ON (and what each needs on this stack) in its env."""
+    junit = out / "e4-on.xml"
+    env = e4_env(out, lab_world)
     argv = [str(PY), "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider", *E4_SUITES,
             f"--junitxml={junit}"]
     code, seconds, log = logged("e4-on", argv, out, API, env, 7200)
@@ -329,10 +412,138 @@ def e4_on(out: Path, lab_world) -> dict:
                 "log": str(log), "reason": "no junit report"}
     counts = _counts(junit)
     status, reason = pytest_verdict(code, counts)
+    skipped, failures = outcomes(junit)
     return {"stage": "e4-on", "status": status, "exit": code, "seconds": seconds,
             "log": str(log), "counts": counts, "reason": reason,
+            "skipped_ids": skipped, "failures": failures,
             "switches_on": [*lab_world.GATEWAY_SWITCHES, *lab_world.WORKER_SWITCHES],
             "pending_switches": lab_world.PENDING_SWITCHES}
+
+
+def node(case_id: str) -> str:
+    """classname::name -> the pytest node id under apps/infrx-api."""
+    module, name = case_id.split("::", 1)
+    return module.replace(".", "/") + ".py::" + name
+
+
+def keyed_plan(skipped: list[str]) -> dict[str, dict]:
+    """{key: cases, nodes, env} for the skips KEYED names; the rest are not planned."""
+    plan: dict[str, dict] = {}
+    for case in skipped:
+        module = case.split("::", 1)[0]
+        if module in KEYED:
+            key, env = KEYED[module]
+            entry = plan.setdefault(key, {"cases": [], "nodes": [], "env": env})
+            entry["cases"].append(case)
+            entry["nodes"].append(node(case))
+    return plan
+
+
+def key_held(key: str, wait_s: float = 0.0, services: dict | None = None) -> str | None:
+    """Why `key` is another lane's right now (a bound port, a held harness lock or a container
+    of its name), polled for up to wait_s; None when it is free to use."""
+    if services is None:
+        from infrx.contracts.tasklocal import local_services
+        services = local_services(key)
+
+    def why() -> str | None:
+        for name, svc in services.items():
+            with socket.socket() as probe:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)   # TIME-WAIT is free
+                try:
+                    probe.bind(("127.0.0.1", svc.host_port))
+                except OSError:
+                    return f"{key}'s {name} port {svc.host_port} is bound"
+            lock = Path("/tmp") / f"{svc.container}-{svc.host_port}.lock"
+            if lock.exists():
+                with lock.open() as fd:
+                    try:
+                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        return f"{lock} is held"
+        names = subprocess.run(["docker", "ps", "-aq", "--filter", f"name=^infrx-{key}-"],
+                               capture_output=True, text=True).stdout.split()
+        return f"{key}'s containers exist: {names}" if names else None
+    deadline = time.monotonic() + wait_s
+    while (reason := why()) and time.monotonic() < deadline:
+        time.sleep(30)
+    return reason
+
+
+def aux(key: str, started: list[str]) -> None:
+    """Start the key's ClickHouse/S3 (compose.yaml's pinned images, the key's literals) and
+    wait for them; each container is appended to the caller's `started` as it starts, so a
+    later failure still removes it (0-LL3R-1). PostgreSQL is the case's harness's."""
+    from infrx.contracts.tasklocal import local_services
+    compose = (HERE.parent / "compose.yaml").read_text()
+    image = lambda svc: re.search(rf"^  {svc}:\n(?:    #.*\n)*    image: (\S+)", compose,  # noqa: E731
+                                  re.M).group(1)
+    spec = {"clickhouse": (8123, [f"CLICKHOUSE_DB=infrx_{key}", f"CLICKHOUSE_USER=infrx_{key}",
+                                  f"CLICKHOUSE_PASSWORD=infrx-{key}-local",
+                                  "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1"], [], "/ping"),
+            "s3": (9000, ["MINIO_ROOT_USER=infrxe2minio",
+                          "MINIO_ROOT_PASSWORD=infrx-e2-local-secret"],
+                   ["server", "/data", "--address", ":9000"], "/minio/health/live")}
+    for name, svc in local_services(key).items():
+        if name not in spec:
+            continue
+        port, env, command, ready = spec[name]
+        subprocess.run(["docker", "run", "-d", "--name", svc.container,
+                        "--label", f"ai.infrx.lab-local.checkout={REPO}",
+                        "-p", f"127.0.0.1:{svc.host_port}:{port}",
+                        *[a for e in env for a in ("-e", e)], image(name), *command],
+                       check=True, capture_output=True)
+        started.append(svc.container)
+        import httpx
+        deadline = time.monotonic() + 90
+        while True:
+            try:
+                if httpx.get(f"http://127.0.0.1:{svc.host_port}{ready}", timeout=3).status_code == 200:
+                    break
+            except httpx.HTTPError:
+                pass
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"{svc.container} not ready in 90 s")
+            time.sleep(1)
+
+
+def e4_keyed(out: Path, env: dict, skipped: list[str]) -> list[dict]:
+    """The e4-on cases skipped for another key, rerun on it with every switch ON when it is
+    free (`e4-on@<key>`, PASS only when each ran and passed); else NOT RUN[KEY-HELD] with the
+    exact rerun. The key's containers this run started are removed after."""
+    rows = []
+    for key, plan in keyed_plan(skipped).items():
+        extra = " ".join(f"{k}={v}" for k, v in plan["env"].items())
+        row = {"stage": f"e4-on@{key}", "cases": plan["cases"],
+               "rerun": f"cd apps/infrx-api && {extra} uv run --frozen pytest -q "
+                        + " ".join(shlex.quote(n) for n in plan["nodes"])}
+        held = key_held(key, KEY_WAIT_S)
+        if held:
+            rows.append({**row, "status": NOT_RUN, "reason": f"NOT RUN[KEY-HELD] {held}"})
+            continue
+        junit = out / f"e4-on@{key}.xml"
+        argv = [str(PY), "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
+                f"--junitxml={junit}", *plan["nodes"]]
+        started: list[str] = []
+        try:
+            aux(key, started)
+            code, seconds, log = logged(f"e4-on@{key}", argv, out, API,
+                                        {**env, **plan["env"]}, 1800)
+        except Exception as error:                        # 0-LL3R-1: a row, never an abort
+            rows.append({**row, "status": INVALID,
+                         "reason": f"INVALID[harness] {type(error).__name__}: {error}"})
+            continue
+        finally:
+            for container in started:
+                subprocess.run(["docker", "rm", "-f", "-v", container], capture_output=True)
+        if not junit.exists():
+            rows.append({**row, "status": FAIL, "exit": code, "reason": "no junit report"})
+            continue
+        counts = _counts(junit)
+        status, reason = pytest_verdict(code, counts)
+        rows.append({**row, "status": status, "exit": code, "seconds": seconds,
+                     "log": str(log), "counts": counts, "reason": reason})
+    return rows
 
 
 def scenarios(out: Path, keyword: str | None) -> tuple[dict, dict]:
@@ -414,6 +625,8 @@ def main(argv: list[str] | None = None) -> int:
                 stages.append(lab_build(out, lab_world))
                 if "e4-on" in only:
                     stages.append(e4_on(out, lab_world))
+                    stages += e4_keyed(out, e4_env(out, lab_world),
+                                       stages[-1].get("skipped_ids") or [])
                 if "scenarios" in only:
                     row, result = scenarios(out, args.keyword)
                     stages.append(row)
