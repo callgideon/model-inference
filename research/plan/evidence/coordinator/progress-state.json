@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 282,
- "updated": "2026-09-29T10:13:33Z",
+ "revision": 283,
+ "updated": "2026-09-29T10:25:45Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7988,25 +7988,29 @@
    "branch": "codex/w5-composition-5",
    "worktree": ".claude/worktrees/codex-w5-composition-5",
    "base": "5ed53a41",
-   "head": null,
+   "head": "6c092e92",
    "isolation": {
     "ports": "b1 57520/57521; j2 57511/57512; r2 57534; n3 57518/57519; e6l 57200-57299",
     "prefix": "infrx-b1-",
     "db": "b1"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T07:34:02Z",
-   "updated": "2026-09-29T07:34:02Z",
+   "updated": "2026-09-29T10:25:45Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge",
+   "next_action": "merge batch #42 (Opus; WR-C5-PREFLIGHT, WR-C5-MK, R226–R230) → lab-evaluate-2 (E6L final), lab-rollout-4 (WR-C5-K09), composition-6 (WR-COMP-4, WR-R4-2, WR-C5-N4-ROUTE, the C5 halves)",
    "estimate": {
-    "optimistic_h": 4,
-    "likely_h": 7,
-    "pessimistic_h": 14,
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
     "confidence": "medium",
-    "basis": "five composition halves + one gate cell"
+    "basis": "ACCEPT_WITH_FIXES 6c092e92; merge with the E4 regression running",
+    "at": "2026-09-29T10:25:45Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/COMPOSITION-5-bd5a273.md",
+    "research/plan/evidence/e/E6L-raw-da7e770/"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/gateway/pilot.py",
@@ -8014,7 +8018,18 @@
     "infrx/evaluation/**",
     "tests/w/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-C5-PREFLIGHT",
+    "WR-C5-K09",
+    "WR-C5-LIVE",
+    "WR-C5-REPORT",
+    "WR-C5-PLAN",
+    "WR-C5-RECEIPT",
+    "WR-C5-PROVIDERS",
+    "WR-C5-N4-ROUTE",
+    "WR-C5-ANNOT",
+    "WR-C5-MK"
+   ]
   },
   {
    "id": "W5-LAB-OBSERVE-2",
@@ -8024,31 +8039,39 @@
    "branch": "codex/w5-lab-observe-2",
    "worktree": ".claude/worktrees/codex-w5-lab-observe-2",
    "base": "ed071536",
-   "head": null,
+   "head": "84dacef4",
    "isolation": {
     "ports": "e5l 57100-57199 under project e5l2",
     "prefix": "infrx-e5l2-",
     "db": "e5l"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T07:34:02Z",
-   "updated": "2026-09-29T07:34:02Z",
+   "updated": "2026-09-29T10:25:45Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge",
+   "next_action": "merge batch #41 (Opus; WR-OBS-6, R225) → o01 after composition-6 (WR-COMP-4), o10 after lab-e2e → E5L under R222",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "one runner option + one gate run"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT 84dacef4; merge running",
+    "at": "2026-09-29T10:25:45Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E5L-1d62678.md",
+    "research/plan/evidence/e/E5L-raw-bd13f72/"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_observe/**",
     "research/plan/evidence/e/E5L-*"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-OBS-6",
+    "WR-COMP-4",
+    "LAB-E2E"
+   ]
   },
   {
    "id": "W5-LAB-DEPLOY-PREP",
@@ -8257,6 +8280,104 @@
    "evidence": [],
    "commands": [],
    "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-41",
+   "task": null,
+   "slice": "merge batch #41 (Opus): lab-observe-2 84dacef4 (E5L 16/0/2; +WR-OBS-6, R225)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-41",
+   "worktree": ".claude/worktrees/codex-w5-merge-41",
+   "base": "073c58fe",
+   "head": null,
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T10:25:45Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge (R225 before R226 at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch, layer-1 only",
+    "at": "2026-09-29T10:25:45Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-42",
+   "task": null,
+   "slice": "merge batch #42 (Opus): composition-5 6c092e92 (+WR-C5-PREFLIGHT, WR-C5-MK, R226–R230)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-42",
+   "worktree": ".claude/worktrees/codex-w5-merge-42",
+   "base": "073c58fe",
+   "head": null,
+   "isolation": {
+    "ports": "p3 57530/57531; l4 57503",
+    "prefix": "infrx-p3-",
+    "db": "p3"
+   },
+   "activity": "running",
+   "started": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T10:25:45Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge (R226–R230 after R225 at integration) → lab-evaluate-2, lab-rollout-4, composition-6",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "single-lane batch with the E4 regression",
+    "at": "2026-09-29T10:25:45Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-E2E",
+   "task": null,
+   "slice": "(wave5 LW6 lane lab-e2e, Opus) one Lab browser/route e2e harness under apps/lab/tests/e2e binding the four gates' UI cells: E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; `make lab-e2e`; base 073c58fe",
+   "agent": "opus",
+   "branch": "codex/w5-lab-e2e",
+   "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+   "base": "073c58fe",
+   "head": null,
+   "isolation": {
+    "ports": "l4 57503; the gate stacks via their runners",
+    "prefix": "infrx-l4-",
+    "db": "l4"
+   },
+   "activity": "running",
+   "started": "2026-09-29T10:25:45Z",
+   "updated": "2026-09-29T10:25:45Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge → the four UI cells",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 14,
+    "confidence": "low",
+    "basis": "four suites over the real stores + four runner binds"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/tests/e2e/**",
+    "tests/integration/lab_*/ (UI cell binds)"
+   ],
    "wiring_requests": []
   }
  ],
