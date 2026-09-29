@@ -315,3 +315,67 @@ async def _once(ledger: CheckpointLedger, sub: Subscription, event: CheckpointEv
     return (await ledger.decisions(sub.subscription_id)).get(event.checkpoint_id) or \
         await ledger.decide(sub.subscription_id, event.checkpoint_id, state=state,
                             reason=reason, run_id=None)
+
+
+# --- P3's Evaluations port (WR-E7L-1 / WR-B3-EVALS) -----------------------------------------
+class Evaluations:
+    """P3's `Evaluations` over B3 and B1, for a checkpoint P3 validated (the manual bundle's).
+
+    `suites(provider_org_id=, checkpoint_id=)` is B3's side: the pinned suite that evaluates
+    the checkpoint (a `Subscription`: harness, evaluator, seed, cases, CREDIT run limit, owner)
+    and the checkpoint's private dev serving (L3's deployer). Without it (not composable yet:
+    the checkpoint's run is not readable from D7 and no dev deployer exists, WR-B3-3) nothing
+    is frozen: a typed 503. With it, `evaluate` is ONE B1 run on the dataset P3 asks (the
+    bundle's), its id derived from (subscription, checkpoint, dataset) and resumed from D7 when
+    it exists, so a repeat or a crash before the record is the same run; the Lab eval worker
+    works it. The record (write-once, `lab/<p>/checkpoints/<id>/evaluation.json`) pins the
+    holdout digest of what B1 froze, never the ask's; `evaluation()` adds D7's run state."""
+
+    def __init__(self, store, objects, access: LabAccess, suites=None) -> None:
+        self.store, self.objects, self.access, self.suites = store, objects, access, suites
+
+    @staticmethod
+    def _key(provider_org_id: str, checkpoint_id: str) -> str:
+        return f"lab/{provider_org_id}/checkpoints/{checkpoint_id}/evaluation.json"
+
+    async def evaluate(self, *, provider_org_id: str, checkpoint_id: str, dataset_ref: str,
+                       split: str, holdout_sha256: str) -> str:
+        from ...datasets.imports import write_once
+        if split != "holdout":
+            raise errors.InvalidRequest("a checkpoint is evaluated on its frozen holdout")
+        key = self._key(provider_org_id, checkpoint_id)
+        found = await self.objects.get(key)
+        if found is None:
+            if self.suites is None:
+                raise errors.DependencyUnavailable("no B3 suite or dev deployer serves this "
+                                                   "checkpoint yet (WR-B3-3)")
+            sub, serving = await self.suites(provider_org_id=provider_org_id,
+                                             checkpoint_id=checkpoint_id)
+            run_id = run_id_of(sub.subscription_id, f"{checkpoint_id}:{dataset_ref}")
+            try:
+                frozen = await runner.resume(self.store, run_id, evaluator=sub.evaluator,
+                                             provider_org_id=provider_org_id)
+            except errors.NotFound:
+                now = (await self.access.store.db_now()).strftime("%Y-%m-%dT%H:%M:%SZ")
+                event = CheckpointEvent.model_construct(checkpoint_id=checkpoint_id,
+                                                        issued_at=now)
+                payload = {**_run_payload(sub, event, serving), "run_id": run_id,
+                           "idempotency_key": lab.run_key(run_id), "dataset_ref": dataset_ref}
+                frozen = await runner.freeze(self.store, payload, evaluator=sub.evaluator,
+                                             access=self.access, user_id=sub.owner_user_id,
+                                             provider_org_id=provider_org_id)
+            await write_once(self.objects, key, lab.canonical({
+                "run_ref": frozen.run_ref, "run_id": run_id,
+                "dataset_ref": frozen.run.dataset_ref, "split": split,
+                "holdout_sha256": hashlib.sha256(
+                    lab.canonical(sorted(frozen.holdout))).hexdigest()}))
+            found = await self.objects.get(key)
+        return json.loads(found)["run_ref"]
+
+    async def evaluation(self, *, provider_org_id: str, checkpoint_id: str) -> dict | None:
+        found = await self.objects.get(self._key(provider_org_id, checkpoint_id))
+        if found is None:
+            return None
+        record = json.loads(found)
+        status = await self.store.run_status(record["run_id"], provider_org_id=provider_org_id)
+        return {**record, "state": status["state"]}

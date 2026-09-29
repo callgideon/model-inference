@@ -1041,6 +1041,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lab_pipelines_listing_empty", "an unwired run listing is a 503, never an empty list",
        P, '        raise errors.DependencyUnavailable("the run listings are not wired (WR-LAB2-4)")',
        "        return []", PIPELINES_D8),
+    # WR-E7L-1 / WR-B3-EVALS (composition-4): P3's evaluation port under LAB_PIPELINES
+    _m("lab_pipelines_evals_absent", "LAB_PIPELINES composes P3's evaluation port (B3/B1)",
+       P, "                                              evals=Evaluations(store, objects, access),\n",
+       "", PIPELINES_D8),
+    _m("lab_pipelines_evals_other_objects", "P3's evaluation records live in the Lab objects",
+       P, "evals=Evaluations(store, objects, access),", "evals=Evaluations(store, None, access),",
+       PIPELINES_D8),
     # WR-P4B-1 (composition-4): P2's teachers under LAB_PIPELINES, only when LAB_TEACHERS is on
     _m("lab_teachers_composed_when_off", "LAB_TEACHERS off leaves the teacher port unwired (503)",
        P, "    if not deployment.lab_teachers:\n        return None\n",

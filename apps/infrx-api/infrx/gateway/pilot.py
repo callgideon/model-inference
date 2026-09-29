@@ -365,9 +365,12 @@ class RunLedger:
 def _lab_2(deployment, connect, sessions, access, objects=None, teachers=None) -> dict:
     """LAB-API-2: the evaluation, pipeline and release surfaces for the switches that are on,
     over D7 (`PgLabDataStore`, merged); the pipelines over D8's label log and run ledger
-    (WR-P1-D8-C / WR-P3-D8-C) and the Lab objects. The ports whose tables are not merged
-    (experiments, the B3 ledger listing, the catalog; the run listings, B3 evals; the release
-    read models, proposals and D9) are absent, so their routes answer 503."""
+    (WR-P1-D8-C / WR-P3-D8-C), the Lab objects and P3's evaluation port over B3/B1
+    (WR-E7L-1; it freezes nothing without a suite source and dev deployer, WR-B3-3). The ports
+    whose tables are not merged (experiments, the B3 ledger listing, the catalog; the run
+    listings; the release read models, proposals and D9) are absent, so their routes answer
+    503."""
+    from ..evaluation.checkpoints import Evaluations
     from ..state.lab_data import PgLabDataStore
     from ..state.lab_pipeline import PgLabelLog, PgRunLedger
     from .routes.lab_evaluations import LabEvaluations
@@ -379,6 +382,7 @@ def _lab_2(deployment, connect, sessions, access, objects=None, teachers=None) -
             **({"lab_pipelines": LabPipelines(sessions, access, store=store, objects=objects,
                                               log=PgLabelLog(connect),
                                               ledger=RunLedger(PgRunLedger(connect)),
+                                              evals=Evaluations(store, objects, access),
                                               teachers=teachers)}
                if deployment.lab_pipelines else {}),
             **({"lab_releases": LabReleases(sessions, access)}

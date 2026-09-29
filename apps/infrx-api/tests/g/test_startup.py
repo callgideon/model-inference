@@ -495,7 +495,8 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
         ports = {f: getattr(x, f) for f in x.__dataclass_fields__
                  if f not in ("sessions", "access")}
         d7 = {"store"} if name != "lab_releases" else set()
-        d8 = {"log", "ledger"} if name == "lab_pipelines" else set()   # WR-P1/P3-D8-C
+        d8 = {"log", "ledger", "evals"} if name == "lab_pipelines" else set()   # WR-P1/P3-D8-C,
+        #                                                          WR-E7L-1 (P3's evaluations)
         assert {f for f, port in ports.items() if port is not None} == d7 | d8, name
         assert all(isinstance(ports[f], PgLabDataStore) for f in d7)
     every = pilot._lab(settings(**{s: True for s, _, _ in LAB_2.values()}), connect=None)
@@ -506,8 +507,9 @@ def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
     """WR-P1-D8-C / WR-P3-D8-C: `LAB_PIPELINES` composes P1's label log (D8's `PgLabelLog`)
     and P3's run ledger (D8's `PgRunLedger`: the CAS and the named payer's PROVIDER_USD
     reservation on D6J's budget, `lab_submission`-gated in SQL) on the pool, over the Lab
-    objects (R182). The run and checkpoint listings (SR-P3-1, WR-LAB2-4) and B3's evaluation
-    port are not written yet: a typed 503 each, never an AttributeError read as a bug."""
+    objects (R182), and P3's evaluation port over B3/B1 (WR-E7L-1). The run and checkpoint
+    listings (SR-P3-1, WR-LAB2-4) are not written yet: a typed 503 each, never an
+    AttributeError read as a bug."""
     import dataclasses
 
     from infrx.contracts import errors
@@ -526,8 +528,16 @@ def test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers():
     for listing in (x.ledger.run_rows, x.ledger.checkpoint_rows):
         died = outcome(lambda: asyncio.run(listing("p")))
         assert type(died) is errors.DependencyUnavailable, died
-    assert x.evals is None
-    assert outcome(lambda: x.port("evals")).code == "dependency_unavailable"
+    # WR-E7L-1 / WR-B3-EVALS: P3's evaluation port is B3/B1's over the same D7 store, Lab
+    # objects and L2; with no suite source or dev deployer (WR-B3-3) it freezes nothing (503)
+    from infrx.evaluation.checkpoints import Evaluations
+    assert type(x.evals) is Evaluations and x.evals.suites is None
+    assert (x.evals.store, x.evals.objects, x.evals.access) == (x.store, objects, x.access)
+    ask = {"provider_org_id": "p", "checkpoint_id": "c", "dataset_ref": "d",
+           "split": "holdout", "holdout_sha256": "0" * 64}
+    assert type(outcome(lambda: asyncio.run(x.evals.evaluate(**ask)))) is \
+        errors.DependencyUnavailable
+    assert asyncio.run(x.evals.evaluation(provider_org_id="p", checkpoint_id="c")) is None
 
 
 TEACHER_FAKE = "http://127.0.0.1:57529"
