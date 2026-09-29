@@ -1,0 +1,79 @@
+TAP version 13
+# (node:3455150) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/lab/tests/r/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+#   from starlette.testclient import TestClient as TestClient  \# noqa
+# Subtest: R4-S01..S04 the release journeys on the real route: guardrail rollback, promotion, unsafe proposals, a stale approval
+    # Subtest: S01 (J01) guardrail rollback: R2's rollback verdict is one D9 transition and the page shows it from the records
+    ok 1 - S01 (J01) guardrail rollback: R2's rollback verdict is one D9 transition and the page shows it from the records
+      ---
+      duration_ms: 188.935696
+      type: 'test'
+      ...
+    # Subtest: S02 (J02) promotion: expand verdict → administrator proposal → operator approval → approved with its evidence
+    ok 2 - S02 (J02) promotion: expand verdict → administrator proposal → operator approval → approved with its evidence
+      ---
+      duration_ms: 393.720283
+      type: 'test'
+      ...
+# refusal: NotFound('not_found: no such release for this provider')
+# refusal: NotFound('not_found: no such provider workspace')
+# refusal: Forbidden('forbidden: this provider role does not hold propose_publication')
+# refusal: Forbidden('forbidden: this provider role does not hold propose_publication')
+# refusal: Forbidden('forbidden: no provider workspace: consumer accounts use the App')
+# refusal: StateConflict('state_conflict: the release moved since the page was read')
+# refusal: StateConflict('state_conflict: an expansion needs a running release and an expand verdict')
+# refusal: StateConflict('state_conflict: a proposal is pending for this release')
+# refusal: StateConflict('state_conflict: a rolled-back release stays rolled back')
+# refusal: StateConflict('state_conflict: a rolled-back release stays rolled back')
+    # Subtest: S03 (J03) unsafe proposals: another provider, a viewer, a developer, a consumer, a stale fence, a double click, an inconclusive verdict, a rolled-back release
+    ok 3 - S03 (J03) unsafe proposals: another provider, a viewer, a developer, a consumer, a stale fence, a double click, an inconclusive verdict, a rolled-back release
+      ---
+      duration_ms: 792.678709
+      type: 'test'
+      ...
+    # Subtest: S04 (J04) an operator approval of a stale or rejected proposal leaves the release untouched
+    ok 4 - S04 (J04) an operator approval of a stale or rejected proposal leaves the release untouched
+      ---
+      duration_ms: 505.399278
+      type: 'test'
+      ...
+    1..4
+ok 1 - R4-S01..S04 the release journeys on the real route: guardrail rollback, promotion, unsafe proposals, a stale approval
+  ---
+  duration_ms: 5762.504497
+  type: 'test'
+  ...
+# Traceback (most recent call last):
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+#     return self._loop.run_until_complete(task)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+#     return future.result()
+#            ^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/lab/tests/r/backend.py", line 223, in serve
+#     await task
+# asyncio.exceptions.CancelledError
+# During handling of the above exception, another exception occurred:
+# Traceback (most recent call last):
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/lab/tests/r/backend.py", line 232, in <module>
+#     main()
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/lab/tests/r/backend.py", line 225, in main
+#     asyncio.run(serve())
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+#     return runner.run(main)
+#            ^^^^^^^^^^^^^^^^
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 123, in run
+#     raise KeyboardInterrupt()
+# KeyboardInterrupt
+1..1
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6640.133584

@@ -1,0 +1,18 @@
+{"level":"warn","ts":1790722191.7532935,"logger":"admin","msg":"admin endpoint disabled"}
+{"level":"info","ts":1790722191.7566848,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x1a62992f6880"}
+{"level":"info","ts":1790722191.7751646,"logger":"http.auto_https","msg":"automatic HTTP->HTTPS redirects are disabled","server_name":"proxy"}
+{"level":"info","ts":1790722191.7787244,"logger":"http","msg":"enabling HTTP/3 listener","addr":":57061"}
+{"level":"info","ts":1790722191.78227,"logger":"http.log","msg":"server running","name":"proxy","protocols":["h1","h2","h3"]}
+{"level":"info","ts":1790722191.78229,"logger":"http","msg":"enabling automatic TLS certificate management","domains":["localhost"]}
+{"level":"info","ts":1790722191.7849612,"logger":"tls","msg":"cleaning storage unit","storage":"FileStorage:/data/caddy"}
+{"level":"info","ts":1790722191.786513,"logger":"tls.obtain","msg":"acquiring lock","identifier":"localhost"}
+{"level":"info","ts":1790722191.7868943,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"info","ts":1790722191.787975,"logger":"tls.obtain","msg":"lock acquired","identifier":"localhost"}
+{"level":"info","ts":1790722191.788034,"logger":"tls.obtain","msg":"obtaining certificate","identifier":"localhost"}
+{"level":"warn","ts":1790722191.9237647,"logger":"pki.ca.local","msg":"installing root certificate (you might be prompted for password)","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1790722191.924589,"msg":"warning: \"certutil\" is not available, install \"certutil\" with \"apt install libnss3-tools\" or \"yum install nss-tools\" and try again"}
+{"level":"info","ts":1790722191.9245982,"msg":"define JAVA_HOME environment variable to use the Java trust"}
+{"level":"info","ts":1790722191.9309292,"logger":"tls.obtain","msg":"certificate obtained successfully","identifier":"localhost","issuer":"local"}
+{"level":"info","ts":1790722191.931001,"logger":"tls.obtain","msg":"releasing lock","identifier":"localhost"}
+{"level":"info","ts":1790722192.01016,"msg":"certificate installed properly in linux trusts"}
+{"level":"info","ts":1790722192.0102851,"msg":"caddy proxying","from":"https://localhost:57061","to":["127.0.0.1:57060"]}
