@@ -133,3 +133,21 @@ def test_r2_pg_a_promoted_candidate_is_rolled_back_by_its_serving_identity(world
                                                     reason="pager"))
     assert rel.decisions() == [("rollback", "rolled_back", OPERATOR, ["operator:pager"])]
     assert rel.serving.current == rel.policy.baseline_ref and len(rel.serving.rollbacks) == 1
+
+
+def test_r2_pg_a_later_listing_of_the_same_serving_version_is_left_alone(world) -> None:
+    """0-RI-1 on D9's rows: after the operator's stop converged a promoted listing, a later
+    re-promotion of the candidate's serving version (a fresh deployment revision) survives the
+    pass over the stored `rolled_back` row; no second decision."""
+    rel = Release(world, 5)
+    cand = rel.policy.candidates[0].serving_ref
+    rel.serving.current = cand.replace(d9.uid(2, 0x5e), d9.uid(9, 0x5e))
+    ctl = rel.controller()
+    asyncio.run(ctl.emergency_rollback(OPERATOR, rel.policy, rel.ref, now=HORIZON, reason="pager"))
+    assert rel.serving.current == rel.policy.baseline_ref
+    again = cand.replace(d9.uid(2, 0x5e), d9.uid(10, 0x5e))
+    rel.serving.current, rel.serving.fence = again, rel.serving.fence + 1
+    for _ in range(2):
+        assert asyncio.run(rel.step(ctl, live())).action == "rolled_back"
+    assert rel.serving.current == again and len(rel.serving.rollbacks) == 1
+    assert rel.decisions() == [("rollback", "rolled_back", OPERATOR, ["operator:pager"])]
