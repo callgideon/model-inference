@@ -1,0 +1,88 @@
+{
+  "task": "I8",
+  "slice": "KNOWN-GOOD-PROOF (KNOWN-GOOD-REPROOF-2: R151 condition 1 for the window that applies 0052)",
+  "activity": "review",
+  "head": "a71f0029",
+  "worktree": ".claude/worktrees/codex-w5-known-good-reproof-2",
+  "branch": "codex/w5-known-good-reproof-2",
+  "owned_paths": [
+    "infra/rollout/known-good.json",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py",
+    "research/plan/evidence/i/"
+  ],
+  "commands": [
+    {
+      "cmd": "pytest -q tests/i/test_known_good_proof.py (68ba65fe, record through 0051)",
+      "exit": 1,
+      "summary": "2 failed, 6 passed (red first)"
+    },
+    {
+      "cmd": "schema_proof.py bda1586 --candidate e9e32e0e --task e3b2d (Supabase image stand-in 0001-0052)",
+      "exit": 0,
+      "summary": "26/26 suites, 383 passed, 14 SHAPE, 5 xfailed, schema PASS, PASS through 0052"
+    },
+    {
+      "cmd": "schema_proof.py 4226315 --candidate e9e32e0e --task e3b2d (Supabase image; rerun after a host port collision)",
+      "exit": 0,
+      "summary": "26/26 suites, 383 passed, 14 SHAPE, 5 xfailed, PASS through 0052 (first run exit 1: 127.0.0.1:55468/55478 address already in use)"
+    },
+    {
+      "cmd": "schema_proof.py bda1586 --candidate e9e32e0e --task d10 (plain PG16 + shim)",
+      "exit": 0,
+      "summary": "26/26 suites, 383 passed, 14 SHAPE, 5 xfailed, PASS through 0052"
+    },
+    {
+      "cmd": "schema_proof.py 4226315 --candidate e9e32e0e --task d10 (plain; rerun after a host port collision)",
+      "exit": 0,
+      "summary": "26/26 suites, 383 passed, PASS through 0052 (first run exit 1: 127.0.0.1:55482 address already in use)"
+    },
+    {
+      "cmd": "known-good.py <bda1586|4226315> --applied 0052 / 0053",
+      "exit": 0,
+      "summary": "0052 KNOWN-GOOD exit 0 both; 0053 NOT-KNOWN-GOOD exit 1 both (migrations only)"
+    },
+    {
+      "cmd": "pytest -q tests/i/test_known_good_proof.py",
+      "exit": 0,
+      "summary": "8 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'known_good or schema_proof'",
+      "exit": 0,
+      "summary": "29/29 killed (3 new)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=d10 pytest -q tests/i",
+      "exit": 0,
+      "summary": "363 passed, 4 skipped (i5-only), 1 xfailed"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS after fix round (0-KGR2-RV-1/1-KGR2-RV-1: WR-KGR2-1 quote fenced); was exit 1 at 62b9adab/6d8f7476, exit 0 only at a71f0029"
+    },
+    {
+      "cmd": "INFRX_D_TASK=d10 INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'known_good or schema_proof' (fix round rerun)",
+      "exit": 0,
+      "summary": "29/29 killed, 167 s"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.1,
+    "likely_h": 0.2,
+    "pessimistic_h": 0.4,
+    "confidence": "high",
+    "basis": "lane done; coordinator WR-KGR2-1/2 text patches, same as WR-KGR-1/2 one migration earlier",
+    "at": "2026-09-29T12:45Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-KGR2-1 infra/rollout/README.md RR row + paragraph + log: through 0052",
+    "WR-KGR2-2 research/plan/15-pending-inputs.md P-25 row: reaches 0052, extend at 0053",
+    "WR-KGR2-3 coordinator: R151 condition 1 for applying 0052 met at this merge; not before"
+  ],
+  "evidence": [
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-2-68ba65f.md"
+  ]
+}
