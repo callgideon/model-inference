@@ -136,3 +136,103 @@ Rollback step 1, without `--bundles`: `known-good.py --list --applied 0052 --set
 --set MAX_VIDEO_SECONDS --set WORKER_CONCURRENCY --set LARGE_BODY_LIMIT --set
 DATABASE_POOL_MAX_SIZE` exits 0 with 27af05a NOT-KNOWN-GOOD, 4226315 KNOWN-GOOD and bda1586
 KNOWN-GOOD. `--bundles` (S3) is outside this lane.
+
+Note on "kept beside the outputs" above: the run outputs, the first-run suite logs and the three
+scripts are in the lane's scratch directory (`<scratchpad>/kgr2/`). They are not committed. Their
+sha256 values in this file are the record.
+
+## Tests
+
+| command | result |
+|---|---|
+| `uv run --frozen --no-sync pytest -q tests/i/test_known_good_proof.py` at `68ba65fe` (tests moved to 0052, record through 0051) | **2 failed, 6 passed**, exit 1 (log `1cf3f36e…`): `…through_the_lab_migrations_0052` (`assert '0051' >= '0052'`), `…known_good_through_0052_and_not_beyond` (0052 NOT-KNOWN-GOOD) |
+| the same at `52eb276d` (the record) | 8 passed, exit 0 |
+| `pytest -q tests/i/test_mutants.py -k "well_formed or every_case"` | 2 passed, exit 0 |
+| `INFRX_MUTANTS=all pytest -q -rs tests/i/test_mutants.py -k "known_good or schema_proof"` | **29 passed** (29/29 killed, 0 survivors), exit 0, 173 s (log `abb0a293…`) |
+| `INFRX_D_TASK=i8 pytest -q tests/i/test_mutants.py` (the default subset + the runner's self-tests, i8 free) | 59 passed, exit 0, 241 s (`ac8060b4…`) |
+| `INFRX_D_TASK=d10 pytest -q -rs tests/i` (whole, including test_mutants' default subset) | **363 passed, 4 skipped, 1 xfailed**, exit 0, 379 s (`af3b4961…`) |
+| `python3 research/plan/scripts/validate_plan.py` | exit 0 |
+
+Two earlier whole-`tests/i` runs used `INFRX_D_TASK=i8` and failed. Neither failure was in a case
+this lane touches.
+- First run (`0603abed…`): 44 failed. Another checkout (`codex-w5-known-good-reproof`, pid
+  2187889) held `/tmp/infrx-i8-postgres-55450.lock`. The pristine baseline of the mutant list
+  therefore failed its pooler/observe cases, and 43 default-subset mutants were `broken_runner`.
+  `test_ops_steps`'s PostgreSQL case failed with `HarnessBusy`. Run alone once i8 was free,
+  test_observe + test_pooler gave 28 passed and 1 xfailed, and the ops_steps case gave 1 passed.
+- Second run (`e324554e…`): 1 failed, `test_ops_login__on_postgresql_the_first_run_sets_both_and_a_rerun_neither`,
+  with `HarnessBusy` naming this checkout's own run. With `INFRX_D_TASK=i8`, that case's harness
+  wants the same i8 lock that the session-scoped `i8_stack` (tests/i/conftest.py) already holds in
+  the same pytest session. This is the suite's own key clash under that env, not a regression. It
+  is recorded under open issues. With `INFRX_D_TASK=d10` (the row above) the whole list is green.
+
+`make api-test` (the whole apps/infrx-api) was not run. This lane changes only
+`infra/rollout/known-good.json` and `tests/i` files. Every reader of the record is in `tests/i`:
+`known-good.py`, `steps/86-cleanup.sh` (through `tests/i/test_ops_steps.py`), `test_known_good_proof.py`
+and `tests/i/mutants.py`. On this host every lane's `api-test` shares the i8/w5 keys.
+
+Cases and mutants:
+
+| case | oracle | mutants |
+|---|---|---|
+| `the_record_proves_both_targets_through_the_lab_migrations_0052` (renamed from `…0051`, extended) | fails when a proof stops short of 0052; when a proof's 0027-0052 hash is not this checkout's bytes; when a target loses its proof; when this re-proof's evidence is not named first; when the through-0051 proof it replaces is not kept first in `superseded`, ahead of the through-0026 one (R224) | `known_good_record_stops_at_0051` (new), `known_good_record_proves_other_0052` (new: one byte in 0052's header comment), `known_good_record_drops_the_0051_proof` (new, R224), `known_good_record_stops_at_0026`, `known_good_record_proves_other_0051`, `known_good_record_proves_other_0027`, `known_good_record_unproven`, `…stops_at_0023/0025` |
+| `both_targets_are_known_good_through_0052_and_not_beyond` (renamed from `…0051…`) | each real entry, judged on a stand-in target commit that carries this checkout's real 0019-0052, is KNOWN-GOOD at 0024/0026/0027/0051/0052 and NOT-KNOWN-GOOD at 0053, where only `migrations` fails | `known_good_record_stops_at_0051` (new), `known_good_record_proves_other_0052` (new), plus the earlier `…stops_at_*` / `…proves_other_*` |
+| `the_record_proves_both_targets_on_the_candidate_schema` (unchanged) | the record states the driver's SHAPE count | `schema_proof_drops_the_registry_shape_case`, `schema_proof_drops_a_0025_shape_case`, `known_good_record_proves_other_0052` (it also names this case) |
+
+## Wiring requests (text for the coordinator; not applied)
+
+- **WR-KGR2-1** `infra/rollout/README.md`:
+  - RR row, line 55. Replace:
+    - "carry a `schema_proof` through 0051 (0027-0051 are the Lab migrations at 72dc76ad; KNOWN-GOOD-REPROOF, plain PostgreSQL and the Supabase image; see the paragraph below), so the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has a target up to 0051; beyond 0051 none qualifies"
+    - with "carry a `schema_proof` through 0052 (0027-0052 are the Lab migrations at e9e32e0e; KNOWN-GOOD-REPROOF-2, plain PostgreSQL and the Supabase image; see the paragraph below), so the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has a target up to 0052; beyond 0052 none qualifies".
+  - Paragraph, lines 61-72:
+    - "carry `through: 0051`" -> "carry `through: 0052`";
+    - "0027-0051 the Lab migrations at 72dc76ad; KNOWN-GOOD-PROOF-2/3 and KNOWN-GOOD-REPROOF reran" -> "0027-0052 the Lab migrations at e9e32e0e; KNOWN-GOOD-PROOF-2/3 and KNOWN-GOOD-REPROOF(-2) reran";
+    - "the sha256 of 0019-0051 (`files`)" -> "the sha256 of 0019-0052 (`files`)";
+    - "Not proven: any migration after 0051, or a\n0022-0051 other than those bytes" -> "Not proven: any migration after 0052, or a\n0022-0052 other than those bytes".
+  - Verification log line to append: "- 2026-09-29 (KNOWN-GOOD-REPROOF-2, WR-KGR2-1): both targets proven through 0052 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0051 proof is kept in `superseded` (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-2-68ba65f.md`; the row and the paragraph say 0052 and `files` 0019-0052. Task-local only, doc only; hosted stays at 0051 until the next R151 window."
+  - Test: `known-good.py <bda1586|4226315 full sha> --applied 0052` exits 0; `--applied 0053` exits 1
+    (above). `grep -c 0051 infra/rollout/README.md` falls by the replaced mentions; the log lines
+    keep theirs.
+- **WR-KGR2-2** `research/plan/15-pending-inputs.md`:
+  - P-25 row, line 169. Replace "(I8-20260925T0002Z.json:27-28; KNOWN-GOOD-REPROOF-fca3ea3: schema_proof reaches 0051 for both targets, plain PostgreSQL and the Supabase image; extend at 0052)" with "(I8-20260925T0002Z.json:27-28; KNOWN-GOOD-REPROOF-2-68ba65f: schema_proof reaches 0052 for both targets, plain PostgreSQL and the Supabase image; the through-0051 proof (KNOWN-GOOD-REPROOF-fca3ea3) kept in `superseded`; extend at 0053)".
+  - Log line to append: "- 2026-09-29: P-25 known-good: schema_proof reaches 0052 for bda1586 and 4226315 on plain PostgreSQL and the Supabase image (KNOWN-GOOD-REPROOF-2-68ba65f; merged on <merge lane>); `known-good.py <t> --applied 0052` exits 0, `--applied 0053` exits 1. R151 condition 1 for the window that applies 0052 is met; the window still needs a new `EXPECTED_PENDING` and the operator window (conditions 2-3)."
+- **WR-KGR2-3** (coordinator, R151 bookkeeping): condition 1 for applying 0052 hosted is met when
+  this lane merges. Until then, `known-good.py --applied 0052` on the tip refuses both targets, so
+  0052 must not be applied hosted before this merge. `hosted-migrate.sh`'s `EXPECTED_PENDING` is
+  outside this lane. WR-KGP3-3 still holds: the R147 follow-up that refuses the lease-less
+  `put_result` breaks both targets.
+
+## Proposed ruling (the coordinator numbers it)
+
+None new. R224 was applied as written. Optional clarification: `superseded` is ordered newest
+first, and each re-proof prepends the proof it replaces.
+
+## Not proven
+
+1-5 are as in KNOWN-GOOD-REPROOF-fca3ea3 (the `infrx_runtime` login; hosted pre-window rows,
+including Lab rows; a browser key INSERT by an unverified owner; the targets' unfenced lease-less
+`put_result`; no catalog grant diff, here 0051 -> 0052 was not rerun as a catalog diff, and the
+suites and probe carry the proof).
+6. A migration after 0052, or 0019-0052 bytes other than these: rerun, then append a new `through`
+   and `files` (R224).
+7. The Lab's own 0052 paths (reject/operator). They are not the old runtime's SQL, and their proof
+   is lab-control-2's `tests/l`/`l3sql`.
+
+## Open issues
+
+- **Host ephemeral ports overlap the task-local registry.** `ip_local_port_range` is 32768-60999,
+  so another process's source port can take a registry port and make a rig's
+  `docker run -p 127.0.0.1:<port>` fail with "address already in use". Two of six proof runs here
+  hit it. Fix options, for the coordinator: reserve the registry blocks with
+  `net.ipv4.ip_local_reserved_ports` on the host, or move them below 32768. Both are outside this
+  lane.
+- `tests/i` under `INFRX_D_TASK=i8`: `test_ops_steps`'s PostgreSQL case and the session `i8_stack`
+  want the same i8 lock, so the whole list is green only with another PG key (e.g. `d10`). This
+  lane does not own that suite.
+
+## Estimate
+
+Lane: 0 h remaining. Coordinator: WR-KGR2-1/2 text patches take 0.1/0.2/0.4 h
+(optimistic/likely/pessimistic). Confidence is high. Basis: WR-KGR-1/2 were the same patches one
+migration earlier.
