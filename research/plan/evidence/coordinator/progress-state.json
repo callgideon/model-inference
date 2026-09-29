@@ -7337,7 +7337,7 @@
   {
    "id": "W5-MERGE-28",
    "task": null,
-   "slice": "merge batch #28 (Sonnet): lab-sql-lw5 ad2aaff3 (+R207/R208, WR-CHECKS-1); migrations 0045/0046 local-only",
+   "slice": "merge batch #28 (Sonnet): lab-sql-lw5 ad2aaff3 (+R207/R208, WR-CHECKS-1); migrations 0045/0046 local-only; workflow wf_d622d696-bd4",
    "agent": "sonnet",
    "branch": "codex/w5-merge-28",
    "worktree": ".claude/worktrees/codex-w5-merge-28",
