@@ -294,9 +294,10 @@ def _lab(settings, connect, objects=None) -> dict:
     if deployment.lab_traces:
         lab["lab_traces"] = _lab_traces(settings, connect, sessions, access)
     if deployment.lab_datasets:           # WR-N4-1 over D7, L2 and the Lab objects (R182)
-        from ..state.lab_data import PgLabDataStore
+        from ..state.lab_data import PgLabDataStore, PgLabImportJobs
         from .routes.lab_datasets import LabDatasets
-        lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects)
+        lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects,
+                                          PgLabImportJobs(connect))    # WR-C5-N4-ROUTE (0051)
     return {**lab, **_lab_2(deployment, connect, sessions, access, objects, teachers)}
 
 

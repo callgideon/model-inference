@@ -801,13 +801,15 @@ def test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_e
     objects = object()
     assert pilot._lab(settings(), connect=None, objects=objects) == {}
     assert "lab_datasets" not in pilot._lab(settings(lab_control=True), None, objects)
-    built = pilot._lab(settings(lab_datasets=True), connect=None, objects=objects)
+    built = pilot._lab(settings(lab_datasets=True), connect="pool", objects=objects)
     assert list(built) == ["lab_datasets"]
     x = built["lab_datasets"]
     assert isinstance(x, lab_datasets.LabDatasets) and isinstance(x.access, LabAccess)
     assert (str(x.sessions.client.base_url), x.sessions.apikey) \
         == ("https://fake.supabase.co", "service-role")
     assert type(x.store) is PgLabDataStore and x.objects is objects
+    from infrx.state.lab_data import PgLabImportJobs          # WR-C5-N4-ROUTE: 0051's queue
+    assert type(x.jobs) is PgLabImportJobs and x.jobs._connect is x.store._connect
     assert outcome(lambda: pilot._lab_checkpoints(settings(), None)) == {}
     for keys in ("", "not a directory"):
         refused = outcome(lambda: pilot._lab_checkpoints(

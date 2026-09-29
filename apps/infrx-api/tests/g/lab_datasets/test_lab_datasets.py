@@ -16,17 +16,19 @@ member importing; an unbounded or malformed body reaching N1 (a 500 instead of a
 """
 from __future__ import annotations
 
-import time
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from infrx.contracts import errors
+from infrx.datasets import imports
 from infrx.gateway.routes import lab_datasets as ld
 from infrx.media.store import InMemoryObjectStore
 
 from .. import support
 from ...l.access.worlds import FakeWorld
+from ...n.imports.test_import import FakeJobs
 from ...n.imports.world import GRANT_ID, FakeLabStore, fixture, grant_ref
 
 
@@ -68,11 +70,16 @@ class World(FakeWorld):
     def __init__(self) -> None:
         super().__init__()
         self.sessions = Sessions((self.DEV_A, self.DEV_B, self.VIEWER_A, self.CONSUMER_ONLY))
-        self.store, self.objects = Store(), InMemoryObjectStore()
+        self.store, self.objects, self.jobs = Store(), InMemoryObjectStore(), FakeJobs()
         self.store.add_grant(provider=self.A)
 
     def datasets(self) -> ld.LabDatasets:
-        return ld.LabDatasets(self.sessions, self.access, self.store, self.objects)
+        return ld.LabDatasets(self.sessions, self.access, self.store, self.objects, self.jobs)
+
+    def pool(self) -> dict:
+        """One pass of the I5 datasets pool (WR-N4-3's worker half) over this world."""
+        return asyncio.run(imports.work(self.jobs, self.store, self.objects, worker_id="w",
+                                        limit=10))
 
     def app(self) -> FastAPI:
         app, rt = FastAPI(), support.runtime()
@@ -105,12 +112,8 @@ def imported(w: World, client, user):
                    {"spec": w.spec(), "body": data.decode(), "accept_rejects": True})
     if started.status_code != 200:
         return started, None
-    for _ in range(100):
-        job = call(client, user, "GET", base(w.A) + f"/imports/{w.spec()['import_id']}")
-        if job.json().get("state") != "running":
-            return started, job
-        time.sleep(0.02)
-    return started, job
+    w.pool()
+    return started, call(client, user, "GET", base(w.A) + f"/imports/{w.spec()['import_id']}")
 
 
 def test_lab_datasets__nothing_is_mounted_without_the_switch():
@@ -179,13 +182,73 @@ def test_lab_datasets__a_body_is_a_bounded_json_object_of_the_operation():
 
 
 def test_lab_datasets__an_import_job_is_read_only_by_its_own_provider():
-    """The in-memory job table is this read's only tenant boundary (D7 is not asked): a
-    developer of B polling A's import id under B's path gets a 404, never A's report."""
+    """0051's job is read for the path's provider only: a developer of B polling A's import
+    id under B's path gets a 404, never A's report."""
     w = World()
     with TestClient(w.app(), raise_server_exceptions=False) as client:
         _, job = imported(w, client, w.DEV_A)
-        assert job.json()["state"] == "published", job.text
+        assert job.json().get("state") == "published", job.text
         import_id = w.spec()["import_id"]
         foreign = call(client, w.DEV_B, "GET", base(w.B) + f"/imports/{import_id}")
         assert foreign.status_code == 404, foreign.text
         assert "dataset_ref" not in foreign.text
+
+
+def test_lab_datasets__an_import_is_one_durable_job_the_pool_works(monkeypatch):
+    """WR-C5-N4-ROUTE: POST imports enqueues ONE job on 0051's queue (`imports.enqueue`: the
+    rows write-once beside the bundle, the session's user as the actor) and publishes nothing
+    itself - the job reads `running` until the I5 pool works it; a re-POST is the same job.
+    GET reads 0051's job: `succeeded` is `published` with its report (then listed), a
+    refused-rows failure `rejected` with its report, any other failure `failed` with its
+    reason. Without a queue the import routes are a 503."""
+    w = World()
+    _, data = fixture("benchmark")
+    body = {"spec": w.spec(), "body": data.decode(), "accept_rejects": True}
+    path, import_id = base(w.A) + "/imports", w.spec()["import_id"]
+    with TestClient(w.app(), raise_server_exceptions=False) as client:
+        for _ in range(2):
+            started = call(client, w.DEV_A, "POST", path, body)
+            assert (started.status_code, started.json()) == (200, {
+                "import_id": import_id, "state": "running", "report": None, "error": None})
+        assert list(w.jobs.rows) == [import_id] and w.store.published == []
+        assert w.jobs.rows[import_id]["spec"]["actor"] == w.DEV_A
+        assert asyncio.run(w.objects.get(imports.rows_key(w.A, import_id))) == data
+        assert call(client, w.DEV_A, "GET", f"{path}/{import_id}").json()["state"] == "running"
+        assert w.pool() == {"succeeded": 1, "failed": 0, "retry": 0}
+        job = call(client, w.DEV_A, "GET", f"{path}/{import_id}").json()
+        assert (job["state"], job["error"]) == ("published", None)
+        assert job["report"]["dataset_ref"] == w.store.published[-1]
+        listed = call(client, w.DEV_A, "GET", base(w.A) + "/versions").json()
+        assert [v["dataset_ref"] for v in listed] == [job["report"]["dataset_ref"]]
+
+    rejected, refused = World(), imports.ImportRejected(imports.ImportReport(
+        accepted=0, rejected=[{"line": 1, "reason": "grant", "detail": ""}], dataset_ref=None,
+        source_ref=None))
+
+    async def refuse(self, *args, **kw):
+        raise refused
+    monkeypatch.setattr(imports.Importer, "run", refuse)
+    with TestClient(rejected.app(), raise_server_exceptions=False) as client:
+        assert call(client, rejected.DEV_A, "POST", path, body).status_code == 200
+        rejected.pool()
+        job = call(client, rejected.DEV_A, "GET", f"{path}/{import_id}").json()
+        assert (job["state"], job["report"], job["error"]) == \
+            ("rejected", vars(refused.report), None)
+
+    async def missing(self, *args, **kw):
+        raise errors.NotFound("the source is gone")
+    failed = World()
+    monkeypatch.setattr(imports.Importer, "run", missing)
+    with TestClient(failed.app(), raise_server_exceptions=False) as client:
+        assert call(client, failed.DEV_A, "POST", path, body).status_code == 200
+        failed.pool()
+        job = call(client, failed.DEV_A, "GET", f"{path}/{import_id}").json()
+        assert (job["state"], job["report"], job["error"]) == \
+            ("failed", None, "the source is gone")
+
+    unwired = World()
+    unwired.jobs = None
+    with TestClient(unwired.app(), raise_server_exceptions=False) as client:
+        assert call(client, unwired.DEV_A, "POST", path, body).status_code == 503
+        assert call(client, unwired.DEV_A, "GET", f"{path}/{import_id}").status_code == 503
+        assert unwired.store.published == []

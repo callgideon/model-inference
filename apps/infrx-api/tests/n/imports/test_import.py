@@ -536,6 +536,12 @@ class FakeJobs:
         job.update(state=state, result=result, error=error)
         return dict(job)
 
+    async def job(self, job_id, *, provider_org_id):
+        job = self.rows.get(job_id)
+        if job is None or job["provider_org_id"] != provider_org_id:
+            raise errors.NotFound("no such import job for this provider")
+        return {"result": None, "error": None, **job}
+
 
 def test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_lease(
         monkeypatch) -> None:
