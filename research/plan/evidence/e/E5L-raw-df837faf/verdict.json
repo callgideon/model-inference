@@ -1,0 +1,266 @@
+{
+  "task": "E5L",
+  "gate": "LAB-OBSERVE (local; I2L-OBS staging needs P-08)",
+  "verdict": "NOT RUN",
+  "exit": 3,
+  "cells": {
+    "TRACE-BOUNDS": "NOT RUN",
+    "TRACE-RECOVER": "PASS",
+    "TRACE-TENANT": "NOT RUN",
+    "FEEDBACK-ACK": "PASS",
+    "JUDGE-BUDGET": "PASS",
+    "JUDGE-SCORES": "PASS",
+    "LAB-ACCESS": "PASS",
+    "CONSOLE-FLOWS": "PASS"
+  },
+  "r222": {
+    "accepted": true,
+    "open": {}
+  },
+  "label": "real PostgreSQL/PostgREST/Valkey/ClickHouse/S3-compatible services, the merged T2I/T2F/T3/G4F/L2/J2 code and a controlled protocol engine; not Marlin quality, not GPU capacity, not hosted behaviour",
+  "judge": "dry-run: J2's local judge fake on 127.0.0.1 and J2's in-memory D6J ledger; no external provider (P-10 absent); never a live-judge run",
+  "pins": {
+    "base": "9a48300c",
+    "head": "df837faf24d3aa7dc2382d80a208dc9e53fa3a0d",
+    "dirty": true,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    }
+  },
+  "namespace": "e5l",
+  "project": "infrx-e5l",
+  "ports": {
+    "postgres": 57132,
+    "valkey": 57179,
+    "clickhouse_http": 57123,
+    "clickhouse_native": 57190,
+    "s3": 57100,
+    "fake_vllm": 57180
+  },
+  "started": "2026-09-29T14:04:19+00:00",
+  "seconds": 151.1,
+  "stack": {
+    "usable": true,
+    "why_not": null,
+    "stages": [
+      {
+        "stage": "preflight",
+        "status": "PASS",
+        "seconds": 1.5
+      },
+      {
+        "stage": "services",
+        "status": "PASS",
+        "seconds": 8.4
+      },
+      {
+        "stage": "migrate",
+        "status": "PASS",
+        "seconds": 0.8
+      },
+      {
+        "stage": "backend-teardown",
+        "status": "PASS",
+        "seconds": 133.4
+      },
+      {
+        "stage": "teardown",
+        "status": "PASS",
+        "seconds": 6.9
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "o01",
+      "title": "capture -> ship -> search: off by default; a captured request ships once with its pins; only its org finds it; capture on via the switch",
+      "test_ids": [
+        "TRACE-BOUNDS",
+        "TRACE-TENANT"
+      ],
+      "lanes": [
+        "WR-C6-CAPTURE"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace": "PASS",
+        "test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it": "PASS",
+        "test_o01_capture_turned_on_through_the_composition_switch": "NOT RUN"
+      },
+      "reasons": [
+        "test_o01_capture_turned_on_through_the_composition_switch: NOT RUN[WR-C6-CAPTURE] product WR (R234 ii): the gateway has no capture seam on the request path and no consent source (consent_for None, every trace policy off_mode_policy), so no served request reaches a spool (COMPOSITION-6); rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01 /home/rey/workspace/rey/code/model-inference/.claude/"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01",
+      "scope": {
+        "WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"
+      }
+    },
+    {
+      "id": "o02",
+      "title": "feedback acknowledged after commit, owned by its key, projected once",
+      "test_ids": [
+        "FEEDBACK-ACK"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o02",
+      "scope": {}
+    },
+    {
+      "id": "o03",
+      "title": "Lab review: a provider reads a grantor's trace only under a current grant, in-process and through the gateway's traces route",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant": "PASS",
+        "test_o03_the_lab_traces_route_through_the_real_gateway": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o03",
+      "scope": {}
+    },
+    {
+      "id": "o04",
+      "title": "judge dry run: default mode sends nothing; a consented run sends once, scores once, charges no customer wallet; the D6J ledger",
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "JUDGE-SCORES"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o04_the_default_dry_run_mode_sends_nothing": "PASS",
+        "test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet": "PASS",
+        "test_o04_the_judge_ledger_is_d6js_postgresql_ledger": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o04",
+      "scope": {}
+    },
+    {
+      "id": "o05",
+      "title": "a grant revoked mid-queue: nothing leaves, the hold is released",
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o05_a_grant_revoked_between_reservation_and_egress_sends_nothing": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o05",
+      "scope": {}
+    },
+    {
+      "id": "o06",
+      "title": "content expired or deleted: gone for every read, never sent to the judge",
+      "test_ids": [
+        "TRACE-TENANT",
+        "JUDGE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge": "PASS",
+        "test_o06_after_the_sweep_nothing_is_left_to_send": "PASS",
+        "test_o06_expired_or_deleted_content_is_gone_for_every_read_before_and_after_the_sweep": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o06",
+      "scope": {}
+    },
+    {
+      "id": "o07",
+      "title": "the projection dropped (ClickHouse killed): segment held, App serving, shipped once after",
+      "test_ids": [
+        "TRACE-RECOVER"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_after": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o07",
+      "scope": {}
+    },
+    {
+      "id": "o08",
+      "title": "a judge submit timed out and the worker restarted: quarantined, never resent, reconciled",
+      "test_ids": [
+        "JUDGE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o08",
+      "scope": {}
+    },
+    {
+      "id": "o09",
+      "title": "a worker restarted: the feedback projector after its insert, the box worker mid-traffic",
+      "test_ids": [
+        "TRACE-RECOVER",
+        "FEEDBACK-ACK"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once": "PASS",
+        "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o09",
+      "scope": {}
+    },
+    {
+      "id": "o10",
+      "title": "the Lab review panel renders the traces route's answer (browser flow)",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o10_the_lab_review_panel_renders_the_routes_answer": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o10",
+      "scope": {}
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e5l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs --import-mode=prepend -o junit_family=xunit1 --junitxml=/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/research/plan/evidence/e/E5L-raw-df837faf/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/tests/integration/lab_observe/scenarios_judge.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/tests/integration/lab_observe/scenarios_trace.py",
+      "exit": 0,
+      "seconds": 133.3,
+      "summary": "17 passed, 1 skipped in 130.96s (0:02:10)",
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/research/plan/evidence/e/E5L-raw-df837faf/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/research/plan/evidence/e/E5L-raw-df837faf/scenarios.xml",
+    "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/research/plan/evidence/e/E5L-raw-df837faf/scenarios.log",
+    "box_logs": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-3/research/plan/evidence/e/E5L-raw-df837faf/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir>"
+}
