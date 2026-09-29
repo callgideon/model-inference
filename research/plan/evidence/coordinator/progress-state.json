@@ -8606,7 +8606,7 @@
   {
    "id": "W5-MERGE-45",
    "task": null,
-   "slice": "merge batch #45 (Opus): lab-evaluate-2 8f1a017f (+R234/R235, WR-E6L-RV-1/RV-2/SCOPE, evidence); E6L flips at integration",
+   "slice": "merge batch #45 (Opus): lab-evaluate-2 8f1a017f (+R234/R235, WR-E6L-RV-1/RV-2/SCOPE, evidence); E6L flips at integration; workflow wf_015fcc20-fb6",
    "agent": "opus",
    "branch": "codex/w5-merge-45",
    "worktree": ".claude/worktrees/codex-w5-merge-45",
@@ -8644,7 +8644,7 @@
   {
    "id": "W5-LAB-EVAL-MEDIA",
    "task": "E6L",
-   "slice": "WR-E6L-J11 (product, L3/B1): HttpDevEndpoint.complete dispatches media samples as a video_url part (presigned, R61); j11 rerun on e6l (Opus)",
+   "slice": "WR-E6L-J11 (product, L3/B1): HttpDevEndpoint.complete dispatches media samples as a video_url part (presigned, R61); j11 rerun on e6l (Opus); workflow wf_9a32de3e-7f5",
    "agent": "opus",
    "branch": "codex/w5-lab-eval-media",
    "worktree": ".claude/worktrees/codex-w5-lab-eval-media",
