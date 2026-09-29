@@ -1,0 +1,26 @@
+{
+ "cohort_skew": [
+  "hold",
+  [
+   "cohort_skew"
+  ]
+ ],
+ "metrics_stale": [
+  "hold",
+  [
+   "metrics_stale"
+  ]
+ ],
+ "min_requests": [
+  "hold",
+  [
+   "min_requests"
+  ]
+ ],
+ "quality_coverage": [
+  "hold",
+  [
+   "quality_coverage"
+  ]
+ ]
+}

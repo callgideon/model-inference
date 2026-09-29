@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="21.981" timestamp="2026-09-29T15:07:10.314761+00:00" hostname="rey-aws"><testcase classname="tests.integration.lab_rollout.scenarios_route" name="test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict" file="tests/integration/lab_rollout/scenarios_route.py" line="287" time="3.106" /><testcase classname="tests.integration.lab_rollout.scenarios_route" name="test_k10_the_composed_releases_route_proposes_and_the_operator_decides" file="tests/integration/lab_rollout/scenarios_route.py" line="327" time="2.883" /><testcase classname="tests.integration.lab_rollout.scenarios_route" name="test_k10_the_releases_ui_over_the_real_route" file="tests/integration/lab_rollout/scenarios_route.py" line="460" time="15.806"><failure message="AssertionError: the e2e suite did not pass: {'command': 'cd apps/lab &amp;&amp; LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 6, 'cancelled': 0, 'skipped': 0, 'record': {'suite': 'rollout', 'cell': 'E8L k10', 'composed': {'records': True, 'proposals': True, 'store': True}, 'stand_ins': ['session verifier and PostgREST RPC door (stack.door)', &quot;records/proposals adapters over D9 + 0043 (WR-R4-2's to compose)&quot;, 'R1 aggregates and R2 verdict as last seen (no table yet)', &quot;L3's serving alias (R2's FakeServing)&quot;]}, 'harness': None}&#10;als are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing&#10;      ---&#10;      duration_ms: 212.019308&#10;      type: 'test'&#10;      location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:88:11'&#10;      failureType: 'testCodeFailure'&#10;      error: 'the page shows lab:policy:b0000001-0000-4000-8000-000000000001:000000b0-0000-4000-8000-000000000004@sha256:c96925b011bfe2dfe60d0b68b4fa5910ead3d50e7bec354c20afac85b5932e01'&#10;      code: 'ERR_ASSERTION'&#10;      name: 'AssertionError'&#10;      expected: true&#10;      actual: false&#10;      operator: '=='&#10;      stack: |-&#10;        shown (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:31:12)&#10;        process.processTicksAndRejections (node:internal/process/task_queues:103:5)&#10;        async TestContext.&lt;anonymous&gt; (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:92:23)&#10;        async Test.run (node:internal/test_runner/test:1054:7)&#10;        async TestContext.&lt;anonymous&gt; (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:88:3)&#10;        async Test.run (node:internal/test_runner/test:1054:7)&#10;        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)&#10;      ...&#10;    1..5&#10;not ok 1 - E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback&#10;  ---&#10;  duration_ms: 15062.665996&#10;  type: 'test'&#10;  location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:15:1'&#10;  failureType: 'subtestsFailed'&#10;  error: '5 subtests failed'&#10;  code: 'ERR_TEST_FAILURE'&#10;  ...&#10;1..1&#10;# tests 6&#10;# suites 0&#10;# pass 0&#10;# fail 6&#10;# cancelled 0&#10;# skipped 0&#10;# todo 0&#10;# duration_ms 15752.062684">workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/lr5/only-k10/cases/test_k10_the_releases_ui_over_the_real_route')
+
+    def test_k10_the_releases_ui_over_the_real_route(workdir):
+        """k10's UI half (LAB-E2E): `apps/lab/tests/e2e/rollout` - the Lab releases page built and
+        served, signed in through its own form, over `/lab/v1/releases` on the l4 key: the page
+        fails closed on the gateway's own LAB_RELEASES composition, then D9's real store and 0043's
+        proposal store show R2's verdict, take a proposal at the fence the page showed through its
+        server action, the operator's approval and an emergency rollback, and refuse the unsafe
+        variants. A red suite fails this case; a green one is NOT RUN while the gateway's own
+        composition lacks a port (R238: a product WR naming it; WR-R4-2 composed all three at
+        merge #50)."""
+        e2e = _e2e()
+        got = e2e.run("rollout", workdir)
+        lw.save(workdir, "k10-ui.json", {k: v for k, v in got.items() if k != "tail"})
+&gt;       absent = e2e.missing(got)
+                 ^^^^^^^^^^^^^^^^
+
+tests/integration/lab_rollout/scenarios_route.py:473: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = {'command': 'cd apps/lab &amp;&amp; LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 6, ...}
+
+    def missing(got: dict) -&gt; list[str]:
+        """Asserts the suite passed as a whole - every case ran and none failed - and answers the
+        ports the gateway's own composition does not carry yet (empty: the cell is bound for real)."""
+        if got["exit"] != 0 and got.get("harness"):
+            raise HarnessError(f"{got['command']}: {got['harness']}")
+&gt;       assert (got["exit"], got.get("fail"), got.get("cancelled", 0), got.get("skipped")) == \
+            (0, 0, 0, 0) and got.get("pass", 0) &gt; 1 and got["record"] is not None, \
+            f"the e2e suite did not pass: {({k: v for k, v in got.items() if k != 'tail'})}\n{got['tail']}"
+E       AssertionError: the e2e suite did not pass: {'command': 'cd apps/lab &amp;&amp; LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 6, 'cancelled': 0, 'skipped': 0, 'record': {'suite': 'rollout', 'cell': 'E8L k10', 'composed': {'records': True, 'proposals': True, 'store': True}, 'stand_ins': ['session verifier and PostgREST RPC door (stack.door)', "records/proposals adapters over D9 + 0043 (WR-R4-2's to compose)", 'R1 aggregates and R2 verdict as last seen (no table yet)', "L3's serving alias (R2's FakeServing)"]}, 'harness': None}
+E       als are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing
+E             ---
+E             duration_ms: 212.019308
+E             type: 'test'
+E             location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:88:11'
+E             failureType: 'testCodeFailure'
+E             error: 'the page shows lab:policy:b0000001-0000-4000-8000-000000000001:000000b0-0000-4000-8000-000000000004@sha256:c96925b011bfe2dfe60d0b68b4fa5910ead3d50e7bec354c20afac85b5932e01'
+E             code: 'ERR_ASSERTION'
+E             name: 'AssertionError'
+E             expected: true
+E             actual: false
+E             operator: '=='
+E             stack: |-
+E               shown (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:31:12)
+E               process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+E               async TestContext.&lt;anonymous&gt; (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:92:23)
+E               async Test.run (node:internal/test_runner/test:1054:7)
+E               async TestContext.&lt;anonymous&gt; (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:88:3)
+E               async Test.run (node:internal/test_runner/test:1054:7)
+E               async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+E             ...
+E           1..5
+E       not ok 1 - E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollback
+E         ---
+E         duration_ms: 15062.665996
+E         type: 'test'
+E         location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/lab/tests/e2e/rollout/stack.test.ts:15:1'
+E         failureType: 'subtestsFailed'
+E         error: '5 subtests failed'
+E         code: 'ERR_TEST_FAILURE'
+E         ...
+E       1..1
+E       # tests 6
+E       # suites 0
+E       # pass 0
+E       # fail 6
+E       # cancelled 0
+E       # skipped 0
+E       # todo 0
+E       # duration_ms 15752.062684
+
+apps/lab/tests/e2e/gate.py:66: AssertionError</failure></testcase></testsuite></testsuites>

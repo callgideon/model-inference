@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import hashlib
 import json
 import sys
@@ -162,6 +163,11 @@ class Lab:
 
     def close(self) -> None:
         self.conn.close()
+        if "objects" in self.__dict__:                  # this session's prefix only
+            client = harness.s3_client()
+            for item in client.list_objects_v2(Bucket=harness.S3_BUCKET,
+                                               Prefix=self.prefix).get("Contents", []):
+                client.delete_object(Bucket=harness.S3_BUCKET, Key=item["Key"])
 
     def sql(self, statement: str, *args) -> list[tuple]:
         cursor = self.conn.execute(statement, args)
@@ -220,12 +226,32 @@ class Lab:
                 "cohort": cohort, "candidates": [{"serving_ref": r, "weight_bp": w}
                                                  for r, w in zip(refs, weights)]}
 
+    @functools.cached_property
+    def objects(self):
+        """The Lab objects on the e8l MinIO under this session's own prefix
+        (`test/e8l/<uuid>/`): where `launch` stores each release's plan (R241) and what the
+        composed releases route (`pilot.lab_releases`, k10) reads."""
+        import uuid
+
+        from infrx.media.s3 import S3ObjectStore
+        client = harness.s3_client()
+        with contextlib.suppress(Exception):            # already there
+            client.create_bucket(Bucket=harness.S3_BUCKET)
+        self.prefix = f"{harness.OBJECT_PREFIX}{uuid.uuid4().hex}/"
+        return S3ObjectStore(client, harness.S3_BUCKET, self.prefix)
+
     def launch(self, body: dict, plan, *, shadow_limit: int = 0):
-        """Publish and start the release with `plan`'s digest frozen; (policy, ref)."""
+        """Publish and start the release with `plan`'s digest frozen, its plan stored beside
+        it first (R241: `rollout launch`'s order, so the composed page lists every release
+        of this world); (policy, ref)."""
         from infrx.contracts.lab import records as lab
+        from infrx.datasets.imports import write_once
+        from infrx.lab.workers.__main__ import plan_key
         from infrx.rollouts import control as r2
         self.quiesce()
         ref = self.d7.publish(self.conn, body)
+        run(write_once(self.objects, plan_key(self.NEMO, body["policy_id"]),
+                       plan.model_dump_json().encode()))
         run(self.releases().start(ref, provider_org_id=self.NEMO,
                                   plan_digest=r2.plan_digest(plan), decided_by=self.DEV,
                                   reason="e8l launch"))
@@ -397,6 +423,12 @@ PLAN = {"horizon_s": 3_600, "min_requests": 20, "max_error_rate": 0.05, "max_p99
 def plan(**changes):
     from infrx.rollouts import control as r2
     return r2.Plan.model_validate({**PLAN, **changes})
+
+
+def plan_file(workdir: Path) -> Path:
+    """The plan file `rollout launch --plan` reads, absolute: the worker runs with cwd=API, so a
+    relative `runner.py --out <dir>` would hand it a path that names nothing there (WR-LR5-RV2)."""
+    return workdir.resolve() / "plan.json"
 
 
 def live(counts, policy_id: str, *, now, errors_=0, p99=1_000, covered=None,

@@ -35,7 +35,7 @@ what works. On this base, **with no gateway switch turned on** (§5 rule 1):
 | Worker role `eval` | `infrx-lab-eval` | starts ready locally (E4-ON o03) — **on the owner login only**; on the box it needs its own login (WR-LDP-7, §3) |
 | Worker roles `judge`, `datasets` | `infrx-lab-{judge,datasets}` | **no on this box**: each requires `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` (`infrx.lab.workers` NEEDS) and the trace projection is not deployed; without them the entry point refuses (exit 2), so 50-lab-role.sh refuses the SPEC first. They start locally (o03) only because the composition gives every role a ClickHouse |
 | Worker role `annotation` | `infrx-lab-annotation` | has its teacher-collect pass on this base (needs `LAB_S3_BUCKET` + `LAB_TEACHER_URL` = the local teacher fake only, P-10); not for internal testing (§5 rule 3) |
-| Worker roles `checkpoints`, `training`, `rollout` | their units | **refuse by name** (exit 2, R198/R211) until WR-B3-3 / P-11 / WR-LSQ-9 |
+| Worker roles `checkpoints`, `training`, `rollout` | their units | **refuse by name** (exit 2, R198/R211) until WR-B3-3 / P-11 / WR-LSQ-9; before `rollout` or `/releases` on the control unit, the plan location is one bucket and prefix (§5 rule 5, R249) |
 
 The gateway's Lab switches are never turned on (R237/R245): **LDP-F1** is resolved by design
 (option (b), lab-control-routes) — the App gateway never serves the Lab; `infrx_runtime` holds no
@@ -188,6 +188,12 @@ is idempotent and logs to `/var/log/infrx-lab-rollout.log`.
 4. Paid work stays off: `JUDGE_MODE` is `dry_run` (50-lab-role refuses anything else), the
    annotation teacher is `dry-run`, the training connector `manual-bundle` (P-10/P-11 approvals
    are separate). Lab paid work is USD with a named payer; CREDIT is never converted.
+5. Before `LAB_RELEASES` serves on the control unit (after WR-LDP-2) or `rollout` is switched
+   on: the control unit's `S3_MEDIA_BUCKET`/`S3_MEDIA_PREFIX` equal lab-workers'
+   `LAB_S3_BUCKET`/`LAB_S3_PREFIX` (unset prefix = `infrx/`), or every release reads
+   "unavailable" (503, WR-C5-PLAN). Check: `rollout launch` a test release, then
+   `GET /lab/v1/releases` lists it (not 503). (WR-LR5-3, R249; the worker's start-time refusal
+   of a divergent pair lands with composition-7.)
 
 ## 6. The Lab web: its own Vercel project (P-08)
 
@@ -350,3 +356,8 @@ reversal of Lab tables is never part of this runbook.
   `LAB_S3_BUCKET` for the control env; Vercel `LAB_{DATASETS,EVALS,PIPELINES,RELEASES}_API_URL`
   = `https://lab-control.callbill.ai`; families typed-unavailable on the box until SR-LCR-1
   (lab-sql-lw8, LCR-F1). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
+- 2026-09-29 (lab-rollout-5 merge, codex/w5-merge-53, WR-LR5-3): §5 rule 5 and the §0
+  `rollout` row — the control unit's `S3_MEDIA_BUCKET`/`S3_MEDIA_PREFIX` and lab-workers'
+  `LAB_S3_BUCKET`/`LAB_S3_PREFIX` name the same bucket and prefix, else every release is a 503
+  (R241, R249); the worker's refusal is carried to composition-7. Nothing was run against the
+  box, AWS, SSM, Vercel or hosted Supabase.

@@ -1,0 +1,41 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5/apps/infrx-api/.venv/bin/python
+rootdir: /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-5
+configfile: pytest.ini
+plugins: anyio-4.15.1
+collecting ... collected 84 items / 52 deselected / 32 selected
+
+tests/integration/lab_rollout/test_mutants.py::test_the_lists_are_well_formed PASSED [  3%]
+tests/integration/lab_rollout/test_mutants.py::test_every_case_is_covered_by_a_mutant PASSED [  6%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[xfail_is_a_pass] PASSED [  9%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[not_run_is_a_pass] PASSED [ 12%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[required_cases_ignored] PASSED [ 15%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[harness_error_is_a_product_fail] PASSED [ 18%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[gate_is_the_best_status] PASSED [ 21%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[a_cell_over_every_scenario] PASSED [ 25%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[not_run_exits_zero] PASSED [ 28%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[no_stack_passes] PASSED [ 31%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[a_manifest_test_id_dropped] PASSED [ 34%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_claimed_waiting] PASSED [ 37%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_port_half_optional] PASSED [ 40%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[a_required_case_renamed] PASSED [ 43%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[another_namespace] PASSED [ 46%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[an_endpoint_on_a_service_port] PASSED [ 50%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[the_dead_port_is_an_endpoint] PASSED [ 53%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[not_run_without_the_rerun] PASSED [ 56%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[sub_cell_is_a_pass] PASSED [ 59%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[sub_cell_without_its_lane] PASSED [ 62%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_ui_sub_cell_without_its_lane] PASSED [ 65%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[k10_ui_sub_cell_dropped] PASSED [ 68%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_in_scope_lane_excused] PASSED [ 71%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_never_run_excused] PASSED [ 75%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_any_reason_excuses] PASSED [ 78%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_fail_excused_by_its_message] PASSED [ 81%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_pass_is_open] PASSED [ 84%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_sub_cells_ignored] PASSED [ 87%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[r222_gpu_in_scope] PASSED [ 90%]
+tests/integration/lab_rollout/test_mutants.py::test_mutant_is_killed[unbound_case_runs] PASSED [ 93%]
+tests/integration/lab_rollout/test_mutants.py::test_the_runner_cannot_report_a_false_kill[self_no_op] PASSED [ 96%]
+tests/integration/lab_rollout/test_mutants.py::test_the_runner_cannot_report_a_false_kill[self_missing_anchor] PASSED [100%]
+
+====================== 32 passed, 52 deselected in 35.80s ======================

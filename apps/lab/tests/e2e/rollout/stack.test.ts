@@ -36,6 +36,12 @@ test("E2E-R k10 the releases UI: verdict, proposal, approval and emergency rollb
 
   await t.test("E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success", async () => {
     await door(s.api, "composition", { as: "gateway" });
+    // WR-R4-2 composed records, proposals and store (merge #50): the records refuse a release D9
+    // started without the plan its launcher stores first (R241, a 503 naming WR-C5-PLAN), and
+    // R3's variant listing is not composed (WR-C6-VARIANTS)
+    await launch(9);
+    // the refusal is WR-C5-PLAN's own, not any 503: the gateway's records port itself names it
+    assert.match(String((await door(s.api, "probe")).refusal), /is not stored \(WR-C5-PLAN\)/);
     for (const path of ["/releases", "/optimizations"]) {
       const page = await admin.get(path);
       assert.ok(page.text.includes(REFUSAL_COPY.unavailable) && forms(page.html).every((f) => !/Propose/.test(f.text)), path);
