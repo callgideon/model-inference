@@ -1,0 +1,3 @@
+not ok 3 - L4-V03 actions follow the record and the role: smoke dev, publish only after a passed smoke, never a provider rollback
+# pass 6
+# fail 1

@@ -1,8 +1,9 @@
-// L4: the Lab's view of L3's control service (lab-access-lw2's infrx/lab/control, not on the base yet).
-// The shape is filed as WR-L4-1; until the real adapter is wired the port is "unavailable" (fails
-// closed), or, only outside production and only when asked for, the labelled preview fake.
+// L4: the Lab's view of L3's control service (`/lab/v1/control`, WR-L4-1). With LAB_CONTROL_URL set the
+// port is the HTTP adapter (server.ts, WR-E3L-J); unset it is "unavailable" (fails closed), or, only
+// outside production and only when asked for, the labelled preview fake.
 import type { Role } from "../../auth/access.ts";
 import { FakeControl } from "./fake.ts";
+import { labControl } from "./server.ts";
 
 /** The capabilities L4 uses, as contracts/v2 ROLE_CAPABILITIES grants them. L3 re-checks every call. */
 export type Capability = "read_aggregate_health" | "manage_dev_deployment" | "propose_publication";
@@ -74,5 +75,5 @@ export const isPreview = (env: Record<string, string | undefined> = process.env)
 
 export function controlPort(env: Record<string, string | undefined> = process.env): ControlPort {
   if (isPreview(env)) return (preview ??= new FakeControl());
-  return UNAVAILABLE;
+  return labControl(env) ?? UNAVAILABLE;
 }
