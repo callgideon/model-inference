@@ -253,6 +253,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0054_lab_release_live.sql",
     "0055_lab_variants_requeue.sql",
     "0056_lab_control_grants.sql",
+    # Lab (local-only, R151/R201): lab-sql LW9 (WR-LW7-3a, WR-C7-TALLY); 0057 is lab-capture-2's
+    "0058_lab_variant_identities.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
