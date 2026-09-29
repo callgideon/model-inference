@@ -1194,7 +1194,8 @@ def test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not(
 # switch that starts without what it needs, and an `eval_run` redelivery that freezes the run
 # again (after a revocation `freeze` is refused, so the run would never end) or acknowledges
 # a delivery whose wallet stopped it (the run would never be picked up again).
-TRACE_PUMPS = {"trace_ship", "trace_retention", "feedback_projection"}
+# WR-C6-CAPTURE (c): the gateway ships (its lifespan); the worker keeps retention + projection
+TRACE_PUMPS = {"trace_retention", "feedback_projection"}
 LAB_PUMPS = {"lab_eval", "lab_recover"}
 TRACE_ENV = {"TRACE_PUMPS": "1", "CLICKHOUSE_URL": "http://ch.invalid:8123/infrx",
              "S3_TRACE_BUCKET": "infrx-traces"}
@@ -1249,13 +1250,14 @@ def test_worker_main__trace_pumps_refuse_to_start_without_their_settings(unset, 
 
 def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(tmp_path,
                                                                                monkeypatch):
-    """On: T2I's `build_shipper` over a spool on `TRACE_SPOOL_DIR` (rotated before each ship
-    pass, the S3 endpoint the deployment's), T3's expire-then-sweep over the shipper's own
-    retention, and T2F's projector on the worker's pool into that retention's feedback
-    projection, consulting it."""
+    """On: T2I's `build_shipper` (the S3 endpoint the deployment's) for T3's expire-then-sweep
+    over the shipper's own retention, and T2F's projector on the worker's pool into that
+    retention's feedback projection, consulting it. WR-C6-CAPTURE (c): the worker neither
+    ships nor locks `TRACE_SPOOL_DIR` (the gateway's: one writer per directory); its runner
+    spools each consented async job's output under `TRACE_SPOOL_DIR/jobs` (`JobCapture`)."""
+    from infrx.gateway import capture
     from infrx.traces import ship
     from infrx.traces.feedback.pg import PgFeedbackOutbox
-    from infrx.traces.spool import SpoolTraceSink
     calls, built = [], {}
 
     class Retention:
@@ -1283,20 +1285,15 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
                                          S3_ENDPOINT_URL="http://127.0.0.1:9", **TRACE_ENV))
     assert set(service.housekeeping) == HOUSEKEEPING | TRACE_PUMPS
     started(service)
-    spool = built["spool"]
-    assert type(spool) is SpoolTraceSink and spool.spool_dir == tmp_path / "spool"
+    assert built["spool"] is None and "trace ship" not in steps
+    assert not (tmp_path / "spool" / ".writer.lock").exists()
     assert built.get("endpoint_url") == "http://127.0.0.1:9"
     assert built["limits"].clickhouse_url == TRACE_ENV["CLICKHOUSE_URL"]
-    rotated = spool.rotate
-
-    async def rotate():
-        calls.append("rotate")
-        return await rotated()
-    spool.rotate = rotate
-    interval, step = steps["trace ship"]
-    asyncio.run(step())
-    assert calls == ["rotate", "ship"] and interval == worker_main.TRACE_SHIP_S
-    calls.clear()
+    runner = service.loop.runner
+    assert type(runner.jobs) is capture.JobCapture and runner.jobs.jobs is service.jobs
+    assert runner.put_result == runner.jobs.put_result
+    assert runner.jobs._put_result == service.jobs.put_result
+    assert runner.jobs.root == tmp_path / "spool" / capture.JOBS_DIR
     interval, step = steps["trace retention"]
     asyncio.run(step())
     assert calls == ["expire", "sweep"] and interval == worker_main.TRACE_RETENTION_S
@@ -1314,7 +1311,6 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
     assert getattr(holds, "__func__", None) is ContentAccess.holds
     assert holds.__self__.refs.connect is service.jobs._connect
     assert not hasattr(Shipper.retention, "holds")        # nothing assigned after the build
-    asyncio.run(spool.close())
 
 
 def test_worker_main__the_shippers_retention_holds_what_it_was_given(monkeypatch):

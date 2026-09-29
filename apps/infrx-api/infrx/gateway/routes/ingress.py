@@ -84,6 +84,9 @@ class IngressDeps:
     consent_for: Callable | None = None
     entitlement_version: Callable[[str], int] | None = None
     catalog: object | None = None               # contracts.v2.ports.CatalogDirectory
+    # WR-C6-CAPTURE (`TRACE_PUMPS`, off by default: None): the per-key consent policy a
+    # request is admitted with, and the capture of its answer (`gateway.capture`).
+    capture: object | None = None
     # One per process, shared by every request: the bound is on the process's loop.
     large_bodies: "intake.LargeBodies | None" = None
     new_request_id: Callable[[], str] = ids.new_request_id
@@ -160,6 +163,9 @@ class Ingress:
             body = intake.parse_object(text)
             normalized = await self.validator.normalize(body, auth, request_id,
                                                         request.headers)
+            if self.deps.capture is not None:        # WR-C6-CAPTURE (a): consent, not off
+                normalized = normalized.model_copy(update={
+                    "trace_policy": await self.deps.capture.policy(auth, normalized.created_at)})
             idem = idempotency(auth, request.headers, identity_digest(normalized), CHAT_OPERATION)
             return auth, normalized, idem
         finally:
@@ -304,6 +310,8 @@ def register(app, rt, deps: IngressDeps | None = None):
         # 01: `Inference-Id` is the request id on every answer. Set here rather than
         # left to each acceptor, so no success path can be the one that forgets it.
         accepted.headers.setdefault(wire.HEADER_INFERENCE_ID, request_id)
+        if deps.capture is not None:            # WR-C6-CAPTURE (b): the answer's record
+            accepted = deps.capture.response(accepted, normalized, request.headers)
         return accepted
 
     # The guard's wrapper is defined in `intake`; the route table names the ingress as the
