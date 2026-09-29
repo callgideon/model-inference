@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="4" time="65.543" timestamp="2026-09-29T21:04:03.565953+00:00" hostname="rey-aws"><testcase classname="tests.integration.lab_observe.scenarios_trace" name="test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace" file="tests/integration/lab_observe/scenarios_trace.py" line="25" time="9.897" /><testcase classname="tests.integration.lab_observe.scenarios_trace" name="test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it" file="tests/integration/lab_observe/scenarios_trace.py" line="38" time="7.578" /><testcase classname="tests.integration.lab_observe.scenarios_trace" name="test_o01_capture_turned_on_through_the_composition_switch" file="tests/integration/lab_observe/scenarios_trace.py" line="98" time="29.634" /><testcase classname="tests.integration.lab_observe.scenarios_trace" name="test_o01_an_async_jobs_shipped_record_holds_no_caller_token" file="tests/integration/lab_observe/scenarios_trace.py" line="130" time="18.291"><failure message="AssertionError: async: the caller's bearer token in the shipped record's ['request line']&#10;assert not ['request line']">workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-4/research/plan/evidence/e/E5L-raw-lo4/fix/o01-only/cases/test_o01_an_async_jobs_shipped_record_holds_no_caller_token')
+
+    def test_o01_an_async_jobs_shipped_record_holds_no_caller_token(workdir):
+        """The async half of WR-LO4-RV1: alpha's job prompt echoes its own token; the worker's
+        job spool (JobCapture) is shipped by the gateway, and the record holds the redaction,
+        never the token. Known FAIL on this base: R8 (lab-capture-2) - `JobCapture.spool` writes
+        `request_line(request)` without the caller's token (mutants.KNOWN_FAIL)."""
+        with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:
+            alpha = trip.world.alpha
+            capture_on(trip, workdir)
+            request_id = ow.served(trip, alpha, "o01-echo", messages=echoing(alpha))
+            retention = trip.traces.retention
+            world.wait_for(lambda: run(retention.find_traces(alpha.org_id, request_id)), 60.0,
+                           "the gateway's ship pass")
+&gt;           holds_no_token(trip, alpha, request_id, "async")
+
+tests/integration/lab_observe/scenarios_trace.py:143: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+trip = &lt;pilotbox.Journey object at 0x781f75050890&gt;, tenant = Tenant(name='alpha', user_id='65b2030a-9c00-48bd-b26e-87b18ecff56e', org_id='9b92ece8-7cc7-4262-a91b-8626c30e6551', ke...ccountView=PgAccountView, WalletDirectory=PgWalletDirectory, CatalogDirectory=PgCatalogDirectory, JobStore=PgJobStore'), request_id = '94d6f677-2b45-465f-b130-fced50360ee3', half = 'async'
+
+    def holds_no_token(trip, tenant, request_id: str, half: str) -&gt; None:
+        """The shipped record of `request_id` holds the redaction and never the caller's token.
+        The failure names the half and the byte class, never the token (no assertion rewrite
+        over the bytes)."""
+        from infrx.gateway.capture import REDACTED
+        content = run(trip.traces.retention.read_content(tenant.org_id, request_id))
+        request_part, _, answer_part = content.partition(b"\n")
+        token = tenant.secret.encode()
+        where = [name for name, part in (("request line", request_part),
+                                         ("answer", answer_part)) if token in part]
+&gt;       assert not where, f"{half}: the caller's bearer token in the shipped record's {where}"
+E       AssertionError: async: the caller's bearer token in the shipped record's ['request line']
+E       assert not ['request line']
+
+tests/integration/lab_observe/scenarios_trace.py:95: AssertionError</failure></testcase></testsuite></testsuites>

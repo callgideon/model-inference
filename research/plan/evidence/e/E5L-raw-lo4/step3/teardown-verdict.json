@@ -1,0 +1,249 @@
+{
+  "task": "E5L",
+  "gate": "LAB-OBSERVE (local; I2L-OBS staging needs P-08)",
+  "verdict": "NOT RUN",
+  "exit": 3,
+  "cells": {
+    "TRACE-BOUNDS": "PASS",
+    "TRACE-RECOVER": "NOT RUN",
+    "TRACE-TENANT": "NOT RUN",
+    "FEEDBACK-ACK": "NOT RUN",
+    "JUDGE-BUDGET": "NOT RUN",
+    "JUDGE-SCORES": "NOT RUN",
+    "LAB-ACCESS": "NOT RUN",
+    "CONSOLE-FLOWS": "NOT RUN"
+  },
+  "r222": {
+    "accepted": false,
+    "open": {
+      "o02": "NOT RUN",
+      "o03": "NOT RUN",
+      "o04": "NOT RUN",
+      "o05": "NOT RUN",
+      "o06": "NOT RUN",
+      "o07": "NOT RUN",
+      "o08": "NOT RUN",
+      "o09": "NOT RUN",
+      "o10": "NOT RUN"
+    }
+  },
+  "label": "real PostgreSQL/PostgREST/Valkey/ClickHouse/S3-compatible services, the merged T2I/T2F/T3/G4F/L2/J2 code and a controlled protocol engine; not Marlin quality, not GPU capacity, not hosted behaviour",
+  "judge": "dry-run: J2's local judge fake on 127.0.0.1 and J2's in-memory D6J ledger; no external provider (P-10 absent); never a live-judge run",
+  "pins": {
+    "base": "9a48300c",
+    "head": "d439fc01713d9980f428328bac8a9619cdf17747",
+    "dirty": false,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    }
+  },
+  "namespace": "e5l",
+  "project": "infrx-e5l",
+  "ports": {
+    "postgres": 57132,
+    "valkey": 57179,
+    "clickhouse_http": 57123,
+    "clickhouse_native": 57190,
+    "s3": 57100,
+    "fake_vllm": 57180
+  },
+  "started": "2026-09-29T20:31:56+00:00",
+  "seconds": 94.4,
+  "stack": {
+    "usable": true,
+    "why_not": "reused a kept stack",
+    "stages": [
+      {
+        "stage": "backend-teardown",
+        "status": "PASS",
+        "seconds": 77.9
+      },
+      {
+        "stage": "teardown",
+        "status": "PASS",
+        "seconds": 16.4
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "o01",
+      "title": "capture -> ship -> search: off by default; a captured request ships once with its pins; only its org finds it; capture on via the switch",
+      "test_ids": [
+        "TRACE-BOUNDS",
+        "TRACE-TENANT"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace": "PASS",
+        "test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_it": "PASS",
+        "test_o01_capture_turned_on_through_the_composition_switch": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01",
+      "scope": {}
+    },
+    {
+      "id": "o02",
+      "title": "feedback acknowledged after commit, owned by its key, projected once",
+      "test_ids": [
+        "FEEDBACK-ACK"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o02",
+      "scope": {}
+    },
+    {
+      "id": "o03",
+      "title": "Lab review: a provider reads a grantor's trace only under a current grant, in-process and through the gateway's traces route",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o03",
+      "scope": {}
+    },
+    {
+      "id": "o04",
+      "title": "judge dry run: default mode sends nothing; a consented run sends once, scores once, charges no customer wallet; the D6J ledger",
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "JUDGE-SCORES"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o04",
+      "scope": {}
+    },
+    {
+      "id": "o05",
+      "title": "a grant revoked mid-queue: nothing leaves, the hold is released",
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o05",
+      "scope": {}
+    },
+    {
+      "id": "o06",
+      "title": "content expired or deleted: gone for every read, never sent to the judge",
+      "test_ids": [
+        "TRACE-TENANT",
+        "JUDGE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o06",
+      "scope": {}
+    },
+    {
+      "id": "o07",
+      "title": "the projection dropped (ClickHouse killed): segment held, App serving, shipped once after",
+      "test_ids": [
+        "TRACE-RECOVER"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o07",
+      "scope": {}
+    },
+    {
+      "id": "o08",
+      "title": "a judge submit timed out and the worker restarted: quarantined, never resent, reconciled",
+      "test_ids": [
+        "JUDGE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o08",
+      "scope": {}
+    },
+    {
+      "id": "o09",
+      "title": "a worker restarted: the feedback projector after its insert, the box worker mid-traffic",
+      "test_ids": [
+        "TRACE-RECOVER",
+        "FEEDBACK-ACK"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o09",
+      "scope": {}
+    },
+    {
+      "id": "o10",
+      "title": "the Lab review panel renders the traces route's answer (browser flow)",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o10",
+      "scope": {}
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e5l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-4/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs --import-mode=prepend -o junit_family=xunit1 --junitxml=/tmp/claude-1000/lo4/step3/teardown/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-4/tests/integration/lab_observe/scenarios_judge.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-4/tests/integration/lab_observe/scenarios_trace.py -k test_o01_",
+      "exit": 0,
+      "seconds": 77.3,
+      "summary": "3 passed, 15 deselected in 72.11s (0:01:12)",
+      "log": "/tmp/claude-1000/lo4/step3/teardown/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/tmp/claude-1000/lo4/step3/teardown/scenarios.xml",
+    "log": "/tmp/claude-1000/lo4/step3/teardown/scenarios.log",
+    "box_logs": "/tmp/claude-1000/lo4/step3/teardown/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir>"
+}

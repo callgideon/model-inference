@@ -1,0 +1,3 @@
+cells {'TRACE-BOUNDS': 'FAIL', 'TRACE-RECOVER': 'NOT RUN', 'TRACE-TENANT': 'FAIL', 'FEEDBACK-ACK': 'NOT RUN', 'JUDGE-BUDGET': 'NOT RUN', 'JUDGE-SCORES': 'NOT RUN', 'LAB-ACCESS': 'NOT RUN', 'CONSOLE-FLOWS': 'NOT RUN'}
+r222 {'accepted': False, 'open': {'o01': 'FAIL', 'o02': 'NOT RUN', 'o03': 'NOT RUN', 'o04': 'NOT RUN', 'o05': 'NOT RUN', 'o06': 'NOT RUN', 'o07': 'NOT RUN', 'o08': 'NOT RUN', 'o09': 'NOT RUN', 'o10': 'NOT RUN'}}
+gate FAIL -> /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/lo4-teardown/verdict.json

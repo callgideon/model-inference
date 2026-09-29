@@ -55,10 +55,103 @@ def test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_
         assert all(trip.traces.rows("trace_envelopes", r) == 1 for r in ids)
 
 
+def capture_on(trip, workdir) -> Path:
+    """TRACE_PUMPS on in the box (worker then gateway on one TRACE_SPOOL_DIR, WR-LC-LOCAL):
+    both orgs consent `full`; only alpha's key opted in. The spool directory."""
+    alpha, beta = trip.world.alpha, trip.world.beta
+    for tenant in (alpha, beta):
+        ow.sql(trip, "insert into infrx.consent_history (org_id, consent_version, "
+                     "trace_mode, content_retention_days, evaluation_consent, "
+                     "actor_principal, effective_at) select %s::uuid, coalesce(max("
+                     "consent_version), 0) + 1, 'full', 30, false, 'e5l', infrx.now() - "
+                     "interval '1 minute' from infrx.consent_history where org_id = %s::uuid",
+               tenant.org_id, tenant.org_id)
+    ow.sql(trip, "update public.api_keys set trace_mode = 'full' where id = %s", alpha.key_id)
+    spool = workdir / "trace-spool"
+    on = {"TRACE_PUMPS": "1", "TRACE_SPOOL_DIR": str(spool),
+          "CLICKHOUSE_URL": ow.limits(trip.traces).clickhouse_url,
+          "S3_TRACE_BUCKET": harness.S3_BUCKET}
+    trip.box.start("worker", **on)
+    trip.box.start("gateway", **on)
+    return spool
+
+
+def echoing(tenant) -> list:
+    """A prompt that echoes the caller's own bearer token (the credential a record never
+    holds; the spool itself is drained by the ship pass, so the shipped record is judged)."""
+    return [{"role": "user", "content": f"Describe the van. {tenant.secret}"}]
+
+
+def holds_no_token(trip, tenant, request_id: str, half: str) -> None:
+    """The shipped record of `request_id` holds the redaction and never the caller's token.
+    The failure names the half and the byte class, never the token (no assertion rewrite
+    over the bytes)."""
+    from infrx.gateway.capture import REDACTED
+    content = run(trip.traces.retention.read_content(tenant.org_id, request_id))
+    request_part, _, answer_part = content.partition(b"\n")
+    token = tenant.secret.encode()
+    where = [name for name, part in (("request line", request_part),
+                                     ("answer", answer_part)) if token in part]
+    assert not where, f"{half}: the caller's bearer token in the shipped record's {where}"
+    assert REDACTED in content, f"{half}: the echoed token was not replaced by the redaction"
+
+
 def test_o01_capture_turned_on_through_the_composition_switch(workdir):
-    ow.not_run("o01", "WR-C6-CAPTURE", why="product WR (R234 ii): the gateway has no capture "
-               "seam on the request path and no consent source (consent_for None, every trace "
-               "policy off_mode_policy), so no served request reaches a spool (COMPOSITION-6)")
+    """WR-C6-CAPTURE (R250): `TRACE_PUMPS` on in the box (gateway and worker on one
+    TRACE_SPOOL_DIR). alpha's key opted in under alpha's consent: its sync answer (the gateway's
+    hook) and its async job's output (the worker's job spool) are shipped by the gateway's
+    lifespan with their pins and found by alpha only; the async record holds the controlled
+    engine's answer (the job's output, WR-LO4-RV2). beta's org consents but its key never
+    opted in: its async and sync requests leave 0 envelopes (WR-LO4-RV3). alpha's sync prompt
+    echoes its own token: the shipped record holds the redaction, never the token (WR-LO4-RV1;
+    the async half is the next case)."""
+    with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:
+        alpha, beta = trip.world.alpha, trip.world.beta
+        spool = capture_on(trip, workdir)
+        sync = trip.send(alpha, "sync", echoing(alpha), None)
+        assert sync.status_code == 200, sync.text[:200]
+        echoed = sync.headers["inference-id"]
+        job = ow.served(trip, alpha, "o01-on")
+        captured = {echoed, job}
+        beta_sync = trip.send(beta, "sync", world.TEXT, None)
+        assert beta_sync.status_code == 200, beta_sync.text[:200]
+        quiet = {ow.served(trip, beta, "o01-beta"), beta_sync.headers["inference-id"]}
+        retention = trip.traces.retention
+        world.wait_for(lambda: all(run(retention.find_traces(alpha.org_id, r))
+                                   for r in captured), 60.0, "the gateway's ship pass")
+        for request_id in captured:
+            [row] = run(retention.find_traces(alpha.org_id, request_id))
+            assert row.mode == "full" and row.content_stored, row
+            assert (row.serving_version_id, row.rate_card_version) == pins_of(trip, request_id)
+            assert b"Describe the van." in run(retention.read_content(alpha.org_id, request_id))
+            assert run(retention.find_traces(beta.org_id, request_id)) == []
+        answer = trip.engine.control()["text"].encode()
+        assert answer in run(retention.read_content(alpha.org_id, job)), \
+            "async: the job's output is not in its shipped record"
+        holds_no_token(trip, alpha, echoed, "sync")
+        # one more ship pass (every 10 s): the box exposes no pass counter to wait on
+        time.sleep(12.0)
+        for request_id in quiet:
+            assert run(retention.find_traces(beta.org_id, request_id)) == []
+            assert trip.traces.rows("trace_envelopes", request_id) == 0, \
+                "a key that never opted in left a trace"
+        assert all(trip.traces.rows("trace_envelopes", r) == 1 for r in captured)
+        assert not any((spool / "jobs").iterdir()), "a shipped job spool was left"
+
+
+def test_o01_an_async_jobs_shipped_record_holds_no_caller_token(workdir):
+    """The async half of WR-LO4-RV1: alpha's job prompt echoes its own token; the worker's
+    job spool (JobCapture) is shipped by the gateway, and the record holds the redaction,
+    never the token. Known FAIL on this base: R8 (lab-capture-2) - `JobCapture.spool` writes
+    `request_line(request)` without the caller's token (mutants.KNOWN_FAIL)."""
+    with ow.observe_trip(workdir, start=(), trace_prefix="infrx/") as trip:
+        alpha = trip.world.alpha
+        capture_on(trip, workdir)
+        request_id = ow.served(trip, alpha, "o01-echo", messages=echoing(alpha))
+        retention = trip.traces.retention
+        world.wait_for(lambda: run(retention.find_traces(alpha.org_id, request_id)), 60.0,
+                       "the gateway's ship pass")
+        holds_no_token(trip, alpha, request_id, "async")
 
 
 # --- o02 feedback -------------------------------------------------------------------------
