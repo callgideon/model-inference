@@ -43,9 +43,10 @@ export type Records = { releases: Release[]; decisions: Decision[]; proposals: P
 
 /** R3's `Identity`, the fields that scope a comparison. */
 export type Identity = { engine: string; engineVersion: string; hardware: string; quantization: string; capabilities: string[] };
-/** R3's lab.optimization_variant.1 with both identities and its infrx.variant_comparison.1 (null: not compared). */
+/** R3's lab.optimization_variant.1 with its infrx.variant_comparison.1 (null: not compared). The identities are
+ *  absent or null until R3 persists them (R252, WR-LW7-3a); the page then shows the serving refs. */
 export type Variant = {
-  variantRef: string; baseServingRef: string; variantServingRef: string; changes: string[]; base: Identity; variant: Identity;
+  variantRef: string; baseServingRef: string; variantServingRef: string; changes: string[]; base?: Identity | null; variant?: Identity | null;
   comparison: {
     outcome: "equivalent" | "not_equivalent" | "inconclusive" | "rejected"; reasons: string[]; reportDigest: string;
     performance: { throughputRatio: number; p99MsDelta: number; memoryGibDelta: number; sources: string[] } | null;

@@ -17,6 +17,7 @@ member importing; an unbounded or malformed body reaching N1 (a 500 instead of a
 from __future__ import annotations
 
 import asyncio
+import uuid
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -68,14 +69,17 @@ class Store(FakeLabStore):
 
 class Jobs(FakeJobs):
     """0055's requeue beside 0051's queue: the provider's failed job again as the new id, the
-    requeuer its actor; a replay is the one successor; any other state `StateConflict`."""
+    requeuer its actor; a replay is the one successor; any other state (or a rejected job)
+    `StateConflict`, and so is a new id another job holds."""
 
     async def requeue(self, job_id, *, new_job_id, provider_org_id, actor):
         job = await self.job(job_id, provider_org_id=provider_org_id)
-        if job["state"] != "failed":
+        if job["state"] != "failed" or job["error"] == "rejected":
             raise errors.StateConflict(f"only a failed import job is requeued; this one is "
                                        f"{job['state']}")
         again = next((j for j in self.rows.values() if j.get("requeued_from") == job_id), None)
+        if again is None and new_job_id in self.rows:
+            raise errors.StateConflict("that new job id is another job's")
         if again is None:
             again = await self.enqueue(new_job_id, {**job["spec"], "actor": actor},
                                        provider_org_id=provider_org_id, actor=actor)
@@ -276,7 +280,8 @@ def test_lab_datasets__a_failed_import_is_requeued_as_a_new_job_the_pool_works(m
     queued job (0055; the failed one stays failed, R243) under an id derived from the failed
     one, after copying the upload's rows to that id - so the pool imports it unchanged and it
     reads `published`. A retry is the same job and writes nothing; a job that has not failed
-    is a 409; a viewer 403, another provider's developer 404; without a queue 503."""
+    is a 409 that copies nothing (R1); a viewer 403, another provider's developer 404; an id
+    another provider's import already holds never blocks it (R2); without a queue 503."""
     w = World()
     _, data = fixture("benchmark")
     body = {"spec": w.spec(), "body": data.decode(), "accept_rejects": True}
@@ -288,7 +293,13 @@ def test_lab_datasets__a_failed_import_is_requeued_as_a_new_job_the_pool_works(m
     with TestClient(w.app(), raise_server_exceptions=False) as client:
         again = f"{path}/{import_id}/requeue"
         assert call(client, w.DEV_A, "POST", path, body).status_code == 200
+        stored = len(w.objects.objects)
         assert call(client, w.DEV_A, "POST", again).status_code == 409      # still running
+        assert len(w.objects.objects) == stored, "a refused requeue copied the upload's rows"
+        derived = str(uuid.uuid5(uuid.NAMESPACE_URL, f"requeue:{w.A}:{import_id}"))
+        w.jobs.rows[derived] = {"job_id": derived, "provider_org_id": w.B, "spec": {},
+                                "state": "succeeded", "by": None, "lapsed": False,
+                                "attempts": 1}          # another provider's import holds it
         monkeypatch.setattr(imports.Importer, "run", missing)
         w.pool()
         monkeypatch.setattr(imports.Importer, "run", run)
@@ -298,13 +309,13 @@ def test_lab_datasets__a_failed_import_is_requeued_as_a_new_job_the_pool_works(m
         assert made.status_code == 200, made.text
         new = made.json()["import_id"]
         assert made.json() == {"import_id": new, "state": "running", "report": None,
-                               "error": None} and new != import_id
+                               "error": None} and new not in (import_id, derived)
         assert w.jobs.rows[new].get("requeued_from") == import_id
         assert w.jobs.rows[new]["spec"]["actor"] == w.DEV_A
         assert asyncio.run(w.objects.get(imports.rows_key(w.A, new))) == data
         stored = len(w.objects.objects)
         assert call(client, w.DEV_A, "POST", again).json()["import_id"] == new   # a retry
-        assert len(w.objects.objects) == stored and len(w.jobs.rows) == 2
+        assert len(w.objects.objects) == stored and len(w.jobs.rows) == 3
         assert w.pool() == {"succeeded": 1, "failed": 0, "retry": 0}
         assert call(client, w.DEV_A, "GET", f"{path}/{new}").json()["state"] == "published"
         assert call(client, w.DEV_A, "GET", f"{path}/{import_id}").json()["state"] == "failed"

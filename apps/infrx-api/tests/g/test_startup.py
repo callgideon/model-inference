@@ -510,8 +510,8 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
     launcher stored beside it (WR-C5-PLAN), the proposals over 0043 (one pending per revision,
     the proposer the session's user), and D9 as the route's store - all on the gateway's
     pool and Lab objects. R1's aggregates are not readable (WR-C5-LIVE): progress is null; the
-    verdict is D9's latest decision; a release whose plan is not stored, and R3's variant
-    listing (not written), are a typed 503, never a guessed row."""
+    verdict is D9's latest decision; a release whose plan is not stored is a typed 503, never
+    a guessed row; R3's variants are 0055's listing for the page's provider (WR-C6-VARIANTS)."""
     import dataclasses
     from datetime import datetime, timezone
 
@@ -522,6 +522,7 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
     from infrx.state.lab_data import PgLabDataStore
     from infrx.state.lab_rollout import (Decision, PgReleaseProposals, PgReleaseStore, Release,
                                          ReleaseListing)
+    from infrx.state.lab_variants import PgLabVariants
 
     settings = support.settings(deployment=dataclasses.replace(support.BUILD,
                                                                lab_releases=True))
@@ -533,6 +534,7 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
     assert type(x.records.d9) is PgReleaseStore and x.records.d9._connect == "pool"
     assert type(x.records.store) is PgLabDataStore and x.records.store._connect == "pool"
     assert x.records.objects is objects
+    assert type(x.records.lab_variants) is PgLabVariants and x.records.lab_variants._connect == "pool"
     assert type(x.proposals.store) is PgReleaseProposals and x.proposals.store._connect == "pool"
 
     provider = "a0000000-0000-4000-8000-00000000000a"
@@ -571,7 +573,11 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
             assert (wanted, provider_org_id) == (ref, provider)
             return lab.parse(record)
 
-    records = pilot.ReleaseRecords(D9(), D7(), objects)
+    class Variants:
+        async def variants(self, provider_org_id):
+            return [{"variant_ref": "lab:variant:v"}] if provider_org_id == provider else []
+
+    records = pilot.ReleaseRecords(D9(), D7(), objects, Variants())
     died = outcome(lambda: asyncio.run(records.releases(provider)))
     assert type(died) is errors.DependencyUnavailable and "WR-C5-PLAN" in str(died), died
     asyncio.run(objects.put_if_absent(plan_key(provider, record["policy_id"]),
@@ -592,8 +598,7 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
     assert asyncio.run(records.decisions(provider)) == [
         {"policy_ref": ref, "decision": "rollback", "reasons": ["error_rate"],
          "evidence_refs": ["run:x"], "decided_by": "op", "decided_at": "2026-09-28T09:30:05Z"}]
-    died = outcome(lambda: asyncio.run(records.variants(provider)))
-    assert type(died) is errors.DependencyUnavailable, died
+    assert asyncio.run(records.variants(provider)) == [{"variant_ref": "lab:variant:v"}]
 
     made = []
 

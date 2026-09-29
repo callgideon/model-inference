@@ -79,22 +79,28 @@ MUTANTS: tuple[Mutant, ...] = (
        DURABLE),
     # WR-C6-REQUEUE (lab-sql LW7): a failed job again as a new job the pool works unchanged
     _m("requeue_rows_not_copied", "the upload's rows are copied to the new job's id first",
-       "            if rows is not None:\n", "            if False:\n", REQUEUE),
+       "                    if rows is not None:\n", "                    if False:\n", REQUEUE),
     _m("requeue_rows_other_provider", "the rows copied are the path provider's upload",
        "rows = await objects.get(imports.rows_key(provider, import_id))",
        "rows = await objects.get(imports.rows_key(user, import_id))", REQUEUE),
+    _m("requeue_rows_copied_unchecked", "only a job read as failed has its rows copied (R1)",
+       "imports.rows_key(provider, import_id)) if failed else None",
+       "imports.rows_key(provider, import_id))", REQUEUE),
     _m("requeue_id_random", "the new id is derived from the failed one (a retry writes nothing)",
-       'str(uuid.uuid5(uuid.NAMESPACE_URL, f"requeue:{import_id}"))', "str(uuid.uuid4())",
-       REQUEUE),
+       'derived = str(uuid.uuid5(uuid.NAMESPACE_URL, f"requeue:{provider}:{import_id}"))',
+       "derived = str(uuid.uuid4())", REQUEUE),
+    _m("requeue_taken_id_blocks", "an id another import holds never blocks a requeue (R2)",
+       "                    if not failed or again != derived:\n",
+       "                    if True:\n", REQUEUE),
     _m("requeue_other_provider", "the job requeued is the path provider's",
-       "new_job_id=again,\n                                            provider_org_id=provider,",
-       "new_job_id=again,\n                                            provider_org_id=user,",
-       REQUEUE),
+       "new_job_id=again,\n                                                    "
+       "provider_org_id=provider,",
+       "new_job_id=again,\n                                                    "
+       "provider_org_id=user,", REQUEUE),
     _m("requeue_actor_not_session", "the requeuer is the session's user",
-       "provider_org_id=provider, actor=user))\n        return await guarded(request, provider, "
-       "work)\n\n    @api.get(\"/versions\")",
-       "provider_org_id=provider, actor=\"lab\"))\n        return await guarded(request, "
-       "provider, work)\n\n    @api.get(\"/versions\")", REQUEUE),
+       "provider_org_id=provider, actor=user))\n                except errors.Conflict:",
+       "provider_org_id=provider, actor=\"lab\"))\n                except errors.Conflict:",
+       REQUEUE),
 )
 
 

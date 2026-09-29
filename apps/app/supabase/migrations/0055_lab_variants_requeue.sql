@@ -15,10 +15,11 @@
 --         `failed` job (another provider's or an unknown id: `not_found`) -> a NEW `queued`
 --         job `new_job_id` with the same import spec, the requeuer as its creator and actor,
 --         recording its predecessor; the datasets role claims it like any job. A replay
---         answers the one successor unchanged; a queued, running or succeeded job is
---         `state_conflict` naming its state; a missing actor `invalid_request`; a new id
---         another job holds `state_conflict`. The gateway copies the upload's rows to the
---         new id before calling this (`imports.work` reads rows by job id).
+--         answers the one successor unchanged; a queued, running, succeeded or rejected
+--         (failed with error `rejected`) job is `state_conflict` naming it; a missing actor
+--         `invalid_request`; a new id another job holds `state_conflict`. The gateway copies the upload's rows to the
+--         new id before calling this (`imports.work` reads rows by job id), only after
+--         reading the job as failed (so a refused requeue copies nothing).
 --
 -- EXECUTE: service_role through 0004's defaults (SECURITY DEFINER), and the control unit's
 -- login `infrx_lab_control` (0043; R237: the box's `/lab/v1/*` server composes lab_datasets
@@ -64,6 +65,10 @@ begin
   if j.state <> 'failed' then
     perform infrx.refuse('state_conflict', 'only a failed import job is requeued; this one '
                          'is ' || j.state);
+  end if;
+  if j.error = 'rejected' then                  -- imports.work's refused rows: they reject again
+    perform infrx.refuse('state_conflict', 'a rejected import job is not requeued; this one '
+                         'is rejected');
   end if;
   begin
     insert into infrx.lab_import_jobs (job_id, provider_org_id, spec, created_by,

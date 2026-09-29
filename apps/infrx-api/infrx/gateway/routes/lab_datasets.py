@@ -135,17 +135,29 @@ def router(*, access, store, objects, user_of, read, clock=lambda: datetime.now(
     @api.post("/imports/{import_id}/requeue")
     async def requeue(request: Request, provider: str, import_id: str):
         """WR-C6-REQUEUE (0055): a failed job again as a new job (R243: the failed id stays
-        terminal). The new id is derived from the failed one, so a retry is the same job; the
-        rows are copied to it first because the pool reads a job's rows by its id.
-        ponytail: the copy re-reads the upload (<= MAX_BODY_BYTES) through the gateway."""
+        terminal). The job is read first (the provider's own, else 404): only a `failed` one
+        has its upload's rows copied to the new id - before 0055 queues it, because the pool
+        reads a job's rows by its id - so a refused requeue copies nothing (0055 names the
+        state). The new id is derived from the provider and the failed id, so a retry is the
+        same job; one another import already holds is replaced by a random id, never a
+        blocked requeue (a replay still answers the one successor).
+        ponytail: the copy re-reads the upload (<= MAX_BODY_BYTES) through the gateway; a
+        taken derived id leaves one unused copy of the rows under it."""
         async def work(provider, user):
-            jobs, again = queue(), str(uuid.uuid5(uuid.NAMESPACE_URL, f"requeue:{import_id}"))
-            rows = await objects.get(imports.rows_key(provider, import_id))
-            if rows is not None:
-                await imports.write_once(objects, imports.rows_key(provider, again), rows,
-                                         "application/x-ndjson")
-            return shown(await jobs.requeue(import_id, new_job_id=again,
-                                            provider_org_id=provider, actor=user))
+            jobs = queue()
+            failed = shown(await jobs.job(import_id, provider_org_id=provider))["state"] == "failed"
+            rows = await objects.get(imports.rows_key(provider, import_id)) if failed else None
+            derived = str(uuid.uuid5(uuid.NAMESPACE_URL, f"requeue:{provider}:{import_id}"))
+            for again in (derived, str(uuid.uuid4())):
+                try:
+                    if rows is not None:
+                        await imports.write_once(objects, imports.rows_key(provider, again),
+                                                 rows, "application/x-ndjson")
+                    return shown(await jobs.requeue(import_id, new_job_id=again,
+                                                    provider_org_id=provider, actor=user))
+                except errors.Conflict:
+                    if not failed or again != derived:
+                        raise                   # 0055's refusal naming the state
         return await guarded(request, provider, work)
 
     @api.get("/versions")

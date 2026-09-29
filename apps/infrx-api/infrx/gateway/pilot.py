@@ -399,10 +399,12 @@ def lab_releases(connect, sessions, access, objects):
     D9 as the route's store, on this pool."""
     from ..state.lab_data import PgLabDataStore
     from ..state.lab_rollout import PgReleaseProposals, PgReleaseStore
+    from ..state.lab_variants import PgLabVariants
     from .routes.lab_releases import LabReleases
     d9 = PgReleaseStore(connect)
     return LabReleases(sessions, access,
-                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects),
+                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects,
+                                              PgLabVariants(connect)),
                        proposals=ReleaseProposals(PgReleaseProposals(connect)), store=d9)
 
 
@@ -420,11 +422,11 @@ class ReleaseRecords:
     """WR-R4-2: `/lab/v1/releases`' read models (port.ts, snake_case). Each D9 release (0048)
     with D7's policy revision and the plan its launcher stored (WR-C5-PLAN; none stored: a
     503 naming it, never a guessed plan); `progress` null (R1's aggregates are not readable,
-    WR-C5-LIVE); the verdict is D9's latest decision. Decisions are 0053's. R3's variant
-    listing is not written (WR-C6-VARIANTS): 503."""
+    WR-C5-LIVE); the verdict is D9's latest decision. Decisions are 0053's. R3's variants
+    are 0055's listing (WR-C6-VARIANTS): none is [], never a 503."""
 
-    def __init__(self, d9, store, objects) -> None:
-        self.d9, self.store, self.objects = d9, store, objects
+    def __init__(self, d9, store, objects, variants) -> None:
+        self.d9, self.store, self.objects, self.lab_variants = d9, store, objects, variants
 
     async def releases(self, provider_org_id: str) -> list[dict]:
         from ..lab.workers.__main__ import plan_key
@@ -461,8 +463,8 @@ class ReleaseRecords:
         return [{**d, "decided_at": _z(d["decided_at"])}
                 for d in await self.d9.decisions(provider_org_id=provider_org_id)]
 
-    async def variants(self, provider_org_id: str):
-        raise errors.DependencyUnavailable("R3's variant listing is not wired (WR-C6-VARIANTS)")
+    async def variants(self, provider_org_id: str) -> list[dict]:
+        return await self.lab_variants.variants(provider_org_id)
 
 
 class ReleaseProposals:

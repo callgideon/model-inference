@@ -30,6 +30,9 @@ test("N4-P01 every call is the provider-scoped path with the user's own token an
   await post.port.startImport(P, { format: "infrx.dataset_import.1" }, "{}\n", true);
   assert.equal(post.sent[0].init.method, "POST");
   assert.deepEqual(JSON.parse(String(post.sent[0].init.body)), { spec: { format: "infrx.dataset_import.1" }, body: "{}\n", accept_rejects: true });
+  const again = await post.port.requeue(P, "../i-1");
+  assert.deepEqual([post.sent[1].url, post.sent[1].init.method, again.ok && again.value.importId],
+    [`http://api.test/lab/v1/providers/${P}/datasets/imports/..%2Fi-1/requeue`, "POST", "i-1"]);
 });
 
 test("N4-P02 refusals are named failures, carrying leaks and the rejection report", async () => {
@@ -68,7 +71,7 @@ test("N4-P04 an unreachable or unconfigured service is unavailable for every cal
   const got = await down.versions(P).catch((error: unknown) => ({ crashed: String(error) }));    // a crash is the defect
   assert.deepEqual(got, { ok: false, error: "unavailable", detail: "the datasets service could not be reached" });
   const offline = offlineDatasets();
-  for (const method of ["preview", "startImport", "importJob", "versions", "version", "derive", "exportVersion", "readPart"] as (keyof DatasetsPort)[]) {
+  for (const method of ["preview", "startImport", "importJob", "requeue", "versions", "version", "derive", "exportVersion", "readPart"] as (keyof DatasetsPort)[]) {
     const got = await (offline[method] as (...a: unknown[]) => Promise<{ ok: boolean; error?: string }>)(P, "x", "y", false);
     assert.equal(got.ok === false && got.error, "unavailable", method);
   }

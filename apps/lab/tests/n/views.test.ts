@@ -16,9 +16,16 @@ test("N4-V01 only a published import with its dataset reads as success; the rest
     const view = importView(job(state));
     assert.equal(view.tone, "error");
     assert.equal(view.poll, false);
-    assert.match(view.detail, /same import id/);
+    assert.doesNotMatch(view.detail, /same import id/);                       // R243: a failed id stays terminal
+    assert.match(view.detail, /new import/);
   }
   assert.match(importView(job("rejected")).detail, /1 row\(s\) were rejected and 3 accepted/);
+});
+
+test("N4-V06 an Import again action is offered for a failed job only (R252)", () => {
+  assert.equal(importView(job("failed")).again, true);
+  assert.equal(importView(job("published", { report: { ...report, datasetRef: "lab:dataset:d" } })).again, false);
+  for (const state of ["published", "running", "rejected"] as const) assert.equal(importView(job(state)).again, false, state);
 });
 
 test("N4-V02 the rejected-rows download is line, reason and detail only", () => {

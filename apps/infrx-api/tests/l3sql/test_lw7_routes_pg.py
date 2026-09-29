@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""lab-sql LW7's routes on real PostgreSQL: `/lab/v1/optimizations` over `PgLabVariants`
-(WR-C6-VARIANTS: the listing instead of 503) with L2's `LabAccess`, and `POST
+"""lab-sql LW7's routes on real PostgreSQL: `/lab/v1/optimizations` as the launched
+composition builds it (`pilot.lab_releases`, WR-LW7-1: `ReleaseRecords.variants` over
+`PgLabVariants`; WR-C6-VARIANTS: the listing instead of 503) with L2's `LabAccess`, and `POST
 imports/{id}/requeue` as `LAB_DATASETS` composes it (`pilot._lab`, 0051/0055's
 `PgLabImportJobs`) with the datasets role's pass working the new job (WR-C6-REQUEUE). Only
 the session verifier (a token per user) and the objects (in memory) are stand-ins. Outside the mutant runner: the oracles are the SQL list
@@ -63,8 +64,9 @@ def test_lw7_routes_pg__optimizations_lists_the_providers_variants_not_a_503(con
     mine, bare = v.variant(conn, 0x91), v.variant(conn, 0x92)
     digest = v.ok(conn, "lab_put_variant_comparison", v.put(v.comparison(mine, report)))
     connect = connector(pgharness.dsn(DB))
-    x = lr.LabReleases(Sessions((l2.VIEWER, l2.BOTH)), LabAccess(PgAccessStore(connect)),
-                       records=PgLabVariants(connect))
+    x = pilot.lab_releases(connect, Sessions((l2.VIEWER, l2.BOTH)),
+                           LabAccess(PgAccessStore(connect)), None)
+    assert type(x.records.lab_variants) is PgLabVariants
     app = FastAPI()
     lr.register(app, gsupport.runtime(), x)
     c = TestClient(app, raise_server_exceptions=False)

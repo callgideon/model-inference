@@ -200,3 +200,63 @@ Commands (apps/infrx-api, key l3):
 | F7 | `INFRX_D_TASK=l3 uv run --frozen pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py` (every switch OFF) | 0 | 2829 passed, 28 skipped, 0 failed (21:40) |
 
 Remaining estimate after this round: optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium. That covers the coordinator applying WR-LW7-1 with this grant, plus one verify round. The WR-LW7-3 ruling and the Lab work are not counted.
+
+## Coordinator rulings (merge #56, `codex/w5-merge-56`)
+
+- **R252 = WR-LW7-3 option (b).** The Lab reads a variant's `base`/`variant` identities as
+  optional (absent or null) and shows the serving refs in their place; a variant missing a
+  serving ref is unavailable. The listing is provider-scoped (R227) with both serving refs, the
+  changes and the newest comparison (null when never compared). A failed import is requeued
+  as a new job naming its predecessor, and the failed id stays terminal (R243). A queued,
+  running, succeeded or rejected job refuses requeue by name. Numbered in 08 §10 directly after
+  R249. R250 and R251 are numbered in parallel on merges #54 and #55, and the coordinator sorts
+  them at integration.
+
+## Applied at merge
+
+- **WR-LW7-1:** the lane's `LAB-SQL-LW7-wiring-variants.patch` was applied as is. It makes
+  `pilot.ReleaseRecords.variants` delegate to `PgLabVariants(connect)` on the gateway pool and
+  changes `tests/g/test_startup.py` and `tests/g/mutants.py`. `lab_releases_variants_invented`
+  is replaced by `_absent`, `_other_provider` and `_off_the_pool`, and the `records_absent` and
+  `other_objects` anchors are re-cut. The l3sql optimizations route case now builds the
+  surface through `pilot.lab_releases`, as the launched composition does.
+- **WR-LW7-2 (apps/lab):** adds `DatasetsPort.requeue`, with `httpDatasets` posting to
+  `imports/{id}/requeue` and `offlineDatasets` answering down. Adds the `requeueImport` flow
+  (viewer refused, provider from the workspace), `requeueImportAction`, which redirects to the
+  new `importId`, and the `ImportAgain` form on the job page, shown only when
+  `importView(job).again` (a failed job). The views' copy no longer promises "import again
+  under the same import id". Adds one new N4 mutant, `N4-X40` (the action offered for a
+  rejected job), killed by `N4-V06`. The datasets UI list is `tests/n/run-mutants.mjs`; it is
+  not under tests/l/ui or tests/v.
+- **WR-LW7-3b (apps/lab):** `http.ts` `VARIANT` reads `base`/`variant` as
+  `opt(nul(IDENTITY))`, and `view.ts` falls back to the serving refs. `R4-X113` is re-cut to
+  the identities being required again, killed by the new `R4-H06`. Two mutants are added:
+  `R4-X120` (a variant missing its serving refs is read, killed by H03) and `R4-X121` (no
+  fallback, killed by the new `R4-V12`).
+- **Lens minors on the lane's own files:**
+  - T1: the running and succeeded refusals now assert the name. New mutant
+    `lw7_requeue_only_queued_named`.
+  - T2: a later-published variant now has the smaller ref. New mutant
+    `lw7_variants_ref_order`.
+  - R3: 0055 refuses a rejected job with `state_conflict` "... is rejected". New mutant
+    `lw7_requeue_rejected_requeued`.
+  - R1 / SCOPE-3: the route reads the job through `lab_import_job` (ownership and state) and
+    copies the rows only for a job read as `failed`, so a refused requeue copies nothing. The
+    lens's "RPC first, then copy" order was not used: it would queue a job whose rows are
+    missing, and the pool could claim it before the copy, failing it with "the upload is
+    missing". New route mutant `requeue_rows_copied_unchecked`.
+  - R2: the derived id is uuid5 of the provider and the failed id. When another job already
+    holds it, the route retries once with a random id, and a replay still answers the one
+    successor through 0055. New route mutant `requeue_taken_id_blocks`. Ponytail note: a
+    taken derived id leaves one unused copy of the rows under it.
+- **SCOPE-6 accepted:** there is no `lab_optimizations.py`. The route lives in
+  `lab_releases.py` (`OPTIMIZATIONS_PATH`).
+
+## Carried
+
+- **WR-LW7-3a:** R3 persists both identities (a lab-sql table plus an R3 write), and 0055's
+  listing returns them. This goes to a later R3/lab-sql lane.
+- **WR-LW8-3:** 0055's two functions (`lab_optimization_variants`, `lab_import_requeue`) were
+  already granted to `infrx_lab_control` by this lane's fix round. lab-sql-lw8's GRANTED list
+  gains both names once 0055 and 0056 are both on the tip. If #55 lands first, the coordinator
+  adds them to `tests/d/test_code_mutants_lw8.py` at integration.

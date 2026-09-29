@@ -11,20 +11,21 @@ export const FAILURE_COPY: Record<Failure["error"], string> = {
   unavailable: "The datasets service did not answer. Nothing was changed on your side; try again.",
 };
 
-export type ImportView = { tone: "success" | "progress" | "error"; title: string; detail: string; poll: boolean };
+/** `again`: the page offers "Import again" (a new job of the same upload, R252) - for a failed job only. */
+export type ImportView = { tone: "success" | "progress" | "error"; title: string; detail: string; poll: boolean; again: boolean };
 
 /** The job page's headline. Only a published job with its dataset reads as success. */
 export function importView(job: ImportJob): ImportView {
   const report = job.report;
   if (job.state === "published" && report?.datasetRef) {
-    return { tone: "success", title: "Imported", detail: `${report.accepted} rows published as ${report.datasetRef}`, poll: false };
+    return { tone: "success", title: "Imported", detail: `${report.accepted} rows published as ${report.datasetRef}`, poll: false, again: false };
   }
-  if (job.state === "running") return { tone: "progress", title: "Importing", detail: "The import runs on the backend; this page refreshes until it ends.", poll: true };
+  if (job.state === "running") return { tone: "progress", title: "Importing", detail: "The import runs on the backend; this page refreshes until it ends.", poll: true, again: false };
   if (job.state === "rejected") {
     const n = report?.rejected.length ?? 0;
-    return { tone: "error", title: "Not published", detail: `${n} row(s) were rejected and ${report?.accepted ?? 0} accepted. Download the rejected rows, fix the upload or its mapping, and import again under the same import id to resume.`, poll: false };
+    return { tone: "error", title: "Not published", detail: `${n} row(s) were rejected and ${report?.accepted ?? 0} accepted. Download the rejected rows, fix the upload or its mapping, and start a new import (a new import id).`, poll: false, again: false };
   }
-  return { tone: "error", title: "Import failed", detail: `${job.error ?? "The import stopped."} Importing again under the same import id resumes from the staged rows.`, poll: false };
+  return { tone: "error", title: "Import failed", detail: `${job.error ?? "The import stopped."} "Import again" starts a new import of the same upload; this one stays failed.`, poll: false, again: job.state === "failed" };
 }
 
 /** The rejected rows as a JSONL download: line, reason and detail only (never the row's content). */

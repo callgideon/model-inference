@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { datasetsPort } from "@/lib/services/datasets/server";
 import { FAILURE_COPY, importView } from "@/lib/services/datasets/views";
+import { ImportAgain } from "../../forms";
 
 export default async function ImportJob({ params }: { params: Promise<{ id: string }> }) {
   const workspace = await requireProviderWorkspace();
@@ -17,6 +18,7 @@ export default async function ImportJob({ params }: { params: Promise<{ id: stri
       {view.poll && <meta httpEquiv="refresh" content="5" />}
       <h1>{view.title}</h1>
       <p role={view.tone === "error" ? "alert" : "status"}>{view.detail}</p>
+      {view.again && <ImportAgain importId={id} />}
       {(job.value.report?.rejected.length ?? 0) > 0 && (
         <p>
           <a href={`/datasets/imports/${encodeURIComponent(id)}/rejected`} download>

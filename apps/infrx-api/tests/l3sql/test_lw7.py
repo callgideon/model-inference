@@ -70,11 +70,13 @@ def check_variants_are_the_providers_own_with_their_latest_comparison(conn) -> s
     """WR-C6-VARIANTS / R227: the provider's `lab:variant` records, oldest first, each with
     both serving identities, what changed, and its NEWEST stored comparison (outcome, reasons,
     report digest, claim) or null; another provider's variants never appear, an unknown
-    provider reads []. Commits (the store reads on its own connection; tags 0x71-0x73)."""
+    provider reads []. Oldest first is publication order, not ref order: the second variant
+    published sorts BEFORE the first by ref (T2). Commits (the store reads on its own
+    connection; tags 0x70-0x73)."""
     report = v.stored_report(conn, 0x71)
     first = v.variant(conn, 0x71)
     t.advance(conn, 5)                                      # the seed's clock is frozen
-    second = v.variant(conn, 0x72)
+    second = v.variant(conn, 0x70)                          # later, but a smaller ref
     foreign = v.variant(conn, 0x73, OTHER)
     older = ok(conn, "lab_put_variant_comparison", v.put(v.comparison(
         first, report, "inconclusive", False)))["comparison_digest"]
@@ -83,6 +85,7 @@ def check_variants_are_the_providers_own_with_their_latest_comparison(conn) -> s
     latest = ok(conn, "lab_put_variant_comparison", v.put(newest))["comparison_digest"]
     assert older != latest
     rows = ok(conn, "lab_optimization_variants", {"provider_org_id": NEMO})
+    assert second < first, (second, first)
     assert [r["variant_ref"] for r in rows] == [first, second], rows       # never `foreign`
     serving = f"lab:serving:{NEMO}:{{}}@sha256:{'e' * 64}"
     assert {k: rows[0].get(k) for k in ("base_serving_ref", "variant_serving_ref", "changes")} == {
@@ -128,28 +131,37 @@ def check_a_failed_import_is_requeued_as_a_new_job_naming_its_predecessor(conn) 
 @v.rolled_back
 def check_only_a_failed_job_is_requeued(conn) -> str:
     """A queued, running or succeeded job is refused `state_conflict` naming its state (it is
-    still the import); a requeue with no actor is `invalid_request`; a new id another job
-    already holds is refused, never answered with that job."""
+    still the import), and so is a rejected one (failed with error `rejected`: the same rows
+    reject again) by that name; a requeue with no actor is `invalid_request`; a new id another
+    job already holds is refused, never answered with that job."""
     queued = uid(1, 0x82)
     ok(conn, "lab_import_job_enqueue", {"job_id": queued, "provider_org_id": NEMO,
                                         "spec": SPEC, "actor": "dev@nemo"})
-    got = cc.attempt(conn, "select infrx.lab_import_requeue(%s)",
-                     (Jsonb(requeue(queued, uid(2, 0x82))),))
-    assert got is not None and "state_conflict" in got and "is queued" in got, got
+    def named(job: str, state: str) -> None:
+        got = cc.attempt(conn, "select infrx.lab_import_requeue(%s)",
+                         (Jsonb(requeue(job, uid(2, 0x82))),))
+        assert got is not None and "state_conflict" in got and f"is {state}" in got, got
+
+    named(queued, "queued")
     ok(conn, "lab_import_job_claim", {"worker_id": "i5", "limit": 10, "redelivery_s": 30})
-    assert refusal(conn, "lab_import_requeue", requeue(queued, uid(2, 0x82))) == \
-        "state_conflict"
+    named(queued, "running")
     ok(conn, "lab_import_job_finish", {"job_id": queued, "worker_id": "i5",
                                        "state": "succeeded", "result": {"accepted": 1}})
-    assert refusal(conn, "lab_import_requeue", requeue(queued, uid(2, 0x82))) == \
-        "state_conflict"
+    named(queued, "succeeded")
+    rejected = uid(1, 0x85)
+    ok(conn, "lab_import_job_enqueue", {"job_id": rejected, "provider_org_id": NEMO,
+                                        "spec": SPEC, "actor": "dev@nemo"})
+    ok(conn, "lab_import_job_claim", {"worker_id": "i5", "limit": 10, "redelivery_s": 30})
+    ok(conn, "lab_import_job_finish", {"job_id": rejected, "worker_id": "i5", "state": "failed",
+                                       "result": {"accepted": 0}, "error": "rejected"})
+    named(rejected, "rejected")
     job = failed(conn, 0x83)
     assert refusal(conn, "lab_import_requeue", requeue(job, uid(2, 0x83), actor=None)) == \
         "invalid_request"
     assert refusal(conn, "lab_import_requeue", requeue(job, queued)) == "state_conflict", \
         "a taken id answered as the new job"
-    assert t.count(conn, "select count(*) from infrx.lab_import_jobs") == 2
-    return "queued/running/succeeded refused by state; no actor or a taken id refused"
+    assert t.count(conn, "select count(*) from infrx.lab_import_jobs") == 3
+    return "queued/running/succeeded/rejected refused by name; no actor or a taken id refused"
 
 
 def check_the_requeue_store_composes(conn) -> str:

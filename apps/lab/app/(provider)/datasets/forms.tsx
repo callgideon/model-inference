@@ -6,7 +6,7 @@ import { useActionState } from "react";
 import type { ActionState } from "@/lib/services/datasets/flows";
 import type { Derived, ExportRecord, ImportJob, Preview } from "@/lib/services/datasets/port";
 import { leakageWarnings } from "@/lib/services/datasets/views";
-import { deriveAction, exportAction, previewImportAction, startImportAction } from "./actions";
+import { deriveAction, exportAction, previewImportAction, requeueImportAction, startImportAction } from "./actions";
 
 const IDLE = { status: "idle" } as const;
 
@@ -28,6 +28,18 @@ function Problem({ state }: { state: ActionState<unknown> }) {
         <p key={w}>{w}</p>
       ))}
     </div>
+  );
+}
+
+/** "Import again" for a failed job (R252): a new job of the same upload; the page moves to it. */
+export function ImportAgain({ importId }: { importId: string }) {
+  const [state, action, pending] = useActionState<ActionState<ImportJob>, FormData>(requeueImportAction, IDLE);
+  return (
+    <form action={action} aria-label="Import again">
+      <input type="hidden" name="import_id" value={importId} />
+      <button disabled={pending}>{pending ? "Starting…" : "Import again"}</button>
+      <Problem state={state} />
+    </form>
   );
 }
 
