@@ -7,7 +7,8 @@ window applies 0019+), bound to the sha256 of the migration bytes it ran on (a r
 in this checkout is not proven); the proof driver refuses a short or unknown target, counts a
 suite that skipped or passed nothing as FAIL (pytest exits 0 on skips), and its migrated-DSN
 check refuses a history that differs from the candidate's files by a version or by a byte, or a
-CLI-split history that omits, reorders or fragments the file's statements.
+CLI-split history that omits, reorders or fragments the file's statements. KNOWN-GOOD-REPROOF
+(R151 condition 1): both proofs reach 0051 and bind this checkout's 0027-0051 bytes.
 """
 from __future__ import annotations
 
@@ -74,6 +75,24 @@ def test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema():
         assert f"{len(PROOF['SHAPE'])} SHAPE cases" in proof["result"], len(PROOF["SHAPE"])
 
 
+def test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0051():
+    """KNOWN-GOOD-REPROOF (R151/R201 condition 1, the 2026-09-29 window: hosted 0026 -> 0051).
+    Failure oracle: a record whose proofs stop short of 0051, or whose 0027-0051 hashes are not
+    this checkout's bytes (a Lab migration revised after the proof ran), leaves the window with
+    no rollback target; the re-proof's evidence is named first."""
+    record = json.loads(RECORD.read_text())
+    lab = {p.name[:4]: hashlib.sha256(p.read_bytes()).hexdigest()
+           for p in (support.REPO / MIG).glob("[0-9][0-9][0-9][0-9]_*.sql") if "0026" < p.name[:4] <= "0051"}
+    assert sorted(lab) == [f"{n:04d}" for n in range(27, 52)]
+    proven = {r["sha"][:7]: r["schema_proof"] for r in record["releases"]
+              if r.get("known_good") and r.get("schema_proof")}
+    assert set(proven) == {"4226315", "bda1586"}
+    for sha, proof in proven.items():
+        assert proof["through"] >= "0051", sha
+        assert {v: proof["files"].get(v) for v in lab} == lab, sha
+        assert "KNOWN-GOOD-REPROOF-" in proof["evidence"][0], sha
+
+
 def test_ops_recover__the_proof_driver_refuses_a_bad_target_and_a_moved_history():
     for bad in ("bda1586", "f" * 40):                                # short; not a commit here
         with pytest.raises(SystemExit) as refused:
@@ -127,11 +146,11 @@ def test_ops_recover__a_cli_split_history_must_be_the_whole_file_in_order():
         "statements differ from the candidate's files: ['0002']"
 
 
-def test_ops_recover__both_targets_are_known_good_through_0026_and_not_beyond(tmp_path):
-    """KNOWN-GOOD-PROOF-2/-3 (RR:51): each target's REAL record entry, judged against this
-    checkout's real 0019-0026 bytes, is KNOWN-GOOD with hosted at 0024-0026 and NOT at 0027,
-    which no proof reaches (0026 fences put_result; its lease-less call, the targets' write,
-    is 0014's). The target tree is a stand-in commit (0001-0018 and the
+def test_ops_recover__both_targets_are_known_good_through_0051_and_not_beyond(tmp_path):
+    """KNOWN-GOOD-PROOF-2/-3 (RR:51), KNOWN-GOOD-REPROOF (R151): each target's REAL record entry,
+    judged against this checkout's real 0019-0051 bytes, is KNOWN-GOOD with hosted at 0024-0051
+    (0026 fences put_result; its lease-less call, the targets' write, is 0014's; 0027-0051 are
+    the Lab's) and NOT at 0052, which no proof reaches. The target tree is a stand-in commit (0001-0018 and the
     preparation loop, as both targets carry) because mutation copies are not git checkouts;
     the real-sha verdicts are the evidence's `known-good.py <sha> --applied 0026|0027` runs."""
     repo = tmp_path / "repo"
@@ -149,7 +168,8 @@ def test_ops_recover__both_targets_are_known_good_through_0026_and_not_beyond(tm
             (repo / path).parent.mkdir(parents=True, exist_ok=True)
             (repo / path).touch()
         at = {applied: judge(target, applied, [], None, {"releases": [entry]}, repo)
-              for applied in ("0024", "0025", "0026", "0027")}
-        assert {at[a]["verdict"] for a in ("0024", "0025", "0026")} == {"KNOWN-GOOD"}, (real["sha"], at)
-        assert at["0027"]["verdict"] == "NOT-KNOWN-GOOD"
-        assert [c["check"] for c in at["0027"]["checks"] if not c["ok"]] == ["migrations"]
+              for applied in ("0024", "0026", "0027", "0050", "0051", "0052")}
+        assert {at[a]["verdict"] for a in ("0024", "0026", "0027", "0050", "0051")} == {"KNOWN-GOOD"}, \
+            (real["sha"], at)
+        assert at["0052"]["verdict"] == "NOT-KNOWN-GOOD"
+        assert [c["check"] for c in at["0052"]["checks"] if not c["ok"]] == ["migrations"]
