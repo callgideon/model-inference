@@ -1,0 +1,25 @@
+{
+ "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da6-0000-4000-8000-000000000002@sha256:eca4ed59d32da94f7032d4f9ea4deb20a5102a24439fccc062572e8a65dc9c27",
+ "rejected": [
+  {
+   "detail": "whole milliseconds, 0 <= start < end, at most 82000 ms long",
+   "line": 4,
+   "reason": "invalid_span"
+  },
+  {
+   "detail": "no 'clips/missing.mp4' in this import's bundle",
+   "line": 5,
+   "reason": "media_missing"
+  },
+  {
+   "detail": "'text/plain' is not a video type",
+   "line": 6,
+   "reason": "unsupported_type"
+  },
+  {
+   "detail": "a relative bundle key or an http(s) URL",
+   "line": 7,
+   "reason": "bad_media_path"
+  }
+ ]
+}

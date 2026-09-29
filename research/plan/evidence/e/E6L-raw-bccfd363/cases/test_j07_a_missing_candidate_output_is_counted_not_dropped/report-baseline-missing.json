@@ -1,0 +1,95 @@
+{
+ "baseline_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000003d@sha256:f6cae0bbc3241b77e9199f8ee105cb42e9de708606ccb30c98836c6f8380ccbc",
+ "candidate_run": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-000000000041@sha256:b946a821d3f39a2b32870ad8487a2c57b677df4164fad0e6bcc2b5cb36e4dd88",
+ "decision": {
+  "outcome": "inconclusive",
+  "reasons": [
+   "slice math uncertain"
+  ]
+ },
+ "estimates": {
+  "basis": "deterministic_metric",
+  "overall": {
+   "clusters": 20,
+   "diff": 0.45,
+   "high": 0.7330559109375604,
+   "improved": true,
+   "low": 0.16694408906243963,
+   "n": 20,
+   "verdict": "non_inferior"
+  },
+  "slices": {
+   "math": {
+    "clusters": 6,
+    "diff": -0.16666666666666666,
+    "high": 0.26129416211090206,
+    "improved": false,
+    "low": -0.5946274954442353,
+    "n": 6,
+    "verdict": "uncertain"
+   }
+  }
+ },
+ "observed": {
+  "baseline": {
+   "costs": {
+    "CREDIT": "50.28000000"
+   },
+   "errors": 0,
+   "latency_ms": {
+    "max": 42,
+    "n": 20,
+    "p50": 24,
+    "p90": 29,
+    "p99": 42
+   },
+   "mean": 0.5,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "candidate": {
+   "costs": {
+    "CREDIT": "48.08000000"
+   },
+   "errors": 1,
+   "latency_ms": {
+    "max": 43,
+    "n": 19,
+    "p50": 30,
+    "p90": 37,
+    "p99": 43
+   },
+   "mean": 0.95,
+   "missing": 0,
+   "not_comparable": 0
+  },
+  "cost_delta": {
+   "CREDIT": "-2.20000000"
+  },
+  "paired": 20,
+  "universe": 20
+ },
+ "pairing": {
+  "factors": [
+   "serving_ref"
+  ],
+  "kind": "single_factor",
+  "tag": null
+ },
+ "protocol": {
+  "confidence": 0.95,
+  "margin": 0.05,
+  "metric_source": "deterministic_metric",
+  "min_cases": 10,
+  "required_slices": {
+   "math": {
+    "margin": 0.0,
+    "min_cases": 5
+   }
+  }
+ },
+ "protocol_digest": "sha256:5a63aba5f370f36ca9cfe6cddda0960fb3537f355ee9892063eb6957c136b109",
+ "report_digest": "sha256:beff48321dc6e9f0718f2120231102341dc9594619e02b934ada69ef33625f8e",
+ "schema": "infrx.eval_report.1",
+ "universe_digest": "sha256:6e96cb0a140ece00989b0d2b33c951098801586ca02b50e3581f2813622d19c6"
+}
