@@ -50,7 +50,8 @@ ENV = {"eval": {**LAB, "LAB_EVAL_ENDPOINT_URL": "http://127.0.0.1:9",
                 "LAB_EVAL_ENDPOINT_KEY": KEY},
        "checkpoints": dict(BASE),
        "judge": {**BASE, "JUDGE_PROVIDER_URL": "http://127.0.0.1:9", **TRACES},
-       "annotation": dict(LAB), "training": dict(LAB), "rollout": dict(BASE),
+       "annotation": {**LAB, "LAB_TEACHER_URL": "http://127.0.0.1:9"}, "training": dict(LAB),
+       "rollout": dict(BASE),
        "datasets": {**LAB, **TRACES}}
 
 
@@ -452,19 +453,112 @@ def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkey
 
 
 # ------------------------------------------------------------ annotation / training (WR-I6-3)
-def test_lab_workers__annotation_and_training_have_no_pass_and_refuse(monkeypatch):
-    """P2's teacher batches and P3's runs are started by the Lab route; the worker's pass
-    (collect / reconcile / poll) needs their durable listing (lab-sql) and, for a teacher,
-    N2's redaction (WR-P2-4); the manual bundle has no platform job at all. So both roles
-    refuse by name - and a non-default adapter without its approval never composes."""
-    with pytest.raises(RuntimeMisconfigured, match="WR-P2-4"):
-        composed("annotation")
+def test_lab_workers__training_has_no_pass_and_a_teacher_host_needs_its_approval():
+    """P3's runs are started by the Lab route and the manual bundle has no platform job, so
+    the training role refuses by name; a non-default adapter without its approval never
+    composes, and the annotation role's teacher is the local fake only (P-10)."""
     with pytest.raises(RuntimeMisconfigured, match="manual-bundle"):
         composed("training")
     with pytest.raises(RuntimeMisconfigured, match="P-10"):
         composed("annotation", {**ENV["annotation"], "LAB_ANNOTATION_TEACHER": "hosted"})
     with pytest.raises(RuntimeMisconfigured, match="P-11"):
         composed("training", {**ENV["training"], "LAB_TRAINING_CONNECTOR": "http"})
+    remote = outcome(lambda: composed("annotation", {
+        **ENV["annotation"], "LAB_TEACHER_URL": "https://teacher.example/do-not-print"}))
+    assert type(remote) is RuntimeMisconfigured and "LAB_TEACHER_URL" in str(remote)
+    assert "P-10" in str(remote) and "do-not-print" not in str(remote)
+
+
+def test_lab_workers__the_annotation_role_collects_teacher_batches_with_n2s_redaction(
+        monkeypatch):
+    """WR-P4B-2 / composition-4: the annotation role is P2's `TeacherWiring` on the role's
+    database (`teacher_wiring`), N2's public redaction (WR-P2-4), the pilot settings from its
+    environment (judge mode not live by default) and the local teacher fake
+    `LAB_TEACHER_URL` names; its one pass is `collect_teachers` over that wiring, every
+    `TEACHER_PASS_S`."""
+    from infrx.datasets.versions import redact_content
+    from infrx.judge.submit import HttpJudgeProvider
+    from infrx.pipelines.teachers import TeacherWiring
+    from infrx.state.lab_pipeline import PgTeacherLedger
+    seen = []
+
+    async def collect_teachers(wiring):
+        seen.append(wiring)
+        return {"collected": 0, "failed": 0}
+    monkeypatch.setattr(lab_workers, "collect_teachers", collect_teachers)
+    steps = captured_steps(monkeypatch)
+    worker = composed("annotation")
+    assert set(worker.tasks) == {"teacher_collect"}
+    worker.tasks["teacher_collect"]().close()
+    interval, step = steps["teacher collect"]
+    assert interval == lab_workers.TEACHER_PASS_S
+    asyncio.run(step())
+    wiring = worker.wiring
+    assert seen == [wiring] and type(wiring) is TeacherWiring
+    assert type(wiring.ledger) is PgTeacherLedger and wiring.redact is redact_content
+    assert (type(wiring.provider), wiring.provider.base_url) == (HttpJudgeProvider,
+                                                                 "http://127.0.0.1:9")
+    assert wiring.settings.judge_mode != "live"
+
+
+def test_lab_workers__the_teacher_pass_collects_every_submitted_run_of_every_approved_batch(
+        monkeypatch):
+    """WR-P4B-2: the pass reads the Lab's durable teacher batches (`lab/<p>/teacher-batches/
+    <id>/batch.json`, write-once, R202) and collects only APPROVED ones (an approval record
+    beside the batch): each chunk run P2 plans for the batch whose ledger state (D8's
+    `PgTeacherLedger`) is `submitted` is P2's `collect` (it imports the labels, records the
+    per-item failures and settles once) - never an unreserved, completed or ambiguous run.
+    The batch is the approver's (the actor who authorized the spend). One run's failure is
+    counted; the next still runs."""
+    import dataclasses
+    import json
+    from types import SimpleNamespace
+
+    from infrx.pipelines import teachers as p2
+    objects = InMemoryObjectStore()
+    b1, b2, b3 = (f"b{n}000000-0000-4000-8000-000000000001" for n in (1, 2, 3))
+
+    def put(key, body):
+        asyncio.run(objects.put_if_absent(key, json.dumps(body).encode(), "application/json"))
+
+    def batch(batch_id):
+        return {"batch_id": batch_id, "dataset_ref": "d", "rubric_ref": "r",
+                "teacher_model": "m", "prompt_version": "v", "payer_ref": "pay",
+                "budget_usd": "1.00000000", "chunk_size": 2, "requested_by": "dev"}
+    for provider, batch_id, approved in (("p1", b1, True), ("p1", b2, False),
+                                         ("p2", b3, True)):
+        put(f"lab/{provider}/teacher-batches/{batch_id}/batch.json", batch(batch_id))
+        if approved:
+            put(f"lab/{provider}/teacher-batches/{batch_id}/approval.json",
+                {"approved_by": "admin", "approved_at": "2026-09-29T00:00:00Z"})
+    put("lab/p1/datasets/x.json", {})
+    chunks = {b1: ("r1", "r2", "r3", "r4"), b2: ("r6",), b3: ("r5",)}
+    states = {"r1": "submitted", "r2": "completed", "r3": None, "r4": "submitted",
+              "r5": "submitted", "r6": "submitted", "r7": "ambiguous"}
+    chunks[b1] += ("r7",)
+    calls = []
+
+    async def plan(batch, *, store, objects, rates, now):
+        return SimpleNamespace(chunks=tuple((r, ()) for r in chunks[batch.batch_id]))
+
+    async def collect(batch, run_id, *, wiring):
+        calls.append((batch.provider_org_id, batch.batch_id, batch.requested_by, run_id))
+        if run_id == "r1":
+            raise errors.DependencyUnavailable("the teacher did not answer")
+
+    class Ledger:
+        async def db_now(self):
+            return datetime(2026, 9, 29, tzinfo=timezone.utc)
+
+        async def run(self, run_id):
+            return None if states[run_id] is None else SimpleNamespace(state=states[run_id])
+    monkeypatch.setattr(p2, "plan", plan)
+    monkeypatch.setattr(p2, "collect", collect)
+    wiring = dataclasses.replace(composed("annotation").wiring, ledger=Ledger(), objects=objects)
+    done = outcome(lambda: asyncio.run(lab_workers.collect_teachers(wiring)))
+    assert calls == [("p1", b1, "admin", "r1"), ("p1", b1, "admin", "r4"),
+                     ("p2", b3, "admin", "r5")]
+    assert done == {"collected": 2, "failed": 1}
 
 
 def test_lab_workers__the_teacher_wiring_is_p2_on_d8s_teacher_ledger():

@@ -32,7 +32,9 @@ SWEEP = C + "the_judge_pass_sweeps_silent_submissions"
 DATASETS = C + "datasets_reconcile_every_providers_lineage_page_by_page"
 ROLLOUT = C + "the_rollout_pass_refuses_until_its_inputs_exist"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
-NO_PASS = C + "annotation_and_training_have_no_pass_and_refuse"
+NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
+ANNOT = C + "the_annotation_role_collects_teacher_batches_with_n2s_redaction"
+COLLECT = C + "the_teacher_pass_collects_every_submitted_run_of_every_approved_batch"
 HEALTH = C + "readyz_is_the_database_and_every_pass_alive"
 DEAD = C + "a_dead_pass_is_not_live_and_exits_non_zero"
 EVERY = C + "the_pumps_are_every_step_forever"
@@ -191,6 +193,36 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_connector_unapproved", "an automatic connector is refused without P-11",
        '    if env.get("LAB_TRAINING_CONNECTOR", MANUAL) != MANUAL:\n', "    if False:\n",
        NO_PASS),
+    # --- WR-P4B-2 (composition-4): the annotation role's collect pass --------------------------
+    _m("lw_annotation_teacher_url_optional", "the annotation role needs its teacher's URL",
+       '"annotation": (BUCKET, "LAB_TEACHER_URL"),', '"annotation": (BUCKET,),', SETTINGS),
+    _m("lw_annotation_unredacted", "the collected teacher saw only N2's redaction (WR-P2-4)",
+       "settings=limits, redact=redact_content)", "settings=limits, redact=str)", ANNOT),
+    _m("lw_annotation_live_by_default", "the role's judge mode is its environment's (dry run)",
+       "settings=limits, redact=redact_content)",
+       'settings=limits.replace(judge_mode="live"), redact=redact_content)', ANNOT),
+    _m("lw_annotation_other_host_escapes", "another teacher host refuses by the setting's name",
+       '    except errors.DomainError:            # names the setting, never its value\n'
+       '        raise RuntimeMisconfigured(mode, detail="LAB_TEACHER_URL: teacher egress is the local "',
+       '    except KeyError:\n'
+       '        raise RuntimeMisconfigured(mode, detail="LAB_TEACHER_URL: teacher egress is the local "',
+       NO_PASS),
+    _m("lw_annotation_pass_idle", "the annotation role's pass is collect_teachers",
+       "lambda: every(TEACHER_PASS_S, lambda: collect_teachers(wiring),",
+       "lambda: every(TEACHER_PASS_S, lambda: asyncio.sleep(0),", ANNOT),
+    _m("lw_collect_unapproved_batches", "only an approved batch is collected",
+       'parts[-1] != "approval.json":', 'parts[-1] != "batch.json":', COLLECT),
+    _m("lw_collect_every_state", "only a submitted run is collected",
+       '"state", None) == "submitted"]', '"state", None) is not None]', COLLECT),
+    _m("lw_collect_as_the_requester", "the batch is collected as its approver",
+       '["approved_by"])', '["approved_by"] and stored["requested_by"])', COLLECT),
+    _m("lw_collect_one_failure_stops_all", "one run's failure never skips the next",
+       '                log.exception("teacher collect failed for one run")\n'
+       '                done["failed"] += 1\n',
+       '                log.exception("teacher collect failed for one run")\n'
+       '                done["failed"] += 1\n                break\n', COLLECT),
+    _m("lw_collect_uncounted", "each collected run is counted",
+       '                done["collected"] += 1\n', "                pass\n", COLLECT),
     # --- WR-P2-D8-C: the teacher wiring ------------------------------------------------------
     _m("lw_teacher_plain_judge_ledger", "P2's ledger is D8's PgTeacherLedger (record_failures)",
        "ledger=PgTeacherLedger(connect),", "ledger=PgTeacherLedger.__mro__[1](connect),",

@@ -76,6 +76,7 @@ def world():
                                 teachers=dataclasses.replace(x.teachers, rates=j1.TEST_RATES))
         app = FastAPI()
         lp.register(app, support.runtime(), x)
+        app.state.lab = x                   # the composed surface, for the worker's twin
         try:
             yield (conn, TestClient(app, raise_server_exceptions=False), ref, fake,
                    x.teachers.ledger)
