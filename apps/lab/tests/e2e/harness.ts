@@ -5,7 +5,7 @@
 // multipart, 303 back). Pages are read as served HTML, never as source.
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 
@@ -159,10 +159,17 @@ export type Stack<W> = { api: string; web: string; world: W; browser: () => Brow
  * (`make lab-e2e` builds once for the four suites); a copy without a build (the mutant runner) builds. */
 export async function stack<W>(suite: string, env: Record<string, string> = {}): Promise<Stack<W>> {
   if (process.env.LAB_E2E_BUILT !== "1" || !existsSync(join(lab, ".next", "BUILD_ID"))) {
-    const built = spawnSync(process.execPath, [join(lab, "node_modules/next/dist/bin/next"), "build"], { cwd: lab, encoding: "utf8", env: { ...process.env, NODE_ENV: "production" } });
+    // A copy whose node_modules is a link to the checkout's (the mutant runner's) builds with webpack:
+    // Turbopack refuses a node_modules outside its root.
+    const bundler = lstatSync(join(lab, "node_modules")).isSymbolicLink() ? ["--webpack"] : [];
+    const built = spawnSync(process.execPath, [join(lab, "node_modules/next/dist/bin/next"), "build", ...bundler], { cwd: lab, encoding: "utf8", env: { ...process.env, NODE_ENV: "production" } });
     assert.equal(built.status, 0, `next build: ${built.stdout.slice(-1500)}${built.stderr.slice(-1500)}`);
   }
-  const backend = spawn("uv", ["run", "--frozen", "--project", api, "python", join(lab, "tests/e2e", suite, "backend.py")], {
+  // INFRX_PYTHON: an interpreter already on the API's environment (a gate runner's mutant copy, which has
+  // no uv on its PATH and imports its own mutated package from INFRX_API_DIR).
+  const script = join(lab, "tests/e2e", suite, "backend.py");
+  const python = process.env.INFRX_PYTHON;
+  const backend = spawn(python ?? "uv", python ? [script] : ["run", "--frozen", "--project", api, "python", script], {
     cwd: lab, stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, INFRX_API_DIR: api },
   });
   const stops: (() => void)[] = [() => backend.kill("SIGINT")];
