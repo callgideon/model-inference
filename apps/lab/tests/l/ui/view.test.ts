@@ -29,7 +29,7 @@ test("L4-V02 a row shows the pinned model, serving, runtime, schema and rate ide
   assert.deepEqual([live.rate, live.where], ["rc-3", "prod · public"]);
 });
 
-test("L4-V03 actions follow the record and the role: smoke dev, publish only after a passed smoke, roll back live prod", () => {
+test("L4-V03 actions follow the record and the role: smoke dev, publish only after a passed smoke, never a provider rollback", () => {
   const acts = (role: "viewer" | "developer" | "administrator", d: Deployment, p: Proposal[] = []) => deploymentRows(role, [d], p)[0].actions;
   assert.deepEqual(acts("viewer", dep({})), []);
   assert.deepEqual(acts("developer", dep({})), ["smoke"]);
@@ -37,7 +37,7 @@ test("L4-V03 actions follow the record and the role: smoke dev, publish only aft
   assert.deepEqual(acts("administrator", dep({ smoke: "passed" })), ["smoke", "publish"]);
   assert.deepEqual(acts("administrator", dep({ smoke: "failed" })), ["smoke"]);
   assert.deepEqual(acts("administrator", dep({ smoke: "passed", state: "retired" })), []);
-  assert.deepEqual(acts("administrator", prod), ["rollback"]);
+  assert.deepEqual(acts("administrator", prod), [], "a rollback is the operator's listing decision, never offered to a provider (E3L-F3)");
   assert.deepEqual(acts("developer", prod), []);
   assert.deepEqual(acts("administrator", dep({ ...prod, visibility: "private" })), []);
 });

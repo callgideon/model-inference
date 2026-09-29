@@ -48,6 +48,8 @@ const landing = (run: Promise<unknown>) =>
     },
   );
 const REG = { name: "acme-7b", artifactDigest: `sha256:${"a".repeat(64)}`, schemaVersion: "chat.v2", runtime: "vllm@sha256:bb" };
+// The operator imported both models' weights (L3 registers only those, E3L-F3).
+for (const model of ["acme/acme-7b", "acme/beta-1b"]) control.importModel(A.provider_org_id, model, [REG.artifactDigest]);
 const as = (role: string, provider = A.provider_org_id) => (world.rows = [{ ...A, role, provider_org_id: provider }]);
 
 test("L4-A01 register runs as the session's provider and role, whatever the form claims", async () => {
@@ -83,7 +85,7 @@ test("L4-A04 the service's refusal is carried as its reason; its success is a pl
   assert.equal(await landing(registerModel(form({ ...REG, name: "beta-1b" }))), "/models");
   const mine = await control.deployments({ providerId: A.provider_org_id, role: "administrator" });
   assert.ok(mine.ok);
-  const id = mine.value.find((x) => x.modelId === "beta-1b")!.deploymentRevisionId;
+  const id = mine.value.find((x) => x.modelId === "acme/beta-1b" && x.environment === "dev")!.deploymentRevisionId;
   assert.equal(await landing(proposeChange(form({ kind: "publish", deploymentRevisionId: id }))), "/deployments?refused=conflict");
   assert.equal(await landing(smokeDeployment(form({ deploymentRevisionId: id }))), "/deployments");
   assert.equal(await landing(proposeChange(form({ kind: "publish", deploymentRevisionId: id }))), "/deployments");
