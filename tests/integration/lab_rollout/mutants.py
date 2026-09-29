@@ -77,6 +77,7 @@ NO_STACK = "test_e8l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e8l_the_namespace_is_the_reserved_block"
 RERUN = "test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 SUB_CELL = "test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun"
+K10_UI = "test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun"
 R222 = "test_e8l_r222_accepts_only_a_not_run_out_of_local_scope"
 UNBOUND = tuple(re.findall(r"^def (test_k\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
@@ -128,6 +129,11 @@ MUTANTS: tuple[Mutant, ...] = (
        SUB_CELL),
     _m("sub_cell_without_its_lane", "the breach sub-cell names WR-C6-LIVE", R,
        '"parent": "k09", "lanes": ["WR-C6-LIVE"],', '"parent": "k09", "lanes": [],', SUB_CELL),
+    _m("k10_ui_sub_cell_without_its_lane", "k10's UI journey sub-cell names WR-C6-LIVE", R,
+       '"parent": "k10", "lanes": ["WR-C6-LIVE"],', '"parent": "k10", "lanes": [],', K10_UI),
+    _m("k10_ui_sub_cell_dropped", "k10's UI journey over stand-ins is recorded, never prose-only",
+       R, '    "k10-ui-composed": {\n        "parent": "k10",',
+       '    "k09-breach-copy": {\n        "parent": "k09",', K10_UI),
     # R222/R235: the runner's machine check (lab_evaluate's shape, with the sub-cells)
     _m("r222_in_scope_lane_excused", "a NOT RUN on a lane not ruled out of scope stays open", R,
        'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',

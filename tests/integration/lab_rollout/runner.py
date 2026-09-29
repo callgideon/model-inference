@@ -159,11 +159,20 @@ SUB_CELLS = {
                 "R1's aggregates (WR-C6-LIVE, R244; composition-6 carried WR-C5-LIVE). The rerun "
                 "passes today because the breach half is not bound: the k09 case gains the "
                 "breach step when WR-C6-LIVE lands"},
+    "k10-ui-composed": {
+        "parent": "k10", "lanes": ["WR-C6-LIVE"],
+        "title": "the releases page's proposal/approval journey over pilot.lab_releases' own "
+                 "records and proposals",
+        "note": "k10 PASS covers the port half (rollout launch|decide over the composed ports) "
+                "and the page failing closed over the gateway's composition (E2E-R01, a 503 "
+                "naming WR-C5-PLAN); E2E-R02..R05 run over the journey adapters until R1/R2 "
+                "have a composed read (WR-C6-LIVE; WR-LR5-1)"},
 }
 #: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
 #: reason class - k08's GPU target (P-08) and k09's breach half, blocked by the product WR
 #: WR-C6-LIVE (R1's aggregates as R2's Live, lane lab-live). k10 is in local scope since
-#: WR-R4-2 is composed (merge #50): its UI half PASSes through LAB-E2E (R238) or stays open.
+#: WR-R4-2 is composed (merge #50): its UI half PASSes through LAB-E2E (R238) or stays open;
+#: the UI journey over the composed ports waits on WR-C6-LIVE (sub-cell k10-ui-composed).
 #: The gate is re-run when a dependency lands and the cell must then PASS.
 OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)", "WR-C6-LIVE": "product WR: WR-C6-LIVE"}
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")

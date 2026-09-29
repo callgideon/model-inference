@@ -1,0 +1,5 @@
+..............................ssssssssssssssssssssssssssssssssssssssssss [ 85%]
+ssssssssss..                                                             [100%]
+=========================== short test summary info ============================
+SKIPPED [52] tests/integration/lab_rollout/test_mutants.py:83: NOT RUN: no kept e8l stack: run tests/integration/lab_rollout/runner.py --keep first
+32 passed, 52 skipped in 38.13s

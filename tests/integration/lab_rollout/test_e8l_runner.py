@@ -161,13 +161,30 @@ def test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun():
     naming WR-C6-LIVE and the exact rerun, so the R222 tally is not prose-only."""
     result = runner.classify(junit(*everything("k09")))
     assert result["k09"]["status"] == "PASS", "the sub-cell never lowers its parent"
-    (cell,) = runner.sub_cells(result)
+    cell = {c["id"]: c for c in runner.sub_cells(result)}["k09-breach"]
     assert (cell["id"], cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
         == ("k09-breach", "k09", "PASS", "NOT RUN", "NOT RUN[WR-C6-LIVE]")
     assert cell["lanes"] == ["WR-C6-LIVE"], "composition-6 carried WR-C5-LIVE as WR-C6-LIVE"
     assert cell["reproduce"] == f"{runner.PY} {runner.RUNNER} --out <dir> --only k09"
     assert "passes today because the breach half is not bound" in cell["note"]
 
+
+def test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun():
+    """0-E8L-RV-1 / 1-LR5-F1: k10 PASS is the port half and the UI failing closed over the
+    gateway's own composition (E2E-R01); the page's proposal/approval journey (E2E-R02..R05)
+    runs over test-local adapters until R2's verdicts and R1's progress have a composed read,
+    so it is a NOT RUN sub-cell naming WR-C6-LIVE in verdict.json, never prose-only."""
+    result = runner.classify(junit(*everything("k10")))
+    assert result["k10"]["status"] == "PASS", "the sub-cell never lowers its parent"
+    cells = {c["id"]: c for c in runner.sub_cells(result)}
+    assert set(cells) == {"k09-breach", "k10-ui-composed"}
+    cell = cells["k10-ui-composed"]
+    assert (cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
+        == ("k10", "PASS", "NOT RUN", "NOT RUN[WR-C6-LIVE]")
+    assert cell["lanes"] == ["WR-C6-LIVE"]
+    assert cell["reproduce"] == f"{runner.PY} {runner.RUNNER} --out <dir> --only k10"
+    assert "E2E-R02..R05 run over the journey adapters" in cell["note"]
+    assert "WR-LR5-1" in cell["note"]
 
 def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     """R222/R234/R235: the gate is accepted locally with no FAIL and every NOT RUN (sub-cells
@@ -187,7 +204,8 @@ def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
         assert runner.r222(accepted) == {"accepted": False, "open": {"k08": "NOT RUN"}}
     with monkeypatch.context() as patch:            # the sub-cell is judged too
         patch.delitem(runner.OUT_OF_SCOPE, "WR-C6-LIVE")
-        assert runner.r222(accepted) == {"accepted": False, "open": {"k09-breach": "NOT RUN"}}
+        assert runner.r222(accepted) == {"accepted": False, "open": {
+            "k09-breach": "NOT RUN", "k10-ui-composed": "NOT RUN"}}
     failed = runner.classify(junit(*others, *everything("k08", "failure", k08)))
     assert runner.r222(failed) == {"accepted": False, "open": {"k08": "FAIL"}}, \
         "R234: an in-scope FAIL is never excused, whatever its message says"
