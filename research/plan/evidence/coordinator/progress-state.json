@@ -8285,7 +8285,7 @@
   {
    "id": "W5-MERGE-41",
    "task": null,
-   "slice": "merge batch #41 (Opus): lab-observe-2 84dacef4 (E5L 16/0/2; +WR-OBS-6, R225)",
+   "slice": "merge batch #41 (Opus): lab-observe-2 84dacef4 (E5L 16/0/2; +WR-OBS-6, R225); workflow wf_e8af0ed9-1b6",
    "agent": "opus",
    "branch": "codex/w5-merge-41",
    "worktree": ".claude/worktrees/codex-w5-merge-41",
@@ -8317,7 +8317,7 @@
   {
    "id": "W5-MERGE-42",
    "task": null,
-   "slice": "merge batch #42 (Opus): composition-5 6c092e92 (+WR-C5-PREFLIGHT, WR-C5-MK, R226–R230)",
+   "slice": "merge batch #42 (Opus): composition-5 6c092e92 (+WR-C5-PREFLIGHT, WR-C5-MK, R226–R230); workflow wf_71ca3135-5f8",
    "agent": "opus",
    "branch": "codex/w5-merge-42",
    "worktree": ".claude/worktrees/codex-w5-merge-42",
@@ -8349,7 +8349,7 @@
   {
    "id": "W5-LAB-E2E",
    "task": null,
-   "slice": "(wave5 LW6 lane lab-e2e, Opus) one Lab browser/route e2e harness under apps/lab/tests/e2e binding the four gates' UI cells: E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; `make lab-e2e`; base 073c58fe",
+   "slice": "(wave5 LW6 lane lab-e2e, Opus) one Lab browser/route e2e harness under apps/lab/tests/e2e binding the four gates' UI cells: E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; `make lab-e2e`; base 073c58fe; workflow wf_a9a9b058-dda",
    "agent": "opus",
    "branch": "codex/w5-lab-e2e",
    "worktree": ".claude/worktrees/codex-w5-lab-e2e",
