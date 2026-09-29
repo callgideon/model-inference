@@ -143,10 +143,9 @@ def test_the_runtime_login_without_a_grant_reads_off():
     assert run(consent.policy(AUTH, NOW)) == capture.off_mode_policy(support.ORG, NOW)
 
 
-def test_the_sql_reads_the_key_of_its_own_org_and_the_consent_head():
-    """Oracle (with the PostgreSQL case in test_capture_pg.py): the statement's binding in
-    the wrong order, or the head chosen among unrevoked rows only (a revoked head would fall
-    back to an older consent instead of off)."""
+def test_consent_is_read_through_the_trace_consent_rpc():
+    """Oracle (with test_capture_pg.py and 0057's list, tests/d/test_code_mutants_lc2.py):
+    the RPC's arguments bound in the wrong order (the org as the key: nothing ever reads)."""
     calls = []
 
     async def rows(connect, sql, params):
@@ -156,9 +155,8 @@ def test_the_sql_reads_the_key_of_its_own_org_and_the_consent_head():
     consent.rows = rows
     assert run(consent.read(support.ORG, support.KEY)) == row()
     [(sql, params)] = calls
-    assert params == (support.KEY, support.ORG)
-    assert "order by h.consent_version desc limit 1" in sql and "revoked_at is null" not in \
-        sql.split("left join")[1]
+    assert params == (support.ORG, support.KEY)
+    assert sql == "select * from infrx.trace_consent(%s, %s)"
 
 
 # --- (a) the ingress seam ---------------------------------------------------------------
@@ -467,8 +465,8 @@ TEXT = "the van is red"
 class Store:
     """The worker's job store as the runner sees it: `load_work`, `complete`, `put_result`."""
 
-    def __init__(self, request, *, refuse: bool = False) -> None:
-        self.request, self.refuse, self.results = request, refuse, []
+    def __init__(self, request, *, refuse: bool = False, lose: int = 0) -> None:
+        self.request, self.refuse, self.results, self.lose = request, refuse, [], lose
 
     async def load_work(self, lease):
         return SimpleNamespace(request=self.request)
@@ -478,6 +476,9 @@ class Store:
         return f"infrx-result:{job_id}"
 
     async def complete(self, lease, outcome):
+        if self.lose:                                   # the terminal ack is lost
+            self.lose -= 1
+            raise ConnectionError("the ack was lost")
         if self.refuse:
             raise errors.StaleLease("another worker holds the lease")
         return "settled"
@@ -585,6 +586,124 @@ def test_a_worker_capture_failure_never_fails_the_job(tmp_path):
     blocked.write_text("not a directory")
     settled, _, _ = worked(tmp_path, request, root=blocked)
     assert settled == "settled"
+
+
+def test_an_async_jobs_record_holds_no_credential(tmp_path):
+    """Oracle (lens R8, merge #54): the worker never holds the caller's bearer token, so a
+    scrub by "the caller's token" scrubs nothing there - `my key is <TOKEN>` in the prompt
+    and `echo <TOKEN>` in the output reach the job spool verbatim. Every occurrence, in
+    both halves, is `[credential]`, and a minted key (`sk-infrx-` + 40) too."""
+    from infrx.operations import service
+    client, composed, calls = gateway(tmp_path / "gw", TraceMode.full)
+    client.post(support.CHAT_PATH, headers={**support.AUTH, "prefer": "respond-async"},
+                json=said(f"my key is {support.TOKEN} yes {support.TOKEN}"))
+    run(composed.close())
+    minted = service.new_secret()
+    worked(tmp_path, calls[0], text=f"echo {support.TOKEN} and {minted}")
+    [spool] = job_spools(tmp_path)
+    [content] = recover(spool).contents
+    assert support.TOKEN.encode() not in content and minted.encode() not in content
+    assert content.count(capture.REDACTED) == 4, content
+
+
+def lost_ack(tmp_path, request, **kw):
+    """One attempt whose first `complete` ack is lost, completed as `AttemptRunner` does
+    (worker/attempt.py: the identical completion retried once)."""
+    store = Store(request, lose=1, **kw)
+    runner = SimpleNamespace(jobs=store, put_result=store.put_result)
+    capture.capture_jobs(runner, tmp_path / "spool", capture.Wall)
+    lease = SimpleNamespace(job_id=request.request_id)
+
+    async def attempt():
+        await runner.jobs.load_work(lease)
+        await runner.put_result(request.request_id, TEXT, lease)
+        try:
+            return await runner.jobs.complete(lease, "outcome")
+        except ConnectionError:
+            return await runner.jobs.complete(lease, "outcome")
+    return run(attempt()), runner
+
+
+def test_a_job_whose_first_ack_is_lost_is_traced_once_when_the_retry_commits(tmp_path):
+    """Oracle (lens R7, merge #54): the remembered attempt dropped when the first `complete`
+    raised (`finally`), so the retry that settles finds nothing - the job is never traced."""
+    request = admitted(tmp_path, TraceMode.full)
+    settled, runner = lost_ack(tmp_path, request)
+    assert settled == "settled"
+    spools = job_spools(tmp_path)
+    assert len(spools) == 1, spools
+    [content] = recover(spools[0]).contents
+    assert content == request_line(request) + TEXT.encode()
+    assert request.request_id not in runner.jobs.open
+
+
+def test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced(tmp_path):
+    """Oracle (R7): a refused retry (the store settled it for another attempt) recorded, or
+    its attempt remembered after the refusal (held until evicted)."""
+    request = admitted(tmp_path, TraceMode.full)
+    store = Store(request, lose=1, refuse=True)
+    runner = SimpleNamespace(jobs=store, put_result=store.put_result)
+    capture.capture_jobs(runner, tmp_path / "spool", capture.Wall)
+    lease = SimpleNamespace(job_id=request.request_id)
+
+    async def attempt():
+        await runner.jobs.load_work(lease)
+        with pytest.raises(ConnectionError):
+            await runner.jobs.complete(lease, "outcome")
+        assert request.request_id in runner.jobs.open          # kept for the retry
+        with pytest.raises(errors.StaleLease):
+            await runner.jobs.complete(lease, "outcome")
+    run(attempt())
+    assert job_spools(tmp_path) == [] and runner.jobs.open == {}
+
+
+def with_large_media(request):
+    """`request` with one inline part over 1 MiB (2 MiB of base64)."""
+    url = "data:video/mp4;base64," + "A" * (2 << 20)
+    part = {"type": "video_url", "video_url": {"url": url}}
+    return request.model_copy(update={"messages": ({"role": "user", "content": [part]},)})
+
+
+def hashed_on_the_loop(monkeypatch) -> list:
+    """`capture`'s sha256, recording per digest (size, whether it ran on an event loop's
+    thread - the loop every other request or lease is served on)."""
+    import hashlib
+    seen = []
+
+    def sha256(data=b""):
+        seen.append((len(data), asyncio._get_running_loop() is not None))
+        return hashlib.sha256(data)
+    monkeypatch.setattr(capture, "hashlib", SimpleNamespace(sha256=sha256))
+    return seen
+
+
+def test_large_inline_media_is_hashed_off_the_gateways_loop(tmp_path, monkeypatch):
+    """Oracle (lens R9, merge #54): a > 1 MiB inline part hashed on the event loop (up to
+    96 MiB of sha256 blocks every request the gateway is serving meanwhile)."""
+    client, composed, calls = gateway(tmp_path / "g", TraceMode.full)
+    client.post(support.CHAT_PATH, headers=support.AUTH, json=said("describe the van"))
+    request = with_large_media(calls[0])
+    seen = hashed_on_the_loop(monkeypatch)
+
+    async def sent(message):
+        pass
+    run(composed.response(JSONResponse(ANSWER), request, support.AUTH)({"type": "http"},
+                                                                       None, sent))
+    assert [on_loop for size, on_loop in seen if size > 1 << 20] == [False], seen
+    content = spooled(tmp_path / "g", composed).contents[-1]       # after the posted one's
+    assert b"data-sha256:" in content and b"AAAA" not in content
+
+
+def test_large_inline_media_is_hashed_off_the_workers_loop(tmp_path, monkeypatch):
+    """Oracle (R9): the worker's job record hashing a > 1 MiB part on its event loop (the
+    loop that heartbeats every running attempt's lease)."""
+    request = with_large_media(admitted(tmp_path, TraceMode.full))
+    seen = hashed_on_the_loop(monkeypatch)
+    worked(tmp_path, request)
+    assert [on_loop for size, on_loop in seen if size > 1 << 20] == [False], seen
+    [spool] = job_spools(tmp_path)
+    [content] = recover(spool).contents
+    assert b"data-sha256:" in content and b"AAAA" not in content
 
 
 def test_the_worker_remembers_a_bounded_number_of_jobs(tmp_path):

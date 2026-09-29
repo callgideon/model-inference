@@ -29,6 +29,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from collections import OrderedDict
@@ -38,7 +39,7 @@ from urllib.parse import urlsplit
 
 from starlette.responses import Response
 
-from ..contracts import wire
+from ..contracts import errors, wire
 from ..contracts.records import ConsentSnapshot, ExecutionMode, TraceEnvelope, TraceMode
 from .routes.validate import MEDIA_TOKEN, off_mode_policy
 
@@ -57,6 +58,10 @@ JOBS_DIR = "jobs"
 REMEMBER = 1024
 #: What the caller's credential becomes wherever it appears in a trace.
 REDACTED = b"[credential]"
+#: Every credential this platform mints (`operations.service.new_secret`, the console's
+#: lib/keys.ts: `sk-infrx-` + 40 base62). The worker never holds the caller's token, so a
+#: job record is scrubbed of the whole family (lens R8), wherever it appears.
+KEY_SHAPE = re.compile(rb"sk-infrx-[A-Za-z0-9_-]+")
 
 
 class Wall:
@@ -66,17 +71,11 @@ class Wall:
     def now() -> datetime:
         return datetime.now(timezone.utc)
 
-#: The key's opt-in and its organization's consent head. The head is the highest version,
-#: revoked or not: a revoked head is off, never a fall-back to an older consent.
-CONSENT_SQL = """
-select k.trace_mode, c.consent_version, c.trace_mode, c.content_retention_days,
-       c.evaluation_consent, c.effective_at, c.revoked_at
-from public.api_keys k
-left join lateral (select h.consent_version, h.trace_mode, h.content_retention_days,
-                          h.evaluation_consent, h.effective_at, h.revoked_at
-                   from infrx.consent_history h where h.org_id = k.org_id
-                   order by h.consent_version desc limit 1) c on true
-where k.id = %s and k.org_id = %s"""
+#: The key's opt-in and its organization's consent head (the highest version, revoked or
+#: not: a revoked head is off, never a fall-back to an older consent), for a key of that org,
+#: through 0057's RPC: the dedicated runtime login (0021) reads neither table, and where the
+#: RPC is absent (hosted before its window) the read fails and capture is off.
+CONSENT_SQL = "select * from infrx.trace_consent(%s, %s)"
 
 
 class ConsentSource:
@@ -90,7 +89,7 @@ class ConsentSource:
         self.rows = pg_rows
 
     async def read(self, org_id: str, key_id: str):
-        rows = await self.rows(self.connect, CONSENT_SQL, (key_id, org_id))
+        rows = await self.rows(self.connect, CONSENT_SQL, (org_id, key_id))
         return rows[0] if rows else None
 
     async def policy(self, auth, now) -> ConsentSnapshot:
@@ -149,8 +148,16 @@ def scrub(data: bytes, token: bytes) -> bytes:
     return data.replace(token, REDACTED) if token else data
 
 
+def scrub_keys(data: bytes) -> bytes:
+    """Every minted credential out of one part of a job record (R8): the worker's scrub."""
+    return KEY_SHAPE.sub(REDACTED, data)
+
+
 def request_line(request, token: bytes = b"") -> bytes:
-    """The request half of a record: what the caller asked, redacted, one line of JSON."""
+    """The request half of a record: what the caller asked, redacted, one line of JSON.
+    Callers on an event loop run it in a thread (lens R9: inline media up to 96 MiB is
+    hashed here). ponytail: every request line takes the thread hop, not only one over
+    1 MiB; a size check first when a measured hop cost matters."""
     document = {"request_id": request.request_id, "model": request.model_revision,
                 "messages": redacted(list(request.messages)),
                 "parameters": redacted(dict(request.parameters))}
@@ -185,7 +192,7 @@ class Captured(Response):
         try:
             capture = self.sink.open(request.request_id, request.org_id,
                                      request.trace_policy.trace_mode, request.deadline_at)
-            capture.add(request_line(request, self.token))
+            capture.add(await asyncio.to_thread(request_line, request, self.token))
         except Exception:                        # noqa: BLE001 - never the request's error
             log.warning("trace capture of %s failed", request.request_id, exc_info=True)
             return await self.inner(scope, receive, send)
@@ -329,10 +336,14 @@ class JobCapture:
         return ref
 
     async def complete(self, lease, outcome):
+        """Forgets the attempt on a settlement or a refusal only: a lost ack (any other
+        failure) keeps it for the runner's identical retry, which may commit (lens R7)."""
         try:
             settled = await self.jobs.complete(lease, outcome)
-        finally:
-            held = self.open.pop(lease.job_id, None)
+        except errors.DomainError:
+            self.open.pop(lease.job_id, None)
+            raise
+        held = self.open.pop(lease.job_id, None)
         if held is not None:
             try:
                 await self.spool(*held)
@@ -351,9 +362,9 @@ class JobCapture:
         try:
             capture = sink.open(request.request_id, request.org_id,
                                 request.trace_policy.trace_mode, request.deadline_at)
-            capture.add(request_line(request))
+            capture.add(scrub_keys(await asyncio.to_thread(request_line, request)))
             if text:
-                capture.add(text.encode())
+                capture.add(scrub_keys(text.encode()))
             await capture.finish(envelope(request, capture, self.limits, text is not None))
             await sink.flush()
         finally:

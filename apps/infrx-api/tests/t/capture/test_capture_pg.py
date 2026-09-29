@@ -43,9 +43,21 @@ def opt_in(w, key: str, mode: str | None) -> None:
     w.owner.execute("update public.api_keys set trace_mode = %s where id = %s", (mode, key))
 
 
-def policy(capture, w, org, key):
-    source = capture.ConsentSource(w.connect(), ttl_s=0.0)
+def policy(capture, w, org, key, connect=None):
+    source = capture.ConsentSource(connect or w.connect(), ttl_s=0.0)
     return asyncio.run(source.policy(SimpleNamespace(org_id=org, key_id=key), NOW))
+
+
+def runtime_login(w):
+    """0021's dedicated gateway login (`infrx_runtime`), stood in for by `set role` on the
+    harness's connection: its privileges, not the platform role's."""
+    async def connect():
+        import psycopg
+        conn = await psycopg.AsyncConnection.connect(w.dsn, autocommit=True,
+                                                     prepare_threshold=None)
+        await conn.execute("set role infrx_runtime")
+        return conn
+    return connect
 
 
 def check_the_keys_opt_in_under_its_orgs_consent_head(capture, w) -> None:
@@ -74,6 +86,31 @@ def check_a_revoked_head_is_off_not_an_older_consent(capture, w) -> None:
     consent(w, b.ORG_A, "full", revoked=True)
     opt_in(w, b.KEY_A, "full")
     assert policy(capture, w, b.ORG_A, b.KEY_A).trace_mode is TraceMode.off
+
+
+def check_the_runtime_login_reads_consent_through_the_rpc(capture, w) -> None:
+    """WR-LC-HOSTED: the dedicated login (no read of `api_keys` or `consent_history`) gets the
+    consented policy through 0057's `trace_consent`. Oracle: a direct table read - capture
+    silently off on that login."""
+    version = consent(w, b.ORG_A, "full")
+    opt_in(w, b.KEY_A, "full")
+    got = policy(capture, w, b.ORG_A, b.KEY_A, runtime_login(w))
+    assert (got.trace_mode, got.consent_version) == (TraceMode.full, version)
+
+
+def check_without_the_grant_the_runtime_login_reads_off(capture, w) -> None:
+    """Until 0057 reaches a database (hosted: its window), the runtime login has no read: the
+    source fails closed to off and never raises into the request."""
+    consent(w, b.ORG_A, "full")
+    opt_in(w, b.KEY_A, "full")
+    w.owner.execute("revoke execute on function infrx.trace_consent(uuid, uuid) "
+                    "from infrx_runtime")
+    try:
+        got = policy(capture, w, b.ORG_A, b.KEY_A, runtime_login(w))
+    except Exception as raised:                     # noqa: BLE001 - the defect under test
+        raise AssertionError(f"the refused read raised: {raised!r}") from None
+    assert got == capture.off_mode_policy(b.ORG_A, NOW)
+    assert policy(capture, w, b.ORG_A, b.KEY_A).trace_mode is TraceMode.full   # the pool reads
 
 
 CHECKS = {name: check for name, check in dict(globals()).items() if name.startswith("check_")}
