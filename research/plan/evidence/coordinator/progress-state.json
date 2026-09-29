@@ -8948,7 +8948,7 @@
   {
    "id": "W5-LAB-LIVE",
    "task": "R2",
-   "slice": "WR-C6-LIVE under R244: 0054 lab_release_live (LOCAL-ONLY) + the rollout pass evaluates running releases (R228) instead of holding NoLive (Opus)",
+   "slice": "WR-C6-LIVE under R244: 0054 lab_release_live (LOCAL-ONLY) + the rollout pass evaluates running releases (R228) instead of holding NoLive (Opus); workflow wf_79ddceb1-979",
    "agent": "opus",
    "branch": "codex/w5-lab-live",
    "worktree": ".claude/worktrees/codex-w5-lab-live",
@@ -8984,7 +8984,7 @@
   {
    "id": "W5-LAB-ROLLOUT-5",
    "task": "E8L",
-   "slice": "WR-C6-K10: k10's port half over pilot.lab_releases + rollout decide; k10-UI rerun through the e2e suite (WR-R4-2 composed); the merged-tree k09 mutant kill on a kept e8l stack (Opus)",
+   "slice": "WR-C6-K10: k10's port half over pilot.lab_releases + rollout decide; k10-UI rerun through the e2e suite (WR-R4-2 composed); the merged-tree k09 mutant kill on a kept e8l stack (Opus); workflow wf_14e58283-d59",
    "agent": "opus",
    "branch": "codex/w5-lab-rollout-5",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout-5",
@@ -9017,7 +9017,7 @@
   {
    "id": "W5-LAB-SQL-LW7",
    "task": "L3",
-   "slice": "WR-C6-VARIANTS (a provider listing of optimization variants with both identities + latest comparison → /lab/v1/optimizations) and WR-C6-REQUEUE (a requeue RPC for a failed import id) as 0055 LOCAL-ONLY (Opus)",
+   "slice": "WR-C6-VARIANTS (a provider listing of optimization variants with both identities + latest comparison → /lab/v1/optimizations) and WR-C6-REQUEUE (a requeue RPC for a failed import id) as 0055 LOCAL-ONLY (Opus); workflow wf_caa9c5f6-702",
    "agent": "opus",
    "branch": "codex/w5-lab-sql-lw7",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw7",
