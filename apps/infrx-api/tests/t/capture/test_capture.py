@@ -319,6 +319,46 @@ def test_a_credential_never_reaches_the_spool(tmp_path):
     assert spool.count(capture.REDACTED) == 2
 
 
+def test_a_credential_repeated_in_one_part_is_scrubbed_everywhere(tmp_path):
+    """Oracle (0-LC-R1): a scrub of the first occurrence only - the token said twice in one
+    prompt, and echoed in the answer, leaks from the second."""
+    client, composed, _ = gateway(tmp_path, TraceMode.full)
+    assert client.post(support.CHAT_PATH, headers=support.AUTH, json=said(
+        f"my key is {support.TOKEN} yes {support.TOKEN}")).status_code == 200
+    run(composed.close())
+    spool = b"".join(path.read_bytes() for path in (tmp_path / "spool").iterdir()
+                     if path.is_file())
+    assert spool and support.TOKEN.encode() not in spool
+    assert spool.count(capture.REDACTED) == 3
+
+
+def test_a_remote_media_url_is_spooled_without_its_query_or_credentials():
+    """Oracle (0-LC-R2): the customer's URL verbatim - a presigned query string (a
+    credential) or `user:pass@` - in the spool, S3 and ClickHouse (S2M D1: durable records
+    hold our reference, never the customer's URL)."""
+    url = "https://me:pw@bucket.s3.amazonaws.com/clip.mp4?X-Amz-Signature=deadbeef#t=1"
+    part = {"type": "video_url", "video_url": {"url": url}}
+    got = capture.redacted({"messages": [{"role": "user", "content": [part]}]})
+    assert got["messages"][0]["content"][0]["video_url"]["url"] == \
+        "https://bucket.s3.amazonaws.com/clip.mp4"
+    assert capture.redacted({"content": "see https://x.test/a?b=c"}) == \
+        {"content": "see https://x.test/a?b=c"}
+
+
+def test_an_idempotent_replay_writes_no_second_record(tmp_path):
+    """Oracle (0-LC-R3): a replayed answer (the original job's `Inference-Id`) recorded again
+    under the fresh request id - a second record that names no job and ships unpinned."""
+    from infrx.contracts import wire
+    _, composed, _ = gateway(tmp_path, TraceMode.full)
+    request = SimpleNamespace(trace_policy=SimpleNamespace(trace_mode=TraceMode.full),
+                              execution_mode=None)
+    replay = JSONResponse(ANSWER, headers={wire.HEADER_INFERENCE_ID: "req_original_job",
+                                           wire.HEADER_IDEMPOTENCY_REPLAYED: "true"})
+    assert composed.response(replay, request, support.AUTH) is replay
+    fresh = JSONResponse(ANSWER)
+    assert composed.response(fresh, request, support.AUTH) is not fresh
+
+
 def test_inline_media_is_spooled_by_digest_not_bytes():
     """Oracle: the base64 clip itself in the trace (up to 96 MiB on the request path)."""
     import hashlib

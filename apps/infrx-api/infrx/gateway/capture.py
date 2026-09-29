@@ -34,9 +34,11 @@ import uuid
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from starlette.responses import Response
 
+from ..contracts import wire
 from ..contracts.records import ConsentSnapshot, ExecutionMode, TraceEnvelope, TraceMode
 from .routes.validate import MEDIA_TOKEN, off_mode_policy
 
@@ -124,15 +126,20 @@ def effective(row, org_id: str, now) -> ConsentSnapshot:
 
 
 # --- (b) the request-path hook ---------------------------------------------------------
-def redacted(value):
+def redacted(value, name=None):
     """`value` with every inline `data:` URL replaced by its digest token (the ingress's own
-    `data-sha256:` form, `validate.payload_digest`)."""
+    `data-sha256:` form, `validate.payload_digest`), and every media part's remote `url`
+    cut to scheme://host/path: a signed query string or `user:pass@` is a credential
+    (media/fetch.py), never in a durable record (S2M D1). Text is left as the caller wrote it."""
     if isinstance(value, dict):
-        return {name: redacted(item) for name, item in value.items()}
+        return {key: redacted(item, key) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [redacted(item) for item in value]
     if isinstance(value, str) and value.startswith("data:"):
         return MEDIA_TOKEN + hashlib.sha256(value.encode()).hexdigest()
+    if isinstance(value, str) and name == "url":
+        parts = urlsplit(value)
+        return f"{parts.scheme}://{parts.hostname or ''}{parts.path}"
     return value
 
 
@@ -216,6 +223,8 @@ class GatewayCapture:
         if request.trace_policy.trace_mode is TraceMode.off \
                 or request.execution_mode is ExecutionMode.async_:
             return accepted
+        if accepted.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED):
+            return accepted                      # the original request's record stands
         token = headers.get("authorization", "").removeprefix("Bearer ").strip().encode()
         return Captured(accepted, self.sink, request, token, self.limits)
 

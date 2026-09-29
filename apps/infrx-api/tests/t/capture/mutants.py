@@ -47,6 +47,9 @@ UNCONSENTED = "test_an_unconsented_request_writes_nothing"
 MINIMAL = "test_a_minimal_request_writes_metadata_only"
 CREDENTIAL = "test_a_credential_never_reaches_the_spool"
 MEDIA = "test_inline_media_is_spooled_by_digest_not_bytes"
+REPEATED = "test_a_credential_repeated_in_one_part_is_scrubbed_everywhere"
+REMOTE = "test_a_remote_media_url_is_spooled_without_its_query_or_credentials"
+REPLAY = "test_an_idempotent_replay_writes_no_second_record"
 STREAM = "test_a_streamed_answer_is_captured_as_relayed"
 ASYNC = "test_an_async_request_is_left_to_the_worker"
 KEEP = "test_a_capture_that_cannot_keep_the_record_never_fails_the_request"
@@ -183,6 +186,25 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("hook_token_never_read", "the caller's token is known to the scrub", C,
        "        token = headers.get(\"authorization\", \"\").removeprefix(\"Bearer \").strip().encode()",
        "        token = b\"\"", CREDENTIAL),
+    _m("hook_credential_scrubbed_once", "every occurrence of the token is scrubbed", C,
+       "    return data.replace(token, REDACTED) if token else data",
+       "    return data.replace(token, REDACTED, 1) if token else data", REPEATED),
+    _m("hook_remote_url_verbatim", "a remote media URL loses its query and userinfo", C,
+       "    if isinstance(value, str) and name == \"url\":",
+       "    if False:", REMOTE),
+    _m("hook_remote_url_keeps_query", "a signed query string never reaches the spool", C,
+       "        return f\"{parts.scheme}://{parts.hostname or ''}{parts.path}\"",
+       "        return f\"{parts.scheme}://{parts.hostname or ''}{parts.path}?{parts.query}\"",
+       REMOTE),
+    _m("hook_remote_url_keeps_userinfo", "user:pass@ never reaches the spool", C,
+       "        return f\"{parts.scheme}://{parts.hostname or ''}{parts.path}\"",
+       "        return f\"{parts.scheme}://{parts.netloc}{parts.path}\"", REMOTE),
+    _m("hook_every_string_is_a_url", "text is left as the caller wrote it", C,
+       "    if isinstance(value, str) and name == \"url\":",
+       "    if isinstance(value, str) and \"://\" in value:", REMOTE),
+    _m("hook_captures_a_replay", "a replayed answer is not recorded a second time", C,
+       "        if accepted.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED):",
+       "        if False:", REPLAY),
     _m("hook_media_inline", "inline media is spooled by digest", C,
        "    if isinstance(value, str) and value.startswith(\"data:\"):",
        "    if False:", MEDIA),
