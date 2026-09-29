@@ -23,6 +23,7 @@ ACCESS = C + "a_viewer_and_another_providers_member_cannot_import"
 BODY = C + "a_body_is_a_bounded_json_object_of_the_operation"
 JOBS = C + "an_import_job_is_read_only_by_its_own_provider"
 DURABLE = C + "an_import_is_one_durable_job_the_pool_works"
+REQUEUE = C + "a_failed_import_is_requeued_as_a_new_job_the_pool_works"
 READ = "            body = await read(request)\n"
 
 
@@ -76,6 +77,24 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("import_queue_invented", "without a queue the import routes are a 503",
        "        if jobs is None:\n            raise", "        if False:\n            raise",
        DURABLE),
+    # WR-C6-REQUEUE (lab-sql LW7): a failed job again as a new job the pool works unchanged
+    _m("requeue_rows_not_copied", "the upload's rows are copied to the new job's id first",
+       "            if rows is not None:\n", "            if False:\n", REQUEUE),
+    _m("requeue_rows_other_provider", "the rows copied are the path provider's upload",
+       "rows = await objects.get(imports.rows_key(provider, import_id))",
+       "rows = await objects.get(imports.rows_key(user, import_id))", REQUEUE),
+    _m("requeue_id_random", "the new id is derived from the failed one (a retry writes nothing)",
+       'str(uuid.uuid5(uuid.NAMESPACE_URL, f"requeue:{import_id}"))', "str(uuid.uuid4())",
+       REQUEUE),
+    _m("requeue_other_provider", "the job requeued is the path provider's",
+       "new_job_id=again,\n                                            provider_org_id=provider,",
+       "new_job_id=again,\n                                            provider_org_id=user,",
+       REQUEUE),
+    _m("requeue_actor_not_session", "the requeuer is the session's user",
+       "provider_org_id=provider, actor=user))\n        return await guarded(request, provider, "
+       "work)\n\n    @api.get(\"/versions\")",
+       "provider_org_id=provider, actor=\"lab\"))\n        return await guarded(request, "
+       "provider, work)\n\n    @api.get(\"/versions\")", REQUEUE),
 )
 
 
