@@ -1,0 +1,23 @@
+{
+ "capability": [
+  "inconclusive",
+  [
+   "capability_unverified:tools"
+  ],
+  false
+ ],
+ "regressing": [
+  "rejected",
+  [
+   "slice math inferior"
+  ],
+  false
+ ],
+ "tokenizer": [
+  "not_equivalent",
+  [
+   "tokenizer_changed"
+  ],
+  false
+ ]
+}

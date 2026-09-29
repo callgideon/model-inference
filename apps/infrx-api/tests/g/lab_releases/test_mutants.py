@@ -59,11 +59,16 @@ def test_mutant_is_killed(mutant):
 
 
 def test_every_pg_case_is_covered_by_a_pg_mutant():
-    """C7-RV-6: the p3 case is named by its own list (never the fake runner's)."""
+    """C7-RV-6 / 1-LR7-RV-5: each PostgreSQL case (p3's, r2's composition verdict) is named by
+    its own list (never the fake runner's) and runs on its own key."""
     import re
-    pg = set(re.findall(r"^def (test_\w+)\(",
-                        (shared.API_DIR / mutation_list.PG_FILE).read_text(), re.M))
-    assert {case for m in PG for case in m.cases} == pg == {mutation_list.PG_CASE}
+
+    def defined(path):
+        return set(re.findall(r"^def (test_\w+)\(", (shared.API_DIR / path).read_text(), re.M))
+    assert {case for m in PG for case in m.cases} == set(mutation_list.PG_KEYS)
+    assert defined(mutation_list.PG_FILE) == {mutation_list.PG_CASE}
+    assert mutation_list.COMP_PG_CASE in defined(mutation_list.COMP_PG_FILE)
+    assert all(len(m.cases) == 1 for m in PG)
     assert not {m.name for m in PG} & {m.name for m in ALL}
     assert all(m.file in mutation_list.FILES for m in PG)
 
@@ -71,12 +76,14 @@ def test_every_pg_case_is_covered_by_a_pg_mutant():
 @pytest.mark.parametrize("mutant", PG if FULL_RUN else (), ids=[m.name for m in PG] if FULL_RUN
                          else ())
 def test_pg_mutant_is_killed(mutant):
-    """On the p3 key only, and only when asked (`INFRX_LAB_RELEASES_PG=1`): a visible skip."""
+    """On its case's key only, and only when asked (`INFRX_LAB_RELEASES_PG=1`): a visible
+    skip."""
     from ...d import pgharness
+    key = mutation_list.pg_key(mutant)
     if os.environ.get("INFRX_LAB_RELEASES_PG") != "1" or \
-            os.environ.get("INFRX_D_TASK") != "p3" or pgharness.unavailable():
-        pytest.skip("the p3 PostgreSQL half runs on request (INFRX_LAB_RELEASES_PG=1, "
-                    "INFRX_D_TASK=p3)")
+            os.environ.get("INFRX_D_TASK") != key or pgharness.unavailable():
+        pytest.skip(f"the {key} PostgreSQL half runs on request (INFRX_LAB_RELEASES_PG=1, "
+                    f"INFRX_D_TASK={key})")
     result = mutation_list.run_mutant(mutant)
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
                            f"{result.detail}. The cases {list(mutant.cases)} do not prove "

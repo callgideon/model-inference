@@ -39,6 +39,7 @@ from ...d import pgharness
 from ...d import test_d7_lab_data as d7
 from ...d import test_d8_ledgers as d8
 from ...d import test_d9_rollout as d9
+from ...d.test_code_mutants_live import job, ref_of
 from ...j import fakes as j1
 from ...j.submit.judge_fake import JudgeFake
 from ...l.control import worlds
@@ -57,8 +58,8 @@ PRESENT_DB = f"{pgharness.DATABASE}_lcrp"
 BATCHES = {"owner": uid(1, 0x7b), "lab": uid(1, 0x7c)}
 A, ADMIN_A = worlds.PgWorld.A, worlds.PgWorld.ADMIN_A
 #: family -> (status, body prefix) on BOTH logins after 0056. A 503 here is a port the unit does
-#: not compose yet (evaluations' experiments: WR-B4-2; teachers off: P-10; R3's variants:
-#: WR-C6-VARIANTS), the same on the owner login - never a grant the Lab login lacks.
+#: not compose yet (evaluations' experiments: WR-B4-2; teachers off: P-10), the same on the
+#: owner login - never a grant the Lab login lacks.
 EXPECTED = {
     "control": (200, '{"data":[{"model_id":"nemostation/marlin-2b"'),
     "datasets": (404, '{"detail":"not_found: no such Lab record for this provider"}'),
@@ -66,7 +67,7 @@ EXPECTED = {
     "pipelines": (404, '{"refusal":"not_found"}'),
     "teacher-batches": (503, '{"refusal":"unavailable"}'),
     "releases": (200, '{"data":{"releases":[],"decisions":[],"proposals":[]}}'),
-    "optimizations": (503, '{"refusal":"unavailable"}'),
+    "optimizations": (200, '{"data":[]}'),
 }
 
 
@@ -240,3 +241,45 @@ def test_control_routes_pg__present_records_answer_alike_on_both_logins(present,
         assert [(x["state"], x["sent"]) for x in chunks] == [("submitted", 4), ("submitted", 2)], \
             (login, chunks)
     assert len(fake.posts) == 4                   # two chunks per login, each sent once
+
+
+def test_control_routes_pg__an_assigned_running_release_reads_its_verdict_on_the_lab_login(
+        present, monkeypatch):
+    """WR-LR7-GRANT (0059, R259): on `infrx_lab_control` the release page lists a running
+    release with one healthy assigned terminal job - its progress is D9's Live (0054's
+    `lab_release_live`) and its verdict R2's hold on `no_report` read at request time (B4's
+    `lab_experiments`) - the same row as the owner login's. Without 0059: a 503
+    (InsufficientPrivilege) in the lab column only."""
+    from infrx.lab.control.operations import serving_ref
+    from infrx.state.catalog import PgCatalogDirectory
+    from infrx.state.lab_control import PgControlStore
+
+    from ...d import checks_credit as cc
+    logins, objects, _, _ = present
+    owner = connector(logins["owner"])
+    public = run(PgControlStore(owner).deployment(cc.PUBLIC_DEPLOYMENT))
+    baseline = serving_ref(public, run(PgCatalogDirectory(owner).serving_revision(
+        public.serving_version_id)))
+    with pgharness.connect(PRESENT_DB) as conn:
+        candidate = ref_of(conn, cc.DEV_DEPLOYMENT)                  # ready_private: healthy
+        payload = {**d9.policy(d9.uid(43, 0xb0), weights=(1_000,), endpoint=d9.uid(43, 0xe0)),
+                   "baseline_ref": baseline,
+                   "candidates": [{"serving_ref": candidate, "weight_bp": 1_000}]}
+        ref = d7.publish(conn, payload)
+        d9.start(conn, ref)
+        run(imports.write_once(objects, plan_key(A, payload["policy_id"]), plan(
+            horizon_s=1, min_requests=2, max_skew_bp=10_000).model_dump_json().encode()))
+        job(conn, ref, payload, d9.uid(1, 0x3f), candidate, "succeeded", ms=20)
+    rows = {}
+    for login, dsn in logins.items():
+        with monkeypatch.context() as m:
+            m.setattr(control_app, "NoObjects", lambda: objects)
+            answer = unit(m, dsn).get("/lab/v1/releases", params={"provider_org_id": A},
+                                      headers={"authorization": f"Bearer {TOKEN}"})
+            assert answer.status_code == 200, (login, answer.text)
+            rows[login] = {r["policy_ref"]: r for r in answer.json()["data"]["releases"]}[ref]
+    shown = rows["lab"]
+    assert shown["progress"]["candidate"]["requests"] == 1, shown["progress"]
+    assert shown["verdict"]["action"] == "hold" and "no_report" in shown["verdict"]["reasons"], \
+        shown["verdict"]
+    assert "refused" not in shown and shown == rows["owner"], rows

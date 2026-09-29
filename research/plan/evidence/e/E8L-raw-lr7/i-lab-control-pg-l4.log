@@ -1,0 +1,137 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_a_500 _
+
+database = {'lab': 'user=infrx_lab_control password=<redacted> connect_timeout=10 dbname=infrx_l4_lcr host=127.0.0.1 port=57503', 'owner': 'postgresql://postgres:<redacted>@127.0.0.1:57503/infrx_l4_lcr?connect_timeout=10'}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7b099f765a00>
+
+    def test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_a_500(
+            database, monkeypatch):
+        """On `infrx_lab_control`: `/readyz` 200 (LDP-F7), the control listing 200, and every
+        family reached as A's administrator (never 401, never the membership's 404), answering
+        its record (200, or 404 for the probe's absent `ds@1`) or its typed 503 - never a 500
+        (LDP-F3). The owner login is the comparison column."""
+        matrix = {}
+        for login, dsn in database.items():
+            with monkeypatch.context() as m:
+                c = unit(m, dsn)
+                assert c.get("/readyz").json() == {"status": "ready"}, login
+                for family, path in FAMILIES.items():
+                    answer = c.get(path.replace(PROVIDER, A),
+                                   headers={"authorization": f"Bearer {TOKEN}"})
+                    matrix[login, family] = (answer.status_code, answer.text[:80])
+        for login in database:
+            print(f"\n[{login}]", {f: matrix[login, f] for f in FAMILIES})
+        for (login, family), (status, text) in matrix.items():
+            assert status not in (401, 500) and "workspace" not in text, (login, family, text)
+            if status == 503:
+                assert text in ('{"refusal":"unavailable"}',
+                                '{"detail":"the datasets service failed"}'), (login, family, text)
+        assert matrix["lab", "control"][0] == 200 and matrix["owner", "control"][0] == 200
+        got = {(login, f): (status, text[:len(EXPECTED[f][1])])
+               for (login, f), (status, text) in matrix.items()}
+>       assert got == {(login, f): EXPECTED[f] for login in database for f in FAMILIES}, got
+E       AssertionError: {('lab', 'control'): (200, '{"data":[{"model_id":"nemostation/marlin-2b"'), ('lab', 'datasets'): (404, '{"detail":"not...'lab', 'evaluations'): (503, '{"refusal":"unavailable"}'), ('lab', 'pipelines'): (404, '{"refusal":"not_found"}'), ...}
+E       assert {('lab', 'con...ound"}'), ...} == {('lab', 'con...ound"}'), ...}
+E         
+E         Omitting 12 identical items, use -vv to show
+E         Differing items:
+E         {('lab', 'optimizations'): (200, '{"data":[]}')} != {('lab', 'optimizations'): (503, '{"refusal":"unavailable"}')}
+E         {('owner', 'optimizations'): (200, '{"data":[]}')} != {('owner', 'optimizations'): (503, '{"refusal":"unavailable"}')}
+E         Use -v to get more diff
+
+tests/i/lab_control/test_control_routes_pg.py:171: AssertionError
+----------------------------- Captured stdout call -----------------------------
+
+[lab] {'control': (200, '{"data":[{"model_id":"nemostation/marlin-2b","revision_label":"2026-09-01","arti'), 'datasets': (404, '{"detail":"not_found: no such Lab record for this provider"}'), 'evaluations': (503, '{"refusal":"unavailable"}'), 'pipelines': (404, '{"refusal":"not_found"}'), 'teacher-batches': (503, '{"refusal":"unavailable"}'), 'releases': (200, '{"data":{"releases":[],"decisions":[],"proposals":[]}}'), 'optimizations': (200, '{"data":[]}')}
+
+[owner] {'control': (200, '{"data":[{"model_id":"nemostation/marlin-2b","revision_label":"2026-09-01","arti'), 'datasets': (404, '{"detail":"not_found: no such Lab record for this provider"}'), 'evaluations': (503, '{"refusal":"unavailable"}'), 'pipelines': (404, '{"refusal":"not_found"}'), 'teacher-batches': (503, '{"refusal":"unavailable"}'), 'releases': (200, '{"data":{"releases":[],"decisions":[],"proposals":[]}}'), 'optimizations': (200, '{"data":[]}')}
+_____ test_control_routes_pg__present_records_answer_alike_on_both_logins ______
+
+present = ({'lab': 'user=infrx_lab_control password=<redacted> connect_timeout=10 dbname=infrx_l4_lcrp host=127.0.0.1 ...00000001:000000b0-0000-4000-8000-000000000029@sha256:56c14addcda19b756f98dac52f956f71eca71af5a0664b9a127f127ebd5668b7')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7b099f34e930>
+
+    def test_control_routes_pg__present_records_answer_alike_on_both_logins(present, monkeypatch):
+        """WR-LW8-R2/R3: a PRESENT dataset version (its page: lineage's 0041 reads), its
+        disagreements (the pipeline's label log), a running release and - with LAB_TEACHERS on and
+        JUDGE_MODE live - a teacher batch planned then approved by the administrator (the
+        approval's in-request submission: D8's teacher reserve/record_sent, J2's begin_submit and
+        record_submission, to a local teacher fake) answer the same on the Lab login as on the
+        owner's. A grant missing past `lab_resolve` is a 503 in the lab column only."""
+        logins, objects, ref, policy = present
+        fake = JudgeFake(port=_free_port())
+        got = {}
+        try:
+            for login, dsn in logins.items():
+                with monkeypatch.context() as m:
+                    m.setattr(control_app, "NoObjects", lambda: objects)
+                    m.setattr(cost, "APPROVED_RATES", j1.TEST_RATES)   # the approved table is empty
+                    c = unit(m, dsn, LAB_TEACHERS="1", LAB_TEACHER_URL=fake.url, JUDGE_MODE="live",
+                             JUDGE_LIVE_BUDGET_USD="5")
+                    auth, q = {"authorization": f"Bearer {TOKEN}"}, {"provider_org_id": A}
+                    batch = {"batch_id": BATCHES[login], "dataset_ref": ref, "rubric_ref": RUBRIC,
+                             "teacher_model": j1.JUDGE_MODEL, "prompt_version": "teach-v1",
+                             "payer_ref": d7.PAYER, "budget_usd": "1.00000000", "chunk_size": 4}
+                    answers = {
+                        "version": c.get(f"/lab/v1/providers/{A}/datasets/versions/{ref}",
+                                         headers=auth),
+                        "disagreements": c.get("/lab/v1/pipelines/disagreements", headers=auth,
+                                               params={**q, "dataset_ref": ref}),
+                        "releases": c.get("/lab/v1/releases", params=q, headers=auth),
+                        "plan": c.post("/lab/v1/pipelines/teacher-batches", params=q,
+                                       json=batch, headers=auth),
+                        "approve": c.post(f"/lab/v1/pipelines/teacher-batches/{BATCHES[login]}"
+                                          "/approve", params=q, headers=auth)}
+                    for probe, answer in answers.items():
+                        got[login, probe] = (answer.status_code, answer.json())
+        finally:
+            fake.close()
+        for key, (status, _) in sorted(got.items()):
+            print(f"\n{key}: {status}")
+        status = {key: answer[0] for key, answer in got.items()}
+>       assert status == {(login, probe): code for login in logins for probe, code in (
+            ("version", 200), ("disagreements", 200), ("releases", 200), ("plan", 201),
+            ("approve", 200))}, got
+E       AssertionError: {('lab', 'version'): (200, {'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000dc-0000-4000-8000-0...000dc-0000-4000-8000-000000000002@sha256:24b10145b60d1d1a82e6ae0290873aeb6190031ad055ef3024fb063a83a29a94', ...}), ...}
+E       assert {('lab', 'ver...n'): 201, ...} == {('lab', 'ver...n'): 201, ...}
+E         
+E         Omitting 9 identical items, use -vv to show
+E         Differing items:
+E         {('lab', 'releases'): 503} != {('lab', 'releases'): 200}
+E         Use -v to get more diff
+
+tests/i/lab_control/test_control_routes_pg.py:233: AssertionError
+----------------------------- Captured stdout call -----------------------------
+
+('lab', 'approve'): 200
+
+('lab', 'disagreements'): 200
+
+('lab', 'plan'): 201
+
+('lab', 'releases'): 503
+
+('lab', 'version'): 200
+
+('owner', 'approve'): 200
+
+('owner', 'disagreements'): 200
+
+('owner', 'plan'): 201
+
+('owner', 'releases'): 200
+
+('owner', 'version'): 200
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: InsufficientPrivilege
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 failed, 2 warnings in 11.09s

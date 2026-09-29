@@ -283,6 +283,10 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0054_lab_release_live.sql",
     "0055_lab_variants_requeue.sql",
     "0056_lab_control_grants.sql",
+    # 0057 (lab-capture-2) and 0058 (lab-sql-lw9) arrive with their lanes: this list stays in
+    # file order, so each is inserted here before 0059 at its merge
+    # Lab (local-only, R151/R201): lab-rollout-7 (WR-LR7-GRANT, merge #62)
+    "0059_lab_control_grants_2.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()

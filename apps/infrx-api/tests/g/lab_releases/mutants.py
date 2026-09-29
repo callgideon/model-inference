@@ -33,6 +33,14 @@ UNWIRED, BODY = C + "an_unwired_port_is_unavailable_after_the_access_checks", \
     C + "a_body_is_json_and_exactly_a_proposal"
 PROGRESS = C + "a_releases_progress_is_d9s_live_null_only_before_one_is_observed"
 UNIT_REFUSED = C + "a_unit_refused_live_nulls_its_own_row_and_the_others_list"
+V_NOW = C + "a_running_releases_verdict_is_r2s_evaluate_now_when_d9_holds_none"
+V_NULL = C + "nothing_assigned_or_a_refused_unit_reads_no_verdict"
+V_D9 = C + "a_decided_release_reads_d9s_decision_never_a_fresh_evaluation"
+V_POOL = C + "the_composed_records_read_b4s_experiments_on_the_pool"
+V_UNWIRED = C + "unwired_b4_is_a_typed_refusal_on_an_undecided_running_release"
+V_BAD_ROW = C + "an_unreadable_b2_report_nulls_only_its_rows_verdict"
+BAD_ROW = "        except (errors.NotFound, KeyError, TypeError, ValueError) as bad:   # R260"
+NOT_RUNNING = '        if item.release.state != "running" or live is None:\n            return None\n'
 ADMIN = ("        who = await lab_actor(request, x.sessions, x.access,\n"
          "                              Cap.read_aggregate_health)"
          "          # the role: `propose`\n")
@@ -43,8 +51,9 @@ REQUIRE = "    require(who, Cap.propose_publication)\n"
 BODY_READ = "        wanted = await lab_body(request, rt, ProposalRequest)\n"
 
 
-def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, old, new, *cases, file=F, dies_by=()) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=dies_by)
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -159,6 +168,68 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("page_tally_invented", "no per-serving tally is invented",
        '"assignments": []}', '"assignments": [{"requests": live.candidate.requests}]}',
        PROGRESS, file=P),
+    # WR-LR6-VERDICT (lab-rollout-7): R2's verdict at read time when D9 holds no decision
+    _m("verdict_never_evaluated", "a running release D9 holds no decision for reads R2's "
+       "verdict now, not null", NOT_RUNNING, "        if True:\n            return None\n",
+       V_NOW, file=P),
+    _m("verdict_of_nothing_assigned", "nothing assigned is null (R244), never an evaluation "
+       "of no Live (R2 would read the arms of None)", NOT_RUNNING,
+       NOT_RUNNING.replace(" or live is None", ""), V_NULL, file=P,
+       dies_by=("AttributeError",)),
+    _m("verdict_of_a_settled_release", "a release that is not running is never evaluated",
+       NOT_RUNNING, NOT_RUNNING.replace('item.release.state != "running" or ', ""), V_D9,
+       file=P),
+    _m("verdict_ignores_d9s_decision", "D9's decision is the verdict once it holds one",
+       '        if d is not None:\n            return {"action": d.decision,',
+       '        if False:\n            return {"action": d.decision,', V_D9, file=P),
+    _m("verdict_unit_refusal_fails_the_listing", "R2's unit refusal is a null verdict (R248), "
+       "never a failed listing", "        except errors.InvalidRequest:\n            return None\n",
+       "        except errors.NotFound:\n            return None\n", V_NULL, file=P),
+    _m("verdict_at_the_wall_clock", "judged at the database clock of the Live it shows",
+       "now=live.observed_until, report=report",
+       'now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc), '
+       "report=report", V_NOW, file=P),
+    _m("verdict_without_its_report", "B2's report is the verdict's second input",
+       "now=live.observed_until, report=report", "now=live.observed_until, report=None",
+       V_NOW, file=P),
+    _m("verdict_reasons_dropped", "R2's reasons are shown",
+       'return {"action": v.action, "reasons": list(v.reasons),',
+       'return {"action": v.action, "reasons": [],', V_NOW, file=P),
+    _m("verdict_evidence_dropped", "an expand verdict carries the report's runs as evidence",
+       '"evidence_refs": list(v.evidence_refs), "evaluated_at": _z(live.observed_until)}',
+       '"evidence_refs": [], "evaluated_at": _z(live.observed_until)}', V_NOW, file=P),
+    _m("verdict_time_not_the_lives", "evaluated_at is the Live's observation time",
+       '"evidence_refs": list(v.evidence_refs), "evaluated_at": _z(live.observed_until)}',
+       '"evidence_refs": list(v.evidence_refs), "evaluated_at": _z(item.release.started_at)}',
+       V_NOW, file=P),
+    _m("verdict_reads_another_live", "the verdict is judged on the Live the progress shows",
+       "verdict = await self.verdict(provider_org_id, item, policy, full, live)",
+       "verdict = await self.verdict(provider_org_id, item, policy, full,\n"
+       "                                              await self.d9.live(item.policy_ref))",
+       V_NOW, file=P),
+    _m("verdict_reads_absent", "LAB_RELEASES reads B4's experiments (0043)",
+       "PgLabReads(connect)),", "None),", V_POOL, file=P),
+    # merge #62 minors: RV-2, 1-LR7-RV-2, 1-LR7-RV-3 (R260)
+    _m("verdict_report_of_any_provider", "B2's report is read for the listed provider only "
+       "(RV-2)", "release_report(self.reads, self.store, provider_org_id,",
+       'release_report(self.reads, self.store, "",', V_NOW, file=P),
+    _m("verdict_unwired_reads_crash", "unwired B4 is a typed 503, never an AttributeError "
+       "(1-LR7-RV-2)", "        if self.reads is None:", "        if False:", V_UNWIRED,
+       file=P, dies_by=("AttributeError",)),
+    _m("report_unavailable_fails_the_listing", "an unreadable B2 report degrades its row "
+       "only (R260)", "            except ReportUnavailable:", "            except errors.Conflict:",
+       V_BAD_ROW, file=P, dies_by=("ReportUnavailable",)),
+    _m("report_unavailable_untyped", "a report-unavailable row names its typed reason (R260)",
+       'verdict, refused = None, "report_unavailable"', "verdict, refused = None, None",
+       V_BAD_ROW, file=P),
+    _m("report_bad_body_fails_the_listing", "a body that is not JSON is a bad row (R260)",
+       BAD_ROW, BAD_ROW.replace(", ValueError)", ")"), V_BAD_ROW, file=P,
+       dies_by=("JSONDecodeError",)),
+    _m("report_outage_is_a_bad_row", "a B4 outage still fails the listing (R260)",
+       BAD_ROW, BAD_ROW.replace("(errors.NotFound, KeyError, TypeError, ValueError)",
+                                "Exception"), V_BAD_ROW, file=P),
+    _m("verdict_reads_off_the_pool", "the experiments are read on the gateway's pool",
+       "PgLabReads(connect)),", "PgLabReads(None)),", V_POOL, file=P),
 )
 
 
@@ -173,16 +244,37 @@ PG_FILE = "tests/g/lab_releases/test_lab_releases_unit_refused_pg.py"
 PG_CASE = "test_lab_releases_unit_refused_pg__a_legacy_usd_release_nulls_only_its_own_row"
 PG_RUNNER = Runner(name="lab-releases-pg", targets=(PG_FILE,), layout=_layout,
                    env=("INFRX_D_TASK",))
+# 1-LR7-RV-5: WR-LR6-VERDICT's composition case on real 0054/0043/D7 (the r2 key), the same
+# opt-in (`INFRX_LAB_RELEASES_PG=1`, `INFRX_D_TASK=r2`)
+COMP_PG_FILE = "tests/g/lab_releases/test_lab_releases_composition_pg.py"
+COMP_PG_CASE = ("test_lab_releases_composition_pg__a_running_releases_verdict_is_r2s_evaluate_"
+                "at_read_time")
+COMP_PG_RUNNER = Runner(name="lab-releases-pg-r2", targets=(COMP_PG_FILE,), layout=_layout,
+                        env=("INFRX_D_TASK",))
+#: each PostgreSQL case -> (its task-local key, its runner)
+PG_KEYS = {PG_CASE: ("p3", PG_RUNNER), COMP_PG_CASE: ("r2", COMP_PG_RUNNER)}
 PG_MUTANTS: tuple[Mutant, ...] = (
     _m("page_unit_refusal_fails_listing_pg", "a legacy-USD release on real 0054 never fails "
        "the listing", "            except errors.InvalidRequest:     # R248",
        "            except errors.Conflict:     # R248", PG_CASE, file=P),
+    _m("verdict_never_evaluated_pg", "a running release's verdict is R2's evaluate over real "
+       "0054 and B4's experiments, not null", NOT_RUNNING,
+       "        if True:\n            return None\n", COMP_PG_CASE, file=P,
+       dies_by=("TypeError",)),       # the case reads the null verdict's action
+    _m("verdict_reads_absent_pg", "LAB_RELEASES composes B4's experiments (0043) on real "
+       "PostgreSQL", "PgLabReads(connect)),", "None),", COMP_PG_CASE, file=P),
 )
+
+
+def pg_key(mutant) -> str:
+    """The task-local key a PostgreSQL mutant's case runs on."""
+    return PG_KEYS[mutant.cases[0]][0]
 
 
 def run_mutant(mutant) -> Result:
     if mutant in PG_MUTANTS:
-        return shared.pristine((PG_CASE,), PG_RUNNER) or shared.run_mutant(mutant, PG_RUNNER)
+        runner = PG_KEYS[mutant.cases[0]][1]
+        return shared.pristine(mutant.cases, runner) or shared.run_mutant(mutant, runner)
     return shared.run_mutant(mutant, RUNNER)
 
 
