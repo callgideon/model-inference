@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 290,
- "updated": "2026-09-29T12:39:49Z",
+ "revision": 291,
+ "updated": "2026-09-29T12:44:13Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8470,11 +8470,11 @@
     "prefix": "infrx-e6l-",
     "db": "e6l"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T12:50:00Z",
-   "updated": "2026-09-29T12:37:51Z",
+   "updated": "2026-09-29T12:44:13Z",
    "blocker": null,
-   "next_action": "merge batch #45 (R234/R235, RV-1/RV-2, OUT_OF_SCOPE L3) → E6L flips under R222+R234 at integration; j11 reruns when lab-eval-media lands",
+   "next_action": "j11 reruns when lab-eval-media lands; j10-UI when lab-e2e lands",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -8606,22 +8606,22 @@
   {
    "id": "W5-MERGE-45",
    "task": null,
-   "slice": "merge batch #45 (Opus): lab-evaluate-2 8f1a017f (+R234/R235, WR-E6L-RV-1/RV-2/SCOPE, evidence); E6L flips at integration; workflow wf_015fcc20-fb6",
+   "slice": "merge batch #45 (Opus): lab-evaluate-2 8f1a017f (+R234/R235, WR-E6L-RV-1/RV-2/SCOPE, evidence); E6L flips at integration; workflow wf_015fcc20-fb6; integrated (R234/R235 on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-45",
    "worktree": ".claude/worktrees/codex-w5-merge-45",
    "base": "7f161b27",
-   "head": null,
+   "head": "4b9515a3",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T12:37:51Z",
-   "updated": "2026-09-29T12:37:51Z",
+   "updated": "2026-09-29T12:44:13Z",
    "blocker": null,
-   "next_action": "integrate → E6L implemented (R222/R234)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
