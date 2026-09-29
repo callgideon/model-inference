@@ -58,7 +58,7 @@ def test_e5l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert tuple(e5l["test_ids"]) == runner.TEST_IDS
     for tid in runner.TEST_IDS:
         assert any(tid in spec["test_ids"] for spec in runner.SCENARIOS.values()), tid
-    assert set(runner.REQUIRED) == set(runner.SCENARIOS) and len(runner.SCENARIOS) == 9
+    assert set(runner.REQUIRED) == set(runner.SCENARIOS) and len(runner.SCENARIOS) == 10
     titles = " ".join(spec["title"] for spec in runner.SCENARIOS.values())
     for fault in ("revoked mid-queue", "expired or deleted", "ClickHouse killed",
                   "timed out", "worker restarted"):
@@ -91,7 +91,7 @@ def test_e5l_every_unbound_case_is_not_run_without_touching_a_stack():
                for name in dir(module) if name.startswith("test_o")
                and "not_run(" in (HERE / f"{module.__name__}.py").read_text().split(
                    f"def {name}(")[1].split("\ndef ")[0]]
-    assert len(unbound) == 3, [case.__name__ for case in unbound]
+    assert len(unbound) == 2, [case.__name__ for case in unbound]
     for case in unbound:
         with pytest.raises(pytest.skip.Exception) as skipped:
             case(None)
@@ -186,3 +186,63 @@ def test_e5l_the_judge_is_labelled_a_dry_run_never_a_live_run():
     from infrx.judge.submit import HttpJudgeProvider
     fake = HttpJudgeProvider(f"http://127.0.0.1:{observe_world.JUDGE_PORT}")
     assert fake.base_url.startswith("http://127.0.0.1:")
+
+
+PROBE = """
+import json, sys
+sys.path[:0] = [{here!r}, {integration!r}]
+import observe_world as ow
+h = ow.harness
+seen = []
+h.run = lambda argv, **kw: seen.append((argv, kw.get("env") or dict()))
+h.compose("ps")
+h._docker_ls = lambda kind: ["infrx-e5l_postgres-data", "infrx-e5l_s3-data",
+                             h.PROJECT + "_postgres-data"]
+h._labels = lambda kind, name: dict()
+print(json.dumps(dict(project=h.PROJECT, prefix=h.PREFIX, network=h.NETWORK,
+                      volumes=list(h.PROJECT_VOLUMES), namespace=h.NAMESPACE, ports=h.PORTS,
+                      database=h.PG_DATABASE, objects=h.OBJECT_PREFIX, keys=h.VALKEY_PREFIX,
+                      postgres=h.container_of("postgres"), argv=seen[0][0],
+                      compose_project=seen[0][1]["INFRX_E2_PROJECT"],
+                      candidates=h._candidates("volume"))))
+"""
+
+
+def probe(project: str | None):
+    """observe_world's harness in a fresh process (it is process-global), `INFRX_E5L_PROJECT`
+    set or not: its names, the compose argv it would run, and the volumes it would consider."""
+    import os
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "INFRX_E5L_PROJECT"}
+    env |= {"INFRX_E2_NAMESPACE": "e5l", **({"INFRX_E5L_PROJECT": project} if project else {})}
+    done = subprocess.run([sys.executable, "-c", PROBE.format(
+        here=str(HERE), integration=str(HERE.parent))], env=env, cwd=REPO,
+        capture_output=True, text=True, timeout=120)
+    return done.returncode, (json.loads(done.stdout.strip().splitlines()[-1])
+                             if done.returncode == 0 else done.stderr[-600:])
+
+
+def test_e5l_a_compose_project_override_moves_only_the_compose_names():
+    """`INFRX_E5L_PROJECT=e5l2` (the foreign `infrx-e5l_*` volumes a finished clone left must
+    never be touched): the compose project, containers, volumes and network are `infrx-e5l2*`
+    and `infrx-e5l_*` is not even a candidate; the namespace, the tasklocal ports, the database
+    and the key/object prefixes stay e5l's. Unset, every name is e5l's. Oracles: an ignored
+    override provisions over the foreign volumes (refused, every cell BLOCKED); one that moves
+    the namespace moves the ports out of the e5l block."""
+    code, default = probe(None)
+    assert code == 0, default
+    code, moved = probe("e5l2")
+    assert code == 0, moved
+    assert default["project"] == "infrx-e5l" and default["compose_project"] == "infrx-e5l"
+    assert (moved["project"], moved["prefix"], moved["network"], moved["postgres"]) == (
+        "infrx-e5l2", "infrx-e5l2-", "infrx-e5l2_default", "infrx-e5l2-postgres")
+    assert moved["volumes"] == [f"infrx-e5l2_{v}" for v in ("postgres-data", "clickhouse-data",
+                                                            "s3-data")]
+    assert moved["argv"][:4] == ["docker", "compose", "-p", "infrx-e5l2"]
+    assert moved["compose_project"] == "infrx-e5l2"
+    assert moved["candidates"] == ["infrx-e5l2_postgres-data"], "the foreign volumes are seen"
+    for same in ("namespace", "ports", "database", "objects", "keys"):
+        assert moved[same] == default[same], same
+    assert moved["ports"]["postgres"] == 57132 and moved["namespace"] == "e5l"
+    code, refused = probe("e3c")
+    assert code != 0 and "INFRX_E5L_PROJECT" in refused, "another gate's project accepted"

@@ -36,8 +36,45 @@ HERE = Path(__file__).resolve().parent
 INTEGRATION = HERE.parent
 E3C = INTEGRATION / "backend" / "e3c"
 NAMESPACE = "e5l"
+#: The compose project (`infrx-<PROJECT>`): `INFRX_E5L_PROJECT`, default the namespace.
+PROJECT = os.environ.get("INFRX_E5L_PROJECT") or NAMESPACE
 sys.path[:0] = [p for p in (str(E3C), str(INTEGRATION), str(INTEGRATION / "backend"))
                 if p not in sys.path]
+
+
+def load_harness() -> None:
+    """E2's harness in namespace e5l under compose project `infrx-<PROJECT>`. Only the compose
+    project and the names derived from it move (containers, volumes, network, bucket, state
+    file); the tasklocal ports, the database and the key/object prefixes stay e5l's. It lets a
+    run sidestep the foreign `infrx-e5l_*` volumes a finished clone left, which nothing here
+    may touch. Unset, the harness loads untouched (E3C's `world.load_harness`)."""
+    import re
+    import types
+    if not re.fullmatch(r"e5l[a-z0-9]{0,12}", PROJECT) \
+            or os.environ.get("INFRX_E2_NAMESPACE", NAMESPACE) != NAMESPACE:
+        raise ValueError(f"INFRX_E5L_PROJECT={PROJECT!r}: an e5l project name (e5l[a-z0-9]*) "
+                         "under INFRX_E2_NAMESPACE=e5l")
+    if PROJECT == NAMESPACE:
+        return
+    loaded = sys.modules.get("harness")
+    if loaded is not None:
+        if loaded.PROJECT != f"infrx-{PROJECT}":
+            raise RuntimeError(f"harness already loaded as {loaded.PROJECT}, not infrx-{PROJECT}")
+        return
+    path = INTEGRATION / "harness.py"
+    source = path.read_text()
+    for old, new in (('PROJECT = f"infrx-{NAMESPACE}"', f'PROJECT = "infrx-{PROJECT}"'),
+                     ('"INFRX_E2_PROJECT": f"infrx-{namespace}"', '"INFRX_E2_PROJECT": PROJECT')):
+        if source.count(old) != 1:
+            raise RuntimeError(f"harness.py moved: INFRX_E5L_PROJECT's anchor {old!r} is gone")
+        source = source.replace(old, new)
+    module = types.ModuleType("harness")
+    module.__file__ = str(path)
+    sys.modules["harness"] = module
+    exec(compile(source, str(path), "exec"), module.__dict__)     # noqa: S102 - our own file
+
+
+load_harness()
 import world                                            # noqa: E402 - E3C's composed box
 
 import stack                                            # noqa: E402
@@ -143,8 +180,9 @@ def s3_credentials():
 
 
 @contextlib.contextmanager
-def trace_stores(trip, workdir: Path):
-    """A ClickHouse database and an object prefix of the trip's own, and T2I's shipper."""
+def trace_stores(trip, workdir: Path, prefix: str | None = None):
+    """A ClickHouse database and an object prefix of the trip's own (or `prefix`: the gateway's
+    own `infrx/`, which a box reading the bucket needs), and T2I's shipper."""
     from infrx.traces import ship
     database = f"e5l_{uuid.uuid4().hex[:12]}"
     admin = harness.clickhouse_client()
@@ -164,7 +202,7 @@ def trace_stores(trip, workdir: Path):
     try:
         with s3_credentials():
             stack.media_bucket()
-            prefix = f"{harness.OBJECT_PREFIX}{workdir.name[:40]}-{uuid.uuid4().hex[:6]}/"
+            prefix = prefix or f"{harness.OBJECT_PREFIX}{workdir.name[:40]}-{uuid.uuid4().hex[:6]}/"
             traces.shipper = ship.build_shipper(limits(traces), None, prefix=prefix,
                                                 endpoint_url=harness.s3_endpoint())
             assert traces.shipper is not None, "build_shipper refused a complete setting set"
@@ -175,12 +213,13 @@ def trace_stores(trip, workdir: Path):
 
 
 @contextlib.contextmanager
-def observe_trip(workdir: Path, start=("worker", "gateway"), **env: str):
+def observe_trip(workdir: Path, start=("worker", "gateway"), trace_prefix: str | None = None,
+                 **env: str):
     """E3C's composed clone (the box processes `start` names) with the Lab seeded and the
     trip's trace stores."""
     with world.composed(workdir, start=start, **env) as trip:
         seed_lab(trip)
-        with trace_stores(trip, workdir) as traces:
+        with trace_stores(trip, workdir, trace_prefix) as traces:
             trip.traces = traces
             yield trip
 
@@ -294,11 +333,12 @@ def j2(name: str):
 
 
 def judge_result() -> str:
-    """A well-formed MARLIN_VIDEO_V1 payload (J1's `result()` shape)."""
+    """A well-formed MARLIN_VIDEO_V1 payload for these text-only samples (J1's `result()` with
+    `groundedness=None`): no media, so no groundedness score and no pass (J1's no-media floor).
+    A groundedness score here is rejected as `media_dependent_score_without_media`."""
     criterion = {"score": 4, "rationale": "frame 3 shows it"}
     return json.dumps({"relevance": criterion, "completeness": criterion, "format": criterion,
-                       "refusal": criterion, "groundedness": criterion, "notes": "fine",
-                       "overall_pass": True})
+                       "refusal": criterion, "notes": "fine", "overall_pass": False})
 
 
 @dataclasses.dataclass
@@ -320,9 +360,12 @@ class Judge:
 
 
 @contextlib.contextmanager
-def judge(trip, *, mode: str = "live", budget: str = "1.00", timeout_s: float = 5.0):
+def judge(trip, *, mode: str = "live", budget: str = "1.00", timeout_s: float = 5.0,
+          pg: bool = False, retention=None):
     """J2's wiring on the trip: real access/projection/objects, the local judge fake, J2's
-    in-memory D6J ledger with a PROVIDER_USD budget for A's named payer."""
+    in-memory D6J ledger with a PROVIDER_USD budget for A's named payer - or, `pg`, D6J's
+    `PgJudgeLedger` on the clone (0036: the `lab_submission` flag on, the same budget put
+    through `lab_put_budget`). `retention`: T3's reads on another clock (default the trip's)."""
     from infrx.contracts.limits import DEFAULTS
     from infrx.contracts.v2.money_units import ProviderUsd
     from infrx.judge.cost import ProviderRate, StaticRateTable
@@ -332,13 +375,26 @@ def judge(trip, *, mode: str = "live", budget: str = "1.00", timeout_s: float = 
     try:
         payer = fakes.payer(PROVIDER)
         ledger = fakes.FakeJudgeLedger({payer: ProviderUsd(budget)})
+        if pg:
+            from psycopg.types.json import Jsonb
+
+            from infrx.state.jobstore import connector
+            from infrx.state.lab_consent import PgJudgeLedger
+            sql(trip, "insert into infrx.feature_flags (name, enabled, updated_by, reason) "
+                      "values ('lab_submission', true, 'e5l', 'E5L o04') on conflict (name) do "
+                      "update set enabled = true")
+            sql(trip, "select infrx.lab_put_budget(%s)", Jsonb({
+                "provider_org_id": PROVIDER, "payer_ref": payer, "limit": budget,
+                "actor": "ops@e5l", "reason": "E5L o04"}))
+            ledger = PgJudgeLedger(connector(harness.pg_dsn(trip.world.database)))
         rates = StaticRateTable((ProviderRate(**RATE_ROW, effective_at=fakes.T0.replace(
             month=1, day=1)),))
         settings = dataclasses.replace(DEFAULTS, judge_mode=mode,
                                        judge_live_budget_usd=Decimal(budget))
         wiring = JudgeWiring(access=access(trip), ledger=ledger,
                              provider=HttpJudgeProvider(fake.url, timeout_s=timeout_s),
-                             retention=trip.traces.retention, rates=rates, settings=settings)
+                             retention=retention or trip.traces.retention, rates=rates,
+                             settings=settings)
         yield Judge(wiring, ledger, fake, payer)
     finally:
         fake.close()
@@ -352,3 +408,107 @@ async def submit(judge: Judge, trip, request_ids, *, job=None):
 
 def new_id() -> str:
     return str(uuid.uuid4())
+
+
+# ------------------------------------------------------------------ the Lab routes (LAB-API)
+
+#: The session door in front of the box's PostgREST: e5l 57167 with spares (the block lies in
+#: the kernel's ephemeral range, E2's documented limit).
+SESSIONS_PORTS = tuple(harness.PORT_RANGE.start + n for n in (67, 68, 69))
+
+
+def session(user: str) -> str:
+    """A signed-in user's Supabase session token (what the Lab web forwards)."""
+    return stack.jwt("authenticated", user, ttl_s=3600)
+
+
+@contextlib.contextmanager
+def supabase_door(rest_url: str):
+    """The box's `SUPABASE_URL` for the Lab routes. The gateway uses one URL for two servers:
+    PostgREST (the REST transport) and GoTrue (`GoTrueSessions`: `GET /auth/v1/user`). This
+    stack runs no GoTrue, so the door answers that one path for a live HS256 token of this
+    stack's PostgREST secret (E3L's `lab_world.sessions` rule: `aud`/`role` from the token, 401
+    otherwise) and forwards every other call unchanged to `rest_url` (the box's own PostgREST,
+    over the trip's clone). Yields its URL and `.seen`, the session tokens it judged."""
+    import base64
+    import errno
+    import hashlib
+    import hmac
+    import threading
+    import time
+    import types
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    import httpx
+    upstream = httpx.Client(base_url=rest_url, timeout=30.0)
+    seen = []
+
+    def claims(token: str):
+        try:
+            head, body, sig = token.split(".")
+            mac = hmac.new(stack.JWT_SECRET.encode(), f"{head}.{body}".encode(),
+                           hashlib.sha256).digest()
+            if not hmac.compare_digest(base64.urlsafe_b64encode(mac).rstrip(b"=").decode(), sig):
+                return None
+            found = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        except (ValueError, TypeError):
+            return None
+        return found if found.get("exp", 0) > time.time() and found.get("sub") else None
+
+    class Door(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *args):
+            pass
+
+        def answer(self, status: int, headers, body: bytes) -> None:
+            self.send_response(status)
+            for name, value in headers:
+                if name.lower() not in ("content-length", "transfer-encoding", "connection",
+                                        "content-encoding"):
+                    self.send_header(name, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def forward(self):
+            if self.path == "/auth/v1/user":
+                found = claims((self.headers.get("authorization") or "").removeprefix("Bearer "))
+                seen.append(bool(found))
+                body = json.dumps({"id": found["sub"], "aud": found["role"], "role": found["role"]}
+                                  if found else {"msg": "invalid"}).encode()
+                return self.answer(200 if found else 401,
+                                   [("Content-Type", "application/json")], body)
+            length = int(self.headers.get("content-length") or 0)
+            got = upstream.request(self.command, self.path, content=self.rfile.read(length),
+                                   headers={k: v for k, v in self.headers.items()
+                                            if k.lower() not in ("host", "content-length",
+                                                                 "connection")})
+            self.answer(got.status_code, got.headers.items(), got.content)
+
+        do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = do_HEAD = forward
+
+    for port in SESSIONS_PORTS:
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", port), Door)
+            break
+        except OSError as busy:
+            if busy.errno != errno.EADDRINUSE:
+                raise
+    else:
+        raise RuntimeError(f"address already in use: every one of {SESSIONS_PORTS}")
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield types.SimpleNamespace(url=f"http://127.0.0.1:{server.server_address[1]}", seen=seen)
+    finally:
+        server.shutdown()
+        server.server_close()
+        upstream.close()
+
+
+def lab_traces_env(trip, door) -> dict[str, str]:
+    """The gateway's LAB_TRACES composition (WR-LAB-API-1) on the trip: the switch, T2I's
+    projection and the trace bucket the shipper wrote, and the door as its SUPABASE_URL."""
+    return {"LAB_TRACES": "1", "SUPABASE_URL": door.url,
+            "CLICKHOUSE_URL": limits(trip.traces).clickhouse_url,
+            "S3_TRACE_BUCKET": harness.S3_BUCKET}

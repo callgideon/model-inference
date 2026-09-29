@@ -1,0 +1,225 @@
+{
+  "task": "E5L",
+  "gate": "LAB-OBSERVE (local; I2L-OBS staging needs P-08)",
+  "verdict": "FAIL",
+  "exit": 1,
+  "cells": {
+    "TRACE-BOUNDS": "NOT RUN",
+    "TRACE-RECOVER": "NOT RUN",
+    "TRACE-TENANT": "NOT RUN",
+    "FEEDBACK-ACK": "NOT RUN",
+    "JUDGE-BUDGET": "FAIL",
+    "JUDGE-SCORES": "FAIL",
+    "LAB-ACCESS": "FAIL",
+    "CONSOLE-FLOWS": "NOT RUN"
+  },
+  "label": "real PostgreSQL/PostgREST/Valkey/ClickHouse/S3-compatible services, the merged T2I/T2F/T3/G4F/L2/J2 code and a controlled protocol engine; not Marlin quality, not GPU capacity, not hosted behaviour",
+  "judge": "dry-run: J2's local judge fake on 127.0.0.1 and J2's in-memory D6J ledger; no external provider (P-10 absent); never a live-judge run",
+  "pins": {
+    "base": "9a48300c",
+    "head": "c5cf9a6cf75daf6324e3492ccaced98f67b77675",
+    "dirty": true,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    }
+  },
+  "namespace": "e5l",
+  "project": "infrx-e5l2",
+  "ports": {
+    "postgres": 57132,
+    "valkey": 57179,
+    "clickhouse_http": 57123,
+    "clickhouse_native": 57190,
+    "s3": 57100,
+    "fake_vllm": 57180
+  },
+  "started": "2026-09-29T07:45:17+00:00",
+  "seconds": 61.1,
+  "stack": {
+    "usable": true,
+    "why_not": "reused a kept stack",
+    "stages": []
+  },
+  "scenarios": [
+    {
+      "id": "o01",
+      "title": "capture -> ship -> search: off by default; a captured request ships once with its pins; only its org finds it; capture on via the switch",
+      "test_ids": [
+        "TRACE-BOUNDS",
+        "TRACE-TENANT"
+      ],
+      "lanes": [
+        "COMPOSITION"
+      ],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01"
+    },
+    {
+      "id": "o02",
+      "title": "feedback acknowledged after commit, owned by its key, projected once",
+      "test_ids": [
+        "FEEDBACK-ACK"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o02"
+    },
+    {
+      "id": "o03",
+      "title": "Lab review: a provider reads a grantor's trace only under a current grant, in-process and through the gateway's traces route",
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "FAIL",
+      "cases": {
+        "test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant": "PASS",
+        "test_o03_the_lab_traces_route_through_the_real_gateway": "FAIL"
+      },
+      "reasons": [
+        "test_o03_the_lab_traces_route_through_the_real_gateway: AssertionError: o03-route: 503 {\"error\":{\"message\":\"A required dependency is unavailable; retry later.\",\"type\":\"server_error\",\"code\":\"dependency_unavailable\",\"request_id\":\"89ed9e2c-411a-4f55-afb9-1c6385631e82\",\"infrx\":{\"retry_after"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o03"
+    },
+    {
+      "id": "o04",
+      "title": "judge dry run: default mode sends nothing; a consented run sends once, scores once, charges no customer wallet; the D6J ledger",
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "JUDGE-SCORES"
+      ],
+      "lanes": [],
+      "status": "FAIL",
+      "cases": {
+        "test_o04_the_default_dry_run_mode_sends_nothing": "PASS",
+        "test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet": "PASS",
+        "test_o04_the_judge_ledger_is_d6js_postgresql_ledger": "FAIL"
+      },
+      "reasons": [
+        "test_o04_the_judge_ledger_is_d6js_postgresql_ledger: AssertionError: assert (2 < 30 and 'uncalibrated' == 'insufficient'\n +  where 2 = len(['3418d72e-9743-4dd9-9f6f-7f394becb910', '9c1f13ce-a223-42d3-a0da-a941f0c7d05d'])\n  \n  - insufficient\n  + uncalibrated)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o04"
+    },
+    {
+      "id": "o05",
+      "title": "a grant revoked mid-queue: nothing leaves, the hold is released",
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "LAB-ACCESS"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o05"
+    },
+    {
+      "id": "o06",
+      "title": "content expired or deleted: gone for every read, never sent to the judge",
+      "test_ids": [
+        "TRACE-TENANT",
+        "JUDGE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge": "PASS",
+        "test_o06_after_the_sweep_nothing_is_left_to_send": "PASS",
+        "test_o06_expired_or_deleted_content_is_gone_for_every_read_before_and_after_the_sweep": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o06"
+    },
+    {
+      "id": "o07",
+      "title": "the projection dropped (ClickHouse killed): segment held, App serving, shipped once after",
+      "test_ids": [
+        "TRACE-RECOVER"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o07"
+    },
+    {
+      "id": "o08",
+      "title": "a judge submit timed out and the worker restarted: quarantined, never resent, reconciled",
+      "test_ids": [
+        "JUDGE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o08"
+    },
+    {
+      "id": "o09",
+      "title": "a worker restarted: the feedback projector after its insert, the box worker mid-traffic",
+      "test_ids": [
+        "TRACE-RECOVER",
+        "FEEDBACK-ACK"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o09"
+    },
+    {
+      "id": "o10",
+      "title": "the Lab review panel renders the traces route's answer (browser flow)",
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "lanes": [
+        "LAB-E2E"
+      ],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o10"
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e5l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs --import-mode=prepend -o junit_family=xunit1 --junitxml=/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind1/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/tests/integration/lab_observe/scenarios_judge.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/tests/integration/lab_observe/scenarios_trace.py -k test_o03_ or test_o04_ or test_o06_",
+      "exit": 1,
+      "seconds": 60.7,
+      "summary": "2 failed, 6 passed, 10 deselected in 57.89s",
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind1/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind1/scenarios.xml",
+    "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind1/scenarios.log",
+    "box_logs": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind1/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir>"
+}

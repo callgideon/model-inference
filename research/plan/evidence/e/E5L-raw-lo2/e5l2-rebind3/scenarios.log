@@ -1,0 +1,23 @@
+....                                                                                                                                                                                                                                                                                                                                                                                                     [100%]
+4 passed, 14 deselected in 32.75s
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 44836)
+Traceback (most recent call last):
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/tests/j/submit/judge_fake.py", line 54, in do_POST
+    self._send(500 if fake.mode == "error" else 200, {"id": batch})
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/tests/j/submit/judge_fake.py", line 40, in _send
+    self.wfile.write(data)
+  File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
