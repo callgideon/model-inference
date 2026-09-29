@@ -286,10 +286,10 @@ def _checkpoints(mode, env, connect, objects, worker_id, registries=None, deploy
     per_provider = (lambda _: registries) if registries else \
         partial(checkpoints.lab_registry, objects)
     deployer = deployer or checkpoints.DevDeployer(PgControlStore(connect))
-    # ponytail: one relay per role over one outbox: an event of the other role's kind is
-    # refused and handed out again after the window (a `kinds` filter is WR-LSQ-C2B's).
-    relay = OutboxRelay(store, Checkpoints(store, ledger, LabAccess(PgAccessStore(connect)),
-                                           per_provider, deployer),
+    # R215 / WR-LSQ-C2B: this role's relay claims its own kind only
+    relay = OutboxRelay(worker_main.Kinds(store, ("checkpoint_received",)),
+                        Checkpoints(store, ledger, LabAccess(PgAccessStore(connect)),
+                                    per_provider, deployer),
                         worker_id=f"{worker_id}-relay")
     return {"lab_checkpoints": lambda: every(worker_main.LAB_PUMP_S, relay.pump,
                                              "lab checkpoints")}, None

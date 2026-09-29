@@ -15,7 +15,8 @@ registry over this stack's MinIO (`lab://<provider>/...`) and L3's dev deployer 
 reads, the checkpoint's digest pinned by a READY private dev revision registered in L3's rows.
 A signed checkpoint is received once; the worker decides it (one queued D7 run, served by that
 revision, one `eval_run` event, the receipt `evaluated`); the event is then released and
-delivered again (a relay redelivery) and the second delivery changes nothing.
+delivered again (a relay redelivery) and the second delivery changes nothing; the queued
+run's `eval_run` event is never claimed by this role (R215, its own kinds only).
 """
 from __future__ import annotations
 
@@ -269,6 +270,9 @@ def test_j09_the_checkpoint_worker_drains_the_outbox_once(lab, workdir):
             process.send_signal(signal.SIGTERM)
             assert process.wait(60) == 0, "SIGTERM is a clean exit"
     assert first == counts() == (1, 1, 1, 1, 1), (first, counts())
+    assert lab.sql("select claimed_by from infrx.lab_outbox where kind = 'eval_run' and "
+                   "payload->>'run_id' = %s", run_id) == [(None,)], \
+        "R215: the checkpoints role never claims the eval role's event"
     assert lab.sql("select state, run_id::text from infrx.lab_checkpoint_decisions where "
                    "checkpoint_id = %s", checkpoint) == [("queued", run_id)]
     assert lab.sql("select state from infrx.lab_checkpoint_receipts where checkpoint_id = %s",

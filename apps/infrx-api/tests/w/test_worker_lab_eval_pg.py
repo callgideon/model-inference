@@ -132,3 +132,22 @@ def test_worker_lab_eval_pg__a_redelivery_before_recover_is_not_acknowledged(
     report = run(steps["lab eval"]())
     assert report["acknowledged"] >= 1 and pending(c) == 0, report
     assert [row[0] for row in c.results()] == c.ids
+
+
+def test_worker_lab_eval_pg__the_eval_relay_never_claims_another_roles_event(
+        tmp_path, monkeypatch, world, endpoint) -> None:
+    """R215 / WR-LSQ-C2B on 0050: beside a pending `eval_run`, a `checkpoint_received` event
+    (the checkpoints role's) is never claimed, errored or acknowledged by the eval relay."""
+    from psycopg.types.json import Jsonb
+    c = Case(world, 34)
+    endpoint(c.wallet)
+    (other,) = c.conn.execute(
+        "insert into infrx.lab_outbox (provider_org_id, kind, payload) values (%s, "
+        "'checkpoint_received', %s) returning event_id::text",
+        (d7.NEMO, Jsonb({"checkpoint_id": d7.uid(34, 0xc3)}))).fetchone()
+    steps, _ = composed(tmp_path, monkeypatch, c, c.endpoint)
+    report = run(steps["lab eval"]())
+    assert report["acknowledged"] >= 1 and pending(c) == 0, report
+    assert c.conn.execute("select claimed_at, claimed_by, acknowledged_at, attempts from "
+                          "infrx.lab_outbox where event_id = %s", (other,)).fetchone() == \
+        (None, None, None, 0)

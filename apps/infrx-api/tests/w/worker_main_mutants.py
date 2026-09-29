@@ -264,6 +264,15 @@ MUTANTS = (
     _m("main_lab_switch_composes_nothing", "LAB_EVAL_WORKER on runs the Lab pump and recover",
        MAIN, "        chores |= lab_eval(mode, connect, objects, evaluators, targets, "
              "worker_id)\n", "        pass\n", LAB_ON),
+    # R215 / WR-LSQ-C2B (composition-5): the eval relay claims its own kind only
+    _m("main_lab_eval_claims_every_kind", "the eval relay claims eval_run events only",
+       MAIN, '    relay = OutboxRelay(Kinds(store, ("eval_run",)),\n',
+       "    relay = OutboxRelay(store,\n", LAB_ON),
+    _m("main_lab_eval_other_kind", "the eval relay's kind is eval_run",
+       MAIN, 'Kinds(store, ("eval_run",))', 'Kinds(store, ("checkpoint_received",))', LAB_ON),
+    _m("main_kinds_unfiltered", "a role's relay passes its kinds to 0050's claim",
+       MAIN, "        return await self.store.dispatch_pending(**kw, kinds=self.kinds)",
+       "        return await self.store.dispatch_pending(**kw)", LAB_ON),
     _m("main_trace_settings_not_required", "TRACE_PUMPS on refuses without its three settings",
        MAIN, "    if missing:\n        raise RuntimeMisconfigured(mode, missing)\n    holds = ",
        "    holds = ", TRACE_REFUSE),

@@ -1389,14 +1389,27 @@ def test_worker_main__the_lab_eval_worker_pumps_d7s_outbox_and_recovers(tmp_path
     interval, pump = steps["lab eval"]
     relay = pump.__self__
     assert type(relay) is OutboxRelay and interval == worker_main.LAB_PUMP_S
-    assert type(relay.store) is PgLabDataStore
-    assert relay.store._connect is service.jobs._connect
+    # R215 / WR-LSQ-C2B: the eval relay claims its own kind only (0050's `kinds`)
+    assert type(relay.store) is worker_main.Kinds and relay.store.kinds == ("eval_run",)
+    store = relay.store.store
+    assert type(store) is PgLabDataStore and store._connect is service.jobs._connect
+    claimed = []
+
+    async def dispatch_pending(self, **kw):
+        claimed.append((self, kw))
+        return []
+    monkeypatch.setattr(PgLabDataStore, "dispatch_pending", dispatch_pending)
+    assert asyncio.run(relay.store.dispatch_pending(limit=3, worker_id="w",
+                                                    redelivery_s=30.0)) == []
+    assert claimed == [(store, {"limit": 3, "worker_id": "w", "redelivery_s": 30.0,
+                                "kinds": ("eval_run",)})]
+    assert relay.store.acknowledge_dispatch == store.acknowledge_dispatch
     handler = relay.scheduler
-    assert type(handler) is worker_main.EvalRuns and handler.store is relay.store
+    assert type(handler) is worker_main.EvalRuns and handler.store is store
     assert (handler.evaluators, handler.targets) == (evaluators, targets)
     assert handler.objects is service.preparation.runner.media.objects
     interval, recover = steps["lab recover"]
-    assert interval == worker_main.LAB_RECOVER_S and recover == relay.store.recover
+    assert interval == worker_main.LAB_RECOVER_S and recover == store.recover
 
 
 class LabStore:

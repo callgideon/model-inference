@@ -287,7 +287,9 @@ def test_lab_workers__a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_
     interval, pump = steps["lab checkpoints"]
     relay = pump.__self__
     assert interval == worker_main.LAB_PUMP_S
-    assert type(relay) is OutboxRelay and type(relay.store) is PgLabDataStore
+    assert type(relay) is OutboxRelay and type(relay.store) is worker_main.Kinds
+    assert relay.store.kinds == ("checkpoint_received",)      # R215 / WR-LSQ-C2B
+    assert type(relay.store.store) is PgLabDataStore
     handler = relay.scheduler
     assert asyncio.run(handler.enqueue(LabEvent(event_id="e", kind="checkpoint_received",
                                                 provider_org_id=NEMO,
@@ -295,7 +297,7 @@ def test_lab_workers__a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_
     (checkpoint, kw), = calls
     assert checkpoint == "c1" and kw["provider_org_id"] == NEMO
     assert (kw["registries"], kw["deployer"]) == (registries, deployer)
-    assert kw["store"] is relay.store and type(kw["ledger"]) is Ledger
+    assert kw["store"] is relay.store.store and type(kw["ledger"]) is Ledger
     assert kw["ledger"].connect is relay.store._connect
     assert kw["access"].store._connect is relay.store._connect
     with pytest.raises(errors.CapacityExhausted):
