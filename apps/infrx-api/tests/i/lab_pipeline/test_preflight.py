@@ -131,6 +131,22 @@ def test_i6_an_adapter_is_approved_per_role_and_nothing_is_enabled_silently() ->
         ("LAB_TRAINING_BUDGET_USD", "LAB_TRAINING_CONNECTOR_URL", "LAB_TRAINING_PAYER_REF")]
 
 
+def test_i6_the_annotation_teacher_url_is_the_local_fake_only_until_p10() -> None:
+    """WR-C4-PREFLIGHT: the annotation role collects approved teacher batches through
+    `LAB_TEACHER_URL`, the local teacher fake until P-10, whose host may join the egress
+    allowlist. Failure oracle: the name refused (the role can never start), another role
+    accepting it, or a non-local or https teacher (unapproved egress) passing."""
+    local = {**BASE, "LAB_TEACHER_URL": "http://127.0.0.1:18090",
+             "LAB_EGRESS_ALLOW": "s3.us-east-1.amazonaws.com,127.0.0.1"}
+    assert check("annotation", local) == []
+    assert check("training", local) == ["LAB_TEACHER_URL: not a training setting",
+        "LAB_EGRESS_ALLOW: entry 2 is neither the object store nor an approved endpoint"]
+    for bad in ("https://127.0.0.1:18090", "http://api.teacher.example/", "http://127.0.0.1.evil/"):
+        assert check("annotation", {**local, "LAB_TEACHER_URL": bad}) == [
+            "LAB_TEACHER_URL: the local teacher fake only until P-10",
+            "LAB_EGRESS_ALLOW: entry 2 is neither the object store nor an approved endpoint"], bad
+
+
 @pytest.mark.parametrize("role,name", [
     ("training", "LAB_ANNOTATION_TEACHER_TOKEN"),        # another purpose's secret
     ("annotation", "LAB_TRAINING_CONNECTOR_TOKEN"),

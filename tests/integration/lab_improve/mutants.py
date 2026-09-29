@@ -164,6 +164,10 @@ I05_BUDGET = "test_i05_the_budget_stops_the_batch_before_the_chunk_it_cannot_cov
 I06 = "test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job"
 I06_CONFIRM = "test_i06_an_ambiguous_run_ends_only_on_an_operators_written_confirmation"
 I04_REGRANT = "test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training"
+I07_WORKER = "test_i07_the_annotation_worker_process_resumes_a_batch_once"
+I08_SURFACE = "test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate"
+LW = "infrx/lab/workers/__main__.py"
+B3 = "infrx/evaluation/checkpoints/__init__.py"
 #: cases that fail on this base (none since WR-E7L-3 fixed 0-E7L-1)
 FAILING: tuple[str, ...] = ()
 
@@ -285,9 +289,15 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "  if v_from = 'ambiguous' and v_target = 'failed' and exists (\n",
        "  if false and v_from = 'ambiguous' and v_target = 'failed' and exists (\n",
        I06_CONFIRM),
+    # composition-4: the bound i07 (annotation worker process) and i08 (composed surface)
+    _m("st_worker_collects_nothing", "the annotation worker collects every submitted chunk",
+       LW, '"state", None) == "submitted"]', '"state", None) == "completed"]', I07_WORKER),
+    _m("st_evaluation_state_stale", "eligibility follows D7's run state through P3's port",
+       B3, '        return {**record, "state": status["state"]}',
+       '        return {**record, "state": "queued"}', I08_SURFACE),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
-SCENARIO_FILES = ("scenarios_iterate.py", "scenarios_faults.py")
+SCENARIO_FILES = ("scenarios_iterate.py", "scenarios_faults.py", "scenarios_surface.py")
 
 
 def case_names() -> set[str]:

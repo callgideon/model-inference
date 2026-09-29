@@ -43,6 +43,7 @@ DIVERGE = "test_i6_a_line_systemd_and_docker_could_read_differently_is_refused_u
 ENVIRON = "test_i6_the_values_checked_are_the_values_systemd_passes_the_unit"
 IMDS = "test_i6_the_object_store_credentials_come_from_the_instance_role_via_imds"
 BOTO = "test_i6_botocore_reaches_the_instance_role_only_when_imds_is_allowlisted"
+TEACHER = "test_i6_the_annotation_teacher_url_is_the_local_fake_only_until_p10"
 PRE = ("ExecStartPre=/usr/bin/python3 -I /home/ubuntu/model-inference/infra/lab/workers/training/"
        "preflight.py --role training --env-file /etc/infrx-lab/training.env\n")
 m = i5.m
@@ -124,6 +125,17 @@ MUTANTS: tuple[Mutant, ...] = (
     m("i6_pf_other_role_knob", "another Lab role's knob is refused", PF,
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY"}',
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY", "LAB_EVAL_CONCURRENCY"}', NAMES),
+    # --- the preflight: WR-C4-PREFLIGHT, the annotation role's local teacher fake
+    m("i6_pf_teacher_url_refused", "the annotation role may name its teacher", PF,
+      '        names.add("LAB_TEACHER_URL")\n', "        pass\n", TEACHER),
+    m("i6_pf_teacher_url_any_role", "only the annotation role names a teacher", PF,
+      '    if role == "annotation":\n        names.add', "    if True:\n        names.add",
+      TEACHER),
+    m("i6_pf_teacher_any_host", "the teacher is the local fake until P-10", PF,
+      '            refusals.append("LAB_TEACHER_URL: the local teacher fake only until P-10")',
+      "            hosts.add(teacher.hostname)", TEACHER),
+    m("i6_pf_teacher_https", "the local fake is plain http, never an https host", PF,
+      'teacher.scheme == "http" and', 'teacher.scheme in ("http", "https") and', TEACHER),
     m("i6_pf_image_unchecked", "the image is a local id", PF,
       'if not IMAGE.fullmatch(env.get("INFRX_IMAGE", "")):', "if False:", IMAGE),
     m("i6_pf_image_flag_only", "a registry reference or no image is refused too", PF,

@@ -32,8 +32,10 @@ never runs in a consumer process.
                every provider with a lineage, every page (WR-N3-2's pull half).
 * `rollout`    `emergency-rollback` (LAB_OPERATOR_ID of the invoking shell): R2's operator
                stop over D9 and L3. The pass loop refuses until its inputs are readable.
-* `annotation`, `training`: no worker pass exists on this base (see `_annotation`,
-               `_training`); both refuse by name.
+* `annotation` LAB_S3_BUCKET, LAB_TEACHER_URL (the local teacher fake until P-10; + JUDGE_MODE):
+               P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
+               submitted chunk run of every approved teacher batch (WR-P4B-2).
+* `training`   no worker pass exists on this base (see `_training`); it refuses by name.
 """
 from __future__ import annotations
 
@@ -71,7 +73,7 @@ DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_B
 TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
 NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
          "checkpoints": (), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
-         "annotation": (BUCKET,), "training": (BUCKET,), "rollout": (),
+         "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,), "rollout": (),
          "datasets": (BUCKET, *TRACES)}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
 #: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
@@ -80,6 +82,7 @@ LAB_PREFIX = "infrx/"
 JUDGE_PASS_S = 60.0
 JUDGE_SILENT_S = 300                  # a `submitting` run silent this long is `ambiguous`
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
+TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
 PROBE_TIMEOUT_S = 5.0
 
 
@@ -334,8 +337,10 @@ async def lineage_providers(objects) -> list[str]:
 def _datasets(mode, env, connect, objects, worker_id, **_):
     from ...datasets import lineage
     from ...state.lab_access import PgAccessStore
+    from ...state.lab_content import PgSampleRestrictions
     _, retention = _traces(mode, env, objects, connect)
-    directory = PgAccessStore(connect)
+    # WR-DS5-2: 0041 written through its own port on this login, not found via the directory
+    directory, restrictions = PgAccessStore(connect), PgSampleRestrictions(connect)
 
     async def reconcile_all() -> dict[str, int]:
         report = {"providers": 0, "failed": 0}
@@ -345,8 +350,8 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
             try:
                 while True:
                     after = (await lineage.reconcile(directory, retention, objects,
-                                                     provider_org_id=provider,
-                                                     after=after))["next"]
+                                                     provider_org_id=provider, after=after,
+                                                     restrictions=restrictions))["next"]
                     if after is None:
                         break
             except Exception:                 # noqa: BLE001 - the next provider still runs
@@ -367,11 +372,56 @@ def _rollout(mode, env, connect, objects, worker_id, **_):
 def _annotation(mode, env, connect, objects, worker_id, **_):
     if env.get("LAB_ANNOTATION_TEACHER", "dry-run") != "dry-run":
         raise RuntimeMisconfigured(mode, detail="LAB_ANNOTATION_TEACHER: a teacher host needs "
-                                   "its P-10 approval and N2's redaction (WR-P2-4)")
-    raise RuntimeMisconfigured(mode, detail="annotation has no worker pass: a dry-run batch "
-                               "is planned by the Lab route and nothing leaves; collecting "
-                               "live batches needs their durable listing and N2's redaction "
-                               "(WR-P2-4)")
+                                   "its P-10 approval")
+    from ...datasets.versions import redact_content
+    try:
+        pilot = validate_pilot(pilot_from_env(env))
+    except ValueError as refused:
+        raise RuntimeMisconfigured(mode, detail=str(refused)) from None
+    try:
+        wiring = teacher_wiring(connect, objects, provider_url=env["LAB_TEACHER_URL"],
+                                settings=pilot, redact=redact_content)
+    except errors.DomainError:            # names the setting, never its value
+        raise RuntimeMisconfigured(mode, detail="LAB_TEACHER_URL: teacher egress is the local "
+                                                "teacher fake until P-10") from None
+    return {"teacher_collect": lambda: every(TEACHER_PASS_S, lambda: collect_teachers(wiring),
+                                             "teacher collect")}, wiring
+
+
+async def collect_teachers(wiring) -> dict[str, int]:
+    """WR-P4B-2: P2's `collect` for every `submitted` chunk run (D8's `PgTeacherLedger`) of
+    every APPROVED teacher batch - the Lab route's write-once `batch.json` with its
+    `approval.json` (R202) under `lab/<provider>/teacher-batches/<id>/` - as the approver;
+    `collect` imports the labels once, records the per-item failures and settles once.
+    ponytail: lists the Lab objects and replans each batch per pass; D8's listing of
+    submitted runs (WR-LSQ-C2A) when that is too many keys."""
+    from ...gateway.routes.lab_pipelines import _teacher
+    from ...pipelines import teachers as p2
+    done, objects = {"collected": 0, "failed": 0}, wiring.objects
+    for key in sorted(await objects.keys("lab/")):
+        parts = key.split("/")
+        if parts[2:3] != ["teacher-batches"] or parts[-1] != "approval.json":
+            continue
+        try:
+            stored = json.loads(await objects.get(key.removesuffix("approval.json")
+                                                  + "batch.json"))
+            batch = _teacher(stored, parts[1], json.loads(await objects.get(key))["approved_by"])
+            planned = await p2.plan(batch, store=wiring.store, objects=objects,
+                                    rates=wiring.rates, now=await wiring.ledger.db_now())
+            runs = [run_id for run_id, _ in planned.chunks
+                    if getattr(await wiring.ledger.run(run_id), "state", None) == "submitted"]
+        except Exception:                     # noqa: BLE001 - the next batch still runs
+            log.exception("teacher batch unreadable")
+            done["failed"] += 1
+            continue
+        for run_id in runs:
+            try:
+                await p2.collect(batch, run_id, wiring=wiring)
+                done["collected"] += 1
+            except Exception:                 # noqa: BLE001 - the next run still runs
+                log.exception("teacher collect failed for one run")
+                done["failed"] += 1
+    return done
 
 
 def _training(mode, env, connect, objects, worker_id, **_):
@@ -388,8 +438,7 @@ def teacher_wiring(connect, objects, *, provider_url: str, settings, redact, rat
     ledger + `record_failures`, which `collect` calls; a plain `PgJudgeLedger` dies at the
     first per-item failure), P1's import over D8's label log, D7 and L2 on the same
     connection; J2's provider refuses any host but the local teacher fake (P-10). `redact` is
-    N2's (WR-P2-4): the annotation role refuses until it exists, so no process builds this
-    yet."""
+    N2's `versions.redact_content` (WR-P2-4) in the annotation role and the gateway."""
     from ...judge.cost import APPROVED_RATES
     from ...judge.submit import HttpJudgeProvider
     from ...pipelines import annotations as p1

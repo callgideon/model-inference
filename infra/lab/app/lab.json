@@ -47,6 +47,7 @@
       {"name": "LAB_EGRESS_ALLOW", "exposure": "unit", "purpose": "NO_PROXY allowlist: exactly the object store host, 169.254.169.254 and the enabled adapter's approved host"},
       {"name": "LAB_ANNOTATION_CONCURRENCY", "exposure": "server", "purpose": "annotation worker concurrency (pool_budget.py role default 1)"},
       {"name": "LAB_ANNOTATION_TEACHER", "exposure": "server", "purpose": "the annotation teacher adapter; default dry-run, any other needs its P-10 approval in egress.json"},
+      {"name": "LAB_TEACHER_URL", "exposure": "server", "purpose": "the annotation role's teacher endpoint for collecting approved teacher batches (WR-P4B-2); the local teacher fake (http://127.0.0.1:<port>) only until P-10, its host in LAB_EGRESS_ALLOW; unset = the annotation role exits 2"},
       {"name": "LAB_ANNOTATION_TEACHER_URL", "exposure": "server", "purpose": "the approved teacher's https endpoint (non-default adapter only)"},
       {"name": "LAB_ANNOTATION_TEACHER_TOKEN", "exposure": "secret", "purpose": "the teacher's purpose-specific token (non-default adapter only)"},
       {"name": "LAB_ANNOTATION_BUDGET_USD", "exposure": "server", "purpose": "the annotation USD budget, above 0 and within the P-10 approval's cap"},

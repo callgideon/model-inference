@@ -37,6 +37,7 @@ R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and th
 P = "gateway/pilot.py"                  # G2: the pilot composition
 ROLLOUT_CASE = "test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_it"
 PIPELINES_D8 = "test_lab_api_2__the_pipeline_surface_is_p1_and_p3_on_d8s_ledgers"
+TEACHERS = "test_lab_teachers__p2_is_composed_under_lab_pipelines_only_when_lab_teachers_is_on"
 ROLLOUT_LOGIN = "test_rollout_routing__the_router_is_r1_over_d9_on_the_runtime_login_only_when_on"
 OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
 ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
@@ -1027,19 +1028,54 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "                                              log=PgLabelLog(connect),\n",
        "                                              log=None,\n", PIPELINES_D8),
     _m("lab_pipelines_ledger_bare", "P3's listings answer 503, never an AttributeError",
-       P, "ledger=RunLedger(PgRunLedger(connect)))}", "ledger=PgRunLedger(connect))}",
+       P, "ledger=RunLedger(PgRunLedger(connect)),", "ledger=PgRunLedger(connect),",
        PIPELINES_D8),
     _m("lab_pipelines_ledger_off_the_pool", "P3's run ledger is on the pool",
-       P, "ledger=RunLedger(PgRunLedger(connect)))}", "ledger=RunLedger(PgRunLedger(None)))}",
+       P, "ledger=RunLedger(PgRunLedger(connect)),", "ledger=RunLedger(PgRunLedger(None)),",
        PIPELINES_D8),
     _m("lab_pipelines_objects_absent", "the pipeline surface reads the Lab objects",
        P, "store=store, objects=objects,", "store=store, objects=None,", PIPELINES_D8),
     _m("lab_pipelines_objects_not_passed", "the gateway's Lab objects reach the pipelines",
-       P, "**_lab_2(deployment, connect, sessions, access, objects)}",
-       "**_lab_2(deployment, connect, sessions, access)}", PIPELINES_D8),
+       P, "**_lab_2(deployment, connect, sessions, access, objects, teachers)}",
+       "**_lab_2(deployment, connect, sessions, access, teachers=teachers)}", PIPELINES_D8),
     _m("lab_pipelines_listing_empty", "an unwired run listing is a 503, never an empty list",
        P, '        raise errors.DependencyUnavailable("the run listings are not wired (WR-LAB2-4)")',
        "        return []", PIPELINES_D8),
+    # WR-E7L-1 / WR-B3-EVALS (composition-4): P3's evaluation port under LAB_PIPELINES
+    _m("lab_pipelines_evals_absent", "LAB_PIPELINES composes P3's evaluation port (B3/B1)",
+       P, "                                              evals=Evaluations(store, objects, access),\n",
+       "", PIPELINES_D8),
+    _m("lab_pipelines_evals_other_objects", "P3's evaluation records live in the Lab objects",
+       P, "evals=Evaluations(store, objects, access),", "evals=Evaluations(store, None, access),",
+       PIPELINES_D8),
+    # WR-P4B-1 (composition-4): P2's teachers under LAB_PIPELINES, only when LAB_TEACHERS is on
+    _m("lab_teachers_composed_when_off", "LAB_TEACHERS off leaves the teacher port unwired (503)",
+       P, "    if not deployment.lab_teachers:\n        return None\n",
+       "    if False:\n        return None\n", TEACHERS),
+    _m("lab_teachers_not_passed", "LAB_TEACHERS on reaches the pipeline surface",
+       P, "                                              teachers=teachers)}",
+       "                                              teachers=None)}", TEACHERS),
+    _m("lab_teachers_without_pipelines", "LAB_TEACHERS on without LAB_PIPELINES refuses to start",
+       P, "    if not deployment.lab_pipelines:\n        raise RuntimeMisconfigured(mode, "
+       "detail=\"LAB_TEACHERS", "    if False:\n        raise RuntimeMisconfigured(mode, "
+       "detail=\"LAB_TEACHERS", TEACHERS),
+    _m("lab_teachers_unredacted", "a teacher sees content only through N2's redaction (WR-P2-4)",
+       P, "settings=settings.pilot, redact=redact_content)",
+       "settings=settings.pilot, redact=str)", TEACHERS),
+    _m("lab_teachers_live_by_default", "the pilot's judge mode (not live by default) gates approval",
+       P, "settings=settings.pilot, redact=redact_content)",
+       "settings=settings.pilot.replace(judge_mode=\"live\"), redact=redact_content)", TEACHERS),
+    _m("lab_teachers_url_ignored", "the teacher is the host LAB_TEACHER_URL names",
+       P, "provider_url=deployment.lab_teacher_url,", "provider_url=\"http://127.0.0.1:57529\",",
+       TEACHERS),
+    _m("lab_teachers_other_host_escapes", "another teacher host refuses startup by the setting's name",
+       P, "    except errors.DomainError:            # names the setting, never its value\n"
+       "        raise RuntimeMisconfigured(mode, detail=\"LAB_TEACHER_URL",
+       "    except KeyError:\n        raise RuntimeMisconfigured(mode, detail=\"LAB_TEACHER_URL",
+       TEACHERS),
+    _m("lab_teachers_off_the_pool", "P2's stores are on the gateway's pool",
+       P, "        return teacher_wiring(connect, objects,", "        return teacher_wiring(None, objects,",
+       TEACHERS),
     _m("lab_2_switches_crossed", "each LAB-API-2 surface follows its own switch",
        P, "    rt.lab_releases = lab_releases if deployment.lab_releases else None\n",
        "    rt.lab_releases = lab_releases if deployment.lab_evals else None\n",

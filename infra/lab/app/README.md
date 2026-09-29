@@ -66,6 +66,7 @@ runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
 | `LAB_EGRESS_ALLOW` | unit | NO_PROXY allowlist: exactly the object store host, 169.254.169.254 and the enabled adapter's approved host |
 | `LAB_ANNOTATION_CONCURRENCY` | server | annotation worker concurrency (pool_budget.py role default 1) |
 | `LAB_ANNOTATION_TEACHER` | server | the annotation teacher adapter; default dry-run, any other needs its P-10 approval in egress.json |
+| `LAB_TEACHER_URL` | server | the annotation role's teacher endpoint for collecting approved teacher batches (WR-P4B-2); the local teacher fake (`http://127.0.0.1:<port>`) only until P-10, its host in LAB_EGRESS_ALLOW; unset = the annotation role exits 2 |
 | `LAB_ANNOTATION_TEACHER_URL` | server | the approved teacher's https endpoint (non-default adapter only) |
 | `LAB_ANNOTATION_TEACHER_TOKEN` | **secret** | the teacher's purpose-specific token (non-default adapter only) |
 | `LAB_ANNOTATION_BUDGET_USD` | server | the annotation USD budget, above 0 and within the P-10 approval's cap |
