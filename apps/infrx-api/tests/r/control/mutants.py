@@ -40,10 +40,12 @@ FORGED = "test_r2_a_policy_other_than_the_stored_revision_is_refused"
 PROMO = "test_r2_a_promoted_candidate_is_recognised_by_its_serving_identity"
 DEPLOY = "test_r2_a_deployment_only_candidate_rolls_back_once_and_never_relists_the_baseline"
 LATER = "test_r2_a_later_listing_of_the_same_serving_version_is_left_alone_after_a_rollback"
+LIVE = "test_r2_live_is_read_per_arm_from_d9s_release_read"
+D9 = "state/lab_rollout.py"
 
 
-def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
-    return Mutant(name=name, invariant=invariant, file=P, old=old, new=new, cases=cases,
+def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1, file=P):
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
                   dies_by=dies_by, occurrences=occurrences)
 
 
@@ -239,6 +241,29 @@ MUTANTS: tuple[Mutant, ...] = (
     m("r2_emergency_policy_unbound", "the operator's stop uses the stored policy too",
       "release = await self._release(policy, policy_ref, None)",
       "release = await self._store.release(policy_ref)", FORGED),
+    # --- WR-C6-LIVE (R244): D9's per-arm read shaped into R2's Live (0054)
+    m("r2_live_empty_as_zeros", "no assigned job is no observation, never zeros",
+      "        if not arms:\n            return None\n", "", LIVE, dies_by=("KeyError",),
+      file=D9),
+    m("r2_live_other_revision", "the read is of the revision the pass steps",
+      '{"policy_ref": policy_ref})}', '{"policy_ref": ""})}', LIVE, file=D9),
+    m("r2_live_usd_accepted", "legacy USD is no Lab unit: refused by name, never converted",
+      '        if cand["spent"]["unit"] not in records.LAB_UNITS:\n', "        if False:\n",
+      LIVE, dies_by=("ValidationError",), file=D9),
+    m("r2_live_arms_swapped", "the arms are read by name",
+      'baseline=arm(arms["baseline"]), candidate=arm(cand)',
+      'baseline=arm(cand), candidate=arm(arms["baseline"])', LIVE, file=D9),
+    m("r2_live_spend_of_both", "the budget is the release's own (candidate) traffic",
+      'spent=records.Amount(**cand["spent"])', 'spent=records.Amount(**arms["baseline"]["spent"])',
+      LIVE, file=D9),
+    m("r2_live_coverage_of_baseline", "quality coverage is the candidate's",
+      'quality_covered=cand["quality_covered"]', 'quality_covered=arms["baseline"]'
+      '["quality_covered"]', LIVE, file=D9),
+    m("r2_live_health_invented", "candidate health is read, never assumed (0-LIVE-1)",
+      'candidate_healthy=cand["candidate_healthy"]', "candidate_healthy=True", LIVE, file=D9),
+    m("r2_live_clock_invented", "observed_until is the database clock at read",
+      'observed_until=datetime.fromisoformat(cand["observed_until"])',
+      "observed_until=datetime.now().astimezone()", LIVE, file=D9),
 )
 
 

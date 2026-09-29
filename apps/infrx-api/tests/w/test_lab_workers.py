@@ -567,8 +567,9 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
     or rolled-back D9 release (`releases_in`) of every provider D9 lists with one
     (0053's `providers_in`, WR-C5-PROVIDERS / 0-F2: never the objects), on the plan stored
     beside it (`plan.json`; R2 refuses one whose digest is not D9's) and D7's policy record.
-    A running release is evaluated on R1's live aggregates; while they are unreadable
-    (`DependencyUnavailable`) it is held, never evaluated on invented numbers. A rolled-back
+    A running release is evaluated on its Live - D9's per-arm read (0054, R244) unless a source
+    is injected; while nothing is assigned (None) or it is unreadable (`DependencyUnavailable`)
+    it is held, never evaluated on invented numbers. A rolled-back
     release only converges (R216: step, never the operator's stop). A release without its
     plan - even a provider with no Lab object at all - is counted held; one failure is counted
     and the next release still runs."""
@@ -634,12 +635,21 @@ def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored
     assert type(ctl._store) is PgReleaseStore and ctl._actor == ENV["rollout"]["LAB_OPERATOR_ID"]
     assert ctl._store._connect is asked[0][0] is ctl._serving.reads._connect
     assert ctl2 is ctl
-    # without an injected source R1's aggregates are unreadable: every running release held
+    # nothing injected: D9's Live of the listed revision (0054, R244) on the role's pool; a
+    # revision with nothing assigned yet (None) is held, never evaluated on zeros
     stepped.clear()
+    read = []
+
+    async def d9_live(self, policy_ref):
+        read.append((self._connect, policy_ref))
+        return None if policy_ref == "ref-p1-3" else ("d9", policy_ref)
+    monkeypatch.setattr(PgReleaseStore, "live", d9_live)
     bare = lab_workers.compose("rollout", ENV["rollout"], objects=objects)
     bare.tasks["rollout_pass"]().close()
-    assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 1, "held": 5, "failed": 0}
-    assert [s[2] for s in stepped] == ["ref-p1-2"]
+    assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 2, "held": 3, "failed": 1}
+    assert [(s[2], s[4]) for s in stepped] == [("ref-p1-1", ("d9", "ref-p1-1")), ("ref-p1-2", None)]
+    assert [r for _, r in read] == ["ref-p1-1", "ref-p1-3", "ref-p2-1"]
+    assert {c for c, _ in read} == {bare.wiring._store._connect}
 
 
 def test_lab_workers__a_running_release_is_stepped_on_its_stored_b2_report(monkeypatch):

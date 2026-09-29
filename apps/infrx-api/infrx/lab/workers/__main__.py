@@ -38,8 +38,8 @@ never runs in a consumer process.
                imports from 0051's durable job queue (WR-N4-3).
 * `rollout`    LAB_S3_BUCKET, LAB_OPERATOR_ID (the controller's audited principal): R2's
                `Controller.step` every 30 s for every running or rolled-back D9 release on
-               the plan stored beside it (WR-R2-3; a running one only on R1's aggregates,
-               held while unreadable). `emergency-rollback` (LAB_OPERATOR_ID of the invoking
+               the plan stored beside it (WR-R2-3; a running one on D9's Live, 0054/R244,
+               held while nothing is assigned or it is unreadable). `emergency-rollback` (LAB_OPERATOR_ID of the invoking
                shell): R2's operator stop over D9 and L3. `decide`: the operator's decision
                of a Lab proposal through D9's CAS (WR-R4-2). `launch` (+ LAB_S3_BUCKET): the
                release launcher - the plan stored write-once, then D9's start (WR-C5-PLAN).
@@ -422,13 +422,14 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
                 jobs, store, objects, worker_id=worker_id), "import jobs")}, None
 
 
-class NoLive:
-    """R1's `Live` aggregates for a running release. R1 records assignments only: no error,
-    latency, spend or health aggregate per arm is readable (WR-C5-LIVE), so a running
-    release is held - never evaluated on invented numbers."""
-
-    async def __call__(self, listing):
-        raise errors.DependencyUnavailable("R1's live aggregates are not readable (WR-C5-LIVE)")
+async def release_live(releases, listing):
+    """R244 (WR-C6-LIVE): R2's `Live` of a running release, read by D9 per arm from R1's
+    assignments and the admitted jobs they name (0054). Nothing assigned yet is no
+    observation: held, never evaluated on zeros."""
+    current = await releases.live(listing.policy_ref)
+    if current is None:
+        raise errors.DependencyUnavailable("no admitted request is assigned to this release yet")
+    return current
 
 
 def plan_key(provider_org_id: str, policy_id: str) -> str:
@@ -460,8 +461,9 @@ async def rollout_pass(objects, store, releases, controller, live, reads) -> dic
     """WR-R2-3: `Controller.step` for every running or rolled-back D9 release of every
     provider D9 lists with one (0053, WR-C5-PROVIDERS), on its stored plan and D7's policy;
     one without a stored plan is counted held (0-F2: the report shows the gap). A running
-    release needs R1's aggregates (held while unreadable); a rolled-back one only
-    converges (R216). A running one is stepped on its B2 report (`release_report`,
+    release is evaluated on its Live (`release_live`, R244; held while nothing is assigned or
+    it is unreadable; a plan budgeted in another unit is refused by R2, counted failed); a
+    rolled-back one only converges (R216). A running one is stepped on its B2 report (`release_report`,
     WR-C5-REPORT). ponytail: the wall clock is `now`, D9's CAS orders the decisions."""
     from ...rollouts.control import Plan
     done = {"stepped": 0, "held": 0, "failed": 0}
@@ -497,7 +499,7 @@ def _rollout(mode, env, connect, objects, worker_id, live=None, **_):
     from ...state.lab_rollout import PgReleaseStore
     operator, releases = env["LAB_OPERATOR_ID"], PgReleaseStore(connect)
     controller = Controller(releases, control_serving(connect, operator), actor_id=operator)
-    store, live = PgLabDataStore(connect), live or NoLive()
+    store, live = PgLabDataStore(connect), live or partial(release_live, releases)
     reads = PgLabReads(connect)                             # WR-C5-REPORT: B4's experiments
     return {"rollout_pass": lambda: every(ROLLOUT_PASS_S, lambda: rollout_pass(
         objects, store, releases, controller, live, reads), "rollout pass")}, controller

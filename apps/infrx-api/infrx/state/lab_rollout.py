@@ -151,6 +151,31 @@ class PgReleaseStore:
         `{policy_ref, decision, reasons, evidence_refs, decided_by, decided_at}`."""
         return await self._call("lab_release_decisions", {"provider_org_id": provider_org_id})
 
+    async def live(self, policy_ref: str):
+        """WR-C6-LIVE (0054, R244): R2's `Live` of the revision, per arm from R1's assignments
+        and the admitted jobs they name, or None when no assignment names an admitted job yet
+        (nothing observed: the caller holds, never evaluates zeros). The spend is the
+        candidate arm's - the release's own traffic - in the unit its jobs settled in; legacy
+        USD is no Lab unit and is refused by name, never converted."""
+        from ..contracts import errors
+        from ..rollouts.control import Arm, Live
+        arms = {r["arm"]: r for r in await self._call("lab_release_live",
+                                                      {"policy_ref": policy_ref})}
+        if not arms:
+            return None
+        cand = arms["candidate"]
+        if cand["spent"]["unit"] not in records.LAB_UNITS:
+            raise errors.InvalidRequest(f"this release's jobs settled in {cand['spent']['unit']}, "
+                                        "no Lab unit: never converted")
+
+        def arm(row: dict[str, Any]) -> Arm:
+            return Arm(requests=row["requests"], errors=row["errors"], p99_ms=row["p99_ms"])
+        return Live(observed_until=datetime.fromisoformat(cand["observed_until"]),
+                    baseline=arm(arms["baseline"]), candidate=arm(cand),
+                    quality_covered=cand["quality_covered"],
+                    spent=records.Amount(**cand["spent"]),
+                    candidate_healthy=cand["candidate_healthy"])
+
     async def transition(self, policy_ref: str, *, fence: int, to: str,
                          decision: dict[str, Any], reasons: tuple[str, ...]) -> int:
         records.parse(decision)                 # the contract refuses first (LabRejected)
