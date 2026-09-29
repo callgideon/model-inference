@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 294,
- "updated": "2026-09-29T13:24:00Z",
+ "revision": 295,
+ "updated": "2026-09-29T13:26:29Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8367,11 +8367,11 @@
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T10:25:45Z",
-   "updated": "2026-09-29T13:14:34Z",
+   "updated": "2026-09-29T13:26:29Z",
    "blocker": null,
-   "next_action": "merge batch #48 (conflict resolution vs #45, WR-LE2E-1/2, R238) → o10/i08-UI PASS recorded; j10/k10-UI NOT RUN[product WR]",
+   "next_action": "j10 reruns when WR-B4-2/WR-LAB2-2/WR-B3-1 compose; k10-UI when WR-R4-2 lands (composition-6); the e6l stack-mutant rerun + `--only i08` alone as recorded",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 7,
@@ -8780,22 +8780,22 @@
   {
    "id": "W5-MERGE-48",
    "task": null,
-   "slice": "merge batch #48 (Opus): lab-e2e 123f9736 (+conflict resolution vs #45 in lab_evaluate, WR-LE2E-1/2, R238); workflow wf_b07cccea-9d7",
+   "slice": "merge batch #48 (Opus): lab-e2e 123f9736 (+conflict resolution vs #45 in lab_evaluate, WR-LE2E-1/2, R238); workflow wf_b07cccea-9d7; integrated (R238 on the tip; R236–R237 with #47)",
    "agent": "opus",
    "branch": "codex/w5-merge-48",
    "worktree": ".claude/worktrees/codex-w5-merge-48",
    "base": "31231785",
-   "head": null,
+   "head": "b97ab14c",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T13:14:34Z",
-   "updated": "2026-09-29T13:14:34Z",
+   "updated": "2026-09-29T13:26:29Z",
    "blocker": null,
-   "next_action": "integrate (sort §10: R236–R237 from #47, R238) → E5L o10 / E7L i08-UI PASS on the tip",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
