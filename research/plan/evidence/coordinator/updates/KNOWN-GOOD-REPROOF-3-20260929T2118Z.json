@@ -1,0 +1,85 @@
+{
+ "task": "I8",
+ "slice": "KNOWN-GOOD-PROOF (KNOWN-GOOD-REPROOF-3: both targets through 0056; R151 condition 1 for the next hosted window)",
+ "activity": "review",
+ "head": "3fc5b06c",
+ "worktree": ".claude/worktrees/codex-w5-known-good-reproof-3",
+ "branch": "codex/w5-known-good-reproof-3",
+ "owned_paths": [
+  "infra/rollout/known-good.json",
+  "apps/infrx-api/tests/i/test_known_good_proof.py",
+  "apps/infrx-api/tests/i/mutants.py",
+  "research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-*",
+  "research/plan/evidence/coordinator/updates/KNOWN-GOOD-REPROOF-3-20260929T2118Z.json"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=d10 pytest -q tests/i/test_known_good_proof.py @8f0e3c93 (red)",
+   "exit": 1,
+   "summary": "4 failed, 6 passed"
+  },
+  {
+   "cmd": "schema_proof.py <bda1586|4226315> --candidate 33547abd on stand-ins 0001-0056 (Supabase image e3b2d, plain+shim d10)",
+   "exit": 0,
+   "summary": "4/4 runs exit 0: 26/26 suites, 383 passed, 14 SHAPE, 5 xfailed, probe PASS, history PASS 0001-0056; no port collision"
+  },
+  {
+   "cmd": "INFRX_D_TASK=d10 pytest -q tests/i/test_known_good_proof.py @62f0e4f0",
+   "exit": 0,
+   "summary": "10 passed"
+  },
+  {
+   "cmd": "known-good.py <bda1586|4226315 full sha> --applied 0056 / 0057",
+   "exit": 0,
+   "summary": "0056 KNOWN-GOOD exit 0 for both; 0057 NOT-KNOWN-GOOD exit 1 (migrations only)"
+  },
+  {
+   "cmd": "known-good.py --list --applied 0056 --set <5 names>",
+   "exit": 0,
+   "summary": "4226315 and bda1586 KNOWN-GOOD, 27af05a NOT"
+  },
+  {
+   "cmd": "lab-migrate.sh --hosted-at 0051 --window P-08:dry with a stub of the PATCHED hosted-migrate lines + real known-good.py",
+   "exit": 0,
+   "summary": "R151 conditions hold (pending 0052-0056); unpatched: condition 2 STOP exit 2"
+  },
+  {
+   "cmd": "INFRX_D_TASK=d10 INFRX_MUTANTS=all pytest -q -rs tests/i/test_mutants.py -k 'known_good or schema_proof'",
+   "exit": 0,
+   "summary": "35 passed, 0 survivors"
+  },
+  {
+   "cmd": "pytest -q tests/i/test_mutants.py -k 'well_formed or every_case'",
+   "exit": 0,
+   "summary": "2 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=d10 pytest -q -rs tests/i",
+   "exit": 0,
+   "summary": "396 passed, 6 skipped (other lanes' l4/i5 keys), 2 xfailed"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py",
+   "exit": 0,
+   "summary": "PASS, 957 links / 418 docs"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.2,
+  "likely_h": 0.45,
+  "pessimistic_h": 0.9,
+  "confidence": "high",
+  "basis": "lane done (0 h); remaining = coordinator WR-KGR3-1/2 doc patches (0.1/0.2/0.4, as WR-KGR2-1/2) + operator WR-KGR3-3 hosted-migrate.sh patch with the strict-xfail drop (0.1/0.25/0.5)",
+  "at": "2026-09-29T21:18Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-KGR3-1 infra/rollout/README.md RR row + paragraph + log: 0052 -> 0056 (exact text in evidence)",
+  "WR-KGR3-2 research/plan/15-pending-inputs.md P-25 row + log line (exact text in evidence)",
+  "WR-KGR3-3 operator (runbook 08 §2): apply the hosted-migrate.sh diff in the evidence (EXPECTED_PENDING 0052-0056, applied anchor 0051 lab_import_jobs, W7 POST 0056 lab_control_grants, say lines) together with dropping the strict xfail on tests/i/lab/test_lab_rollout_steps.py::test_ldp__todays_hosted_migrate_carries_the_reviewed_patch",
+  "WR-KGR3-4 coordinator: nothing past 0052 hosted before this merges; any 0057+ merged before the window reopens condition 1"
+ ],
+ "evidence": [
+  "research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-8f0e3c9.md"
+ ]
+}
