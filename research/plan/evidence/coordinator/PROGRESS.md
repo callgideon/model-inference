@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-29 23:13Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 325, updated 2026-09-29 23:13Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-29 23:14Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 325, updated 2026-09-29 23:13Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -374,7 +374,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W5-MERGE-61 | support merge batch #61 (Opus): lab-local-2 44a19b71 (+WR-LL2-1/2 test-backend ports, WR-LL2-4, minors, R257–R258); workflow wf_6480cc4a-e86; integrated (R257–R258 on the tip) | complete | codex/w5-merge-61 | 1b19a1f4 → 87b2d5d3 | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:57Z | — | 1–4 h remaining (likely 2 h), confidence unknown, estimated — |
 | W5-LAB-LOCAL-3 | I2L `GATE_ARGS=--keep make lab-local` after #61: the pipelines/traces journeys run in the composition, o05 judged against CONTROL_EXPECTED, the 14 e4-on skips on other keys run inside the composition or ruled; the 12 stack mutants on the kept stack (Opus); workflow wf_504e9d9d-7c5 | running | codex/w5-lab-local-3 | 8ab880a5 → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 21:57Z | handback → merge → E4-ON accepted under R257 → the runbook proof table | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
 | W5-MERGE-62 | support merge batch #62 (Opus): lab-rollout-7 dc3ba861 (+pilot.py/lab_releases conflicts vs #60 kept both sides, 0059 lab_control_grants_2, WR-LR7-I-OPT, minors, R259–R260); workflow wf_daf503a9-854 | running | codex/w5-merge-62 | a8bdd22c → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 22:45Z | integrate (sort §10; harness pins 0057/0058/0059 in order as they land) | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
-| W5-MERGE-63 | support merge batch #63 (Opus): lab-capture-2 8ddb75f8 (+WR-LC2-RUNTIME, the 0057 pin, minors, the o01 kept-stack rerun, R261) | running | codex/w5-merge-63 | 6738643c → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 23:13Z | integrate (sort §10; harness pins 0057 before 0058/0059) → E5L fully PASS on the tip | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
+| W5-MERGE-63 | support merge batch #63 (Opus): lab-capture-2 8ddb75f8 (+WR-LC2-RUNTIME, the 0057 pin, minors, the o01 kept-stack rerun, R261); workflow wf_c1917f53-beb | running | codex/w5-merge-63 | 6738643c → — | ports none (layer-1 only), prefix -, db - | 2026-09-29 23:13Z | integrate (sort §10; harness pins 0057 before 0058/0059) → E5L fully PASS on the tip | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 
 ### Queues and locks
 

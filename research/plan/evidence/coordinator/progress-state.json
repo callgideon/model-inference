@@ -9861,7 +9861,7 @@
   {
    "id": "W5-MERGE-63",
    "task": null,
-   "slice": "merge batch #63 (Opus): lab-capture-2 8ddb75f8 (+WR-LC2-RUNTIME, the 0057 pin, minors, the o01 kept-stack rerun, R261)",
+   "slice": "merge batch #63 (Opus): lab-capture-2 8ddb75f8 (+WR-LC2-RUNTIME, the 0057 pin, minors, the o01 kept-stack rerun, R261); workflow wf_c1917f53-beb",
    "agent": "opus",
    "branch": "codex/w5-merge-63",
    "worktree": ".claude/worktrees/codex-w5-merge-63",
