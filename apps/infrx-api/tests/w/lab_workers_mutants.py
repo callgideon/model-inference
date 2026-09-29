@@ -25,12 +25,14 @@ SETTINGS = C + "each_role_refuses_to_start_naming_a_missing_setting"
 PROCESS = C + "the_process_refuses_an_unknown_role_and_a_missing_setting"
 EVAL = C + "eval_is_the_consumer_workers_one_composition"
 TARGETS = C + "dev_targets_resolve_only_the_providers_private_dev_revision"
-CKPT_REFUSE = C + "checkpoints_refuse_without_a_registry_and_a_deployer"
+CKPT_SOURCES = C + "checkpoints_compose_l3s_dev_deployer_and_the_lab_registry"
 CKPT = C + "a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_it_back"
 JUDGE = C + "the_judge_is_j2_on_its_ledger_dry_run_by_default"
 SWEEP = C + "the_judge_pass_sweeps_silent_submissions"
+JPASS = C + "the_judge_pass_reconciles_and_collects_every_providers_runs"
 DATASETS = C + "datasets_reconcile_every_providers_lineage_page_by_page"
-ROLLOUT = C + "the_rollout_pass_refuses_until_its_inputs_exist"
+IMPORTS = C + "the_datasets_role_works_the_durable_import_job_queue"
+ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
 ANNOT = C + "the_annotation_role_collects_teacher_batches_with_n2s_redaction"
@@ -93,21 +95,88 @@ MUTANTS: tuple[Mutant, ...] = (
        "                               model=serving.serving_version_id, rate_card=card,",
        TARGETS),
     # --- checkpoints -------------------------------------------------------------------------------
-    _m("lw_checkpoints_without_deployer", "no checkpoint is decided without both sources",
-       "    if not registries or deployer is None:\n", "    if deployer is None:\n",
-       CKPT_REFUSE),
+    _m("lw_checkpoints_bucket_optional", "the checkpoints role needs the Lab objects",
+       '         "checkpoints": (BUCKET,), "judge"', '         "checkpoints": (), "judge"', SETTINGS),
+    _m("lw_checkpoints_no_deployer", "the role composes L3's dev deployer by default",
+       "    deployer = deployer or checkpoints.DevDeployer(PgControlStore(connect))",
+       "    deployer = deployer", CKPT_SOURCES),
+    _m("lw_checkpoints_deployer_off_the_pool", "L3's reads are on the role's database",
+       "checkpoints.DevDeployer(PgControlStore(connect))",
+       'checkpoints.DevDeployer(PgControlStore(connector("")))', CKPT_SOURCES),
+    _m("lw_checkpoints_registry_other_provider", "each event gets its own provider's registry",
+       "            registries=self.registries(provider), deployer=self.deployer,",
+       "            registries=self.registries(None), deployer=self.deployer,", CKPT_SOURCES),
+    Mutant(name="lw_checkpoints_registry_other_objects",
+           invariant="the Lab registry reads the role's objects", file=F,
+           old="        partial(checkpoints.lab_registry, objects)",
+           new="        partial(checkpoints.lab_registry, None)", cases=(CKPT_SOURCES,),
+           dies_by=("AttributeError",)),
+    _m("lw_checkpoints_p3_decided_by_b3", "a checkpoint without B3's signed event is P3's: done",
+       "        except errors.NotFound:\n            return True\n",
+       "        except errors.NotFound:\n            pass\n", CKPT),
+    _m("lw_checkpoints_signed_other_provider", "the signed event is looked up for its provider",
+       "            await self.ledger.event(checkpoint_id, provider_org_id=provider)",
+       "            await self.ledger.event(checkpoint_id, provider_org_id=None)", CKPT),
+    _m("lw_checkpoints_claims_every_kind", "the checkpoints relay claims its own kind (R215)",
+       '    relay = OutboxRelay(worker_main.Kinds(store, ("checkpoint_received",)),\n',
+       "    relay = OutboxRelay(store,\n", CKPT),
+    _m("lw_checkpoints_other_kind", "the checkpoints relay's kind is checkpoint_received",
+       'worker_main.Kinds(store, ("checkpoint_received",))',
+       'worker_main.Kinds(store, ("eval_run",))', CKPT),
     _m("lw_checkpoints_any_kind", "the checkpoints handler takes checkpoint_received only",
        '        if event.kind != "checkpoint_received":\n', "        if False:\n", CKPT),
     _m("lw_checkpoints_payload_provider", "a checkpoint is decided for the event's provider",
-       "            event.payload[\"checkpoint_id\"], provider_org_id=event.provider_org_id,",
-       "            event.payload[\"checkpoint_id\"], "
-       "provider_org_id=event.payload.get(\"provider_org_id\"),", CKPT),
+       'checkpoint_id, provider = event.payload["checkpoint_id"], event.provider_org_id',
+       'checkpoint_id, provider = event.payload["checkpoint_id"], '
+       'event.payload.get("provider_org_id")', CKPT),
     _m("lw_checkpoints_ledger_off_the_pool", "D8's checkpoint ledger is on the role's database",
        '    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connect)',
        '    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connector(""))', CKPT),
     _m("lw_checkpoints_cadence", "the checkpoints relay pumps at the Lab pump cadence",
        "every(worker_main.LAB_PUMP_S, relay.pump,", "every(LINEAGE_PASS_S, relay.pump,", CKPT),
+    # WR-N4-3 (composition-5): the datasets role's import-job pass
+    _m("lw_import_jobs_unscheduled", "the datasets role works the import-job queue",
+       '            "import_jobs": lambda: every(IMPORT_PASS_S,',
+       '            "import_jobs_off": lambda: every(IMPORT_PASS_S,', IMPORTS),
+    _m("lw_import_jobs_cadence", "the queue is claimed every IMPORT_PASS_S",
+       '"import_jobs": lambda: every(IMPORT_PASS_S,', '"import_jobs": lambda: every(LINEAGE_PASS_S,',
+       IMPORTS),
+    _m("lw_import_jobs_off_the_pool", "the job queue is on the role's database",
+       "    jobs, store = PgLabImportJobs(connect), PgLabDataStore(connect)",
+       '    jobs, store = PgLabImportJobs(connector("")), PgLabDataStore(connect)', IMPORTS),
+    _m("lw_import_jobs_other_objects", "imports read and write the role's Lab objects",
+       "                jobs, store, objects, worker_id=worker_id)",
+       "                jobs, store, None, worker_id=worker_id)", IMPORTS),
     # --- judge ------------------------------------------------------------------------------------
+    # WR-LSQ-C2A (composition-5): the collect/reconcile pass
+    _m("lw_judge_pass_unscheduled", "the judge role runs its collect/reconcile pass",
+       '"judge sweep"),\n            "judge_collect"', '"judge sweep"),\n            "judge_collect_off"',
+       JUDGE),
+    _m("lw_judge_pass_cadence", "the collect pass runs every JUDGE_PASS_S",
+       '"judge_collect": lambda: every(JUDGE_PASS_S,', '"judge_collect": lambda: every(LINEAGE_PASS_S,',
+       JPASS),
+    _m("lw_judge_pass_providers_off_the_login", "the providers are read on the role's login",
+       "wiring, partial(provider_ids, connect)),", 'wiring, partial(provider_ids, connector(""))),',
+       JPASS),
+    _m("lw_judge_pass_ambiguous_released", "an ambiguous run the provider lacks is never released",
+       "                    elif (external := await wiring.provider.lookup(run.submit_key)) is None:\n"
+       "                        done[\"waiting\"] += 1\n",
+       "                    elif (external := await wiring.provider.lookup(run.submit_key)) is None:\n"
+       "                        await ledger.record_submission(run.run_id, external)\n", JPASS),
+    _m("lw_judge_pass_teachers_collected", "a teacher run is the annotation role's",
+       '                if run.consent.grant_id.startswith("lab:"):\n                    continue\n',
+       "", JPASS),
+    _m("lw_judge_pass_submitted_only", "ambiguous runs are reconciled before collection",
+       '        for state in ("ambiguous", "submitted"):', '        for state in ("submitted",):', JPASS),
+    _m("lw_judge_pass_one_failure_stops_all", "one run's failure never stops the pass",
+       '                    log.exception("judge pass failed for one run")\n'
+       '                    done["failed"] += 1\n', "                    raise\n", JPASS),
+    _m("lw_judge_pass_unbounded", "each listing is bounded to JUDGE_BATCH",
+       "runs_in((state,), JUDGE_BATCH, provider_org_id=provider)",
+       "runs_in((state,), 10_000, provider_org_id=provider)", JPASS),
+    _m("lw_judge_pass_other_wiring", "a run is collected on the role's own wiring",
+       "                        await submit.collect(run.run_id, wiring=wiring)",
+       "                        await submit.collect(run.run_id, wiring=None)", JPASS),
     _m("lw_judge_live_by_default", "the judge is dry_run unless JUDGE_MODE=live",
        "        limits = validate_pilot(pilot_from_env(env))",
        '        limits = validate_pilot(pilot_from_env({"JUDGE_MODE": "live", '
@@ -170,10 +239,43 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if existing is not None:\n            await self.deleted(existing)\n"
        "            return existing\n", PUSH, file=T3),
     # --- rollout ------------------------------------------------------------------------------------
-    _m("lw_rollout_pass_idle", "the rollout pass refuses rather than idle",
-       '    raise RuntimeMisconfigured(mode, detail="the rollout pass needs every running or "',
-       '    return {}, None\n    raise RuntimeMisconfigured(mode, detail="the rollout pass needs '
-       'every running or "', ROLLOUT),
+    # WR-R2-3 (composition-5): the pass loop
+    _m("lw_rollout_operator_optional", "the controller's principal is required",
+       '         "rollout": (BUCKET, "LAB_OPERATOR_ID"),', '         "rollout": (BUCKET,),',
+       SETTINGS),
+    _m("lw_rollout_cadence", "the controller pass runs every ROLLOUT_PASS_S",
+       "every(ROLLOUT_PASS_S, lambda: rollout_pass(", "every(LINEAGE_PASS_S, lambda: rollout_pass(",
+       ROLLOUT),
+    _m("lw_rollout_other_actor", "R2's decisions are the named principal's",
+       "control_serving(connect, operator), actor_id=operator)",
+       'control_serving(connect, operator), actor_id="controller")', ROLLOUT),
+    _m("lw_rollout_serving_off_the_pool", "L3's serving control is on the role's database",
+       "control_serving(connect, operator), actor_id", 'control_serving(connector(""), operator), actor_id',
+       ROLLOUT),
+    _m("lw_rollout_every_state", "only running and rolled-back releases are stepped",
+       'releases.releases_in(("running", "rolled_back"),', "releases.releases_in((),", ROLLOUT),
+    _m("lw_rollout_any_prefix", "a provider is one with a release under lab/<p>/releases/",
+       '                        if key.split("/")[2:3] == ["releases"]})',
+       "                        })", ROLLOUT),
+    _m("lw_rollout_planless_stepped", "a release without its stored plan is held",
+       "                if raw is None:\n", "                if False:\n", ROLLOUT),
+    _m("lw_rollout_invented_live", "a running release is evaluated only on R1's aggregates",
+       'current = await live(item) if item.release.state == "running" else None',
+       "current = None", ROLLOUT),
+    _m("lw_rollout_live_by_default", "without R1's aggregates a running release is held",
+       "    store, live = PgLabDataStore(connect), live or NoLive()",
+       "    store, live = PgLabDataStore(connect), live or (lambda item: asyncio.sleep(0, item))",
+       ROLLOUT),
+    _m("lw_rollout_held_is_failed", "an unreadable input holds, it is not a failure",
+       "            except errors.DependencyUnavailable:\n                done[\"held\"] += 1\n", "",
+       ROLLOUT),
+    _m("lw_rollout_one_failure_stops_all", "one release's failure never stops the pass",
+       '                log.exception("rollout pass failed for one release")\n'
+       '                done["failed"] += 1\n',
+       '                raise\n', ROLLOUT),
+    _m("lw_rollout_policy_foreign", "the policy is D7's record of the release's provider",
+       "store.resolve(item.policy_ref, provider_org_id=provider)",
+       'store.resolve(item.policy_ref, provider_org_id="")', ROLLOUT),
     _m("lw_rollback_without_operator", "an emergency rollback names its operator",
        '    values = settings(mode, env, (DATABASE, "LAB_OPERATOR_ID"))',
        "    values = settings(mode, env, (DATABASE,))", STOP),
@@ -234,7 +336,10 @@ MUTANTS: tuple[Mutant, ...] = (
        '                log.exception("teacher collect failed for one run")\n'
        '                done["failed"] += 1\n                break\n', COLLECT),
     _m("lw_collect_uncounted", "each collected run is counted",
-       '                done["collected"] += 1\n', "                pass\n", COLLECT),
+       '                await p2.collect(batch, run_id, wiring=wiring)\n'
+       '                done["collected"] += 1\n',
+       '                await p2.collect(batch, run_id, wiring=wiring)\n'
+       "                pass\n", COLLECT),
     # --- WR-P2-D8-C: the teacher wiring ------------------------------------------------------
     _m("lw_teacher_plain_judge_ledger", "P2's ledger is D8's PgTeacherLedger (record_failures)",
        "ledger=PgTeacherLedger(connect),", "ledger=PgTeacherLedger.__mro__[1](connect),",

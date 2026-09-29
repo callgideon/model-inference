@@ -19,7 +19,7 @@ ALL = mutation_list.MUTANTS
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("lw_setting_not_required", "lw_evaluator_provider_wrong", "lw_targets_unpinned",
-          "lw_checkpoints_without_deployer", "lw_judge_live_by_default",
+          "lw_checkpoints_no_deployer", "lw_judge_live_by_default",
           "lw_ready_without_the_database")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 

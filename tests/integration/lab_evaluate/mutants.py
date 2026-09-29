@@ -114,9 +114,6 @@ MUTANTS: tuple[Mutant, ...] = (
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
     _m("unbound_case_runs", "a case waiting on L3/B4/lab-api-2 is never a pass", P,
        "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
-    _m("checkpoint_tripwire_blind", "the checkpoint half binds when the role composes", P,
-       '        return "WR-B3-3" not in str(refused)', "        return True",
-       "test_j09_the_checkpoint_worker_drains_the_outbox_once"),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -256,6 +253,16 @@ STACK_MUTANTS += (
        '"lab recover")}\n', "}\n", J09_EVAL),
     _m("st_worker_other_objects", "the eval role reads the Lab objects where they are",
        LAB_WORKERS, 'env.get("LAB_S3_PREFIX") or LAB_PREFIX,', "LAB_PREFIX,", J09_EVAL),
+)
+# composition batch 5: the real checkpoints worker process (j09's checkpoint half, WR-B3-3)
+J09_CKPT = "test_j09_the_checkpoint_worker_drains_the_outbox_once"
+STACK_MUTANTS += (
+    _m("st_checkpoints_serve_unvalidated", "only a READY private dev revision serves a "
+       "checkpoint", B3, "                    and d.state is DeploymentState.ready_private):",
+       "                    and d.state is DeploymentState.draft):", J09_CKPT),
+    _m("st_checkpoints_run_per_delivery", "a redelivered checkpoint is the same run",
+       B3, "    run_id = run_id_of(sub.subscription_id, event.checkpoint_id)\n",
+       "    run_id = str(uuid.uuid4())\n", J09_CKPT),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_data.py", "scenarios_eval.py", "scenarios_checkpoint.py",

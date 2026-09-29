@@ -58,7 +58,7 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
         assert any(tid in spec["test_ids"] for spec in runner.SCENARIOS.values()), tid
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 11
-    assert runner.SCENARIOS["j09"]["lanes"] == ["L3"]
+    assert runner.SCENARIOS["j09"]["lanes"] == []
     assert runner.SCENARIOS["j10"]["lanes"] == ["B4", "lab-api-2"]
 
 

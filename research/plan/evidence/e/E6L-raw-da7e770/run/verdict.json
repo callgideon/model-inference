@@ -1,0 +1,246 @@
+{
+  "task": "E6L",
+  "gate": "LAB-EVALUATE-LOCAL",
+  "verdict": "NOT RUN",
+  "exit": 3,
+  "cells": {
+    "DATA-IMPORT": "NOT RUN",
+    "DATA-SPLIT": "NOT RUN",
+    "DATA-RIGHTS": "NOT RUN",
+    "EVAL-DURABLE": "NOT RUN",
+    "EVAL-REPRO": "NOT RUN",
+    "EVAL-COMPARE": "NOT RUN",
+    "CHECKPOINT-IDEM": "NOT RUN"
+  },
+  "label": "real PostgreSQL (every migration, D7 0029) and S3-compatible MinIO, the merged N1/N2/H1/B1/B2/B3 code, owned synthetic fixtures, a deterministic evaluator and synthetic dev endpoints; no real-model quality claim (P-07), not GPU capacity, not hosted behaviour",
+  "pins": {
+    "base": "9a48300c",
+    "head": "da7e7702ac491009831cd9252be3cdb3a7552167",
+    "dirty": false,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    },
+    "fixtures_sha256": {
+      "benchmark.json": "1b59cca80258f26a7646a56ba2ed1f393fb28172bb3fd1f494e0e853ba101398",
+      "families.jsonl": "94d38edccb320910565b2095baeed65a7407cc06a3ff80a4f9c4f501e5028140",
+      "split_additions.jsonl": "b9767c431e5bbf18f88a09ea5a3e98a69d82ee8237a22317fcb50cbcc0c5b0e9",
+      "split_base.jsonl": "777ac8c32fd28248605501bd2639eeefebfc17b0cbde43b00731da270fdacb53",
+      "split_leaky.jsonl": "404a7e5cd7761c3508fdb413f01b9de09fe06584e4b86f8e7098b21171a86672",
+      "text.jsonl": "c533cf1e76f3e324a7b789ab4d77500db021f5e966d5427fc4a40e21a67eb6f3",
+      "tools.jsonl": "5a31f208ab0ae330bce91140c60455f376222ca1e72df3448ac5e6a005e62970",
+      "video.jsonl": "666989fb21a8f385ee738a8ec1896830df1a52b5bb882fdb1aad6fcf53cc2c21"
+    }
+  },
+  "namespace": "e6l",
+  "ports": {
+    "postgres": 57232,
+    "valkey": 57279,
+    "clickhouse_http": 57223,
+    "clickhouse_native": 57290,
+    "s3": 57200,
+    "fake_vllm": 57280
+  },
+  "started": "2026-09-29T08:12:38+00:00",
+  "seconds": 22.6,
+  "stack": {
+    "usable": true,
+    "why_not": "reused a kept stack",
+    "stages": [
+      {
+        "stage": "backend-teardown",
+        "status": "PASS",
+        "seconds": 14.2
+      },
+      {
+        "stage": "teardown",
+        "status": "PASS",
+        "seconds": 8.4
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "j01",
+      "title": "owned text/tool benchmark imported through N1 onto D7 + MinIO: bad rows quarantined and refused until accepted; a replay is the same dataset, a changed upload conflicts",
+      "test_ids": [
+        "DATA-IMPORT"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j01"
+    },
+    {
+      "id": "j02",
+      "title": "owned finite-video benchmark: clips in the import bundle, the 82 s cap, missing and non-video clips refused",
+      "test_ids": [
+        "DATA-IMPORT"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j02"
+    },
+    {
+      "id": "j03",
+      "title": "a foreign dataset is refused at import, resolve and schedule; a revoked grant stops derivation and scheduling",
+      "test_ids": [
+        "DATA-RIGHTS"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j03"
+    },
+    {
+      "id": "j04",
+      "title": "split traps: related sources placed whole and deterministically; a leaking base refused; the frozen holdout admits no relative",
+      "test_ids": [
+        "DATA-SPLIT"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j04"
+    },
+    {
+      "id": "j05",
+      "title": "B1 on real D7 through HttpDevEndpoint: a worker killed mid-attempt, a duplicate delivery, a cancel mid-run",
+      "test_ids": [
+        "EVAL-DURABLE"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j05"
+    },
+    {
+      "id": "j06",
+      "title": "two serving versions reproduce the frozen benchmark; the same run payload is the same run",
+      "test_ids": [
+        "EVAL-REPRO"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j06"
+    },
+    {
+      "id": "j07",
+      "title": "compare -> decide: a required-slice regression rejects despite an aggregate gain, a clean win is accepted, a missing output is counted, tool cases are visible and not comparable",
+      "test_ids": [
+        "EVAL-COMPARE"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j07"
+    },
+    {
+      "id": "j08",
+      "title": "a checkpoint delivered twice is one receipt and one run; a crash before the decision is one run on redelivery",
+      "test_ids": [
+        "CHECKPOINT-IDEM"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j08"
+    },
+    {
+      "id": "j09",
+      "title": "the I5 eval and checkpoint worker processes: a worker killed mid-run, the outbox drained once",
+      "test_ids": [
+        "EVAL-DURABLE",
+        "CHECKPOINT-IDEM"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_j09_the_eval_worker_process_killed_mid_run_loses_nothing": "PASS",
+        "test_j09_the_checkpoint_worker_drains_the_outbox_once": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j09"
+    },
+    {
+      "id": "j10",
+      "title": "the provider UI: launch, progress, cancel, compare with slices and uncertainty",
+      "test_ids": [
+        "EVAL-COMPARE"
+      ],
+      "lanes": [
+        "B4",
+        "lab-api-2"
+      ],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j10"
+    },
+    {
+      "id": "j11",
+      "title": "a finite-video case reaches the dev endpoint through H1/B1",
+      "test_ids": [
+        "EVAL-COMPARE"
+      ],
+      "lanes": [
+        "L3"
+      ],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir> --only j11"
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e6l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-composition-5/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs --import-mode=prepend -o junit_family=xunit1 --junitxml=/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/c5/e6l-j09-final/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-composition-5/tests/integration/lab_evaluate/scenarios_checkpoint.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-composition-5/tests/integration/lab_evaluate/scenarios_data.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-composition-5/tests/integration/lab_evaluate/scenarios_eval.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-composition-5/tests/integration/lab_evaluate/scenarios_pending.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-composition-5/tests/integration/lab_evaluate/scenarios_workers.py -k test_j09_",
+      "exit": 0,
+      "seconds": 13.7,
+      "summary": "2 passed, 20 deselected in 13.12s",
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/c5/e6l-j09-final/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/c5/e6l-j09-final/scenarios.xml",
+    "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/c5/e6l-j09-final/scenarios.log",
+    "case_artifacts": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/c5/e6l-j09-final/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --out <dir>"
+}
