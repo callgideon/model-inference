@@ -1,0 +1,2 @@
+2026-09-29 11:43:41,691 INFO botocore.credentials Found credentials in environment variables.
+infrx.lab.workers: refusing to start: INFRX_MODE='lab-rollout': STUB (pre-WR-R2-3): the rollout pass needs every running or rolled-back D9 release with its frozen plan

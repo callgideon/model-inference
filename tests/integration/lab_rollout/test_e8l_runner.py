@@ -152,3 +152,16 @@ def test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun():
     message = str(skipped.value)
     assert message.startswith("NOT RUN[lab-ui-swap] absent")
     assert message.endswith(f"{runner.PY} {runner.RUNNER} --out <dir> --only k10")
+
+
+def test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun():
+    """k09 PASS is the pass-loop half; the breach half is a NOT RUN sub-cell in verdict.json
+    naming WR-C5-LIVE and the exact rerun, so the R222 tally is not prose-only."""
+    result = runner.classify(junit(*everything("k09")))
+    assert result["k09"]["status"] == "PASS", "the sub-cell never lowers its parent"
+    (cell,) = runner.sub_cells(result)
+    assert (cell["id"], cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
+        == ("k09-breach", "k09", "PASS", "NOT RUN", "NOT RUN[WR-C5-LIVE]")
+    assert cell["lanes"] == ["WR-C5-LIVE"]
+    assert cell["reproduce"] == f"{runner.PY} {runner.RUNNER} --out <dir> --only k09"
+    assert "passes today because the breach half is not bound" in cell["note"]

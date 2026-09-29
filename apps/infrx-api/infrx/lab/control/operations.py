@@ -9,7 +9,8 @@
                  listing CAS (`LabControl.rollback`): admitted jobs keep their pins (R62/R69).
 
 The route's records are closed and coarser than L3's (`state` is liveness only; `smoke`
-carries validation): see `_deployment`. A registration is the Lab App's form (0-L3I-R1): `name`
+carries validation; `visibility` is whether the alias's current listing names the revision,
+E3L-F5): see `_deployment`. A registration is the Lab App's form (0-L3I-R1): `name`
 is the model's bare name in the workspace (the App allows no slug), `artifact_digest` the
 model's weights - one of the shard digests an operator imported it with, checked, never
 re-declared - and `runtime` the image by digest (`<repo>@sha256:<hex>`). It makes a new serving
@@ -43,6 +44,9 @@ class ControlOperations(Protocol):
     async def register(self, actor: Actor, registration: Registration) -> Deployment: ...
     async def smoke(self, actor: Actor, deployment_revision_id: str) -> Deployment: ...
     async def propose(self, actor: Actor, kind: str, deployment_revision_id: str) -> Proposal: ...
+    async def operator(self, user_id: str) -> OperatorSession: ...
+    async def reject(self, operator: OperatorSession, proposal_id: str,
+                     reason: str) -> Proposal: ...
 
 
 class ControlReads(Protocol):
@@ -80,13 +84,18 @@ class Operations:
                      == S.validating for e in await self.control.store.events(d.provider_org_id))
         smoke = ("failed" if failed else "none" if d.state in (S.draft, S.validating, S.retired)
                  else "passed")
+        # E3L-F5 (R207): public is the listing's truth - only the alias's current listing is;
+        # a pending, rejected, rolled-back or replaced revision reads private (R189: coarse).
+        versions = await self.reads.listing_versions(serving.public_model_id)
+        listed = versions[-1].deployment_revision_id if versions else None
         return Deployment(
             deployment_revision_id=d.deployment_revision_id, model_id=serving.public_model_id,
             serving_version_id=d.serving_version_id, revision_label=serving.revision_label,
             runtime=serving.runtime_image_ref, created_at=d.created_at,
             schema_version=serving.capability.input_schema_ref.removeprefix(REQUEST),
             rate_card_version=card.rate_card_version if card else None,
-            environment=d.environment.value, visibility=d.visibility.value,
+            environment=d.environment.value,
+            visibility="public" if d.deployment_revision_id == listed else "private",
             state="retired" if d.state is S.retired else "active", smoke=smoke)
 
     async def models(self, actor: Actor) -> list[Model]:
@@ -103,9 +112,17 @@ class Operations:
     async def proposals(self, actor: Actor) -> list[Proposal]:
         await self.control.access.require(actor.user_id, actor.provider_org_id,
                                           ProviderCapability.read_aggregate_health)
-        events = await self.control.store.events(actor.provider_org_id)
+        return await self._proposals(actor.provider_org_id)
+
+    async def _proposals(self, provider_org_id: str) -> list[Proposal]:
+        """Every `lab_propose` of the provider; a proposal no operator listed and no longer
+        `proposed_public` is `rejected` (E3L-F4: the operator's decision, or the platform's
+        retirement - then with no instant)."""
+        events = await self.control.store.events(provider_org_id)
         published = {e.after.get("deployment_revision_id"): e.at for e in events
                      if e.action == "lab_publish"}
+        rejected = {e.subject: e.at for e in events if e.action == "lab_transition"
+                    and (e.before or {}).get("state") == S.proposed_public}
         found = []
         for e in (e for e in events if e.action == "lab_propose"):
             d = await self.control.store.deployment(e.subject)
@@ -114,8 +131,30 @@ class Operations:
                      else "approved" if decided else "rejected")
             found.append(Proposal(proposal_id=e.subject, kind="publish",
                                   deployment_revision_id=e.after["source"], state=state,
-                                  proposed_at=e.at, decided_at=decided))
+                                  proposed_at=e.at,
+                                  decided_at=decided or rejected.get(e.subject)))
         return found
+
+    # --- the operator's door (E3L-F4) ---------------------------------------------------
+    async def operator(self, user_id: str) -> OperatorSession:
+        """The session user as a platform operator (`profiles.is_operator`), audited as
+        `operator:<user_id>` (0025's naming); anyone else is `forbidden`."""
+        if not await self.control.store.operator(user_id):
+            raise errors.Forbidden("an operator decides a proposal")
+        return OperatorSession(ops=None, principal=f"operator:{user_id}")
+
+    async def reject(self, operator: OperatorSession, proposal_id: str,
+                     reason: str) -> Proposal:
+        """Decline a provider's open publication proposal; anything that is not one of the
+        Lab's proposals is `not_found`."""
+        d = await self.control.store.deployment(proposal_id)
+        mine = d and [p for p in await self._proposals(d.provider_org_id)
+                      if p.proposal_id == proposal_id]
+        if not mine:
+            raise errors.NotFound("no such proposal")
+        await self.control.reject(operator, proposal_id, reason=reason)
+        return next(p for p in await self._proposals(d.provider_org_id)
+                    if p.proposal_id == proposal_id)
 
     async def register(self, actor: Actor, registration: Registration) -> Deployment:
         """A new serving revision of the provider's model over its pinned weights, then its

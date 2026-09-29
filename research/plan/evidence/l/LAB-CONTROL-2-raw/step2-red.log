@@ -1,0 +1,12 @@
+E       AssertionError: assert {'c0000004-00...c', 'active')} == {'c0000004-00...e', 'active')}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'8555ed6d-c49f-49fa-af8c-a1b012e1906b': ('public', 'active')} != {'8555ed6d-c49f-49fa-af8c-a1b012e1906b': ('private', 'active')}
+E         Use -v to get more diff
+E       AssertionError: assert {'c0000004-00...c', 'active')} == {'c0000004-00...e', 'active')}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'58373ace-fde1-4ccb-a0ed-930464a0724f': ('public', 'active')} != {'58373ace-fde1-4ccb-a0ed-930464a0724f': ('private', 'active')}
+E         Use -v to get more diff

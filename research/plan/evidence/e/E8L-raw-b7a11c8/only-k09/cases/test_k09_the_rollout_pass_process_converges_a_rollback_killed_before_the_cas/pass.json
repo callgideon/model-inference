@@ -1,0 +1,29 @@
+{
+ "converged_after_s": 1.0,
+ "decisions": [
+  [
+   "rollback",
+   "rolled_back",
+   "00000090-0000-4000-8000-0000000000e8",
+   [
+    "latency"
+   ]
+  ]
+ ],
+ "exit_on_sigterm": 0,
+ "exited_early": null,
+ "held": {
+  "decisions": [],
+  "state": "running"
+ },
+ "listing_after": [
+  6,
+  "c0000004-0000-4000-8000-000000000004"
+ ],
+ "listing_before": [
+  4,
+  "c0000004-0000-4000-8000-000000000004"
+ ],
+ "policy_candidate": "lab:serving:b0000001-0000-4000-8000-000000000001:00000de8-0000-4000-8000-00000000009a@sha256:39ddd03cf0fd0e38f3fb7ddd3dd39de9115984892e4bbb083f930e4836124b01",
+ "promoted": "00000de8-0000-4000-8000-00000000009a"
+}

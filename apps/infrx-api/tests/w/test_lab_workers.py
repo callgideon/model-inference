@@ -48,10 +48,10 @@ LAB = {**BASE, "LAB_S3_BUCKET": "infrx-lab"}
 TRACES = {"CLICKHOUSE_URL": "http://ch.invalid:8123/infrx", "S3_TRACE_BUCKET": "infrx-traces"}
 ENV = {"eval": {**LAB, "LAB_EVAL_ENDPOINT_URL": "http://127.0.0.1:9",
                 "LAB_EVAL_ENDPOINT_KEY": KEY},
-       "checkpoints": dict(BASE),
+       "checkpoints": dict(LAB),
        "judge": {**BASE, "JUDGE_PROVIDER_URL": "http://127.0.0.1:9", **TRACES},
        "annotation": {**LAB, "LAB_TEACHER_URL": "http://127.0.0.1:9"}, "training": dict(LAB),
-       "rollout": dict(BASE),
+       "rollout": {**LAB, "LAB_OPERATOR_ID": "00000090-0000-4000-8000-000000000090"},
        "datasets": {**LAB, **TRACES}}
 
 
@@ -218,13 +218,33 @@ def test_lab_workers__dev_targets_resolve_only_the_providers_private_dev_revisio
 
 
 # ------------------------------------------------------------------ checkpoints (WR-B-5 amended)
-def test_lab_workers__checkpoints_refuse_without_a_registry_and_a_deployer():
-    """B3's registration needs a registry adapter and L3's dev deployer (WR-B3-3); without
-    them every checkpoint would be REJECTED `unsupported_registry` for good - so the role
-    refuses to start instead of deciding anything."""
-    for sources in ({}, {"registries": {"s3": object()}}, {"deployer": object()}):
-        with pytest.raises(RuntimeMisconfigured, match="WR-B3-3"):
-            composed("checkpoints", **sources)
+def test_lab_workers__checkpoints_compose_l3s_dev_deployer_and_the_lab_registry(monkeypatch):
+    """WR-B3-3: with no sources given (the unit's `main()`), the role composes L3's dev
+    deployer over `PgControlStore`'s reads (0044) on the role's pool and, per event, the Lab
+    registry of the event's OWN provider over the role's Lab objects (`LAB_S3_BUCKET`)."""
+    from infrx.evaluation import checkpoints
+    from infrx.state.lab_control import PgControlStore
+    fake_d8(monkeypatch, PgCheckpointLedger=Ledger)
+    steps = captured_steps(monkeypatch)
+    objects = InMemoryObjectStore()
+    asyncio.run(objects.put_if_absent(f"lab/{NEMO}/c/a", b"mine", "x"))
+    worker = lab_workers.compose("checkpoints", ENV["checkpoints"], objects=objects)
+    worker.tasks["lab_checkpoints"]().close()
+    handler = steps["lab checkpoints"][1].__self__.scheduler
+    assert type(handler.deployer) is checkpoints.DevDeployer
+    assert type(handler.deployer.reads) is PgControlStore
+    assert handler.deployer.reads._connect is handler.ledger.connect
+    seen = {}
+
+    async def on_checkpoint(checkpoint_id, **kw):
+        seen.update(kw)
+    monkeypatch.setattr(checkpoints, "on_checkpoint", on_checkpoint)
+    from infrx.state.lab_data import LabEvent
+    asyncio.run(handler.enqueue(LabEvent(event_id="e", kind="checkpoint_received",
+                                         provider_org_id=NEMO, payload={"checkpoint_id": "c"})))
+    assert seen["deployer"] is handler.deployer
+    assert asyncio.run(seen["registries"]["lab"](f"lab://{NEMO}/c/a")) == b"mine"
+    assert asyncio.run(handler.registries("other")["lab"](f"lab://{NEMO}/c/a")) == b""
 
 
 def fake_d8(monkeypatch, **classes):
@@ -238,6 +258,9 @@ def fake_d8(monkeypatch, **classes):
 class Ledger:
     def __init__(self, connect) -> None:
         self.connect = connect
+
+    async def event(self, checkpoint_id, *, provider_org_id):
+        return object()                          # B3's signed event exists
 
 
 def test_lab_workers__a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_it_back(
@@ -264,7 +287,9 @@ def test_lab_workers__a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_
     interval, pump = steps["lab checkpoints"]
     relay = pump.__self__
     assert interval == worker_main.LAB_PUMP_S
-    assert type(relay) is OutboxRelay and type(relay.store) is PgLabDataStore
+    assert type(relay) is OutboxRelay and type(relay.store) is worker_main.Kinds
+    assert relay.store.kinds == ("checkpoint_received",)      # R215 / WR-LSQ-C2B
+    assert type(relay.store.store) is PgLabDataStore
     handler = relay.scheduler
     assert asyncio.run(handler.enqueue(LabEvent(event_id="e", kind="checkpoint_received",
                                                 provider_org_id=NEMO,
@@ -272,7 +297,7 @@ def test_lab_workers__a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_
     (checkpoint, kw), = calls
     assert checkpoint == "c1" and kw["provider_org_id"] == NEMO
     assert (kw["registries"], kw["deployer"]) == (registries, deployer)
-    assert kw["store"] is relay.store and type(kw["ledger"]) is Ledger
+    assert kw["store"] is relay.store.store and type(kw["ledger"]) is Ledger
     assert kw["ledger"].connect is relay.store._connect
     assert kw["access"].store._connect is relay.store._connect
     with pytest.raises(errors.CapacityExhausted):
@@ -283,6 +308,23 @@ def test_lab_workers__a_checkpoint_delivery_is_decided_by_b3_and_capacity_hands_
         event_id="e3", kind="eval_run", provider_org_id=NEMO, payload={"run_id": "r"}))))
     assert type(other) is errors.InvalidRequest
     assert len(calls) == 2
+    handler.ledger = Unsigned()
+    assert asyncio.run(handler.enqueue(LabEvent(event_id="e4", kind="checkpoint_received",
+                                                provider_org_id=NEMO,
+                                                payload={"checkpoint_id": "p3"}))) is True
+    assert len(calls) == 2 and handler.ledger.asked == [("p3", NEMO)]
+
+
+class Unsigned:
+    """D8's checkpoint ledger without a signed event: a P3 (manual-bundle) checkpoint,
+    decided by the Lab route, whose D7 receipt wrote the same `checkpoint_received` kind."""
+
+    def __init__(self) -> None:
+        self.asked = []
+
+    async def event(self, checkpoint_id, *, provider_org_id):
+        self.asked.append((checkpoint_id, provider_org_id))
+        raise errors.NotFound("no such checkpoint event for this provider")
 
 
 # ------------------------------------------------------------------------------ judge (WR-OBS-1)
@@ -303,7 +345,7 @@ def test_lab_workers__the_judge_is_j2_on_its_ledger_dry_run_by_default(no_trace_
     assert type(wiring.provider) is HttpJudgeProvider and wiring.rates is APPROVED_RATES
     assert type(wiring.retention) is Retention
     assert no_trace_stack["limits"].clickhouse_url == ENV["judge"]["CLICKHOUSE_URL"]
-    assert set(worker.tasks) == {"judge_sweep"}
+    assert set(worker.tasks) == {"judge_sweep", "judge_collect"}
     with pytest.raises(RuntimeMisconfigured, match="JUDGE_LIVE_BUDGET_USD"):
         composed("judge", {**ENV["judge"], "JUDGE_MODE": "live"})
     live = composed("judge", {**ENV["judge"], "JUDGE_MODE": "live",
@@ -328,6 +370,72 @@ def test_lab_workers__the_judge_pass_sweeps_silent_submissions(monkeypatch, no_t
     interval, step = steps["judge sweep"]
     assert asyncio.run(step()) == 1
     assert swept == [lab_workers.JUDGE_SILENT_S] and interval == lab_workers.JUDGE_PASS_S
+
+
+def judge_run(n, state, consent="grant-1"):
+    from infrx.state.lab_consent import Consent, JudgeRun, ProviderUsd
+    return JudgeRun(run_id=f"r{n}", provider_org_id="p", payer_ref="payer",
+                    consent=Consent(consent, 1), sample_ids=(), media_ids=frozenset(),
+                    price_version="v", reserved=ProviderUsd("1"), state=state,
+                    submit_key=f"k{n}")
+
+
+def test_lab_workers__the_judge_pass_reconciles_and_collects_every_providers_runs(
+        monkeypatch, no_trace_stack):
+    """WR-LSQ-C2A: every JUDGE_PASS_S, for every provider org, D6J's `ambiguous` runs
+    (`runs_in`, 0049) are looked up by their submit key: the provider's record moves the run
+    to `submitted`, none leaves it exactly as it is (R184/R192: never resubmitted or released
+    by the platform); then every `submitted` run is J2's `collect` on the role's wiring. A
+    teacher run (consented by its dataset ref) is the annotation role's. One run's failure is
+    counted and the next still runs; the providers are read on the role's own login."""
+    from infrx.judge import submit
+    from infrx.judge.submit import HttpJudgeProvider
+    from infrx.state.lab_consent import PgJudgeLedger
+    moved, collected, asked = [], [], []
+    runs = {("p1", "ambiguous"): [judge_run(1, "ambiguous"), judge_run(2, "ambiguous"),
+                                  judge_run(3, "ambiguous", "lab:dataset:p1:x")],
+            ("p1", "submitted"): [judge_run(4, "submitted"), judge_run(5, "submitted"),
+                                  judge_run(6, "submitted", "lab:dataset:p1:x")],
+            ("p2", "submitted"): [judge_run(7, "submitted")]}
+
+    async def runs_in(self, states, limit, *, provider_org_id):
+        asked.append((provider_org_id, tuple(states), limit))
+        return runs.get((provider_org_id, *states), [])
+
+    async def record_submission(self, run_id, external_id):
+        moved.append((run_id, external_id))
+
+    async def lookup(self, submit_key):
+        return {"k1": "ext-1"}.get(submit_key)
+
+    async def collect(run_id, *, wiring):
+        collected.append((run_id, wiring))
+        if run_id == "r4":
+            raise errors.DependencyUnavailable("the provider did not answer")
+
+    async def providers(connect):
+        providers.connect = connect
+        return ["p1", "p2"]
+    monkeypatch.setattr(PgJudgeLedger, "runs_in", runs_in)
+    monkeypatch.setattr(PgJudgeLedger, "record_submission", record_submission)
+    monkeypatch.setattr(HttpJudgeProvider, "lookup", lookup)
+    monkeypatch.setattr(submit, "collect", collect)
+    monkeypatch.setattr(lab_workers, "provider_ids", providers)
+    steps = captured_steps(monkeypatch)
+    worker = composed("judge")
+    worker.tasks["judge_collect"]().close()
+    interval, step = steps["judge collect"]
+    assert interval == lab_workers.JUDGE_PASS_S
+    report = asyncio.run(step())
+    assert report == {"reconciled": 1, "waiting": 1, "collected": 2, "failed": 1}
+    assert moved == [("r1", "ext-1")]
+    assert [r for r, _ in collected] == ["r4", "r5", "r7"]
+    assert all(w is worker.wiring for _, w in collected)
+    assert asked == [("p1", ("ambiguous",), lab_workers.JUDGE_BATCH),
+                     ("p1", ("submitted",), lab_workers.JUDGE_BATCH),
+                     ("p2", ("ambiguous",), lab_workers.JUDGE_BATCH),
+                     ("p2", ("submitted",), lab_workers.JUDGE_BATCH)]
+    assert providers.connect is worker.wiring.ledger._connect
 
 
 def captured_steps(monkeypatch) -> dict:
@@ -414,14 +522,111 @@ def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(mo
     assert no_trace_stack["objects"] is objects      # WR-N3-2a: its deletions push tombstones
 
 
+def test_lab_workers__the_datasets_role_works_the_durable_import_job_queue(monkeypatch,
+                                                                           no_trace_stack):
+    """WR-N4-3: every IMPORT_PASS_S the datasets role (the I5 datasets pool) works 0051's
+    import-job queue - N1's `imports.work` over `PgLabImportJobs` and D7's `PgLabDataStore`
+    on the role's pool, the role's Lab objects, as this process's worker id."""
+    from infrx.datasets import imports
+    from infrx.state.lab_data import PgLabDataStore, PgLabImportJobs
+    seen = []
+
+    async def work(jobs, store, objects, *, worker_id):
+        seen.append((jobs, store, objects, worker_id))
+        return {"succeeded": 1}
+    monkeypatch.setattr(imports, "work", work)
+    steps = captured_steps(monkeypatch)
+    objects = InMemoryObjectStore()
+    worker = lab_workers.compose("datasets", ENV["datasets"], objects=objects)
+    assert set(worker.tasks) == {"lineage_reconcile", "import_jobs"}
+    worker.tasks["import_jobs"]().close()
+    interval, step = steps["import jobs"]
+    assert interval == lab_workers.IMPORT_PASS_S
+    assert asyncio.run(step()) == {"succeeded": 1}
+    ((jobs, store, got, worker_id),) = seen
+    assert type(jobs) is PgLabImportJobs and type(store) is PgLabDataStore
+    assert jobs._connect is store._connect and got is objects
+    assert worker_id.startswith("lab-datasets-")
+
+
 # ------------------------------------------------------------------ rollout (WR-I7-1)
-def test_lab_workers__the_rollout_pass_refuses_until_its_inputs_exist():
-    """R2's pass needs every running or rolled-back D9 release with its frozen plan and R1's
-    live aggregates and the stored report: none is readable on this base, so the controller
-    unit refuses rather than report ready and do nothing (WR-LSQ-9-C wires L3's alias reads
-    for the operator surfaces via the real `PgControlStore`; this pass still needs R1/B2)."""
-    with pytest.raises(RuntimeMisconfigured, match="WR-LSQ-9"):
-        composed("rollout")
+def listing(provider, n, state):
+    from infrx.state.lab_rollout import Release, ReleaseListing
+    return ReleaseListing(policy_id=f"pol-{provider}-{n}", provider_org_id=provider,
+                          endpoint_id="e", policy_ref=f"ref-{provider}-{n}",
+                          release=Release(state=state, fence=1, plan_digest="d",
+                                          started_at=datetime(2026, 9, 29, tzinfo=timezone.utc)),
+                          latest_decision=None)
+
+
+def test_lab_workers__the_rollout_pass_steps_every_released_policy_on_its_stored_plan(
+        monkeypatch):
+    """WR-R2-3: every ROLLOUT_PASS_S the rollout role runs R2's `Controller.step` (over D9's
+    `PgReleaseStore` and L3's serving control, acting as `LAB_OPERATOR_ID`) for every running
+    or rolled-back D9 release (`releases_in`) of every provider with a release under
+    `lab/<p>/releases/`, on the plan stored beside it (`plan.json`; R2 refuses one whose
+    digest is not D9's) and D7's policy record. A running release is evaluated on R1's live
+    aggregates; while they are unreadable (`DependencyUnavailable`) it is held, never
+    evaluated on invented numbers. A rolled-back release only converges (R216: step, never the
+    operator's stop). A release without its plan is held; one failure is counted and the
+    next release still runs."""
+    from infrx.rollouts import control as r2
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_rollout import PgReleaseStore
+    from tests.r.control.test_control import plan
+    objects, stepped, asked = InMemoryObjectStore(), [], []
+    stored = plan().model_dump_json().encode()
+    for key in ("lab/p1/releases/pol-p1-1/plan.json", "lab/p1/releases/pol-p1-2/plan.json",
+                "lab/p1/releases/pol-p1-3/plan.json", "lab/p2/releases/pol-p2-1/plan.json"):
+        asyncio.run(objects.put_if_absent(key, stored, "application/json"))
+    asyncio.run(objects.put_if_absent("lab/p3/releases/pol-p3-1/other.json", b"{}", "x"))
+    asyncio.run(objects.put_if_absent("lab/p4/datasets/x.json", b"{}", "x"))
+
+    async def releases_in(self, states=(), *, provider_org_id):
+        asked.append((self._connect, tuple(states), provider_org_id))
+        return {"p1": [listing("p1", 1, "running"), listing("p1", 2, "rolled_back"),
+                       listing("p1", 3, "running")],
+                "p2": [listing("p2", 1, "running")],
+                "p3": [listing("p3", 1, "running")]}.get(provider_org_id, [])
+
+    async def resolve(self, ref, *, provider_org_id):
+        if ref == "ref-p2-1":
+            raise errors.NotFound("gone")
+        return ("policy", ref, provider_org_id)
+
+    async def step(self, policy, policy_ref, plan_, live, *, now, report=None, runs=None):
+        stepped.append((self, policy, policy_ref, plan_, live, report, runs))
+        return r2.Verdict("hold", ())
+
+    async def live(item):
+        if item.policy_id == "pol-p1-3":
+            raise errors.DependencyUnavailable("R1's aggregates")
+        return ("live", item.policy_id)
+    monkeypatch.setattr(PgReleaseStore, "releases_in", releases_in)
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(r2.Controller, "step", step)
+    steps = captured_steps(monkeypatch)
+    worker = lab_workers.compose("rollout", ENV["rollout"], objects=objects, live=live)
+    worker.tasks["rollout_pass"]().close()
+    interval, pump = steps["rollout pass"]
+    assert interval == lab_workers.ROLLOUT_PASS_S
+    report = asyncio.run(pump())
+    assert report == {"stepped": 2, "held": 2, "failed": 1}
+    assert [p for _, _, p in asked] == ["p1", "p2", "p3"]
+    assert {s for _, s, _ in asked} == {("running", "rolled_back")}
+    (ctl, policy, ref, plan_, live_, rep, runs), (ctl2, _, ref2, _, live2, _, _) = stepped
+    assert (policy, ref, plan_, live_) == (("policy", "ref-p1-1", "p1"), "ref-p1-1", plan(),
+                                           ("live", "pol-p1-1"))
+    assert (ref2, live2) == ("ref-p1-2", None) and (rep, runs) == (None, None)
+    assert type(ctl._store) is PgReleaseStore and ctl._actor == ENV["rollout"]["LAB_OPERATOR_ID"]
+    assert ctl._store._connect is asked[0][0] is ctl._serving.reads._connect
+    assert ctl2 is ctl
+    # without an injected source R1's aggregates are unreadable: every running release held
+    stepped.clear()
+    bare = lab_workers.compose("rollout", ENV["rollout"], objects=objects)
+    bare.tasks["rollout_pass"]().close()
+    assert asyncio.run(steps["rollout pass"][1]()) == {"stepped": 1, "held": 4, "failed": 0}
+    assert [s[2] for s in stepped] == ["ref-p1-2"]
 
 
 def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkeypatch):

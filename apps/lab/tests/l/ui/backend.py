@@ -47,7 +47,7 @@ def main() -> None:
     w = worlds.PgWorld(conn, pgharness.dsn(db))   # the operator's and the App's side, same rows
 
     users = {"admin": w.ADMIN_A, "dev": w.DEV_A, "viewer": w.VIEWER_A, "rival": w.ADMIN_B,
-             "rival_dev": w.DEV_B, "consumer": w.CONSUMER_ONLY}
+             "rival_dev": w.DEV_B, "consumer": w.CONSUMER_ONLY, "ops": w.OPS_USER}
     os.environ.update({control_app.DATABASE_URL: pgharness.dsn(db),
                        control_app.SUPABASE_URL: "http://127.0.0.1:9",
                        control_app.SUPABASE_KEY: "anon"})
@@ -65,8 +65,8 @@ def main() -> None:
 
     @app.post("/_test/approve")
     def approve(body: dict):
-        """The operator approves a proposal at a fresh card, at the current listing version. L3
-        has no rejection (E3L-F4: retiring a public proposal breaks the listings), so no door."""
+        """The operator approves a proposal at a fresh card, at the current listing version (the
+        rejection is the route's own operator door, E3L-F4)."""
         n = listed()
         asyncio.run(w.control.approve(worlds.OPERATOR, body["proposal_id"],
                                       rate_card_version=f"rc_lab_{n + 1}", input_rate="3",

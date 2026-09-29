@@ -38,6 +38,7 @@ GSPLIT = "test_n1_a_group_split_across_splits_is_quarantined"
 PREVIEW = "test_n1_the_schema_preview_shows_fields_mapping_and_row_errors"
 STRICT = "test_n1_the_spec_is_strict"
 ACTING = "test_wrn2_only_a_current_developer_member_acts_for_the_provider"
+JOBS = "test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_lease"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -176,6 +177,31 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n1_preview_blank_row", "a blank line is not a preview row",
       "        if not raw.strip():\n            continue\n        try:",
       "        try:", PREVIEW),
+    # --- WR-N4-3 (composition-5): the durable import-job queue's halves
+    m("n4_rows_not_stored", "the upload's rows are stored before the job is enqueued",
+      "    await write_once(objects, rows_key(provider_org_id, spec.import_id), body[\"body\"].encode(),\n"
+      "                     \"application/x-ndjson\")\n", "", JOBS),
+    m("n4_accept_rejects_forced", "the job keeps the caller's accept_rejects",
+      '"accept_rejects": bool(body.get("accept_rejects")),', '"accept_rejects": True,', JOBS),
+    m("n4_other_actor", "the import runs as the job's actor",
+      'provider_org_id=provider, actor=task["actor"],', 'provider_org_id=provider, actor="worker",',
+      JOBS),
+    m("n4_no_heartbeat", "the lease is heartbeaten while the import runs",
+      "                await jobs.heartbeat(job_id, worker_id=worker_id)\n",
+      "                pass\n", JOBS),
+    m("n4_rejected_succeeds", "rejected rows fail the job, keeping their report",
+      '            result, error = vars(rejected.report), "rejected"',
+      "            result, error = vars(rejected.report), None", JOBS),
+    m("n4_missing_upload_retried", "a missing upload fails the job by name",
+      "            if rows is None:\n", "            if False:\n", JOBS),
+    m("n4_infra_failure_finishes", "an infrastructure failure finishes nothing (the lease lapses)",
+      '            done["retry"] += 1\n            continue\n', '            error = "died"\n', JOBS),
+    m("n4_transient_refusal_finishes", "a 5xx/429 refusal finishes nothing (the lease lapses)",
+      "        except (errors.ServerError, errors.RateLimitError):\n",
+      "        except ():\n", JOBS),
+    m("n4_claims_every_job", "a pass claims at most `limit` jobs",
+      "    for job in await jobs.claim(limit=limit, worker_id=worker_id, redelivery_s=lease_s):",
+      "    for job in await jobs.claim(limit=99, worker_id=worker_id, redelivery_s=lease_s):", JOBS),
     # --- WR-N-2: the acting provider (the L2 membership half)
     Mutant(name="wrn2_role_unchecked", invariant="a viewer never acts on dataset content",
            file="datasets/__init__.py", old="if ACTS not in ROLE_CAPABILITIES[membership.role]:",

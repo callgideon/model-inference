@@ -85,9 +85,19 @@ def _uuid(value: str) -> bool:
     return True
 
 
+def _revision(row) -> DeploymentRevision:
+    """A stored revision as the record. E3L-F4: 0007 keeps visibility immutable, so a public
+    proposal rejected or retired by the platform stays `public` in its row - which no
+    `DeploymentRevision` may be (the contract's rule). A retired revision serves and lists
+    nothing: it is read back as the terminal private row it is, never a ValidationError."""
+    doc = dict(zip(_DEPLOYMENT_FIELDS, row))
+    if doc["state"] == "retired":
+        doc["visibility"] = "private"
+    return _record(DeploymentRevision, _DEPLOYMENT_FIELDS, doc.values())
+
+
 def _deployment(doc: dict[str, Any]) -> DeploymentRevision:
-    return _record(DeploymentRevision, _DEPLOYMENT_FIELDS,
-                   [doc[k] for k in _DEPLOYMENT_FIELDS])
+    return _revision([doc[k] for k in _DEPLOYMENT_FIELDS])
 
 
 def _listing(doc: dict[str, Any]) -> Listing:
@@ -115,7 +125,7 @@ class PgControlStore:
         if not _uuid(deployment_revision_id):
             return None
         row = await self._db.one(_DEPLOYMENT, (deployment_revision_id,))
-        return None if row is None else _record(DeploymentRevision, _DEPLOYMENT_FIELDS, row)
+        return None if row is None else _revision(row)
 
     async def endpoint(self, provider_org_id: str, name: str, environment: Environment,
                        actor: str) -> str:
@@ -163,6 +173,17 @@ class PgControlStore:
             "public_model_id": public_model_id, "to_version": to_version,
             "expected_version": expected_version, "actor": actor, "reason": reason}))
 
+    async def reject(self, deployment_revision_id: str, *, actor: str,
+                     reason: str) -> DeploymentRevision:
+        return _deployment(await self._call("lab_control_reject", {
+            "deployment_revision_id": deployment_revision_id, "actor": actor,
+            "reason": reason}))
+
+    async def operator(self, user_id: str) -> bool:
+        if not _uuid(user_id):
+            return False
+        return (await self._call("lab_control_operator", {"user_id": user_id}))["operator"]
+
     async def fund_dev_wallet(self, provider_org_id: str, amount: Credit, *, operation_id: str,
                               actor: str, reason: str) -> CreditLedgerEntry:
         return _entry((await self._call("lab_control_fund", {
@@ -181,7 +202,7 @@ class PgControlStore:
                 for row in await self._db.rows(_PROVIDER_SERVINGS, (provider_org_id,))]
 
     async def provider_deployments(self, provider_org_id: str) -> list[DeploymentRevision]:
-        return [_record(DeploymentRevision, _DEPLOYMENT_FIELDS, row)
+        return [_revision(row)
                 for row in await self._db.rows(_PROVIDER_DEPLOYMENTS, (provider_org_id,))]
 
     async def endpoint_alias(self, endpoint_id: str) -> str | None:

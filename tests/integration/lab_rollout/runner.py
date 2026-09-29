@@ -114,7 +114,8 @@ SCENARIOS = {
     "k08": {"title": "R3 parity measured on an allocated supported GPU target",
             "test_ids": ["OPT-PARITY"], "lanes": ["P-08"]},
     "k09": {"title": "the I7 controller process killed and restarted mid-rollout: the real "
-                     "emergency-rollback subcommand twice; the pass loop waits on WR-R2-3",
+                     "emergency-rollback subcommand twice; the bare rollout role converges a "
+                     "rollback killed before the alias CAS on its first pass",
             "test_ids": ["ROLLOUT-RECOVER"], "lanes": []},
     "k10": {"title": "the Lab releases UI: verdict, proposal, approval and emergency rollback",
             "test_ids": ["ROLLOUT-PIN"], "lanes": ["WR-R4-2"]},
@@ -140,9 +141,21 @@ REQUIRED = {
     "k07": ("test_k07_a_variant_is_probed_compared_and_stored",
             "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"),
     "k08": ("test_k08_parity_on_an_allocated_gpu_target",),
-    "k09": ("test_k09_the_controller_process_restarted_mid_rollout",),
+    "k09": ("test_k09_the_controller_process_restarted_mid_rollout",
+            "test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas"),
     "k10": ("test_k10_the_releases_ui_over_the_real_route",
             "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict"),
+}
+#: Halves of a scenario that exist in the matrix but are not bound yet (R222: recorded in
+#: verdict.json, never prose-only). NOT RUN always; they do not lower their parent's status.
+SUB_CELLS = {
+    "k09-breach": {
+        "parent": "k09", "lanes": ["WR-C5-LIVE"],
+        "title": "the pass loop sees a breach, kill -9 between D9's decision and the alias CAS, "
+                 "restart: converges with no second decision",
+        "note": "k09 PASS covers the operator stop and the pass-loop half; the breach half needs "
+                "R1's aggregates (WR-C5-LIVE). The rerun passes today because the breach half "
+                "is not bound: the k09 case gains the breach step when WR-C5-LIVE lands"},
 }
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>k\d\d)_")
@@ -216,6 +229,12 @@ def gate(result: dict) -> str:
 
 def reproduce(sid: str | None = None) -> str:
     return f"{PY} {RUNNER} --out <dir>" + (f" --only {sid}" if sid else "")
+
+
+def sub_cells(result: dict) -> list[dict]:
+    return [{"id": cid, **spec, "parent_status": result[spec["parent"]]["status"],
+             "status": NOT_RUN, "reason": f"NOT RUN[{','.join(spec['lanes'])}]",
+             "reproduce": reproduce(spec["parent"])} for cid, spec in SUB_CELLS.items()]
 
 
 # ------------------------------------------------------------------ the run
@@ -340,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
                   "stages": [{k: s[k] for k in ("stage", "status", "seconds")} for s in report.stages]},
         "scenarios": [{"id": sid, **SCENARIOS[sid], **entry, "reproduce": reproduce(sid)}
                       for sid, entry in result.items()],
+        "sub_cells": sub_cells(result),
         "lock": {"path": str(LOCK), "held": held}, "runs": runs,
         "evidence": {"junit": str(out / "scenarios.xml"), "log": str(out / "scenarios.log"),
                      "case_artifacts": str(out / "cases")},

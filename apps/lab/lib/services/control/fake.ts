@@ -77,6 +77,8 @@ export class FakeControl implements ControlPort {
     if (d.state !== "active" || d.smoke !== "passed") return no("conflict");
     const p: Owned<Proposal> = { providerId: actor.providerId, proposalId: randomUUID(), kind, deploymentRevisionId: id, state: "proposed", proposedAt: this.now(), decidedAt: null };
     this.requests.push(p);
+    // E3L-F5: L3's proposal IS a new prod revision (its id), unlisted until approved: private, unpriced.
+    this.revisions.push({ ...d, deploymentRevisionId: p.proposalId, environment: "prod", visibility: "private", rateCardVersion: null, createdAt: p.proposedAt });
     return ok(strip(p));
   }
 
@@ -85,12 +87,15 @@ export class FakeControl implements ControlPort {
     const p = this.requests.find((x) => x.proposalId === proposalId && x.state === "proposed");
     if (p === undefined) throw new Error("no such pending proposal");
     Object.assign(p, { state: approve ? "approved" : "rejected", decidedAt: this.now() });
-    if (!approve) return;
-    const d = this.revisions.find((x) => x.deploymentRevisionId === p.deploymentRevisionId)!;
-    const live = this.revisions.filter((x) => x.modelId === d.modelId && x.providerId === d.providerId && x.visibility === "public");
+    const r = this.revisions.find((x) => x.deploymentRevisionId === p.proposalId)!;
+    if (!approve) {
+      r.state = "retired"; // E3L-F4: a rejected proposal is a terminal prod/private/retired row
+      return;
+    }
+    const live = this.revisions.filter((x) => x.modelId === r.modelId && x.providerId === r.providerId && x.visibility === "public");
     for (const x of live) x.visibility = "private";
     this.cards += 1;
-    this.revisions.push({ ...d, deploymentRevisionId: randomUUID(), environment: "prod", visibility: "public", rateCardVersion: `rc-${this.cards}`, createdAt: this.now() });
+    Object.assign(r, { visibility: "public", rateCardVersion: `rc-${this.cards}` });
   }
 
   /** The operator's import (outside the Lab): a model's weights and its first public revision, priced. */
@@ -108,7 +113,7 @@ export class FakeControl implements ControlPort {
 
   /** The operator's rollback (outside the Lab): the model's previous prod revision is public again. */
   rollback(providerId: string, modelId: string): void {
-    const prod = this.revisions.filter((x) => x.providerId === providerId && x.modelId === modelId && x.environment === "prod" && x.state === "active");
+    const prod = this.revisions.filter((x) => x.providerId === providerId && x.modelId === modelId && x.environment === "prod" && x.state === "active" && x.rateCardVersion !== null);
     const live = prod.find((x) => x.visibility === "public");
     const back = prod.filter((x) => x !== live).at(-1);
     if (live === undefined || back === undefined) throw new Error("nothing to roll back to");

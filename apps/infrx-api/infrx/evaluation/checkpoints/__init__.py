@@ -379,3 +379,92 @@ class Evaluations:
         record = json.loads(found)
         status = await self.store.run_status(record["run_id"], provider_org_id=provider_org_id)
         return {**record, "state": status["state"]}
+
+
+# --- WR-B3-3 / WR-C4-B3-SUITES: the production sources ------------------------------------
+LAB_SCHEME = "lab"
+
+
+def lab_registry(objects, provider_org_id: str) -> dict:
+    """B3's registry adapter over the Lab objects for ONE provider's events:
+    `lab://<provider>/<path>` is the object `lab/<provider>/<path>`. Another provider's or a
+    missing object is no bytes (so `digest_mismatch`), never read."""
+    async def fetch(uri: str) -> bytes:
+        provider, _, path = uri.removeprefix(f"{LAB_SCHEME}://").partition("/")
+        if provider != provider_org_id:
+            return b""
+        return await objects.get(f"lab/{provider}/{path}") or b""
+    return {LAB_SCHEME: fetch}
+
+
+class DevDeployer:
+    """L3's dev deployer (`Deployer`): a checkpoint is served by its provider's newest READY
+    private dev revision whose serving revision pins the checkpoint's digest (a weight shard
+    or the adapter) - registered, created and validated through L3 (`register`,
+    `create_dev`, `validate`). The answer is L3's serving ref, which the eval worker's
+    `DevTargets` resolves. None yet: a typed 503 (the event is handed out again).
+    ponytail: resolves an L3 revision, never launches one; a runtime that pulls weights by
+    digest is the fleet's (I4/W3)."""
+
+    def __init__(self, reads) -> None:
+        self.reads = reads                  # L3's ControlReads (0044)
+
+    async def deploy(self, *, provider_org_id: str, checkpoint_id: str, uri: str,
+                     digest: str) -> str:
+        from ...contracts.v2.records import DeploymentState, Environment, Visibility
+        from ...lab.control.operations import serving_ref
+        servings = {s.serving_version_id: s
+                    for s in await self.reads.provider_servings(provider_org_id)
+                    if s.provider_org_id == provider_org_id
+                    and digest in (*s.weight_shard_digests, s.adapter_digest)}
+        for d in reversed(await self.reads.provider_deployments(provider_org_id)):
+            if (d.serving_version_id in servings and d.provider_org_id == provider_org_id
+                    and d.environment is Environment.dev and d.visibility is Visibility.private
+                    and d.state is DeploymentState.ready_private):
+                return serving_ref(d, servings[d.serving_version_id])
+        raise errors.DependencyUnavailable("no ready private dev revision serves this "
+                                           "checkpoint yet")
+
+
+def suites(receipts, ledger: CheckpointLedger, deployer: Deployer):
+    """P3's `suites(provider_org_id=, checkpoint_id=)`: the oldest B3 subscription of the
+    external run the checkpoint's D7 receipt names, and where L3's dev deployer serves the
+    receipt's digest. `receipts(checkpoint_id, provider_org_id=)` -> (external run, digest)
+    or None. No receipt: not found; no subscription: a typed 503."""
+    async def suite(*, provider_org_id: str, checkpoint_id: str):
+        found = await receipts(checkpoint_id, provider_org_id=provider_org_id)
+        if found is None:
+            raise errors.NotFound("no such checkpoint for this provider")
+        external_run_ref, digest = found
+        subs = await ledger.subscriptions(external_run_ref, provider_org_id=provider_org_id)
+        if not subs:
+            raise errors.DependencyUnavailable("no suite subscribes to this checkpoint's run")
+        return subs[0], await deployer.deploy(provider_org_id=provider_org_id,
+                                              checkpoint_id=checkpoint_id, uri="",
+                                              digest=digest)
+    return suite
+
+
+def pg_receipts(connect):
+    """D7's receipt read: (external run, digest) of the provider's checkpoint, or None.
+    ponytail: one select here until lab-sql's `PgLabDataStore` reads it (WR-C5-RECEIPT)."""
+    async def receipt(checkpoint_id: str, *, provider_org_id: str):
+        conn = await connect()
+        try:
+            cursor = await conn.execute(
+                "select external_run_ref, artifact_digest from infrx.lab_checkpoint_receipts "
+                "where provider_org_id::text = %s and checkpoint_id::text = %s",
+                (provider_org_id, checkpoint_id))
+            return await cursor.fetchone()
+        finally:
+            await conn.close()
+    return receipt
+
+
+def production_suites(connect):
+    """WR-C4-B3-SUITES on one pool: D7's receipts, D8's `PgCheckpointLedger` (0042) and
+    L3's dev deployer over `PgControlStore`'s reads (0044)."""
+    from ...state.lab_control import PgControlStore
+    from ...state.lab_pipeline import PgCheckpointLedger
+    return suites(pg_receipts(connect), PgCheckpointLedger(connect),
+                  DevDeployer(PgControlStore(connect)))

@@ -1,7 +1,8 @@
 """E8L k08: the leg that waits - NOT RUN, never a pass, naming what it waits on and the exact
-rerun. (k10's UI half is bound in `scenarios_route.py` to `apps/lab/tests/e2e/rollout`, LAB-E2E.) Each case states the steps it will run once bound. (k09's I7 entry point
-landed with composition-2: its case moved to `scenarios_recover.py`, bound for the
-emergency-rollback subcommand and NOT RUN for the pass loop alone - WR-R2-3.)
+rerun. (k10's UI half is bound in `scenarios_route.py` to `apps/lab/tests/e2e/rollout`, LAB-E2E.)
+Each case states the steps it will run once bound. (k09's I7 entry point
+landed with composition-2: its cases live in `scenarios_recover.py` - the emergency-rollback
+subcommand and, since composition-5's WR-R2-3, the bare rollout role's pass loop.)
 
 * k08 (P-08): R3 parity on an allocated supported target. This host has no GPU and no Lab
   window is allocated; the only measured serving pair is Marlin-2B on the g6e.2xlarge L40S

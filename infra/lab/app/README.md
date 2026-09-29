@@ -79,6 +79,7 @@ runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
 | `LAB_TRAINING_BUDGET_USD` | server | the training USD budget, above 0 and within the P-11 approval's cap |
 | `LAB_TRAINING_PAYER_REF` | server | exactly the P-11 approval's named payer |
 | `LAB_ROLLOUT_CONCURRENCY` | server | rollout controller concurrency (pool_budget.py role default 1) |
+| `LAB_OPERATOR_ID` | server | the rollout role's principal id (a UUID) that R2's pass and `emergency-rollback` record their decisions under (WR-C5-PREFLIGHT); unset = the rollout role exits 2 |
 
 ## 3. Origins and the auth allowlist (P-05 settings, per project) [OP]
 

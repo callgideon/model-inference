@@ -42,6 +42,10 @@ ROLLBACK = "check_rollback_is_a_new_listing_and_admitted_jobs_keep_their_pins"
 WALLET = "check_the_dev_wallet_opens_at_zero_and_is_funded_only_by_audited_allocation"
 RACE = "check_two_operators_racing_publish_once"
 STORE = "check_the_store_composes"
+#: E3L-F4 (lane lab-control-2): the operator's rejection and door.
+REJECT_FILE = "0052_lab_control_reject.sql"
+REJECT = "check_an_operator_rejects_only_an_open_proposal"
+OPERATOR = "check_the_operator_door_is_the_profiles_bit_on_the_control_login"
 
 
 def _s(name, old, new, check, why, file=FILE, **kw):
@@ -204,6 +208,28 @@ SQL_MUTANTS = (
        "limit 1;\n  if cur.version is distinct from (p_args->>'expected_version')::int then\n"
        "    perform infrx.refuse('state_conflict', v_alias || ' moved on", RACE,
        "two rollbacks at once collide on the listing key (a 500)"),
+    # --- E3L-F4: 0052's rejection and operator door
+    _s("l3_reject_any_state", "  if d.state <> 'proposed_public' then", "  if false then",
+       REJECT, "an operator 'rejects' a listed revision, or a decided proposal twice",
+       file=REJECT_FILE),
+    _s("l3_reject_blank_reason", "not between 1 and 500 then", "not between 0 and 500 then",
+       REJECT, "a rejection records no reason", file=REJECT_FILE),
+    _s("l3_reject_activates", "  update infrx.deployment_revisions set state = 'retired'",
+       "  update infrx.deployment_revisions set state = 'active'", REJECT,
+       "a rejected proposal becomes servable", file=REJECT_FILE),
+    _s("l3_reject_unattributed", "  perform infrx.lab_control_audit(d.provider_org_id, "
+       "'lab_transition', p_args->>'actor',", "  perform infrx.lab_control_audit("
+       "d.provider_org_id, 'lab_transition', 'platform',", REJECT,
+       "the audit does not name the operator who rejected", file=REJECT_FILE),
+    _s("l3_reject_start_lost", "    jsonb_build_object('state', 'proposed_public'));",
+       "    null);", REJECT, "the audit does not show a proposal was rejected",
+       file=REJECT_FILE),
+    _s("l3_reject_not_on_the_login", "  to service_role, infrx_lab_control;",
+       "  to service_role;", OPERATOR, "the control service cannot reject on its own login",
+       file=REJECT_FILE),
+    _s("l3_operator_anyone", "coalesce((select p.is_operator from public.profiles p",
+       "coalesce((select true from public.profiles p", OPERATOR,
+       "every signed-in user is an operator", file=REJECT_FILE),
     _s("l3_events_empty", "'after', e.after, 'at', e.at) order by e.event_id), '[]')",
        "'after', e.after, 'at', e.at) order by e.event_id) filter (where false), '[]')",
        STORE, "the provider sees no audit of its moves"),
@@ -214,6 +240,7 @@ RUNNER = Runner(name="l3sql", targets=("tests/d/test_l3sql_units.py",))
 F = "state/lab_control.py"
 CALLS = "test_calls__carry_the_servers_identity_and_the_cas_expectations"
 READS = "test_reads__a_malformed_id_is_absent_without_a_query"
+REJECTS = "test_reject__sends_the_operator_and_reason_and_reads_the_terminal_row_private"
 
 
 def _p(name, invariant, old, new, *cases, **kw) -> Mutant:
@@ -248,6 +275,17 @@ CODE_MUTANTS = (
     _p("l3_py_malformed_id_queried", "a malformed id never reaches a uuid column",
        "        if not _uuid(deployment_revision_id):\n            return None",
        "        if False:\n            return None", READS),
+    _p("l3_py_reject_reason_dropped", "a rejection sends the operator's reason",
+       '"deployment_revision_id": deployment_revision_id, "actor": actor,\n'
+       '            "reason": reason}))', '"deployment_revision_id": deployment_revision_id, '
+       '"actor": actor,\n            "reason": ""}))', REJECTS),
+    _p("l3_py_retired_read_public", "a retired revision reads back private (E3L-F4)",
+       '    if doc["state"] == "retired":\n', "    if False:\n", REJECTS),
+    _p("l3_py_operator_malformed_queried", "a malformed user id is no operator, unqueried",
+       "        if not _uuid(user_id):\n            return False",
+       "        if False:\n            return False", REJECTS),
+    _p("l3_py_operator_other_user", "the door asks about the session's user",
+       '{"user_id": user_id}', '{"user_id": None}', REJECTS),
     _p("l3_py_malformed_endpoint_queried", "a malformed endpoint id has no alias, unqueried",
        "        if not _uuid(endpoint_id):\n            return None",
        "        if False:\n            return None", READS),

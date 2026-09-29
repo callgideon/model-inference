@@ -1,0 +1,42 @@
+{
+ "task": "E8L",
+ "lane": "lab-rollout-4",
+ "slice": "WR-C5-K09: k09's pass-loop half bound (the bare rollout role converges a rollback killed before the alias CAS on its first pass); full make lab-rollout at d869ee40",
+ "activity": "review",
+ "head": "10aa5481",
+ "base": "8949ffb1",
+ "worktree": ".claude/worktrees/codex-w5-lab-rollout-4",
+ "branch": "codex/w5-lab-rollout-4",
+ "owned_paths": ["tests/integration/lab_rollout/", "research/plan/evidence/e/E8L-*"],
+ "commands": [
+  {"cmd": "runner.py --keep --only k09 (against a pre-WR-R2-3 stub of _rollout, reverted)", "exit": 1, "summary": "red: new k09 case FAILED 'the rollout role exited 2'"},
+  {"cmd": "runner.py --reuse --keep --only k09", "exit": 3, "summary": "k09 PASS (2 passed); alias converged 1.0 s after spawn, one decision, held release running, SIGTERM 0"},
+  {"cmd": "make lab-rollout", "exit": 2, "summary": "runner exit 3, gate NOT RUN: k01-k07 + k09 PASS; k08 NOT RUN[P-08]; k10 NOT RUN[lab-ui-swap] (UI half); no FAIL; cells ROLLOUT-PIN NOT RUN, ROLLOUT-RECOVER PASS, OPT-PARITY NOT RUN; 22 passed 2 skipped"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest -q tests/integration/lab_rollout/test_mutants.py", "exit": 0, "summary": "65 passed in 861s: 45 stack + 16 layer-1 mutants killed, 0 survivors; 6 new (st_pass_skips_the_rolled_back, st_pass_reads_another_plan, st_pass_rolled_back_needs_live, st_step_leaves_the_rolled_back, st_pass_waits_a_cadence_first, st_pass_held_is_failed)"},
+  {"cmd": "pytest -q tests/integration/lab_rollout", "exit": 0, "summary": "17 passed, 1 skipped"},
+  {"cmd": "uvx ruff check --line-length 100 tests/integration/lab_rollout", "exit": 0, "summary": "all checks passed"},
+  {"cmd": "make api-test", "exit": 143, "summary": "stopped at 29%, 0 F/E; diff has no file it collects"},
+  {"cmd": "runner.py --reuse --only k08 (teardown)", "exit": 3, "summary": "removed infrx-e8l-{clickhouse,postgres,s3,valkey}; none left"}
+ ],
+ "states": {
+  "k01": "PASS", "k02": "PASS", "k03": "PASS", "k04": "PASS", "k05": "PASS", "k06": "PASS", "k07": "PASS",
+  "k08": "NOT RUN[P-08] staging GPU; rerun apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k08",
+  "k09": "PASS (operator stop + pass loop); breach half NOT RUN[WR-C5-LIVE], rerun apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k09",
+  "k10": "NOT RUN[lab-ui-swap] UI half (lab-e2e lane), read half PASS; rerun ... runner.py --out <dir> --only k10"
+ },
+ "gate": {"verdict": "NOT RUN", "exit": 3, "fail": 0, "pass": ["k01","k02","k03","k04","k05","k06","k07","k09"], "not_run": ["k08","k10"], "cells": {"ROLLOUT-PIN": "NOT RUN", "ROLLOUT-RECOVER": "PASS", "OPT-PARITY": "NOT RUN"}},
+ "estimate": {
+  "optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium",
+  "basis": "three remaining bindings (k10 UI via lab-e2e, k09 breach via WR-C5-LIVE, k08 via P-08), each one binding + one rerun once its dependency lands; this lane: ~1.3 h for one binding, a full run and the 14-min mutant list",
+  "at": "2026-09-29T12:15:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [],
+ "evidence": [
+  "research/plan/evidence/e/E8L-d869ee40.md",
+  "research/plan/evidence/e/E8L-raw-d869ee40/verdict.json",
+  "research/plan/evidence/e/E8L-raw-d869ee40/mutants/test_mutants.log",
+  "research/plan/evidence/e/E8L-raw-b7a11c8/only-k09/verdict.json",
+  "research/plan/evidence/e/E8L-raw-b7a11c8/only-k09-red-stub/verdict.json"
+ ]
+}

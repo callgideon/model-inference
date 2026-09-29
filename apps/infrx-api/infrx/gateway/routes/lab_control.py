@@ -5,6 +5,7 @@
                                                                 schema_version, runtime}
     POST /lab/v1/control/deployments/{id}/smoke?provider_org_id=
     POST /lab/v1/control/proposals?provider_org_id=           {kind, deployment_revision_id}
+    POST /lab/v1/control/proposals/{id}/reject                {reason}   (operators only)
 
 Records are the Lab's `apps/lab/lib/services/control/port.ts` in snake_case; lists are
 `{"data": [...]}`. Every call re-derives the actor - (provider, user, role) - from the forwarded
@@ -17,6 +18,10 @@ interface request, driven here by a fake. L3 re-checks ownership (another provid
 `not_found`), digests and state, and raises the typed refusals `lab_auth.refusal` renders.
 Until it is wired the operations answer 503 `unavailable`; aggregates are served regardless.
 Mounted only when the composition put a `LabControl` on `rt.lab_control` (LAB_CONTROL, off).
+
+E3L-F4: `reject` is the platform operator's, on the same session door: the session user must
+be an operator (`ControlOperations.operator`, `profiles.is_operator`) before the body is read;
+no provider membership or `provider_org_id` is involved.
 """
 from __future__ import annotations
 
@@ -52,6 +57,10 @@ class Registration(Record):
 class ProposalRequest(Record):
     kind: Literal["publish", "rollback"]
     deployment_revision_id: str = Field(min_length=1, max_length=64)
+
+
+class Rejection(Record):
+    reason: str = Field(min_length=1, max_length=500)
 
 
 class Model(Record):
@@ -108,6 +117,9 @@ class ControlOperations(Protocol):
     async def smoke(self, actor: Actor, deployment_revision_id: str) -> Deployment: ...
     async def propose(self, actor: Actor, kind: str,
                       deployment_revision_id: str) -> Proposal: ...
+    async def operator(self, user_id: str):
+        """The user's operator session (`Forbidden` for anyone else)."""
+    async def reject(self, operator, proposal_id: str, reason: str) -> Proposal: ...
 
 
 @dataclass(frozen=True)
@@ -189,5 +201,15 @@ def register(app, rt, control: LabControl | None = None):
         wanted = await body(request, ProposalRequest)
         proposal = await operations().propose(who, wanted.kind, wanted.deployment_revision_id)
         return lab_auth.ok(proposal.model_dump(mode="json"), 201)
+
+    @app.post(CONTROL_PREFIX + "/proposals/{proposal_id}/reject")
+    @lab_auth.guarded
+    async def reject(request: Request):
+        operator = await operations().operator(
+            await lab_auth.authenticate(request, control.sessions))
+        decision = await body(request, Rejection)
+        rejected = await operations().reject(operator, request.path_params["proposal_id"],
+                                             decision.reason)
+        return lab_auth.ok(rejected.model_dump(mode="json"))
 
     return control

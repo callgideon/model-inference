@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 17 planned; 105 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 16 planned; 106 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -138,7 +138,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | I7 | implemented / I | [Package release controls and optimization evidence operations](13-lab-improvement-handoffs.md) | I5 | R2, R3 |
 | E6L | planned / E | [Prove imported benchmark to candidate decision end to end](13-lab-improvement-handoffs.md) | F3, E2R | E3L, N2, N4, H1, B1, B2, B3, B4, I5 |
 | E7L | implemented / E | [Prove the second authorized improvement iteration](13-lab-improvement-handoffs.md) | E6L | E5L, N3, P1, P2, P3, P4, I6 |
-| E8L | planned / E | [Prove controlled rollout and optimization evidence](13-lab-improvement-handoffs.md) | E6L | R1, R2, R3, R4, I7 |
+| E8L | implemented / E | [Prove controlled rollout and optimization evidence](13-lab-improvement-handoffs.md) | E6L | R1, R2, R3, R4, I7 |
 
 ## Conditional work — activation required
 

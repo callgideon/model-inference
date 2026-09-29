@@ -4,7 +4,7 @@ runner (`apps/infrx-api/tests/contracts/mutants.py`, a private copy whose Python
 check is relaxed for the SQL targets, as E3L's and track I's).
 
 * `MUTANTS` (layer 1, no stack): the runner's classification, cells, gate and exit codes, the
-  NOT RUN vocabulary, and the unbound j09 case (never a pass once it stops skipping).
+  NOT RUN vocabulary.
 * `STACK_MUTANTS` (E6L.c, "intentional defects are detected"): the product decisions the
   journey guards - N1's quarantine, replay and grant binding, N2's families, leak refusal and
   frozen holdout, D7's provider scoping, rights read and receipt dedup (0029), H1's pairing
@@ -63,8 +63,7 @@ shared.compile = lambda source, filename, mode, *a, **k: (
 
 R = "tests/integration/lab_evaluate/runner.py"
 W = "tests/integration/lab_evaluate/lab_world.py"
-P = "tests/integration/lab_evaluate/scenarios_pending.py"
-LAYER1_FILES = ("tests/integration/lab_evaluate/test_e6l_runner.py", P)
+LAYER1_FILES = ("tests/integration/lab_evaluate/test_e6l_runner.py",)
 
 MATRIX = "test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases"
 REQUIRED = "test_e6l_the_required_cases_are_exactly_what_the_scenario_modules_define"
@@ -75,7 +74,6 @@ GATE = "test_e6l_the_gate_and_the_cells_are_the_worst_status_and_exit_as_e2c_doe
 NO_STACK = "test_e6l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e6l_the_namespace_is_the_reserved_block"
 RERUN = "test_e6l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
-UNBOUND = tuple(re.findall(r"^def (test_j\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("xfail_is_a_pass", "an xfail is never a pass", R,
@@ -112,11 +110,6 @@ MUTANTS: tuple[Mutant, ...] = (
        NAMESPACE),
     _m("not_run_without_the_rerun", "a NOT RUN names the exact rerun", W,
        "rerun after the merge: {RERUN} --only {sid}", "rerun after the merge: {RERUN}", RERUN),
-    _m("unbound_case_runs", "a case waiting on L3 is never a pass", P,
-       "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
-    _m("checkpoint_tripwire_blind", "the checkpoint half binds when the role composes", P,
-       '        return "WR-B3-3" not in str(refused)', "        return True",
-       "test_j09_the_checkpoint_worker_drains_the_outbox_once"),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -264,15 +257,24 @@ STACK_MUTANTS += (
        "second cancel is a conflict)", "infrx/gateway/routes/lab_evaluations.py",
        '    if status["state"] not in LIVE:', "    if False:", J10_UI),
 )
+# composition batch 5: the real checkpoints worker process (j09's checkpoint half, WR-B3-3)
+J09_CKPT = "test_j09_the_checkpoint_worker_drains_the_outbox_once"
+STACK_MUTANTS += (
+    _m("st_checkpoints_serve_unvalidated", "only a READY private dev revision serves a "
+       "checkpoint", B3, "                    and d.state is DeploymentState.ready_private):",
+       "                    and d.state is DeploymentState.draft):", J09_CKPT),
+    _m("st_checkpoints_run_per_delivery", "a redelivered checkpoint is the same run",
+       B3, "    run_id = run_id_of(sub.subscription_id, event.checkpoint_id)\n",
+       "    run_id = str(uuid.uuid4())\n", J09_CKPT),
+)
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_data.py", "scenarios_eval.py", "scenarios_checkpoint.py",
                   "scenarios_workers.py")
 
 
 def case_names() -> set[str]:
-    """The layer-1 cases: the runner's own, and the unbound j09 case."""
-    return set(re.findall(r"^def (test_\w+)\(", (REPO / LAYER1_FILES[0]).read_text(), re.M)) \
-        | set(UNBOUND)
+    """The layer-1 cases: the runner's own (no case waits unbound: j09 and j10 are bound)."""
+    return set(re.findall(r"^def (test_\w+)\(", (REPO / LAYER1_FILES[0]).read_text(), re.M))
 
 
 def stack_case_names() -> set[str]:

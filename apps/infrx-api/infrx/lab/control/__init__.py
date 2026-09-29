@@ -10,7 +10,7 @@ and role, on the store clock) and what may be registered; the store decides what
 
     provider (server session user_id, L2)   register, create_dev, validate, issue_dev_key,
                                             propose, events
-    operator (`Operations.operator(secret)`) approve, rollback, price_dev, fund
+    operator (`Operations.operator(secret)`) approve, reject, rollback, price_dev, fund
 
 A dev revision is private, in a `dev` endpoint of its provider, reachable only by that
 endpoint's provider_dev credential (A3's resolution), priced only by an operator's internal
@@ -113,6 +113,15 @@ class ControlStore(Protocol):
                        actor: str, reason: str) -> Listing:
         """CAS: listing version + 1 repeating an earlier version whose deployment is still
         active; `lab_rollback`."""
+
+    async def reject(self, deployment_revision_id: str, *, actor: str,
+                     reason: str) -> DeploymentRevision:
+        """E3L-F4: CAS `proposed_public` -> `retired` with a 1-500 character reason, listings
+        untouched; `lab_transition`. The answer is the terminal row (private: a retired
+        revision is never public)."""
+
+    async def operator(self, user_id: str) -> bool:
+        """Whether the user is a platform operator (`public.profiles.is_operator`)."""
 
     async def fund_dev_wallet(self, provider_org_id: str, amount: Credit, *, operation_id: str,
                               actor: str, reason: str) -> CreditLedgerEntry:
@@ -281,6 +290,13 @@ class LabControl:
         return await self.store.publish(serving.public_model_id, card,
                                         expected_version=expected_version,
                                         actor=operator.principal, reason=reason)
+
+    async def reject(self, operator: OperatorSession, deployment_revision_id: str, *,
+                     reason: str) -> DeploymentRevision:
+        """Decline an open proposal: it leaves `proposed_public`, publishes nothing, and its
+        dev source may be proposed again."""
+        return await self.store.reject(deployment_revision_id, actor=operator.principal,
+                                       reason=reason)
 
     async def rollback(self, operator: OperatorSession, public_model_id: str, *,
                        to_version: int, expected_version: int, reason: str) -> Listing:
