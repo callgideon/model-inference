@@ -405,6 +405,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "PgLabDataStore(connect), provider,", EXPAND),
     _m("lw_expand_on_hold", "only R2's expand verdict is decided",
        '    if verdict.action != "expand":\n', "    if False:\n", EXPAND),
+    _m("lw_expand_on_rollback", "a rollback verdict is refused, never decided (C7-RV-1)",
+       '    if verdict.action != "expand":\n', '    if verdict.action == "hold":\n', EXPAND),
+    _m("lw_expand_started_at_replaced", "R2 is evaluated at the release's own start: a release "
+       "launched inside the plan's horizon is held (C7-RV-2)",
+       "started_at=release.started_at, now=now,",
+       "started_at=datetime.min.replace(tzinfo=timezone.utc), now=now,", EXPAND),
     _m("lw_expand_hold_unnamed", "a refused verdict names its action and reasons",
        "f\"({', '.join(verdict.reasons)})\")", '"")', EXPAND),
     _m("lw_expand_evidence_dropped", "the decision carries the verdict's evidence refs",
