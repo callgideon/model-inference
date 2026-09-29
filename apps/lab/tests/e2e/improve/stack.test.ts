@@ -116,7 +116,8 @@ test("E2E-I i08 the pipeline surface drives labels to a checkpoint through the p
   await t.test("E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels", async () => {
     const viewer = await as("viewer");
     const seen = await viewer.get(labels);
-    assert.ok(forms(seen.html).every((f) => !/Import labels|Export training labels|Review$|Assign a reviewer/.test(f.text)), "a viewer reads, with no form");
+    assert.ok(seen.text.includes(REFUSAL_COPY.denied) && !seen.text.includes(w.train[0]), "a viewer's label read is refused, and the page says so");
+    assert.ok(forms(seen.html).every((f) => !/Import labels|Export training labels|Review$|Assign a reviewer/.test(f.text)), "and offers no write");
     const write = form((await dev.get(labels)).html, /Import labels/);
     assert.equal((await viewer.submit(labels, write, { rubricRef: w.rubric, rows: human(w.train[0], "v") })).location, `${labels}&refused=denied`);
     const other = await as("other_dev");

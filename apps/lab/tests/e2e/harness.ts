@@ -60,7 +60,9 @@ export function forms(html: string): Form[] {
     }
     for (const [, open, body] of inner.matchAll(/(<textarea\b[^>]*>)([\s\S]*?)<\/textarea>/gi)) {
       const name = attr(open, "name");
-      if (name !== null) (names.push(name), fields.push([name, decode(body)]));
+      if (name === null) continue;
+      names.push(name);
+      fields.push([name, decode(body)]);
     }
     return { text: text(inner), fields, names };
   });

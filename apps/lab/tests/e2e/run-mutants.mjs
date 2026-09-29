@@ -29,7 +29,7 @@ const HARNESS_MUTANTS = [
   m("E2E-X04", "a hex entity is read as decimal", HARNESS, "parseInt(e.slice(2), 16)", "parseInt(e.slice(2), 10)", [H.h01]),
   m("E2E-X05", "an unticked box is submitted", HARNESS, '      if (type === "checkbox" || type === "radio") continue;\n', "", [H.h02]),
   m("E2E-X06", "the selected option is ignored", HARNESS, 'options.find((o) => /\\sselected(=""|\\s|>)/.test(o)) ?? options[0]', "options[0]", [H.h02]),
-  m("E2E-X07", "a textarea is not submitted", HARNESS, "if (name !== null) (names.push(name), fields.push([name, decode(body)]));", "if (name !== null) names.push(name);", [H.h02]),
+  m("E2E-X07", "a textarea is not submitted", HARNESS, "      fields.push([name, decode(body)]);\n", "", [H.h02]),
   m("E2E-X08", "a hidden field without a value is dropped", HARNESS, 'fields.push([name, attr(tag, "value") ?? ""]);', 'if (attr(tag, "value") !== null) fields.push([name, attr(tag, "value")!]);', [H.h02]),
   m("E2E-X09", "an ambiguous form match takes the first", HARNESS, "assert.equal(found.length, 1, `one form matching", "assert.ok(found.length >= 1, `one form matching", [H.h02]),
   m("E2E-X10", "a section runs on into the next record", HARNESS, 'html.slice(open, html.indexOf("</section>", open))', "html.slice(open)", [H.h03]),
@@ -95,7 +95,7 @@ const STACK_MUTANTS = [
   stackMutant("improve", "E2E-S21", "an omitted label loses its reason", "lib/services/pipelines/view.ts", "omitted: e.omitted.map((x) => `${x.sampleId}: ${x.reason}`),", "omitted: e.omitted.map((x) => x.sampleId),", [S.i04]),
   stackMutant("improve", "E2E-S22", "a submitted manual run cannot be marked finished", "lib/services/pipelines/view.ts", '      if (r.state === "submitted" && manual(r)) actions.push("finish");\n', "", [S.i05]),
   stackMutant("improve", "E2E-S23", "a checkpoint without its held-out evaluation reads as eligible", "lib/services/pipelines/view.ts", ': !onHoldout ? "Not evaluated on this run\'s pinned holdout: not eligible."', ': !onHoldout ? "Eligible candidate: not public and not promoted."', [S.i05]),
-  stackMutant("improve", "E2E-S24", "a viewer is offered the label import and export forms", "app/(provider)/annotations/page.tsx", '              {holds(workspace.role, "run_evaluation") && (\n                <>', "              {true && (\n                <>", [S.i06]),
+  stackMutant("improve", "E2E-S24", "a refused label read shows an empty page instead of its refusal", "app/(provider)/annotations/page.tsx", "const failed = [imports, exports, labels, disputes].find((r) => r !== null && !r.ok);", "const failed = [imports, exports, labels, disputes].find(() => false);", [S.i06]),
 ];
 
 function suiteRun(cwd, suite) {
