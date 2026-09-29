@@ -54,23 +54,26 @@ preflight() {
 window() {
   need WINDOW
   say "R151 condition 2: the reviewed EXPECTED_PENDING patch (hosted is 0001-0051; pending $PENDING)"
-  python3 - "$PENDING" "$NEWEST_N" "$NEWEST_NAME" <<'PY'
-import re,sys; pending,n,name=sys.argv[1:]
-p='infra/rollout/hosted-migrate.sh'; s=open(p).read(); o=s
-s=re.sub(r'^EXPECTED_PENDING="[^"]*"', f'EXPECTED_PENDING="{pending}"', s, count=1, flags=re.M)
-s=s.replace('*"0026 fenced_result") ;; *) say "stop: hosted applied list does not end at 0026 fenced_result (unrecorded hosted change)"',
-            '*"0051 lab_import_jobs") ;; *) say "stop: hosted applied list does not end at 0051 lab_import_jobs (unrecorded hosted change)"')
-s=re.sub(r'\*"0051 lab_import_jobs"\$\'\\n\'"nothing pending"\) ;; \*\) say "W7: hosted is not 0001-0051 with nothing pending\.',
-         f'*"{n} {name}"$\'\\n\'"nothing pending") ;; *) say "W7: hosted is not 0001-{n} with nothing pending.', s)
-s=s.replace('say "W7 PASS: hosted 0001-0051, nothing pending;', f'say "W7 PASS: hosted 0001-{n}, nothing pending;')
-s=s.replace('(0027–0051, the Lab migrations under the R151/R201 window; never reverted afterwards)',
-            f'(0052–{n}, the Lab migrations under the second R151/R201 window; 0027–0051 applied 2026-09-29; never reverted afterwards)')
-open(p,'w').write(s); print('changed' if s!=o else 'already applied')
+  PATCH=infra/lab/rollout/hosted-migrate-0052-0056.patch   # the reviewed diff (KNOWN-GOOD-REPROOF-3); WR-KGR3-3
+  XFAIL_TEST=apps/infrx-api/tests/i/lab/test_lab_rollout_steps.py
+  if grep -q '^EXPECTED_PENDING="0052, 0053, 0054, 0055, 0056"' infra/rollout/hosted-migrate.sh; then
+    echo "  already applied"
+  else
+    git apply "$PATCH"
+    python3 - "$XFAIL_TEST" <<'PY'   # the strict xfail would XPASS (fail) once the patch lands: drop it in the same commit
+import sys; p=sys.argv[1]; L=open(p).read().split('\n')
+i=L.index('def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():'); j=i-1
+while not L[j].startswith('@'): j-=1
+assert L[j].startswith('@pytest.mark.xfail(strict=True'), L[j]
+del L[j:i]; s='\n'.join(L)
+s=s.replace('EXPECTED_PENDING 0052, its W7 post-check `*"0052 lab_control_reject"`', 'EXPECTED_PENDING 0052-0056, its W7 post-check `*"0056 lab_control_grants"`')
+open(p,'w').write(s)
 PY
-  git --no-pager diff --stat -- infra/rollout/hosted-migrate.sh; git --no-pager diff -- infra/rollout/hosted-migrate.sh | head -60
+  fi
+  git --no-pager diff --stat -- infra/rollout/hosted-migrate.sh "$XFAIL_TEST"; git --no-pager diff -- infra/rollout/hosted-migrate.sh "$XFAIL_TEST"
   read -r -p "commit this reviewed patch and continue to w6b? [y/N] " ok; [ "$ok" = y ] || exit 1
-  git add infra/rollout/hosted-migrate.sh
-  git commit -q -m "rollout: hosted-migrate.sh expects the Lab migrations $PENDING (second R151/R201 window $WINDOW; applied list ends at 0051 lab_import_jobs; post-check $NEWEST_N $NEWEST_NAME)" || true
+  git add infra/rollout/hosted-migrate.sh "$XFAIL_TEST"
+  git commit -q -m "rollout: hosted-migrate.sh expects the Lab migrations $PENDING (second R151/R201 window $WINDOW; the reviewed $PATCH; the strict xfail dropped, WR-KGR3-3)" || true
   say "coordinator log entry for condition 3 (append; never rewrite)"
   printf -- '- %s (operator, %s): **R151 window %s** — hosted 0052–%s (Lab), never reverted; P-08 record: lab.callbill.ai / lab-control.callbill.ai; release %s.\n' \
     "$(date -u +%FT%H:%MZ)" "$(git config user.name)" "$WINDOW" "$NEWEST_N" "$RELEASE" >> research/plan/evidence/coordinator/2026-09-24-session-03.md

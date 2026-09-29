@@ -269,3 +269,12 @@ def test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond(tm
             {"KNOWN-GOOD"}, (real["sha"], at)
         assert at["0057"]["verdict"] == "NOT-KNOWN-GOOD"
         assert [c["check"] for c in at["0057"]["checks"] if not c["ok"]] == ["migrations"]
+
+
+def test_ops_recover__every_evidence_path_the_record_names_exists():
+    """KGR3-RV-1: every evidence path of the real record (each proven target's `evidence` and
+    its `schema_proof.evidence`) exists in this checkout; known-good.py refuses a target whose
+    evidence is missing, so a renamed or unmerged evidence file must fail here first."""
+    for real in (r for r in json.loads(RECORD.read_text())["releases"] if r.get("schema_proof")):
+        for path in real["evidence"] + real["schema_proof"]["evidence"]:
+            assert (support.REPO / path).exists(), (real["sha"], path)

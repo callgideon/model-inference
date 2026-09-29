@@ -15,6 +15,7 @@ What a kill is - and that a crash is not one unless declared - is the shared rul
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import re
 import shutil
@@ -1414,6 +1415,11 @@ MUTANTS += (
        '"superseded": [{"through": "0052", "result": "4226315: its own tests/d (26 suites, 383 passed',
        '"superseded": [{"through": "0052", "result": "4226315: its own tests/d (26 suites, 384 passed',
        "test_ops_recover__the_superseded_0052_proof_is_the_recorded_one_word_for_word"),
+    # KGR3-RV-1: every evidence path the record names exists (the copy carries them, _layout)
+    _m("known_good_record_names_missing_evidence", "every evidence path of the record exists",
+       "../../infra/rollout/known-good.json", '"models/marlin2b/results/E1B-box-bda1586/bench.jsonl"',
+       '"models/marlin2b/results/E1B-box-bda1586/bench.json"',
+       "test_ops_recover__every_evidence_path_the_record_names_exists"),
 )
 
 # --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------
@@ -1812,6 +1818,14 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
                  ("models", "marlin2b", "runprofile.py"), ("models", "marlin2b", "corpus", "manifest.json")):
         root.joinpath(*part[:-1]).mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO.joinpath(*part), root.joinpath(*part))
+    # KGR3-RV-1: the evidence paths the known-good record names (its existence case reads them)
+    for rel in (r for r in json.loads((REPO / "infra/rollout/known-good.json").read_text())["releases"]
+                if r.get("schema_proof")):
+        for path in rel["evidence"] + rel["schema_proof"]["evidence"]:
+            src, dst = REPO / path, root / path
+            if src.exists() and not dst.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                (shutil.copytree if src.is_dir() else shutil.copy2)(src, dst)
     for name in ("pyproject.toml", "uv.lock"):
         shutil.copy2(API_DIR / name, api / name)
     return api

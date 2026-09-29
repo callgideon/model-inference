@@ -117,7 +117,7 @@ holds for 0056 and condition 2 needs only the patch below.
 ## The reviewed EXPECTED_PENDING patch for infra/rollout/hosted-migrate.sh (NOT applied; the operator applies it under runbook 08 §2)
 
 `git apply --check -p1` passes on `33547abd`; `bash -n` of the patched file passes; patch sha256
-`4439c31def559c1fc3d4729df580cd6826ca4234f2201a6974b6deefbe5ee287`. `EXPECTED_FLAGS` is unchanged: no file in
+`0aef52da19b6f32def4659dbb5db2728ba3e320fdfedda58bea5ac4810d0ce0b` (KGR3-RS-1: the committed `infra/lab/rollout/hosted-migrate-0052-0056.patch`, extracted byte for byte from the fenced block below; the lane's scratch copy was `4439c31d…`). `EXPECTED_FLAGS` is unchanged: no file in
 0052-0056 names `infrx.feature_flags` or the drift view.
 
 ```diff
@@ -252,3 +252,10 @@ diff 0052 -> 0056, the suites and probe carry the proof).
 Lane: 0 h remaining. Coordinator: WR-KGR3-1/2 text patches 0.1/0.2/0.4 h; WR-KGR3-3 (operator patch + xfail
 drop) 0.1/0.25/0.5 h (optimistic/likely/pessimistic). Confidence high. Basis: WR-KGR2-1/2 were the same
 patches one re-proof earlier; this lane's own wall time 1.2 h (proofs 45 min, parallel).
+
+## Coordinator note (codex/w5-merge-59)
+
+- Coordinator rulings: none.
+- R151 for the 0052–0056 window: condition 1 met at this integration; condition 2 = the operator applies `infra/lab/rollout/hosted-migrate-0052-0056.patch` via `launch-v1.sh window` (WR-KGR3-3: the same commit drops the strict xfail on `test_ldp__todays_hosted_migrate_carries_the_reviewed_patch`); condition 3 = the window entry `launch-v1.sh` writes; WR-KGR3-4: nothing past 0056 may be applied hosted before a further re-proof (0057/0058 are in flight in lab-capture-2 / lab-sql-lw9 — their windows reopen condition 1).
+- KGR3-RV-1: `test_ops_recover__every_evidence_path_the_record_names_exists` + the mutant `known_good_record_names_missing_evidence` (the mutation copy now carries the record's evidence paths).
+- KGR3-RS-1/-2: the patch sha256 above is the committed file's; the update JSON's `head` is `3fc5b06c` and `owned_paths` lists it.

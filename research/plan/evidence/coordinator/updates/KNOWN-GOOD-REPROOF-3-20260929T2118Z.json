@@ -2,14 +2,15 @@
  "task": "I8",
  "slice": "KNOWN-GOOD-PROOF (KNOWN-GOOD-REPROOF-3: both targets through 0056; R151 condition 1 for the next hosted window)",
  "activity": "review",
- "head": "<the commit carrying this file; see git log>",
+ "head": "3fc5b06c",
  "worktree": ".claude/worktrees/codex-w5-known-good-reproof-3",
  "branch": "codex/w5-known-good-reproof-3",
  "owned_paths": [
   "infra/rollout/known-good.json",
   "apps/infrx-api/tests/i/test_known_good_proof.py",
   "apps/infrx-api/tests/i/mutants.py",
-  "research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-*"
+  "research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-*",
+  "research/plan/evidence/coordinator/updates/KNOWN-GOOD-REPROOF-3-20260929T2118Z.json"
  ],
  "commands": [
   {
