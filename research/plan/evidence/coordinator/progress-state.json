@@ -9899,7 +9899,7 @@
   {
    "id": "W5-MERGE-64",
    "task": null,
-   "slice": "merge batch #64 (Opus): lab-local-3 31d61031 (+the acceptance rerun `GATE_ARGS=--keep make lab-local` on the merged tree, minors, R262)",
+   "slice": "merge batch #64 (Opus): lab-local-3 31d61031 (+the acceptance rerun `GATE_ARGS=--keep make lab-local` on the merged tree, minors, R262); workflow wf_242e3d2c-70f",
    "agent": "opus",
    "branch": "codex/w5-merge-64",
    "worktree": ".claude/worktrees/codex-w5-merge-64",
