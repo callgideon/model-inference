@@ -503,3 +503,23 @@ over that Live and the B2 report.
 - **make lab-local's o05 expectation for releases on the unit**: lab-local-3, still in flight,
   reads `CONTROL_EXPECTED`. With 0059, the lab login's `/lab/v1/releases` answers 200 for a
   listed release. Its merge must expect that.
+
+### Merge #62 checks (shared clone at 46fb5117)
+
+The pristine l4 lw8 check was red on the base: 0055's `lab_optimization_variants` and
+`lab_import_requeue` were outside GRANTED. GRANTED now carries them (WR-LW8-3, the same line
+lab-sql-lw9 carries), so 0059's list does not "kill" on a check that already fails. Every result
+below exited 0.
+
+| check | result |
+|---|---|
+| `INFRX_D_TASK=r2 pytest tests/g/lab_releases` | 36 passed, 2 skipped (p3, list param) |
+| `INFRX_MUTANTS=all INFRX_D_TASK=r2 pytest tests/g/lab_releases/test_mutants.py tests/g/test_mutants.py -k 'lab_releases or releases or well_formed or every_case'` | 83 passed, 3 skipped (the PG halves), 0 survivors |
+| same with `INFRX_LAB_RELEASES_PG=1 -k pg` (r2) | 3 passed (2 r2 PG mutants killed + list check), p3 skipped |
+| `INFRX_MUTANTS=all INFRX_D_TASK=l4 pytest tests/d/test_code_mutants_lr7.py tests/d/test_code_mutants_lw8.py` | 19 passed (3 + 9 SQL mutants killed) |
+| `INFRX_D_TASK=l4 INFRX_LAB_API_PG=1 pytest tests/i/lab_control --ignore=…test_mutants.py` | 10 passed. Without 0059 the new case fails: lab login 503, InsufficientPrivilege |
+| harness `migration_set` + E8L layer 1 (`-k 'migration_set or not stack'`) | 71 passed |
+| `INFRX_MUTANTS=all pytest tests/integration/lab_rollout/test_mutants.py -k 'not stack'` | 37 passed (34 layer-1 mutants, 0 survivors) |
+| `make lab-test` | 251 pass, 14 skipped, 0 fail |
+| `node tests/e2e/run-mutants.mjs` | 17/17 killed (the stack list needs `LAB_E2E_REAL=1`) |
+| `validate_plan.py` | PASS |
