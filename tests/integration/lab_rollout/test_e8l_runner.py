@@ -62,11 +62,13 @@ def test_e8l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert runner.SCENARIOS["k09"]["lanes"] == [], (
         "k09's I7 entry point landed (composition-2): it runs for real now, NOT RUN only "
         "internally (WR-R2-3, the pass loop), not as a whole-scenario merge wait")
-    assert runner.SCENARIOS["k10"]["lanes"] == ["WR-R4-2"], (
-        "k10's UI half runs apps/lab/tests/e2e/rollout (LAB-E2E); NOT RUN until the gateway's "
-        "own LAB_RELEASES composition carries the records and proposal ports")
+    assert runner.SCENARIOS["k10"]["lanes"] == [], (
+        "WR-R4-2 is composed (merge #50): k10's port half runs pilot.lab_releases and "
+        "`rollout decide` for real, its UI half apps/lab/tests/e2e/rollout (LAB-E2E, R238)")
+    assert "test_k10_the_composed_releases_route_proposes_and_the_operator_decides" in \
+        runner.REQUIRED["k10"], "k10's port half (WR-C6-K10) is required"
     assert not any(runner.SCENARIOS[sid]["lanes"] for sid in
-                   ("k01", "k02", "k03", "k04", "k05", "k06", "k07", "k09"))
+                   ("k01", "k02", "k03", "k04", "k05", "k06", "k07", "k09", "k10"))
 
 
 def test_e8l_the_required_cases_are_exactly_what_the_scenario_modules_define():

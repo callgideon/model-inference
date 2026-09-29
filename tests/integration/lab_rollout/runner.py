@@ -117,8 +117,9 @@ SCENARIOS = {
                      "emergency-rollback subcommand twice; the bare rollout role converges a "
                      "rollback killed before the alias CAS on its first pass",
             "test_ids": ["ROLLOUT-RECOVER"], "lanes": []},
-    "k10": {"title": "the Lab releases UI: verdict, proposal, approval and emergency rollback",
-            "test_ids": ["ROLLOUT-PIN"], "lanes": ["WR-R4-2"]},
+    "k10": {"title": "the Lab releases page over the composed route: verdict, proposal, the "
+                     "operator's decision through D9 (`rollout decide`) and emergency rollback",
+            "test_ids": ["ROLLOUT-PIN"], "lanes": []},
 }
 REQUIRED = {
     "k01": ("test_k01_routing_off_serves_todays_request_over_a_live_release",
@@ -144,7 +145,8 @@ REQUIRED = {
     "k09": ("test_k09_the_controller_process_restarted_mid_rollout",
             "test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas"),
     "k10": ("test_k10_the_releases_ui_over_the_real_route",
-            "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict"),
+            "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict",
+            "test_k10_the_composed_releases_route_proposes_and_the_operator_decides"),
 }
 #: Halves of a scenario that exist in the matrix but are not bound yet (R222: recorded in
 #: verdict.json, never prose-only). NOT RUN always; they do not lower their parent's status.
