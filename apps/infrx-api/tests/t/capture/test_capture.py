@@ -467,8 +467,8 @@ TEXT = "the van is red"
 class Store:
     """The worker's job store as the runner sees it: `load_work`, `complete`, `put_result`."""
 
-    def __init__(self, request, *, refuse: bool = False) -> None:
-        self.request, self.refuse, self.results = request, refuse, []
+    def __init__(self, request, *, refuse: bool = False, lose: int = 0) -> None:
+        self.request, self.refuse, self.results, self.lose = request, refuse, [], lose
 
     async def load_work(self, lease):
         return SimpleNamespace(request=self.request)
@@ -478,6 +478,9 @@ class Store:
         return f"infrx-result:{job_id}"
 
     async def complete(self, lease, outcome):
+        if self.lose:                                   # the terminal ack is lost
+            self.lose -= 1
+            raise ConnectionError("the ack was lost")
         if self.refuse:
             raise errors.StaleLease("another worker holds the lease")
         return "settled"
@@ -603,6 +606,57 @@ def test_an_async_jobs_record_holds_no_credential(tmp_path):
     [content] = recover(spool).contents
     assert support.TOKEN.encode() not in content and minted.encode() not in content
     assert content.count(capture.REDACTED) == 4, content
+
+
+def lost_ack(tmp_path, request, **kw):
+    """One attempt whose first `complete` ack is lost, completed as `AttemptRunner` does
+    (worker/attempt.py: the identical completion retried once)."""
+    store = Store(request, lose=1, **kw)
+    runner = SimpleNamespace(jobs=store, put_result=store.put_result)
+    capture.capture_jobs(runner, tmp_path / "spool", capture.Wall)
+    lease = SimpleNamespace(job_id=request.request_id)
+
+    async def attempt():
+        await runner.jobs.load_work(lease)
+        await runner.put_result(request.request_id, TEXT, lease)
+        try:
+            return await runner.jobs.complete(lease, "outcome")
+        except ConnectionError:
+            return await runner.jobs.complete(lease, "outcome")
+    return run(attempt()), runner
+
+
+def test_a_job_whose_first_ack_is_lost_is_traced_once_when_the_retry_commits(tmp_path):
+    """Oracle (lens R7, merge #54): the remembered attempt dropped when the first `complete`
+    raised (`finally`), so the retry that settles finds nothing - the job is never traced."""
+    request = admitted(tmp_path, TraceMode.full)
+    settled, runner = lost_ack(tmp_path, request)
+    assert settled == "settled"
+    spools = job_spools(tmp_path)
+    assert len(spools) == 1, spools
+    [content] = recover(spools[0]).contents
+    assert content == request_line(request) + TEXT.encode()
+    assert request.request_id not in runner.jobs.open
+
+
+def test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced(tmp_path):
+    """Oracle (R7): a refused retry (the store settled it for another attempt) recorded, or
+    its attempt remembered after the refusal (held until evicted)."""
+    request = admitted(tmp_path, TraceMode.full)
+    store = Store(request, lose=1, refuse=True)
+    runner = SimpleNamespace(jobs=store, put_result=store.put_result)
+    capture.capture_jobs(runner, tmp_path / "spool", capture.Wall)
+    lease = SimpleNamespace(job_id=request.request_id)
+
+    async def attempt():
+        await runner.jobs.load_work(lease)
+        with pytest.raises(ConnectionError):
+            await runner.jobs.complete(lease, "outcome")
+        assert request.request_id in runner.jobs.open          # kept for the retry
+        with pytest.raises(errors.StaleLease):
+            await runner.jobs.complete(lease, "outcome")
+    run(attempt())
+    assert job_spools(tmp_path) == [] and runner.jobs.open == {}
 
 
 def test_the_worker_remembers_a_bounded_number_of_jobs(tmp_path):

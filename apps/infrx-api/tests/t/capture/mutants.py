@@ -63,6 +63,8 @@ REFUSED = "test_a_refused_completion_spools_nothing_and_raises_as_before"
 JOB_FAILS = "test_a_worker_capture_failure_never_fails_the_job"
 REMEMBER = "test_the_worker_remembers_a_bounded_number_of_jobs"
 JOB_CREDENTIAL = "test_an_async_jobs_record_holds_no_credential"
+LOST_ACK = "test_a_job_whose_first_ack_is_lost_is_traced_once_when_the_retry_commits"
+LOST_REFUSED = "test_a_lost_ack_whose_retry_is_refused_is_forgotten_untraced"
 SHIP_BOTH = "test_the_gateway_ships_its_own_spool_and_every_finished_job_spool"
 HELD = "test_a_job_spool_still_being_written_is_left_to_its_writer"
 PUMP = "test_the_pump_ships_every_interval_until_stopped"
@@ -247,7 +249,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("job_spooled_before_the_store_accepted", "only a completion the store accepted is "
        "recorded", C,
        "        try:\n            settled = await self.jobs.complete(lease, outcome)\n"
-       "        finally:\n            held = self.open.pop(lease.job_id, None)\n",
+       "        except errors.DomainError:\n            self.open.pop(lease.job_id, None)\n"
+       "            raise\n        held = self.open.pop(lease.job_id, None)\n",
        "        held = self.open.pop(lease.job_id, None)\n        if held is not None:\n"
        "            await self.spool(*held)\n            held = None\n"
        "        settled = await self.jobs.complete(lease, outcome)\n", REFUSED),
@@ -261,6 +264,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("job_spool_in_the_gateways_directory", "job spools live under jobs/, never beside the "
        "gateway's segments", C, "Path(root) / JOBS_DIR, limits or DEFAULTS",
        "Path(root), limits or DEFAULTS", ASYNC_OUT),
+    # --- lens R7: a lost terminal ack, then the runner's retry --------------------------
+    _m("job_forgotten_on_a_lost_ack", "a lost ack keeps the attempt for the retry", C,
+       "        except errors.DomainError:\n            self.open.pop(lease.job_id, None)\n",
+       "        except BaseException:\n            self.open.pop(lease.job_id, None)\n",
+       LOST_ACK),
+    _m("job_refusal_remembered", "a refused completion forgets its attempt", C,
+       "        except errors.DomainError:\n            self.open.pop(lease.job_id, None)\n",
+       "        except errors.DomainError:\n", LOST_REFUSED),
     # --- lens R8: the job record holds no credential -----------------------------------
     _m("job_credential_in_the_request", "the job record's request half holds no key", C,
        "            capture.add(scrub_keys(request_line(request)))",

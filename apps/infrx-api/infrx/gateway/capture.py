@@ -39,7 +39,7 @@ from urllib.parse import urlsplit
 
 from starlette.responses import Response
 
-from ..contracts import wire
+from ..contracts import errors, wire
 from ..contracts.records import ConsentSnapshot, ExecutionMode, TraceEnvelope, TraceMode
 from .routes.validate import MEDIA_TOKEN, off_mode_policy
 
@@ -339,10 +339,14 @@ class JobCapture:
         return ref
 
     async def complete(self, lease, outcome):
+        """Forgets the attempt on a settlement or a refusal only: a lost ack (any other
+        failure) keeps it for the runner's identical retry, which may commit (lens R7)."""
         try:
             settled = await self.jobs.complete(lease, outcome)
-        finally:
-            held = self.open.pop(lease.job_id, None)
+        except errors.DomainError:
+            self.open.pop(lease.job_id, None)
+            raise
+        held = self.open.pop(lease.job_id, None)
         if held is not None:
             try:
                 await self.spool(*held)
