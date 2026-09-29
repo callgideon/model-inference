@@ -13,15 +13,27 @@
   ends. `off` wraps nothing; `minimal` is metadata only (the sink's no-op capture); an async
   request is answered 202 here and its output is the worker's (c). A trace failure is
   counted by the sink and never becomes the request's.
+* **Async output and shipping (c, proposed ruling).** The worker writes an async job's record
+  (the request line, then its output) into a spool of its own, `TRACE_SPOOL_DIR/jobs/<job
+  id>-<n>` - hidden (`.`-prefixed) while it writes, renamed once sealed and unlocked: one
+  writer per directory, the sink's lock. Only the gateway ships: every `SHIP_S` its lifespan
+  seals and ships its own spool, then each finished job spool it can lock, removed once
+  every segment is acked. One gateway process per `TRACE_SPOOL_DIR` (its sink's lock refuses
+  a second). The worker's `trace_pumps` keeps T3's retention and T2F's projection only.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import json
 import logging
+import os
 import time
+import uuid
 from collections import OrderedDict
 from datetime import datetime, timezone
+from pathlib import Path
 
 from starlette.responses import Response
 
@@ -35,6 +47,12 @@ CONSENT_TTL_S = 60.0
 #: Key ids are the tenant's to mint: the cache is bounded, oldest out.
 CONSENT_CACHE_MAX = 4096
 ORDER = (TraceMode.off, TraceMode.minimal, TraceMode.full)
+#: The gateway's ship cadence (the worker's former `TRACE_SHIP_S`): seals a quiet host's tail.
+SHIP_S = 10.0
+#: Under `TRACE_SPOOL_DIR`: the worker's per-job spools (c).
+JOBS_DIR = "jobs"
+#: Async attempts the worker remembers between `load_work` and `complete`.
+REMEMBER = 1024
 #: What the caller's credential becomes wherever it appears in a trace.
 REDACTED = b"[credential]"
 
@@ -201,7 +219,173 @@ class GatewayCapture:
         token = headers.get("authorization", "").removeprefix("Bearer ").strip().encode()
         return Captured(accepted, self.sink, request, token, self.limits)
 
+    async def ship_once(self) -> list:
+        """(c): seal and ship the gateway's own spool, then every finished job spool."""
+        await self.sink.flush()
+        await self.sink.rotate()
+        reports = [await self.shipper.ship()]
+        return reports + await ship_jobs(self.shipper, self.root / JOBS_DIR, self.limits)
+
+    async def pump(self, stop: asyncio.Event, every_s: float = SHIP_S) -> None:
+        """The lifespan's ship loop until `stop`; a failed pass is logged and retried."""
+        while not stop.is_set():
+            try:
+                await self.ship_once()
+            except Exception:                    # noqa: BLE001 - the next pass retries
+                log.exception("trace ship failed")
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), every_s)
+
     async def close(self) -> None:
         """Shutdown: what is held in memory is written, the tail sealed, the lock released."""
         await self.sink.flush()
         await self.sink.close(drop_queued=False)
+
+
+async def ship_jobs(shipper, root: Path, limits) -> list:
+    """Each finished job spool under `root` that this process can lock, shipped with the
+    gateway's projection, objects, pins and retention; removed once nothing is left. A
+    directory still held by its writer, or still hidden, is the next pass's."""
+    from ..traces.ship import Shipper
+    from ..traces.spool import SpoolTraceSink
+    names = await asyncio.to_thread(
+        lambda: sorted(p.name for p in root.iterdir() if p.is_dir()
+                       and not p.name.startswith(".")) if root.is_dir() else [])
+    reports = []
+    for name in names:
+        try:
+            sink = await asyncio.to_thread(SpoolTraceSink, Wall, limits=limits,
+                                           spool_dir=root / name)
+        except RuntimeError:                     # its writer still holds it
+            continue
+        except Exception:                        # noqa: BLE001 - one bad spool, not all
+            log.warning("job spool %s could not be opened", name, exc_info=True)
+            continue
+        try:
+            reports.append(await Shipper(sink, shipper.projection, shipper.objects,
+                                         pins=shipper.pins, retention=shipper.retention).ship())
+            await asyncio.to_thread(_remove, root / name)
+        finally:
+            await sink.close()
+    return reports
+
+
+def _remove(path: Path) -> None:
+    """A shipped job spool, while its lock is still held (nothing else can be writing). A
+    segment that did not ship keeps the directory: `rmdir` refuses a non-empty one."""
+    with contextlib.suppress(OSError):
+        (path / ".writer.lock").unlink()
+        path.rmdir()
+
+
+# --- (c) the worker's half: async job output ---------------------------------------------
+def capture_jobs(runner, root, clock, *, limits=None, remember: int = REMEMBER) -> None:
+    """Compose (c) into W's `AttemptRunner`: its `jobs` and `put_result` go through a
+    `JobCapture` over the spools under `root` (`TRACE_SPOOL_DIR`)."""
+    captured = JobCapture(runner.jobs, runner.put_result, root, clock, limits, remember)
+    runner.jobs, runner.put_result = captured, captured.put_result
+
+
+class JobCapture:
+    """The runner's job store, remembering each consented async attempt from `load_work` to
+    `complete` and spooling its record after a completion the store accepted. Everything
+    else is the store's; a trace failure is logged, never the job's."""
+
+    def __init__(self, jobs, put_result, root, clock, limits=None,
+                 remember: int = REMEMBER) -> None:
+        from ..contracts.limits import DEFAULTS
+        self.jobs, self._put_result, self.clock = jobs, put_result, clock
+        self.root, self.limits, self.remember = Path(root) / JOBS_DIR, limits or DEFAULTS, remember
+        self.open: OrderedDict = OrderedDict()           # job id -> [request, output]
+
+    def __getattr__(self, name):
+        return getattr(self.jobs, name)
+
+    async def load_work(self, lease):
+        work = await self.jobs.load_work(lease)
+        request = work.request
+        if request.execution_mode is ExecutionMode.async_ \
+                and request.trace_policy.trace_mode is not TraceMode.off:
+            self.open[lease.job_id] = [request, None]
+            self.open.move_to_end(lease.job_id)
+            while len(self.open) > self.remember:
+                self.open.popitem(last=False)
+        return work
+
+    async def put_result(self, job_id, text, lease=None):
+        ref = await self._put_result(job_id, text, lease)
+        held = self.open.get(job_id)
+        if held is not None:
+            held[1] = text
+        return ref
+
+    async def complete(self, lease, outcome):
+        try:
+            settled = await self.jobs.complete(lease, outcome)
+        finally:
+            held = self.open.pop(lease.job_id, None)
+        if held is not None:
+            try:
+                await self.spool(*held)
+            except Exception:                    # noqa: BLE001 - never the job's error
+                log.warning("trace capture of job %s failed", lease.job_id, exc_info=True)
+        return settled
+
+    async def spool(self, request, text) -> None:
+        """One record in a spool of its own, sealed, then renamed visible for the gateway.
+        ponytail: a sink (and a writer thread) per job; one per worker with a handoff
+        directory when a measured job rate makes that matter."""
+        from ..traces.spool import SpoolTraceSink
+        hidden = self.root / f".{request.request_id}-{uuid.uuid4().hex[:8]}"
+        sink = await asyncio.to_thread(SpoolTraceSink, self.clock, limits=self.limits,
+                                       spool_dir=hidden)
+        try:
+            capture = sink.open(request.request_id, request.org_id,
+                                request.trace_policy.trace_mode, request.deadline_at)
+            capture.add(request_line(request))
+            if text:
+                capture.add(text.encode())
+            await capture.finish(envelope(request, capture, self.limits, text is not None))
+            await sink.flush()
+        finally:
+            await sink.close(drop_queued=False)
+        await asyncio.to_thread(os.rename, hidden, hidden.with_name(hidden.name[1:]))
+
+
+# --- the composition (`TRACE_PUMPS`) ------------------------------------------------------
+def adapters(settings, connect) -> dict:
+    """`pilot.adapters_from_env`'s hook: nothing unless the deployment enables TRACE_PUMPS."""
+    return {"capture": build(settings, connect)} if settings.deployment.trace_pumps else {}
+
+
+def build(settings, connect) -> GatewayCapture:
+    """The gateway's capture: the consent source on the job store's pool, the spool on
+    `TRACE_SPOOL_DIR` and T2I's shipper (C2's holds, as the worker's retention). Refuses to
+    start, naming the setting, without the three settings, when another process holds the
+    spool, or when ClickHouse does not answer."""
+    from ..config import RuntimeMisconfigured, runtime_mode
+    from ..traces import ship
+    from ..traces.spool import SpoolTraceSink
+    from ..worker.__main__ import content_holds
+    mode, limits = runtime_mode(settings), settings.pilot
+    missing = [name for name, value in (("TRACE_SPOOL_DIR", limits.trace_spool_dir),
+                                        ("CLICKHOUSE_URL", limits.clickhouse_url),
+                                        ("S3_TRACE_BUCKET", limits.s3_trace_bucket))
+               if not value.strip()]
+    if missing:
+        raise RuntimeMisconfigured(mode, missing)
+    holds = content_holds(mode, connect)
+    try:
+        shipper = ship.build_shipper(limits, None, holds=holds,
+                                     endpoint_url=settings.deployment.s3_endpoint_url)
+    except Exception as failure:          # noqa: BLE001 - every failure refuses startup
+        raise RuntimeMisconfigured(mode, detail="TRACE_PUMPS: CLICKHOUSE_URL did not answer "
+                                   f"({type(failure).__name__})") from None
+    try:
+        shipper.spool = SpoolTraceSink(Wall, limits=limits)
+    except RuntimeError:
+        raise RuntimeMisconfigured(mode, ("TRACE_SPOOL_DIR",), detail="another process "
+                                   "spools there: one gateway process per TRACE_SPOOL_DIR") \
+            from None
+    return GatewayCapture(ConsentSource(connect), shipper.spool, shipper,
+                          Path(limits.trace_spool_dir), limits)

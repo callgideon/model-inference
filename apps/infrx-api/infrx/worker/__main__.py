@@ -43,11 +43,11 @@ index, the build-info gauge), so the two processes cannot disagree about a store
   bounded by `PROCESSING_CACHE_MAX_BYTES`, and the engine pins every file it opens from
   submit to terminal (a keeper without the pin could remove an input mid-attempt).
 
-* **Trace pumps** (WR-T-4, `TRACE_PUMPS`, off by default): T2I's shipper over a spool on
-  `TRACE_SPOOL_DIR` (rotated before each pass), T3's expire-then-sweep over the shipper's
-  retention, and T2F's feedback projection on this process's pool. Capture stays off: no
-  process adds to the spool until the capture wiring lands, and then the ship step moves to
-  the process that owns the spool (one writer per directory, `SpoolTraceSink`'s lock).
+* **Trace pumps** (WR-T-4, `TRACE_PUMPS`, off by default): T3's expire-then-sweep over the
+  shipper's retention and T2F's feedback projection on this process's pool. WR-C6-CAPTURE
+  (c): the gateway owns `TRACE_SPOOL_DIR` and ships (its lifespan, `gateway.capture`); this
+  process spools each consented async job's output under `TRACE_SPOOL_DIR/jobs` through its
+  runner (`capture.capture_jobs`) and never locks the gateway's directory.
 * **Lab evaluation** (WR-B-5, `LAB_EVAL_WORKER`, off by default, Lab-only): D2's
   `OutboxRelay` over D7's Lab outbox with `EvalRuns` as its scheduler, and `lab_recover` on
   a timer. It refuses to start until an evaluator source and a dev target source exist.
@@ -69,7 +69,7 @@ from ..evaluation import runner as evaluation
 from ..contracts import errors
 from ..contracts.records import OutboxKind
 from ..contracts.v2.money_units import CREDIT_REGIME
-from ..gateway import pilot
+from ..gateway import capture, pilot
 from ..media import fetch
 from ..media.attachments import PgAttachments
 from ..media.prepare import MediaPreparation, ProcessingCache
@@ -83,7 +83,6 @@ from ..state.outbox import OutboxRelay
 from ..traces import ship
 from ..traces.feedback import FeedbackProjector
 from ..traces.feedback.pg import PgFeedbackOutbox
-from ..traces.spool import SpoolTraceSink
 from .attempt import AttemptRunner
 from .engine import VllmEngine
 from .loop import WorkerLoop
@@ -177,6 +176,8 @@ def compose(settings, *, objects=None, index=None, evaluators=None, targets=None
                            engine=engine, clock=Wall, worker_id=worker_id,
                            count_prompt_tokens=lambda work: work.prompt_tokens,
                            put_result=store.put_result, limits=limits)
+    if deployment.trace_pumps:                           # WR-C6-CAPTURE (c), off by default
+        capture.capture_jobs(runner, limits.trace_spool_dir, Wall, limits=limits)
     scheduler = index if index is not None else pilot.valkey_index(limits)
     loop = WorkerLoop(scheduler=scheduler, runner=runner, worker_id=worker_id, limits=limits,
                       metrics=rt.metrics)     # E1B WR-4: each attempt's phase timings
@@ -251,7 +252,6 @@ async def expire_journal(journal) -> int:
 
 # --- WR-T-4 / WR-B-5 (composition lane, LW2): the trace pumps and the Lab eval worker ----
 # ponytail: fixed cadences; deployment settings when a measured backlog asks for them.
-TRACE_SHIP_S = 10.0              # T1 rotates on size; this seals a quiet host's tail too
 FEEDBACK_PROJECTION_S = 10.0     # T3's alert fires at 15 min of projection lag
 TRACE_RETENTION_S = 300.0        # the media retention's cadence (P-25)
 LAB_PUMP_S = 5.0
@@ -261,8 +261,9 @@ LAB_EVAL_LIMITS = evaluation.Limits(lease_s=30, max_attempts=3, dispatch_retries
 
 
 def trace_pumps(settings, mode, connect) -> dict:
-    """T3's WR-T-4 calls, by task name: `ship.build_shipper` over a spool of this
-    process's own, its retention and T2F's projector into that retention's projection."""
+    """T3's WR-T-4 calls, by task name: the retention `ship.build_shipper` composes and T2F's
+    projector into that retention's projection. No spool and no ship step here
+    (WR-C6-CAPTURE (c)): the gateway owns `TRACE_SPOOL_DIR` and ships it."""
     limits = settings.pilot
     missing = [name for name, value in (("TRACE_SPOOL_DIR", limits.trace_spool_dir),
                                         ("CLICKHOUSE_URL", limits.clickhouse_url),
@@ -272,8 +273,7 @@ def trace_pumps(settings, mode, connect) -> dict:
         raise RuntimeMisconfigured(mode, missing)
     holds = content_holds(mode, connect)                                # WR-C2-2
     try:
-        spool = SpoolTraceSink(Wall, limits=limits)
-        shipper = ship.build_shipper(limits, spool,
+        shipper = ship.build_shipper(limits, None,
                                      endpoint_url=settings.deployment.s3_endpoint_url,
                                      holds=holds)                       # WR-C2-2b
     except Exception as failure:          # noqa: BLE001 - every failure refuses startup
@@ -283,15 +283,10 @@ def trace_pumps(settings, mode, connect) -> dict:
     projector = FeedbackProjector(PgFeedbackOutbox(connect), retention.feedback,
                                   retention=retention)
 
-    async def ship_once():
-        await spool.rotate()
-        return await shipper.ship()
-
     async def retain():
         await retention.expire()
         return await retention.sweep()
-    return {"trace_ship": lambda: every(TRACE_SHIP_S, ship_once, "trace ship"),
-            "trace_retention": lambda: every(TRACE_RETENTION_S, retain, "trace retention"),
+    return {"trace_retention": lambda: every(TRACE_RETENTION_S, retain, "trace retention"),
             "feedback_projection": lambda: every(FEEDBACK_PROJECTION_S, projector.pump,
                                                  "feedback projection")}
 

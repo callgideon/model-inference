@@ -407,3 +407,356 @@ def test_an_answer_that_breaks_off_is_recorded_as_incomplete(tmp_path):
     first, cut = spooled(tmp_path, composed).records
     assert first.content_complete and not cut.content_complete
     assert cut.content_bytes > 0 and cut.request_id == first.request_id
+
+
+# --- (c) async output in the worker, shipped by the gateway ------------------------------
+# Proposed ruling (c): the worker writes an async job's record into a spool of its own,
+# `TRACE_SPOOL_DIR/jobs/<job id>-<n>` (hidden while it writes, renamed when sealed: one
+# writer per directory, the sink's lock); only the gateway ships (every `SHIP_S` in its
+# lifespan): its own spool, then each finished job spool it can lock, removed once acked.
+import pytest  # noqa: E402
+
+from infrx.contracts import errors  # noqa: E402
+from infrx.traces import ship  # noqa: E402
+
+from ..ship.test_ship import MemoryProjection, Objects  # noqa: E402
+
+TEXT = "the van is red"
+
+
+class Store:
+    """The worker's job store as the runner sees it: `load_work`, `complete`, `put_result`."""
+
+    def __init__(self, request, *, refuse: bool = False) -> None:
+        self.request, self.refuse, self.results = request, refuse, []
+
+    async def load_work(self, lease):
+        return SimpleNamespace(request=self.request)
+
+    async def put_result(self, job_id, text, lease=None):
+        self.results.append((job_id, text))
+        return f"infrx-result:{job_id}"
+
+    async def complete(self, lease, outcome):
+        if self.refuse:
+            raise errors.StaleLease("another worker holds the lease")
+        return "settled"
+
+    async def heartbeat(self, lease):
+        return "beat"
+
+
+def admitted(tmp_path, mode: TraceMode, prefer_async: bool = True):
+    """A request as the ingress admitted it (its policy `mode`)."""
+    client, composed, calls = gateway(tmp_path / "gw", mode)
+    headers = {**support.AUTH, **({"prefer": "respond-async"} if prefer_async else {})}
+    client.post(support.CHAT_PATH, headers=headers, json=said("describe the van"))
+    run(composed.close())
+    return calls[0]
+
+
+def worked(tmp_path, request, *, text=TEXT, root=None, **kw):
+    """One attempt through the worker's capture: load, (result,) complete. The runner."""
+    store = Store(request, **kw)
+    runner = SimpleNamespace(jobs=store, put_result=store.put_result)
+    capture.capture_jobs(runner, root or tmp_path / "spool", capture.Wall)
+    lease = SimpleNamespace(job_id=request.request_id)
+
+    async def attempt():
+        await runner.jobs.load_work(lease)
+        if text is not None:
+            assert await runner.put_result(request.request_id, text, lease) == \
+                f"infrx-result:{request.request_id}"
+        return await runner.jobs.complete(lease, "outcome")
+    return run(attempt()), runner, store
+
+
+def job_spools(tmp_path):
+    jobs = tmp_path / "spool" / capture.JOBS_DIR
+    return sorted(jobs.iterdir()) if jobs.is_dir() else []
+
+
+def test_an_async_jobs_output_is_spooled_by_the_worker_under_its_job_id(tmp_path):
+    """Oracle: the async output never captured (the worker drops it), written into the
+    gateway's directory (two writers), or left hidden (never shipped)."""
+    request = admitted(tmp_path, TraceMode.full)
+    settled, _, store = worked(tmp_path, request)
+    assert settled == "settled" and store.results == [(request.request_id, TEXT)]
+    spools = job_spools(tmp_path)
+    assert len(spools) == 1, spools
+    [spool] = spools
+    assert spool.name.startswith(f"{request.request_id}-")
+    scan = recover(spool)
+    [envelope], [content] = scan.records, scan.contents
+    assert (envelope.request_id, envelope.org_id, envelope.mode) == \
+        (request.request_id, support.ORG, TraceMode.full)
+    assert envelope.content_complete and content == request_line(request) + TEXT.encode()
+    assert not list((tmp_path / "spool").glob("trace-*"))        # never the gateway's own
+
+
+def request_line(request):
+    return capture.request_line(request)
+
+
+def test_the_worker_spools_only_consented_async_jobs(tmp_path):
+    """Oracle: a sync job spooled by the worker too (the gateway already has its record:
+    two for one request), or an unconsented job's output kept."""
+    worked(tmp_path, admitted(tmp_path / "sync", TraceMode.full, prefer_async=False))
+    worked(tmp_path, admitted(tmp_path / "off", TraceMode.off))
+    assert job_spools(tmp_path) == []
+
+
+def test_a_job_without_output_is_recorded_as_incomplete(tmp_path):
+    """Oracle: a failed job (no result) recorded as complete, or not recorded at all."""
+    request = admitted(tmp_path, TraceMode.full)
+    worked(tmp_path, request, text=None)
+    [spool] = job_spools(tmp_path)
+    [envelope] = recover(spool).records
+    assert not envelope.content_complete and envelope.request_id == request.request_id
+
+
+def test_a_refused_completion_spools_nothing_and_raises_as_before(tmp_path):
+    """Oracle: a record for an attempt that lost its lease (the winner writes its own), or
+    the refusal swallowed by the capture."""
+    request = admitted(tmp_path, TraceMode.full)
+    with pytest.raises(errors.StaleLease):
+        worked(tmp_path, request, refuse=True)
+    assert job_spools(tmp_path) == []
+
+
+def test_a_worker_capture_failure_never_fails_the_job(tmp_path):
+    """Oracle: a spool that cannot be written (the root is a file) fails the settlement."""
+    request = admitted(tmp_path, TraceMode.full)
+    blocked = tmp_path / "blocked"
+    blocked.write_text("not a directory")
+    settled, _, _ = worked(tmp_path, request, root=blocked)
+    assert settled == "settled"
+
+
+def test_the_worker_remembers_a_bounded_number_of_jobs(tmp_path):
+    """Oracle: an attempt that never completes (killed, lease lost) held for ever."""
+    request = admitted(tmp_path, TraceMode.full)
+    store = Store(request)
+    runner = SimpleNamespace(jobs=store, put_result=store.put_result)
+    capture.capture_jobs(runner, tmp_path / "spool", capture.Wall, remember=3)
+    for n in range(5):
+        run(runner.jobs.load_work(SimpleNamespace(job_id=f"job-{n}")))
+    assert list(runner.jobs.open) == ["job-2", "job-3", "job-4"]
+    assert run(runner.jobs.heartbeat(None)) == "beat"          # everything else is the store's
+
+
+def shipping(tmp_path, mode=TraceMode.full):
+    """(client, composed, projection): the gateway composed with a shipper over memory."""
+    client, composed, calls = gateway(tmp_path, mode)
+    projection, objects = MemoryProjection(), Objects()
+    composed.shipper = ship.Shipper(composed.sink, projection, objects)
+    return client, composed, projection, calls
+
+
+def test_the_gateway_ships_its_own_spool_and_every_finished_job_spool(tmp_path):
+    """Oracle: the job spools never shipped (async traces never reach the projection), the
+    gateway's own tail never sealed, or a shipped job spool left on disk."""
+    client, composed, projection, calls = shipping(tmp_path)
+    assert client.post(support.CHAT_PATH, headers=support.AUTH,
+                       json=said("describe")).status_code == 200
+    job = admitted(tmp_path, TraceMode.full)
+    worked(tmp_path, job)
+    run(composed.ship_once())
+    shipped = {(row.request_id, row.content_stored) for row in projection.inserted}
+    assert shipped == {(calls[0].request_id, True), (job.request_id, True)}
+    assert job_spools(tmp_path) == []
+    assert composed.sink.segments() == ()
+    run(composed.ship_once())
+    assert len(projection.inserted) == 2, "a second pass re-shipped"
+    run(composed.close())
+
+
+def test_a_job_spool_still_being_written_is_left_to_its_writer(tmp_path):
+    """Oracle: the gateway ships a directory whose writer still holds it (acking a segment
+    being appended), or a hidden one the worker has not sealed; or one spool it cannot open
+    stops every other spool from shipping."""
+    client, composed, projection, _ = shipping(tmp_path)
+    jobs = tmp_path / "spool" / capture.JOBS_DIR
+    held = SpoolTraceSink(capture.Wall, spool_dir=jobs / "held-1")
+    hidden = jobs / ".hidden-1"
+    hidden.mkdir()
+    bad = jobs / "0bad-1"                    # sorts first; this process cannot open it
+    bad.mkdir()
+    bad.chmod(0)
+    job = admitted(tmp_path, TraceMode.full)
+    worked(tmp_path, job)
+    try:
+        run(composed.ship_once())
+    finally:
+        bad.chmod(0o700)
+    assert (jobs / "held-1").is_dir() and hidden.is_dir() and bad.is_dir()
+    assert [row.request_id for row in projection.inserted] == [job.request_id]
+    run(held.close())
+    run(composed.close())
+
+
+def test_the_pump_ships_every_interval_until_stopped(tmp_path):
+    """Oracle: a lifespan that never ships (the o01 gap: records sit in the spool), or a
+    pump that outlives shutdown, or one failed pass ending shipping for the process."""
+    client, composed, projection, _ = shipping(tmp_path)
+    passes = []
+
+    async def once():
+        passes.append(1)
+        await asyncio.sleep(0)
+        if len(passes) == 1:
+            raise OSError("clickhouse did not answer")
+    composed.ship_once = once
+
+    async def lifetime():
+        stop = asyncio.Event()
+        task = asyncio.create_task(composed.pump(stop, every_s=0.001))
+        for _ in range(5000):                     # bounded: a pump that died fails, not hangs
+            if len(passes) >= 3 or task.done():
+                break
+            await asyncio.sleep(0.001)
+        stop.set()
+        await asyncio.wait_for(task, 1.0)
+    run(lifetime())
+    assert len(passes) >= 3
+    run(composed.close())
+
+
+# --- (d) the switch: TRACE_PUMPS composes the capture into the gateway ---------------------
+from infrx.config import RuntimeMisconfigured  # noqa: E402
+from infrx.gateway import pilot  # noqa: E402
+
+TRACE_SETTINGS = {"clickhouse_url": "http://ch.invalid:8123/infrx",
+                  "s3_trace_bucket": "infrx-traces"}
+
+
+def switched(tmp_path, on: bool = True, **pilot_settings):
+    config = support.settings(**{"trace_spool_dir": str(tmp_path / "spool"),
+                                 **TRACE_SETTINGS, **pilot_settings})
+    config.deployment = config.deployment.replace(trace_pumps=on,
+                                                  s3_endpoint_url="http://127.0.0.1:9")
+    return config
+
+
+def buildable(monkeypatch):
+    """`build`'s two collaborators that would connect (ClickHouse, C2's refs) recorded."""
+    from infrx.worker import __main__ as worker_main
+    built = {}
+
+    def shipper(limits, spool, **kw):
+        built.update(limits=limits, spool=spool, **kw)
+        return SimpleNamespace(spool=spool)
+    monkeypatch.setattr(ship, "build_shipper", shipper)
+    monkeypatch.setattr(worker_main, "content_holds", lambda mode, connect: ("holds", connect))
+    return built
+
+
+def test_trace_pumps_off_composes_no_capture(tmp_path):
+    """Oracle: the switch-off gateway builds a spool or a consent reader (E4's launched
+    process would lock a directory and read consent it never uses)."""
+    assert capture.adapters(switched(tmp_path, on=False), "connect") == {}
+    assert not (tmp_path / "spool").exists()
+
+
+@pytest.mark.parametrize("unset", ["trace_spool_dir", "clickhouse_url", "s3_trace_bucket"])
+def test_trace_pumps_on_refuses_without_its_settings(unset, tmp_path):
+    """Oracle: a switch that silently captures nowhere (or ships nowhere)."""
+    with pytest.raises(RuntimeMisconfigured) as refused:
+        capture.adapters(switched(tmp_path, **{unset: ""}), "connect")
+    assert unset.upper() in str(refused.value)
+
+
+def test_trace_pumps_on_composes_consent_spool_and_shipper(tmp_path, monkeypatch):
+    """Oracle: the consent read off the job store's pool, a spool elsewhere than
+    TRACE_SPOOL_DIR, the shipper without C2's holds or the deployment's endpoint."""
+    built = buildable(monkeypatch)
+    composed = capture.adapters(switched(tmp_path), "connect")["capture"]
+    assert composed.consent.connect == "connect"
+    assert composed.sink.spool_dir == tmp_path / "spool" and composed.shipper.spool is composed.sink
+    assert built.get("holds") == ("holds", "connect")
+    assert built["endpoint_url"] == "http://127.0.0.1:9"
+    assert built["limits"].clickhouse_url == TRACE_SETTINGS["clickhouse_url"]
+    run(composed.close())
+
+
+def test_one_gateway_process_per_spool_directory(tmp_path, monkeypatch):
+    """Oracle: a second gateway on the same TRACE_SPOOL_DIR (two writers: each adopts and
+    acks the other's live segments)."""
+    buildable(monkeypatch)
+    first = capture.build(switched(tmp_path), "connect")
+    with pytest.raises(RuntimeMisconfigured) as refused:
+        capture.build(switched(tmp_path), "connect")
+    assert "TRACE_SPOOL_DIR" in str(refused.value)
+    run(first.close())
+
+
+def test_the_pilot_composes_the_capture_and_its_lifespan_ships_then_closes(tmp_path):
+    """Oracle: the capture built but never handed to the ingress (policy off), the lifespan
+    that never runs the ship pump, or a shutdown that leaves the spool unflushed."""
+    from ...g.test_composition import composed as pilot_composed
+    from ...g.test_composition import rs, served
+    events = []
+
+    class Composed:
+        async def policy(self, auth, now):
+            return capture.off_mode_policy(auth.org_id, now)
+
+        def response(self, accepted, request, headers):
+            return accepted
+
+        async def pump(self, stop):
+            events.append("pump")
+            await stop.wait()
+            events.append("stopped")
+
+        async def close(self):
+            events.append("close")
+    fake = Composed()
+    rt, deps = pilot_composed(capture=fake)
+    assert deps.capture is fake and rt.lifetime.capture is fake
+
+    async def lifetime():
+        async with pilot.lifespan(served(rt, deps)):
+            for _ in range(1000):                 # bounded: a pump that never starts fails
+                if "pump" in events:
+                    break
+                await asyncio.sleep(0)
+    rs.run(lifetime())
+    assert events == ["pump", "stopped", "close"]
+    rt_off, deps_off = pilot_composed()
+    assert deps_off.capture is None and rt_off.lifetime.capture is None
+
+
+def test_a_job_spool_that_did_not_ship_stays_for_the_next_pass(tmp_path):
+    """Oracle: a job spool removed although its segment was held (ClickHouse down): the
+    record is gone before it reached the projection."""
+    from ..ship.test_ship import Projection
+    client, composed, projection, _ = shipping(tmp_path)
+    composed.shipper.projection = down = Projection(MemoryProjection())
+    down.down = True
+    job = admitted(tmp_path, TraceMode.full)
+    worked(tmp_path, job)
+    run(composed.ship_once())
+    assert len(job_spools(tmp_path)) == 1
+    down.down = False
+    run(composed.ship_once())
+    assert job_spools(tmp_path) == [] and \
+        [row.request_id for row in down.inner.inserted] == [job.request_id]
+    run(composed.close())
+
+
+def test_the_pilot_asks_the_switch_for_its_capture_adapters(tmp_path, monkeypatch):
+    """Oracle: `adapters_from_env` never composes the capture (TRACE_PUMPS on, and still no
+    consent, capture or ship), or composes it off another pool."""
+    from infrx.media.store import InMemoryObjectStore
+    asked = []
+
+    def adapters(settings, connect):
+        asked.append((settings, connect))
+        return {"capture": "the capture"}
+    monkeypatch.setattr(pilot.trace_capture, "adapters", adapters)
+    config = switched(tmp_path)
+    built = pilot.adapters_from_env(config, objects=InMemoryObjectStore())
+    assert built["capture"] == "the capture"
+    [(settings, connect)] = asked
+    assert settings is config and connect is built["jobs"]._connect

@@ -27,6 +27,7 @@ from tests.contracts.mutants import Mutant, Outcome, Result, Runner  # noqa: E40
 
 C = "gateway/capture.py"
 I = "gateway/routes/ingress.py"
+P = "gateway/pilot.py"
 
 LOWER = "test_a_consented_key_under_a_consenting_org_captures_at_the_lower_of_the_two"
 OPT_IN = "test_a_key_that_never_opted_in_or_an_org_without_consent_is_off"
@@ -51,6 +52,22 @@ ASYNC = "test_an_async_request_is_left_to_the_worker"
 KEEP = "test_a_capture_that_cannot_keep_the_record_never_fails_the_request"
 OPEN = "test_a_capture_that_cannot_open_never_fails_the_request"
 BROKEN = "test_an_answer_that_breaks_off_is_recorded_as_incomplete"
+ASYNC_OUT = "test_an_async_jobs_output_is_spooled_by_the_worker_under_its_job_id"
+WORKER_ONLY = "test_the_worker_spools_only_consented_async_jobs"
+NO_OUTPUT = "test_a_job_without_output_is_recorded_as_incomplete"
+REFUSED = "test_a_refused_completion_spools_nothing_and_raises_as_before"
+JOB_FAILS = "test_a_worker_capture_failure_never_fails_the_job"
+REMEMBER = "test_the_worker_remembers_a_bounded_number_of_jobs"
+SHIP_BOTH = "test_the_gateway_ships_its_own_spool_and_every_finished_job_spool"
+HELD = "test_a_job_spool_still_being_written_is_left_to_its_writer"
+PUMP = "test_the_pump_ships_every_interval_until_stopped"
+STAYS = "test_a_job_spool_that_did_not_ship_stays_for_the_next_pass"
+OFF = "test_trace_pumps_off_composes_no_capture"
+REFUSE = "test_trace_pumps_on_refuses_without_its_settings"
+COMPOSES = "test_trace_pumps_on_composes_consent_spool_and_shipper"
+ONE_GATEWAY = "test_one_gateway_process_per_spool_directory"
+PILOT = "test_the_pilot_composes_the_capture_and_its_lifespan_ships_then_closes"
+ADAPTERS = "test_the_pilot_asks_the_switch_for_its_capture_adapters"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -175,6 +192,113 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("hook_complete_when_lost", "content is complete only if the answer finished", C,
        "        content_complete=bool(held) and finished,", "        content_complete=bool(held),",
        BROKEN),
+    # --- (c) the worker's half ----------------------------------------------------------
+    _m("job_capture_sync_too", "the worker spools async jobs only (the gateway has sync)", C,
+       "        if request.execution_mode is ExecutionMode.async_ \\\n"
+       "                and request.trace_policy.trace_mode is not TraceMode.off:",
+       "        if request.trace_policy.trace_mode is not TraceMode.off:", WORKER_ONLY),
+    _m("job_capture_ignores_policy", "an unconsented job's output is never kept", C,
+       "        if request.execution_mode is ExecutionMode.async_ \\\n"
+       "                and request.trace_policy.trace_mode is not TraceMode.off:",
+       "        if request.execution_mode is ExecutionMode.async_:", WORKER_ONLY),
+    _m("job_capture_unbounded", "the remembered attempts are bounded", C,
+       "            while len(self.open) > self.remember:", "            while False:", REMEMBER),
+    _m("job_output_not_kept", "the job's output reaches its record", C,
+       "            held[1] = text", "            pass", ASYNC_OUT),
+    _m("job_output_not_added", "the job's output reaches its record", C,
+       "            if text:\n                capture.add(text.encode())\n", "", ASYNC_OUT),
+    _m("job_without_output_complete", "a job without output is incomplete", C,
+       "envelope(request, capture, self.limits, text is not None)",
+       "envelope(request, capture, self.limits, True)", NO_OUTPUT),
+    _m("job_spooled_before_the_store_accepted", "only a completion the store accepted is "
+       "recorded", C,
+       "        try:\n            settled = await self.jobs.complete(lease, outcome)\n"
+       "        finally:\n            held = self.open.pop(lease.job_id, None)\n",
+       "        held = self.open.pop(lease.job_id, None)\n        if held is not None:\n"
+       "            await self.spool(*held)\n            held = None\n"
+       "        settled = await self.jobs.complete(lease, outcome)\n", REFUSED),
+    _m("job_capture_failure_raises", "a trace failure is never the job's", C,
+       "            except Exception:                    # noqa: BLE001 - never the job's error",
+       "            except ZeroDivisionError:            # noqa: BLE001 - never the job's error",
+       JOB_FAILS, dies_by=("FileExistsError", "NotADirectoryError", "OSError")),
+    _m("job_spool_left_hidden", "a sealed job spool is renamed visible for the gateway", C,
+       "        await asyncio.to_thread(os.rename, hidden, hidden.with_name(hidden.name[1:]))",
+       "        pass", ASYNC_OUT, SHIP_BOTH),
+    _m("job_spool_in_the_gateways_directory", "job spools live under jobs/, never beside the "
+       "gateway's segments", C, "Path(root) / JOBS_DIR, limits or DEFAULTS",
+       "Path(root), limits or DEFAULTS", ASYNC_OUT),
+    # --- (c) the gateway ships -----------------------------------------------------------
+    _m("ship_never_ships_jobs", "the gateway ships the job spools too", C,
+       "        return reports + await ship_jobs(self.shipper, self.root / JOBS_DIR, self.limits)",
+       "        return reports", SHIP_BOTH),
+    _m("ship_never_seals", "each pass seals the gateway's tail", C,
+       "        await self.sink.flush()\n        await self.sink.rotate()\n",
+       "        await self.sink.flush()\n", SHIP_BOTH),
+    _m("ship_never_flushes", "each pass writes what is held in memory", C,
+       "        await self.sink.flush()\n        await self.sink.rotate()\n",
+       "        await self.sink.rotate()\n", SHIP_BOTH),
+    _m("ship_a_held_spool", "a spool its writer holds is never shipped", C,
+       "            sink = await asyncio.to_thread(SpoolTraceSink, Wall, limits=limits,\n"
+       "                                           spool_dir=root / name)",
+       "            sink = await asyncio.to_thread(SpoolTraceSink, Wall, limits=limits,\n"
+       "                                           spool_dir=root / name, lock_dir=False)",
+       HELD),
+    _m("ship_a_hidden_spool", "a hidden (unsealed) spool is never shipped", C,
+       "        lambda: sorted(p.name for p in root.iterdir() if p.is_dir()\n"
+       "                       and not p.name.startswith(\".\")) if root.is_dir() else [])",
+       "        lambda: sorted(p.name for p in root.iterdir() if p.is_dir()) "
+       "if root.is_dir() else [])", HELD),
+    _m("ship_one_bad_spool_stops_all", "one spool that cannot be opened is skipped", C,
+       "        except Exception:                        # noqa: BLE001 - one bad spool, not all",
+       "        except ZeroDivisionError:                # noqa: BLE001 - one bad spool, not all",
+       HELD, dies_by=("PermissionError",)),
+    _m("ship_leaves_shipped_spools", "a shipped job spool is removed", C,
+       "            await asyncio.to_thread(_remove, root / name)", "            pass",
+       SHIP_BOTH),
+    _m("ship_removes_unshipped_spools", "a spool that did not ship stays", C,
+       "        path.rmdir()", "        __import__(\"shutil\").rmtree(path)", STAYS),
+    _m("pump_dies_on_a_failed_pass", "one failed pass never ends shipping", C,
+       "            except Exception:                    # noqa: BLE001 - the next pass retries",
+       "            except ZeroDivisionError:            # noqa: BLE001 - the next pass retries",
+       PUMP, dies_by=("OSError",)),
+    _m("pump_outlives_stop", "the pump ends at shutdown", C,
+       "        while not stop.is_set():\n            try:\n                await self.ship_once()",
+       "        while True:\n            try:\n                await self.ship_once()",
+       PUMP, dies_by=("TimeoutError",)),
+    # --- (d) the switch and the composition ------------------------------------------------
+    _m("switch_ignored", "TRACE_PUMPS off composes nothing", C,
+       "if settings.deployment.trace_pumps else {}", "if True else {}", OFF,
+       dies_by=("RuntimeMisconfigured",)),
+    _m("switch_settings_not_required", "TRACE_PUMPS on refuses without its settings", C,
+       "    if missing:\n        raise RuntimeMisconfigured(mode, missing)\n    holds = ",
+       "    holds = ", REFUSE, dies_by=("RuntimeMisconfigured", "AttributeError", "ValueError")),
+    _m("build_consent_off_the_pool", "consent is read on the job store's pool", C,
+       "    return GatewayCapture(ConsentSource(connect),", "    return GatewayCapture(ConsentSource(None),",
+       COMPOSES),
+    _m("build_without_holds", "the gateway's shipper holds what C2 holds", C,
+       "        shipper = ship.build_shipper(limits, None, holds=holds,",
+       "        shipper = ship.build_shipper(limits, None,", COMPOSES),
+    _m("build_endpoint_ignored", "the trace bucket at the deployment's endpoint", C,
+       "                                     endpoint_url=settings.deployment.s3_endpoint_url)",
+       "                                     endpoint_url=\"\")", COMPOSES),
+    _m("build_two_gateways", "one gateway process per TRACE_SPOOL_DIR", C,
+       "        shipper.spool = SpoolTraceSink(Wall, limits=limits)",
+       "        shipper.spool = SpoolTraceSink(Wall, limits=limits, lock_dir=False)",
+       ONE_GATEWAY),
+    _m("pilot_capture_not_handed_to_the_ingress", "the composed capture is the ingress's", P,
+       "                       capture=capture,\n", "", PILOT),
+    _m("pilot_lifetime_without_capture", "the lifespan knows the capture", P,
+       "                           relay=relay, capture=capture)", "                           relay=relay)",
+       PILOT, dies_by=("AttributeError",)),
+    _m("pilot_never_pumps", "the lifespan runs the ship pump", P,
+       "        lifetime.tasks.append(asyncio.create_task(lifetime.capture.pump(stop)))",
+       "        pass", PILOT),
+    _m("pilot_never_closes", "shutdown flushes and seals the spool", P,
+       "            await lifetime.capture.close()          # flushed and sealed for the next boot",
+       "            pass", PILOT),
+    _m("pilot_never_asks_the_switch", "adapters_from_env composes the capture", P,
+       "                    **trace_capture.adapters(settings, connect),\n", "", ADAPTERS,
+       dies_by=("KeyError",)),
 )
 
 #: Killed in process against real PostgreSQL (`kill_in_process`): cases are `check_*` names.
