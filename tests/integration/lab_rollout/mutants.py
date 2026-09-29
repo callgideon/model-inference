@@ -129,7 +129,9 @@ F3 = "infrx/contracts/lab/records.py"
 B2 = "infrx/evaluation/reports/__init__.py"
 G = "infrx/gateway/pilot.py"
 D9 = "../app/supabase/migrations/0043_lab_reads_and_proposals.sql"
+D44 = "../app/supabase/migrations/0044_lab_control_reads.sql"
 D45 = "../app/supabase/migrations/0045_lab_serving_ref_identity.sql"
+L3S = "infrx/state/lab_control.py"
 
 K01 = "test_k01_routing_off_serves_todays_request_over_a_live_release"
 K01_IDENTITY = "test_k01_a_candidate_ref_resolves_through_0045_and_matches_l3s_own_computation"
@@ -148,6 +150,7 @@ K05_SLICE = "test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back"
 K05_GAPS = "test_k05_missing_or_stale_evidence_never_expands"
 K05_SPEND = "test_k05_overspend_rolls_back_and_units_never_mix"
 K06_PROMOTED = "test_k06_an_emergency_rollback_moves_a_promoted_alias_back"
+K06_READS = "test_k06_the_worlds_alias_read_is_the_real_control_store_on_its_login"
 K07_STORED = "test_k07_a_variant_is_probed_compared_and_stored"
 K07_REFUSED = "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"
 
@@ -207,6 +210,14 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_converge_by_full_ref", "R2 recognises a promoted candidate by serving identity "
        "(R216, E8L-F2): L3's promotion mints a fresh deployment revision", R2,
        "    return f\"{head.rpartition(':')[0]}@{digest}\"", "    return ref", K06_PROMOTED),
+    # WR-E8L-3: the world's alias read is the real PgControlStore on 0044's control login
+    _m("st_alias_answers_a_superseded_listing", "an endpoint's alias is the newest CURRENT "
+       "listing (R207): an alias that moved off answers nothing there", L3S,
+       '"and l.version = (select max(v.version) "', '"and l.version >= (select min(v.version) "',
+       K06_READS),
+    _m("st_control_login_lacks_the_listings_read", "the reads run on 0044's infrx_lab_control "
+       "login, which holds the catalog listings read", D44,
+       "grant select on infrx.catalog_listings to infrx_lab_control;", "select 1;", K06_READS),
     _m("st_error_rate_ignored", "an error-rate breach rolls back", R2,
        "    if cand.errors > plan.max_error_rate * cand.requests:", "    if False:", K04_ONCE),
     _m("st_latency_ignored", "a p99 breach rolls back", R2,

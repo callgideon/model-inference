@@ -297,6 +297,75 @@ def test_k06_an_emergency_rollback_moves_a_promoted_alias_back(lab, workdir):
         lab.restore_alias(listed[0])
 
 
+def test_k06_the_worlds_alias_read_is_the_real_control_store_on_its_login(lab, workdir):
+    """WR-E8L-3: the alias R2 converges is read through the real `PgControlStore` on 0044's
+    `infrx_lab_control` login (what `pilot.control_serving` composes), never a stand-in. R207's
+    oracle: an alias that moved to another endpoint leaves its old listing behind (0007 keeps
+    history), and the old endpoint then answers nothing - a stand-in reading "the highest
+    listing version on this endpoint" still answers the moved alias there."""
+    alias, ids = "nemostation/e8l-moved", {k: lw.uid(n, 0xe07) for n, k in enumerate(
+        ("m", "v", "s", "ep_a", "ep_b", "dep_a", "dep_b"), 1)}
+    params = {**ids, "p": lab.NEMO, "base": lab.cc.MODEL, "base_s": lab.cc.SERVING,
+              "alias": alias}
+    for statement in (
+        "insert into public.models (id, name, provider, description, status, base_url, "
+        "served_model, input_usd_per_m, output_usd_per_m, context_tokens, input_modalities, "
+        "output_modalities, model_uuid, provider_org_id) values (%(alias)s, 's', 's', 's', "
+        "'live', 'https://s.example', 's', 1, 1, 1024, '{text}', '{text}', %(m)s, %(p)s)",
+        "insert into infrx.model_versions (model_version_id, model_id, provider_org_id, "
+        "model_repo, model_commit, weight_shard_digests, tokenizer_digest, "
+        "chat_template_digest, digest_source, created_by) select %(v)s, %(m)s, %(p)s, "
+        "model_repo, model_commit, weight_shard_digests, tokenizer_digest, "
+        "chat_template_digest, digest_source, 'e8l' from infrx.model_versions "
+        "where model_id = %(base)s limit 1",
+        "insert into infrx.serving_versions (serving_version_id, model_version_id, model_id, "
+        "provider_org_id, revision_label, prompt_harness_ref, preprocessor_profile_version, "
+        "runtime_image_ref, runtime_image_digest, engine_options_digest, precision, "
+        "capability, created_by) select %(s)s, %(v)s, %(m)s, provider_org_id, 'moved-1', "
+        "prompt_harness_ref, preprocessor_profile_version, runtime_image_ref, "
+        "runtime_image_digest, engine_options_digest, precision, capability, 'e8l' "
+        "from infrx.serving_versions where serving_version_id = %(base_s)s",
+        "insert into infrx.endpoints (endpoint_id, provider_org_id, name, environment, "
+        "created_by) values (%(ep_a)s, %(p)s, 'e8l-moved-a', 'prod', 'e8l'), "
+        "(%(ep_b)s, %(p)s, 'e8l-moved-b', 'prod', 'e8l')",
+        "insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id, "
+        "provider_org_id, environment, serving_version_id, visibility, state, "
+        "max_input_tokens, max_output_tokens, created_by) values "
+        "(%(dep_a)s, %(ep_a)s, %(p)s, 'prod', %(s)s, 'public', 'active', 1, 1, 'e8l'), "
+        "(%(dep_b)s, %(ep_b)s, %(p)s, 'prod', %(s)s, 'public', 'active', 1, 1, 'e8l')",
+        "insert into infrx.rate_card_versions (rate_card_version, model_id, "
+        "deployment_revision_id, serving_version_id, input_rate_per_million, "
+        "output_rate_per_million, effective_at, approved_by, provisional) values "
+        "('rc_e8l_moved_1', %(m)s, %(dep_a)s, %(s)s, 400, 1200, infrx.now(), 'e8l', true), "
+        "('rc_e8l_moved_2', %(m)s, %(dep_b)s, %(s)s, 400, 1200, infrx.now(), 'e8l', true)",
+        "insert into infrx.catalog_listings (public_model_id, version, model_id, "
+        "deployment_revision_id, serving_version_id, rate_card_version, effective_at, "
+        "approved_by, created_at) values "
+        "(%(alias)s, 1, %(m)s, %(dep_a)s, %(s)s, 'rc_e8l_moved_1', infrx.now(), 'e8l', "
+        "infrx.now()), (%(alias)s, 2, %(m)s, %(dep_b)s, %(s)s, 'rc_e8l_moved_2', infrx.now(), "
+        "'e8l', infrx.now() + interval '1 second')"):
+        lab.conn.execute(statement, params)
+    reads = lab.serving().reads
+
+    def answer(coro):
+        try:
+            return run(coro)
+        except Exception as refused:                    # noqa: BLE001 - the login's refusal
+            return type(refused).__name__
+    listed = answer(reads.listing_versions(alias))
+    got = {"moved_off": answer(reads.endpoint_alias(ids["ep_a"])),
+           "current": answer(reads.endpoint_alias(ids["ep_b"])),
+           "versions": listed if isinstance(listed, str) else
+           [(x.version, x.deployment_revision_id) for x in listed],
+           "reads": type(reads).__name__}
+    lw.save(workdir, "reads.json", got)
+    assert got["moved_off"] is None, (
+        f"{alias} moved off {ids['ep_a']} (its current listing v2 is on {ids['ep_b']}): the "
+        f"old endpoint answers nothing under R207, the world's reads answered {got}")
+    assert got["current"] == alias, got
+    assert got["versions"] == [(1, ids["dep_a"]), (2, ids["dep_b"])], got
+
+
 # ------------------------------------------------------------------------------------ k09
 def test_k09_the_controller_process_restarted_mid_rollout(lab, workdir):
     """composition-2 landed `python -m infrx.lab.workers rollout emergency-rollback
