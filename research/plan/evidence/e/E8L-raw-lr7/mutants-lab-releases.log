@@ -1,0 +1,20 @@
+.......................................F...........                      [100%]
+=================================== FAILURES ===================================
+______________ test_mutant_is_killed[verdict_of_nothing_assigned] ______________
+
+mutant = Mutant(name='verdict_of_nothing_assigned', invariant='nothing assigned is null (R244), never an evaluation of no Live'... None\n', cases=('test_lab_releases__nothing_assigned_or_a_refused_unit_reads_no_verdict',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: verdict_of_nothing_assigned is broken_runner (nothing assigned is null (R244), never an evaluation of no Live): undeclared exception deaths ['AttributeError@pilot.py']: 1 failed, 17 deselected, 2 warnings in 2.85s. The cases ['test_lab_releases__nothing_assigned_or_a_refused_unit_reads_no_verdict'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="undeclared exception deaths ['AttributeError@pilot.py']: 1 failed, 17 deselected, 2 warnings in 2.85s").killed
+
+tests/g/lab_releases/test_mutants.py:55: AssertionError
+=========================== short test summary info ============================
+FAILED tests/g/lab_releases/test_mutants.py::test_mutant_is_killed[verdict_of_nothing_assigned]
+1 failed, 50 passed in 282.60s (0:04:42)
