@@ -45,7 +45,7 @@
 | 4 | `INFRX_MUTANTS=all .venv/bin/python -m pytest -q tests/w/test_lab_workers_mutants.py tests/r/control/test_mutants.py` | 90843622 | 0 | **219 passed, 0 survivors** (3 new `lw_rollout_*` + 1 re-cut `lw_rollout_live_by_default`; 7 new `r2_live_*`) |
 | 5 | **E4, every switch OFF:** `INFRX_D_TASK=r2 INFRX_D2_VALKEY_PORT=57533 INFRX_D2_VALKEY_CONTAINER=infrx-r1-valkey .venv/bin/python -m pytest -q -rs tests/g tests/w tests/contracts tests/i/test_packaging.py` | 90843622 | 0 | **2830 passed, 26 skipped, 0 failed** (24m02s; the floor is ≥ 2828). The skips are key/stack-scoped as in COMPOSITION-6 (other keys' PG, the t2f proof, empty mutant parameter sets) |
 | 6 | `INFRX_D_TASK=r1 pytest -q -rs tests/d/test_code_mutants_live.py tests/d/test_c6_reads.py tests/d/test_d9_release.py tests/d/test_d9_rollout.py tests/d/test_d8_requests.py tests/d/test_d7_lab_data.py tests/d/test_upgrade_lab.py tests/d/test_port_d10.py tests/r` | 90843622 | 0 | 181 passed, 0 skipped (incl. the 0054 SQL list again on r1, and R1's routing PG) |
-| 7 | `INFRX_D_TASK=r1 pytest -q tests/d/test_reads.py` (the runtime's exact function surface) | 90843622 | 0 | 42 passed, 3 xfailed (0054 is not executable by infrx_runtime) |
+| 7 | `INFRX_D_TASK=r1 pytest -q tests/d/test_reads.py` (the runtime's exact function surface) | 90843622 | 0 | 42 passed, 3 xfailed (the three strict xfails are the CREDIT JobStore suite's PENDING cases, which predate 0054; corrected at merge #52, RV-1) |
 | 8 | `pytest tests/i/test_known_good_proof.py tests/i/test_migrate.py tests/i/test_release_bundle.py tests/i/lab_pipeline tests/i/lab_rollout tests/i/lab` | 90843622 | 0 | 112 passed, 1 xfailed (0054 does not move the R151 proofs) |
 | 9 | `pytest tests/integration/lab_{rollout,improve,local,evaluate}/test_mutants.py -k "well_formed or every_case or anchor or declared or known"` (repo root) | 90843622 | 0 | 12 passed. Every E8L anchor on the pass (`live(item) if …`, `except errors.DependencyUnavailable`, `releases_in(("running", "rolled_back")`, `plan_key`) is intact |
 | 10 | `pytest tests/integration/test_harness.py` (repo root) | 7b689871 | 1 | 46 passed, 1 failed: `test_nothing_in_this_directory_points_at_production`, which flags `test_certify.py`/`mutants.py`/`test_create_test_user.py`. Those files are not this lane's and the case is unrelated to the pin; the pin case (`…migrations…`) passes |
@@ -177,4 +177,33 @@
 | `INFRX_D_TASK=r2 uv run --frozen pytest -q tests/r tests/w/test_lab_workers.py tests/d/test_code_mutants_live.py` | 0 | 144 passed, 4 skipped (the r1-only routing PG cases) |
 | `INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/r/control/test_mutants.py` | 0 | 81 passed, 0 survivors (`r2_live_health_invented` killed) |
 
-No production code changed, so the E4 figure of 2830/0 at 1f68d35 still stands.
+No production code changed, so the E4 figure of 2830/0 still stands. (Corrected at merge #52, LIVE-4: E4 ran at `90843622`, step 3's head; `1f68d35` adds only the Makefile line, so the code under tests/g, tests/w and tests/contracts is unchanged at `1f68d35`.)
+
+## Merge #52 (codex/w5-merge-52, coordinator)
+
+- Merged `6aae4bbc` onto `1c63776d` with `--no-ff`. There were no conflicts.
+- Evidence minors:
+  - **LIVE-4.** Row 5's E4 (2830 passed / 0 failed) ran at `90843622`, step 3's head. The header's code head `1f68d35` differs only by the Makefile line, so the code in the tests/g, tests/w and tests/contracts scope is unchanged. The fix-round sentence is corrected to say so.
+  - **RV-1.** Row 7's three `test_reads` xfails are the CREDIT JobStore suite's strict PENDING cases (`test_credit_jobstore_conformance.PENDING`). They predate 0054. The row is corrected.
+  - **RV-2.** Commit `7b689871`'s message says "21 mutants", but the list it added has 20. Row 1 already records this. The message is history and stays as written.
+- Wirings (one commit, `lab-live wirings: …`), in 0054 (still LOCAL-ONLY, R151/R201) and `tests/d/test_code_mutants_live.py`:
+  - **RV-4.** The unit is read over terminal jobs only, like every other field. A revision with only queued jobs now reads `[]` (held). UNITS check + mutant `live_units_of_queued_jobs`.
+  - **LIVE-2.** Two candidates, one active and one retired, give `candidate_healthy` False in SQL and on the store. HEALTH check + mutant `live_one_candidate_healthy_is_enough` (`bool_and` → `bool_or`).
+  - **LIVE-3.** `invalid_media` and `client_disconnected` still count as requests and are never errors. `engine_error` is still an error. New check `check_customer_caused_failures_are_not_candidate_errors`, with mutants `live_invalid_media_is_an_error` and `live_disconnect_is_an_error`. The exclusion applies to both arms, so the baseline and candidate compare like for like.
+  - **RV-3.** 0033 indexes `lab_rollout_assignments` only by its primary key `(policy_id, request_id)`, so 0054 adds `lab_rollout_assignments_policy_ref` (`create index if not exists`). The rollback note names it.
+  - Anchors re-cut for the moved text: `live_units_of_any_revision`, `live_queued_is_a_request`, `live_cancel_is_an_error`, `live_expired_not_an_error`.
+  - The list is now 6 PG checks and 24 SQL mutants.
+
+## Coordinator rulings
+
+- **R246.** A release's budget is spent by its candidate arm. R2's `Live.spent` is the candidate arm's settled spend: the traffic the release adds. The baseline's spend is read per arm, but it is never charged to the release.
+- **R247.** Health "ready" means deployment state `ready_private` or `active`. Every candidate must be ready (`bool_and`), and a ref naming no deployment is unhealthy. Customer-caused failure classes (`invalid_media`, `client_disconnected`) are not candidate errors (LIVE-3).
+- **R248.** A unit refusal is counted `failed`, not held. A plan whose budget unit differs from the jobs' settled unit, or legacy USD, is a misconfiguration that R2 refuses on every pass. It is logged and never decided.
+
+## Carried
+
+- **WR-LIVE-K09** → lane lab-rollout-6, after lab-rollout-5 merges. The exact diff is under "Wiring requests" above.
+- **WR-LIVE-DECIDE** and **WR-LIVE-PAGE** → lane composition-7.
+- **PG expand verdict.** The DB clock is frozen in the D worlds, so an `expand` over real Live has unit-level proof only (`test_control.py`). E8L's breach half runs on the real clock: note it there.
+
+Rulings: R246–R248 numbered at the lab-live merge on codex/w5-merge-52 (08 §10, after R245); next free R249.

@@ -49,10 +49,12 @@ def ref_of(conn, deployment: str) -> str:
     return conn.execute("select infrx.lab_serving_ref(%s)", (deployment,)).fetchone()[0]
 
 
-def launch(conn, tag: int, candidate: str) -> tuple[str, dict]:
-    """A NEMO canary revision on its own endpoint, `candidate` its one candidate, started."""
+def launch(conn, tag: int, *candidates: str) -> tuple[str, dict]:
+    """A NEMO canary revision on its own endpoint, `candidates` its candidates (5,000 bp
+    between them), started."""
     body = {**d9.policy(uid(tag, 0xb0), weights=(5_000,), endpoint=uid(tag, 0xe0)),
-            "candidates": [{"serving_ref": candidate, "weight_bp": 5_000}]}
+            "candidates": [{"serving_ref": c, "weight_bp": 5_000 // len(candidates)}
+                           for c in candidates]}
     ref = t.publish(conn, body)
     ok(conn, "lab_release_start", {"provider_org_id": NEMO, "policy_ref": ref,
                                    "plan_digest": "sha256:" + "a1" * 32, "decided_by": d9.USER,
@@ -62,10 +64,11 @@ def launch(conn, tag: int, candidate: str) -> tuple[str, dict]:
 
 def job(conn, ref: str, body: dict, rid: str, serving: str, state: str, *, ms: int = 10,
         charged: str | None = None, feedback: tuple[str, ...] = (),
-        regime: str = "credit") -> None:
+        regime: str = "credit", cause: str | None = None) -> None:
     """One admitted job assigned to `serving` under revision `ref`: terminal `ms` after its
     admission (5 s after it was created) unless `queued`; `charged` its settled CREDIT debit (or USD `debit` on a
-    legacy_usd job); a T2F feedback row per author role in `feedback`."""
+    legacy_usd job); a T2F feedback row per author role in `feedback`; `cause` the terminal
+    cause when not the state's default."""
     org = cc.personal_org(conn, cc.CONSUMER_1)
     with conn.transaction():
         conn.execute("set local session_replication_role = replica")
@@ -82,7 +85,7 @@ def job(conn, ref: str, body: dict, rid: str, serving: str, state: str, *, ms: i
                 "'settled', usage_certainty = 'authoritative', result_ref = 'r', admitted_at = admitted_at + interval '5 seconds', settled_at = "
                 "admitted_at + interval '5 seconds' + make_interval(secs => %s / 1000.0), "
                 "debit = %s where request_id = %s",
-                (state, TERMINAL_CAUSE[state], ms,
+                (state, cause or TERMINAL_CAUSE[state], ms,
                  charged if regime == "legacy_usd" and charged else 0, rid))
         if charged and regime == "credit":
             conn.execute("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
@@ -194,7 +197,18 @@ def check_units_never_mix(conn) -> str:
         {"unit": "USD", "value": "0.00000000"}, {"unit": "USD", "value": "2.00000000"}]
     with pytest.raises(errors.InvalidRequest, match="USD"):
         asyncio.run(store(conn).live(usd))
-    return "CREDIT + USD refused; USD alone read as USD and refused by the store"
+    # RV-4: the unit is read over terminal jobs only, like every other field - a queued
+    # legacy job beside a terminal CREDIT one neither mixes the units nor is observed
+    queued, qbody = launch(conn, 0x4b, candidate)
+    job(conn, queued, qbody, uid(1, 0x4bc), candidate, "succeeded", charged="1.00000000")
+    job(conn, queued, qbody, uid(2, 0x4bc), candidate, "queued", regime="legacy_usd")
+    assert [r["spent"] for r in live(conn, queued)] == [
+        {"unit": "CREDIT", "value": "0.00000000"}, {"unit": "CREDIT", "value": "1.00000000"}]
+    only, obody = launch(conn, 0x4c, candidate)
+    job(conn, only, obody, uid(1, 0x4cc), candidate, "queued")
+    assert live(conn, only) == [], "a revision with only queued jobs was observed"
+    return ("CREDIT + USD refused; USD alone read as USD and refused by the store; the unit "
+            "is read over terminal jobs only")
 
 
 def check_the_candidate_is_healthy_only_on_a_ready_deployment(conn) -> str:
@@ -216,7 +230,32 @@ def check_the_candidate_is_healthy_only_on_a_ready_deployment(conn) -> str:
             [asyncio.run(store(conn).live(ref)).candidate_healthy]        # 0-LIVE-1: the port
     assert seen == {0x46: [True, True, True], 0x47: [False, False, False],
                     0x48: [False, False, False]}, seen
-    return "active healthy; retired and unknown deployments unhealthy, in SQL and on the store's Live"
+    # LIVE-2 (R247): every candidate must be ready - one retired beside an active one is not
+    both, bbody = launch(conn, 0x4a, active, ref_of(conn, retired_id))
+    job(conn, both, bbody, uid(1, 0x4ac), active, "succeeded")
+    assert [r["candidate_healthy"] for r in live(conn, both)] == [False, False] and \
+        asyncio.run(store(conn).live(both)).candidate_healthy is False, live(conn, both)
+    return ("active healthy; retired and unknown deployments unhealthy, in SQL and on the "
+            "store's Live; one retired candidate of two makes the release unhealthy")
+
+
+def check_customer_caused_failures_are_not_candidate_errors(conn) -> str:
+    """LIVE-3 (R247, coordinator decision): the customer-caused failure classes
+    (`invalid_media`, `client_disconnected` - infrx.contracts.records.TerminalCause) are not
+    the candidate's fault: they are requests, never errors. A platform failure still is.
+    Commits (tag 0x49)."""
+    candidate = ref_of(conn, cc.DEV_DEPLOYMENT)
+    ref, body = launch(conn, 0x49, candidate)
+    for n, (state, cause) in enumerate((("failed", "invalid_media"),
+                                        ("failed", "client_disconnected"),
+                                        ("failed", "engine_error"),
+                                        ("succeeded", None)), 1):
+        job(conn, ref, body, uid(n, 0x49c), candidate, state, cause=cause)
+    c = live(conn, ref)[1]
+    assert (c["requests"], c["errors"]) == (4, 1), c
+    got = asyncio.run(store(conn).live(ref)).candidate
+    assert (got.requests, got.errors) == (4, 1), got
+    return "invalid_media + client_disconnected are requests, not errors; engine_error is one"
 
 
 CHECKS = {c.__name__: c for c in (
@@ -224,8 +263,9 @@ CHECKS = {c.__name__: c for c in (
     check_live_is_read_per_arm_from_the_assigned_terminal_jobs,
     check_a_revision_without_assigned_jobs_is_empty,
     check_units_never_mix,
-    check_the_candidate_is_healthy_only_on_a_ready_deployment)}
-ROLES, PER_ARM, EMPTY, UNITS, HEALTH = CHECKS
+    check_the_candidate_is_healthy_only_on_a_ready_deployment,
+    check_customer_caused_failures_are_not_candidate_errors)}
+ROLES, PER_ARM, EMPTY, UNITS, HEALTH, CUSTOMER = CHECKS
 
 
 # ----------------------------------------------------------------------------- mutants
@@ -240,16 +280,17 @@ SQL_MUTANTS = (
     _s("live_any_revision", "       where a.policy_ref = p_args->>'policy_ref'\n         and",
        "       where", PER_ARM, "another revision's requests and errors decide this release"),
     _s("live_units_of_any_revision", "                    where a.policy_ref = p_args->>"
-       "'policy_ref');", "                   );", UNITS,
+       "'policy_ref'\n                      and j.state in",
+       "                    where j.state in", UNITS,
        "another revision's jobs decide this one's unit (a legacy job elsewhere refuses it)"),
     _s("live_queued_is_a_request",
-       "         and j.state in ('succeeded', 'failed', 'cancelled', 'expired'))",
-       "         and true)", PER_ARM, "a request still queued counts as a success"),
-    _s("live_cancel_is_an_error", "(where t.state in ('failed', 'expired'))",
-       "(where t.state in ('failed', 'expired', 'cancelled'))", PER_ARM,
+       "\n         and j.state in ('succeeded', 'failed', 'cancelled', 'expired'))",
+       "\n         and true)", PER_ARM, "a request still queued counts as a success"),
+    _s("live_cancel_is_an_error", "(where t.state in ('failed', 'expired')\n",
+       "(where t.state in ('failed', 'expired', 'cancelled')\n", PER_ARM,
        "a user's cancel rolls the candidate back"),
-    _s("live_expired_not_an_error", "(where t.state in ('failed', 'expired'))",
-       "(where t.state in ('failed'))", PER_ARM, "an expired request hides the breach"),
+    _s("live_expired_not_an_error", "(where t.state in ('failed', 'expired')\n",
+       "(where t.state in ('failed')\n", PER_ARM, "an expired request hides the breach"),
     _s("live_p99_is_the_max", "percentile_disc(0.99)\n", "percentile_disc(1.0)\n", PER_ARM, "one outlier reads as the p99 and rolls a healthy candidate back"),
     _s("live_p99_from_queue", "j.settled_at - j.admitted_at", "j.settled_at - j.created_at",
        PER_ARM, "latency measured from another instant than admission"),
@@ -284,6 +325,17 @@ SQL_MUTANTS = (
        "a candidate naming no deployment reads as healthy"),
     _s("live_active_unhealthy", "d.state in ('ready_private', 'active')",
        "d.state in ('ready_private')", HEALTH, "a published candidate reads as unhealthy"),
+    # merge #52 wirings (WR-LIVE-RV4, LIVE-2, LIVE-3)
+    _s("live_units_of_queued_jobs", "p_args->>'policy_ref'\n                      and j.state "
+       "in ('succeeded', 'failed', 'cancelled', 'expired'));", "p_args->>'policy_ref');", UNITS,
+       "a queued job's regime decides the unit (a queued legacy job refuses a CREDIT release)"),
+    _s("live_one_candidate_healthy_is_enough", "coalesce(bool_and(", "coalesce(bool_or(",
+       HEALTH, "a retired candidate beside a ready one reads as a healthy release"),
+    _s("live_invalid_media_is_an_error", "t.cause not in ('invalid_media',\n",
+       "t.cause not in ('-',\n", CUSTOMER,
+       "a customer's unreadable media rolls the candidate back"),
+    _s("live_disconnect_is_an_error", "'client_disconnected')),", "'-')),", CUSTOMER,
+       "a customer walking away rolls the candidate back"),
 )
 
 
