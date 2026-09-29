@@ -102,6 +102,13 @@ def ready(health: int) -> bool:
         return False
 
 
+def settled(lab) -> bool:
+    """No other backend on the Lab database is running a statement or holding a transaction."""
+    return lab.sql("select count(*) from pg_stat_activity where datname = current_database() "
+                   "and backend_type = 'client backend' and pid <> pg_backend_pid() "
+                   "and state <> 'idle'")[0][0] == 0
+
+
 def test_j09_the_eval_worker_process_killed_mid_run_loses_nothing(lab, workdir):
     try:
         run(lab.store.put_evaluator(lw.SPEC, provider_org_id=lab.NEMO,
@@ -142,6 +149,9 @@ def test_j09_the_eval_worker_process_killed_mid_run_loses_nothing(lab, workdir):
             first.kill()                                      # SIGKILL mid-attempt
             assert first.wait(30) == -signal.SIGKILL
         gate.set()
+        # A statement the killed worker sent just before SIGKILL still commits (a case it had
+        # answered finishes `succeeded`): count the leases once its backends are gone.
+        until(lambda: settled(lab), 30, "the killed worker's in-flight statements")
         leased = cases("leased")
         assert leased >= 1 and event_pending() == 1, (leased, event_pending())
         lab.advance(31)                     # past the 30 s leases and the relay's window
