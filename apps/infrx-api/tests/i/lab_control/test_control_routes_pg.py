@@ -9,8 +9,10 @@ family's read runs as provider A's administrator.
     INFRX_D_TASK=l4 uv run --frozen pytest -q -s -m pg tests/i/lab_control
 
 Failure oracles: the unit not ready on its own login (LDP-F7); a member refused (401/404) or a
-family missing on it; any 500 (LDP-F3). A family the Lab login holds no grant for answers its
-typed 503 - recorded in the printed matrix, never excused as a pass of the family.
+family missing on it; any 500 (LDP-F3). SR-LCR-1 (0056, lab-sql-lw8): the Lab column equals the
+owner column for every family (LCR-F1 closed), each pinned in `EXPECTED`; a worker-only claim
+stays refused to the Lab login (42501); 0041's sample reads the families' lineage calls run on
+it (0-LW8-R1).
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from psycopg.types.json import Jsonb
 
 from infrx.contracts import errors
 from infrx.gateway import lab_auth
@@ -33,8 +36,18 @@ _reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") == "l4" else
     "PostgreSQL only on the l4 task-local key (INFRX_D_TASK=l4)"
 DB, LAB_PASSWORD = f"{pgharness.DATABASE}_lcr", "infrx-l4-lab-control"
 A, ADMIN_A = worlds.PgWorld.A, worlds.PgWorld.ADMIN_A
-#: LCR-F1: every family but control is its typed 503 on the Lab login until SR-LCR-1.
-NOT_RUN_SR_LCR_1 = frozenset(FAMILIES) - {"control"}
+#: family -> (status, body prefix) on BOTH logins after 0056. A 503 here is a port the unit does
+#: not compose yet (evaluations' experiments: WR-B4-2; teachers off: P-10; R3's variants:
+#: WR-C6-VARIANTS), the same on the owner login - never a grant the Lab login lacks.
+EXPECTED = {
+    "control": (200, '{"data":[{"model_id":"nemostation/marlin-2b"'),
+    "datasets": (404, '{"detail":"not_found: no such Lab record for this provider"}'),
+    "evaluations": (503, '{"refusal":"unavailable"}'),
+    "pipelines": (404, '{"refusal":"not_found"}'),
+    "teacher-batches": (503, '{"refusal":"unavailable"}'),
+    "releases": (200, '{"data":{"releases":[],"decisions":[],"proposals":[]}}'),
+    "optimizations": (503, '{"refusal":"unavailable"}'),
+}
 
 
 @pytest.fixture(scope="module")
@@ -97,10 +110,21 @@ def test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_
             assert text in ('{"refusal":"unavailable"}',
                             '{"detail":"the datasets service failed"}'), (login, family, text)
     assert matrix["lab", "control"][0] == 200 and matrix["owner", "control"][0] == 200
-    # LCR-R2/R3: the matrix pinned. The owner column reaches the datasets and pipelines
-    # handlers (the probe's `ds@1` is absent: 404). The lab column's typed 503s are LCR-F1's
-    # (infrx_lab_control holds none of the families' D7/D8/D9 grants): NOT RUN[SR-LCR-1] - the
-    # SR-LCR-1 merge (lane lab-sql-lw8) flips this set to the owner column explicitly.
-    assert (matrix["owner", "datasets"][0], matrix["owner", "pipelines"][0]) == (404, 404)
-    assert {f for f in FAMILIES if matrix["lab", f][0] == 503} == NOT_RUN_SR_LCR_1
-    print("\nNOT RUN[SR-LCR-1]:", sorted(NOT_RUN_SR_LCR_1))
+    got = {(login, f): (status, text[:len(EXPECTED[f][1])])
+           for (login, f), (status, text) in matrix.items()}
+    assert got == {(login, f): EXPECTED[f] for login in database for f in FAMILIES}, got
+    import psycopg
+    with psycopg.connect(database["lab"], autocommit=True) as lab:     # SR-LCR-1: routes only
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            lab.execute("select infrx.lab_import_job_claim('{}'::jsonb)")
+        # 0-LW8-R1: lineage.status / lineage.permitted (a version's page, derive, export,
+        # read_part; label imports, select, export; training prepare) run 0041's reads on the
+        # unit's login once a record exists - the absent `ds@1` above never reaches them.
+        for function in ("lab_blocked_samples", "lab_permitted_samples"):
+            args = {"provider_org_id": A, "dataset_ref": "lab:dataset:none"}
+            try:
+                lab.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
+            except psycopg.errors.InsufficientPrivilege as refused:
+                pytest.fail(f"{function}: {refused.sqlstate} on the Lab login")
+            except psycopg.Error:
+                pass            # the function ran and refused its arguments: granted

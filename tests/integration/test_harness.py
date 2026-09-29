@@ -251,6 +251,9 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0053_lab_composition_reads.sql",
     # Lab (local-only, R151/R201): lab-live (WR-C6-LIVE, R244)
     "0054_lab_release_live.sql",
+    # Lab (local-only, R151/R201): lab-sql LW8 (SR-LCR-1, the control login's route halves);
+    # 0055 (lab-sql-lw7) arrives later and slots before it
+    "0056_lab_control_grants.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
