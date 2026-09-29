@@ -9123,7 +9123,7 @@
   {
    "id": "W5-MERGE-52",
    "task": null,
-   "slice": "merge batch #52 (Opus): lab-live 6aae4bbc (+0054 minors: terminal-only units, bool_and health, customer-caused failures excluded, index; R246–R248)",
+   "slice": "merge batch #52 (Opus): lab-live 6aae4bbc (+0054 minors: terminal-only units, bool_and health, customer-caused failures excluded, index; R246–R248); workflow wf_cc3c2b59-04b",
    "agent": "opus",
    "branch": "codex/w5-merge-52",
    "worktree": ".claude/worktrees/codex-w5-merge-52",
