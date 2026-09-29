@@ -45,7 +45,7 @@ FAMILIES = {
     "control": "/lab/v1/control/models" + P,
     "datasets": f"/lab/v1/providers/{PROVIDER}/datasets/versions/ds@1",
     "evaluations": "/lab/v1/evaluations/runs" + P,
-    "pipelines": "/lab/v1/pipelines/training-runs" + P,
+    "pipelines": "/lab/v1/pipelines/disagreements" + P + "&dataset_ref=ds@1",
     "teacher-batches": "/lab/v1/pipelines/teacher-batches" + P,
     "releases": "/lab/v1/releases" + P,
     "optimizations": "/lab/v1/optimizations" + P,
