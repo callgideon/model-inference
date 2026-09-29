@@ -109,3 +109,5 @@ Findings: 0-DS5-R1, 1-DS5-R1 (the tip's callers of `reconcile`/`tombstone`/`expo
 **Proposed ruling (amended, unnumbered).** 0041 is D7's authority for N3's SQL-side gate (`lab_permitted_samples`). Every tombstone also keeps its write-once object record, which every lineage gate honors deny-only, so a caller without the database can neither miss nor undo a denial. A bound passed on either clock denies.
 
 **Open issue (new).** `blocked` lists the provider's object tombstones once per read again, the base's ponytail ceiling. The upgrade path is to retire the object reads once every caller passes `restrictions` (WR-DS5-2) and `backfill` has run (WR-DS5-3).
+
+**Rulings.** The proposed ruling above is numbered R206 in `research/plan/08-contracts-v1-encoding.md` §10, integrated at the datasets-lw5 merge on `codex/w5-merge-27` (2026-09-29). WR-DS5-1, WR-DS5-2 (no longer merge-blocking), WR-DS5-3 and WR-DS5-5 are not applied by this merge and stay open for lab-sql, composition and the operator; WR-DS5-4 is withdrawn.
