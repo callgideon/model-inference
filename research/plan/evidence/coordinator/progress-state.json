@@ -7829,7 +7829,7 @@
   {
    "id": "W5-MERGE-36",
    "task": null,
-   "slice": "merge batch #36 (Opus): composition-4 6bffa2e8 (+WR-C4-PREFLIGHT, WR-C4-MK, R217–R219)",
+   "slice": "merge batch #36 (Opus): composition-4 6bffa2e8 (+WR-C4-PREFLIGHT, WR-C4-MK, R217–R219); workflow wf_feaa3652-8ec",
    "agent": "opus",
    "branch": "codex/w5-merge-36",
    "worktree": ".claude/worktrees/codex-w5-merge-36",
