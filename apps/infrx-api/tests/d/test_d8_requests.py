@@ -54,6 +54,12 @@ W: dict[str, str] = {}
 
 
 def serving_ref(version_id: str) -> str:
+    """A stand-in ref, keyed by `version_id` (whatever id the caller means for its case).
+    `release_active` never resolves this: it is opaque to every D9 RPC (they store a
+    candidate/baseline ref as a string, never dereference it), and the one reader that does
+    resolve one (`release_active`, WR-E8L-2) is given `W['candidate_ref']` below instead -
+    a real ref of an actual deployment, built by the one function that builds one
+    (`infrx.lab_serving_ref`, 0045)."""
     return f"lab:serving:{NEMO}:{version_id}@sha256:{'e' * 64}"
 
 
@@ -77,10 +83,12 @@ def report(base: str, cand: str, digest: str = PROTOCOL_DIGEST) -> str:
 
 def policy(tag: int, *, endpoint: str = cc.PROD_ENDPOINT, weights=(2500,)) -> dict:
     """A NEMO canary on the alias's prod endpoint: baseline = the listed serving version,
-    candidate = the second serving version of the model."""
+    candidate = the second serving version of the model, deployed (`W['candidate_ref']`,
+    WR-E8L-2's identity - L3's `operations.serving_ref` in the R191 form, a real
+    `deployment_revision_id`, not a bare `serving_version_id`)."""
     body = {**d9.policy(uid(tag, 0xb0), endpoint=endpoint, weights=weights),
             "baseline_ref": serving_ref(cc.SERVING),
-            "candidates": [{"serving_ref": serving_ref(W["serving_2"]), "weight_bp": w}
+            "candidates": [{"serving_ref": W["candidate_ref"], "weight_bp": w}
                            for w in weights]}
     return body
 
@@ -199,6 +207,18 @@ def seed(conn) -> None:
         "runtime_image_digest, engine_options_digest, precision, capability, 'd8-test' "
         "from infrx.serving_versions where serving_version_id = %s",
         (W["serving_2"], W["label_2"], cc.SERVING))
+    # WR-E8L-2 (R191): a candidate is a deployment of that serving version, not a bare
+    # serving version - L3's `operations.serving_ref` pins the deployment, not the revision
+    # alone. Deployed private/dev so it never competes with the prod listing above.
+    W["deployment_2"] = uid(3, 0x5e)
+    conn.execute(
+        "insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id, "
+        "provider_org_id, environment, serving_version_id, visibility, state, "
+        "max_input_tokens, max_output_tokens, created_by) values (%s, %s, %s, 'dev', %s, "
+        "'private', 'ready_private', 30720, 2048, 'd8-test')",
+        (W["deployment_2"], cc.DEV_ENDPOINT, NEMO, W["serving_2"]))
+    W["candidate_ref"] = conn.execute(
+        "select infrx.lab_serving_ref(%s)", (W["deployment_2"],)).fetchone()[0]
 
 
 # ----------------------------------------------------------------------------- checks
@@ -465,15 +485,22 @@ def check_release_active_answers_the_running_head_with_pins(conn) -> str:
     """SR-R1-1 / ROLLOUT-PIN: for an alias, the running rollout of the endpoint its current
     listing serves - the policy record, its ref, each candidate's R62 pin
     (`<alias>@<revision>`) and the shadow bound (0 by default) - and nothing for a paused
-    rollout or an unknown alias; a candidate that is not a published revision of the model
-    is `state_conflict` (fail closed); only infrx_runtime executes it."""
+    rollout or an unknown alias; a candidate that is not a published revision of the model,
+    or whose digest is stale for its deployment (R191), is `state_conflict` (fail closed);
+    only infrx_runtime executes it."""
     assert active(conn) == (None, []), "a release before any rollout"
+    stale_digest = W["candidate_ref"].rpartition("sha256:")[0] + "sha256:" + "f" * 64
+    stale = {**policy(4), "candidates": [{"serving_ref": stale_digest, "weight_bp": 100}]}
+    ok(conn, "lab_rollout_start", {"provider_org_id": NEMO, "policy_ref": t.publish(conn, stale),
+                                   "decided_by": DEV, "reason": "x"})
+    assert active(conn)[0] == "P0001", "a stale-digest candidate (the revision moved on) routed"
+    ok(conn, d9.MOVE, d9.args(uid(4, 0xb0), "stop", 1))
     ref, body = launch(conn, 5)
     state, rows = active(conn)
     assert state is None and len(rows) == 1, (state, rows)
     record, policy_ref, revisions, shadow_limit = rows[0]
     assert (record, policy_ref, shadow_limit) == (body, ref, 0), rows
-    assert revisions == {serving_ref(W["serving_2"]): f"{ALIAS}@{W['label_2']}"}, revisions
+    assert revisions == {W["candidate_ref"]: f"{ALIAS}@{W['label_2']}"}, revisions
     assert active(conn, "nemostation/unknown") == (None, [])
     with conn.transaction(force_rollback=True):                   # the alias moved on
         execute_all(conn,
@@ -524,14 +551,20 @@ def check_release_active_answers_the_running_head_with_pins(conn) -> str:
         "created_by) select %(s)s, %(v)s, %(m)s, provider_org_id, 'other-1', "
         "prompt_harness_ref, preprocessor_profile_version, runtime_image_ref, "
         "runtime_image_digest, engine_options_digest, precision, capability, 't' "
-        "from infrx.serving_versions where serving_version_id = %(sv)s",
+        "from infrx.serving_versions where serving_version_id = %(sv)s;"
+        "insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id, "
+        "provider_org_id, environment, serving_version_id, visibility, state, "
+        "max_input_tokens, max_output_tokens, created_by) values (%(dep)s, %(ep)s, %(p)s, "
+        "'dev', %(s)s, 'private', 'ready_private', 1, 1, 't')",
         {"m": other_model, "p": NEMO, "v": uid(4, 0x5e), "s": uid(5, 0x5e),
-         "base": cc.MODEL, "sv": cc.SERVING})
-    wrong = {**policy(10), "candidates": [{"serving_ref": serving_ref(uid(5, 0x5e)),
-                                           "weight_bp": 100}]}
+         "base": cc.MODEL, "sv": cc.SERVING, "dep": uid(6, 0x5e), "ep": cc.DEV_ENDPOINT})
+    other_ref = conn.execute("select infrx.lab_serving_ref(%s)", (uid(6, 0x5e),)).fetchone()[0]
+    wrong = {**policy(10), "candidates": [{"serving_ref": other_ref, "weight_bp": 100}]}
     ok(conn, "lab_rollout_start", {"provider_org_id": NEMO, "policy_ref": t.publish(conn, wrong),
                                    "decided_by": DEV, "reason": "x"})
-    assert active(conn)[0] == "P0001", "another model's revision pinned under the alias"
+    assert active(conn)[0] == "P0001", (
+        "another model's revision pinned under the alias - real deployment, real digest, "
+        "wrong model")
     return "running head with pins; paused/unknown none; unpinned fails closed"
 
 
@@ -565,6 +598,34 @@ def check_release_eligibility_is_current_and_default_deny(conn) -> str:
     assert eligible(conn, pid, c1org) is False, "a revoked grant"
     assert eligible(conn, uid(99, 0xb0), c1org) is False, "an unknown policy"
     return "current provider_sharing grant only; default deny"
+
+
+@rolled_back
+def check_the_operator_raises_the_shadow_limit_and_only_the_operator(conn) -> str:
+    """WR-E8L-4: `public.operator_raise_lab_shadow_limit` moves `lab_rollouts.shadow_limit`
+    up only (never down, and a call at or below the bound in force is a no-op naming the
+    unchanged bound), under `infrx.console_operator`'s door (0025) - not a provider, not an
+    anonymous caller, only a platform operator."""
+    from . import checks_operator as op
+    ref, body = launch(conn, 9)
+    pid = body["policy_id"]
+    op.make_operator(conn)
+    sql = "select public.operator_raise_lab_shadow_limit(%s, %s, %s, %s)"
+    code, answer, _ = op.call(conn, op.OPERATOR, sql, (pid, 5, "e8l drill", "shadow-1"))
+    assert code is None and answer == {"policy_id": pid, "shadow_limit": 5}, (code, answer)
+    lowered = op.call(conn, op.OPERATOR, sql, (pid, 2, "e8l drill", "shadow-2"))
+    assert lowered == (None, {"policy_id": pid, "shadow_limit": 5}, ""), \
+        "a call at or below the bound in force never lowers it"
+    assert conn.execute("select shadow_limit from infrx.lab_rollouts where policy_id = %s",
+                        (pid,)).fetchone() == (5,)
+    assert op.call(conn, DEV, sql, (pid, 9, "not an operator", "shadow-3"))[0] == "42501", \
+        "an authenticated non-operator"
+    assert op.call(conn, "anon", sql, (pid, 9, "x", "shadow-4"))[0] == "42501", "anonymous"
+    unknown = op.call(conn, op.OPERATOR, sql, (uid(99, 0xb0), 1, "e8l drill", "shadow-5"))
+    assert unknown[0] == "not_found", unknown
+    negative = op.call(conn, op.OPERATOR, sql, (pid, -1, "e8l drill", "shadow-6"))
+    assert negative[0] == "invalid_request", negative
+    return "raises only, monotonic, replay-safe by construction; operator door holds"
 
 
 @rolled_back
@@ -687,6 +748,7 @@ CHECKS = {c.__name__: c for c in (
     check_calibrations_are_j3s_and_the_latest_stands,
     check_release_active_answers_the_running_head_with_pins,
     check_release_eligibility_is_current_and_default_deny,
+    check_the_operator_raises_the_shadow_limit_and_only_the_operator,
     check_assignments_are_recorded_once_for_the_runtime,
     check_the_control_login_is_bounded_and_lab_only)}
 

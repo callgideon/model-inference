@@ -34,9 +34,24 @@ _PROVIDER_SERVINGS = (_SERVING.rpartition("where")[0] + "where s.provider_org_id
                       "order by s.created_at, s.serving_version_id")
 _PROVIDER_DEPLOYMENTS = (_DEPLOYMENT.rpartition("where")[0] + "where provider_org_id = %s "
                          "order by created_at, deployment_revision_id")
+# R195/LSQ5-m1: an endpoint's alias is the newest LISTING that names a deployment on it.
+# `version` is scoped to one alias (0007 lets two different aliases' deployments sit on the
+# same endpoint over time), so ordering by it across aliases is not "newest" - order by
+# `created_at` instead, tie-broken like WR-LSQ-9's other reads (rows one transaction wrote
+# together share `created_at`).
+# 0-F1/LSQ5-m2: a listing row is never deleted or moved (0007 keeps it as history), so an
+# alias that republishes to a NEW deployment on a DIFFERENT endpoint leaves its OLD listing
+# still "naming a deployment" on the endpoint it moved off. Ordering by `created_at` alone
+# (m1's fix) still lets that stale listing win when nothing else has since claimed the old
+# endpoint. A listing only counts when it is ALSO its own alias's current listing (the
+# highest `version` under its `public_model_id`) - never a listing an alias has superseded.
 _ENDPOINT_ALIAS = ("select l.public_model_id from infrx.catalog_listings l "
                    "join infrx.deployment_revisions d using (deployment_revision_id) "
-                   "where d.endpoint_id = %s order by l.version desc limit 1")
+                   "where d.endpoint_id = %s "
+                   "and l.version = (select max(v.version) "
+                   "from infrx.catalog_listings v "
+                   "where v.public_model_id = l.public_model_id) "
+                   "order by l.created_at desc, l.public_model_id desc, l.version desc limit 1")
 _LISTINGS = ("select public_model_id, version, deployment_revision_id::text, rate_card_version "
              "from infrx.catalog_listings where public_model_id = %s order by version")
 
