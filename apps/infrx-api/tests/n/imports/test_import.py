@@ -593,3 +593,12 @@ def test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_leas
     assert run(imports.work(jobs, store, objects, worker_id="w3")) == \
         {"succeeded": 0, "failed": 0, "retry": 1}
     assert jobs.rows[later["import_id"]]["state"] == "running"       # its lease will lapse
+    for transient in (errors.DependencyUnavailable("the media object store did not answer"),
+                      errors.RateLimited("slow down")):       # a 5xx/429 refusal is not final
+        async def blip(key, _e=transient):
+            raise _e
+        monkeypatch.setattr(objects, "get", blip)
+        jobs.rows[later["import_id"]]["lapsed"] = True
+        assert run(imports.work(jobs, store, objects, worker_id="w4")) == \
+            {"succeeded": 0, "failed": 0, "retry": 1}
+        assert jobs.rows[later["import_id"]]["state"] == "running"   # finished nothing

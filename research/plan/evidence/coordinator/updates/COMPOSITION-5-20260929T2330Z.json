@@ -57,6 +57,11 @@
    "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=b1 9 mutant lists",
    "exit": 1,
    "summary": "1439 passed, 7 skipped, 1 failed = n1_fetch_refusal_escapes misdeclared (anchor twice), 0 survivors; fixed in bd5a2735, N1 list rerun 68 passed"
+  },
+  {
+   "cmd": "fix round 1-C5-1: pytest tests/n; INFRX_D_TASK=n3 imports PG twins; INFRX_MUTANTS=all tests/n/imports/test_mutants.py tests/w/test_lab_workers_mutants.py",
+   "exit": 0,
+   "summary": "63 passed/7 skipped; 4 passed; 177 passed, 0 survivors (new mutant n4_transient_refusal_finishes)"
   }
  ],
  "activity": "review",
@@ -88,5 +93,11 @@
   "WR-C5-N4-ROUTE",
   "WR-C5-ANNOT (optional)",
   "WR-C5-MK (optional)"
- ]
+ ],
+ "fix_round": {
+  "handback": "085a9846",
+  "findings": {
+   "1-C5-1": "fixed: a 5xx/429 refusal leaves the import job's lease to lapse (retry), never a terminal failed"
+  }
+ }
 }

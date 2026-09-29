@@ -213,3 +213,10 @@ Optimistic 0.5 h, likely 1.5 h, pessimistic 4 h; confidence medium. Basis:
 - E6L j09 PASS on the real processes;
 - composition-3/-4 each needed about one fix round (about 2 h);
 - what remains is one verify round, and the filed requests outside the lane (WR-C5-LIVE/-REPORT/-PLAN gate the rollout breach half and E8L k09).
+
+## Fix round (handback 085a9846)
+
+- **1-C5-1 (major) fixed.** `imports.work` finished a job terminal `failed` on a transient `DomainError` (`DependencyUnavailable` from a throttled or unreachable S3 `objects.get`, `RateLimited`, `InternalError`). A new clause `except (errors.ServerError, errors.RateLimitError)` now sits before the `DomainError` clause. It logs, counts `retry` and finishes nothing, so the lease lapses and the job is claimed again. This matches the docstring and the proposed ruling "An import job finishes once, by its lease holder". The docstring now names the transient case.
+- Fail-first: `test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_lease` gains a lapsed-lease pass where `objects.get` raises `DependencyUnavailable`, then `RateLimited`. Each pass asserts `{"succeeded": 0, "failed": 0, "retry": 1}` and that the job is still `running`. At 085a9846 it went red with `{'failed': 1} != {'failed': 0}`.
+- Named mutant: `n4_transient_refusal_finishes` in tests/n/imports/mutants.py. It turns the new clause into `except ():` and is killed by the case above.
+- Reruns: `pytest -q tests/n` gave 63 passed, 7 skipped (PG needs a key). `INFRX_D_TASK=n3 pytest tests/w/test_lab_workers_imports_pg.py tests/n/imports/test_import_pg.py` gave 4 passed. `pytest tests/w/test_lab_workers.py tests/w/test_lab_workers_imports_pg.py` gave 29 passed, 1 skipped (no key). `INFRX_MUTANTS=all pytest tests/n/imports/test_mutants.py tests/w/test_lab_workers_mutants.py` gave 177 passed with 0 survivors, including the new mutant and `n4_infra_failure_finishes`. Every switch is still OFF. No other path was touched.

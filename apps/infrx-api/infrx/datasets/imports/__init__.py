@@ -450,8 +450,9 @@ async def work(jobs, store, objects, *, worker_id: str, limit: int = 1,
     """The I5 datasets pool's half: claim up to `limit` jobs (one whose lease lapsed is
     claimed again), run N1's `Importer` on the stored rows as the job's actor while the
     lease is heartbeaten, and finish each once - `succeeded` with the report, or `failed`
-    with its reason (a refusal; rejected rows keep their report). Any other failure finishes
-    nothing: the lease lapses and the job is claimed again (`retry`)."""
+    with its reason (a refusal; rejected rows keep their report). A transient refusal (5xx,
+    429) or any other failure finishes nothing: the lease lapses and the job is claimed again
+    (`retry`)."""
     done = {"succeeded": 0, "failed": 0, "retry": 0}
     for job in await jobs.claim(limit=limit, worker_id=worker_id, redelivery_s=lease_s):
         job_id, provider, task = job["job_id"], job["provider_org_id"], job["spec"]
@@ -471,6 +472,11 @@ async def work(jobs, store, objects, *, worker_id: str, limit: int = 1,
                 accept_rejects=task["accept_rejects"]))
         except ImportRejected as rejected:
             result, error = vars(rejected.report), "rejected"
+        except (errors.ServerError, errors.RateLimitError):
+            logging.getLogger(__name__).warning("import job %s: transient refusal", job_id,
+                                                exc_info=True)
+            done["retry"] += 1               # a 5xx/429 is not final: the lease lapses
+            continue
         except errors.DomainError as refusal:
             error = str(refusal).removeprefix(f"{refusal.code}: ")
         except Exception:                    # noqa: BLE001 - the lease lapses: claimed again
