@@ -1,0 +1,27 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_e5l_a_compose_project_override_moves_only_the_compose_names _______
+
+    def test_e5l_a_compose_project_override_moves_only_the_compose_names():
+        """`INFRX_E5L_PROJECT=e5l2` (the foreign `infrx-e5l_*` volumes a finished clone left must
+        never be touched): the compose project, containers, volumes and network are `infrx-e5l2*`
+        and `infrx-e5l_*` is not even a candidate; the namespace, the tasklocal ports, the database
+        and the key/object prefixes stay e5l's. Unset, every name is e5l's. Oracles: an ignored
+        override provisions over the foreign volumes (refused, every cell BLOCKED); one that moves
+        the namespace moves the ports out of the e5l block."""
+        code, default = probe(None)
+        assert code == 0, default
+        code, moved = probe("e5l2")
+        assert code == 0, moved
+        assert default["project"] == "infrx-e5l" and default["compose_project"] == "infrx-e5l"
+>       assert (moved["project"], moved["prefix"], moved["network"], moved["postgres"]) == (
+            "infrx-e5l2", "infrx-e5l2-", "infrx-e5l2_default", "infrx-e5l2-postgres")
+E       AssertionError: assert ('infrx-e5l',...e5l-postgres') == ('infrx-e5l2'...5l2-postgres')
+E         
+E         At index 0 diff: 'infrx-e5l' != 'infrx-e5l2'
+E         Use -v to get more diff
+
+tests/integration/lab_observe/test_e5l_runner.py:237: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_observe/test_e5l_runner.py::test_e5l_a_compose_project_override_moves_only_the_compose_names
+1 failed, 14 deselected in 0.24s

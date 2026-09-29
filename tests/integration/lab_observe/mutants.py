@@ -78,6 +78,7 @@ NO_STACK = "test_e5l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e5l_the_namespace_is_the_reserved_block_and_the_judge_fake_port_is_free_in_it"
 RERUN = "test_e5l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 DRY_RUN = "test_e5l_the_judge_is_labelled_a_dry_run_never_a_live_run"
+PROJECT = "test_e5l_a_compose_project_override_moves_only_the_compose_names"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- I2L-OBS packaging
@@ -173,7 +174,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '    "o08": ("test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled",),',
        '    "o08": ("test_o08_a_timed_out_submit",),', REQUIRED),
     _m("a_lane_undeclared", "a scenario waiting on a lane declares it", R,
-       '"lanes": ["LAB-API", "C3L", "G4T"]}', '"lanes": []}', LANES),
+       '"lanes": ["LAB-E2E"]}', '"lanes": []}', LANES),
     _m("another_namespace", "e5l runs in its own reserved block", R,
        'NAMESPACE = "e5l"', 'NAMESPACE = "e3l"', NAMESPACE),
     _m("judge_fake_on_the_gateway_port", "the judge fake has a port of its own", W,
@@ -187,6 +188,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("judge_label_claims_live", "dry-run evidence never claims a live run", R,
        'external provider (P-10 absent); never a live-judge run")',
        'external provider (P-10 absent)")', DRY_RUN),
+    # --- lab-observe-2: the compose project override (INFRX_E5L_PROJECT)
+    _m("project_override_ignored", "INFRX_E5L_PROJECT names the compose project", W,
+       'PROJECT = os.environ.get("INFRX_E5L_PROJECT") or NAMESPACE', "PROJECT = NAMESPACE",
+       PROJECT),
+    _m("compose_run_under_the_namespace", "compose itself runs under the override", W,
+       """'"INFRX_E2_PROJECT": PROJECT')""", """'"INFRX_E2_PROJECT": f"infrx-{namespace}"')""",
+       PROJECT),
+    _m("any_project_name", "only an e5l project name is accepted", W,
+       'r"e5l[a-z0-9]{0,12}"', 'r"[a-z0-9]{1,15}"', PROJECT),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -211,6 +221,10 @@ O07 = "test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_
 O08 = "test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled"
 O09_PROJECTOR = "test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once"
 O09_WORKER = "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once"
+O03_ROUTE = "test_o03_the_lab_traces_route_through_the_real_gateway"
+O04_PG = "test_o04_the_judge_ledger_is_d6js_postgresql_ledger"
+ROUTE, CONSENT = "infrx/gateway/routes/lab_traces.py", "infrx/state/lab_consent.py"
+J3 = "infrx/judge/calibration/report.py"
 #: Cases that FAIL on this base (a product finding, recorded in the evidence): no mutant can
 #: name them (the pristine baseline refuses a failing case), so coverage lists them here and
 #: `test_every_case_is_covered_by_a_mutant` holds the list to exactly the failing ones.
@@ -219,7 +233,8 @@ KNOWN_FAIL: dict[str, str] = {}   # E5L-F1 fixed by WR-OBS-3 (J2 reads through R
 STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_capture_on_in_the_box", "the drill judges capture off with the box at its defaults",
        OWORLD, "    with world.composed(workdir, start=start, **env) as trip:",
-       "    with world.composed(workdir, start=start, **{'TRACE_PUMPS': '1', **env}) as trip:",
+       "    with world.composed(workdir, start=start, **{'TRACE_SPOOL_DIR': str(workdir), **env}) "
+       "as trip:",
        O01_OFF),
     _m("st_ship_without_pins", "a shipped row carries the pins PostgreSQL admitted", SHIP,
        "serving_version_id=pins.serving_version_id if pins else None,",
@@ -267,6 +282,18 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_worker_never_restarted", "the drill judges the job after the worker came back",
        TRACE, "        time.sleep(1.0)\n        trip.box.start(\"worker\")",
        "        time.sleep(1.0)", O09_WORKER),
+    # --- lab-observe-2: the cells the tip now supports (LAB-API route, D6J ledger, J3 report)
+    _m("st_route_content_without_a_grant", "the route shows content only under a current grant",
+       ROUTE, "            if grants[key] is not None:", "            if True:", O03_ROUTE),
+    _m("st_route_shows_a_deleted_request", "an owner-deleted request is not there for the Lab",
+       ROUTE, "            if REQUEST in scopes or not t3.metadata_live(row.started_at, now):",
+       "            if not t3.metadata_live(row.started_at, now):", O03_ROUTE),
+    _m("st_pg_reserve_another_payer", "the reservation holds the named payer's budget", CONSENT,
+       '"run_id": run_id, "provider_org_id": provider_org_id, "payer_ref": payer_ref,',
+       '"run_id": run_id, "provider_org_id": provider_org_id, "payer_ref": payer_ref + "-x",',
+       O04_PG),
+    _m("st_j3_limited_results_calibrate", "a limited result never enters the calibration",
+       J3, "        elif result.limited:", "        elif False:", O04_PG),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 
@@ -322,7 +349,7 @@ def _stack(root: pathlib.Path) -> pathlib.Path:
 
 RUNNER = Runner(name="e5l", targets=LAYER1_FILES, package="", layout=_layer1)
 #: the kept stack's identity, handed to the copy (harness.working_dir / STATE_FILE seams)
-STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE")
+STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_E5L_PROJECT")
 STACK_RUNNER = Runner(name="e5l-stack", package="", layout=_stack, env=STACK_ENV,
                       timeout_s=1800,
                       targets=tuple(f"../../tests/integration/lab_observe/{f}" for f in (
@@ -338,7 +365,8 @@ def claim_the_kept_stack() -> str | None:
         return (f"this process loaded E2's harness as {observe_world.harness.NAMESPACE!r}: run "
                 "the stack list in its own process with INFRX_E2_NAMESPACE=e5l")
     if not observe_world.stack.has_stack():
-        return f"no kept e5l stack: run {observe_world.RUNNER} --keep first"
+        return (f"no kept {observe_world.harness.PROJECT} stack: run {observe_world.RUNNER} "
+                "--keep first (the same INFRX_E5L_PROJECT)")
     os.environ["INFRX_E2_CHECKOUT"] = observe_world.harness.working_dir()
     os.environ["INFRX_E2_STATE_FILE"] = str(observe_world.harness.STATE_FILE)
     return None
