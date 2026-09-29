@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 293,
- "updated": "2026-09-29T13:14:34Z",
+ "revision": 294,
+ "updated": "2026-09-29T13:24:00Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8433,11 +8433,11 @@
     "prefix": "infrx-e3b2d-/infrx-d10-",
     "db": "e3b2d/d10"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T11:20:00Z",
-   "updated": "2026-09-29T13:12:28Z",
+   "updated": "2026-09-29T13:24:00Z",
    "blocker": null,
-   "next_action": "merge batch #46 (WR-KGR2-1/2, RV-2 test) → R151 condition 1 for 0052 met at integration",
+   "next_action": "0052 hosted: condition 2 = the EXPECTED_PENDING 0027–0052 patch (coordinator, next window), condition 3 = the operator window",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -8677,22 +8677,22 @@
   {
    "id": "W5-MERGE-46",
    "task": null,
-   "slice": "merge batch #46 (Opus): known-good-reproof-2 f1fb6990 (+WR-KGR2-1/2, RV-2 test; no rulings); workflow wf_0a1d4834-72a",
+   "slice": "merge batch #46 (Opus): known-good-reproof-2 f1fb6990 (+WR-KGR2-1/2, RV-2 test; no rulings); workflow wf_0a1d4834-72a; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-46",
    "worktree": ".claude/worktrees/codex-w5-merge-46",
    "base": "046f4322",
-   "head": null,
+   "head": "00e9899d",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T13:12:28Z",
-   "updated": "2026-09-29T13:12:28Z",
+   "updated": "2026-09-29T13:24:00Z",
    "blocker": null,
-   "next_action": "integrate → I8 KNOWN-GOOD-PROOF at 0052 (R151 condition 1 for the 0052 window)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
