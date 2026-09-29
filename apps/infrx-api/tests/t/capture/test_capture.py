@@ -174,7 +174,7 @@ class Policy:
                                content_retention_days=30, evaluation_consent=False,
                                effective_at=now)
 
-    def response(self, accepted, request, token):
+    def response(self, accepted, request, headers):
         return accepted
 
 
@@ -200,3 +200,210 @@ def test_without_a_composed_capture_the_ingress_policy_is_off():
     assert TestClient(app).post(support.CHAT_PATH, headers=support.AUTH,
                                 json=support.BODY).status_code == 202
     assert calls[0][1].trace_policy.trace_mode is TraceMode.off
+
+
+# --- (b) the request-path capture hook ---------------------------------------------------
+# A consented sync or SSE request writes ONE record to the gateway's spool: the request
+# (redacted: inline media by digest, the caller's credential never) and the answer as the
+# client received it. Off, nothing; `minimal`, metadata only; async, the worker's (c).
+from fastapi.responses import JSONResponse  # noqa: E402
+from starlette.responses import Response  # noqa: E402
+
+from infrx.traces.spool import SpoolTraceSink, recover  # noqa: E402
+
+ANSWER = {"id": "chatcmpl-1", "choices": [{"index": 0, "message": {
+    "role": "assistant", "content": f"echo {support.TOKEN} the van is red"}}]}
+FRAMES = (b'data: {"choices":[{"delta":{"content":"the van"}}]}\n\n',
+          b'data: {"choices":[{"delta":{"content":" is red"}}]}\n\n', b"data: [DONE]\n\n")
+
+
+class Streamed(Response):
+    """An SSE answer as the relay sends it: its own `__call__`, frame by frame."""
+
+    def __init__(self) -> None:
+        self.status_code, self.background = 200, None
+        self.init_headers({"content-type": "text/event-stream"})
+
+    async def __call__(self, scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": self.raw_headers})
+        for frame in FRAMES:
+            await send({"type": "http.response.body", "body": frame, "more_body": True})
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+
+def answered(stream: bool = False):
+    """An `accept` answering like the relay: the JSON result, or SSE frames."""
+    calls = []
+
+    async def accept(auth, request, idem):
+        calls.append(request)
+        if request.execution_mode.value == "async":
+            return JSONResponse({"request_id": request.request_id}, status_code=202)
+        return Streamed() if stream else JSONResponse(ANSWER)
+    return calls, accept
+
+
+def gateway(tmp_path, mode: TraceMode, stream: bool = False):
+    """(client, sink, calls): the ingress with a capture composed over a real spool."""
+    calls, accept = answered(stream)
+    sink = SpoolTraceSink(capture.Wall, spool_dir=tmp_path / "spool")
+    composed = capture.GatewayCapture(Policy(mode), sink, None, tmp_path / "spool")
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept, capture=composed))
+    return TestClient(app), composed, calls
+
+
+def spooled(tmp_path, composed):
+    """What reached the spool, once the capture closed (flushed and sealed)."""
+    run(composed.close())
+    return recover(tmp_path / "spool")
+
+
+def said(text: str) -> dict:
+    return {**support.BODY, "messages": [{"role": "user", "content": text}]}
+
+
+def test_a_consented_sync_request_writes_one_record_of_the_request_and_its_answer(tmp_path):
+    """Oracle: nothing captured although consent is on (o01's gap), a second record for one
+    request, the answer missing, or the record under another org, key or mode."""
+    client, composed, calls = gateway(tmp_path, TraceMode.full)
+    answer = client.post(support.CHAT_PATH, headers=support.AUTH, json=said("describe the van"))
+    assert answer.status_code == 200 and answer.json() == ANSWER
+    scan = spooled(tmp_path, composed)
+    assert len(scan.records) == 1, scan.records
+    [envelope], [content] = scan.records, scan.contents
+    request = calls[0]
+    assert (envelope.request_id, envelope.org_id, envelope.key_id, envelope.mode) == \
+        (request.request_id, support.ORG, support.KEY, TraceMode.full)
+    assert envelope.content_complete and envelope.content_bytes == len(content)
+    head, _, body = content.partition(b"\n")
+    assert b"describe the van" in head and b"the van is red" in body
+    assert envelope.completed_at is not None and envelope.started_at == request.created_at
+
+
+def test_an_unconsented_request_writes_nothing(tmp_path):
+    """Oracle: capture that ignores the policy - content stored for an org that never
+    opted in, which deleting afterwards cannot undo - or an off request still wrapped (the
+    request line serialized on the path of every unconsented request)."""
+    client, composed, calls = gateway(tmp_path, TraceMode.off)
+    assert client.post(support.CHAT_PATH, headers=support.AUTH,
+                       json=said("private")).status_code == 200
+    accepted = JSONResponse(ANSWER)
+    assert composed.response(accepted, calls[0], {}) is accepted
+    scan = spooled(tmp_path, composed)
+    assert scan.records == [] and scan.segments == 0
+
+
+def test_a_minimal_request_writes_metadata_only(tmp_path):
+    """Oracle: content stored under a `minimal` consent (R12)."""
+    client, composed, _ = gateway(tmp_path, TraceMode.minimal)
+    assert client.post(support.CHAT_PATH, headers=support.AUTH,
+                       json=said("describe the van")).status_code == 200
+    scan = spooled(tmp_path, composed)
+    assert len(scan.records) == 1, scan.records
+    [envelope] = scan.records
+    assert envelope.mode is TraceMode.minimal and scan.contents == [b""]
+    assert not envelope.content_complete and envelope.content_ref is None
+
+
+def test_a_credential_never_reaches_the_spool(tmp_path):
+    """Oracle: the bearer token written to disk - from the request headers, echoed in the
+    prompt, or echoed back in the answer."""
+    client, composed, _ = gateway(tmp_path, TraceMode.full)
+    assert client.post(support.CHAT_PATH, headers=support.AUTH,
+                       json=said(f"my key is {support.TOKEN}")).status_code == 200
+    run(composed.close())
+    spool = b"".join(path.read_bytes() for path in (tmp_path / "spool").iterdir()
+                     if path.is_file())
+    assert spool and support.TOKEN.encode() not in spool
+    assert b"authorization" not in spool.lower()
+    assert spool.count(capture.REDACTED) == 2
+
+
+def test_inline_media_is_spooled_by_digest_not_bytes():
+    """Oracle: the base64 clip itself in the trace (up to 96 MiB on the request path)."""
+    import hashlib
+    url = "data:video/mp4;base64," + "A" * 64
+    part = {"type": "video_url", "video_url": {"url": url}}
+    got = capture.redacted({"messages": [{"role": "user", "content": [part]}]})
+    assert got["messages"][0]["content"][0]["video_url"]["url"] == \
+        "data-sha256:" + hashlib.sha256(url.encode()).hexdigest()
+
+
+def test_a_streamed_answer_is_captured_as_relayed(tmp_path):
+    """Oracle: only the first frame kept, or the stream's frames lost because the answer
+    is not one JSON body."""
+    client, composed, _ = gateway(tmp_path, TraceMode.full, stream=True)
+    answer = client.post(support.CHAT_PATH, headers=support.AUTH,
+                         json={**said("describe the van"), "stream": True})
+    assert answer.status_code == 200 and answer.content == b"".join(FRAMES)
+    contents = spooled(tmp_path, composed).contents
+    assert len(contents) == 1, contents
+    [content] = contents
+    assert content.partition(b"\n")[2] == b"".join(FRAMES)
+
+
+def test_an_async_request_is_left_to_the_worker(tmp_path):
+    """Oracle: the gateway spools the 202 (a record with no output) and the worker spools
+    the job's output too: two records for one request (the ruling (c) split)."""
+    client, composed, _ = gateway(tmp_path, TraceMode.full)
+    answer = client.post(support.CHAT_PATH, headers={**support.AUTH, "prefer": "respond-async"},
+                         json=said("describe the van"))
+    assert answer.status_code == 202, answer.text
+    assert spooled(tmp_path, composed).records == []
+
+
+def test_a_capture_that_cannot_keep_the_record_never_fails_the_request(tmp_path):
+    """Oracle: a trace failure (a closed spool, a finish that raises) that becomes the
+    request's error."""
+    client, composed, _ = gateway(tmp_path, TraceMode.full)
+    run(composed.close())
+    answer = client.post(support.CHAT_PATH, headers=support.AUTH, json=said("describe"))
+    assert answer.status_code == 200 and answer.json() == ANSWER
+    opened = composed.sink.open
+
+    def failing(*args, **kw):
+        capture_ = opened(*args, **kw)
+
+        async def finish(envelope):
+            raise RuntimeError("the spool writer died")
+        capture_.finish = finish
+        return capture_
+    composed.sink.open = failing
+    answer = client.post(support.CHAT_PATH, headers=support.AUTH, json=said("describe"))
+    assert answer.status_code == 200 and answer.json() == ANSWER
+
+
+def test_a_capture_that_cannot_open_never_fails_the_request(tmp_path):
+    """Oracle: a sink that raises on `open` turns the trace path into the request's 500."""
+    client, composed, _ = gateway(tmp_path, TraceMode.full)
+
+    def broken(*args, **kw):
+        raise OSError("the spool is gone")
+    composed.sink.open = broken
+    answer = client.post(support.CHAT_PATH, headers=support.AUTH, json=said("describe"))
+    assert answer.status_code == 200 and answer.json() == ANSWER
+    run(composed.close())
+
+
+def test_an_answer_that_breaks_off_is_recorded_as_incomplete(tmp_path):
+    """Oracle: a stream cut after its first frame (a relay failure, the process stopping)
+    recorded `content_complete` - a partial capture must never look complete (R27)."""
+    import pytest
+    client, composed, calls = gateway(tmp_path, TraceMode.full, stream=True)
+    assert client.post(support.CHAT_PATH, headers=support.AUTH,
+                       json={**said("describe the van"), "stream": True}).status_code == 200
+
+    class Broken(Streamed):
+        async def __call__(self, scope, receive, send):
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": FRAMES[0], "more_body": True})
+            raise ConnectionError("the relay stopped")
+
+    async def sent(message):
+        pass
+    wrapped = composed.response(Broken(), calls[0], {})
+    with pytest.raises(ConnectionError):
+        run(wrapped({"type": "http"}, None, sent))
+    first, cut = spooled(tmp_path, composed).records
+    assert first.content_complete and not cut.content_complete
+    assert cut.content_bytes > 0 and cut.request_id == first.request_id

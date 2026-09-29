@@ -310,6 +310,8 @@ def register(app, rt, deps: IngressDeps | None = None):
         # 01: `Inference-Id` is the request id on every answer. Set here rather than
         # left to each acceptor, so no success path can be the one that forgets it.
         accepted.headers.setdefault(wire.HEADER_INFERENCE_ID, request_id)
+        if deps.capture is not None:            # WR-C6-CAPTURE (b): the answer's record
+            accepted = deps.capture.response(accepted, normalized, request.headers)
         return accepted
 
     # The guard's wrapper is defined in `intake`; the route table names the ingress as the
