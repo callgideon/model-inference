@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 257,
- "updated": "2026-09-29T02:01:46Z",
+ "revision": 258,
+ "updated": "2026-09-29T02:06:28Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7224,25 +7224,28 @@
    "branch": "codex/w5-e3l-f1",
    "worktree": ".claude/worktrees/codex-w5-e3l-f1",
    "base": "ad828a2d",
-   "head": null,
+   "head": "d48c3c97",
    "isolation": {
     "ports": "g7 55446; dlab 57500",
     "prefix": "infrx-g7-",
     "db": "g7"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T23:37:10Z",
-   "updated": "2026-09-28T23:37:10Z",
+   "updated": "2026-09-29T02:06:28Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge → l05b rerun",
+   "next_action": "merge batch #31 (Opus) → the lab-operate rerun lane after E3L-F2 (lab-sql-lw6)",
    "estimate": {
-    "optimistic_h": 1,
-    "likely_h": 2,
-    "pessimistic_h": 4,
-    "confidence": "medium",
-    "basis": "one constant, one port read, one PG case"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT d48c3c97; merge running",
+    "at": "2026-09-29T02:06:28Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/g/E3L-F1-99c3285.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/gateway/routes/models.py",
@@ -7508,6 +7511,38 @@
     "confidence": "medium",
     "basis": "single-lane batch with the E4 regression",
     "at": "2026-09-29T01:51:47Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-31",
+   "task": null,
+   "slice": "merge batch #31 (Opus): e3l-f1 d48c3c97 (E3L-F1: the catalog's own listing version on /v1/models)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-31",
+   "worktree": ".claude/worktrees/codex-w5-merge-31",
+   "base": "4f25e232",
+   "head": null,
+   "isolation": {
+    "ports": "d10 55442",
+    "prefix": "infrx-d10-",
+    "db": "d10"
+   },
+   "activity": "running",
+   "started": "2026-09-29T02:06:28Z",
+   "updated": "2026-09-29T02:06:28Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch; the G list takes ~25 min",
+    "at": "2026-09-29T02:06:28Z"
    },
    "evidence": [],
    "commands": [],
