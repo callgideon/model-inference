@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 284,
- "updated": "2026-09-29T10:30:56Z",
+ "revision": 285,
+ "updated": "2026-09-29T10:46:04Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8149,25 +8149,29 @@
    "branch": "codex/w5-lab-control-2",
    "worktree": ".claude/worktrees/codex-w5-lab-control-2",
    "base": "97b3689b",
-   "head": null,
+   "head": "d2565c4f",
    "isolation": {
     "ports": "l3 57502; dlab 57500; l4 57503",
     "prefix": "infrx-l3-",
     "db": "l3"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T07:46:58Z",
-   "updated": "2026-09-29T07:46:58Z",
+   "updated": "2026-09-29T10:46:04Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge",
+   "next_action": "merge batch #43 (Opus; WR-LC2-1/2 Lab-app diffs, R231–R233); 0052 local-only until the next R151 window; known-good-reproof-2 at 0052",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 5,
-    "pessimistic_h": 10,
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
     "confidence": "medium",
-    "basis": "one new RPC + route + record change across store, fake and tests"
+    "basis": "ACCEPT d2565c4f; merge running with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/l/LAB-CONTROL-2-c1aac90.md",
+    "research/plan/evidence/l/LAB-CONTROL-2-raw/"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/lab/control/**",
@@ -8175,7 +8179,10 @@
     "apps/app/supabase/migrations/0052_*.sql",
     "tests/l/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-LC2-1",
+    "WR-LC2-2"
+   ]
   },
   {
    "id": "W5-MERGE-39",
@@ -8378,6 +8385,38 @@
     "apps/lab/tests/e2e/**",
     "tests/integration/lab_*/ (UI cell binds)"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-43",
+   "task": null,
+   "slice": "merge batch #43 (Opus): lab-control-2 d2565c4f (0052 local-only; +WR-LC2-1/2, R231–R233)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-43",
+   "worktree": ".claude/worktrees/codex-w5-merge-43",
+   "base": "f918dd89",
+   "head": null,
+   "isolation": {
+    "ports": "l3 57502; dlab 57500; l4 57503",
+    "prefix": "infrx-l3-",
+    "db": "l3"
+   },
+   "activity": "running",
+   "started": "2026-09-29T10:46:04Z",
+   "updated": "2026-09-29T10:46:04Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge (R226–R230 before R231 at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "single-lane batch with the Lab suites",
+    "at": "2026-09-29T10:46:04Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
