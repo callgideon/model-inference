@@ -151,14 +151,6 @@ REQUIRED = {
 #: Halves of a scenario that exist in the matrix but are not bound yet (R222: recorded in
 #: verdict.json, never prose-only). NOT RUN always; they do not lower their parent's status.
 SUB_CELLS = {
-    "k09-breach": {
-        "parent": "k09", "lanes": ["WR-C6-LIVE"],
-        "title": "the pass loop sees a breach, kill -9 between D9's decision and the alias CAS, "
-                 "restart: converges with no second decision",
-        "note": "k09 PASS covers the operator stop and the pass-loop half; the breach half needs "
-                "R1's aggregates (WR-C6-LIVE, R244; composition-6 carried WR-C5-LIVE). The rerun "
-                "passes today because the breach half is not bound: the k09 case gains the "
-                "breach step when WR-C6-LIVE lands"},
     "k10-ui-composed": {
         "parent": "k10", "lanes": ["WR-C6-LIVE"],
         "title": "the releases page's proposal/approval journey over pilot.lab_releases' own "
@@ -169,8 +161,8 @@ SUB_CELLS = {
                 "have a composed read (WR-C6-LIVE; WR-LR5-1)"},
 }
 #: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
-#: reason class - k08's GPU target (P-08) and k09's breach half, blocked by the product WR
-#: WR-C6-LIVE (R1's aggregates as R2's Live, lane lab-live). k10 is in local scope since
+#: reason class - k08's GPU target (P-08) and product WRs. k09's breach half is bound over
+#: 0054's Live (WR-LIVE-K09, R244): k09's own case, no sub-cell. k10 is in local scope since
 #: WR-R4-2 is composed (merge #50): its UI half PASSes through LAB-E2E (R238) or stays open;
 #: the UI journey over the composed ports waits on WR-C6-LIVE (sub-cell k10-ui-composed).
 #: The gate is re-run when a dependency lands and the cell must then PASS.

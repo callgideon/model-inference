@@ -156,17 +156,28 @@ def test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun():
     assert message.endswith(f"{runner.PY} {runner.RUNNER} --out <dir> --only k10")
 
 
-def test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun():
-    """k09 PASS is the pass-loop half; the breach half is a NOT RUN sub-cell in verdict.json
-    naming WR-C6-LIVE and the exact rerun, so the R222 tally is not prose-only."""
+def test_e8l_k09s_breach_half_is_bound_and_no_longer_a_sub_cell():
+    """WR-LIVE-K09 (R244): k09's pass-loop case now sees a breach in D9's Live (0054) and rolls
+    it back once, so the breach half is k09's own case, not a NOT RUN sub-cell beside it."""
+    result = runner.classify(junit(*everything("k09")))
+    assert result["k09"]["status"] == "PASS"
+    assert "k09-breach" not in {c["id"] for c in runner.sub_cells(result)}
+    assert "k09-breach" not in runner.SUB_CELLS
+
+
+def test_e8l_a_sub_cell_is_not_run_naming_its_lanes_and_its_parents_rerun(monkeypatch):
+    """A half of a scenario that is not bound yet is recorded in verdict.json as NOT RUN with
+    its lanes and its parent's exact rerun (R222: never prose-only), and never lowers its
+    parent."""
+    monkeypatch.setattr(runner, "SUB_CELLS", {"k09-fixture": {
+        "parent": "k09", "lanes": ["WR-X", "WR-Y"], "title": "t", "note": "n"}})
     result = runner.classify(junit(*everything("k09")))
     assert result["k09"]["status"] == "PASS", "the sub-cell never lowers its parent"
-    cell = {c["id"]: c for c in runner.sub_cells(result)}["k09-breach"]
+    [cell] = runner.sub_cells(result)
     assert (cell["id"], cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
-        == ("k09-breach", "k09", "PASS", "NOT RUN", "NOT RUN[WR-C6-LIVE]")
-    assert cell["lanes"] == ["WR-C6-LIVE"], "composition-6 carried WR-C5-LIVE as WR-C6-LIVE"
+        == ("k09-fixture", "k09", "PASS", "NOT RUN", "NOT RUN[WR-X,WR-Y]")
+    assert cell["lanes"] == ["WR-X", "WR-Y"]
     assert cell["reproduce"] == f"{runner.PY} {runner.RUNNER} --out <dir> --only k09"
-    assert "passes today because the breach half is not bound" in cell["note"]
 
 
 def test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun():
@@ -177,7 +188,7 @@ def test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun():
     result = runner.classify(junit(*everything("k10")))
     assert result["k10"]["status"] == "PASS", "the sub-cell never lowers its parent"
     cells = {c["id"]: c for c in runner.sub_cells(result)}
-    assert set(cells) == {"k09-breach", "k10-ui-composed"}
+    assert set(cells) == {"k10-ui-composed"}
     cell = cells["k10-ui-composed"]
     assert (cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
         == ("k10", "PASS", "NOT RUN", "NOT RUN[WR-C6-LIVE]")
@@ -199,8 +210,8 @@ def test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute(tmp_path, monkeypat
 
 def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     """R222/R234/R235: the gate is accepted locally with no FAIL and every NOT RUN (sub-cells
-    included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), k09's breach
-    half on a product WR (WR-C6-LIVE) - by its own NOT RUN reason. A NOT RUN on in-scope work
+    included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), k10's composed
+    UI journey on a product WR - by its own NOT RUN reason. A NOT RUN on in-scope work
     (k10, composed since merge #50), a FAIL, or a scenario NOT RUN for another reason
     (deselected, never run) stays open."""
     assert runner.OUT_OF_SCOPE == {"P-08": "GPU (P-08 staging target)",
@@ -216,7 +227,7 @@ def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     with monkeypatch.context() as patch:            # the sub-cell is judged too
         patch.delitem(runner.OUT_OF_SCOPE, "WR-C6-LIVE")
         assert runner.r222(accepted) == {"accepted": False, "open": {
-            "k09-breach": "NOT RUN", "k10-ui-composed": "NOT RUN"}}
+            "k10-ui-composed": "NOT RUN"}}
     failed = runner.classify(junit(*others, *everything("k08", "failure", k08)))
     assert runner.r222(failed) == {"accepted": False, "open": {"k08": "FAIL"}}, \
         "R234: an in-scope FAIL is never excused, whatever its message says"
