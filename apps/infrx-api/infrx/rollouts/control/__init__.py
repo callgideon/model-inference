@@ -23,7 +23,10 @@ serving alias only through L3's CAS. The controller never expands by itself: `ap
 records an operator's expansion, and only on an `expand` verdict. A rollback is one D9
 transition (a lost race rereads and accepts a rollback that another controller made, so a
 breach rolls back exactly once) followed by `_converge`: while the endpoint's alias is a
-candidate of this policy, CAS it back to the baseline. A controller killed between the two
+candidate of this policy, CAS it back to the baseline. The alias is a candidate by serving
+identity (`serving_identity`: provider + the serving revision's digest, the R188 ref without
+its deployment_revision_id), since L3's promotion lists the candidate's serving revision
+under a fresh deployment revision; an alias exactly on the baseline ref is never re-listed. A controller killed between the two
 steps converges on restart; a rolled-back release stays rolled back whatever the metrics
 do later, and an alias someone else moved on is left alone (no flapping). Queued and
 running jobs keep the serving and rate pins they were admitted with (R1/L3); only future
@@ -183,6 +186,13 @@ class ServingControl(Protocol):
         """CAS on the endpoint's alias: `StateConflict` unless it is still at `fence`."""
 
 
+def serving_identity(ref: str) -> str:
+    """`lab:serving:<provider>@sha256:<digest>`: R188's serving ref without the deployment
+    revision it is listed under (E8L-F2); the digest covers the serving version and provider."""
+    head, _, digest = ref.partition("@")
+    return f"{head.rpartition(':')[0]}@{digest}"
+
+
 CONVERGE_TRIES = 3
 
 
@@ -218,10 +228,10 @@ class Controller:
                 raise                  # lost to a different decision: never overwrite it
 
     async def _converge(self, policy: lab.RolloutPolicy, policy_ref: str) -> None:
-        candidates = {c.serving_ref for c in policy.candidates}
+        candidates = {serving_identity(c.serving_ref) for c in policy.candidates}
         for _ in range(CONVERGE_TRIES):
             current, fence = await self._serving.serving(policy.endpoint_id)
-            if current not in candidates:
+            if current == policy.baseline_ref or serving_identity(current) not in candidates:
                 return
             try:
                 await self._serving.rollback(policy.endpoint_id, fence=fence,

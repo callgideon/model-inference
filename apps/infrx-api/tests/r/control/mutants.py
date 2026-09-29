@@ -37,6 +37,8 @@ RACE = "test_r2_a_lost_serving_race_rereads_and_converges"
 EMERG = "test_r2_emergency_rollback_needs_no_evidence_and_happens_once"
 LOST = "test_r2_a_decision_lost_to_another_transition_is_not_swallowed"
 FORGED = "test_r2_a_policy_other_than_the_stored_revision_is_refused"
+PROMO = "test_r2_a_promoted_candidate_is_recognised_by_its_serving_identity"
+DEPLOY = "test_r2_a_deployment_only_candidate_rolls_back_once_and_never_relists_the_baseline"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -192,8 +194,29 @@ MUTANTS: tuple[Mutant, ...] = (
       "                           Verdict(\"rollback\", (f\"operator:{reason}\",)), operator_id, now)\n",
       EMERG),
     m("r2_converge_any_alias", "an alias moved on by someone else is left alone",
-      "            if current not in candidates:\n",
+      "            if current == policy.baseline_ref or serving_identity(current) not in candidates:\n",
       "            if current == policy.baseline_ref:\n", RACE),
+    # --- E8L-F2: the alias is a candidate by serving identity, not by the full ref
+    m("r2_converge_full_ref_membership", "a promoted candidate (fresh deployment revision) "
+      "is still this policy's candidate",
+      "        candidates = {serving_identity(c.serving_ref) for c in policy.candidates}\n"
+      "        for _ in range(CONVERGE_TRIES):\n"
+      "            current, fence = await self._serving.serving(policy.endpoint_id)\n"
+      "            if current == policy.baseline_ref or serving_identity(current) not in candidates:\n",
+      "        candidates = {c.serving_ref for c in policy.candidates}\n"
+      "        for _ in range(CONVERGE_TRIES):\n"
+      "            current, fence = await self._serving.serving(policy.endpoint_id)\n"
+      "            if current not in candidates:\n", PROMO),
+    m("r2_identity_is_the_full_ref", "the identity drops the deployment revision",
+      "    return f\"{head.rpartition(':')[0]}@{digest}\"", "    return ref", PROMO),
+    m("r2_identity_drops_provider", "the identity keeps the provider",
+      "head.rpartition(':')[0]}", "head.rpartition(':')[0].rpartition(':')[0]}", PROMO),
+    m("r2_identity_drops_digest", "the identity keeps the serving revision's digest",
+      "    return f\"{head.rpartition(':')[0]}@{digest}\"",
+      "    return head.rpartition(':')[0]", PROMO, RACE),
+    m("r2_converge_relists_baseline", "an alias exactly on the baseline is never re-listed",
+      "            if current == policy.baseline_ref or serving_identity(current) not in candidates:\n",
+      "            if serving_identity(current) not in candidates:\n", DEPLOY),
     m("r2_converge_target", "the alias goes back to the baseline",
       "to_serving_ref=policy.baseline_ref,", "to_serving_ref=current,", ONCE),
     m("r2_converge_gives_up", "a lost serving CAS is reread",
