@@ -4,7 +4,7 @@
   "slice": "LAB-INTERNAL-TESTING-PREP: E4-ON under R222/R234/R257/R258 - the real make lab-local at b94fd337, the e4-on other-key skips run on their keys, stack mutants",
   "activity": "review",
   "at": "2026-09-29T23:08:00Z",
-  "head": "HEAD_PLACEHOLDER",
+  "head": "6eb57a0e",
   "base": "8ab880a5",
   "worktree": ".claude/worktrees/codex-w5-lab-local-3",
   "branch": "codex/w5-lab-local-3",
