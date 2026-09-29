@@ -1,0 +1,71 @@
+{
+ "task": "L3",
+ "slice": "lab-sql-lw7: WR-C6-VARIANTS + WR-C6-REQUEUE (0055)",
+ "activity": "review",
+ "head": "21ca7882",
+ "worktree": ".claude/worktrees/codex-w5-lab-sql-lw7",
+ "branch": "codex/w5-lab-sql-lw7",
+ "owned_paths": [
+  "apps/app/supabase/migrations/0055_lab_variants_requeue.sql",
+  "tests/integration/test_harness.py (pin line)",
+  "apps/infrx-api/tests/d/test_code_mutants_lw7.py",
+  "Makefile (the lw7 api-mutants line)",
+  "apps/infrx-api/infrx/state/lab_variants.py",
+  "apps/infrx-api/infrx/state/lab_data.py (requeue port)",
+  "apps/infrx-api/infrx/gateway/routes/lab_datasets.py (requeue route)",
+  "apps/infrx-api/tests/l3sql/",
+  "apps/infrx-api/tests/g/lab_datasets/",
+  "research/plan/evidence/l/LAB-SQL-LW7-*"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l3sql/test_lw7.py tests/d/test_code_mutants_lw7.py",
+   "exit": 0,
+   "summary": "27 passed; red first: 5 failed (0055 absent)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py",
+   "exit": 0,
+   "summary": "28 passed; 19 SQL + 4 Python mutants, 0 survivors"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l3sql/test_lw7_routes_pg.py",
+   "exit": 0,
+   "summary": "2 passed; red first: optimizations 503 over pilot.ReleaseRecords"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/lab_datasets/test_mutants.py",
+   "exit": 0,
+   "summary": "24 passed; 5 new requeue mutants; red first: requeue 404"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l4 uv run --frozen pytest -q -rs tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "E4 switches OFF: 2829 passed, 28 skipped, 0 failed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 make api-test",
+   "exit": 0,
+   "summary": "6778 passed, 184 skipped, 10 xfailed, 0 failed"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "code/tests/mutants done; remaining = coordinator applies WR-LW7-1 (verified patch) + one verify round (E4 ~23 min, lw7 line ~1 min); analogue D10-0025 1/2/5; Lab WR-LW7-2/3 not counted",
+  "at": "2026-09-29T17:12Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LW7-1: pilot.ReleaseRecords.variants -> PgLabVariants (patch research/plan/evidence/l/LAB-SQL-LW7-wiring-variants.patch, verified then reverted)",
+  "WR-LW7-2: apps/lab datasets requeue port + 'Import again' button + copy (diff in evidence)",
+  "WR-LW7-3: Lab VARIANT requires base/variant Identity that R3 never stores: Lab nul(IDENTITY) now, R3 persists identities later",
+  "WR-LW7-4: Makefile lw7 line (applied in owned line)"
+ ],
+ "evidence": [
+  "research/plan/evidence/l/LAB-SQL-LW7-21ca788.md",
+  "research/plan/evidence/l/LAB-SQL-LW7-wiring-variants.patch"
+ ]
+}
