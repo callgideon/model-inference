@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 265,
- "updated": "2026-09-29T03:55:57Z",
+ "revision": 266,
+ "updated": "2026-09-29T04:09:32Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7429,32 +7429,41 @@
    "branch": "codex/w5-lab-sql-lw6",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw6",
    "base": "eb561d5f",
-   "head": null,
+   "head": "5eb04ba3",
    "isolation": {
     "ports": "dlab 57500; l3 57502; r1 57532/57533; n3 57518/57519",
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T01:46:45Z",
-   "updated": "2026-09-29T01:46:45Z",
+   "updated": "2026-09-29T04:09:32Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge",
+   "next_action": "merge batch #34 (Opus; WR-CHECKS-2 D10 rows/revokes, R214/R215, the runs_in unit case) → the lab-operate rerun lane",
    "estimate": {
-    "optimistic_h": 4,
-    "likely_h": 7,
-    "pessimistic_h": 14,
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
     "confidence": "medium",
-    "basis": "lw5's undelivered items + two seams"
+    "basis": "ACCEPT 5eb04ba3; the D10 execute-surface rows are unknown until the merge runs them",
+    "at": "2026-09-29T04:09:32Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/d/LSQ6-be7dfff.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/app/supabase/migrations/0047+_*.sql",
     "infrx/state/lab_*.py",
     "tests/d/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-CHECKS-2",
+    "WR-R2-3 (composition half)",
+    "WR-B3-3",
+    "WR-LSQ-C2A/C2B/N4-3 (Python halves)",
+    "WR-E8L-3 (lab_world half)"
+   ]
   },
   {
    "id": "W5-LAB-ROLLOUT-2",
@@ -7698,6 +7707,38 @@
     "tests/w/**",
     "tests/p/**"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-34",
+   "task": null,
+   "slice": "merge batch #34 (Opus): lab-sql-lw6 5eb04ba3 (0047–0051 local-only; +R214/R215, WR-CHECKS-2)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-34",
+   "worktree": ".claude/worktrees/codex-w5-merge-34",
+   "base": "b5eee52a",
+   "head": null,
+   "isolation": {
+    "ports": "dlab 57500; l3 57502; n3 57518/57519",
+    "prefix": "infrx-dlab-",
+    "db": "dlab"
+   },
+   "activity": "running",
+   "started": "2026-09-29T04:09:32Z",
+   "updated": "2026-09-29T04:09:32Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "single-lane batch with D10 privilege fixes",
+    "at": "2026-09-29T04:09:32Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
