@@ -1266,7 +1266,7 @@ MUTANTS += (
 # --- KNOWN-GOOD-PROOF: a schema proof reaches its `through` and no further ---------------
 PROOF_PY = "../../infra/runbooks/schema_proof.py"
 LAB = "test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0056"
-KGR_0051_HEAD = ('"superseded": [{"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 '
+KGR_0051_HEAD = ('}, {"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 '
                  'passed, 14 SHAPE cases skipped by name, 5 xfailed) + the result-read probe PASS on 0001-0051, '
                  'on plain PostgreSQL + shim AND on the Supabase image; migrate.py history check PASS on both '
                  '(the committed driver at fca3ea3, candidate 72dc76ad)",')
@@ -1279,8 +1279,8 @@ MUTANTS += (
        'proven = (bool(proof.get("evidence"))',
        "test_ops_recover__a_schema_proof_reaches_exactly_its_through"),
     _m("known_good_record_unproven", "both known-good targets carry their schema proof",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0052", "result": "bda1586',
-       '"schema_proof_withdrawn": {"through": "0052", "result": "bda1586',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
+       '"schema_proof_withdrawn": {"through": "0056", "result": "bda1586',
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
     _m("schema_proof_trusts_moved_statements", "a migrated history that differs from the files is refused",
        PROOF_PY, "if parts != [files[v]] and not covers(", "if False and not covers(",
@@ -1311,8 +1311,8 @@ MUTANTS += (
        "revoke execute on function infrx.claim_preparation(jsonb) from infrx_runtime; ",
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
     # KNOWN-GOOD-PROOF-2: the proof reaches 0025, and only those bytes
-    _m("known_good_record_stops_at_0023", "both targets are proven through 0052",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0052", "result": "4226315',
+    _m("known_good_record_stops_at_0023", "both targets are proven through 0056",
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "4226315',
        '"schema_proof": {"through": "0023", "result": "4226315',
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
        "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
@@ -1329,8 +1329,8 @@ MUTANTS += (
        '        "operator_unknown_usage)",\n', "",
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
     # KNOWN-GOOD-PROOF-3: the proof reaches 0026 (R147's fenced put_result), and only those bytes
-    _m("known_good_record_stops_at_0025", "both targets are proven through 0052",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0052", "result": "bda1586',
+    _m("known_good_record_stops_at_0025", "both targets are proven through 0056",
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
        '"schema_proof": {"through": "0025", "result": "bda1586',
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
        "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
@@ -1343,7 +1343,7 @@ MUTANTS += (
     # KNOWN-GOOD-REPROOF (R151/R201 condition 1): the proof reaches 0051 (the Lab migrations),
     # and only this checkout's 0027-0051 bytes
     _m("known_good_record_stops_at_0026", "both targets are proven through the Lab's 0051",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0052", "result": "bda1586',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
        '"schema_proof": {"through": "0026", "result": "bda1586',
        LAB, "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
     _m("known_good_record_proves_other_0051", "the proof's 0051 hash is this tree's 0051",
@@ -1370,8 +1370,8 @@ MUTANTS += (
     # KNOWN-GOOD-REPROOF-2 (the next R151 window's condition 1): the proof reaches 0052
     # (lab-control-2's reject), binds this checkout's 0052 bytes, and keeps the through-0051
     # proof it replaces (R224)
-    _m("known_good_record_stops_at_0051", "both targets are proven through 0052",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0052", "result": "bda1586',
+    _m("known_good_record_stops_at_0051", "both targets are proven through 0056",
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
        '"schema_proof": {"through": "0051", "result": "bda1586',
        LAB, "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
     _m("known_good_record_proves_other_0052", "the proof's 0052 hash is this tree's 0052",
@@ -1381,17 +1381,39 @@ MUTANTS += (
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
        "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
     _m("known_good_record_drops_the_0051_proof", "a re-proof keeps the proof it replaces (R224)",
-       "../../infra/rollout/known-good.json", '"superseded": [{"through": "0051", "result": "4226315',
-       '"superseded": [{"through": "0026", "result": "4226315', LAB),
+       "../../infra/rollout/known-good.json", '}, {"through": "0051", "result": "4226315',
+       '}, {"through": "0026", "result": "4226315', LAB),
     # WR-KGR2-RV2 (R224 word for word): superseded[0] equals the through-0051 record at ac8bc06d
     _m("known_good_record_rewords_the_0051_proof", "the kept through-0051 proof is word for word",
        "../../infra/rollout/known-good.json",
-       '"superseded": [{"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 passed',
-       '"superseded": [{"through": "0051", "result": "4226315: its own tests/d (26 suites, 384 passed',
+       '}, {"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 passed',
+       '}, {"through": "0051", "result": "4226315: its own tests/d (26 suites, 384 passed',
        "test_ops_recover__the_superseded_0051_proof_is_the_recorded_one_word_for_word"),
     _m("known_good_record_drops_the_0051_candidate", "the kept through-0051 proof keeps every field",
        "../../infra/rollout/known-good.json", KGR_0051_HEAD + KGR_0051_CANDIDATE, KGR_0051_HEAD,
        "test_ops_recover__the_superseded_0051_proof_is_the_recorded_one_word_for_word"),
+    # KNOWN-GOOD-REPROOF-3 (the next R151 window's condition 1): the proof reaches 0056
+    # (0053-0056 the Lab's), binds this checkout's 0056 bytes, and keeps the through-0052 proof
+    # it replaces word for word in front of the through-0051 one (R224)
+    _m("known_good_record_stops_at_0052", "both targets are proven through 0056",
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
+       '"schema_proof": {"through": "0052", "result": "bda1586',
+       LAB, "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+    _m("known_good_record_proves_other_0056", "the proof's 0056 hash is this tree's 0056",
+       "../../apps/app/supabase/migrations/0056_lab_control_grants.sql",
+       "-- `infrx_lab_control` (0043), which held EXECUTE only on the lab_control_* RPCs and L2's reads,",
+       "-- `infrx_lab_control` (0043), which held EXECUTE only on the lab_control_* RPCs and L2's reads, ",
+       LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
+       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+    _m("known_good_record_drops_the_0052_proof", "a re-proof keeps the proof it replaces (R224)",
+       "../../infra/rollout/known-good.json", '"superseded": [{"through": "0052", "result": "4226315',
+       '"superseded": [{"through": "0051", "result": "4226315', LAB,
+       "test_ops_recover__the_superseded_0052_proof_is_the_recorded_one_word_for_word"),
+    _m("known_good_record_rewords_the_0052_proof", "the kept through-0052 proof is word for word",
+       "../../infra/rollout/known-good.json",
+       '"superseded": [{"through": "0052", "result": "4226315: its own tests/d (26 suites, 383 passed',
+       '"superseded": [{"through": "0052", "result": "4226315: its own tests/d (26 suites, 384 passed',
+       "test_ops_recover__the_superseded_0052_proof_is_the_recorded_one_word_for_word"),
 )
 
 # --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------
