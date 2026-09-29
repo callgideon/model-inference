@@ -9,7 +9,8 @@
                  listing CAS (`LabControl.rollback`): admitted jobs keep their pins (R62/R69).
 
 The route's records are closed and coarser than L3's (`state` is liveness only; `smoke`
-carries validation): see `_deployment`. A registration is the Lab App's form (0-L3I-R1): `name`
+carries validation; `visibility` is whether the alias's current listing names the revision,
+E3L-F5): see `_deployment`. A registration is the Lab App's form (0-L3I-R1): `name`
 is the model's bare name in the workspace (the App allows no slug), `artifact_digest` the
 model's weights - one of the shard digests an operator imported it with, checked, never
 re-declared - and `runtime` the image by digest (`<repo>@sha256:<hex>`). It makes a new serving
@@ -83,13 +84,18 @@ class Operations:
                      == S.validating for e in await self.control.store.events(d.provider_org_id))
         smoke = ("failed" if failed else "none" if d.state in (S.draft, S.validating, S.retired)
                  else "passed")
+        # E3L-F5 (R207): public is the listing's truth - only the alias's current listing is;
+        # a pending, rejected, rolled-back or replaced revision reads private (R189: coarse).
+        versions = await self.reads.listing_versions(serving.public_model_id)
+        listed = versions[-1].deployment_revision_id if versions else None
         return Deployment(
             deployment_revision_id=d.deployment_revision_id, model_id=serving.public_model_id,
             serving_version_id=d.serving_version_id, revision_label=serving.revision_label,
             runtime=serving.runtime_image_ref, created_at=d.created_at,
             schema_version=serving.capability.input_schema_ref.removeprefix(REQUEST),
             rate_card_version=card.rate_card_version if card else None,
-            environment=d.environment.value, visibility=d.visibility.value,
+            environment=d.environment.value,
+            visibility="public" if d.deployment_revision_id == listed else "private",
             state="retired" if d.state is S.retired else "active", smoke=smoke)
 
     async def models(self, actor: Actor) -> list[Model]:

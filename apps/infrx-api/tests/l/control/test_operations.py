@@ -238,6 +238,7 @@ def test_operations__an_operator_rejects_a_proposal_and_it_publishes_nothing(wor
             rows[p.proposal_id].state) == ("prod", "private", "retired")
     assert (rows[d.deployment_revision_id].environment,
             rows[d.deployment_revision_id].state) == ("dev", "active")
+    assert run(w.control_store.deployment(p.proposal_id)).visibility is v2.Visibility.private
     event = run(w.control.events(w.ADMIN_A, w.A))[-1]
     assert (event.action, event.actor, event.subject, event.before, event.after) == (
         "lab_transition", operator.principal, p.proposal_id, {"state": "proposed_public"},
@@ -280,6 +281,30 @@ def test_operations__a_retired_proposal_lists_as_a_terminal_row(world):
     assert (row.environment, row.visibility, row.state) == ("prod", "private", "retired")
     stored = run(w.control_store.deployment(p.proposal_id))
     assert (stored.visibility, stored.state) == (v2.Visibility.private, v2.DeploymentState.retired)
+
+
+def test_operations__a_revision_reads_public_only_while_it_is_the_listing(world):
+    """Oracle (E3L-F5, R207): the route record's visibility is the listing's truth. A pending
+    proposal's prod revision reads private until the operator's approval lists it (then
+    public); after the operator's rollback the rolled-back revision reads private (still
+    `active`: admitted jobs keep their pins) and the restored one public. At each step the one
+    public prod revision is the one App discovery pins."""
+    w, o = world, ops(world)
+    seed = pin(w, ALIAS).deployment_revision_id
+    _, p = proposed(w, o)
+    viewer = actor(w, w.VIEWER_A, w.A, v2.ProviderRole.viewer)
+
+    def prod():
+        return {x.deployment_revision_id: (x.visibility, x.state)
+                for x in run(o.deployments(viewer)) if x.deployment_revision_id in (seed, p.proposal_id)}
+    assert prod() == {seed: ("public", "active"), p.proposal_id: ("private", "active")}
+    run(w.control.approve(OPERATOR, p.proposal_id, rate_card_version="rc_f5", input_rate="3",
+                          output_rate="9", expected_version=1, reason="launch"))
+    assert prod() == {seed: ("private", "active"), p.proposal_id: ("public", "active")}
+    assert pin(w, ALIAS).deployment_revision_id == p.proposal_id
+    run(w.control.rollback(OPERATOR, ALIAS, to_version=1, expected_version=2, reason="regress"))
+    assert prod() == {seed: ("public", "active"), p.proposal_id: ("private", "active")}
+    assert pin(w, ALIAS).deployment_revision_id == seed
 
 
 class Sessions:

@@ -64,6 +64,7 @@ O_MOUNT = "test_control_app__mounts_only_the_lab_routers_on_its_own_settings"
 O_REJECT = "test_operations__an_operator_rejects_a_proposal_and_it_publishes_nothing"
 O_TERMINAL = "test_operations__a_retired_proposal_lists_as_a_terminal_row"
 O_ROUTE = "test_control_route__only_an_operator_rejects_a_proposal"
+O_LISTED = "test_operations__a_revision_reads_public_only_while_it_is_the_listing"
 READ_GUARD = ("        await self.control.access.require(actor.user_id, actor.provider_org_id,\n"
               "                                          ProviderCapability.read_aggregate_health)\n")
 
@@ -321,6 +322,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("reject_reason_optional", "a rejection body names its reason", ROUTE,
        "    reason: str = Field(min_length=1, max_length=500)",
        '    reason: str = "declined"', O_ROUTE),
+    # --- E3L-F5: the record's visibility is the listing's truth (R207) -----------------------
+    _m("visibility_from_the_row", "a revision reads public only while it is the listing", OPS,
+       'visibility="public" if d.deployment_revision_id == listed else "private",',
+       "visibility=d.visibility.value,", O_LISTED),
+    _m("visibility_from_the_first_listing", "the listing is the alias's CURRENT version", OPS,
+       "listed = versions[-1].deployment_revision_id if versions else None",
+       "listed = versions[0].deployment_revision_id if versions else None", O_LISTED),
     _m("reject_unmounted", "the operator's rejection is served", ROUTE,
        '    @app.post(CONTROL_PREFIX + "/proposals/{proposal_id}/reject")\n',
        '    @app.post(CONTROL_PREFIX + "/proposals/{proposal_id}/reject-x")\n', O_ROUTE),
