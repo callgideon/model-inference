@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 269,
- "updated": "2026-09-29T06:25:19Z",
+ "revision": 270,
+ "updated": "2026-09-29T06:39:35Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7684,25 +7684,29 @@
    "branch": "codex/w5-composition-4",
    "worktree": ".claude/worktrees/codex-w5-composition-4",
    "base": "9698e51b",
-   "head": null,
+   "head": "6bffa2e8",
    "isolation": {
     "ports": "p2 57528/57529; p3 57530/57531; b1 57520/57521; n3 57518/57519; e7l 57300-57399",
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T03:55:57Z",
-   "updated": "2026-09-29T03:55:57Z",
+   "updated": "2026-09-29T06:39:35Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge → LAB-IMPROVE-LOCAL rerun",
+   "next_action": "merge batch #36 (Opus; WR-C4-PREFLIGHT, WR-C4-MK, R217–R219) → composition-5 (WR-B3-3/WR-C4-B3-SUITES, the lab-sql-lw6 Python halves) → lab-evaluate-2 (E6L j09 checkpoint half)",
    "estimate": {
-    "optimistic_h": 4,
-    "likely_h": 7,
-    "pessimistic_h": 14,
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
     "confidence": "medium",
-    "basis": "five composition items + one gate rerun; composition-3 took ~9 h incl. review"
+    "basis": "ACCEPT 6bffa2e8; merge running with the E4 regression",
+    "at": "2026-09-29T06:39:35Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/COMPOSITION-4-b7db806.md",
+    "research/plan/evidence/e/E7L-raw-17176f5/"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/gateway/pilot.py",
@@ -7714,7 +7718,14 @@
     "tests/w/**",
     "tests/p/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-C4-PREFLIGHT",
+    "WR-C4-B3-SUITES",
+    "WR-C4-EVIDENCE-ROUTE",
+    "WR-LAB2-4",
+    "WR-C4-UI",
+    "WR-C4-MK"
+   ]
   },
   {
    "id": "W5-MERGE-34",
@@ -7809,6 +7820,38 @@
     "confidence": "high",
     "basis": "single-lane batch",
     "at": "2026-09-29T06:25:19Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-36",
+   "task": null,
+   "slice": "merge batch #36 (Opus): composition-4 6bffa2e8 (+WR-C4-PREFLIGHT, WR-C4-MK, R217–R219)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-36",
+   "worktree": ".claude/worktrees/codex-w5-merge-36",
+   "base": "e35ea4dd",
+   "head": null,
+   "isolation": {
+    "ports": "p3 57530/57531; p2 57528/57529; l4 57503",
+    "prefix": "infrx-p3-",
+    "db": "p3"
+   },
+   "activity": "running",
+   "started": "2026-09-29T06:39:35Z",
+   "updated": "2026-09-29T06:39:35Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R216 before R217 at integration)",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "single-lane batch with the E4 regression",
+    "at": "2026-09-29T06:39:35Z"
    },
    "evidence": [],
    "commands": [],
