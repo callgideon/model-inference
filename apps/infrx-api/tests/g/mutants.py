@@ -43,6 +43,8 @@ OR = "observe/route.py"                 # I3B's loopback rule, which G2's /ready
 ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
 M = "gateway/routes/models.py"          # G7: public discovery, one projection
 BUILD_CASE = "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as"
+DATASETS_C6 = "test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_enabled"
+RELEASES_C6 = "test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -1112,6 +1114,63 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lab_pipelines_without_d7", "the pipeline surface runs over D7 (merged)",
        P, "LabPipelines(sessions, access, store=store, objects=objects,",
        "LabPipelines(sessions, access, objects=objects,", "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
+    # WR-C5-N4-ROUTE (composition-6): the datasets surface's imports are 0051's queue
+    _m("lab_datasets_jobs_absent", "LAB_DATASETS enqueues imports on 0051's queue (no 503)",
+       P, "                                          PgLabImportJobs(connect))",
+       "                                          None)", DATASETS_C6),
+    _m("lab_datasets_jobs_off_the_pool", "the import queue is on the gateway's pool",
+       P, "                                          PgLabImportJobs(connect))",
+       "                                          PgLabImportJobs(None))", DATASETS_C6),
+    # WR-R4-2 (composition-6): the release surface's ports over D9, D7, the Lab objects, 0043
+    _m("lab_releases_records_absent", "LAB_RELEASES reads the release models (no 503)",
+       P, "                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects),\n",
+       "                       records=None,\n", RELEASES_C6,
+       "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
+    _m("lab_releases_proposals_absent", "LAB_RELEASES stores proposals in 0043 (no 503)",
+       P, "proposals=ReleaseProposals(PgReleaseProposals(connect)), store=d9)",
+       "proposals=None, store=d9)", RELEASES_C6,
+       "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
+    _m("lab_releases_store_absent", "a proposal is checked against D9's row now (no 503)",
+       P, "proposals=ReleaseProposals(PgReleaseProposals(connect)), store=d9)",
+       "proposals=ReleaseProposals(PgReleaseProposals(connect)), store=None)", RELEASES_C6,
+       "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
+    _m("lab_releases_off_the_pool", "the release ports are on the gateway's pool",
+       P, "    d9 = PgReleaseStore(connect)\n", "    d9 = PgReleaseStore(None)\n", RELEASES_C6),
+    _m("lab_releases_other_objects", "the plan is read from the Lab objects the surface got",
+       P, "records=ReleaseRecords(d9, PgLabDataStore(connect), objects),",
+       "records=ReleaseRecords(d9, PgLabDataStore(connect), None),", RELEASES_C6),
+    _m("lab_releases_every_state", "the page lists the three states the Lab shows",
+       P, "await self.d9.releases_in(SHOWN, provider_org_id=provider_org_id)",
+       "await self.d9.releases_in((), provider_org_id=provider_org_id)", RELEASES_C6),
+    _m("lab_releases_plan_guessed", "a release whose plan is not stored is a 503, never guessed",
+       P, "            if raw is None:\n                raise errors.DependencyUnavailable(\n"
+       "                    f\"the plan of", "            if raw is None:\n                continue\n"
+       "                raise errors.DependencyUnavailable(\n                    f\"the plan of",
+       RELEASES_C6),
+    _m("lab_releases_policy_foreign", "D7's policy is read for the page's own provider",
+       P, "policy = await self.store.resolve(item.policy_ref, provider_org_id=provider_org_id)",
+       "policy = await self.store.resolve(item.policy_ref, provider_org_id=None)", RELEASES_C6),
+    _m("lab_releases_verdict_dropped", "the verdict is D9's latest decision",
+       P, '                "verdict": None if d is None else {',
+       '                "verdict": None if True else {', RELEASES_C6),
+    _m("lab_releases_budget_unnamed", "the plan's budget keeps its unit (never converted)",
+       P, '"unit": plan["budget"]["unit"]}},', '"unit": "CREDIT"}},', RELEASES_C6),
+    _m("lab_releases_time_not_utc", "a database time is shown as UTC",
+       P, '    return at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")',
+       '    return at.strftime("%Y-%m-%dT%H:%M:%SZ")', RELEASES_C6),
+    _m("lab_releases_variants_invented", "R3's variant listing is a 503 until it is written",
+       P, '        raise errors.DependencyUnavailable("R3\'s variant listing is not wired',
+       '        return []\n        raise errors.DependencyUnavailable("R3\'s variant listing is not wired',
+       RELEASES_C6),
+    _m("lab_proposals_proposer_dropped", "0043 records the session's user as the proposer",
+       P, 'fence=proposal["fence"], proposed_by=proposal["proposed_by"]))',
+       'fence=proposal["fence"], proposed_by=None))', RELEASES_C6),
+    _m("lab_proposals_fence_zero", "the proposal carries the fence the page showed",
+       P, 'fence=proposal["fence"], proposed_by=proposal["proposed_by"]))',
+       'fence=0, proposed_by=proposal["proposed_by"]))', RELEASES_C6),
+    _m("lab_proposals_other_provider", "the page lists the provider's own proposals",
+       P, "for p in await self.store.proposals(provider_org_id=provider_org_id)]",
+       "for p in await self.store.proposals(provider_org_id=None)]", RELEASES_C6),
     # Composition batch 2 (WR-LAB-API-2): LAB_CONTROL over L3's operations on the same pool
     _m("lab_control_without_operations", "the control surface runs over L3's operations",
        P, "LabControl(sessions, access, lab_operations(connect, access))",
@@ -1151,8 +1210,8 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "            or deployment.lab_pipelines or deployment.lab_releases or deployment.lab_datasets):",
        "            or deployment.lab_pipelines or deployment.lab_releases):", "test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_enabled"),
     _m("lab_datasets_objects_elsewhere", "the datasets surface stores in the gateway's own objects",
-       P, "LabDatasets(sessions, access, PgLabDataStore(connect), objects)",
-       "LabDatasets(sessions, access, PgLabDataStore(connect), None)", "test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_enabled"),
+       P, "LabDatasets(sessions, access, PgLabDataStore(connect), objects,",
+       "LabDatasets(sessions, access, PgLabDataStore(connect), None,", "test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_enabled"),
     _m("lab_checkpoints_composed_when_off", "LAB_CHECKPOINTS off builds no receiver",
        P, "    if not deployment.lab_checkpoints:\n        return {}",
        "    if False:\n        return {}", "test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_enabled"),

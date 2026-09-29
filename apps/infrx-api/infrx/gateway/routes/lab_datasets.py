@@ -17,7 +17,7 @@ the media store under `lab/<provider>/` (R182). Mounted only when the compositio
 """
 from __future__ import annotations
 
-import asyncio
+import asyncio  # noqa: F401 - the mutants' stand-in session reader
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -45,6 +45,7 @@ class LabDatasets:
     access: object                          # infrx.lab.access.LabAccess
     store: object                           # D7: PgLabDataStore
     objects: object                         # the Lab objects (the media store, lab/<p>/)
+    jobs: object = None                     # 0051's import-job queue: PgLabImportJobs
 
 
 def refusal(error: Exception) -> JSONResponse:
@@ -63,16 +64,31 @@ async def pieces(text: str):
         yield data[start:start + 4096]
 
 
+def shown(job: dict) -> dict:
+    """0051's import job as the Lab's (WR-C5-N4-ROUTE): queued or running is `running`;
+    `succeeded` is `published` with its report; a failure whose rows were refused
+    (`imports.work`'s "rejected") is `rejected` with its report, any other `failed` with its
+    reason."""
+    state = {"succeeded": "published", "failed": "failed"}.get(job["state"], "running")
+    if state == "failed" and job.get("error") == "rejected":
+        state = "rejected"
+    return {"import_id": str(job["job_id"]), "state": state, "report": job.get("result"),
+            "error": job.get("error") if state == "failed" else None}
+
+
 def router(*, access, store, objects, user_of, read, clock=lambda: datetime.now(UTC),
-           objects_for=None) -> APIRouter:
+           jobs=None) -> APIRouter:
     """The datasets surface. Every call first derives the acting provider (WR-N-2);
-    `user_of(request)` is the verified user, `read(request)` the bounded JSON body."""
+    `user_of(request)` is the verified user, `read(request)` the bounded JSON body. An
+    import is one job on 0051's durable queue (`jobs`, `PgLabImportJobs`), worked by the I5
+    datasets pool (WR-N4-3); without a queue the import routes are a 503."""
     api = APIRouter(prefix=PREFIX)
-    jobs: dict[tuple[str, str], dict] = {}
     published: dict[str, list[str]] = {}          # ponytail: WR-N4-2 asks D7 for a list RPC
-    # ponytail: imports run as tasks of this process; the I5 datasets pool (a durable
-    # import-job queue, WR-N4-3) when one exists. A re-POST of an import id resumes it.
-    tasks: set = set()
+
+    def queue():
+        if jobs is None:
+            raise errors.DependencyUnavailable("the import-job queue is not wired")
+        return jobs
 
     def note(provider: str, ref: str) -> None:
         if ref not in published.setdefault(provider, []):
@@ -99,38 +115,16 @@ def router(*, access, store, objects, user_of, read, clock=lambda: datetime.now(
     async def start(request: Request, provider: str):
         async def work(provider, user):
             body = await read(request)
-            spec = imports.parse_spec(body["spec"], provider_org_id=provider)
-            key = (provider, spec.import_id)
-            if jobs.get(key, {}).get("state") in ("running", "published"):
-                return jobs[key]
-            job = jobs[key] = {"import_id": spec.import_id, "state": "running", "report": None,
-                               "error": None}
-            target = objects_for(body) if objects_for else objects
-
-            async def run():
-                try:
-                    report = await imports.Importer(store, target).run(
-                        body["spec"], pieces(body["body"]), provider_org_id=provider,
-                        actor=user, accept_rejects=bool(body.get("accept_rejects")))
-                    note(provider, report.dataset_ref)
-                    job.update(state="published", report=vars(report))
-                except imports.ImportRejected as rejected:
-                    job.update(state="rejected", report=vars(rejected.report))
-                except BaseException as died:            # noqa: BLE001 - the job records it
-                    job.update(state="failed",
-                               error=f"the import stopped ({type(died).__name__})")
-            task = asyncio.get_running_loop().create_task(run())
-            tasks.add(task)
-            task.add_done_callback(tasks.discard)
-            return dict(job)
+            return shown(await imports.enqueue(queue(), objects, body, provider_org_id=provider,
+                                               actor=user))
         return await guarded(request, provider, work)
 
     @api.get("/imports/{import_id}")
     async def job(request: Request, provider: str, import_id: str):
         async def work(provider, user):
-            found = jobs.get((provider, import_id))
-            if found is None:
-                raise errors.NotFound(f"no import {import_id}")
+            found = shown(await queue().job(import_id, provider_org_id=provider))
+            if found["state"] == "published":
+                note(provider, found["report"]["dataset_ref"])
             return found
         return await guarded(request, provider, work)
 
@@ -205,7 +199,7 @@ def register(app, rt, datasets: LabDatasets | None = None):
         except ValueError:
             raise errors.InvalidRequest("the body is not JSON") from None
 
-    api = router(access=x.access, store=x.store, objects=x.objects, read=read,
+    api = router(access=x.access, store=x.store, objects=x.objects, read=read, jobs=x.jobs,
                  user_of=lambda request: lab_auth.authenticate(request, x.sessions))
     for route in api.routes:              # on the app's own table, as every other router
         app.add_api_route(route.path, route.endpoint, methods=list(route.methods))

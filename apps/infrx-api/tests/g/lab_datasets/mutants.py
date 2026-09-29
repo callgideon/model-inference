@@ -22,6 +22,7 @@ ORDER = C + "the_body_is_read_only_after_the_acting_provider"
 ACCESS = C + "a_viewer_and_another_providers_member_cannot_import"
 BODY = C + "a_body_is_a_bounded_json_object_of_the_operation"
 JOBS = C + "an_import_job_is_read_only_by_its_own_provider"
+DURABLE = C + "an_import_is_one_durable_job_the_pool_works"
 READ = "            body = await read(request)\n"
 
 
@@ -42,14 +43,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("unauthenticated_is_unavailable", "a missing or unverified session is a 401",
        "STATUS = ((errors.InvalidApiKey, 401), ", "STATUS = (", IDENTITY),
     _m("actor_not_the_session", "N1 records the session's user as the actor",
-       "                        actor=user, accept_rejects=", "                        actor="
-       '"lab", accept_rejects=', IDENTITY),
+       "                                               actor=user))",
+       '                                               actor="lab"))', IDENTITY, DURABLE),
     _m("published_not_listed", "a published import is listed",
-       "                    note(provider, report.dataset_ref)\n", "", IDENTITY),
+       '                note(provider, found["report"]["dataset_ref"])\n',
+       "                pass\n", IDENTITY),
     _m("body_before_identity", "an import body is read after the acting provider",
-       "        async def work(provider, user):\n" + READ + "            spec = ",
+       "        async def work(provider, user):\n" + READ + "            return shown(",
        "        body = await read(request)\n\n        async def work(provider, user):\n"
-       "            spec = ", ORDER),
+       "            return shown(", ORDER),
     _m("provider_not_derived", "every call acts for a provider the session may act for",
        "            return await work(await acting_provider(access, user, provider), user)",
        "            return await work(provider, user)", ACCESS, ORDER),
@@ -59,9 +61,21 @@ MUTANTS: tuple[Mutant, ...] = (
        "max_bytes=MAX_BODY_BYTES,", "max_bytes=MAX_BODY_BYTES * 2,", BODY),
     _m("too_large_is_a_400", "a body past the bound is a 413",
        "(errors.RequestTooLarge, 413), ", "", BODY),
-    _m("import_job_any_provider", "an import job is read only under its own provider",
-       "found = jobs.get((provider, import_id))",
-       "found = next((j for (_, i), j in jobs.items() if i == import_id), None)", JOBS),
+    _m("import_job_other_provider", "an import job is read for the path's provider",
+       "found = shown(await queue().job(import_id, provider_org_id=provider))",
+       "found = shown(await queue().job(import_id, provider_org_id=user))", JOBS),
+    # WR-C5-N4-ROUTE (composition-6): one durable job on 0051's queue, as the Lab reads it
+    _m("import_running_as_published", "a queued or running job reads `running`",
+       '.get(job["state"], "running")', '.get(job["state"], "published")', DURABLE),
+    _m("import_rejected_as_failed", "refused rows read `rejected` with their report",
+       '    if state == "failed" and job.get("error") == "rejected":\n', "    if False:\n",
+       DURABLE),
+    _m("import_error_beyond_failure", "only a failure carries its reason",
+       '"error": job.get("error") if state == "failed" else None}', '"error": job.get("error")}',
+       DURABLE),
+    _m("import_queue_invented", "without a queue the import routes are a 503",
+       "        if jobs is None:\n            raise", "        if False:\n            raise",
+       DURABLE),
 )
 
 

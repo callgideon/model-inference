@@ -536,6 +536,12 @@ class FakeJobs:
         job.update(state=state, result=result, error=error)
         return dict(job)
 
+    async def job(self, job_id, *, provider_org_id):
+        job = self.rows.get(job_id)
+        if job is None or job["provider_org_id"] != provider_org_id:
+            raise errors.NotFound("no such import job for this provider")
+        return {"result": None, "error": None, **job}
+
 
 def test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_lease(
         monkeypatch) -> None:
@@ -602,3 +608,89 @@ def test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_leas
         assert run(imports.work(jobs, store, objects, worker_id="w4")) == \
             {"succeeded": 0, "failed": 0, "retry": 1}
         assert jobs.rows[later["import_id"]]["state"] == "running"   # finished nothing
+
+
+def test_n4_the_default_heartbeat_keeps_a_slow_import_leased(monkeypatch) -> None:
+    """Lens 0-F1: without `beat_s` (the datasets role's call) the lease is heartbeaten every
+    lease/3, so an import longer than a heartbeat period keeps its lease - at the old
+    `lease * 2` cadence it would lapse halfway and a second worker would run the same
+    import."""
+    spec, data = fixture("benchmark")
+    store, objects, _ = world()
+    jobs = FakeJobs()
+    run(imports.enqueue(jobs, objects, {"spec": spec, "body": data.decode()},
+                        provider_org_id=NEMO, actor="dev@nemo"))
+    slow = imports.Importer.run
+
+    async def slowly(self, *args, **kw):
+        await asyncio.sleep(0.25)
+        return await slow(self, *args, **kw)
+    monkeypatch.setattr(imports.Importer, "run", slowly)
+    done = run(imports.work(jobs, store, objects, worker_id="w", lease_s=0.3))
+    assert done == {"succeeded": 1, "failed": 0, "retry": 0}
+    assert jobs.beats and set(jobs.beats) == {(spec["import_id"], "w")}, jobs.beats
+
+
+def test_n4_the_heartbeat_stops_once_the_import_finishes() -> None:
+    """Lens WR-C6-F3: the heartbeat lives only while its import runs - once the job is
+    finished no further heartbeat reaches the queue (a leaked one would keep renewing a lease
+    this worker no longer uses)."""
+    spec, data = fixture("benchmark")
+    store, objects, _ = world()
+    jobs = FakeJobs()
+    run(imports.enqueue(jobs, objects, {"spec": spec, "body": data.decode()},
+                        provider_org_id=NEMO, actor="dev@nemo"))
+
+    async def pass_then_wait():
+        done = await imports.work(jobs, store, objects, worker_id="w", beat_s=0.01)
+        beats = len(jobs.beats)
+        await asyncio.sleep(0.1)                  # ten heartbeat periods after the finish
+        return done, beats
+    done, beats = run(pass_then_wait())
+    assert done == {"succeeded": 1, "failed": 0, "retry": 0}
+    assert len(jobs.beats) == beats, jobs.beats[beats:]
+
+
+def test_n4_a_lost_lease_stops_the_import_and_the_pass_goes_on(monkeypatch, caplog) -> None:
+    """Lens 1-C5-2: a heartbeat the queue refuses (another worker reclaimed the job) stops
+    that import - it is never finished by this worker - and says so in the log; a finish the
+    queue refuses (the lease lapsed at the last moment) is counted, never an exception that
+    aborts the rest of the pass: the pass's other jobs still finish."""
+    spec, data = fixture("benchmark")
+    store, objects, _ = world()
+    ids = [f"b0000001-0000-4000-8000-00000000c00{n}" for n in range(1, 5)]
+    lost_beat, lost_finish = ids[0], ids[2]
+
+    class Lossy(FakeJobs):
+        async def heartbeat(self, job_id, *, worker_id):
+            if job_id == lost_beat:
+                raise errors.StateConflict("this worker does not hold that job")
+            return await super().heartbeat(job_id, worker_id=worker_id)
+
+        async def finish(self, job_id, state, **kw):
+            if job_id == lost_finish:
+                raise errors.StateConflict("this worker does not hold that job")
+            return await super().finish(job_id, state, **kw)
+    jobs, finished = Lossy(), []
+    for import_id in ids:
+        own = {**spec, "import_id": import_id, "dataset_id": "da" + import_id[2:]}
+        run(imports.enqueue(jobs, objects, {"spec": own, "body": data.decode()},
+                            provider_org_id=NEMO, actor="dev@nemo"))
+    slow = imports.Importer.run
+
+    async def importer(self, spec_, *args, **kw):
+        if spec_["import_id"] == lost_beat:
+            await asyncio.sleep(5)
+        report = await slow(self, spec_, *args, **kw)
+        finished.append(spec_["import_id"])
+        return report
+    monkeypatch.setattr(imports.Importer, "run", importer)
+    caplog.set_level("WARNING")
+    done = run(imports.work(jobs, store, objects, worker_id="w", limit=4, beat_s=0.01))
+    assert done == {"succeeded": 2, "failed": 0, "retry": 2}, \
+        (done, {i: jobs.rows[i].get("error") for i in ids})
+    assert lost_beat not in finished and jobs.rows[lost_beat]["state"] == "running"
+    assert jobs.rows[lost_finish]["state"] == "running"
+    assert {jobs.rows[i]["state"] for i in (ids[1], ids[3])} == {"succeeded"}
+    lost = [r.getMessage() for r in caplog.records if "the lease was lost" in r.getMessage()]
+    assert any(lost_beat in m for m in lost) and any(lost_finish in m for m in lost), lost

@@ -141,6 +141,16 @@ class PgReleaseStore:
         return [_listing(doc) for doc in await self._call("lab_releases_in", {
             "provider_org_id": provider_org_id, "states": list(states)})]
 
+    async def providers_in(self, states: Sequence[str]) -> list[str]:
+        """WR-C5-PROVIDERS (0053): the providers with a release in one of `states`."""
+        return await self._call("lab_providers_with", {"work": "release",
+                                                       "states": list(states)})
+
+    async def decisions(self, *, provider_org_id: str) -> list[dict[str, Any]]:
+        """WR-R4-2 (0053): every D9 decision of the provider's releases, oldest first -
+        `{policy_ref, decision, reasons, evidence_refs, decided_by, decided_at}`."""
+        return await self._call("lab_release_decisions", {"provider_org_id": provider_org_id})
+
     async def transition(self, policy_ref: str, *, fence: int, to: str,
                          decision: dict[str, Any], reasons: tuple[str, ...]) -> int:
         records.parse(decision)                 # the contract refuses first (LabRejected)

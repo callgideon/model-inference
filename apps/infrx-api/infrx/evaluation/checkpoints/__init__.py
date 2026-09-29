@@ -445,26 +445,11 @@ def suites(receipts, ledger: CheckpointLedger, deployer: Deployer):
     return suite
 
 
-def pg_receipts(connect):
-    """D7's receipt read: (external run, digest) of the provider's checkpoint, or None.
-    ponytail: one select here until lab-sql's `PgLabDataStore` reads it (WR-C5-RECEIPT)."""
-    async def receipt(checkpoint_id: str, *, provider_org_id: str):
-        conn = await connect()
-        try:
-            cursor = await conn.execute(
-                "select external_run_ref, artifact_digest from infrx.lab_checkpoint_receipts "
-                "where provider_org_id::text = %s and checkpoint_id::text = %s",
-                (provider_org_id, checkpoint_id))
-            return await cursor.fetchone()
-        finally:
-            await conn.close()
-    return receipt
-
-
 def production_suites(connect):
-    """WR-C4-B3-SUITES on one pool: D7's receipts, D8's `PgCheckpointLedger` (0042) and
+    """WR-C4-B3-SUITES on one pool: D7's receipts (0053, WR-C5-RECEIPT), D8's `PgCheckpointLedger` (0042) and
     L3's dev deployer over `PgControlStore`'s reads (0044)."""
     from ...state.lab_control import PgControlStore
+    from ...state.lab_data import PgLabDataStore
     from ...state.lab_pipeline import PgCheckpointLedger
-    return suites(pg_receipts(connect), PgCheckpointLedger(connect),
+    return suites(PgLabDataStore(connect).checkpoint_receipt, PgCheckpointLedger(connect),
                   DevDeployer(PgControlStore(connect)))

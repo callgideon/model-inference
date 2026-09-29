@@ -39,6 +39,9 @@ PREVIEW = "test_n1_the_schema_preview_shows_fields_mapping_and_row_errors"
 STRICT = "test_n1_the_spec_is_strict"
 ACTING = "test_wrn2_only_a_current_developer_member_acts_for_the_provider"
 JOBS = "test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_lease"
+BEAT = "test_n4_the_default_heartbeat_keeps_a_slow_import_leased"
+LOST = "test_n4_a_lost_lease_stops_the_import_and_the_pass_goes_on"
+STOPS = "test_n4_the_heartbeat_stops_once_the_import_finishes"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -199,6 +202,23 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n4_transient_refusal_finishes", "a 5xx/429 refusal finishes nothing (the lease lapses)",
       "        except (errors.ServerError, errors.RateLimitError):\n",
       "        except ():\n", JOBS),
+    # --- lens 0-F1 / 1-C5-2 (composition-6): the default cadence and a lost lease
+    m("n4_default_cadence_past_the_lease", "the lease is heartbeaten every lease/3 by default",
+      "await asyncio.sleep(beat_s or lease_s / 3)", "await asyncio.sleep(beat_s or lease_s * 2)",
+      BEAT),
+    m("n4_lost_lease_imports_on", "a refused heartbeat stops the import (the lease is lost)",
+      "        if not importing.done():             # the heartbeat died: the lease is not ours\n",
+      "        if False:\n", LOST),
+    m("n4_lost_import_not_stopped", "a lost lease's import is cancelled, never finished here",
+      "            importing.cancel()\n", "            pass\n", LOST),
+    m("n4_lost_lease_silent", "a lost lease is logged",
+      '            log.warning("import job %s: the lease was lost (%r); the import stopped", job_id,\n'
+      "                        beating.exception())\n", "", LOST),
+    m("n4_lost_finish_escapes", "a refused finish is counted, never an exception aborting the pass",
+      "        except errors.StateConflict:\n            log.warning(", "        except ():\n"
+      "            log.warning(", LOST),
+    m("n4_heartbeat_outlives_the_import", "the heartbeat stops once the import finishes",
+      "        beating.cancel()\n", "", STOPS),
     m("n4_claims_every_job", "a pass claims at most `limit` jobs",
       "    for job in await jobs.claim(limit=limit, worker_id=worker_id, redelivery_s=lease_s):",
       "    for job in await jobs.claim(limit=99, worker_id=worker_id, redelivery_s=lease_s):", JOBS),

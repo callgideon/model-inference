@@ -283,6 +283,7 @@ def test_lab_releases__a_proposal_names_the_revision_d9_holds_now():
         "kind": "expand", "policy_ref": w.refs[1], "fence": shown + 1, "state": "proposed",
         "decided_at": None}
     assert made["proposed_at"] == w.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert w.proposals.rows[-1][1]["proposed_by"] == ADMIN_A   # the session's user (0043)
     assert w.d9.rows[w.refs[1]] == r2.Release(state="running", fence=shown + 1,
                                               plan_digest="sha256:" + "9" * 64,
                                               started_at=STARTED)

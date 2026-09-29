@@ -34,6 +34,9 @@ DATASETS = C + "datasets_reconcile_every_providers_lineage_page_by_page"
 IMPORTS = C + "the_datasets_role_works_the_durable_import_job_queue"
 ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
+DECIDE = C + "an_operator_decides_a_lab_proposal_through_d9s_cas"
+LAUNCH = C + "a_release_is_launched_with_its_plan_stored_first"
+B2 = C + "a_running_release_is_stepped_on_its_stored_b2_report"
 NO_PASS = C + "training_has_no_pass_and_a_teacher_host_needs_its_approval"
 ANNOT = C + "the_annotation_role_collects_teacher_batches_with_n2s_redaction"
 COLLECT = C + "the_teacher_pass_collects_every_submitted_run_of_every_approved_batch"
@@ -155,9 +158,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_judge_pass_cadence", "the collect pass runs every JUDGE_PASS_S",
        '"judge_collect": lambda: every(JUDGE_PASS_S,', '"judge_collect": lambda: every(LINEAGE_PASS_S,',
        JPASS),
-    _m("lw_judge_pass_providers_off_the_login", "the providers are read on the role's login",
-       "wiring, partial(provider_ids, connect)),", 'wiring, partial(provider_ids, connector(""))),',
-       JPASS),
+    _m("lw_judge_pass_providers_off_the_ledger", "the providers are read on the role's ledger",
+       "wiring, partial(ledger.providers_in, JUDGE_WORK)),",
+       'wiring, partial(PgJudgeLedger(connector("")).providers_in, JUDGE_WORK)),', JPASS),
+    _m("lw_judge_pass_providers_other_states", "the providers are those with work the pass does",
+       "wiring, partial(ledger.providers_in, JUDGE_WORK)),",
+       'wiring, partial(ledger.providers_in, ("submitted",))),', JPASS),
     _m("lw_judge_pass_ambiguous_released", "an ambiguous run the provider lacks is never released",
        "                    elif (external := await wiring.provider.lookup(run.submit_key)) is None:\n"
        "                        done[\"waiting\"] += 1\n",
@@ -167,7 +173,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '                if run.consent.grant_id.startswith("lab:"):\n                    continue\n',
        "", JPASS),
     _m("lw_judge_pass_submitted_only", "ambiguous runs are reconciled before collection",
-       '        for state in ("ambiguous", "submitted"):', '        for state in ("submitted",):', JPASS),
+       '        for state in JUDGE_WORK:', '        for state in ("submitted",):', JPASS),
     _m("lw_judge_pass_one_failure_stops_all", "one run's failure never stops the pass",
        '                    log.exception("judge pass failed for one run")\n'
        '                    done["failed"] += 1\n', "                    raise\n", JPASS),
@@ -254,9 +260,9 @@ MUTANTS: tuple[Mutant, ...] = (
        ROLLOUT),
     _m("lw_rollout_every_state", "only running and rolled-back releases are stepped",
        'releases.releases_in(("running", "rolled_back"),', "releases.releases_in((),", ROLLOUT),
-    _m("lw_rollout_any_prefix", "a provider is one with a release under lab/<p>/releases/",
-       '                        if key.split("/")[2:3] == ["releases"]})',
-       "                        })", ROLLOUT),
+    _m("lw_rollout_providers_other_states", "the providers are D9's with a release the pass steps",
+       "    for provider in await releases.providers_in(ROLLOUT_STATES):",
+       '    for provider in await releases.providers_in(("running",)):', ROLLOUT),
     _m("lw_rollout_planless_stepped", "a release without its stored plan is held",
        "                if raw is None:\n", "                if False:\n", ROLLOUT),
     _m("lw_rollout_invented_live", "a running release is evaluated only on R1's aggregates",
@@ -291,6 +297,88 @@ MUTANTS: tuple[Mutant, ...] = (
        "                   OperatorSession(ops=None, principal=principal))",
        '                   OperatorSession(ops=None, principal="rollout:controller"))', STOP,
        file=P),
+    # --- WR-C5-REPORT (composition-6): a running release is stepped on its B2 report ----------
+    _m("lw_report_never_read", "a running release is stepped on its stored B2 report",
+       "                report, runs = await release_report(reads, store, provider, policy, plan) \\\n"
+       "                    if current is not None else (None, None)\n",
+       "                report, runs = None, None\n", B2),
+    _m("lw_report_rolled_back_reads", "a rolled-back release reads no report (converge only)",
+       "                    if current is not None else (None, None)\n",
+       "                    if True else (None, None)\n", B2),
+    _m("lw_report_any_protocol", "the report is under the plan's own protocol",
+       '        if e["report"] is None or e["protocol_digest"] != protocol:\n',
+       '        if e["report"] is None:\n', B2),
+    _m("lw_report_unreported", "an experiment without a stored report is skipped",
+       '        if e["report"] is None or e["protocol_digest"] != protocol:\n',
+       '        if e["protocol_digest"] != protocol:\n', B2),
+    _m("lw_report_other_servings", "the report compares the policy's baseline and a candidate",
+       '        if runs[0]["serving_ref"] == policy.baseline_ref and \\\n', "        if True or \\\n",
+       B2),
+    _m("lw_report_oldest", "the newest matching experiment is the release's",
+       "    for e in await reads.experiments(provider_org_id=provider):",
+       "    for e in reversed(await reads.experiments(provider_org_id=provider)):", B2),
+    _m("lw_report_run_refs_changed", "the runs are D7's records as stored (their refs)",
+       '.model_dump(mode="json", by_alias=True, exclude_unset=True)   # its ref',
+       '.model_dump(mode="json", by_alias=True)', B2),
+    _m("lw_report_off_the_pool", "B4's experiments are read on the role's database",
+       "    reads = PgLabReads(connect)", '    reads = PgLabReads(connector(""))', B2),
+    # --- WR-C5-PLAN (composition-6): the release launcher stores the plan, then D9 starts ------
+    _m("lw_launch_without_bucket", "the launcher needs the Lab bucket the plan is stored in",
+       '    values = settings(mode, env, (DATABASE, BUCKET, "LAB_OPERATOR_ID"))',
+       '    values = settings(mode, env, (DATABASE, "LAB_OPERATOR_ID"))', LAUNCH),
+    _m("lw_launch_plan_unvalidated", "only R2's plan is launched",
+       "            plan = Plan.model_validate_json(stored.read())",
+       "            plan = Plan.model_construct(**json.loads(stored.read()))", LAUNCH),
+    _m("lw_launch_plan_not_stored", "the plan is stored beside the release before D9 starts it",
+       "        await write_once(lab_objects(mode, env), plan_key(provider, policy.policy_id),\n"
+       "                         plan.model_dump_json().encode())\n", "", LAUNCH),
+    _m("lw_launch_plan_elsewhere", "the plan is stored where the pass and the page read it",
+       "plan_key(provider, policy.policy_id),", "plan_key(provider, policy_ref),", LAUNCH),
+    _m("lw_launch_digest_other", "D9 freezes the stored plan's digest",
+       "                                            plan_digest=plan_digest(plan),",
+       '                                            plan_digest="sha256:" + "0" * 64,', LAUNCH),
+    _m("lw_launch_other_actor", "the launch is the operator's decision",
+       'decided_by=values["LAB_OPERATOR_ID"], reason=reason)',
+       'decided_by="launcher", reason=reason)', LAUNCH),
+    _m("lw_launch_refusal_escapes", "a refused launch is a non-zero exit",
+       '        print(f"infrx.lab.workers: the release was not launched: {failed.code}: {failed}",\n'
+       "              file=sys.stderr)\n        return 1\n", "        raise\n", LAUNCH),
+    _m("lw_launch_unparsed", "launch names its plan",
+       '    if args.command == "launch" and not args.plan:\n', "    if False:\n", LAUNCH),
+    # --- WR-R4-2 (composition-6): the operator decides a Lab proposal through D9's CAS ---------
+    _m("lw_decide_without_operator", "a decision names its operator",
+       '    mode, needs = "lab-rollout", (DATABASE, "LAB_OPERATOR_ID")',
+       '    mode, needs = "lab-rollout", (DATABASE,)', DECIDE),
+    _m("lw_decide_other_release", "a proposal is decided only for the release the ref names",
+       ' and p["policy_ref"] == policy_ref),', "),", DECIDE),
+    _m("lw_decide_other_provider", "the proposals are the ref's provider's",
+       "await proposals.proposals(provider_org_id=provider)",
+       'await proposals.proposals(provider_org_id="")', DECIDE),
+    _m("lw_decide_reject_approves", "a rejection moves nothing",
+       "            await proposals.decide(proposal_id, approve=False, decided_by=operator)",
+       "            await proposals.decide(proposal_id, approve=True, decided_by=operator)",
+       DECIDE),
+    _m("lw_decide_expand_without_live", "an expansion needs R2's verdict on R1's aggregates",
+       '        if found["kind"] != "rollback":\n', "        if False:\n", DECIDE),
+    _m("lw_decide_other_actor", "the decision is the operator's",
+       "await proposals.decide(proposal_id, approve=True, decided_by=operator, decision={",
+       'await proposals.decide(proposal_id, approve=True, decided_by="ops", decision={', DECIDE),
+    _m("lw_decide_reasons_unnamed", "the decision names the operator's reason and the proposal",
+       '            reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))',
+       "            reasons=())", DECIDE),
+    _m("lw_decide_no_converge", "an approved rollback converges the alias (R2's stop)",
+       "        await controller.emergency_rollback(operator, policy, policy_ref, now=now, "
+       "reason=reason)\n", "", DECIDE),
+    _m("lw_decide_refusal_escapes", "a refused CAS is a non-zero exit, not a crash",
+       '        print(f"infrx.lab.workers: the proposal {outcome}: {failed.code}: {failed}",\n'
+       "              file=sys.stderr)\n        return 1\n",
+       '        raise\n', DECIDE),
+    _m("lw_decide_outcome_unfollowed", "the refusal message follows the outcome (WR-C6-F2)",
+       "        decided = True                        # committed: a later failure is "
+       "converge-only\n", "", DECIDE),
+    _m("lw_decide_unparsed", "decide names a proposal and approve or reject",
+       '    if args.command == "decide" and not (args.proposal_id and (args.approve or '
+       'args.reject)):\n', "    if False:\n", DECIDE),
     # --- annotation / training ------------------------------------------------------------------
     _m("lw_teacher_unapproved", "a teacher host is refused without P-10",
        '    if env.get("LAB_ANNOTATION_TEACHER", "dry-run") != "dry-run":\n', "    if False:\n",

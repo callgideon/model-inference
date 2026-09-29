@@ -22,9 +22,7 @@ from functools import partial
 
 import pytest
 from infrx.lab.workers import __main__ as lab_workers
-from infrx.state.jobstore import connector
 
-from ..d import pgharness
 from ..j import fakes as j1
 from ..j.submit.conftest import CASE, pg_template, pg_world  # noqa: F401
 from ..j.submit.test_submit import PER_RUN
@@ -42,7 +40,7 @@ def test_lab_workers_judge_pg__the_pass_reconciles_what_the_provider_has_and_col
     never = asyncio.run(case.submit(case.job(2)))
     assert (lost.state, never.state) == ("ambiguous", "ambiguous")
     case.provider.outputs["batch-1"] = [(s, json.dumps(j1.result())) for s in case.ids]
-    providers = partial(lab_workers.provider_ids, connector(pgharness.dsn(CASE)))
+    providers = partial(case.ledger.providers_in, lab_workers.JUDGE_WORK)   # WR-C5-PROVIDERS
     first = asyncio.run(lab_workers.judge_pass(case.wiring, providers))
     assert first == {"reconciled": 1, "waiting": 1, "collected": 1, "failed": 0}, first
     done = asyncio.run(case.ledger.run(lost.run_id))

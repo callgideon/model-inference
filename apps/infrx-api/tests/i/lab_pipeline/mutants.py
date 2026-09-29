@@ -24,6 +24,7 @@ PF = "../../infra/lab/workers/training/preflight.py"
 APPROVALS = "../../infra/lab/workers/training/egress.json"
 
 BOUNDED = "test_i6_each_role_is_bounded_off_by_default_and_gated_by_the_preflight"
+OPERATOR = "test_i6_only_the_rollout_role_names_its_operator_principal"
 FLAGS = "test_i6_egress_is_denied_by_default_through_a_dead_proxy_the_env_file_cannot_override"
 SHIPPED = "test_i6_the_shipped_approvals_are_empty_so_every_role_is_local_or_manual_only"
 PAID = "test_i6_an_approved_paid_adapter_needs_its_budget_payer_host_and_secret"
@@ -125,6 +126,12 @@ MUTANTS: tuple[Mutant, ...] = (
     m("i6_pf_other_role_knob", "another Lab role's knob is refused", PF,
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY"}',
       'names = {*COMMON, f"LAB_{role.upper()}_CONCURRENCY", "LAB_EVAL_CONCURRENCY"}', NAMES),
+    # --- the preflight: WR-C5-PREFLIGHT, the rollout role's operator principal (composition-6)
+    m("i6_pf_operator_refused", "the rollout role names its operator principal", PF,
+      '        names.add("LAB_OPERATOR_ID")\n', "        pass\n", OPERATOR),
+    m("i6_pf_operator_any_role", "only the rollout role names an operator principal", PF,
+      '    if role == "rollout":                  # WR-C5-PREFLIGHT', "    if True:  # WR-C5-PREFLIGHT",
+      OPERATOR),
     # --- the preflight: WR-C4-PREFLIGHT, the annotation role's local teacher fake
     m("i6_pf_teacher_url_refused", "the annotation role may name its teacher", PF,
       '        names.add("LAB_TEACHER_URL")\n', "        pass\n", TEACHER),
