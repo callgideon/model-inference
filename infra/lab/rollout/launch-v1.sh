@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# launch-v1.sh — the operator's script for the v1 INTERNAL-TESTING launch of the Lab.
+#
+# Runs the three actions the coordinator's sandbox refuses (Production Deploy): the hosted
+# migration window (runbook 08 §2), the box's Lab units (§4) and the Lab web on Vercel (§6),
+# plus the tester memberships (§7). Every step is idempotent and re-runnable; every hosted or
+# box write goes through the existing gates (lab-migrate.sh, ssm.sh) which refuse on their own
+# preconditions. Secrets are read from SSM by name on the box, or typed with `read -rs` here —
+# never on a command line, never printed.
+#
+# Usage (from the repo root, on the coordinator host, with the default AWS profile):
+#   infra/lab/rollout/launch-v1.sh preflight      # everything read-only
+#   infra/lab/rollout/launch-v1.sh window          # R151 window: the reviewed patch + w6b + w7
+#   infra/lab/rollout/launch-v1.sh box             # L1, L3–L6s on the pilot box
+#   infra/lab/rollout/launch-v1.sh vercel          # the Lab web project + domain
+#   infra/lab/rollout/launch-v1.sh members         # provider org + memberships (SQL you confirm)
+#   infra/lab/rollout/launch-v1.sh main            # fast-forward main to the release (the App rebuilds)
+#   infra/lab/rollout/launch-v1.sh all             # preflight window box vercel members main
+#
+# Inputs (exported or prompted):
+#   RELEASE       the 40-hex commit to launch (default: the tip of claude/consumer-v1)
+#   WINDOW        the P-08 window reference for the coordinator log, e.g. P-08:2026-09-30
+#   SUPABASE_URL  https://<project-ref>.supabase.co  (the App's project)
+#   LAB_DB_HOST   the hosted Postgres host for the transaction pooler (…pooler.supabase.com)
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+aws() { command env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
+say() { printf '\n== %s\n' "$*"; }
+need() { [ -n "${!1:-}" ] || { printf 'set %s\n' "$1" >&2; exit 2; }; }
+RELEASE=${RELEASE:-$(git rev-parse claude/consumer-v1)}
+[[ $RELEASE =~ ^[0-9a-f]{40}$ ]] || { echo "RELEASE must be a 40-hex sha" >&2; exit 2; }
+NEWEST=$(ls apps/app/supabase/migrations | grep -E '^00[0-9]{2}_' | sort | tail -1)   # e.g. 0056_lab_control_grants.sql
+NEWEST_N=${NEWEST:0:4}; NEWEST_NAME=${NEWEST:5}; NEWEST_NAME=${NEWEST_NAME%.sql}
+PENDING=$(ls apps/app/supabase/migrations | grep -E '^00[0-9]{2}_' | sort | awk -v at=0051 'substr($0,1,4) > at {printf "%s%s", sep, substr($0,1,4); sep=", "}')
+SSM_CONTROL_DSN=/model-inference/lab/control_database_url
+SSM_ANON=/model-inference/lab/supabase_anon_key
+SSM_VERCEL=/callgideon/prod/VERCEL_TOKEN
+
+preflight() {
+  say "preflight at $RELEASE (newest migration $NEWEST; pending after 0051: $PENDING)"
+  git merge-base --is-ancestor "$RELEASE" claude/consumer-v1 || { echo "RELEASE is not on claude/consumer-v1" >&2; exit 2; }
+  [ -x apps/infrx-api/.venv/bin/python ] || make api-env
+  say "R151 condition 1: both rollback targets KNOWN-GOOD at $NEWEST_N (needs the known-good-reproof-3 merge)"
+  for t in bda15866e5700f3856d7142580da842fba9bbd23 422631591845fbd66b590c73d5ff4150318d9d7a; do
+    apps/infrx-api/.venv/bin/python infra/rollout/known-good.py "$t" --applied "$NEWEST_N" && echo "  $t KNOWN-GOOD at $NEWEST_N"
+  done
+  say "R151 condition 2: hosted-migrate.sh carries the reviewed patch (EXPECTED_PENDING=\"$PENDING\")"
+  grep -q "^EXPECTED_PENDING=\"$PENDING\"" infra/rollout/hosted-migrate.sh && echo "  patch present" || echo "  patch NOT present: run 'window' (it applies and shows the diff before anything hosted)"
+  say "SSM names present (values never shown)"
+  aws ssm describe-parameters --parameter-filters "Key=Name,Values=$SSM_CONTROL_DSN,$SSM_ANON,/model-inference/infrx_lab_control_password" --query 'Parameters[].[Name,Type,Version]' --output text
+  say "App health"; curl -s -o /dev/null -w 'https://marlin2b.callbill.ai/health %{http_code}\n' https://marlin2b.callbill.ai/health || true
+}
+
+window() {
+  need WINDOW
+  say "R151 condition 2: the reviewed EXPECTED_PENDING patch (hosted is 0001-0051; pending $PENDING)"
+  python3 - "$PENDING" "$NEWEST_N" "$NEWEST_NAME" <<'PY'
+import re,sys; pending,n,name=sys.argv[1:]
+p='infra/rollout/hosted-migrate.sh'; s=open(p).read(); o=s
+s=re.sub(r'^EXPECTED_PENDING="[^"]*"', f'EXPECTED_PENDING="{pending}"', s, count=1, flags=re.M)
+s=s.replace('*"0026 fenced_result") ;; *) say "stop: hosted applied list does not end at 0026 fenced_result (unrecorded hosted change)"',
+            '*"0051 lab_import_jobs") ;; *) say "stop: hosted applied list does not end at 0051 lab_import_jobs (unrecorded hosted change)"')
+s=re.sub(r'\*"0051 lab_import_jobs"\$\'\\n\'"nothing pending"\) ;; \*\) say "W7: hosted is not 0001-0051 with nothing pending\.',
+         f'*"{n} {name}"$\'\\n\'"nothing pending") ;; *) say "W7: hosted is not 0001-{n} with nothing pending.', s)
+s=s.replace('say "W7 PASS: hosted 0001-0051, nothing pending;', f'say "W7 PASS: hosted 0001-{n}, nothing pending;')
+s=s.replace('(0027–0051, the Lab migrations under the R151/R201 window; never reverted afterwards)',
+            f'(0052–{n}, the Lab migrations under the second R151/R201 window; 0027–0051 applied 2026-09-29; never reverted afterwards)')
+open(p,'w').write(s); print('changed' if s!=o else 'already applied')
+PY
+  git --no-pager diff --stat -- infra/rollout/hosted-migrate.sh; git --no-pager diff -- infra/rollout/hosted-migrate.sh | head -60
+  read -r -p "commit this reviewed patch and continue to w6b? [y/N] " ok; [ "$ok" = y ] || exit 1
+  git add infra/rollout/hosted-migrate.sh
+  git commit -q -m "rollout: hosted-migrate.sh expects the Lab migrations $PENDING (second R151/R201 window $WINDOW; applied list ends at 0051 lab_import_jobs; post-check $NEWEST_N $NEWEST_NAME)" || true
+  say "coordinator log entry for condition 3 (append; never rewrite)"
+  printf -- '- %s (operator, %s): **R151 window %s** — hosted 0052–%s (Lab), never reverted; P-08 record: lab.callbill.ai / lab-control.callbill.ai; release %s.\n' \
+    "$(date -u +%FT%H:%MZ)" "$(git config user.name)" "$WINDOW" "$NEWEST_N" "$RELEASE" >> research/plan/evidence/coordinator/2026-09-24-session-03.md
+  git add research/plan/evidence/coordinator/2026-09-24-session-03.md; git commit -q -m "plan: R151 window $WINDOW opened (0052–$NEWEST_N)" || true
+  say "W6 + W6b on a fresh hosted dump (no hosted write)"
+  infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at 0051 --window "$WINDOW" --through w6b | tee /tmp/launch-v1-w6b.log
+  DIG=$(grep -o 'COPY_DIGEST=[0-9a-f]*' /tmp/launch-v1-w6b.log | tail -1 | cut -d= -f2); [ -n "$DIG" ] || { echo "no COPY_DIGEST in the w6b log" >&2; exit 1; }
+  say "W7 needs the public /health 503: maintenance on, apply, resume (App requests queue for ~1 min)"
+  infra/rollout/ssm.sh infra/rollout/steps/95-maintenance.sh
+  infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at 0051 --window "$WINDOW" --through w7 --expect "$DIG" | tee /tmp/launch-v1-w7.log
+  infra/rollout/ssm.sh infra/rollout/steps/56-resume.sh
+  grep -q "W7 PASS: hosted 0001-$NEWEST_N" /tmp/launch-v1-w7.log && echo "hosted 0001-$NEWEST_N applied (digest $DIG)"
+  git push origin claude/consumer-v1
+}
+
+box() {
+  need SUPABASE_URL
+  say "L1 inventory"; infra/rollout/ssm.sh infra/lab/rollout/steps/10-lab-preflight.sh RELEASE="$RELEASE"
+  say "L3 Lab image (up to 1 h)"; TIMEOUT_S=3600 infra/rollout/ssm.sh infra/lab/rollout/steps/20-lab-image.sh RELEASE="$RELEASE"
+  say "L4 units (inert)"; infra/rollout/ssm.sh infra/lab/rollout/steps/30-lab-units.sh RELEASE="$RELEASE"
+  say "L5 control service ON (DSN and anon key by SSM name)"
+  infra/rollout/ssm.sh infra/lab/rollout/steps/40-lab-control.sh STATE=on RELEASE="$RELEASE" \
+    CONTROL_DSN_PARAM="$SSM_CONTROL_DSN" ANON_KEY_PARAM="$SSM_ANON" SUPABASE_URL="$SUPABASE_URL" LAB_ORIGIN=https://lab.callbill.ai
+  say "L5s smoke"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh
+  say "L6 the control origin on the edge (DNS lab-control.callbill.ai → the box is already set)"
+  infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on RELEASE="$RELEASE"
+  curl -s -o /dev/null -w 'https://lab-control.callbill.ai/healthz %{http_code}\n' https://lab-control.callbill.ai/healthz || true
+  say "L6s smoke + the App's external checks"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh; infra/rollout/verify-external.sh || true
+  echo "L7 (eval/judge/datasets roles) is NOT run: no role login exists yet (WR-LDP-7); the control unit serves every Lab family (R237, 0056)."
+}
+
+vercel_lab() {
+  command -v vercel >/dev/null || npm i -g vercel >/dev/null
+  say "a valid Vercel token in SSM $SSM_VERCEL (the stored one is invalid): paste a new one now, or Enter to use the stored one"
+  read -rs -p "token (hidden): " T; echo
+  if [ -n "$T" ]; then umask 077; printf '%s' "$T" > ~/.vt; aws ssm put-parameter --name "$SSM_VERCEL" --type SecureString --overwrite --value "file://$HOME/.vt" >/dev/null; shred -u ~/.vt; fi
+  export VERCEL_TOKEN; VERCEL_TOKEN=$(aws ssm get-parameter --name "$SSM_VERCEL" --with-decryption --query Parameter.Value --output text)
+  ANON=$(aws ssm get-parameter --name "$SSM_ANON" --with-decryption --query Parameter.Value --output text)
+  need SUPABASE_URL
+  say "project infrx-lab, root apps/lab"
+  (cd apps/lab && vercel link --yes --project infrx-lab >/dev/null 2>&1 || vercel project add infrx-lab >/dev/null && vercel link --yes --project infrx-lab >/dev/null)
+  (cd apps/lab && for kv in "NEXT_PUBLIC_LAB_URL=https://lab.callbill.ai" "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON" \
+      "LAB_CONTROL_URL=https://lab-control.callbill.ai" "LAB_TRACES_API_URL=https://lab-control.callbill.ai" "LAB_EVALS_API_URL=https://lab-control.callbill.ai" \
+      "LAB_PIPELINES_API_URL=https://lab-control.callbill.ai" "LAB_RELEASES_API_URL=https://lab-control.callbill.ai" "LAB_DATASETS_API_URL=https://lab-control.callbill.ai"; do
+      k=${kv%%=*}; v=${kv#*=}; vercel env rm "$k" production --yes >/dev/null 2>&1 || true; printf '%s' "$v" | vercel env add "$k" production >/dev/null; done
+    vercel --prod --yes | tail -3
+    vercel domains add lab.callbill.ai >/dev/null 2>&1 || true)
+  unset VERCEL_TOKEN ANON
+  curl -s -o /dev/null -w 'https://lab.callbill.ai/ %{http_code}\n' https://lab.callbill.ai/ || true
+  echo "Supabase Auth redirect URLs already include https://lab.callbill.ai/auth/callback** (set 2026-09-29)."
+}
+
+members() {
+  say "provider org + memberships (the owner DSN is typed, never echoed)"
+  read -rs -p "OPERATIONS_DATABASE_URL (hidden): " DSN; echo
+  read -r -p "tester emails (space-separated): " EMAILS
+  read -r -p "operator name for the audit column: " OP
+  psql "$DSN" -v ON_ERROR_STOP=1 <<SQL
+insert into infrx.provider_orgs (slug, display_name, created_by)
+values ('infrx-internal', 'infrx internal testing', 'operator:$OP P-08 ${WINDOW:-launch-v1}')
+on conflict (slug) do nothing;
+SQL
+  for e in $EMAILS; do psql "$DSN" -v ON_ERROR_STOP=1 -c "insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by)
+select p.id, u.id, 'developer', 'operator:$OP P-08 ${WINDOW:-launch-v1}' from infrx.provider_orgs p, auth.users u where p.slug='infrx-internal' and u.email='$e'
+on conflict do nothing;"; done
+  psql "$DSN" -c "select provider_org_id, user_id, role, granted_at from infrx.provider_memberships where revoked_at is null;"
+  unset DSN
+}
+
+main_ff() {
+  say "fast-forward main to $RELEASE (the App's Vercel project builds main; every Lab switch is OFF there)"
+  git fetch -q origin main; git merge-base --is-ancestor origin/main "$RELEASE" || { echo "main is not an ancestor of RELEASE" >&2; exit 1; }
+  git push origin "$RELEASE:main"
+}
+
+case "${1:-}" in
+  preflight) preflight ;; window) window ;; box) box ;; vercel) vercel_lab ;; members) members ;; main) main_ff ;;
+  all) preflight; window; box; vercel_lab; members; main_ff ;;
+  *) sed -n 2,26p "$0"; exit 2 ;;
+esac

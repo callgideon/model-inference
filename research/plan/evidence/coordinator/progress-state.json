@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 314,
- "updated": "2026-09-29T20:09:13Z",
+ "revision": 315,
+ "updated": "2026-09-29T20:21:25Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9385,11 +9385,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "blocked",
+   "activity": "running",
    "started": "2026-09-29T18:40:05Z",
-   "updated": "2026-09-29T20:09:13Z",
-   "blocker": "weekly subagent limit (resets 2026-10-01T13:00Z): resume the workflow by run id with identical args",
-   "next_action": "5 commits on the branch (R8 scrub landed; R7/R9/0057 unverified)",
+   "updated": "2026-09-29T20:21:25Z",
+   "blocker": null,
+   "next_action": "resumed by run id 2026-09-29T20:15Z (the limit lifted)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9453,11 +9453,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "blocked",
+   "activity": "running",
    "started": "2026-09-29T18:45:40Z",
-   "updated": "2026-09-29T20:09:13Z",
-   "blocker": "weekly subagent limit (resets 2026-10-01T13:00Z): resume the workflow by run id with identical args",
-   "next_action": "step 1 committed; the real make lab-local not run",
+   "updated": "2026-09-29T20:21:25Z",
+   "blocker": null,
+   "next_action": "resumed by run id 2026-09-29T20:15Z (the limit lifted)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9487,11 +9487,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "blocked",
+   "activity": "running",
    "started": "2026-09-29T19:01:01Z",
-   "updated": "2026-09-29T20:09:13Z",
-   "blocker": "weekly subagent limit (resets 2026-10-01T13:00Z): resume the workflow by run id with identical args",
-   "next_action": "o01 --only PASS on the real e5l stack (3/3); steps 3–5 not run",
+   "updated": "2026-09-29T20:21:25Z",
+   "blocker": null,
+   "next_action": "resumed by run id 2026-09-29T20:15Z (the limit lifted)",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9502,6 +9502,145 @@
    "owned_paths": [
     "tests/integration/lab_observe/",
     "research/plan/evidence/e/E5L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-KNOWN-GOOD-REPROOF-3",
+   "task": "I8",
+   "slice": "R151 condition 1 through 0056 for the second window + the reviewed EXPECTED_PENDING diff (Opus); workflow wf_e138bcfe-f5d",
+   "agent": "opus",
+   "branch": "codex/w5-known-good-reproof-3",
+   "worktree": ".claude/worktrees/codex-w5-known-good-reproof-3",
+   "base": "33547abd",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T20:21:25Z",
+   "blocker": null,
+   "next_action": "handback → merge → the operator runs launch-v1.sh window",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infra/rollout/known-good.json",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py",
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-ROLLOUT-7",
+   "task": "E8L",
+   "slice": "WR-LR6-VERDICT (read-time verdict), WR-LR6-GATE-OUT, WR-LR6-E2E-SHADOW; E8L only k08 NOT RUN (Opus); workflow wf_b5c37c35-1a4",
+   "agent": "opus",
+   "branch": "codex/w5-lab-rollout-7",
+   "worktree": ".claude/worktrees/codex-w5-lab-rollout-7",
+   "base": "33547abd",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T20:21:25Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "tests/integration/lab_rollout/",
+    "apps/lab/tests/e2e/",
+    "research/plan/evidence/e/E8L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-C7-GAPS",
+   "task": "R2",
+   "slice": "C7-RV-1..6 + WR-C7-DOC (rollback-verdict case, started_at, HeadBucket message, S3_MEDIA_BUCKET in the unit env, USD-settled row fallback) (Opus); workflow wf_20889db3-846",
+   "agent": "opus",
+   "branch": "codex/w5-lab-c7-gaps",
+   "worktree": ".claude/worktrees/codex-w5-lab-c7-gaps",
+   "base": "33547abd",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T20:21:25Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/workers/__main__.py",
+    "apps/infrx-api/tests/w/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "infra/lab/app/lab.json",
+    "research/plan/evidence/coordinator/LAB-C7-GAPS-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-SQL-LW9",
+   "task": "L3",
+   "slice": "0058 LOCAL-ONLY: variant identities (WR-LW7-3a) + the per-serving assignments tally (WR-C7-TALLY); WR-LW8-3 GRANTED (Opus); workflow wf_a815dde2-641",
+   "agent": "opus",
+   "branch": "codex/w5-lab-sql-lw9",
+   "worktree": ".claude/worktrees/codex-w5-lab-sql-lw9",
+   "base": "33547abd",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T20:21:25Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0058_*",
+    "apps/infrx-api/tests/d/test_code_mutants_lw9.py",
+    "apps/infrx-api/infrx/state/lab_variants.py",
+    "apps/infrx-api/tests/l3sql/",
+    "research/plan/evidence/l/LAB-SQL-LW9-*"
    ],
    "wiring_requests": []
   }
