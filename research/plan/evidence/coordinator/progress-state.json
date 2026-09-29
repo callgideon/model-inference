@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 327,
- "updated": "2026-09-29T23:37:06Z",
+ "revision": 328,
+ "updated": "2026-09-29T23:49:59Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9612,22 +9612,22 @@
   {
    "id": "W5-LAB-SQL-LW9",
    "task": "L3",
-   "slice": "0058 LOCAL-ONLY: variant identities (WR-LW7-3a) + the per-serving assignments tally (WR-C7-TALLY); WR-LW8-3 GRANTED (Opus); workflow wf_a815dde2-641",
+   "slice": "0058 LOCAL-ONLY: variant identities (WR-LW7-3a) + the per-serving assignments tally (WR-C7-TALLY); WR-LW8-3 GRANTED (Opus); workflow wf_a815dde2-641; REJECT at 96c5ec2e with one merge-time item open (WR-LW9-0) → merged as ACCEPT_WITH_FIXES; 0058 identities + tally; 36 mutants; api-test 6940/1; E4 2832/0",
    "agent": "opus",
    "branch": "codex/w5-lab-sql-lw9",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw9",
    "base": "33547abd",
-   "head": null,
+   "head": "96c5ec2e",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T20:21:25Z",
-   "updated": "2026-09-29T20:21:25Z",
+   "updated": "2026-09-29T23:49:59Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #65 (five-file conflict resolution keeping every side, WR-LW9-0, minors, R263)",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 6,
@@ -9926,6 +9926,45 @@
     "tests/integration/lab_local/",
     "research/plan/evidence/e/E4ON-*",
     "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+    "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-65",
+   "task": null,
+   "slice": "merge batch #65 (Opus): lab-sql-lw9 96c5ec2e (+conflicts vs #60/#62 kept every side, WR-LW9-0, minors, R263)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-65",
+   "worktree": ".claude/worktrees/codex-w5-merge-65",
+   "base": "80821080",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T23:49:59Z",
+   "updated": "2026-09-29T23:49:59Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10; harness pins 0057 before 0058) → known-good-reproof-4 after #63 too",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0058_*",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/state/lab_variants.py",
+    "apps/infrx-api/infrx/state/lab_rollout.py",
+    "apps/infrx-api/tests/d/",
+    "apps/infrx-api/tests/l3sql/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "tests/integration/test_harness.py",
     "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
