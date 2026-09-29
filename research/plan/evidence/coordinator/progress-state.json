@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 309,
- "updated": "2026-09-29T18:37:07Z",
+ "revision": 310,
+ "updated": "2026-09-29T18:40:05Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8926,11 +8926,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T13:59:28Z",
-   "updated": "2026-09-29T17:54:33Z",
+   "updated": "2026-09-29T18:40:05Z",
    "blocker": null,
-   "next_action": "merge batch #54 (ratified composition-root edits; WR-LC-LOCAL/MAKE/DOC; R250) → lab-observe-4 runs o01 once e5l is free",
+   "next_action": "lab-capture-2 (R8 async spool scrub, R7 lost-ack retry, WR-LC-HOSTED consent read) before any TRACE_PUMPS enable; lab-observe-4 runs o01",
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 12,
@@ -9261,22 +9261,22 @@
   {
    "id": "W5-MERGE-54",
    "task": null,
-   "slice": "merge batch #54 (Opus): lab-capture fea8a4fd (+ratification, WR-LC-LOCAL/MAKE/DOC, minors, R250); workflow wf_6c7820c0-ce9",
+   "slice": "merge batch #54 (Opus): lab-capture fea8a4fd (+ratification, WR-LC-LOCAL/MAKE/DOC, minors, R250); workflow wf_6c7820c0-ce9; integrated (R250 on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-54",
    "worktree": ".claude/worktrees/codex-w5-merge-54",
    "base": "381a4093",
-   "head": null,
+   "head": "99992175",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T17:54:33Z",
-   "updated": "2026-09-29T17:54:33Z",
+   "updated": "2026-09-29T18:40:05Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → lab-observe-4 (o01 PASS)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9368,6 +9368,41 @@
     "tests/integration/test_harness.py",
     "Makefile",
     "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-CAPTURE-2",
+   "task": "T2",
+   "slice": "R8 (the async job spool scrubbed of the caller's credential), R7 (a lost complete-ack retry is traced once), R9 (off-loop media hashing over 1 MiB), WR-LC-HOSTED (0057 LOCAL-ONLY: a runtime-login consent read) (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-capture-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-capture-2",
+   "base": "7880f3c5",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T18:40:05Z",
+   "updated": "2026-09-29T18:40:05Z",
+   "blocker": null,
+   "next_action": "handback → merge → TRACE_PUMPS may be enabled locally (o01)",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/gateway/capture.py",
+    "apps/infrx-api/infrx/worker/attempt.py",
+    "apps/app/supabase/migrations/0057_*",
+    "apps/infrx-api/tests/t/capture/",
+    "research/plan/evidence/t/LAB-CAPTURE-2-*"
    ],
    "wiring_requests": []
   }
