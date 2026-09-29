@@ -6,10 +6,6 @@
 # address ("ambiguous site definition"), never reaches the running edge.
 # INFRX_LAB_CONTROL_UPSTREAM exists for the local drill; the box leaves it unset.
 {$INFRX_LAB_CONTROL_SITE:lab-control.callbill.ai} {
-	request_body {
-		max_size 1MiB
-	}
-
 	# The control service down, restarting or rolled back is "Lab unavailable", never an
 	# empty 502 and never another origin's route.
 	handle_errors 502 503 504 {
@@ -26,7 +22,19 @@
 			header Content-Type application/json
 			respond `{"error":{"message":"Consumer API keys cannot call provider controls.","type":"authentication_error","code":"invalid_audience","param":null,"request_id":"{http.request.uuid}","infrx":null}}` 401
 		}
+		# WR-LDP-2: the unit serves every Lab family; a dataset import is one bounded request
+		# of up to 64 MiB (lab_datasets MAX_BODY_BYTES), every other Lab call stays at 1 MiB.
+		@datasets path_regexp ^/lab/v1/providers/[^/]+/datasets/
+		handle @datasets {
+			request_body {
+				max_size 64MiB
+			}
+			reverse_proxy {$INFRX_LAB_CONTROL_UPSTREAM:127.0.0.1:8003}
+		}
 		handle /lab/v1/* {
+			request_body {
+				max_size 1MiB
+			}
 			reverse_proxy {$INFRX_LAB_CONTROL_UPSTREAM:127.0.0.1:8003}
 		}
 		handle {

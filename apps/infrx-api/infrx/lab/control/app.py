@@ -12,8 +12,8 @@ A missing `INFRX_LAB_*` setting refuses startup by name (`RuntimeMisconfigured`)
 WR-LDP-2 (R237: the box serves the Lab only from its own units): every other Lab family -
 datasets, evaluations, pipelines (teacher batches included), releases/optimizations and,
 given `LAB_CHECKPOINT_KEYS`, the checkpoint receiver - is `pilot._lab`'s composition on this
-login. No `LAB_*` switch is read for them: this unit is the switch, so the App gateway keeps
-every Lab switch OFF. Its connections never `set role` (LDP-F7: the Lab login is a member of
+login. No `LAB_*` switch but `LAB_TEACHERS` (P-10 teacher egress, default off) is read for
+them: this unit is the switch, so the App gateway keeps every Lab switch OFF. Its connections never `set role` (LDP-F7: the Lab login is a member of
 no role). The Lab objects are the Lab workers' (`LAB_S3_BUCKET`); without it, `NoObjects`.
 """
 from __future__ import annotations

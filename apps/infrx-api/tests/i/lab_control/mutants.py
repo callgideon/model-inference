@@ -23,6 +23,7 @@ C = "test_control_routes__"
 MOUNTED = C + "every_lab_family_is_mounted_behind_the_session_with_no_switch"
 LOGIN = C + "a_session_reaches_each_family_on_the_lab_login_never_the_runtimes"
 TYPED = C + "a_failing_store_is_each_familys_typed_503_never_a_500"
+LOGGED = C + "a_datasets_store_fault_logs_its_type_never_its_message"
 KEYS = C + "the_checkpoint_receiver_is_mounted_with_its_key_directory"
 OBJECTS = C + "the_lab_objects_are_the_workers_bucket_or_a_typed_503"
 AUTH = C + "the_families_verify_sessions_with_the_labs_own_auth_settings"
@@ -86,6 +87,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("store_fault_is_a_400", "a store fault is the service's 503, not the caller's 400", DS,
        'refusal(errors.DependencyUnavailable("the datasets store failed"))',
        'refusal(errors.InvalidRequest("the datasets store failed"))', TYPED, PG),
+    _m("store_fault_message_logged", "a store fault is logged by its type, never its message",
+       DS, '"lab datasets route failed: %s", type(failed).__name__)',
+       '"lab datasets route failed: %s", failed)', LOGGED),
 )
 
 

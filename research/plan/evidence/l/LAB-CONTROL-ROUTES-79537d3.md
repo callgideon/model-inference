@@ -27,7 +27,7 @@ make the whole unit refuse to start). `LAB_TEACHERS` stays the env's (default of
 ## Decisions
 
 - **LDP-F1: option (b).** (a) is not one grant statement: on a fresh 0001-0052 database
-  `infrx_runtime` holds EXECUTE on none of the ~100 `infrx.lab_*` functions (query below), and the
+  `infrx_runtime` holds EXECUTE on none of the 150 `infrx.lab_*` functions (measured: query #12 below), and the
   families need D7/D8/D9 functions beyond L2's two reads; granting them widens the App runtime's
   login, against R237. So the Lab families never run on the App gateway on the box; the control
   unit serves them on `INFRX_LAB_DATABASE_URL`. No migration 0053 (0053 is also composition-6's).
@@ -218,3 +218,29 @@ Every family's store fault is its typed 503, never a 500."
 optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium. Basis: lane work done with 0
 survivors; remaining = coordinator merge + WR-LCR-1..5 (one small diff each, ~15 min) + SR-LCR-1
 (lab-sql, analogue D10-0025 1/2/5 h, not counted) + one `make lab-local` rerun (~45 min).
+
+## Coordinator rulings (merge #51, `codex/w5-merge-51`)
+
+- **R245** (numbered from the proposed ruling above, `08-contracts-v1-encoding.md` §10, directly
+  after R244): the control unit is the only `/lab/v1/*` server on the box; every family is
+  composed through `pilot._lab` on `INFRX_LAB_DATABASE_URL` without `set role` (LDP-F7); no
+  `LAB_*` switch is read per family on the unit (`LAB_TEACHERS`, P-10, excepted) - the unit is
+  the switch (R237) and the checkpoint receiver is mounted by its key directory; each family's
+  store fault is its typed 503, its exception type logged and never its message; R236's
+  per-family E4-ON gate applies to SR-LCR-1 and to enabling the unit on the box: a family is
+  exposed on `lab-control.callbill.ai` only after it PASSes the `make lab-local` o05
+  control-factory case at that release.
+- Wirings WR-LCR-1..5 and the lens minors LCR-R1..R4 applied in the merge's wirings commit.
+
+## Carried
+
+- **SR-LCR-1 → lane lab-sql-lw8**: migration 0056 LOCAL-ONLY granting `infrx_lab_control`
+  EXECUTE on the families' D7/D8/D9 route-half functions listed under "SR-LCR-1" above
+  (worker-only claims excluded; lab-sql owns the exact set via its PG role matrix). Its test:
+  `tests/i/lab_control`'s PG case, whose lab column (`NOT_RUN_SR_LCR_1`) that merge flips to
+  the owner column explicitly.
+- **LCR-F1**: until then every family but control answers its typed 503 on the Lab login
+  (on the box and in `make lab-local` o05's control-factory case, NOT RUN[SR-LCR-1]).
+- Rerun after SR-LCR-1 merges (lab-on + e3l free, ≈45 min): `make lab-local`; judge
+  `test_o05_the_control_factory_serves_every_family_on_its_own_login` (and PG:
+  `INFRX_D_TASK=l4 INFRX_LAB_API_PG=1 uv run --frozen pytest -q -s tests/i/lab_control`).

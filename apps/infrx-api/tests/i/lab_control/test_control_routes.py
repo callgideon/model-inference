@@ -3,8 +3,9 @@
 behind lab-control.callbill.ai) serves every Lab route family - control, datasets,
 evaluations, pipelines (teacher batches included), releases/optimizations and, with its key
 directory, the checkpoint receiver - on its own `INFRX_LAB_DATABASE_URL` login, through
-`gateway.pilot._lab`'s composition. No `LAB_*` switch is read for a family there: the unit is
-the switch (R237), so the App gateway keeps every Lab switch OFF.
+`gateway.pilot._lab`'s composition. No `LAB_*` switch but `LAB_TEACHERS` (P-10 teacher egress,
+default off) is read for them there: the unit is the switch (R237), so the App gateway keeps
+every Lab switch OFF.
 
 The fake half: nothing is dialled. `jobstore.connector` is replaced by a recorder whose
 connections are refused the way the runtime login was in E4-ON o05 (`permission denied for
@@ -129,6 +130,16 @@ def test_control_routes__a_failing_store_is_each_familys_typed_503_never_a_500(u
         expected = {"detail": "the datasets service failed"} if family == "datasets" \
             else {"refusal": "unavailable"}
         assert answer.json() == expected, (family, answer.text)
+
+
+def test_control_routes__a_datasets_store_fault_logs_its_type_never_its_message(unit, caplog):
+    """LCR-R1 (LDP-F3): the datasets surface logs a store fault by its exception type only -
+    the database's message (role and function names) never reaches the log either."""
+    with caplog.at_level("ERROR", logger="infrx.gateway.lab"):
+        answer = client().get(FAMILIES["datasets"], headers={"authorization": f"Bearer {TOKEN}"})
+    assert answer.status_code == 503, answer.text
+    assert "InsufficientPrivilege" in caplog.text, caplog.text
+    assert "permission denied" not in caplog.text, caplog.text
 
 
 def test_control_routes__the_checkpoint_receiver_is_mounted_with_its_key_directory(unit,

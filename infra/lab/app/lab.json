@@ -38,7 +38,10 @@
       {"name": "INFRX_LAB_DATABASE_URL", "exposure": "secret", "purpose": "the control service's own database login (L3-SQL names the role); never the runtime's DATABASE_URL"},
       {"name": "INFRX_LAB_SUPABASE_URL", "exposure": "server", "purpose": "where the control service verifies a Lab session token"},
       {"name": "INFRX_LAB_SUPABASE_ANON_KEY", "exposure": "server", "purpose": "the publishable anon key the control service presents as apikey when verifying a Lab session token (GoTrueSessions); never the service-role key"},
-      {"name": "INFRX_LAB_ORIGIN", "exposure": "server", "purpose": "the one browser origin whose Lab sessions it accepts"}
+      {"name": "INFRX_LAB_ORIGIN", "exposure": "server", "purpose": "the one browser origin whose Lab sessions it accepts"},
+      {"name": "LAB_S3_BUCKET", "exposure": "server", "purpose": "the Lab objects (the Lab workers' bucket, instance-role credentials) the datasets, pipelines and releases families read and write; unset = those uses answer 503 (NoObjects)"},
+      {"name": "LAB_S3_ENDPOINT", "exposure": "server", "purpose": "that bucket's endpoint (optional)"},
+      {"name": "LAB_CHECKPOINT_KEYS", "exposure": "secret", "purpose": "the checkpoint receiver's key directory (WR-B3-2); set = POST /lab/v1/checkpoints is served by this unit, unset = not mounted"}
     ],
     "lab-workers": [
       {"name": "INFRX_IMAGE", "exposure": "unit", "purpose": "the role's release in its own env file: a local content-addressed image id (sha256:<64 hex>, --pull never); never the App's INFRX_IMAGE"},

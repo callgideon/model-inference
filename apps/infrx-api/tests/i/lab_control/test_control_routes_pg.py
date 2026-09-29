@@ -33,6 +33,8 @@ _reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") == "l4" else
     "PostgreSQL only on the l4 task-local key (INFRX_D_TASK=l4)"
 DB, LAB_PASSWORD = f"{pgharness.DATABASE}_lcr", "infrx-l4-lab-control"
 A, ADMIN_A = worlds.PgWorld.A, worlds.PgWorld.ADMIN_A
+#: LCR-F1: every family but control is its typed 503 on the Lab login until SR-LCR-1.
+NOT_RUN_SR_LCR_1 = frozenset(FAMILIES) - {"control"}
 
 
 @pytest.fixture(scope="module")
@@ -95,3 +97,10 @@ def test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_
             assert text in ('{"refusal":"unavailable"}',
                             '{"detail":"the datasets service failed"}'), (login, family, text)
     assert matrix["lab", "control"][0] == 200 and matrix["owner", "control"][0] == 200
+    # LCR-R2/R3: the matrix pinned. The owner column reaches the datasets and pipelines
+    # handlers (the probe's `ds@1` is absent: 404). The lab column's typed 503s are LCR-F1's
+    # (infrx_lab_control holds none of the families' D7/D8/D9 grants): NOT RUN[SR-LCR-1] - the
+    # SR-LCR-1 merge (lane lab-sql-lw8) flips this set to the owner column explicitly.
+    assert (matrix["owner", "datasets"][0], matrix["owner", "pipelines"][0]) == (404, 404)
+    assert {f for f in FAMILIES if matrix["lab", f][0] == 503} == NOT_RUN_SR_LCR_1
+    print("\nNOT RUN[SR-LCR-1]:", sorted(NOT_RUN_SR_LCR_1))

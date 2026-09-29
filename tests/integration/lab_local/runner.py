@@ -72,7 +72,8 @@ REQUIRED = {
             "test_o04_the_control_factory_is_ready_on_its_own_login"),
     "o05": ("test_o05_every_lab_route_family_answers_a_lab_session",
             "test_o05_the_lab_routes_gateway_serves_every_family",
-            "test_o05_a_consumer_key_is_no_lab_session_on_any_family"),
+            "test_o05_a_consumer_key_is_no_lab_session_on_any_family",
+            "test_o05_the_control_factory_serves_every_family_on_its_own_login"),
     "o06": ("test_o06_the_consumer_path_serves_and_settles_once",),
     "o07": ("test_o07_the_lab_web_renders_every_page_family_signed_in",),
 }
