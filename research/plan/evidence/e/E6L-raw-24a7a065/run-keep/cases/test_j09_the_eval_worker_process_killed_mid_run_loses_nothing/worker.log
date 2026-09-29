@@ -1,0 +1,17 @@
+2026-09-29 11:50:22,049 INFO botocore.credentials Found credentials in environment variables.
+2026-09-29 11:50:23,731 INFO botocore.credentials Found credentials in environment variables.
+2026-09-29 11:50:25,009 ERROR infrx.worker lab eval failed
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/apps/infrx-api/infrx/worker/__main__.py", line 237, in every
+    await step()
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/apps/infrx-api/infrx/state/outbox.py", line 72, in pump
+    raise failures[0]
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/apps/infrx-api/infrx/state/outbox.py", line 54, in pump
+    await self.scheduler.enqueue(event)     # True new, False already indexed
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/apps/infrx-api/infrx/worker/__main__.py", line 367, in enqueue
+    endpoint, deployment = await self.targets(record.serving_ref)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-evaluate-2/apps/infrx-api/infrx/lab/workers/__main__.py", line 231, in __call__
+    raise errors.NotFound("no private dev revision of this provider serves this ref")
+infrx.contracts.errors.NotFound: not_found: no private dev revision of this provider serves this ref

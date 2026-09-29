@@ -1,0 +1,61 @@
+{
+ "attempts": [
+  [
+   "003339ee-4c69-4cf3-8226-08d04bbd66f4",
+   1,
+   "succeeded"
+  ],
+  [
+   "0635945f-6966-4efc-85d4-40b1f857d85e",
+   1,
+   "expired"
+  ],
+  [
+   "0635945f-6966-4efc-85d4-40b1f857d85e",
+   2,
+   "succeeded"
+  ],
+  [
+   "1a55fff8-c338-4151-8fec-330e48f1d2f0",
+   1,
+   "succeeded"
+  ],
+  [
+   "21cc6fb4-ab4a-4615-8037-a1eb36f07a4f",
+   1,
+   "succeeded"
+  ],
+  [
+   "246726ec-5fd3-433f-8b05-1289829349d2",
+   1,
+   "succeeded"
+  ],
+  [
+   "2aad8550-5348-4657-8eab-c313fea97fc3",
+   1,
+   "succeeded"
+  ]
+ ],
+ "leased_at_kill": 1,
+ "run_id": "000007e6-0000-4000-8000-00000000005b",
+ "serving_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:c0000003-0000-4000-8000-000000000003@sha256:69ce4608ad696a48f6ec410df30037ca82de8ffb9256bbabd096d9144097c5b4",
+ "status": {
+  "attempts": {
+   "expired": 1,
+   "succeeded": 6
+  },
+  "cases": {
+   "done": 6
+  },
+  "costs": {
+   "CREDIT": "15.04000000"
+  },
+  "created_at": "2026-09-20T12:00:31+00:00",
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da6-0000-4000-8000-000000000001@sha256:b7b07e38c982601c0107bd23fb7bd186122550e1f5ad480c45147d17709cfdf6",
+  "run_id": "000007e6-0000-4000-8000-00000000005b",
+  "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000005b@sha256:2425ec848f54a003b9f86cc64116e72f9e182b13787bb0c64ab0da19ddf7a22c",
+  "state": "succeeded",
+  "updated_at": "2026-09-20T12:01:02+00:00"
+ },
+ "wallet_calls": 7
+}
