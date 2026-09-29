@@ -1741,6 +1741,7 @@ EXPECTED_FUNCTION_CALLERS = {
     "public.operator_adjust_credit(uuid,text,text,text)": {"authenticated"},
     "public.operator_set_suspension(uuid,boolean,text,text)": {"authenticated"},
     "public.operator_revoke_key(uuid,text,text)": {"authenticated"},
+    "public.operator_raise_lab_shadow_limit(uuid,integer,text,text)": {"authenticated"},
 }
 
 
