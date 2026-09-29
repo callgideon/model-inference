@@ -102,3 +102,7 @@ plus 2.6 h of detached proofs.
 
 `make api-test` was not rerun. The only change is in `test_mutants.py`, and the full list above covers it. The
 earlier i4 api-test result stays as recorded. Remaining estimate: 0/0.25/0.5 h (re-review), confidence high.
+
+## Rulings
+
+Numbered R209 in `research/plan/08-contracts-v1-encoding.md` §10 at the i-harness-key merge (`codex/w5-merge-29`).
