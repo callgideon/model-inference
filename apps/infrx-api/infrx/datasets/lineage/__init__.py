@@ -57,7 +57,6 @@ from ...contracts import errors
 from ...contracts.lab import records as lab
 from ...contracts.v2.records import DataCategory, DataPurpose
 from ...media.fetch import digest_of
-from ...state.lab_content import PgSampleRestrictions
 from ...state.lab_data import grant_ref
 from .. import acting_provider
 from ..imports import sample_id, sample_key, write_once
@@ -102,13 +101,10 @@ def _id(key: str) -> str:
 
 def restrictions_of(store):
     """0041's tombstones and bounds beside D7's rows: a store (or directory) that carries
-    them (the fakes), else its own connection (WR-DS5-1: `PgLabDataStore.restrictions`),
-    else None - the object records alone (a fake with neither, e.g. P2's)."""
-    found = getattr(store, "restrictions", None)
-    if found is not None:
-        return found
-    connect = getattr(store, "_connect", None)
-    return None if connect is None else PgSampleRestrictions(connect)
+    them (the fakes, or WR-DS5-1's `PgLabDataStore.restrictions`), else None - the object
+    records alone (a fake with neither, e.g. P2's). Never reaches into a store's `_connect`
+    itself (WR-DS5-1)."""
+    return getattr(store, "restrictions", None)
 
 
 async def select(*, access, retention, content: Content, feedback: Feedback,

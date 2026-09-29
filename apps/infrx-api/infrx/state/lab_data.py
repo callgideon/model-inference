@@ -65,6 +65,13 @@ class PgLabDataStore:
             await conn.close()
         return result
 
+    @property
+    def restrictions(self):
+        """WR-DS5-1: N3's tombstones/bounds (`PgSampleRestrictions`) over this store's own
+        connection, so `lineage.restrictions_of` never reaches into a store's `_connect`."""
+        from .lab_content import PgSampleRestrictions
+        return PgSampleRestrictions(self._connect)
+
     # --- catalog (D7.a) ---------------------------------------------------------------------
     async def register_source(self, *, provider_org_id: str, source_id: str,
                               content_digest: str, grant_ref: str, actor: str) -> str:
