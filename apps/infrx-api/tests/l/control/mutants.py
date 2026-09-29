@@ -48,6 +48,7 @@ WALLET = "test_lab_control__a_dev_wallet_starts_at_zero_and_only_audited_allocat
 PINS = "test_lab_control__an_alias_switch_while_a_job_is_queued_keeps_its_pins"
 CAS = "test_lab_control__publication_and_rollback_are_compare_and_set"
 ROLLBACK = "test_lab_control__a_rollback_targets_an_earlier_servable_listing_only"
+RETRY = "test_lab_control__a_proposal_retried_after_a_lost_answer_proposes_once"
 SHADOW = "test_lab_control__a_newer_unvalidated_revision_is_never_keyed_priced_or_served"
 O_ROWS = "test_operations__the_route_records_are_l3s_own_rows"
 O_FOREIGN = "test_operations__another_providers_actor_sees_and_moves_nothing"
@@ -133,6 +134,15 @@ MUTANTS: tuple[Mutant, ...] = (
        F, '_event("lab_transition", actor,', '_event("lab_transition", "system",', SMOKE),
     _m("proposal_of_unvalidated", "only a ready_private dev revision is proposed",
        F, "        if (source.state is not S.ready_private\n", "        if (False\n", SMOKE),
+    _m("proposal_retry_opens_a_second", "E3L-F2/R205: a retry of the same source answers "
+       "the open proposal, never a second insert", F,
+       "        for event in reversed(self.audit):\n"
+       "            if event.action == \"lab_propose\" and event.after.get(\"source\") == "
+       "source_revision_id:\n"
+       "                existing = self.deployments.get(event.subject)\n"
+       "                if existing is not None and existing.state is S.proposed_public:\n"
+       "                    return existing\n                break\n",
+       "        pass\n", RETRY),
     _m("listing_without_cas", "publication and rollback compare-and-set the listing version",
        F, "        if (current.version if current else None) != expected_version:\n",
        "        if False:\n", CAS),

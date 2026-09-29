@@ -1,0 +1,93 @@
+{
+  "task": "LSQ6",
+  "lane": "lab-sql-lw6",
+  "slice": "LW6 lab-sql: E3L-F2 (R205) -> WR-R4-1 (lab-sql half) -> SQL halves of WR-LSQ-C2A/C2B/N4-3/R2-3/B3-3 -> WR-E8L-3 (already covered) -> WR-DS5-1",
+  "activity": "review",
+  "head": "be7dfff3",
+  "worktree": ".claude/worktrees/codex-w5-lab-sql-lw6",
+  "branch": "codex/w5-lab-sql-lw6",
+  "owned_paths": [
+    "apps/app/supabase/migrations/0047_lab_control_propose_idempotent.sql",
+    "apps/app/supabase/migrations/0048_lab_release_listing.sql",
+    "apps/app/supabase/migrations/0049_lab_judge_runs_in.sql",
+    "apps/app/supabase/migrations/0050_lab_outbox_pending_kinds.sql",
+    "apps/app/supabase/migrations/0051_lab_import_jobs.sql",
+    "apps/infrx-api/infrx/lab/control/fakes.py",
+    "apps/infrx-api/infrx/state/lab_access.py",
+    "apps/infrx-api/infrx/state/lab_consent.py",
+    "apps/infrx-api/infrx/state/lab_data.py",
+    "apps/infrx-api/infrx/state/lab_rollout.py",
+    "apps/infrx-api/infrx/datasets/lineage/__init__.py",
+    "apps/infrx-api/tests/d/test_l3sql_control.py",
+    "apps/infrx-api/tests/d/test_d9_release.py",
+    "apps/infrx-api/tests/d/test_d6j_judge.py",
+    "apps/infrx-api/tests/d/test_d7_lab_data.py",
+    "apps/infrx-api/tests/d/test_d7_units.py",
+    "apps/infrx-api/tests/d/test_upgrade_lab.py",
+    "apps/infrx-api/tests/d/code_mutants_l3sql.py",
+    "apps/infrx-api/tests/d/code_mutants_d9.py",
+    "apps/infrx-api/tests/d/code_mutants_d6j.py",
+    "apps/infrx-api/tests/d/code_mutants_d7.py",
+    "apps/infrx-api/tests/l/control/mutants.py",
+    "apps/infrx-api/tests/l/control/test_control.py",
+    "apps/infrx-api/tests/n/lineage/mutants.py",
+    "tests/integration/test_harness.py"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=dlab uv run --frozen pytest -q tests/d/test_d7_lab_data.py tests/d/test_d6j_judge.py tests/d/test_upgrade_lab.py tests/d/test_d9_release.py tests/d/test_l3sql_control.py tests/d/test_d7_units.py",
+      "exit": 0,
+      "summary": "60 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=dlab uv run --frozen pytest -q tests/l/control/ -m pg",
+      "exit": 0,
+      "summary": "23 passed, 30 deselected"
+    },
+    {
+      "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_code_mutants_l3sql.py",
+      "exit": 0,
+      "summary": "66 passed, 0 survivors"
+    },
+    {
+      "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_code_mutants_d9.py -k release",
+      "exit": 0,
+      "summary": "30 passed, 0 survivors"
+    },
+    {
+      "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_code_mutants_d6j.py -k judge",
+      "exit": 0,
+      "summary": "42 passed, 0 survivors"
+    },
+    {
+      "cmd": "INFRX_D_TASK=dlab INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_code_mutants_d7.py",
+      "exit": 0,
+      "summary": "159 passed, 0 survivors (2 fix rounds along the way: a superseded-anchor gap on lab_outbox_pending, and a check-bug IndexError plus one unit test case missing a mutant)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/n/lineage/test_mutants.py",
+      "exit": 0,
+      "summary": "52 passed, 0 survivors"
+    },
+    {
+      "cmd": "INFRX_D_TASK=n3 uv run --frozen pytest -q tests/n/lineage/test_lineage_pg.py",
+      "exit": 0,
+      "summary": "2 passed"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0.5,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "every brief item done and green; only remaining risk is a merge-time migration-number conflict, resolved at merge per rule 3",
+    "at": "2026-09-29T03:22Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "already filed by COMPOSITION-2-b790f17.md and E8L-2334e6a.md for the R2-3 pass-loop assembly, the B3-3 Deployer/registry adapters, pilot.py's NoControlReads() swap and lab_world.py's Reads swap - none of it SQL, nothing new added here"
+  ],
+  "evidence": [
+    "research/plan/evidence/d/LSQ6-be7dfff.md"
+  ]
+}

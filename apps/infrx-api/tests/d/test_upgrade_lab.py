@@ -48,7 +48,8 @@ NEW_TABLES = {"infrx.lab_access_grants",                                    # 00
                                        "lab_checkpoint_subscriptions",
                                        "lab_checkpoint_decisions")),
               *(f"infrx.{t}" for t in ("lab_experiments", "lab_release_proposals",  # 0043
-                                       "lab_judge_calibrations"))}
+                                       "lab_judge_calibrations")),
+              "infrx.lab_import_jobs"}                                      # 0051
 SEEDED: dict[str, int] = {}                                                 # none yet
 
 
@@ -246,3 +247,35 @@ def test_the_lw5_upgrade_keeps_a_running_policy_and_refuses_its_stale_candidate(
     assert [conn.execute(q).fetchall() for q in rows] == before, "0045 changed a stored row"
     pgharness.apply(DB, later)
     assert [conn.execute(q).fetchall() for q in rows] == before, "not re-runnable"
+
+
+def test_the_lw6_upgrade_keeps_existing_rows_and_reruns() -> None:
+    """0047-0051 (E3L-F2, WR-R4-1, WR-LSQ-C2A/B, WR-N4-3) over a database already holding a
+    proposed revision (0032's world at 0046): the additive functions and the new
+    `lab_import_jobs` table land without touching a single existing row, and every file
+    re-runs."""
+    from . import test_l3sql_control as l3
+    everything = migrations.sql_for(shim=pgharness.NEEDS_SHIM)
+    later = tuple(f for f in everything if f[0][:4].isdigit() and f[0][:4] >= "0047")
+    assert [f for f, _ in later][:1] == ["0047_lab_control_propose_idempotent.sql"], later
+    pgharness.ensure()
+    pgharness.recreate(DB)
+    pgharness.apply(DB, tuple(f for f in everything if f not in later))
+    conn = pgharness.connect(DB)
+    l3.seed(conn)
+    l3.validated(conn)
+    proposed = l3.ok(conn, "lab_control_propose", {
+        "proposal": l3.proposal(), "source_revision_id": l3.D2, "actor": "admin@nemo"})
+    rows = ("select row_to_json(d)::jsonb from infrx.deployment_revisions d order by "
+            "deployment_revision_id",
+            "select row_to_json(e)::jsonb from infrx.lab_control_events e order by event_id")
+    before = [conn.execute(q).fetchall() for q in rows]
+    pgharness.apply(DB, later)
+    assert [conn.execute(q).fetchall() for q in rows] == before, "0047-0051 changed a stored row"
+    # A retry of the SAME source now answers the open proposal (R205), not a fresh insert:
+    retried = l3.ok(conn, "lab_control_propose", {
+        "proposal": l3.proposal(l3.RETRY_ID), "source_revision_id": l3.D2,
+        "actor": "admin@nemo"})
+    assert retried["deployment_revision_id"] == proposed["deployment_revision_id"]
+    pgharness.apply(DB, later)
+    assert [conn.execute(q).fetchall() for q in rows[:1]] == before[:1], "not re-runnable"

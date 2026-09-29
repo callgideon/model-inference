@@ -234,10 +234,12 @@ J_RESULTS = "check_results_are_stored_once_and_settled_once"
 J_RACE = "check_concurrent_reservations_never_exceed_the_budget"
 J_ONE = "check_a_duplicate_submit_under_contention_creates_one_intent"
 J_STORE = "check_the_store_composes"
+J_RUNS_IN = "check_runs_in_lists_this_providers_runs_by_state_oldest_first"
+RUNS_IN_FILE = "0049_lab_judge_runs_in.sql"
 
 
-def _j(name, old, new, check, why, **kw):
-    return _d.Mutant(name, JUDGE_FILE, old, new, "lab", check, why, **kw)
+def _j(name, old, new, check, why, file=JUDGE_FILE, **kw):
+    return _d.Mutant(name, file, old, new, "lab", check, why, **kw)
 
 
 JUDGE = (
@@ -363,6 +365,16 @@ JUDGE = (
        "coalesce(r.actual, 0)::text,", "lab", J_STORE, "the port reports no hold"),
     # (0042, D8 SR-P2-1, redefines lab_judge_json with purpose and dataset_ref: the anchor
     # follows the live body)
+    # --- WR-LSQ-C2A: the collect/reconcile listing, `0049_lab_judge_runs_in.sql` -----------
+    _j("d6jc2a_empty_states_unbounded", "  if cardinality(v_states) = 0 then\n    perform "
+       "infrx.refuse('invalid_request', 'a judge run listing names at least one state');\n"
+       "  end if;\n", "", J_RUNS_IN, "a worker asking for every state gets an unbounded scan",
+       file=RUNS_IN_FILE),
+    _j("d6jc2a_any_provider", "           where provider_org_id = (p_args->>'provider_org_id')"
+       "::uuid\n", "           where true\n", J_RUNS_IN,
+       "a worker reads another provider's judge runs", file=RUNS_IN_FILE),
+    _j("d6jc2a_any_state", "             and state = any(v_states)\n", "", J_RUNS_IN,
+       "collect and reconcile are handed runs in the wrong state", file=RUNS_IN_FILE),
 )
 JUDGE_NAMES = tuple(m.name for m in JUDGE)
 
