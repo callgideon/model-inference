@@ -9052,7 +9052,7 @@
   {
    "id": "W5-MERGE-51",
    "task": null,
-   "slice": "merge batch #51 (Opus): lab-control-routes a01c0a91 (+WR-LCR-1..5, lens minors, R245)",
+   "slice": "merge batch #51 (Opus): lab-control-routes a01c0a91 (+WR-LCR-1..5, lens minors, R245); workflow wf_196928e9-2a6",
    "agent": "opus",
    "branch": "codex/w5-merge-51",
    "worktree": ".claude/worktrees/codex-w5-merge-51",
@@ -9089,7 +9089,7 @@
   {
    "id": "W5-LAB-SQL-LW8",
    "task": "L3",
-   "slice": "SR-LCR-1: 0056 lab_control_grants LOCAL-ONLY — infrx_lab_control EXECUTE on the families' route-half functions; the PG matrix lab column = owner column (Opus)",
+   "slice": "SR-LCR-1: 0056 lab_control_grants LOCAL-ONLY — infrx_lab_control EXECUTE on the families' route-half functions; the PG matrix lab column = owner column (Opus); workflow wf_c5d734e0-f5a",
    "agent": "opus",
    "branch": "codex/w5-lab-sql-lw8",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw8",
