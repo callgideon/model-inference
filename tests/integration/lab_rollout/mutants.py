@@ -129,8 +129,10 @@ F3 = "infrx/contracts/lab/records.py"
 B2 = "infrx/evaluation/reports/__init__.py"
 G = "infrx/gateway/pilot.py"
 D9 = "../app/supabase/migrations/0043_lab_reads_and_proposals.sql"
+D45 = "../app/supabase/migrations/0045_lab_serving_ref_identity.sql"
 
 K01 = "test_k01_routing_off_serves_todays_request_over_a_live_release"
+K01_IDENTITY = "test_k01_a_candidate_ref_resolves_through_0045_and_matches_l3s_own_computation"
 K02 = "test_k02_a_shadow_changes_nothing_the_user_sees_or_pays"
 K03_ARMS = "test_k03_a_subject_keeps_its_arm_and_each_admission_is_one_d9_row"
 K03_WEIGHT = "test_k03_candidate_traffic_is_bounded_and_a_raised_weight_keeps_its_subjects"
@@ -139,6 +141,7 @@ K03_NEVER = "test_k03_pins_ineligible_and_session_subjects_are_never_routed"
 K03_OUTAGE = "test_k03_a_release_store_outage_is_a_503_never_the_baseline"
 K04_ONCE = "test_k04_a_breach_rolls_back_once_under_two_controllers_for_future_admissions"
 K04_RESTART = "test_k04_a_controller_killed_before_the_alias_cas_converges_on_restart"
+K09_PROCESS = "test_k09_the_controller_process_restarted_mid_rollout"
 K05_ACCEPT = "test_k05_an_accepting_report_after_the_horizon_is_approved_once"
 K05_HOLD = "test_k05_an_inconclusive_report_blocks_promotion"
 K05_SLICE = "test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back"
@@ -148,6 +151,10 @@ K07_STORED = "test_k07_a_variant_is_probed_compared_and_stored"
 K07_REFUSED = "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"
 
 STACK_MUTANTS: tuple[Mutant, ...] = (
+    _m("st_serving_ref_digest_drifts", "0045's digest is the same JCS field set L3's "
+       "operations.serving_ref reads (R188/R208) - SQL and Python must agree byte-for-byte",
+       D45, "|| '\"revision_label\":' || to_json(s.revision_label) || ','",
+       "|| '\"revision_label\":' || to_json(s.runtime_image_ref) || ','", K01_IDENTITY),
     _m("st_routing_ignores_the_switch", "ROLLOUT_ROUTING off leaves the relay's own accept", G,
        "    if deployment.rollout_routing:\n        # R1", "    if rollouts is not None:\n        # R1",
        K01),
@@ -183,13 +190,19 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "            serving = policy.candidates[0].serving_ref\n            break", K03_AB),
     _m("st_weight_ignored", "candidate traffic is bounded by the weight", F3,
        "        edge += candidate.weight_bp", "        edge += 5_000", K03_ARMS, K03_WEIGHT),
-    _m("st_rolled_back_still_routes", "only a running release routes", D9,
+    # E8L-F3 (base drift, not a mutant-writing error): this anchor lived in 0043's
+    # `release_active` body until lab-sql-lw5 merged 0045, which `create or replace
+    # function`s the WHOLE body (D5 item 10b's pattern, already fixed the same way in
+    # tests/d/code_mutants_d8.py's `q_active_*` list) - a mutation of 0043's copy of this
+    # line now runs invisibly, since Postgres always executes 0045's redefinition. Moved to
+    # 0045's own copy of the identical line (verified identical below).
+    _m("st_rolled_back_still_routes", "only a running release routes", D45,
        "   where x.endpoint_id = v_endpoint and x.state = 'running';",
        "   where x.endpoint_id = v_endpoint and x.state in ('running', 'rolled_back') "
        "order by x.state limit 1;", K04_ONCE),
     _m("st_lost_race_raises", "a lost CAS race rereads and accepts the same rollback", R2,
        "            if (await self._store.release(policy_ref)).state != to:",
-       "            if True:", K04_ONCE),
+       "            if True:", K04_ONCE, K09_PROCESS),
     _m("st_error_rate_ignored", "an error-rate breach rolls back", R2,
        "    if cand.errors > plan.max_error_rate * cand.requests:", "    if False:", K04_ONCE),
     _m("st_latency_ignored", "a p99 breach rolls back", R2,
@@ -251,8 +264,17 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_route.py", "scenarios_recover.py", "scenarios_parity.py")
-#: FAIL on this base (E8L-F1: the serving-ref identity R1/0043 and L3's `Serving` disagree),
-#: so no mutant can be judged on it; it is bound to a mutant once the seam is reconciled.
+#: FAIL on this base - E8L-F2 (WR-E8L-2b re-derived E8L-F1 as fixed: 0045/R208 makes
+#: `release_active` and L3's `operations.serving_ref` agree, k01-k05/k07 now resolve a real
+#: candidate ref cleanly). k06 itself surfaces a SEPARATE, deeper gap: `Controller._converge`
+#: (infrx/rollouts/control) tests membership by the CANDIDATE'S OWN full ref (deployment
+#: id + digest), but L3's real promotion (`operations.py`'s `propose`, and this world's
+#: `promote()` mirroring it) always mints a FRESH deployment_revision_id for the newly public
+#: deployment - same servingVersion, same digest, different id. `current not in candidates`
+#: can then never be true for a real promotion, however correct the identity scheme is, so
+#: the alias never converges. No mutant can be judged on a case that fails by construction;
+#: bound once `_converge` compares by serving identity (servingVersion + digest) rather than
+#: the full ref, or a lane fixes the seam another way (product code, outside this lane).
 KNOWN_FAIL = {"test_k06_an_emergency_rollback_moves_a_promoted_alias_back"}
 
 

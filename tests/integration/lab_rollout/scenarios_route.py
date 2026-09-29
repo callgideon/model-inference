@@ -109,6 +109,23 @@ def test_k01_routing_off_serves_todays_request_over_a_live_release(lab, workdir)
     assert run(lab.releases().release(ref)).state == "running"
 
 
+def test_k01_a_candidate_ref_resolves_through_0045_and_matches_l3s_own_computation(lab, workdir):
+    """WR-E8L-2b (E8L-F1, R191/R208): the world's candidate ref is a real deployment's
+    `infrx.lab_serving_ref`, so a launch resolves through 0045's `release_active` instead of
+    refusing `state_conflict` on an opaque, unresolvable stand-in - the fail-first this case
+    replaces: before this fix, `lab.CAND` was `q8.serving_ref(<bare serving_version_id>)`, a
+    string no deployment ever names, and this exact launch+route raised `state_conflict` (the
+    fixture-drift 0045's own `release_active` created for every e8l scenario, not only k06).
+    The SQL and Python computations of the same identity (R188) must also agree byte-for-byte,
+    or the ref this world hands to a policy is not the one `release_active`/R2 recompute."""
+    matched = run(lab.python_serving_ref(lab.q8.W["deployment_2"]))
+    lw.save(workdir, "identity.json", {"cand": lab.CAND, "python_computed": matched})
+    assert lab.CAND == matched, "infrx.lab_serving_ref disagrees with operations.serving_ref"
+    policy, ref = lab.launch(lab.policy(weights=(10_000,), candidates=(lab.CAND,)), lw.plan())
+    assert admit(router(lab), lab.subjects(1)[0], 1, tag=0x4f).model_revision == lab.PIN
+    assert run(lab.releases().release(ref)).state == "running"
+
+
 # ------------------------------------------------------------------------------------ k02
 def test_k02_a_shadow_changes_nothing_the_user_sees_or_pays(lab, workdir):
     """A shadow release (shadow_limit raised to 1 by the operator): the user's answer, job,
