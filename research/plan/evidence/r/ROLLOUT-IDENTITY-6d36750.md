@@ -193,3 +193,5 @@ candidate refs only, and leaves alone any later listing of the same serving vers
 another deployment revision (a deliberate re-promotion or redeploy). An interrupted rollback of a
 promoted listing is finished by the operator's stop. An alias exactly on `baseline_ref` is never
 re-listed. The ref format is unchanged (R188/R191/R208)."
+
+Rulings: the revised proposal is numbered R216 in `08-contracts-v1-encoding.md` §10 at the rollout-identity merge on `codex/w5-merge-35` (2026-09-29); next free R217.
