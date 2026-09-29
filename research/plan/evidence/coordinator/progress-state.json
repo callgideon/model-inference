@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 264,
- "updated": "2026-09-29T03:54:53Z",
+ "revision": 265,
+ "updated": "2026-09-29T03:55:57Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7657,6 +7657,46 @@
    "owned_paths": [
     "infrx/rollouts/**",
     "tests/r/rollouts/**"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-COMPOSITION-4",
+   "task": null,
+   "slice": "(wave5 LW6 lane composition-4, Opus) WR-P4B-1 LAB_TEACHERS switch → a P2 collect() caller in the annotation role → WR-DS5-2 → WR-E7L-1/WR-B3-EVALS (P3 Evaluations port; E7L i07/i08 binds) → WR-P2-4 redaction; E4 regression; workflow wf_9f17019c-634; base 9698e51b",
+   "agent": "opus",
+   "branch": "codex/w5-composition-4",
+   "worktree": ".claude/worktrees/codex-w5-composition-4",
+   "base": "9698e51b",
+   "head": null,
+   "isolation": {
+    "ports": "p2 57528/57529; p3 57530/57531; b1 57520/57521; n3 57518/57519; e7l 57300-57399",
+    "prefix": "infrx-p2-",
+    "db": "p2"
+   },
+   "activity": "running",
+   "started": "2026-09-29T03:55:57Z",
+   "updated": "2026-09-29T03:55:57Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge → LAB-IMPROVE-LOCAL rerun",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "five composition items + one gate rerun; composition-3 took ~9 h incl. review"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/gateway/pilot.py",
+    "infrx/config.py",
+    "infrx/worker/**",
+    "infrx/lab/workers/**",
+    "infrx/pipelines/**",
+    "infrx/evaluation/**",
+    "tests/w/**",
+    "tests/p/**"
    ],
    "wiring_requests": []
   }
