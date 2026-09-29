@@ -124,6 +124,7 @@ def test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate(lab, wo
     finished; the provider's checkpoint validated and evaluated by P3's port over B3/B1 on the
     bundle's dataset (queued, the holdout digest what B1 froze); not eligible until the Lab
     eval worker's run succeeds, then eligible on exactly that holdout - never public."""
+    lab.benchmark  # WR-LE2E-2: the WR-B3-3 suite stand-in reads it inside the route's event loop
     ref = lab.import_benchmark(3).dataset_ref
     ids, rubric, dev = lab.ids(ref), lab.rubric, lab.DEV
     rows = "\n".join(json.dumps({"sample_id": ids[r], "method": "human",
