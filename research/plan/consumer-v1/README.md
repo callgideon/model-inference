@@ -13,3 +13,4 @@ Detailed briefs for [program 22](../22-consumer-v1-implementation.md); [tasks.js
 ## Audit log
 
 - 2026-09-28: Index created with the post-launch wave map (07); briefs 01–06 unchanged.
+- [Path to v1 internal testing](09-path-to-internal-testing.md) — the completion plan: COMPLETE-LOCAL, then the internal-testing deployment (2026-09-29)

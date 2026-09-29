@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 274,
- "updated": "2026-09-29T07:09:57Z",
+ "revision": 275,
+ "updated": "2026-09-29T07:34:02Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7962,6 +7962,112 @@
    "owned_paths": [
     "apps/lab/lib/services/control/**",
     "apps/lab/tests/l/**"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-COMPOSITION-5",
+   "task": null,
+   "slice": "(wave5 LW6 lane composition-5, Opus) WR-B3-3/WR-C4-B3-SUITES → WR-R2-3 pass loop → WR-LSQ-C2A/C2B → WR-N4-3 → the E6L j09 checkpoint half; workflow wf_9ca204e9-694; base 5ed53a41",
+   "agent": "opus",
+   "branch": "codex/w5-composition-5",
+   "worktree": ".claude/worktrees/codex-w5-composition-5",
+   "base": "5ed53a41",
+   "head": null,
+   "isolation": {
+    "ports": "b1 57520/57521; j2 57511/57512; r2 57534; n3 57518/57519; e6l 57200-57299",
+    "prefix": "infrx-b1-",
+    "db": "b1"
+   },
+   "activity": "running",
+   "started": "2026-09-29T07:34:02Z",
+   "updated": "2026-09-29T07:34:02Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "five composition halves + one gate cell"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/gateway/pilot.py",
+    "infrx/lab/workers/**",
+    "infrx/evaluation/**",
+    "tests/w/**"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-OBSERVE-2",
+   "task": "E5L",
+   "slice": "(wave5 LW5 lane lab-observe-2, Opus) E5L final: compose project override (INFRX_E5L_PROJECT) sidestepping the foreign e5l volumes, o06 + the newly supported cells bound, `make lab-observe`; workflow wf_ef42ed84-e78; base ed071536",
+   "agent": "opus",
+   "branch": "codex/w5-lab-observe-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-observe-2",
+   "base": "ed071536",
+   "head": null,
+   "isolation": {
+    "ports": "e5l 57100-57199 under project e5l2",
+    "prefix": "infrx-e5l2-",
+    "db": "e5l"
+   },
+   "activity": "running",
+   "started": "2026-09-29T07:34:02Z",
+   "updated": "2026-09-29T07:34:02Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "one runner option + one gate run"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_observe/**",
+    "research/plan/evidence/e/E5L-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-DEPLOY-PREP",
+   "task": "I2L",
+   "slice": "(wave5 LW6 lane lab-deploy-prep, Opus) `make lab-local` = every switch ON locally (E4-ON), the internal-testing runbook 08-lab-internal-testing-rollout.md, the Lab rollout step scripts + tests/i/lab; workflow wf_2da4035b-8be; base ed071536",
+   "agent": "opus",
+   "branch": "codex/w5-lab-deploy-prep",
+   "worktree": ".claude/worktrees/codex-w5-lab-deploy-prep",
+   "base": "ed071536",
+   "head": null,
+   "isolation": {
+    "ports": "a new tasklocal key lab-on; l4 57503",
+    "prefix": "infrx-lab-on-",
+    "db": "lab-on"
+   },
+   "activity": "running",
+   "started": "2026-09-29T07:34:02Z",
+   "updated": "2026-09-29T07:34:02Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 8,
+    "pessimistic_h": 16,
+    "confidence": "low",
+    "basis": "a new gate script + a runbook + step scripts with tests"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab-local.sh",
+    "infra/lab/rollout/**",
+    "tests/i/lab/**",
+    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md"
    ],
    "wiring_requests": []
   }
