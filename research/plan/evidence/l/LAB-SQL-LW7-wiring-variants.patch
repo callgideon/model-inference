@@ -1,0 +1,144 @@
+diff --git a/apps/infrx-api/infrx/gateway/pilot.py b/apps/infrx-api/infrx/gateway/pilot.py
+index c07bdb35..e3f5160c 100644
+--- a/apps/infrx-api/infrx/gateway/pilot.py
++++ b/apps/infrx-api/infrx/gateway/pilot.py
+@@ -399,10 +399,12 @@ def lab_releases(connect, sessions, access, objects):
+     D9 as the route's store, on this pool."""
+     from ..state.lab_data import PgLabDataStore
+     from ..state.lab_rollout import PgReleaseProposals, PgReleaseStore
++    from ..state.lab_variants import PgLabVariants
+     from .routes.lab_releases import LabReleases
+     d9 = PgReleaseStore(connect)
+     return LabReleases(sessions, access,
+-                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects),
++                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects,
++                                              PgLabVariants(connect)),
+                        proposals=ReleaseProposals(PgReleaseProposals(connect)), store=d9)
+ 
+ 
+@@ -420,11 +422,11 @@ class ReleaseRecords:
+     """WR-R4-2: `/lab/v1/releases`' read models (port.ts, snake_case). Each D9 release (0048)
+     with D7's policy revision and the plan its launcher stored (WR-C5-PLAN; none stored: a
+     503 naming it, never a guessed plan); `progress` null (R1's aggregates are not readable,
+-    WR-C5-LIVE); the verdict is D9's latest decision. Decisions are 0053's. R3's variant
+-    listing is not written (WR-C6-VARIANTS): 503."""
++    WR-C5-LIVE); the verdict is D9's latest decision. Decisions are 0053's. R3's variants
++    are 0055's listing (WR-C6-VARIANTS): none is [], never a 503."""
+ 
+-    def __init__(self, d9, store, objects) -> None:
+-        self.d9, self.store, self.objects = d9, store, objects
++    def __init__(self, d9, store, objects, variants) -> None:
++        self.d9, self.store, self.objects, self.lab_variants = d9, store, objects, variants
+ 
+     async def releases(self, provider_org_id: str) -> list[dict]:
+         from ..lab.workers.__main__ import plan_key
+@@ -461,8 +463,8 @@ class ReleaseRecords:
+         return [{**d, "decided_at": _z(d["decided_at"])}
+                 for d in await self.d9.decisions(provider_org_id=provider_org_id)]
+ 
+-    async def variants(self, provider_org_id: str):
+-        raise errors.DependencyUnavailable("R3's variant listing is not wired (WR-C6-VARIANTS)")
++    async def variants(self, provider_org_id: str) -> list[dict]:
++        return await self.lab_variants.variants(provider_org_id)
+ 
+ 
+ class ReleaseProposals:
+diff --git a/apps/infrx-api/tests/g/mutants.py b/apps/infrx-api/tests/g/mutants.py
+index 8c368f8b..fb41ef95 100644
+--- a/apps/infrx-api/tests/g/mutants.py
++++ b/apps/infrx-api/tests/g/mutants.py
+@@ -1123,7 +1123,8 @@ MUTANTS: tuple[Mutant, ...] = (
+        "                                          PgLabImportJobs(None))", DATASETS_C6),
+     # WR-R4-2 (composition-6): the release surface's ports over D9, D7, the Lab objects, 0043
+     _m("lab_releases_records_absent", "LAB_RELEASES reads the release models (no 503)",
+-       P, "                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects),\n",
++       P, "                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects,\n"
++       "                                              PgLabVariants(connect)),\n",
+        "                       records=None,\n", RELEASES_C6,
+        "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
+     _m("lab_releases_proposals_absent", "LAB_RELEASES stores proposals in 0043 (no 503)",
+@@ -1137,8 +1138,8 @@ MUTANTS: tuple[Mutant, ...] = (
+     _m("lab_releases_off_the_pool", "the release ports are on the gateway's pool",
+        P, "    d9 = PgReleaseStore(connect)\n", "    d9 = PgReleaseStore(None)\n", RELEASES_C6),
+     _m("lab_releases_other_objects", "the plan is read from the Lab objects the surface got",
+-       P, "records=ReleaseRecords(d9, PgLabDataStore(connect), objects),",
+-       "records=ReleaseRecords(d9, PgLabDataStore(connect), None),", RELEASES_C6),
++       P, "records=ReleaseRecords(d9, PgLabDataStore(connect), objects,",
++       "records=ReleaseRecords(d9, PgLabDataStore(connect), None,", RELEASES_C6),
+     _m("lab_releases_every_state", "the page lists the three states the Lab shows",
+        P, "await self.d9.releases_in(SHOWN, provider_org_id=provider_org_id)",
+        "await self.d9.releases_in((), provider_org_id=provider_org_id)", RELEASES_C6),
+@@ -1158,10 +1159,15 @@ MUTANTS: tuple[Mutant, ...] = (
+     _m("lab_releases_time_not_utc", "a database time is shown as UTC",
+        P, '    return at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")',
+        '    return at.strftime("%Y-%m-%dT%H:%M:%SZ")', RELEASES_C6),
+-    _m("lab_releases_variants_invented", "R3's variant listing is a 503 until it is written",
+-       P, '        raise errors.DependencyUnavailable("R3\'s variant listing is not wired',
+-       '        return []\n        raise errors.DependencyUnavailable("R3\'s variant listing is not wired',
+-       RELEASES_C6),
++    _m("lab_releases_variants_absent", "R3's variants are 0055's listing (WR-C6-VARIANTS)",
++       P, "        return await self.lab_variants.variants(provider_org_id)",
++       "        return []", RELEASES_C6),
++    _m("lab_releases_variants_other_provider", "the variants are the page's provider's",
++       P, "        return await self.lab_variants.variants(provider_org_id)",
++       "        return await self.lab_variants.variants(None)", RELEASES_C6),
++    _m("lab_releases_variants_off_the_pool", "the variant listing reads the gateway's pool",
++       P, "                                              PgLabVariants(connect)),",
++       "                                              PgLabVariants(None)),", RELEASES_C6),
+     _m("lab_proposals_proposer_dropped", "0043 records the session's user as the proposer",
+        P, 'fence=proposal["fence"], proposed_by=proposal["proposed_by"]))',
+        'fence=proposal["fence"], proposed_by=None))', RELEASES_C6),
+diff --git a/apps/infrx-api/tests/g/test_startup.py b/apps/infrx-api/tests/g/test_startup.py
+index 3a5f9102..08291e73 100644
+--- a/apps/infrx-api/tests/g/test_startup.py
++++ b/apps/infrx-api/tests/g/test_startup.py
+@@ -510,8 +510,8 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
+     launcher stored beside it (WR-C5-PLAN), the proposals over 0043 (one pending per revision,
+     the proposer the session's user), and D9 as the route's store - all on the gateway's
+     pool and Lab objects. R1's aggregates are not readable (WR-C5-LIVE): progress is null; the
+-    verdict is D9's latest decision; a release whose plan is not stored, and R3's variant
+-    listing (not written), are a typed 503, never a guessed row."""
++    verdict is D9's latest decision; a release whose plan is not stored is a typed 503, never
++    a guessed row; R3's variants are 0055's listing for the page's provider (WR-C6-VARIANTS)."""
+     import dataclasses
+     from datetime import datetime, timezone
+ 
+@@ -522,6 +522,7 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
+     from infrx.state.lab_data import PgLabDataStore
+     from infrx.state.lab_rollout import (Decision, PgReleaseProposals, PgReleaseStore, Release,
+                                          ReleaseListing)
++    from infrx.state.lab_variants import PgLabVariants
+ 
+     settings = support.settings(deployment=dataclasses.replace(support.BUILD,
+                                                                lab_releases=True))
+@@ -533,6 +534,7 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
+     assert type(x.records.d9) is PgReleaseStore and x.records.d9._connect == "pool"
+     assert type(x.records.store) is PgLabDataStore and x.records.store._connect == "pool"
+     assert x.records.objects is objects
++    assert type(x.records.lab_variants) is PgLabVariants and x.records.lab_variants._connect == "pool"
+     assert type(x.proposals.store) is PgReleaseProposals and x.proposals.store._connect == "pool"
+ 
+     provider = "a0000000-0000-4000-8000-00000000000a"
+@@ -571,7 +573,11 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
+             assert (wanted, provider_org_id) == (ref, provider)
+             return lab.parse(record)
+ 
+-    records = pilot.ReleaseRecords(D9(), D7(), objects)
++    class Variants:
++        async def variants(self, provider_org_id):
++            return [{"variant_ref": "lab:variant:v"}] if provider_org_id == provider else []
++
++    records = pilot.ReleaseRecords(D9(), D7(), objects, Variants())
+     died = outcome(lambda: asyncio.run(records.releases(provider)))
+     assert type(died) is errors.DependencyUnavailable and "WR-C5-PLAN" in str(died), died
+     asyncio.run(objects.put_if_absent(plan_key(provider, record["policy_id"]),
+@@ -592,8 +598,7 @@ def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals(
+     assert asyncio.run(records.decisions(provider)) == [
+         {"policy_ref": ref, "decision": "rollback", "reasons": ["error_rate"],
+          "evidence_refs": ["run:x"], "decided_by": "op", "decided_at": "2026-09-28T09:30:05Z"}]
+-    died = outcome(lambda: asyncio.run(records.variants(provider)))
+-    assert type(died) is errors.DependencyUnavailable, died
++    assert asyncio.run(records.variants(provider)) == [{"variant_ref": "lab:variant:v"}]
+ 
+     made = []
+ 

@@ -251,6 +251,9 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0053_lab_composition_reads.sql",
     # Lab (local-only, R151/R201): lab-live (WR-C6-LIVE, R244)
     "0054_lab_release_live.sql",
+    # Lab (local-only, R151/R201): lab-sql LW7 (WR-C6-VARIANTS, WR-C6-REQUEUE)
+    "0055_lab_variants_requeue.sql",
+    # 0056 (lab-sql LW8, merge #55 in parallel) slots after 0055; the coordinator sorts at integration
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()

@@ -1,7 +1,7 @@
 """WR-N4-1: the Lab's datasets surface, `/lab/v1/providers/{provider}/datasets`, over N1/N2/N3.
 
-    POST imports/preview  POST imports  GET imports/{id}  GET versions  GET versions/{ref}
-    POST versions         POST exports  GET exports/{id}/parts/{n}
+    POST imports/preview  POST imports  GET imports/{id}  POST imports/{id}/requeue
+    GET versions  GET versions/{ref}  POST versions  POST exports  GET exports/{id}/parts/{n}
 
 `router()` is N4's proposed production router (`apps/lab/tests/n/backend.py`, the Lab journey's
 backend) moved here, with three changes for a public process: the user is the verified Lab
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio  # noqa: F401 - the mutants' stand-in session reader
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -129,6 +130,22 @@ def router(*, access, store, objects, user_of, read, clock=lambda: datetime.now(
             if found["state"] == "published":
                 note(provider, found["report"]["dataset_ref"])
             return found
+        return await guarded(request, provider, work)
+
+    @api.post("/imports/{import_id}/requeue")
+    async def requeue(request: Request, provider: str, import_id: str):
+        """WR-C6-REQUEUE (0055): a failed job again as a new job (R243: the failed id stays
+        terminal). The new id is derived from the failed one, so a retry is the same job; the
+        rows are copied to it first because the pool reads a job's rows by its id.
+        ponytail: the copy re-reads the upload (<= MAX_BODY_BYTES) through the gateway."""
+        async def work(provider, user):
+            jobs, again = queue(), str(uuid.uuid5(uuid.NAMESPACE_URL, f"requeue:{import_id}"))
+            rows = await objects.get(imports.rows_key(provider, import_id))
+            if rows is not None:
+                await imports.write_once(objects, imports.rows_key(provider, again), rows,
+                                         "application/x-ndjson")
+            return shown(await jobs.requeue(import_id, new_job_id=again,
+                                            provider_org_id=provider, actor=user))
         return await guarded(request, provider, work)
 
     @api.get("/versions")

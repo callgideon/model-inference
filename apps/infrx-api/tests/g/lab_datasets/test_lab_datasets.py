@@ -66,11 +66,28 @@ class Store(FakeLabStore):
         return await super().register_source(**kw)
 
 
+class Jobs(FakeJobs):
+    """0055's requeue beside 0051's queue: the provider's failed job again as the new id, the
+    requeuer its actor; a replay is the one successor; any other state `StateConflict`."""
+
+    async def requeue(self, job_id, *, new_job_id, provider_org_id, actor):
+        job = await self.job(job_id, provider_org_id=provider_org_id)
+        if job["state"] != "failed":
+            raise errors.StateConflict(f"only a failed import job is requeued; this one is "
+                                       f"{job['state']}")
+        again = next((j for j in self.rows.values() if j.get("requeued_from") == job_id), None)
+        if again is None:
+            again = await self.enqueue(new_job_id, {**job["spec"], "actor": actor},
+                                       provider_org_id=provider_org_id, actor=actor)
+            again["requeued_from"] = job_id
+        return {"result": None, "error": None, **again}
+
+
 class World(FakeWorld):
     def __init__(self) -> None:
         super().__init__()
         self.sessions = Sessions((self.DEV_A, self.DEV_B, self.VIEWER_A, self.CONSUMER_ONLY))
-        self.store, self.objects, self.jobs = Store(), InMemoryObjectStore(), FakeJobs()
+        self.store, self.objects, self.jobs = Store(), InMemoryObjectStore(), Jobs()
         self.store.add_grant(provider=self.A)
 
     def datasets(self) -> ld.LabDatasets:
@@ -252,3 +269,48 @@ def test_lab_datasets__an_import_is_one_durable_job_the_pool_works(monkeypatch):
         assert call(client, unwired.DEV_A, "POST", path, body).status_code == 503
         assert call(client, unwired.DEV_A, "GET", f"{path}/{import_id}").status_code == 503
         assert unwired.store.published == []
+
+
+def test_lab_datasets__a_failed_import_is_requeued_as_a_new_job_the_pool_works(monkeypatch):
+    """WR-C6-REQUEUE: `POST imports/{id}/requeue` turns the provider's FAILED job into a new
+    queued job (0055; the failed one stays failed, R243) under an id derived from the failed
+    one, after copying the upload's rows to that id - so the pool imports it unchanged and it
+    reads `published`. A retry is the same job and writes nothing; a job that has not failed
+    is a 409; a viewer 403, another provider's developer 404; without a queue 503."""
+    w = World()
+    _, data = fixture("benchmark")
+    body = {"spec": w.spec(), "body": data.decode(), "accept_rejects": True}
+    path, import_id = base(w.A) + "/imports", w.spec()["import_id"]
+    run = imports.Importer.run
+
+    async def missing(self, *args, **kw):
+        raise errors.NotFound("the source is gone")
+    with TestClient(w.app(), raise_server_exceptions=False) as client:
+        again = f"{path}/{import_id}/requeue"
+        assert call(client, w.DEV_A, "POST", path, body).status_code == 200
+        assert call(client, w.DEV_A, "POST", again).status_code == 409      # still running
+        monkeypatch.setattr(imports.Importer, "run", missing)
+        w.pool()
+        monkeypatch.setattr(imports.Importer, "run", run)
+        for user, status in ((w.VIEWER_A, 403), (w.DEV_B, 404)):
+            assert call(client, user, "POST", again).status_code == status, user
+        made = call(client, w.DEV_A, "POST", again)
+        assert made.status_code == 200, made.text
+        new = made.json()["import_id"]
+        assert made.json() == {"import_id": new, "state": "running", "report": None,
+                               "error": None} and new != import_id
+        assert w.jobs.rows[new].get("requeued_from") == import_id
+        assert w.jobs.rows[new]["spec"]["actor"] == w.DEV_A
+        assert asyncio.run(w.objects.get(imports.rows_key(w.A, new))) == data
+        stored = len(w.objects.objects)
+        assert call(client, w.DEV_A, "POST", again).json()["import_id"] == new   # a retry
+        assert len(w.objects.objects) == stored and len(w.jobs.rows) == 2
+        assert w.pool() == {"succeeded": 1, "failed": 0, "retry": 0}
+        assert call(client, w.DEV_A, "GET", f"{path}/{new}").json()["state"] == "published"
+        assert call(client, w.DEV_A, "GET", f"{path}/{import_id}").json()["state"] == "failed"
+        assert call(client, w.DEV_A, "POST", f"{path}/{new}/requeue").status_code == 409
+    unwired = World()
+    unwired.jobs = None
+    with TestClient(unwired.app(), raise_server_exceptions=False) as client:
+        assert call(client, unwired.DEV_A, "POST", f"{path}/{import_id}/requeue").status_code \
+            == 503
