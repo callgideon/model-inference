@@ -2,7 +2,7 @@
 import type { Role } from "../../auth/access.ts";
 import { holds, REFUSALS, type Aggregate, type Deployment, type Proposal, type Refusal } from "./port.ts";
 
-export type Action = "smoke" | "publish" | "rollback";
+export type Action = "smoke" | "publish";
 export type DeploymentRow = {
   id: string; model: string; serving: string; runtime: string; schema: string; rate: string; where: string;
   state: string; smoke: string; pending: string | null; actions: Action[];

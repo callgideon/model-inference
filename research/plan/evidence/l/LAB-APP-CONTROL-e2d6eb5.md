@@ -167,3 +167,5 @@ leftovers seen and not touched: `infrx-d1-postgres`, `infrx-d2-postgres`, `infrx
 - optimistic 0.5 h, likely 1 h, pessimistic 3 h; confidence medium-high.
 - basis: code, fake and real journeys are green with 0 survivors; what remains is one verify round
   (47-234 min per session-03) and the two small wiring requests; E3L-F4/F5 are L3's, not counted.
+
+Rulings: proposal 2 numbered R223 and proposal 1's two extra clauses (role judged in the caller's own workspace before the id; only the provider's own dev revision is smoked or proposed) added to R221 as a verification-log amendment in `research/plan/08-contracts-v1-encoding.md`, at the lab-app-control merge on `codex/w5-merge-38` (2026-09-29).
