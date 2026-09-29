@@ -1,11 +1,72 @@
-{"task":"I8","slice":"I-HARNESS-KEY","activity":"review","head":"38298d65","worktree":".claude/worktrees/codex-w5-i-harness-key","branch":"codex/w5-i-harness-key",
- "owned_paths":["apps/infrx-api/tests/i/mutants.py","apps/infrx-api/tests/i/test_mutants.py","apps/infrx-api/tests/i/conftest.py"],
- "commands":[
-  {"cmd":"(lock held) INFRX_D_TASK=i3 pytest -q tests/i/test_mutants.py -k held_i8 (before fix)","exit":1,"summary":"2 failed: pristine baseline broken_runner on test_pooler"},
-  {"cmd":"same after fix","exit":0,"summary":"2 passed"},
-  {"cmd":"INFRX_D_TASK=i3 INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py","exit":1,"summary":"448 passed, 1 failed (merge_accepts_duplicate_rules anchor x2, base defect; fixed 38298d65, rerun 3 passed)"},
-  {"cmd":"default key pytest -q tests/i/test_mutants.py","exit":0,"summary":"57 passed"},
-  {"cmd":"INFRX_D_TASK=i4 make api-test","exit":2,"summary":"6464 passed, 137 skipped, 9 xfailed, 7 failed (all tests/d/test_outbox_relay[valkey] foreign d2-valkey), 0 in tests/i"}],
- "estimate":{"optimistic_h":0,"likely_h":0.5,"pessimistic_h":1,"confidence":"high","basis":"one harness defect 1/2/4; implemented and proven, review round left","at":"2026-09-28T23:37Z"},
- "blockers":[],"wiring_requests":[],
- "evidence":["research/plan/evidence/i/I-HARNESS-KEY-38298d6.md"]}
+{
+ "task": "I8",
+ "slice": "I-HARNESS-KEY",
+ "activity": "review",
+ "head": "cc594dd3",
+ "worktree": ".claude/worktrees/codex-w5-i-harness-key",
+ "branch": "codex/w5-i-harness-key",
+ "owned_paths": [
+  "apps/infrx-api/tests/i/mutants.py",
+  "apps/infrx-api/tests/i/test_mutants.py",
+  "apps/infrx-api/tests/i/conftest.py"
+ ],
+ "commands": [
+  {
+   "cmd": "(lock held) INFRX_D_TASK=i3 pytest -q tests/i/test_mutants.py -k held_i8 (before fix)",
+   "exit": 1,
+   "summary": "2 failed: pristine baseline broken_runner on test_pooler"
+  },
+  {
+   "cmd": "same after fix",
+   "exit": 0,
+   "summary": "2 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i3 INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py",
+   "exit": 1,
+   "summary": "448 passed, 1 failed (merge_accepts_duplicate_rules anchor x2, base defect; fixed 38298d65, rerun 3 passed)"
+  },
+  {
+   "cmd": "default key pytest -q tests/i/test_mutants.py",
+   "exit": 0,
+   "summary": "57 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i4 make api-test",
+   "exit": 2,
+   "summary": "6464 passed, 137 skipped, 9 xfailed, 7 failed (all tests/d/test_outbox_relay[valkey] foreign d2-valkey), 0 in tests/i"
+  },
+  {
+   "cmd": "fix round: INFRX_D_TASK=i3 pytest -q tests/i/test_mutants.py -k 'not_run or changes_hands' (before fix)",
+   "exit": 1,
+   "summary": "6 failed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=i3 INFRX_MUTANTS=all pytest -q -rs tests/i/test_mutants.py",
+   "exit": 0,
+   "summary": "451 passed, 0 skipped (435 mutants killed)"
+  },
+  {
+   "cmd": "default key and i3 pytest -q tests/i/test_mutants.py",
+   "exit": 0,
+   "summary": "59 passed each"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0,
+  "likely_h": 0.25,
+  "pessimistic_h": 0.5,
+  "confidence": "high",
+  "basis": "review findings 0-F1/0-F2 fixed and proven; re-review left",
+  "at": "2026-09-29T00:40Z"
+ },
+ "blockers": [],
+ "wiring_requests": [],
+ "evidence": [
+  "research/plan/evidence/i/I-HARNESS-KEY-38298d6.md"
+ ],
+ "findings_fixed": [
+  "0-F1",
+  "0-F2"
+ ]
+}

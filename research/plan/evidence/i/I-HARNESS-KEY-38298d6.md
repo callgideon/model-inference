@@ -78,3 +78,27 @@ None (no Makefile/composition change; `tests/i/test_mutants.py` is already in `a
 ## Estimate
 Remaining 0/0.5/1 h (review round only), confidence high; basis: one harness defect at 1/2/4, spent ~1.5 h active
 plus 2.6 h of detached proofs.
+
+## Fix round (review 0-F1, 0-F2; head cc594dd3, only `apps/infrx-api/tests/i/test_mutants.py`)
+- **0-F1 (TOCTOU):** `_settled(mutant)` replaces the bare `run_mutant` call in `test_mutant_is_killed`. When a
+  mutant naming an i8 case comes back "its cases were skipped" and the probe finds the lock free, it is rerun once, so
+  the verdict comes from a real run and not from a probe taken after the copy finished. ponytail: if the lock changes
+  hands again during the rerun, the race can still happen. Loop if that is ever seen.
+- **0-F2 (over-broad NOT RUN):** `_not_run(mutant, result, busy)` reports NOT RUN only when
+  `files_for(mutant.cases) & I8_FILES` (test_pooler/observe/privilege_probe/rollback_drill, the only `i8_stack`
+  users). A skipped mutant that names no i8 case stays `misdeclared` whatever the lock state.
+- Tests first: the new cases `NOT_RUN_CASES[non-i8 skipped while held]` and
+  `test_a_lock_that_changes_hands_mid_run_is_rerun_not_misdeclared` (injected run sequence skipped→killed, lock free;
+  and held → NOT RUN with no rerun), plus the four existing rows now carrying a mutant.
+
+| cmd | head | exit | result |
+|---|---|---|---|
+| `INFRX_D_TASK=i3 pytest -q tests/i/test_mutants.py -k 'not_run or changes_hands'` (before fix) | 28861ac6+tests | 1 | 6 failed (scratchpad `ihk-fix-red.log`) |
+| reviewer repro (LOGIN_PG-only mutant, `busy=lambda: True`) through `_settled`/`_not_run` | cc594dd3 | 0 | `misdeclared`, `_not_run` → None (before: NOT RUN) |
+| `INFRX_D_TASK=i3 pytest -q tests/i/test_mutants.py` (subset) | cc594dd3 | 0 | 59 passed |
+| default key `pytest -q tests/i/test_mutants.py` | cc594dd3 | 0 | 59 passed |
+| `INFRX_D_TASK=i3 INFRX_MUTANTS=all pytest -q -rs tests/i/test_mutants.py` | cc594dd3 | 0 | **451 passed** (21 min): 435 mutants killed, 0 survivors, 0 skipped + 16 runner/shape/guard cases |
+| `ruff check tests/i/test_mutants.py` | cc594dd3 | 0 | clean |
+
+`make api-test` was not rerun. The only change is in `test_mutants.py`, and the full list above covers it. The
+earlier i4 api-test result stays as recorded. Remaining estimate: 0/0.25/0.5 h (re-review), confidence high.
