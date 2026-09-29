@@ -40,6 +40,6 @@ begin
 end $$;
 
 revoke all on function public.operator_raise_lab_shadow_limit(uuid, int, text, text)
-  from public, anon;
+  from public, anon, authenticated, service_role;
 grant execute on function public.operator_raise_lab_shadow_limit(uuid, int, text, text)
   to authenticated;
