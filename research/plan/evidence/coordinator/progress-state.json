@@ -7712,7 +7712,7 @@
   {
    "id": "W5-MERGE-34",
    "task": null,
-   "slice": "merge batch #34 (Opus): lab-sql-lw6 5eb04ba3 (0047–0051 local-only; +R214/R215, WR-CHECKS-2)",
+   "slice": "merge batch #34 (Opus): lab-sql-lw6 5eb04ba3 (0047–0051 local-only; +R214/R215, WR-CHECKS-2); workflow wf_74a535bc-ae9",
    "agent": "opus",
    "branch": "codex/w5-merge-34",
    "worktree": ".claude/worktrees/codex-w5-merge-34",
