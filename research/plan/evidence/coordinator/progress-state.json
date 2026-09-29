@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 281,
- "updated": "2026-09-29T09:50:31Z",
+ "revision": 282,
+ "updated": "2026-09-29T10:13:33Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8200,11 +8200,11 @@
     "prefix": "infrx-d10rv-",
     "db": "d10"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T09:50:31Z",
-   "updated": "2026-09-29T09:50:31Z",
+   "updated": "2026-09-29T10:13:33Z",
    "blocker": null,
-   "next_action": "merge batch #40 (Opus; WR-KGR-1/2, R224)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -8230,22 +8230,22 @@
   {
    "id": "W5-MERGE-40",
    "task": null,
-   "slice": "merge batch #40 (Opus): known-good-reproof 21b3f93d (+WR-KGR-1/2, the SHAPE-keys case, R224); workflow wf_95eb8ac4-3c7",
+   "slice": "merge batch #40 (Opus): known-good-reproof 21b3f93d (+WR-KGR-1/2, the SHAPE-keys case, R224); workflow wf_95eb8ac4-3c7; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-40",
    "worktree": ".claude/worktrees/codex-w5-merge-40",
    "base": "dc8851b7",
-   "head": null,
+   "head": "547f2f5a",
    "isolation": {
     "ports": "none",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T09:50:31Z",
-   "updated": "2026-09-29T09:50:31Z",
+   "updated": "2026-09-29T10:13:33Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,

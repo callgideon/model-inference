@@ -72,7 +72,7 @@ its statements, in order, are the whole file. Not proven: any migration after 00
 0022-0051 other than those bytes (rerun, then add the new `through` and `files`); the old release on the `infrx_runtime` login (0023 revokes
 `admit`/`claim_preparation` from it on purpose, so revert with the target's own env file, which
 R2 restores: the login the release ran on, which cannot be `infrx_runtime`, created by 0021); hosted rows written before the window (the proof uses
-fresh rows); a browser key INSERT by an unverified owner (0024 refuses it whichever backend runs); the targets' lease-less result write stays unfenced on 0026 (R147 follow-up: refuse it only after these targets leave the record). Thirteen old cases that list the
+fresh rows); a browser key INSERT by an unverified owner (0024 refuses it whichever backend runs); the targets' lease-less result write stays unfenced on 0026 (R147 follow-up: refuse it only after these targets leave the record). Fourteen old cases (thirteen SQL-shape cases plus the registry decoy lint) that list the
 old catalog, read a result before its outcome or exercise the 0024/0025 browser surface are skipped by name, each with its reason
 (`SHAPE` in the driver). If no record reaches `--applied`, R3 maintenance is the only fallback.
 
