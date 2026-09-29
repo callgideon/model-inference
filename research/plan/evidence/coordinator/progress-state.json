@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 289,
- "updated": "2026-09-29T12:37:51Z",
+ "revision": 290,
+ "updated": "2026-09-29T12:39:49Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8505,11 +8505,11 @@
     "prefix": "infrx-e8l-",
     "db": "e8l"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T12:50:00Z",
-   "updated": "2026-09-29T12:34:54Z",
+   "updated": "2026-09-29T12:39:49Z",
    "blocker": null,
-   "next_action": "merge batch #44 running → E8L flips under R222 at integration",
+   "next_action": "k09-breach reruns when WR-C5-LIVE lands (composition-6); k10-UI when lab-e2e lands; k08 needs P-08",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -8571,22 +8571,22 @@
   {
    "id": "W5-MERGE-44",
    "task": null,
-   "slice": "merge batch #44 (Opus): lab-rollout-4 2b5a9446 (+WR-LR4-A/B evidence + verdict sub-cell; no rulings); workflow wf_e457199b-855",
+   "slice": "merge batch #44 (Opus): lab-rollout-4 2b5a9446 (+WR-LR4-A/B evidence + verdict sub-cell; no rulings); workflow wf_e457199b-855; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-44",
    "worktree": ".claude/worktrees/codex-w5-merge-44",
    "base": "8949ffb1",
-   "head": null,
+   "head": "a4314c24",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T12:34:54Z",
-   "updated": "2026-09-29T12:34:54Z",
+   "updated": "2026-09-29T12:39:49Z",
    "blocker": null,
-   "next_action": "integrate → E8L implemented (R222)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,

@@ -3486,7 +3486,7 @@
       "track": "E",
       "product": "lab",
       "milestone": "LAB-M4",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
       "start_dependencies": [
