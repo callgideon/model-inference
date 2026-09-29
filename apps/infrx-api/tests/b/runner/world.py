@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 import threading
 from collections import Counter
 from decimal import Decimal
@@ -210,16 +211,19 @@ class FakeEvalStore(FakeLabStore):
         self._fence(lease)["expires"] = self.now + lease_s
         return lease
 
-    async def finish(self, lease, *, outcome, results, cost=None):
+    async def finish(self, lease, *, outcome, results, cost=None, error=None):
         key = (lease["run_id"], lease["case_id"], lease["attempt"])
-        digest = json.dumps([outcome, results, cost], sort_keys=True)
+        digest = json.dumps([outcome, results, cost, error], sort_keys=True)
         a = self.attempts.get(key)
         if a is not None and a["digest"] is not None:
             if a["digest"] != digest:
                 raise errors.IdempotencyConflict("the attempt finished with another outcome")
             return lease
-        if outcome not in ("succeeded", "failed") or (outcome == "failed" and results):
+        if outcome not in ("succeeded", "failed") or (outcome == "failed" and results) \
+                or (outcome == "succeeded" and error is not None):
             raise errors.InvalidRequest("succeed with results or fail with none")
+        if error is not None and not re.fullmatch(r"[a-z][a-z0-9_:.-]{0,99}", error):
+            raise errors.InvalidRequest("a well-formed error code")         # 0034's check
         a = self._fence(lease)
         for r in results:
             if len(r["body"]) > 65536 or (key[0], key[1], r["evaluator_ref"]) in self.results:
@@ -227,7 +231,7 @@ class FakeEvalStore(FakeLabStore):
         for r in results:
             self.results[(key[0], key[1], r["evaluator_ref"])] = {"attempt": key[2],
                                                                   "body": r["body"]}
-        a.update(state=outcome, digest=digest, cost=cost)
+        a.update(state=outcome, digest=digest, cost=cost, error=error)
         self.cases[key[:2]]["state"] = "done" if outcome == "succeeded" else "failed"
         mine = [c["state"] for k, c in self.cases.items() if k[0] == key[0]]
         if not any(s in ("pending", "leased") for s in mine):

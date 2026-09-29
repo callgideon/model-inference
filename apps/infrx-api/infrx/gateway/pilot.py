@@ -421,11 +421,25 @@ def _z(value) -> str:
     return at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _progress(live) -> dict | None:
+    """R2's `Live` in port.ts's `Progress` shape (snake_case), or None: nothing observed."""
+    if live is None:
+        return None
+
+    def arm(a) -> dict:
+        return {"requests": a.requests, "errors": a.errors, "p99_ms": a.p99_ms}
+    return {"observed_until": _z(live.observed_until), "baseline": arm(live.baseline),
+            "candidate": arm(live.candidate), "quality_covered": live.quality_covered,
+            "spent": {"amount": live.spent.value, "unit": live.spent.unit},
+            "candidate_healthy": live.candidate_healthy, "assignments": []}
+
+
 class ReleaseRecords:
     """WR-R4-2: `/lab/v1/releases`' read models (port.ts, snake_case). Each D9 release (0048)
     with D7's policy revision and the plan its launcher stored (WR-C5-PLAN; none stored: a
-    503 naming it, never a guessed plan); `progress` null (R1's aggregates are not readable,
-    WR-C5-LIVE); the verdict is D9's latest decision. Decisions are 0053's. R3's variants
+    503 naming it, never a guessed plan); `progress` is D9's Live of the revision (0054, R244;
+    WR-LIVE-PAGE), null only while nothing is assigned - no per-serving tally is readable yet,
+    so `assignments` is empty; the verdict is D9's latest decision. Decisions are 0053's. R3's variants
     are 0055's listing (WR-C6-VARIANTS): none is [], never a 503."""
 
     def __init__(self, d9, store, objects, variants) -> None:
@@ -456,7 +470,8 @@ class ReleaseRecords:
                                                  "min_quality_coverage", "max_lag_s")},
                          "budget": {"amount": plan["budget"]["value"],
                                     "unit": plan["budget"]["unit"]}},
-                "started_at": _z(release.started_at), "progress": None,
+                "started_at": _z(release.started_at),
+                "progress": _progress(await self.d9.live(item.policy_ref)),
                 "verdict": None if d is None else {
                     "action": d.decision, "reasons": list(d.reasons),
                     "evidence_refs": list(d.evidence_refs), "evaluated_at": _z(d.at)}})

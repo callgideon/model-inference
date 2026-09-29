@@ -313,7 +313,10 @@ class Runner:
         except ReplayBoundExceeded as bound:
             return await self._finish(lease, "failed", reason=f"bound:{bound.bound}", bill=bill)
         except errors.DomainError as refused:
-            return await self._finish(lease, "failed", reason=refused.code, bill=bill)
+            name = (refused.detail or "").partition(":")[0]       # R239's refusals, by name
+            return await self._finish(lease, "failed", bill=bill, reason=(
+                f"{refused.code}:{name}" if name in ("media_foreign", "video_over_cap")
+                else refused.code))
         except Exception as broken:        # B-R7: this case's, never the whole delivery's
             return await self._finish(lease, "failed", reason=f"error:{type(broken).__name__}",
                                       bill=bill)
@@ -375,7 +378,9 @@ class Runner:
                       bill: _Bill | None = None) -> None:
         cost = None if bill is None else {"unit": "CREDIT", "value": str(bill.charged)}
         try:
-            await self._store.finish(lease, outcome=outcome, results=results or [], cost=cost)
+            # WR-LEM-R3: D7 stores the reason as 0034's error code (lower case)
+            await self._store.finish(lease, outcome=outcome, results=results or [], cost=cost,
+                                     error=reason.lower() if reason else None)
         except errors.StaleLease:
             return self._abandon(lease["case_id"], bill)
         if reason:

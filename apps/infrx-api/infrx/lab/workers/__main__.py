@@ -41,7 +41,8 @@ never runs in a consumer process.
                the plan stored beside it (WR-R2-3; a running one on D9's Live, 0054/R244,
                held while nothing is assigned or it is unreadable). `emergency-rollback` (LAB_OPERATOR_ID of the invoking
                shell): R2's operator stop over D9 and L3. `decide`: the operator's decision
-               of a Lab proposal through D9's CAS (WR-R4-2). `launch` (+ LAB_S3_BUCKET): the
+               of a Lab proposal through D9's CAS (WR-R4-2; an expansion only on R2's
+               `expand` verdict over D9's Live, WR-LIVE-DECIDE). `launch` (+ LAB_S3_BUCKET): the
                release launcher - the plan stored write-once, then D9's start (WR-C5-PLAN).
 * `annotation` LAB_S3_BUCKET, LAB_TEACHER_URL (the local teacher fake until P-10; + JUDGE_MODE):
                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
@@ -136,8 +137,13 @@ def lab_sql(mode: str, module: str, name: str):
 
 
 def lab_objects(mode: str, env):
-    """The Lab objects, answering HeadBucket before anything is served."""
+    """The Lab objects, answering HeadBucket before anything is served; at the gateway's media
+    location when the unit names it (R249, WR-LR5-3), else refused before any bucket."""
     from ...media.s3 import S3ObjectStore, reason
+    media = ((env.get("S3_MEDIA_BUCKET") or "").strip(), env.get("S3_MEDIA_PREFIX") or LAB_PREFIX)
+    if media[0] and media != (env.get(BUCKET), env.get("LAB_S3_PREFIX") or LAB_PREFIX):
+        raise RuntimeMisconfigured(mode, detail=f"{BUCKET}/LAB_S3_PREFIX must be the gateway's "
+                                                "S3_MEDIA_BUCKET/S3_MEDIA_PREFIX (WR-C5-PLAN)")
     try:
         objects = S3ObjectStore.connect(env[BUCKET], env.get("LAB_S3_PREFIX") or LAB_PREFIX,
                                         env.get("LAB_S3_ENDPOINT", ""))
@@ -682,6 +688,37 @@ async def launch_release(env, policy_ref: str, plan_path: str, reason: str) -> i
     return 0
 
 
+async def expansion_verdict(mode: str, env, connect, provider: str, policy, policy_ref: str,
+                            now: datetime) -> list[str]:
+    """WR-LIVE-DECIDE (R240): R2's verdict for an expansion of the running release, evaluated
+    as the pass evaluates it - the plan stored beside it (R241, D9's digest), D9's Live (0054,
+    R244) and its B2 report (R242). Only `expand` returns (its evidence refs); the caller
+    decides it through 0043, never `Controller.approve` (a second CAS at the same fence).
+    Nothing assigned, or any other verdict, refuses by name."""
+    from ...rollouts.control import Plan, evaluate, plan_digest
+    from ...state.lab_data import PgLabDataStore, PgLabReads
+    from ...state.lab_rollout import PgReleaseStore
+    raw = await lab_objects(mode, env).get(plan_key(provider, policy.policy_id))
+    if raw is None:
+        raise errors.DependencyUnavailable("the release's plan is not stored (WR-C5-PLAN)")
+    releases, plan = PgReleaseStore(connect), Plan.model_validate_json(raw)
+    release = await releases.release(policy_ref)
+    if release.plan_digest != plan_digest(plan):
+        raise errors.StateConflict("the plan changed after launch")
+    current = await releases.live(policy_ref)
+    if current is None:
+        raise errors.DependencyUnavailable("held: no admitted request is assigned to this "
+                                           "release yet")
+    report, runs = await release_report(PgLabReads(connect), PgLabDataStore(connect), provider,
+                                        policy, plan)
+    verdict = evaluate(plan, policy, current, started_at=release.started_at, now=now,
+                       report=report, runs=runs)
+    if verdict.action != "expand":
+        raise errors.StateConflict(f"not approvable: R2's verdict is {verdict.action} "
+                                   f"({', '.join(verdict.reasons)})")
+    return list(verdict.evidence_refs)
+
+
 async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
                           reason: str) -> int:
     """WR-R4-2: the operator decides one of the Lab's proposals for the release `policy_ref`
@@ -689,8 +726,8 @@ async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
     the proposal's state in one transaction (a stale fence refuses and leaves it pending). A
     rejection moves nothing. An approved rollback is R2's `lab.rollout_decision.1` by the
     operator; R2's operator stop then converges the alias (its CAS finds the release rolled
-    back). An approved expansion needs R2's `expand` verdict on R1's aggregates, which are
-    not readable (WR-C5-LIVE): refused, nothing decided."""
+    back). An approved expansion is decided only on R2's `expand` verdict
+    (`expansion_verdict`, R240); any other verdict refuses by name, nothing decided."""
     mode, needs = "lab-rollout", (DATABASE, "LAB_OPERATOR_ID")
     values = settings(mode, env, needs)
     match = lab.REF_RE.fullmatch(policy_ref)
@@ -712,17 +749,19 @@ async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
         if not approve:
             await proposals.decide(proposal_id, approve=False, decided_by=operator)
             return 0
+        now, evidence = datetime.now(timezone.utc), []
+        policy = await PgLabDataStore(connect).resolve(policy_ref, provider_org_id=provider)
         if found["kind"] != "rollback":
-            raise errors.DependencyUnavailable("an expansion is approved on R2's expand verdict "
-                                               "over R1's aggregates (WR-C5-LIVE)")
-        now = datetime.now(timezone.utc)
+            evidence = await expansion_verdict(mode, env, connect, provider, policy, policy_ref,
+                                               now)
         await proposals.decide(proposal_id, approve=True, decided_by=operator, decision={
             "schema": "lab.rollout_decision.1", "provider_org_id": provider,
-            "policy_ref": policy_ref, "decision": "rollback", "evidence_refs": [],
+            "policy_ref": policy_ref, "decision": found["kind"], "evidence_refs": evidence,
             "decided_by": operator, "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")},
             reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))
         decided = True                        # committed: a later failure is converge-only
-        policy = await PgLabDataStore(connect).resolve(policy_ref, provider_org_id=provider)
+        if found["kind"] == "expand":
+            return 0                          # an approved expansion moves no alias (R2)
         serving = control_serving(connect, operator)
         controller = Controller(PgReleaseStore(connect), serving, actor_id=operator)
         await controller.emergency_rollback(operator, policy, policy_ref, now=now, reason=reason)

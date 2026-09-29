@@ -17,7 +17,8 @@ from ..lab_auth import mutants as auth
 
 SUITE_FILES = ("tests/g/lab_releases/test_lab_releases.py",)
 F = "gateway/routes/lab_releases.py"
-FILES = (F, auth.F)
+P = "gateway/pilot.py"                  # WR-LIVE-PAGE: the composed records' progress
+FILES = (F, auth.F, P)
 C = "test_lab_releases__"
 MOUNT, SESSION = C + "nothing_is_mounted_without_the_switch", \
     C + "every_route_needs_the_session_before_anything_else"
@@ -29,6 +30,7 @@ VERDICT = C + "only_an_expand_verdict_on_a_running_release_can_be_proposed"
 FOREIGN = C + "another_providers_policy_is_not_found_and_d9_is_not_read"
 UNWIRED, BODY = C + "an_unwired_port_is_unavailable_after_the_access_checks", \
     C + "a_body_is_json_and_exactly_a_proposal"
+PROGRESS = C + "a_releases_progress_is_d9s_live_null_only_before_one_is_observed"
 ADMIN = ("        who = await lab_actor(request, x.sessions, x.access,\n"
          "                              Cap.read_aggregate_health)"
          "          # the role: `propose`\n")
@@ -105,6 +107,36 @@ MUTANTS: tuple[Mutant, ...] = (
     # WR-R4-2 (composition-6): 0043 records the proposer
     _m("proposer_not_the_session", "a proposal's proposer is the session's user",
        '        "proposed_by": who.user_id})', '        "proposed_by": None})', FENCE),
+    # WR-LIVE-PAGE (composition-7): progress is D9's Live of the revision (0054, R244)
+    _m("page_progress_withheld", "progress is D9's Live, not null",
+       '"progress": _progress(await self.d9.live(item.policy_ref)),', '"progress": None,',
+       PROGRESS, file=P),
+    _m("page_live_of_another", "each release's Live is read for its own revision",
+       "await self.d9.live(item.policy_ref)", "await self.d9.live(item.policy_id)", PROGRESS,
+       file=P),
+    _m("page_progress_invented", "nothing observed is null, never an invented progress",
+       "    if live is None:\n        return None\n\n    def arm",
+       '    if live is None:\n        return {"assignments": []}\n\n    def arm', PROGRESS,
+       file=P),
+    _m("page_arms_swapped", "each arm is shown as its own", '"baseline": arm(live.baseline),',
+       '"baseline": arm(live.candidate),', PROGRESS, file=P),
+    _m("page_errors_lost", "an arm's errors are shown", '"errors": a.errors,', '"errors": 0,',
+       PROGRESS, file=P),
+    _m("page_p99_lost", "an arm's p99 is shown", '"p99_ms": a.p99_ms}', '"p99_ms": None}',
+       PROGRESS, file=P),
+    _m("page_coverage_lost", "quality coverage is shown", '"quality_covered": live.quality_covered,',
+       '"quality_covered": 0,', PROGRESS, file=P),
+    _m("page_spend_unit", "the spend keeps its unit (never converted, R246)",
+       '"unit": live.spent.unit},', '"unit": "CREDIT"},', PROGRESS, file=P),
+    _m("page_health_invented", "the candidate's health is D9's (R247)",
+       '"candidate_healthy": live.candidate_healthy,', '"candidate_healthy": True,', PROGRESS,
+       file=P),
+    _m("page_clock_not_utc", "the observation time is the database clock as UTC",
+       '"observed_until": _z(live.observed_until),', '"observed_until": str(live.observed_until),',
+       PROGRESS, file=P),
+    _m("page_tally_invented", "no per-serving tally is invented",
+       '"assignments": []}', '"assignments": [{"requests": live.candidate.requests}]}',
+       PROGRESS, file=P),
 )
 
 

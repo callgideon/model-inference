@@ -365,3 +365,52 @@ def test_lab_releases__a_body_is_json_and_exactly_a_proposal():
         answer = call(c, ADMIN_A, "POST", PROPOSE, {**w.proposal(), **over})
         assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"}), over
     assert (w.proposals.rows, w.d9.reads) == ([], [])
+
+
+def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed():
+    """WR-LIVE-PAGE (R244): `pilot.ReleaseRecords` shows each release's `progress` as D9's Live
+    of that revision (`PgReleaseStore.live(policy_ref)`, 0054) in port.ts's shape - per arm
+    counts and p99, quality coverage, the candidate arm's spend in its own unit (R246), health,
+    the database clock as UTC - and null only while Live is None (nothing assigned yet). No
+    per-serving tally is readable yet: `assignments` is empty, never invented."""
+    import asyncio
+
+    from infrx.gateway import pilot
+    from infrx.lab.workers.__main__ import plan_key
+    from infrx.media.store import InMemoryObjectStore
+    from infrx.state.lab_rollout import Release, ReleaseListing
+    from tests.r.control import test_control as r2w
+
+    objects, lives, asked = InMemoryObjectStore(), {}, []
+    refs = [r2w.POLICY_REF, r2w.POLICY_REF.replace("sha256:", "sha256:0", 1)[:-1]]
+    asyncio.run(objects.put_if_absent(plan_key(r2w.P, r2w.POLICY.policy_id),
+                                      r2w.plan().model_dump_json().encode(), "x"))
+
+    class D9:
+        async def releases_in(self, states=(), *, provider_org_id):
+            return [ReleaseListing(policy_id=r2w.POLICY.policy_id, provider_org_id=r2w.P,
+                                   endpoint_id="e", policy_ref=ref, latest_decision=None,
+                                   release=Release(state="running", fence=1, plan_digest="d",
+                                                   started_at=r2w.START)) for ref in refs]
+
+        async def live(self, policy_ref):
+            asked.append(policy_ref)
+            return lives.get(policy_ref)
+
+    class D7:
+        async def resolve(self, ref, *, provider_org_id):
+            return r2w.POLICY
+
+    records = pilot.ReleaseRecords(D9(), D7(), objects)
+    assert [r["progress"] for r in asyncio.run(records.releases(r2w.P))] == [None, None]
+    assert asked == refs, "each release's Live is read for its own revision"
+    lives[refs[0]] = r2w.live(requests=40, errors_=2, p99=950, covered=7, spent="3.50000000",
+                              unit="PROVIDER_USD", healthy=False)
+    first, second = [r["progress"] for r in asyncio.run(records.releases(r2w.P))]
+    assert second is None
+    assert first == {
+        "observed_until": "2026-09-28T09:55:00Z",
+        "baseline": {"requests": 9_000, "errors": 0, "p99_ms": 8_000},
+        "candidate": {"requests": 40, "errors": 2, "p99_ms": 950},
+        "quality_covered": 7, "spent": {"amount": "3.50000000", "unit": "PROVIDER_USD"},
+        "candidate_healthy": False, "assignments": []}, first

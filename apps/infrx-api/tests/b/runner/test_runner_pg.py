@@ -8,7 +8,8 @@ Drills (EVAL-DURABLE): a worker killed after the endpoint charged and before it 
 a connection lost after the charge (the same key replays, no second debit); a durable cancel
 mid-batch; duplicate delivery; an exhausted dev wallet, funded again; data revoked mid-run;
 402 deliveries past max_attempts (0034 `lab_release_attempt`, B-R1); a kill,
-then a revocation, then a delivery that resumes the created run.
+then a revocation, then a delivery that resumes the created run; R239's clip refusals stored on D7's attempt rows by
+name (WR-LEM-R3).
 Outside the mutant runner (N2/T2I's pattern); the oracles are the fake-world cases' mutants.
 
     INFRX_D_TASK=b1 uv run --frozen pytest -q tests/b/runner/test_runner_pg.py   # or b3
@@ -75,7 +76,7 @@ def world():
 class Case:
     """One run of N samples over the seeded grant, with its own dev wallet and endpoint."""
 
-    def __init__(self, world, n: int, funded: str = "1000") -> None:
+    def __init__(self, world, n: int, funded: str = "1000", **harness_over) -> None:
         self.conn, self.store = world
         self.objects = InMemoryObjectStore()
         self.manifest = manifest(N, d7.W["grant"], d7.W["source"], dataset=n)
@@ -83,7 +84,7 @@ class Case:
             run(self.objects.put_if_absent(sample_key(NEMO, sample["content_digest"]),
                                            content(i), "application/json"))
         dataset = run(self.store.publish(self.manifest, provider_org_id=NEMO, actor="dev@nemo"))
-        harness_ref = run(self.store.publish(harness(harness_id=uid(n, 0xa7)),
+        harness_ref = run(self.store.publish(harness(harness_id=uid(n, 0xa7), **harness_over),
                                              provider_org_id=NEMO, actor="dev@nemo"))
         self.payload = eval_run(dataset, harness_ref, run=n)
         self.frozen = run(runner.freeze(self.store, self.payload, evaluator=SPEC,
@@ -314,3 +315,30 @@ def test_b1_pg_b2_case_records_come_from_d7_rows(world, endpoint) -> None:
     assert {r["case_id"]: r["cluster"] for r in records} == groups
     assert str(sum(Decimal(x["value"]) for r in records for x in r["costs"])) == \
         str(c.wallet.debited)
+
+
+def test_b1_pg_a_refused_clip_is_stored_by_name_on_d7s_attempt(world, endpoint) -> None:
+    """WR-LEM-R3: a clip B1 refuses before signing (a foreign media ref; a span H1 passes but
+    R239 does not) fails its case with `invalid_request:<name>` in the report and as 0034's
+    `error_code` on D7's attempt row; nothing reaches the endpoint."""
+    from infrx.contracts.lab import records
+    c = Case(world, 20, adapter="finite_video", prompt_template="label {{media_ref}}",
+             input_mapping={})
+    endpoint(c.wallet)
+    clips = {c.ids[0]: ("sha256:" + "C" * 64, [0, 1000], "media_foreign"),
+             c.ids[1]: ("sha256:" + "c" * 63, [0, 1000], "media_foreign"),
+             c.ids[2]: ("sha256:" + "c" * 64, [-1, 1000], "video_over_cap"),
+             c.ids[3]: ("sha256:" + "c" * 64, [False, True], "video_over_cap")}
+    for sample in c.manifest["samples"]:
+        digest, span, _ = clips[sample["sample_id"]]
+        key = sample_key(NEMO, sample["content_digest"])
+        c.objects.objects.pop(key)
+        run(c.objects.put_if_absent(key, records.canonical({
+            "modality": "finite_video", "content": {"action": "run"}, "media_digest": digest,
+            "span_ms": span, "original": {"answer": "run"}}), "application/json"))
+    report = run(c.runner().run(c.frozen))
+    named = {cid: f"invalid_request:{name}" for cid, (_, _, name) in clips.items()}
+    assert report["failures"] == named, report
+    assert dict(c.rows("select case_id::text, error_code from infrx.lab_eval_attempts "
+                       "where run_id = %s")) == named
+    assert c.wallet.calls == [], "a refused clip reached the endpoint"

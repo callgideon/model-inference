@@ -835,8 +835,9 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
     nothing. An approved rollback is 0043's decision - D9's CAS at the proposal's fence and
     the proposal's state in one transaction - carrying R2's `lab.rollout_decision.1` by the
     operator, then R2's operator stop converges the alias (its CAS finds the release already
-    rolled back). An approved expansion needs R2's expand verdict on R1's aggregates
-    (WR-C5-LIVE): refused, nothing decided. A refused CAS (a stale fence) is exit 1."""
+    rolled back). An approved expansion reads the release's stored plan, so without
+    LAB_S3_BUCKET it refuses to start, nothing decided (its verdict: the next case). A refused
+    CAS (a stale fence) is exit 1."""
     from infrx.rollouts import control
     from infrx.state.lab_data import PgLabDataStore
     from infrx.state.lab_rollout import PgReleaseProposals, PgReleaseStore
@@ -881,7 +882,7 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
     assert decide_("p-rb", "reject") == 0
     assert decided == [("p-rb", False, operator, None, ())] and rolled == []
     decided.clear()
-    assert decide_("p-ex", "approve") == 1                            # WR-C5-LIVE
+    assert decide_("p-ex", "approve") == 2                            # no LAB_S3_BUCKET
     assert (decided, rolled) == ([], [])
     assert decide_("p-rb", "approve") == 0
     [(pid, approve, by, doc, reasons)] = decided
@@ -912,6 +913,140 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
         with pytest.raises(SystemExit):
             lab_workers.main(argv, env=dict(env))
     assert decided == []
+
+
+def test_lab_workers__an_expansion_is_approved_only_on_r2s_expand_verdict_over_live(
+        monkeypatch, capsys):
+    """WR-LIVE-DECIDE (R240, R244): `rollout decide --approve` of an expansion evaluates the
+    release as the pass does - the plan stored beside it (R241, D9's digest), D9's Live
+    (`PgReleaseStore.live`, 0054) and its B2 report (`release_report`, R242) - and only R2's
+    `expand` verdict is decided, through 0043 (one CAS: never `Controller.approve`), as R2's
+    `lab.rollout_decision.1` 'expand' by the operator with the verdict's evidence; no alias
+    moves. Nothing assigned, a hold verdict (named with its reasons), no stored plan or a plan
+    other than D9's digest refuses by name: exit 1, nothing decided."""
+    import dataclasses
+    import json as _json
+
+    from infrx.contracts.lab import records as lab
+    from infrx.rollouts import control as r2
+    from infrx.state.lab_data import PgLabDataStore, PgLabReads
+    from infrx.state.lab_rollout import PgReleaseProposals, PgReleaseStore
+    from tests.r.control import test_control as r2w
+    ref, operator = r2w.POLICY_REF, "0e000000-0000-4000-8000-0000000000e0"
+    objects, decided, approved, rolled = InMemoryObjectStore(), [], [], []
+    state = {"live": None, "digest": r2.plan_digest(r2w.plan())}
+    runs = {lab.ref_of(r): r for r in (r2w.BASE_RUN, r2w.CAND_RUN)}
+    body = {k: v for k, v in r2w.report().items() if k != "report_digest"}
+
+    async def proposals(self, *, provider_org_id):
+        return [{"proposal_id": "p-ex", "policy_ref": ref, "kind": "expand", "fence": 1}]
+
+    async def decide(self, proposal_id, *, approve, decided_by, decision=None, reasons=()):
+        decided.append((proposal_id, approve, decided_by, decision, reasons))
+        return {}
+
+    async def resolve(self, policy_ref, *, provider_org_id):
+        assert provider_org_id == r2w.P
+        return r2w.POLICY if policy_ref == ref else lab.parse(runs[policy_ref])
+
+    async def release(self, policy_ref):
+        assert policy_ref == ref
+        return r2.Release(state="running", fence=1, plan_digest=state["digest"],
+                          started_at=r2w.START)
+
+    async def live(self, policy_ref):
+        assert policy_ref == ref, "the Live read is of another revision"
+        return state["live"]
+
+    async def experiments(self, *, provider_org_id):
+        return [{"protocol_digest": r2w.digest(r2w.PROTOCOL),
+                 "baseline": {"run_ref": lab.ref_of(r2w.BASE_RUN)},
+                 "candidate": {"run_ref": lab.ref_of(r2w.CAND_RUN)},
+                 "report": {"report_digest": r2w.report()["report_digest"],
+                            "body": _json.dumps(body)}}]
+
+    async def approve(self, *args, **kw):
+        approved.append(args)
+
+    async def emergency_rollback(self, *args, **kw):
+        rolled.append(args)
+    monkeypatch.setattr(PgReleaseProposals, "proposals", proposals)
+    monkeypatch.setattr(PgReleaseProposals, "decide", decide)
+    monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
+    monkeypatch.setattr(PgReleaseStore, "release", release)
+    monkeypatch.setattr(PgReleaseStore, "live", live)
+    monkeypatch.setattr(PgLabReads, "experiments", experiments)
+    monkeypatch.setattr(r2.Controller, "approve", approve)
+    monkeypatch.setattr(r2.Controller, "emergency_rollback", emergency_rollback)
+    monkeypatch.setattr(lab_workers, "lab_objects", lambda mode, env: objects)
+    env = {**BASE, "LAB_OPERATOR_ID": operator, "LAB_S3_BUCKET": "lab"}
+
+    def approve_():
+        capsys.readouterr()
+        code = outcome(lambda: lab_workers.main(
+            ["rollout", "decide", "--policy-ref", ref, "--proposal-id", "p-ex", "--approve",
+             "--reason", "widen"], env=dict(env)))
+        return code, capsys.readouterr().err
+    code, err = approve_()                                  # no plan stored beside it
+    assert code == 1 and "WR-C5-PLAN" in err and decided == [], (code, err)
+    asyncio.run(objects.put_if_absent(lab_workers.plan_key(r2w.P, r2w.POLICY.policy_id),
+                                      r2w.plan().model_dump_json().encode(), "x"))
+    code, err = approve_()                                  # nothing assigned: held
+    assert code == 1 and "no admitted request is assigned" in err and decided == [], (code, err)
+    fresh = datetime.now(timezone.utc)
+    state["live"] = dataclasses.replace(r2w.live(requests=999, errors_=19),
+                                        observed_until=fresh)
+    code, err = approve_()                                  # R2 holds: refused by name
+    assert code == 1 and "hold" in err and "min_requests" in err and decided == [], (code, err)
+    state["live"] = dataclasses.replace(r2w.live(), observed_until=fresh)
+    state["digest"] = "sha256:" + "0" * 64
+    code, err = approve_()                                  # not the plan D9 froze
+    assert code == 1 and "plan changed" in err and decided == [], (code, err)
+    state["digest"] = r2.plan_digest(r2w.plan())
+    code, err = approve_()
+    assert code == 0, err
+    [(pid, yes, by, doc, reasons)] = decided
+    assert (pid, yes, by, reasons) == ("p-ex", True, operator, ("operator:widen", "proposal:p-ex"))
+    assert {k: doc[k] for k in ("schema", "provider_org_id", "policy_ref", "decision",
+                                "evidence_refs", "decided_by")} == {
+        "schema": "lab.rollout_decision.1", "provider_org_id": r2w.P, "policy_ref": ref,
+        "decision": "expand", "evidence_refs": [lab.ref_of(r2w.BASE_RUN),
+                                                lab.ref_of(r2w.CAND_RUN)],
+        "decided_by": operator}
+    lab.parse(doc)                                          # 0043's store parses it first
+    assert (approved, rolled) == ([], []), "a second CAS or an alias move for an expansion"
+
+
+def test_lab_workers__the_lab_objects_are_the_gateways_media_location_or_refused(monkeypatch):
+    """WR-LR5-3 (R249): a release's plan is written through `lab_objects` (LAB_S3_BUCKET /
+    LAB_S3_PREFIX, unset prefix `infrx/`) and read by the page through the gateway's
+    `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX`. When the unit names the media location and it
+    differs (bucket or prefix), the role refuses at start naming both settings and WR-C5-PLAN,
+    before any bucket is asked; the same location, or none named, connects and probes."""
+    from infrx.media import s3
+    connected = []
+
+    class Store:
+        def probe(self):
+            pass
+    monkeypatch.setattr(s3.S3ObjectStore, "connect", classmethod(
+        lambda cls, bucket, prefix, endpoint="": connected.append((bucket, prefix)) or Store()))
+    lab = {"LAB_S3_BUCKET": "media"}
+
+    def objects(**env):
+        return outcome(lambda: lab_workers.lab_objects("lab-rollout", {**lab, **env}))
+    for differing in ({"S3_MEDIA_BUCKET": "other"},
+                      {"S3_MEDIA_BUCKET": "media", "S3_MEDIA_PREFIX": "elsewhere/"},
+                      {"S3_MEDIA_BUCKET": "media", "LAB_S3_PREFIX": "lab/"}):
+        died = objects(**differing)
+        assert type(died) is RuntimeMisconfigured, (differing, died)
+        assert all(name in str(died) for name in ("LAB_S3_BUCKET", "S3_MEDIA_BUCKET",
+                                                    "WR-C5-PLAN")), died
+    assert connected == [], "a differing location asked a bucket"
+    for same in ({}, {"S3_MEDIA_BUCKET": "media"},
+                 {"S3_MEDIA_BUCKET": " media ", "S3_MEDIA_PREFIX": "p/", "LAB_S3_PREFIX": "p/"}):
+        assert type(objects(**same)) is Store, same
+    assert connected == [("media", "infrx/"), ("media", "infrx/"), ("media", "p/")]
 
 
 # ------------------------------------------------------------ annotation / training (WR-I6-3)
