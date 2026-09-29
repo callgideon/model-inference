@@ -401,7 +401,7 @@ def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_o
         async def resolve(self, ref, *, provider_org_id):
             return r2w.POLICY
 
-    records = pilot.ReleaseRecords(D9(), D7(), objects)
+    records = pilot.ReleaseRecords(D9(), D7(), objects, None)   # variants: unread here
     assert [r["progress"] for r in asyncio.run(records.releases(r2w.P))] == [None, None]
     assert asked == refs, "each release's Live is read for its own revision"
     lives[refs[0]] = r2w.live(requests=40, errors_=2, p99=950, covered=7, spent="3.50000000",
