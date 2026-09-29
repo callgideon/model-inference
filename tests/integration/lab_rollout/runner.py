@@ -66,7 +66,7 @@ def _sibling(name: str):
 
 
 NAMESPACE = "e8l"
-BASE = "b2906856"            # the LW6 base this runner was built on (coordinator dispatch)
+BASE = "57a779af"            # the base of the E8L lane this runner last measured (merge #39)
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
 EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}

@@ -298,12 +298,24 @@ def test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict(lab, work
         return [x for x in run(store.releases_in(states, provider_org_id=lab.NEMO))
                 if x.policy_ref == ref]
     running = mine("running")
+    # a non-final decision first (D9's expand, running -> approved), so "latest" is tested
+    # against an older decision row (0048's `order by e.fence desc limit 1`)
+    from infrx.contracts.lab import records
+    evidence = [records.ref_of(x) for x in lab.runs(0x10a, lab.BASE, lab.CAND)]
+    run(store.transition(ref, fence=run(store.release(ref)).fence, to="approved", decision={
+        "schema": "lab.rollout_decision.1", "provider_org_id": policy.provider_org_id,
+        "policy_ref": ref, "decision": "expand", "evidence_refs": evidence,
+        "decided_by": lw.OPERATOR, "decided_at": lab.now().strftime("%Y-%m-%dT%H:%M:%SZ")},
+        reasons=("e8l k10 expand",)))
+    approved = mine("approved")
+    assert [x.latest_decision.decision for x in approved] == ["expand"], approved
     run(lab.controller().emergency_rollback(lw.OPERATOR, policy, ref, now=lab.now(),
                                             reason="e8l k10 read half"))
     after = run(store.release(ref))
     rolled, still_running, every = mine("rolled_back"), mine("running"), mine()
-    lw.save(workdir, "listing.json", {"running": running, "rolled_back": rolled,
-                                      "running_after": still_running, "every": every})
+    lw.save(workdir, "listing.json", {"running": running, "approved": approved,
+                                      "rolled_back": rolled, "running_after": still_running,
+                                      "every": every})
     assert [(x.release.state, x.endpoint_id, x.provider_org_id, x.latest_decision)
             for x in running] == [("running", policy.endpoint_id, lab.NEMO, None)], running
     assert still_running == [], "a rolled-back release is still listed as running"

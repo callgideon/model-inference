@@ -271,6 +271,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "(0048's lab_releases_in)", D48,
        "          or o.state = any(array(select jsonb_array_elements_text(p_args->'states'))))",
        "          or true)", K10_LISTING),
+    _m("st_listing_earliest_decision", "the listing's latest decision is the newest by fence "
+       "(0048's lab_releases_in)", D48,
+       "       order by e.fence desc limit 1) d on true",
+       "       order by e.fence asc limit 1) d on true", K10_LISTING),
     _m("st_claim_unmeasured", "an optimization is claimed only with measurements", R3,
        '"optimization_claimed": outcome == "equivalent" and performance is not None}',
        '"optimization_claimed": outcome == "equivalent"}', K07_STORED),
