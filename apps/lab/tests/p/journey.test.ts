@@ -205,3 +205,45 @@ test("P4-J05 unauthorized variants: another provider, a viewer, a developer assi
   assert.equal(reason(await lab.prepare(dev, { ...input, externalRunId: uuid(32), payerRef: PAYER })), "gone");
   assert.equal(value(await lab.runs(dev)).length, 1);
 });
+
+test("P4-J06 teacher batch: a dry run sends nothing; only an administrator approves within the budget; a double click is one batch; ambiguous, stopped and unauthorized variants", async () => {
+  const lab = world();
+  const input = { batchId: uuid(50), datasetRef: DATASET, rubricRef: RUBRIC, teacherModel: "claude-opus-5", promptVersion: "teach-v1", payerRef: PAYER, budgetUsd: "1.00000000", chunkSize: 2 };
+  const planned = value(await lab.planTeachers(dev, input));
+  same([planned.ceilingUsd, planned.withinBudget, planned.holdout, planned.notPermitted, planned.approval, planned.chunks.map((c) => [c.samples, c.ceilingUsd, c.state])],
+    ["0.45416000", true, 1, 1, null, [[2, "0.22708000", "unreserved"], [2, "0.22708000", "unreserved"]]]);
+  assert.equal(lab.teacherSends, 0, "a dry run sends nothing");
+  same(value(await lab.planTeachers(admin, input)), planned, "the same batch id again is the stored batch");
+  assert.equal(reason(await lab.planTeachers(dev, { ...input, chunkSize: 1 })), "conflict");
+  same(value(await lab.teacherBatches(dev)), [planned]);
+  assert.equal(reason(await lab.approveTeachers(dev, uuid(50))), "denied");
+  assert.equal(reason(await lab.approveTeachers(viewer, uuid(59))), "not_found", "the batch before the role (R183)");
+  assert.equal(reason(await lab.approveTeachers(other, uuid(50))), "not_found");
+  value(await lab.planTeachers(dev, { ...input, batchId: uuid(51), budgetUsd: "0.40000000" }));
+  value(await lab.planTeachers(dev, { ...input, batchId: uuid(52), teacherModel: "unpriced" }));
+  for (const id of [uuid(51), uuid(52)]) assert.equal(reason(await lab.approveTeachers(admin, id)), "conflict", id);
+  lab.teacherLive = false;
+  assert.equal(reason(await lab.approveTeachers(admin, uuid(50))), "unavailable");
+  lab.teacherLive = true;
+  assert.equal(lab.teacherSends, 0);
+  const approved = value(await lab.approveTeachers(admin, uuid(50)));
+  same([approved.approval?.approvedBy, approved.chunks.map((c) => [c.state, c.reservedUsd, c.sent])], ["session-user", [["submitted", "0.22708000", 2], ["submitted", "0.22708000", 1]]]);
+  same(value(await lab.approveTeachers(admin, uuid(50))), approved, "a double click resumes and sends nothing more");
+  assert.equal(lab.teacherSends, 2);
+  for (const bad of [{ payerRef: ref("payer", B, uuid(3)) }, { datasetRef: ref("dataset", B, uuid(1)) }, { budgetUsd: "1" }, { chunkSize: 201 }])
+    assert.equal(reason(await lab.planTeachers(dev, { ...input, batchId: uuid(53), ...bad })), "invalid", JSON.stringify(bad));
+  assert.equal(reason(await lab.planTeachers(viewer, { ...input, batchId: uuid(53) })), "denied");
+  same(value(await lab.teacherBatches(other)), []);
+
+  const lost = world();
+  lost.teacherMode = "lost";
+  lost.payerBudgetUsd = "0.30000000";
+  value(await lost.planTeachers(dev, input));
+  const held = value(await lost.approveTeachers(admin, uuid(50)));
+  same(held.chunks.map((c) => [c.state, c.reservedUsd]), [["ambiguous", "0.22708000"], ["unreserved", null]], "the payer's budget stops the batch; the lost answer is held");
+  assert.equal(lost.teacherSends, 1);
+  value(await lost.approveTeachers(admin, uuid(50)));
+  assert.equal(lost.teacherSends, 1, "an ambiguous chunk is never resent");
+  lost.teacherFailures(held.chunks[0].runId, [{ sampleId: "s1", reason: "malformed_label" }]);
+  same(value(await lost.teacherBatches(dev))[0].chunks[0].failures, [{ sampleId: "s1", reason: "malformed_label" }]);
+});

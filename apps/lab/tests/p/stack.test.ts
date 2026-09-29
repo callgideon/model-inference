@@ -1,6 +1,7 @@
-// P4 swap, real evidence: the journeys J01-J05 rerun through the Lab's pipelines adapter against
+// P4 swap, real evidence: the journeys J01-J06 rerun through the Lab's pipelines adapter against
 // lab-api's `/lab/v1/pipelines` as merged, over the real D7 and L2 on the task-local PostgreSQL
-// (`backend.py`, key p1). Skipped unless LAB_P4_REAL=1 (needs Docker and the p1 key):
+// (`backend.py`, key p1); J06's teacher batches over the real D8 `PgTeacherLedger` and the local
+// teacher fake on p2's port. Skipped unless LAB_P4_REAL=1 (needs Docker and the p1/p2 keys):
 //   LAB_P4_REAL=1 INFRX_D_TASK=p1 node --test tests/p/stack.test.ts
 // Outside the mutant suite (like V1M's stack): its oracle is the real route, not Lab code.
 import assert from "node:assert/strict";
@@ -9,14 +10,14 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { httpPipelines } from "../../lib/services/pipelines/http.ts";
 import type { Actor, Result } from "../../lib/services/pipelines/port.ts";
-import { checkpointRows, labelRows, runRows } from "../../lib/services/pipelines/view.ts";
+import { checkpointRows, labelRows, runRows, teacherRows } from "../../lib/services/pipelines/view.ts";
 
 const REAL = process.env.LAB_P4_REAL === "1";
 const lab = resolve(import.meta.dirname, "../..");
 type Who = "dev" | "admin" | "viewer" | "other_dev" | "consumer";
 type World = {
   A: string; B: string; dataset: string; rubric: string; payer: string; train: string[]; holdout: string[]; validation: string[];
-  users: Record<Who, string>; tokens: Record<Who, string>;
+  users: Record<Who, string>; tokens: Record<Who, string>; teacher: string;
 };
 
 async function backend(): Promise<{ url: string; world: World; stop: () => void }> {
@@ -44,7 +45,7 @@ const lines = (...rows: object[]) => rows.map((l) => JSON.stringify(l)).join("\n
 const uuid = (n: number) => `${String(n).padStart(8, "0")}-0000-4000-8000-000000000000`;
 const CONFIG = { objective: "sft", adaptation: "lora", baseModel: "marlin-2b" } as const;
 
-test("P4-S01..S05 the pipelines journeys on the real route: labels, the manual run to an eligible checkpoint, rejected checkpoints, ambiguous and revoked, unauthorized", { skip: !REAL && "LAB_P4_REAL=1 (Docker, p1)" }, async (t) => {
+test("P4-S01..S06 the pipelines journeys on the real route: labels, the manual run to an eligible checkpoint, rejected checkpoints, ambiguous and revoked, teacher batches, unauthorized", { skip: !REAL && "LAB_P4_REAL=1 (Docker, p1)" }, async (t) => {
   const { url, world: w, stop } = await backend();
   t.after(stop);
   const as = (who: Who) => httpPipelines({ baseUrl: url, token: async () => w.tokens[who] });
@@ -158,6 +159,37 @@ test("P4-S01..S05 the pipelines journeys on the real route: labels, the manual r
     await hook("ambiguous", { external_run_id: uuid(31) });
     assert.equal(value(await as("dev").runs(A)).find((r) => r.externalRunId === uuid(31))!.state, "ambiguous", "the page reads the ledger's state");
     assert.equal(value(await as("dev").submit(A, uuid(31))).state, "submitted", "the manual bundle's lookup finds it");
+  });
+
+  await t.test("S06 (J06) teacher batch on the real D8 ledger: a dry run sends nothing; only an administrator approves within the budget; a double click is one batch; ambiguous and failures read back", async () => {
+    const input = { batchId: uuid(60), datasetRef: D, rubricRef: w.rubric, teacherModel: w.teacher, promptVersion: "teach-v1", payerRef: w.payer, budgetUsd: "1.00000000", chunkSize: 4 };
+    const planned = value(await as("dev").planTeachers(A, input));
+    same([planned.ceilingUsd, planned.withinBudget, planned.holdout, planned.notPermitted, planned.approval, planned.chunks.map((c) => [c.samples, c.ceilingUsd, c.state])],
+      ["0.68124000", true, 2, 0, null, [[4, "0.45416000", "unreserved"], [2, "0.22708000", "unreserved"]]]);
+    same(teacherRows("administrator", [planned])[0].status, "Dry run: nothing reserved or sent.");
+    assert.equal((await hook("teacher-mode", { mode: "ok" })).posts, 0, "a dry run sends nothing");
+    same(value(await as("admin").planTeachers(admin, input)), planned, "the same batch id again is the stored batch");
+    assert.equal(reason(await as("dev").planTeachers(A, { ...input, chunkSize: 2 })), "conflict");
+    for (const bad of [{ payerRef: w.payer.replace(w.A, w.B) }, { budgetUsd: "1" }]) assert.equal(reason(await as("dev").planTeachers(A, { ...input, batchId: uuid(63), ...bad })), "invalid");
+    assert.equal(reason(await as("dev").approveTeachers(A, uuid(60))), "denied");
+    assert.equal(reason(await as("viewer").approveTeachers(viewer, uuid(69))), "not_found", "the batch before the role (R183)");
+    assert.equal(reason(await as("other_dev").approveTeachers(A, uuid(60))), "not_found");
+    assert.equal(reason(await as("viewer").teacherBatches(viewer)), "denied");
+    value(await as("dev").planTeachers(A, { ...input, batchId: uuid(61), budgetUsd: "0.50000000" }));
+    assert.equal(reason(await as("admin").approveTeachers(admin, uuid(61))), "conflict", "over its budget");
+    const approved = value(await as("admin").approveTeachers(admin, uuid(60)));
+    same([approved.approval?.approvedBy, approved.chunks.map((c) => [c.state, c.reservedUsd, c.sent])], [w.users.admin, [["submitted", "0.45416000", 4], ["submitted", "0.22708000", 2]]]);
+    same(value(await as("admin").approveTeachers(admin, uuid(60))), approved, "a double click resumes and sends nothing more");
+    assert.equal((await hook("teacher-mode", { mode: "drop" })).posts, 2);
+    value(await as("dev").planTeachers(A, { ...input, batchId: uuid(62), chunkSize: 6 }));
+    const lost = value(await as("admin").approveTeachers(admin, uuid(62)));
+    same(lost.chunks.map((c) => [c.state, c.reservedUsd]), [["ambiguous", "0.68124000"]], "the lost answer is held");
+    value(await as("admin").approveTeachers(admin, uuid(62)));
+    assert.equal((await hook("teacher-mode", { mode: "ok" })).posts, 3, "an ambiguous chunk is never resent");
+    await hook("teacher-failures", { run_id: approved.chunks[0].runId, failures: [{ sample_id: s1, reason: "malformed_label" }, { sample_id: s2, reason: "duplicate" }] });
+    const listed = value(await as("dev").teacherBatches(A)).find((b) => b.batchId === uuid(60))!;
+    same(listed.chunks[0].failures, [{ sampleId: s1, reason: "malformed_label" }, { sampleId: s2, reason: "duplicate" }]);
+    same(teacherRows("developer", [listed])[0].chunks[0], "4 samples · 4 sent · 0.45416000 USD held · 2 not imported (malformed label ×1, duplicate ×1)");
   });
 
   await t.test("S05 (J05) unauthorized variants: another provider, a viewer, a consumer, a developer assigning, a foreign payer, an expired export", async () => {

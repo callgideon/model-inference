@@ -12,6 +12,7 @@ verifier is a minimal fake of `lab_auth.Sessions` (lab-api, batch #4).
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import json
 from datetime import timedelta
@@ -22,16 +23,25 @@ from fastapi.testclient import TestClient
 
 from infrx.contracts import errors
 from infrx.contracts.lab import records
+from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.v2 import records as v2
+from infrx.contracts.v2.money_units import ProviderUsd
 from infrx.gateway.routes import lab_pipelines as lp
+from infrx.judge.cost import worst_case
+from infrx.judge.dryrun import DEFAULT_CEILINGS
 from infrx.lab.access import LabAccess
+from infrx.pipelines import annotations as p1
 from infrx.pipelines import training as p3
+from infrx.pipelines.teachers import TeacherWiring
 
 from .. import support
+from ...j import fakes as j1
+from ...j.submit import fakes as j2
 from ...n.imports.world import NEMO, OTHER
 from ...n.versions.test_versions import uid
 from ...p.annotations.world import (ADMIN, DEV, DEV2, GONE, NOW, RUBRIC, VIEWER,
                                     FakeLabelLog, rows)
+from ...p.teachers import fakes as p2f
 from ...p.training import world as p3w
 from ...p.training.test_training import World as P3World
 
@@ -39,6 +49,8 @@ P = lp.PIPELINES_PREFIX
 OUTSIDER = "d0000009-0000-4000-8000-000000000009"
 CONSUMER = "f1000000-0000-4000-8000-0000000000f1"
 EXT, IMPORT, EXPORT, CKPT = uid(1, 0xe0), uid(1, 0x1b), uid(1, 0xe7), uid(1, 0xc9)
+BATCH = uid(1, 0x7b)
+LIVE = DEFAULTS.replace(judge_mode="live")
 
 
 def token(user: str) -> str:
@@ -80,10 +92,27 @@ class Ledger(p3w.FakeRunLedger):
         return out
 
 
+class TeacherLedger(j2.FakeJudgeLedger):
+    """P2's ledger: J2's D6J fake plus 0042's append-only per-item failure log
+    (`PgTeacherLedger.failures`)."""
+
+    def __init__(self, budget: str) -> None:
+        super().__init__({p3w.PAYER: ProviderUsd(budget)})
+        self.failed: dict[str, list[tuple[str, str]]] = {}
+
+    async def failures(self, run_id):
+        return list(self.failed.get(run_id, ()))
+
+
 class World(P3World):
-    def __init__(self) -> None:
+    def __init__(self, teacher_budget: str = "100.00000000") -> None:
         super().__init__(items=rows(8, splits=("train", "train", "holdout", "validation")))
         self.ledger, self.log = Ledger(self.store), FakeLabelLog()
+        # every sample may leave for an external teacher and be trained on (P2's two purposes)
+        self.store.grants[self.manifest().samples[0].grant_ref]["purposes"].add(
+            "external_judging")
+        self.teachers, self.teacher = TeacherLedger(teacher_budget), p2f.Provider()
+        self.settings = LIVE
         self.access.memberships[(OTHER, OUTSIDER)] = v2.ProviderMembership(
             provider_org_id=OTHER, user_id=OUTSIDER, role=v2.ProviderRole.developer,
             granted_by="ops", granted_at=NOW - timedelta(days=1))
@@ -91,8 +120,12 @@ class World(P3World):
         self.sessions = Sessions((ADMIN, DEV, DEV2, VIEWER, GONE, OUTSIDER, CONSUMER))
 
     def pipelines(self, **absent) -> lp.LabPipelines:
+        teachers = TeacherWiring(
+            members=self.access, ledger=self.teachers, provider=self.teacher, store=self.store,
+            objects=self.objects, labels=p1.import_labels, log=self.log, rates=j1.TEST_RATES,
+            settings=self.settings, redact=p2f.redact)
         ports = {"store": self.store, "objects": self.objects, "log": self.log,
-                 "ledger": self.ledger, "evals": self.evals}
+                 "ledger": self.ledger, "evals": self.evals, "teachers": teachers}
         return lp.LabPipelines(self.sessions, LabAccess(self.access), **{**ports, **absent})
 
     def client(self, *, on_runtime=False, **absent) -> TestClient:
@@ -126,6 +159,12 @@ class World(P3World):
                 "export": {"format": "infrx.label_export.1", "export_id": EXPORT},
                 "config": {"objective": "sft", "adaptation": "lora", "base_model": "marlin-2b"},
                 "payer_ref": p3w.PAYER, "limit": "25.00000000", **over}
+
+    def teaching(self, **over) -> dict:
+        """A P2 batch's dry run: 6 train + validation samples in chunks of 4 and 2."""
+        return {"batch_id": BATCH, "dataset_ref": self.ref, "rubric_ref": RUBRIC,
+                "teacher_model": j1.JUDGE_MODEL, "prompt_version": "teach-v1",
+                "payer_ref": p3w.PAYER, "budget_usd": "1.00000000", "chunk_size": 4, **over}
 
     def checkpointing(self, data=None, **over) -> dict:
         data = p3w.descriptor() if data is None else data
@@ -183,13 +222,16 @@ def routes(w):
             ("POST", "checkpoints", {"external_run_id": EXT, "checkpoint_id": CKPT,
                                      "artifact_key": f"lab/{NEMO}/training/{EXT}/c",
                                      "artifact_digest": "sha256:" + "0" * 64}, None),
-            ("POST", f"checkpoints/{CKPT}/approve", {"external_run_id": EXT}, None))
+            ("POST", f"checkpoints/{CKPT}/approve", {"external_run_id": EXT}, None),
+            ("GET", "teacher-batches", None, None),
+            ("POST", "teacher-batches", w.teaching(), None))
 
 
 def untouched(w) -> bool:
     written = asyncio.run(w.objects.keys(f"lab/{NEMO}/"))
-    return (w.log.rows, w.ledger.runs, w.ledger.notes, w.store.receipts) == ([], {}, {}, {}) \
-        and not [k for k in written if "/label-" in k or "/training/" in k]
+    return (w.log.rows, w.ledger.runs, w.ledger.notes, w.store.receipts, w.teachers.runs,
+            w.teacher.calls) == ([], {}, {}, {}, {}, []) \
+        and not [k for k in written if "/label-" in k or "/training/" in k or "/teacher-" in k]
 
 
 # --- mounting ------------------------------------------------------------------------------
@@ -482,3 +524,126 @@ def test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3():
     assert untouched(w)
     padded = text + " " * 20_000                  # over the chat cap, under the import cap
     assert call(c, DEV, "POST", "label-imports", raw=padded).status_code == 201
+
+
+# --- P2 teacher batches (P4.b): a dry run until an administrator approves it ------------------
+def ceiling(samples: int) -> str:
+    return str(ProviderUsd(worst_case(j1.TEST_RATE, DEFAULT_CEILINGS, samples)))
+
+
+def test_lab_pipelines__a_teacher_batch_is_a_dry_run_until_approved():
+    """Oracle (PIPELINE-BUDGET): the dry run is the plan - the holdout left out, each chunk's
+    reservation at the rate in force and the batch's cost ceiling against its USD budget and
+    named payer - and nothing is reserved or sent; the form's batch id is write-once (the
+    same batch again is the stored one, another body under it a 409) and the batch is
+    listed."""
+    w = World()
+    c = w.client()
+    answer = call(c, DEV, "POST", "teacher-batches", w.teaching())
+    assert answer.status_code == 201, answer.json()
+    batch = answer.json()
+    assert [(x["samples"], x["ceiling_usd"], x["state"], x["reserved_usd"], x["sent"])
+            for x in batch["chunks"]] == [(4, ceiling(4), "unreserved", None, 0),
+                                          (2, ceiling(2), "unreserved", None, 0)]
+    assert (batch["ceiling_usd"], batch["within_budget"], batch["budget_usd"],
+            batch["payer_ref"], batch["price_version"], batch["holdout"],
+            batch["not_permitted"], batch["approval"], batch["requested_by"]) == (
+        str(ProviderUsd(ceiling(4)) + ProviderUsd(ceiling(2))), True, "1.00000000", p3w.PAYER,
+        j1.TEST_RATE.price_version, 2, 0, None, DEV)
+    assert (w.teachers.runs, w.teacher.calls) == ({}, [])
+    assert "request_sha256" not in batch
+    again = call(c, DEV2, "POST", "teacher-batches", w.teaching())
+    assert (again.status_code, again.json()) == (201, batch)
+    other = call(c, DEV, "POST", "teacher-batches", w.teaching(chunk_size=2))
+    assert (other.status_code, other.json()) == (409, {"refusal": "conflict"})
+    assert call(c, DEV, "GET", "teacher-batches").json() == {"data": [batch]}
+    w.store.grants[w.manifest().samples[0].grant_ref]["purposes"].discard("external_judging")
+    unpriced = call(c, DEV, "POST", "teacher-batches",
+                    w.teaching(batch_id=uid(2, 0x7b), teacher_model="unpriced-model")).json()
+    assert (unpriced["ceiling_usd"], unpriced["within_budget"], unpriced["not_permitted"],
+            [x["ceiling_usd"] for x in unpriced["chunks"]]) == (None, False, 6, [None, None])
+
+
+def test_lab_pipelines__only_an_administrator_approves_a_batch_within_its_budget():
+    """Oracle (PIPELINE-BUDGET, R183): approving is addressed to the batch - another provider's
+    404, an unknown batch 404 whatever the role, then a developer or viewer 403; a ceiling over
+    the budget or unpriced is a 409 and live submission off a 503, nothing reserved or sent
+    either way; the administrator's approval reserves each chunk at its ceiling against the
+    payer and sends it once, and a second approval (a double click) sends nothing more."""
+    w = World()
+    c = w.client()
+    shown = [call(c, DEV, "POST", "teacher-batches", body).json() for body in (
+        w.teaching(budget_usd="0.50000000", batch_id=uid(3, 0x7b)),
+        w.teaching(teacher_model="unpriced-model", batch_id=uid(4, 0x7b)), w.teaching())]
+    assert [b["within_budget"] for b in shown] == [False, False, True]
+    approve = f"teacher-batches/{BATCH}/approve"
+    assert call(c, OUTSIDER, "POST", approve).status_code == 404
+    assert call(c, VIEWER, "POST", f"teacher-batches/{uid(9, 0x7b)}/approve").status_code == 404
+    for user in (DEV, VIEWER):
+        answer = call(c, user, "POST", approve)
+        assert (answer.status_code, answer.json()) == (403, {"refusal": "denied"}), user
+    for batch in (uid(3, 0x7b), uid(4, 0x7b)):
+        answer = call(c, ADMIN, "POST", f"teacher-batches/{batch}/approve")
+        assert (answer.status_code, answer.json()) == (409, {"refusal": "conflict"}), batch
+    w.settings = DEFAULTS
+    off = w.client()
+    answer = call(off, ADMIN, "POST", approve)
+    assert (answer.status_code, answer.json()) == (503, {"refusal": "unavailable"})
+    assert (w.teachers.runs, w.teacher.calls) == ({}, [])
+    assert [b["approval"] for b in call(c, ADMIN, "GET", "teacher-batches").json()["data"]] \
+        == [None, None, None]
+    answer = call(c, ADMIN, "POST", approve)
+    assert answer.status_code == 200, answer.json()
+    batch = answer.json()
+    assert [(x["state"], x["reserved_usd"], x["sent"]) for x in batch["chunks"]] \
+        == [("submitted", ceiling(4), 4), ("submitted", ceiling(2), 2)]
+    assert batch["approval"] == {"approved_by": ADMIN, "approved_at": "2026-09-27T12:00:00Z"}
+    assert {r.payer_ref for r in w.teachers.runs.values()} == {p3w.PAYER}
+    assert len(w.teacher.calls) == 2
+    again = call(c, ADMIN, "POST", approve)
+    assert (again.status_code, again.json(), len(w.teacher.calls)) == (200, batch, 2)
+
+
+def test_lab_pipelines__an_ambiguous_or_stopped_batch_reads_back_as_recorded():
+    """Oracle (PIPELINE-BUDGET): a chunk whose answer was lost reads `ambiguous` with its hold
+    kept; the payer's budget stops the batch before the chunk it cannot cover, which reads
+    `unreserved`; each chunk's per-item failures read back from the ledger's log."""
+    w = World(teacher_budget="0.50000000")
+    w.teacher.mode = "lost"
+    c = w.client()
+    call(c, DEV, "POST", "teacher-batches", w.teaching())
+    chunks = call(c, ADMIN, "POST", f"teacher-batches/{BATCH}/approve").json()["chunks"]
+    assert [(x["state"], x["reserved_usd"]) for x in chunks] \
+        == [("ambiguous", ceiling(4)), ("unreserved", None)]
+    w.teachers.failed[chunks[0]["run_id"]] = [("s-1", "malformed_label"), ("s-2", "duplicate")]
+    listed = call(c, DEV, "GET", "teacher-batches")
+    assert listed.status_code == 200, listed.json()
+    listed = listed.json()["data"][0]["chunks"]
+    assert listed[0]["failures"] == [{"sample_id": "s-1", "reason": "malformed_label"},
+                                     {"sample_id": "s-2", "reason": "duplicate"}]
+    assert len(w.teacher.calls) == 1
+    first = chunks[0]["run_id"]
+    w.teachers.runs[first] = dataclasses.replace(w.teachers.runs[first], state="completed",
+                                                 actual=ProviderUsd("0.01000000"))
+    listed = call(c, DEV, "GET", "teacher-batches").json()["data"][0]["chunks"]
+    assert [(x["state"], x["cost_usd"]) for x in listed] \
+        == [("completed", "0.01000000"), ("unreserved", None)]
+
+
+def test_lab_pipelines__a_teacher_form_names_only_what_the_provider_holds():
+    """Oracle (R183): another provider's payer or an unknown dataset is a 422, a budget that
+    is not an exact USD amount or a chunk over J1's bound a 422, nothing written; without the
+    teacher wiring (P-10) the batches are a 503 after the access checks."""
+    w = World()
+    c = w.client()
+    for over in ({"payer_ref": p3w.PAYER.replace(NEMO, OTHER)},
+                 {"dataset_ref": w.ref.replace(w.ref[-64:], "0" * 64)},
+                 {"budget_usd": "1"}, {"chunk_size": 201}):
+        answer = call(c, DEV, "POST", "teacher-batches", w.teaching(**over))
+        assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"}), over
+    assert untouched(w)
+    c = w.client(teachers=None)
+    for method, path, body, _ in routes(w)[-2:]:
+        answer = call(c, DEV, method, path, body)
+        assert (answer.status_code, answer.json()) == (503, {"refusal": "unavailable"}), path
+        assert call(c, OUTSIDER, method, path, body).status_code == 404

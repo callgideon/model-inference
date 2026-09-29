@@ -18,11 +18,13 @@ ALL = mutation_list.MUTANTS
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One pytest process per mutant: the default suite runs one per invariant group (mounting,
-# identity, capabilities, the connector, write-once ids, lineage, gone, the body);
+# identity, capabilities, the connector, write-once ids, lineage, gone, the body, the
+# teacher dry run, its approval, its read-back and its form);
 # `INFRX_MUTANTS=all` runs all.
 SUBSET = ("mounted_without_the_switch", "body_before_identity", "viewer_reads_labels",
           "connector_not_manual", "import_conflict_unchecked", "run_holdout_unpinned",
-          "gone_is_unavailable", "body_bounded_by_the_chat_cap")
+          "gone_is_unavailable", "body_bounded_by_the_chat_cap", "dry_run_sends",
+          "developer_approves", "chunk_state_not_the_ledgers", "foreign_payer_is_forbidden")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

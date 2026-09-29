@@ -4,12 +4,15 @@
 // train-only exports, the manual bundle reserving nothing, an ambiguous submit only ever looked up, and
 // checkpoint rejection before any evaluation. It does not model reviewer identity (the route derives the
 // user from the session). `dataset`, `artifact`, `evaluated`, `ambiguous`, `found`, `revoke` and `expire`
-// are the other services' side; the Lab never calls them.
+// are the other services' side; the Lab never calls them. Teacher batches (P2 behind the route) are a dry run
+// until an administrator approves one within its budget: the batch is looked up before the role (R183), each
+// chunk reserves its ceiling against the payer and is sent once, a lost answer stays ambiguous and is never
+// resent; `teacherLive`, `teacherMode`, `payerBudgetUsd` and `teacherFailures` are the other side.
 import { createHash, randomUUID } from "node:crypto";
 import {
   holds, MANUAL, type Actor, type AdjudicateInput, type AssignInput, type Capability, type Checkpoint, type CheckpointInput,
   type Disagreement, type ExportInput, type ImportInput, type ImportReceipt, type Label, type LabelExport, type PipelinesPort,
-  type PrepareInput, type Refusal, type Result, type ReviewInput, type TrainingRun,
+  type PrepareInput, type Refusal, type Result, type ReviewInput, type TeacherBatch, type TeacherInput, type TrainingRun,
 } from "./port.ts";
 
 type Sample = { sampleId: string; split: "train" | "validation" | "holdout"; readable?: boolean };
@@ -21,10 +24,15 @@ const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/;
 const METHODS: Record<string, Label["method"]> = { human: "imported", model: "synthetic" };
 const ROW_KEYS = new Set(["sample_id", "method", "method_version", "label", "ground_truth", "annotator", "model", "prompt", "confidence", "spans"]);
 const LIVE = ["submitted", "accepted"];
+/** The teacher's worst case per sample in 1e-8 USD (a test rate, not a price); another model is unpriced. */
+const TEACHER_RATES: Record<string, bigint> = { "claude-opus-5": BigInt(11_354_000) };
+const E8 = BigInt(100_000_000);
+const units = (usd: string) => BigInt(usd.replace(".", ""));
+const usd = (n: bigint) => `${n / E8}.${String(n % E8).padStart(8, "0")}`;
 /** A record as the route returns it: the fake's own bookkeeping fields dropped, a copy. */
 const bare = <T>(row: object): T => {
-  const { providerId, body, expired, bundled, dataset, ...rest } = row as Record<string, unknown>;
-  return (void [providerId, body, expired, bundled, dataset], structuredClone(rest) as T);
+  const { providerId, body, expired, bundled, dataset, ids, ...rest } = row as Record<string, unknown>;
+  return (void [providerId, body, expired, bundled, dataset, ids], structuredClone(rest) as T);
 };
 
 export class FakePipelines implements PipelinesPort {
@@ -40,6 +48,11 @@ export class FakePipelines implements PipelinesPort {
   private trainings: Owned<TrainingRun & { body: string; bundled: { train: string[]; dev: string[] } }>[] = [];
   private points: Owned<Checkpoint>[] = [];
   private objects = new Map<string, string>();
+  private teachers: Owned<TeacherBatch & { body: string; ids: string[][] }>[] = [];
+  teacherLive = true;
+  teacherMode: "ok" | "lost" = "ok";
+  payerBudgetUsd = "100.00000000";
+  teacherSends = 0;
   private foundKeys = new Set<string>();
 
   private gate(actor: Actor, capability: Capability = "run_evaluation"): Refusal | null {
@@ -277,6 +290,53 @@ export class FakePipelines implements PipelinesPort {
     return ok(bare<Checkpoint>(c));
   }
 
+  async teacherBatches(actor: Actor) { return this.mine<TeacherBatch>(actor, this.teachers); }
+
+  async planTeachers(actor: Actor, input: TeacherInput): Promise<Result<TeacherBatch>> {
+    this.calls.push(["planTeachers", actor, input]);
+    const refused = this.gate(actor);
+    if (refused) return no(refused);
+    const set = this.set(actor, input.datasetRef);
+    if (!set || !input.payerRef.startsWith(`lab:payer:${actor.providerId}:`) || !USD.test(input.budgetUsd)
+      || !Number.isInteger(input.chunkSize) || input.chunkSize < 1 || input.chunkSize > 200) return no("invalid");
+    const body = JSON.stringify(input);
+    const prior = this.teachers.find((b) => b.batchId === input.batchId && b.providerId === actor.providerId);
+    if (prior) return prior.body === body ? ok(bare<TeacherBatch>(prior)) : no("conflict");
+    const kept = set.samples.filter((x) => x.split !== "holdout").map((x) => x.sampleId).sort();
+    const ids = Array.from({ length: Math.ceil(kept.length / input.chunkSize) }, (_, i) => kept.slice(i * input.chunkSize, (i + 1) * input.chunkSize));
+    const rate = TEACHER_RATES[input.teacherModel];
+    const ceiling = rate === undefined ? null : rate * BigInt(kept.length);
+    const b: (typeof this.teachers)[number] = {
+      providerId: actor.providerId, body, ids, ...input, requestedBy: "session-user", priceVersion: rate === undefined ? null : "test-rates-v1",
+      ceilingUsd: ceiling === null ? null : usd(ceiling), withinBudget: ceiling !== null && ceiling <= units(input.budgetUsd),
+      holdout: set.samples.length - kept.length, notPermitted: set.samples.filter((x) => x.split !== "holdout" && x.readable === false).length, approval: null,
+      chunks: ids.map((chunk, i) => ({ runId: `${input.batchId}:${i}`, samples: chunk.length, ceilingUsd: rate === undefined ? null : usd(rate * BigInt(chunk.length)),
+        state: "unreserved", reservedUsd: null, costUsd: null, sent: 0, failures: [] })),
+    };
+    this.teachers.push(b);
+    return ok(bare<TeacherBatch>(b));
+  }
+
+  async approveTeachers(actor: Actor, batchId: string): Promise<Result<TeacherBatch>> {
+    this.calls.push(["approveTeachers", actor, batchId]);
+    const b = this.teachers.find((x) => x.batchId === batchId && x.providerId === actor.providerId);
+    if (!b) return no("not_found");
+    const refused = this.gate(actor, "manage_members");
+    if (refused) return no(refused);
+    if (!b.withinBudget) return no("conflict");
+    if (!this.teacherLive) return no("unavailable");
+    b.approval ??= { approvedBy: "session-user", approvedAt: "2026-09-28T10:00:00Z" };
+    const readable = new Set(this.sets.get(b.datasetRef)!.samples.filter((x) => x.readable !== false).map((x) => x.sampleId));
+    for (const [i, c] of b.chunks.entries()) {
+      if (c.state !== "unreserved") continue; // a resume: reserved chunks are never sent again
+      const held = this.teachers.flatMap((x) => x.chunks).filter((x) => x.reservedUsd !== null).reduce((n, x) => n + units(x.reservedUsd!), BigInt(0));
+      if (held + units(c.ceilingUsd!) > units(this.payerBudgetUsd)) break; // the budget stops the batch
+      this.teacherSends += 1;
+      Object.assign(c, { reservedUsd: c.ceilingUsd, sent: b.ids[i].filter((id) => readable.has(id)).length, state: this.teacherMode === "lost" ? "ambiguous" : "submitted" });
+    }
+    return ok(bare<TeacherBatch>(b));
+  }
+
   // --- the other services' side ------------------------------------------------------------------
   dataset(providerId: string, ref: string, samples: Sample[]): void { this.sets.set(ref, { providerId, samples }); }
   artifact(key: string, digest: string): void { this.objects.set(key, digest); }
@@ -288,6 +348,9 @@ export class FakePipelines implements PipelinesPort {
   found(externalRunId: string): void { this.foundKeys.add(externalRunId); }
   revoke(datasetRef: string, sampleId: string): void {
     this.sets.get(datasetRef)!.samples.find((s) => s.sampleId === sampleId)!.readable = false;
+  }
+  teacherFailures(runId: string, failures: { sampleId: string; reason: string }[]): void {
+    this.teachers.flatMap((b) => b.chunks).find((c) => c.runId === runId)!.failures.push(...failures);
   }
   expire(exportId: string): void { this.exported.find((e) => e.exportId === exportId)!.expired = true; }
 }

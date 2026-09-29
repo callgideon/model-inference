@@ -134,3 +134,37 @@ test("P4-H05 a session-token getter that rejects is no session: nothing is sent 
   for (const call of calls) assert.deepEqual(await call, { ok: false, reason: "unavailable" });
   assert.equal(seen.length, 0);
 });
+
+const TEACHER = { batch_id: "b 1", dataset_ref: "lab:dataset:d", rubric_ref: "lab:rubric:r", teacher_model: "m", prompt_version: "v", payer_ref: "lab:payer:p",
+  budget_usd: "1.00000000", chunk_size: 2, requested_by: "u", price_version: "p1", ceiling_usd: "0.45416000", within_budget: true, holdout: 1, not_permitted: 0,
+  approval: { approved_by: "a", approved_at: "2026-09-28T10:00:00Z" },
+  chunks: [{ run_id: "r", samples: 2, ceiling_usd: "0.22708000", state: "ambiguous", reserved_usd: "0.22708000", cost_usd: null, sent: 2, failures: [{ sample_id: "s", reason: "duplicate" }] }] };
+
+test("P4-H06 teacher batches: listed, planned (the form's batch id, snake_case) and approved on their routes; an unreadable batch or chunk fails closed", async () => {
+  const { seen, port } = server((s) => json(s.method === "GET" ? { data: [TEACHER] } : TEACHER));
+  const batch = { batchId: "b 1", datasetRef: "lab:dataset:d", rubricRef: "lab:rubric:r", teacherModel: "m", promptVersion: "v", payerRef: "lab:payer:p",
+    budgetUsd: "1.00000000", chunkSize: 2, requestedBy: "u", priceVersion: "p1", ceilingUsd: "0.45416000", withinBudget: true, holdout: 1, notPermitted: 0,
+    approval: { approvedBy: "a", approvedAt: "2026-09-28T10:00:00Z" },
+    chunks: [{ runId: "r", samples: 2, ceilingUsd: "0.22708000", state: "ambiguous", reservedUsd: "0.22708000", costUsd: null, sent: 2, failures: [{ sampleId: "s", reason: "duplicate" }] }] };
+  assert.deepEqual(await port.teacherBatches(A), { ok: true, value: [batch] });
+  const input = { batchId: "b 1", datasetRef: "lab:dataset:d", rubricRef: "lab:rubric:r", teacherModel: "m", promptVersion: "v", payerRef: "lab:payer:p", budgetUsd: "1.00000000", chunkSize: 2 };
+  assert.deepEqual(await port.planTeachers(A, input), { ok: true, value: batch });
+  assert.deepEqual(await port.approveTeachers(A, "b 1"), { ok: true, value: batch });
+  const u = (path: string) => `https://api.test/lab/v1/pipelines/${path}?provider_org_id=${A.providerId}`;
+  assert.deepEqual(seen.map((s) => [s.method, s.url, s.body]), [
+    ["GET", u("teacher-batches"), undefined],
+    ["POST", u("teacher-batches"), { batch_id: "b 1", dataset_ref: "lab:dataset:d", rubric_ref: "lab:rubric:r", teacher_model: "m", prompt_version: "v", payer_ref: "lab:payer:p", budget_usd: "1.00000000", chunk_size: 2 }],
+    ["POST", u("teacher-batches/b%201/approve"), undefined],
+  ]);
+  const chunk = TEACHER.chunks[0];
+  const drop = (o: object, key: string) => Object.fromEntries(Object.entries(o).filter(([k]) => k !== key));
+  for (const bad of [{ ...TEACHER, within_budget: "yes" }, { ...TEACHER, ceiling_usd: 0.45 }, drop(TEACHER, "ceiling_usd"), { ...TEACHER, approval: { approved_by: "a" } },
+    drop(TEACHER, "budget_usd"), drop(TEACHER, "payer_ref"), { ...TEACHER, not_permitted: "0" }, { ...TEACHER, chunks: [{ ...chunk, state: "paused" }] },
+    { ...TEACHER, chunks: [drop(chunk, "reserved_usd")] }, { ...TEACHER, chunks: [{ ...chunk, failures: "duplicate" }] }, { ...TEACHER, chunks: [drop(chunk, "sent")] },
+    { ...TEACHER, chunks: [{ ...chunk, cost_usd: undefined }] }, { ...TEACHER, chunks: [{ ...chunk, failures: [{ sample_id: "s" }] }] }]) {
+    const answers = server((s) => json(s.method === "GET" ? { data: [TEACHER, bad] } : bad)).port;
+    assert.deepEqual(await answers.teacherBatches(A), { ok: false, reason: "unavailable" }, JSON.stringify(bad).slice(0, 120));
+    assert.deepEqual(await answers.approveTeachers(A, "b"), { ok: false, reason: "unavailable" });
+    assert.deepEqual(await answers.planTeachers(A, input), { ok: false, reason: "unavailable" });
+  }
+});

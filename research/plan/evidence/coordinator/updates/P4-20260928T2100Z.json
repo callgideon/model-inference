@@ -1,0 +1,44 @@
+{
+ "task": "P4",
+ "slice": "P4.b: teacher dry-run / budget approval (route teacher-batches + the training page's teacher section, over the merged P2)",
+ "activity": "review",
+ "head": "9234fd3c",
+ "worktree": ".claude/worktrees/codex-w5-pipeline-ui-2",
+ "branch": "codex/w5-pipeline-ui-2",
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/routes/lab_pipelines.py",
+  "apps/infrx-api/tests/g/lab_pipelines/",
+  "apps/lab/app/(provider)/training/",
+  "apps/lab/lib/services/pipelines/",
+  "apps/lab/tests/p/"
+ ],
+ "commands": [
+  {"cmd": "uv run --frozen pytest -q tests/g/lab_pipelines/test_lab_pipelines.py (teacher tests, no route code)", "exit": 1, "summary": "21 failed: LabPipelines has no 'teachers' (red first)"},
+  {"cmd": "node --test tests/p/*.test.ts (Lab tests, no Lab code)", "exit": 1, "summary": "pass 16 fail 5: teacherRows missing; J06 H06 P05 not ok (red first)"},
+  {"cmd": "INFRX_D_TASK=p2 uv run --frozen pytest -q tests/g/lab_pipelines", "exit": 0, "summary": "37 passed, 1 skipped (p1-only PG file)"},
+  {"cmd": "INFRX_D_TASK=p2 uv run --frozen pytest -q tests/g/lab_pipelines/test_lab_teachers_pg.py", "exit": 0, "summary": "1 passed: real D7+L2+D8 PgTeacherLedger (57528) + teacher fake (57529)"},
+  {"cmd": "INFRX_D_TASK=p1 uv run --frozen pytest -q tests/g/lab_pipelines/test_lab_pipelines_pg.py", "exit": 0, "summary": "1 passed"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=p2 uv run --frozen pytest -q tests/g/lab_pipelines/test_mutants.py", "exit": 0, "summary": "71 mutants (32 new) + 3 meta passed, 0 survivors"},
+  {"cmd": "LAB_P4_REAL=1 INFRX_D_TASK=p1 node --test tests/p/stack.test.ts", "exit": 0, "summary": "7 pass: S01-S05 + S06 (J06) on the real route"},
+  {"cmd": "make lab-test", "exit": 0, "summary": "248 tests, 239 pass, 0 fail, 9 skipped"},
+  {"cmd": "make lab-lint && make lab-typecheck && make lab-build", "exit": 0, "summary": "clean"},
+  {"cmd": "make lab-mutants", "exit": 0, "summary": "12 runners, 0 survivors; tests/p 214/214 (63 new)"},
+  {"cmd": "INFRX_D_TASK=p2 make api-test", "exit": 2, "summary": "6473 passed, 129 skipped, 8 failed outside owned paths: outbox[valkey] x7 ForeignContainer infrx-d2-valkey (another lane's), retention[d10] x1 timing under load (passes alone)"}
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "pipeline-ui's P4.b 1/2/4 + route half 1/2/4; ~3.5 h spent; remaining = one verify round + WR-P4B-1 composition + WR-P4B-2 failure logging",
+  "at": "2026-09-28T21:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-P4B-1 (coordinator, infrx/gateway/pilot.py / Lab control app + infrx/config.py): behind a new off-by-default switch lab_teachers, pass LabPipelines(teachers=TeacherWiring(members=PgAccessStore, ledger=PgTeacherLedger, provider=HttpJudgeProvider(<local teacher fake until P-10>), store=PgLabDataStore, objects=<Lab object store>, labels=annotations.import_labels, log=PgLabelLog, rates=<approved rates>, settings=<pilot settings>, redact=<N2 redaction, WR-P2-4>)); unwired today = 503 + 'not enabled' copy; proof: switch off -> GET teacher-batches 503, on -> test_lab_teachers_pg flow",
+  "WR-P4B-2 (lab-sql-integration-2 infrx/pipelines or the I6 annotation worker): after P2 collect(), await ledger.record_failures(run_id, collected.failures) so per-item failures reach D8's log the route reads; proof: a collect case asserting ledger.failures(run_id) == collected.failures"
+ ],
+ "evidence": [
+  "research/plan/evidence/p/P4b-9234fd3.md"
+ ]
+}

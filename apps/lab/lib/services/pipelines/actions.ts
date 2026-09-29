@@ -17,6 +17,7 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/; // a Lab Amount value (R159), PROVIDER_USD
 const MAX_EXPORT_TTL_S = 604_800; // N2's bound, as P1 enforces it
 const MAX_TEXT = 1_000_000;
+const MAX_CHUNK = 200; // J1's scan bound, as P2 enforces it
 
 const text = (data: FormData, name: string) => {
   const v = data.get(name);
@@ -157,4 +158,32 @@ export async function approveCheckpoint(data: FormData): Promise<void> {
   const checkpointId = field(data, "checkpointId", ID);
   await land("/training", w, "run_evaluation", externalRunId !== null && checkpointId !== null, () =>
     pipelinesPort().approve(actor(w), { externalRunId: externalRunId!, checkpointId: checkpointId! }));
+}
+
+/** P4.b: a teacher batch's dry run. The batch id is the form's (minted at render), so a double submit is one
+ *  batch; the budget is PROVIDER_USD with this provider's own payer; nothing here sends or approves. */
+export async function planTeachers(data: FormData): Promise<void> {
+  const w = await requireProviderWorkspace();
+  const batchId = field(data, "batchId", ID);
+  const datasetRef = own(data, "datasetRef", "dataset", w);
+  const rubricRef = own(data, "rubricRef", "rubric", w);
+  const teacherModel = field(data, "teacherModel", MODEL);
+  const promptVersion = field(data, "promptVersion", MODEL);
+  const payerRef = own(data, "payerRef", "payer", w);
+  const budgetUsd = field(data, "budgetUsd", USD);
+  const chunk = field(data, "chunkSize", /^[1-9][0-9]{0,2}$/);
+  const chunkSize = chunk === null ? 0 : Number(chunk);
+  const valid = ![batchId, datasetRef, rubricRef, teacherModel, promptVersion, payerRef, budgetUsd].includes(null) && chunkSize <= MAX_CHUNK && chunkSize >= 1;
+  await land("/training", w, "run_evaluation", valid, () =>
+    pipelinesPort().planTeachers(actor(w), {
+      batchId: batchId!, datasetRef: datasetRef!, rubricRef: rubricRef!, teacherModel: teacherModel!, promptVersion: promptVersion!,
+      payerRef: payerRef!, budgetUsd: budgetUsd!, chunkSize,
+    }));
+}
+
+/** The live submit, an administrator's only; the service re-checks the budget and resumes, never resends. */
+export async function approveTeachers(data: FormData): Promise<void> {
+  const w = await requireProviderWorkspace();
+  const batchId = field(data, "batchId", ID);
+  await land("/training", w, "manage_members", batchId !== null, () => pipelinesPort().approveTeachers(actor(w), batchId!));
 }

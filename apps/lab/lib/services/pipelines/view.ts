@@ -1,7 +1,10 @@
 // P4: rows and copy derived only from the P1/P3 records. Nothing here remembers what a button did; an
 // unknown submission, an unknown cost and a rejected checkpoint are said as such (WR-P-6).
 import type { Role } from "../../auth/access.ts";
-import { holds, IMPORT_REFUSALS, MANUAL, REFUSALS, type Checkpoint, type ImportReceipt, type Label, type LabelExport, type Refusal, type TrainingRun } from "./port.ts";
+import {
+  holds, IMPORT_REFUSALS, MANUAL, REFUSALS, type Checkpoint, type ImportReceipt, type Label, type LabelExport, type Refusal, type TeacherBatch,
+  type TeacherChunk, type TrainingRun,
+} from "./port.ts";
 
 const KIND: Record<Label["method"], string> = {
   synthetic: "Synthetic (model-generated)",
@@ -110,6 +113,48 @@ export function checkpointRows(role: Role, checkpoints: Checkpoint[], runs: Trai
       approvable: passed && !c.eligible && holds(role, "run_evaluation"),
     };
   });
+}
+
+// P4.b: a teacher batch (P2) as its records say: the dry-run plan, the budget and payer, each chunk's hold
+// and outcome. An ambiguous chunk is held and never resent; a cost is as reported or unknown, never guessed.
+const TEACHER_FAILURES: Record<string, string> = {
+  not_sent: "not sent", duplicate: "duplicate", grant_not_current: "grant not current", malformed_label: "malformed label",
+};
+function failures(c: TeacherChunk): string {
+  if (c.failures.length === 0) return "";
+  const counts = new Map<string, number>();
+  for (const f of c.failures) {
+    const copy = Object.hasOwn(TEACHER_FAILURES, f.reason) ? TEACHER_FAILURES[f.reason] : "reason not recognised";
+    counts.set(copy, (counts.get(copy) ?? 0) + 1);
+  }
+  return ` · ${c.failures.length} not imported (${[...counts].map(([k, n]) => `${k} ×${n}`).join(", ")})`;
+}
+function chunkCopy(c: TeacherChunk, approved: boolean): string {
+  const head = `${c.samples} samples · `;
+  switch (c.state) {
+    case "unreserved": return head + (approved
+      ? "not reserved: the batch stopped before this chunk (payer budget or a withdrawn permission); nothing sent"
+      : `reservation ${c.ceilingUsd ?? "unpriced"} USD · not reserved, nothing sent`);
+    case "ambiguous": return `${head}outcome unknown: ${c.reservedUsd} USD held; it is never resent, only looked up`;
+    case "completed": return `${head}${c.sent} sent · ${c.costUsd === null ? "cost unknown: the teacher reported none (never estimated)" : `cost ${c.costUsd} USD, as reported`}${failures(c)}`;
+    case "failed":
+    case "cancelled": return `${head}${c.state}: the hold is released`;
+    default: return `${head}${c.sent} sent · ${c.reservedUsd} USD held${failures(c)}`;
+  }
+}
+
+export function teacherRows(role: Role, batches: TeacherBatch[]) {
+  return batches.map((b) => ({
+    id: b.batchId, dataset: b.datasetRef, teacher: `${b.teacherModel} · prompt ${b.promptVersion}`,
+    budget: `budget ${b.budgetUsd} USD · payer ${b.payerRef}`,
+    ceiling: b.ceilingUsd === null ? "Unpriced: no approved rate for this teacher, so it cannot be approved."
+      : `ceiling ${b.ceilingUsd} USD at ${b.priceVersion}${b.withinBudget ? "" : " · over the budget: it cannot be approved"}`,
+    plan: `${b.chunks.length} chunks · ${b.holdout} held-out samples left out · ${b.notPermitted} not permitted to leave now (skipped)`,
+    status: b.approval === null ? "Dry run: nothing reserved or sent." : `Approved by ${b.approval.approvedBy} at ${b.approval.approvedAt}.`,
+    chunks: b.chunks.map((c) => chunkCopy(c, b.approval !== null)),
+    labels: "Labels it returns are imported as synthetic (model-generated), never ground truth.",
+    approvable: b.approval === null && b.withinBudget && holds(role, "manage_members"),
+  }));
 }
 
 export const REFUSAL_COPY: Record<Refusal, string> = {
