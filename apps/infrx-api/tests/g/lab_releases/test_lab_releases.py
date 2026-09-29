@@ -371,8 +371,9 @@ def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_o
     """WR-LIVE-PAGE (R244): `pilot.ReleaseRecords` shows each release's `progress` as D9's Live
     of that revision (`PgReleaseStore.live(policy_ref)`, 0054) in port.ts's shape - per arm
     counts and p99, quality coverage, the candidate arm's spend in its own unit (R246), health,
-    the database clock as UTC - and null only while Live is None (nothing assigned yet). No
-    per-serving tally is readable yet: `assignments` is empty, never invented."""
+    the database clock as UTC - and null only while Live is None (nothing assigned yet). Its
+    `assignments` are D9's per-serving tally of that revision (`PgReleaseStore.tally`, 0058,
+    WR-C7-TALLY), read only once something is observed, never invented."""
     import asyncio
 
     from infrx.gateway import pilot
@@ -381,7 +382,7 @@ def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_o
     from infrx.state.lab_rollout import Release, ReleaseListing
     from tests.r.control import test_control as r2w
 
-    objects, lives, asked = InMemoryObjectStore(), {}, []
+    objects, lives, asked, tallied = InMemoryObjectStore(), {}, [], []
     refs = [r2w.POLICY_REF, r2w.POLICY_REF.replace("sha256:", "sha256:0", 1)[:-1]]
     asyncio.run(objects.put_if_absent(plan_key(r2w.P, r2w.POLICY.policy_id),
                                       r2w.plan().model_dump_json().encode(), "x"))
@@ -397,13 +398,18 @@ def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_o
             asked.append(policy_ref)
             return lives.get(policy_ref)
 
+        async def tally(self, policy_ref):
+            tallied.append(policy_ref)
+            return [{"serving_ref": policy_ref, "pinned_by": "explicit", "requests": 40}]
+
     class D7:
         async def resolve(self, ref, *, provider_org_id):
             return r2w.POLICY
 
-    records = pilot.ReleaseRecords(D9(), D7(), objects)
+    records = pilot.ReleaseRecords(D9(), D7(), objects, None)
     assert [r["progress"] for r in asyncio.run(records.releases(r2w.P))] == [None, None]
     assert asked == refs, "each release's Live is read for its own revision"
+    assert tallied == [], "nothing observed: no tally is read"
     lives[refs[0]] = r2w.live(requests=40, errors_=2, p99=950, covered=7, spent="3.50000000",
                               unit="PROVIDER_USD", healthy=False)
     first, second = [r["progress"] for r in asyncio.run(records.releases(r2w.P))]
@@ -413,4 +419,6 @@ def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_o
         "baseline": {"requests": 9_000, "errors": 0, "p99_ms": 8_000},
         "candidate": {"requests": 40, "errors": 2, "p99_ms": 950},
         "quality_covered": 7, "spent": {"amount": "3.50000000", "unit": "PROVIDER_USD"},
-        "candidate_healthy": False, "assignments": []}, first
+        "candidate_healthy": False,
+        "assignments": [{"serving_ref": refs[0], "pinned_by": "explicit", "requests": 40}]}, first
+    assert tallied == [refs[0]], "the tally is the observed revision's own"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""R32/R40/R83: every decision of lab-sql LW7's Python ports is killable by a named case.
+"""R32/R40/R83: every decision of lab-sql LW7/LW9's Python ports is killable by a named case.
 
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/l3sql/test_mutants.py
 """
@@ -14,8 +14,8 @@ import pytest
 from . import mutants as mutation_list
 
 ALL = mutation_list.MUTANTS
-UNITS = pathlib.Path(__file__).with_name("test_lw7_units.py")
-CASES = {n.name for n in ast.parse(UNITS.read_text()).body
+UNITS = [pathlib.Path(__file__).with_name(f"test_{n}_units.py") for n in ("lw7", "lw9")]
+CASES = {n.name for units in UNITS for n in ast.parse(units.read_text()).body
          if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")}
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SELECTED = ALL if FULL_RUN else ALL[:1]

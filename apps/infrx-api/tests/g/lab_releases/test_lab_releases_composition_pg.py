@@ -128,7 +128,9 @@ def test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides
     assert (live["candidate"], live["baseline"]["requests"], live["quality_covered"],
             live["spent"], live["assignments"]) == (
         {"requests": 1, "errors": 1, "p99_ms": 40}, 0, 0,
-        {"amount": "0.00000000", "unit": "CREDIT"}, []), live
+        {"amount": "0.00000000", "unit": "CREDIT"},
+        [{"serving_ref": payload["candidates"][0]["serving_ref"], "pinned_by": "cohort",
+          "requests": 1}]), live                              # WR-C7-TALLY (0058)
     assert live["observed_until"].endswith("Z") and live["candidate_healthy"] is False
 
     assert propose(l2.DEV, "rollback").status_code == 403

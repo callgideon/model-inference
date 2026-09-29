@@ -109,7 +109,8 @@ MUTANTS: tuple[Mutant, ...] = (
        '        "proposed_by": who.user_id})', '        "proposed_by": None})', FENCE),
     # WR-LIVE-PAGE (composition-7): progress is D9's Live of the revision (0054, R244)
     _m("page_progress_withheld", "progress is D9's Live, not null",
-       '"progress": _progress(await self.d9.live(item.policy_ref)),', '"progress": None,',
+       '"progress": _progress(live := await self.d9.live(item.policy_ref),',
+       '"progress": None and _progress(live := await self.d9.live(item.policy_ref),',
        PROGRESS, file=P),
     _m("page_live_of_another", "each release's Live is read for its own revision",
        "await self.d9.live(item.policy_ref)", "await self.d9.live(item.policy_id)", PROGRESS,
@@ -134,9 +135,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("page_clock_not_utc", "the observation time is the database clock as UTC",
        '"observed_until": _z(live.observed_until),', '"observed_until": str(live.observed_until),',
        PROGRESS, file=P),
-    _m("page_tally_invented", "no per-serving tally is invented",
-       '"assignments": []}', '"assignments": [{"requests": live.candidate.requests}]}',
-       PROGRESS, file=P),
+    # WR-C7-TALLY (lab-sql LW9): assignments are D9's per-serving tally (0058)
+    _m("page_tally_dropped", "the per-serving tally is shown, not emptied",
+       '"assignments": assignments}', '"assignments": []}', PROGRESS, file=P),
+    _m("page_tally_of_another", "each release's tally is read for its own revision",
+       "await self.d9.tally(item.policy_ref)", "await self.d9.tally(item.policy_id)", PROGRESS,
+       file=P),
+    _m("page_tally_unobserved", "no tally is read before anything is observed",
+       "None if live is None else\n", "\n", PROGRESS, file=P),
 )
 
 
