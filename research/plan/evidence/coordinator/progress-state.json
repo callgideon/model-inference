@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 253,
- "updated": "2026-09-29T01:28:42Z",
+ "revision": 254,
+ "updated": "2026-09-29T01:46:16Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7111,11 +7111,11 @@
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-28T23:22:19Z",
-   "updated": "2026-09-29T01:26:59Z",
+   "updated": "2026-09-29T01:46:16Z",
    "blocker": null,
-   "next_action": "merge batch #28 (Sonnet; WR-CHECKS-1, R207/R208) → lab-sql-lw6 (items 5/6 + E3L-F2 + WR-E8L-3 + WR-DS5-1) and lab-rollout-2 (WR-E8L-2b + e8l rerun)",
+   "next_action": "items 5/6 → lab-sql-lw6; WR-E8L-2b → lab-rollout-2",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -7339,22 +7339,22 @@
   {
    "id": "W5-MERGE-28",
    "task": null,
-   "slice": "merge batch #28 (Sonnet): lab-sql-lw5 ad2aaff3 (+R207/R208, WR-CHECKS-1); migrations 0045/0046 local-only; workflow wf_d622d696-bd4",
+   "slice": "merge batch #28 (Sonnet): lab-sql-lw5 ad2aaff3 (+R207/R208, WR-CHECKS-1); migrations 0045/0046 local-only; workflow wf_d622d696-bd4; the 0046 revoke fix 03ddfe4a; integrated eb561d5f",
    "agent": "sonnet",
    "branch": "codex/w5-merge-28",
    "worktree": ".claude/worktrees/codex-w5-merge-28",
    "base": "0772ca1c",
-   "head": null,
+   "head": "03ddfe4a",
    "isolation": {
     "ports": "dlab 57500; l3 57502; r1 57532",
     "prefix": "infrx-dlab-",
     "db": "dlab"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T01:26:59Z",
-   "updated": "2026-09-29T01:26:59Z",
+   "updated": "2026-09-29T01:46:16Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
