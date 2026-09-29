@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 273,
- "updated": "2026-09-29T07:05:47Z",
+ "revision": 274,
+ "updated": "2026-09-29T07:09:57Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7773,11 +7773,11 @@
     "prefix": "infrx-e3l-",
     "db": "e3l"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T04:31:32Z",
-   "updated": "2026-09-29T07:05:47Z",
+   "updated": "2026-09-29T07:09:57Z",
    "blocker": null,
-   "next_action": "merge batch #37 (Opus; R220/R221) → E3L implemented; J01/J02 UI journey after WR-E3L-J (lab-app-control)",
+   "next_action": "J01/J02 UI journey after lab-app-control",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -7902,22 +7902,22 @@
   {
    "id": "W5-MERGE-37",
    "task": null,
-   "slice": "merge batch #37 (Opus): lab-operate-2 5bf07c1f (LAB-OPERATE-LOCAL PASS; +R220/R221); workflow wf_3572d48c-5fb",
+   "slice": "merge batch #37 (Opus): lab-operate-2 5bf07c1f (LAB-OPERATE-LOCAL PASS; +R220/R221); workflow wf_3572d48c-5fb; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-37",
    "worktree": ".claude/worktrees/codex-w5-merge-37",
    "base": "adb84d11",
-   "head": null,
+   "head": "d2063fbb",
    "isolation": {
     "ports": "l4 57503",
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T07:05:47Z",
-   "updated": "2026-09-29T07:05:47Z",
+   "updated": "2026-09-29T07:09:57Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R217–R219 before R220 at integration) → flip E3L",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,

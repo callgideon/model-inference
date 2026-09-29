@@ -2227,11 +2227,12 @@
         "SPLIT-CONTRACT"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "split-successor",
       "supersedes_part_of": "E3",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "LAB-OPERATE-LOCAL PASS at lab-operate-2 5bec250c (merge #37, R220): make lab-operate exit 0, 12/12 scenarios, 24/24 cases, LAB-ACCESS/LAB-PUBLISH/SPLIT-CONTRACT PASS on the real L3 with the real ControlReads (E3L-F1 #31, E3L-F2 #34); the engine smoke is the R203 stand-in until WR-L3-2; the Lab App UI journey J01/J02 reruns after WR-E3L-J (lab-app-control); WR-E3L-2 ports user-held"
     },
     {
       "id": "E5L",
