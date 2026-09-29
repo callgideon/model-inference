@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 255,
- "updated": "2026-09-29T01:46:45Z",
+ "revision": 256,
+ "updated": "2026-09-29T01:51:47Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7066,25 +7066,28 @@
    "branch": "codex/w5-composition-3",
    "worktree": ".claude/worktrees/codex-w5-composition-3",
    "base": "3529168d",
-   "head": null,
+   "head": "655ad324",
    "isolation": {
     "ports": "p2 57528/57529; j2 57511/57512; r1 57532/57533; p3 57530/57531; b3 57522",
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-28T22:15:23Z",
-   "updated": "2026-09-28T22:15:23Z",
+   "updated": "2026-09-29T01:51:47Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge (+ WR-LSQ-9-C as a merge wiring after #21) → flip P2/J3",
+   "next_action": "merge batch #30 (Sonnet; WR-LSQ-9-C, 1-C3-1, R210–R212) → flip P2/J3 → composition-4 (WR-P4B-1, WR-DS5-2, WR-E7L-1/WR-B3-EVALS, lab-sql-lw6 halves)",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 5,
-    "pessimistic_h": 10,
-    "confidence": "medium",
-    "basis": "eight small wirings + the E4 regression; composition-2's fix round as the analogue"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT_WITH_FIXES 655ad324; merge running",
+    "at": "2026-09-29T01:51:47Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/coordinator/COMPOSITION-3-2ddbc07.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/gateway/pilot.py",
@@ -7095,7 +7098,17 @@
     "tests/w/**",
     "tests/i/lab"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-P2-D8-Cb",
+    "WR-J3-D8-Cb",
+    "WR-R1-3-Cb",
+    "WR-N3-2a-door",
+    "WR-N3-2b",
+    "WR-LAB2-4",
+    "WR-B3-EVALS",
+    "WR-C3-DOC",
+    "WR-C3-MK"
+   ]
   },
   {
    "id": "W5-LAB-SQL-LW5",
@@ -7467,6 +7480,38 @@
     "tests/integration/lab_rollout/**",
     "research/plan/evidence/e/E8L-*"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-30",
+   "task": null,
+   "slice": "merge batch #30 (Sonnet): composition-3 655ad324 (+WR-LSQ-9-C, 1-C3-1, R210–R212)",
+   "agent": "sonnet",
+   "branch": "codex/w5-merge-30",
+   "worktree": ".claude/worktrees/codex-w5-merge-30",
+   "base": "6fc7315f",
+   "head": null,
+   "isolation": {
+    "ports": "r1 57532/57533; l3 57502; j2 57511/57512",
+    "prefix": "infrx-r1-",
+    "db": "r1"
+   },
+   "activity": "running",
+   "started": "2026-09-29T01:51:47Z",
+   "updated": "2026-09-29T01:51:47Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R209 before R210 at integration) → flip P2/J3",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "single-lane batch with the E4 regression",
+    "at": "2026-09-29T01:51:47Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
