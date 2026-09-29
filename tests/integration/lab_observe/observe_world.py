@@ -36,8 +36,45 @@ HERE = Path(__file__).resolve().parent
 INTEGRATION = HERE.parent
 E3C = INTEGRATION / "backend" / "e3c"
 NAMESPACE = "e5l"
+#: The compose project (`infrx-<PROJECT>`): `INFRX_E5L_PROJECT`, default the namespace.
+PROJECT = os.environ.get("INFRX_E5L_PROJECT") or NAMESPACE
 sys.path[:0] = [p for p in (str(E3C), str(INTEGRATION), str(INTEGRATION / "backend"))
                 if p not in sys.path]
+
+
+def load_harness() -> None:
+    """E2's harness in namespace e5l under compose project `infrx-<PROJECT>`. Only the compose
+    project and the names derived from it move (containers, volumes, network, bucket, state
+    file); the tasklocal ports, the database and the key/object prefixes stay e5l's. It lets a
+    run sidestep the foreign `infrx-e5l_*` volumes a finished clone left, which nothing here
+    may touch. Unset, the harness loads untouched (E3C's `world.load_harness`)."""
+    import re
+    import types
+    if not re.fullmatch(r"e5l[a-z0-9]{0,12}", PROJECT) \
+            or os.environ.get("INFRX_E2_NAMESPACE", NAMESPACE) != NAMESPACE:
+        raise ValueError(f"INFRX_E5L_PROJECT={PROJECT!r}: an e5l project name (e5l[a-z0-9]*) "
+                         "under INFRX_E2_NAMESPACE=e5l")
+    if PROJECT == NAMESPACE:
+        return
+    loaded = sys.modules.get("harness")
+    if loaded is not None:
+        if loaded.PROJECT != f"infrx-{PROJECT}":
+            raise RuntimeError(f"harness already loaded as {loaded.PROJECT}, not infrx-{PROJECT}")
+        return
+    path = INTEGRATION / "harness.py"
+    source = path.read_text()
+    for old, new in (('PROJECT = f"infrx-{NAMESPACE}"', f'PROJECT = "infrx-{PROJECT}"'),
+                     ('"INFRX_E2_PROJECT": f"infrx-{namespace}"', '"INFRX_E2_PROJECT": PROJECT')):
+        if source.count(old) != 1:
+            raise RuntimeError(f"harness.py moved: INFRX_E5L_PROJECT's anchor {old!r} is gone")
+        source = source.replace(old, new)
+    module = types.ModuleType("harness")
+    module.__file__ = str(path)
+    sys.modules["harness"] = module
+    exec(compile(source, str(path), "exec"), module.__dict__)     # noqa: S102 - our own file
+
+
+load_harness()
 import world                                            # noqa: E402 - E3C's composed box
 
 import stack                                            # noqa: E402

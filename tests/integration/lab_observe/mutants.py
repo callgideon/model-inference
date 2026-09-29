@@ -78,6 +78,7 @@ NO_STACK = "test_e5l_no_stack_blocks_every_scenario"
 NAMESPACE = "test_e5l_the_namespace_is_the_reserved_block_and_the_judge_fake_port_is_free_in_it"
 RERUN = "test_e5l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 DRY_RUN = "test_e5l_the_judge_is_labelled_a_dry_run_never_a_live_run"
+PROJECT = "test_e5l_a_compose_project_override_moves_only_the_compose_names"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- I2L-OBS packaging
@@ -187,6 +188,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("judge_label_claims_live", "dry-run evidence never claims a live run", R,
        'external provider (P-10 absent); never a live-judge run")',
        'external provider (P-10 absent)")', DRY_RUN),
+    # --- lab-observe-2: the compose project override (INFRX_E5L_PROJECT)
+    _m("project_override_ignored", "INFRX_E5L_PROJECT names the compose project", W,
+       'PROJECT = os.environ.get("INFRX_E5L_PROJECT") or NAMESPACE', "PROJECT = NAMESPACE",
+       PROJECT),
+    _m("compose_run_under_the_namespace", "compose itself runs under the override", W,
+       """'"INFRX_E2_PROJECT": PROJECT')""", """'"INFRX_E2_PROJECT": f"infrx-{namespace}"')""",
+       PROJECT),
+    _m("any_project_name", "only an e5l project name is accepted", W,
+       'r"e5l[a-z0-9]{0,12}"', 'r"[a-z0-9]{1,15}"', PROJECT),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -322,7 +332,7 @@ def _stack(root: pathlib.Path) -> pathlib.Path:
 
 RUNNER = Runner(name="e5l", targets=LAYER1_FILES, package="", layout=_layer1)
 #: the kept stack's identity, handed to the copy (harness.working_dir / STATE_FILE seams)
-STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE")
+STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_E5L_PROJECT")
 STACK_RUNNER = Runner(name="e5l-stack", package="", layout=_stack, env=STACK_ENV,
                       timeout_s=1800,
                       targets=tuple(f"../../tests/integration/lab_observe/{f}" for f in (
@@ -338,7 +348,8 @@ def claim_the_kept_stack() -> str | None:
         return (f"this process loaded E2's harness as {observe_world.harness.NAMESPACE!r}: run "
                 "the stack list in its own process with INFRX_E2_NAMESPACE=e5l")
     if not observe_world.stack.has_stack():
-        return f"no kept e5l stack: run {observe_world.RUNNER} --keep first"
+        return (f"no kept {observe_world.harness.PROJECT} stack: run {observe_world.RUNNER} "
+                "--keep first (the same INFRX_E5L_PROJECT)")
     os.environ["INFRX_E2_CHECKOUT"] = observe_world.harness.working_dir()
     os.environ["INFRX_E2_STATE_FILE"] = str(observe_world.harness.STATE_FILE)
     return None

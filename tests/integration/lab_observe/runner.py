@@ -5,6 +5,10 @@ RUN through the real local services on one SHA, with faults.
     apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py \\
         [--out DIR] [--keep] [--reuse] [--only o01,o07] [-k EXPR]
 
+`INFRX_E5L_PROJECT=e5l2` runs the same gate under compose project `infrx-e5l2` (its own
+containers, volumes and network; same ports, namespace and evidence layout): see
+`observe_world.load_harness`.
+
 1. **stack**: E2's services in namespace `e5l` (tasklocal block 57100-57199, PostgreSQL 57132;
    run.py's own preflight/services/migrate stages, every migration incl. the Lab's). E3C's
    composed world supplies PostgREST per clone, the controlled engine and the gateway/worker
@@ -287,7 +291,8 @@ def main(argv: list[str] | None = None) -> int:
                  "T2I/T2F/T3/G4F/L2/J2 code and a controlled protocol engine; not Marlin quality, "
                  "not GPU capacity, not hosted behaviour",
         "judge": JUDGE_LABEL,
-        "pins": pins(harness), "namespace": harness.NAMESPACE, "ports": harness.PORTS,
+        "pins": pins(harness), "namespace": harness.NAMESPACE, "project": harness.PROJECT,
+        "ports": harness.PORTS,
         "started": started.isoformat(timespec="seconds"),
         "seconds": round(time.monotonic() - clock, 1),
         "stack": {"usable": usable, "why_not": why or None,
