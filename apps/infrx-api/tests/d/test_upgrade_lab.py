@@ -218,3 +218,31 @@ def test_the_lw4_reads_keep_the_listings_already_written() -> None:
     assert conn.execute(rows).fetchall() == before and as_control() == before
     pgharness.apply(DB, later)
     assert as_control() == before, "not re-runnable"
+
+
+def test_the_lw5_upgrade_keeps_a_running_policy_and_refuses_its_stale_candidate() -> None:
+    """0045 (E8L-F1, WR-E8L-2) touches no table, only `release_active`'s body: a policy
+    published and started at 0044 (its candidate ref keyed by serving_version_id, the
+    pre-fix identity) is untouched by the upgrade, and `release_active` - which never saw
+    that ref before 0045 either, since nothing routes to this policy's own endpoint - moves
+    from resolving nothing new to refusing the same stale-style ref outright once a listing
+    does route to it, rather than silently accepting the wrong identity space."""
+    from . import test_d9_rollout as d9
+    everything = migrations.sql_for(shim=pgharness.NEEDS_SHIM)
+    later = tuple(f for f in everything if f[0][:4].isdigit() and f[0][:4] >= "0045")
+    assert [f for f, _ in later][:1] == ["0045_lab_serving_ref_identity.sql"], later
+    pgharness.ensure()
+    pgharness.recreate(DB)
+    pgharness.apply(DB, tuple(f for f in everything if f not in later))
+    conn = pgharness.connect(DB)
+    d9.seed(conn)
+    stale = d9.policy(d9.uid(1, 0xb5))
+    ref = d9.t.publish(conn, stale)
+    d9.start(conn, ref)
+    rows = ("select row_to_json(r)::jsonb from infrx.lab_records r order by ref",
+            "select row_to_json(o)::jsonb from infrx.lab_rollouts o order by policy_id")
+    before = [conn.execute(q).fetchall() for q in rows]
+    pgharness.apply(DB, later)
+    assert [conn.execute(q).fetchall() for q in rows] == before, "0045 changed a stored row"
+    pgharness.apply(DB, later)
+    assert [conn.execute(q).fetchall() for q in rows] == before, "not re-runnable"
