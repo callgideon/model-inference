@@ -298,8 +298,14 @@ def test_e8l_an_environment_enoent_is_blocked_harness_not_a_product_fail(tmp_pat
     def no_node(*_, **__):
         raise FileNotFoundError(2, "No such file or directory", "node")
     monkeypatch.setattr(gate.subprocess, "run", no_node)
-    with pytest.raises(gate.EnvironmentBlocked, match="ENOENT"):
+    try:
         gate.run("rollout", tmp_path / "out")
+        blocked = None
+    except gate.EnvironmentBlocked as why:
+        blocked = str(why)
+    except FileNotFoundError as crash:                 # the defect: an untyped crash
+        blocked = f"crashed: {crash!r}"
+    assert blocked and blocked.startswith("ENOENT"), blocked
     cases = everything("k10")
     cases[0] = (cases[0][0], "failure",
                 "lab_rollout.lab_e2e_gate.EnvironmentBlocked: ENOENT /x/apps/lab/node_modules")

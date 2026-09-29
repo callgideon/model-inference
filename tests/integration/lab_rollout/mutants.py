@@ -182,7 +182,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '    if not (LAB / "node_modules").is_dir():', "    if False:", ENOENT),
     _m("gate_no_node_is_a_crash", "no node on PATH is EnvironmentBlocked", E2E,
        "    except FileNotFoundError as absent:", "    except NotADirectoryError as absent:",
-       ENOENT, dies_by=("FileNotFoundError",)),
+       ENOENT),
     _m("environment_enoent_is_a_fail", "an environment ENOENT is BLOCKED[harness]", R,
        "            if ENVIRONMENT.search(message):", "            if False:", ENOENT),
     _m("unbound_case_runs", "a case waiting on P-08 is never a pass",
