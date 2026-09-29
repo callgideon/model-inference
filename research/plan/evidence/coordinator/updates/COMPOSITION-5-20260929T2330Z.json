@@ -1,0 +1,92 @@
+{
+ "task": "COMPOSITION-5",
+ "lane": "composition-5",
+ "slice": "LW6 composition batch 5: WR-B3-3 + WR-C4-B3-SUITES, WR-R2-3, WR-LSQ-C2A, WR-LSQ-C2B (R215), WR-N4-3, E6L j09 checkpoint half bound; E4 every switch off",
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/pilot.py",
+  "apps/infrx-api/infrx/worker/__main__.py",
+  "apps/infrx-api/infrx/lab/workers/__main__.py",
+  "apps/infrx-api/infrx/evaluation/checkpoints/__init__.py",
+  "apps/infrx-api/infrx/datasets/imports/__init__.py",
+  "apps/infrx-api/tests/{g/test_startup.py,g/mutants.py,w,b/checkpoints,n/imports,r/control}",
+  "tests/integration/lab_evaluate (j09 bind)",
+  "research/plan/08-contracts-v1-encoding.md \u00a75 row"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first per item",
+   "exit": 1,
+   "summary": "each red at base as recorded"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p3 pytest test_training_composition_pg test_checkpoints_composition_pg test_checkpoints_sources_pg",
+   "exit": 0,
+   "summary": "5 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=j2 pytest test_calibration_composition_pg tests/w/test_lab_workers_judge_pg.py",
+   "exit": 0,
+   "summary": "2 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 pytest tests/w/test_lab_workers_lineage_pg.py tests/w/test_lab_workers_imports_pg.py",
+   "exit": 0,
+   "summary": "2 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=r2 pytest tests/r/control/test_control_pass_pg.py tests/r/control/test_control_pg.py",
+   "exit": 0,
+   "summary": "4 passed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=b1 pytest tests/w/test_worker_lab_eval_pg.py",
+   "exit": 0,
+   "summary": "4 passed (red without kinds recorded)"
+  },
+  {
+   "cmd": "E6L runner --only j09 --keep; stack mutants; --reuse (teardown)",
+   "exit": 3,
+   "summary": "j09 PASS (eval + checkpoint cases); 2 stack mutants killed; torn down"
+  },
+  {
+   "cmd": "E4 INFRX_D_TASK=p3 pytest tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "2822 passed, 27 skipped, 0 failed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=b1 9 mutant lists",
+   "exit": 1,
+   "summary": "1439 passed, 7 skipped, 1 failed = n1_fetch_refusal_escapes misdeclared (anchor twice), 0 survivors; fixed in bd5a2735, N1 list rerun 68 passed"
+  }
+ ],
+ "activity": "review",
+ "head": "bd5a2735",
+ "base": "5ed53a41",
+ "worktree": ".claude/worktrees/codex-w5-composition-5",
+ "branch": "codex/w5-composition-5",
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "5 items done with fail-first, named mutants and real-service proofs; E4 2822/0; E6L j09 PASS; composition-3/-4 each needed ~1 fix round; remaining = one verify round",
+  "at": "2026-09-29T23:30:00Z"
+ },
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-5-bd5a273.md",
+  "research/plan/evidence/e/E6L-raw-da7e770/run/verdict.json"
+ ],
+ "blockers": [],
+ "wiring_requests": [
+  "WR-C5-PREFLIGHT",
+  "WR-C5-K09",
+  "WR-C5-LIVE",
+  "WR-C5-REPORT",
+  "WR-C5-PLAN",
+  "WR-C5-RECEIPT",
+  "WR-C5-PROVIDERS",
+  "WR-C5-N4-ROUTE",
+  "WR-C5-ANNOT (optional)",
+  "WR-C5-MK (optional)"
+ ]
+}

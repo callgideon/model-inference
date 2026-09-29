@@ -1,0 +1,50 @@
+{
+ "task": "E6L",
+ "lane": "composition-5",
+ "slice": "j09 checkpoint half bound (WR-B3-3): real python -m infrx.lab.workers checkpoints on the e6l stack",
+ "owned_paths": [
+  "tests/integration/lab_evaluate (j09 bind only)"
+ ],
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --only j09 --reuse --out <dir>",
+   "exit": 3,
+   "summary": "j09 PASS: test_j09_the_eval_worker_process_killed_mid_run_loses_nothing PASS, test_j09_the_checkpoint_worker_drains_the_outbox_once PASS; gate NOT RUN only because nothing else selected; j10 NOT RUN (B4 UI), j11 NOT RUN (L3 video) unchanged"
+  }
+ ],
+ "states": {
+  "j09": "PASS (both halves)",
+  "j10": "NOT RUN",
+  "j11": "NOT RUN"
+ },
+ "activity": "review",
+ "head": "bd5a2735",
+ "base": "5ed53a41",
+ "worktree": ".claude/worktrees/codex-w5-composition-5",
+ "branch": "codex/w5-composition-5",
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "5 items done with fail-first, named mutants and real-service proofs; E4 2822/0; E6L j09 PASS; composition-3/-4 each needed ~1 fix round; remaining = one verify round",
+  "at": "2026-09-29T23:30:00Z"
+ },
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-5-bd5a273.md",
+  "research/plan/evidence/e/E6L-raw-da7e770/run/verdict.json"
+ ],
+ "blockers": [],
+ "wiring_requests": [
+  "WR-C5-PREFLIGHT",
+  "WR-C5-K09",
+  "WR-C5-LIVE",
+  "WR-C5-REPORT",
+  "WR-C5-PLAN",
+  "WR-C5-RECEIPT",
+  "WR-C5-PROVIDERS",
+  "WR-C5-N4-ROUTE",
+  "WR-C5-ANNOT (optional)",
+  "WR-C5-MK (optional)"
+ ]
+}

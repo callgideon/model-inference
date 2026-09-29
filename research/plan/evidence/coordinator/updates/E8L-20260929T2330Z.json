@@ -1,0 +1,46 @@
+{
+ "task": "E8L",
+ "lane": "composition-5",
+ "slice": "k09 pass-loop half: the rollout role's pass loop exists (WR-R2-3); cell not rerun (e8l stack held by lab-rollout-3)",
+ "owned_paths": [],
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k09",
+   "exit": null,
+   "summary": "NOT RUN here: infrx-e8l-postgres up (lab-rollout-3); k09's pass-loop half still lw.not_run(WR-R2-3) in tests/integration/lab_rollout - bind per WR-C5-K09 (converge half now runnable; breach half needs WR-C5-LIVE)"
+  }
+ ],
+ "states": {
+  "k09": "NOT RUN (pass loop composed; bind WR-C5-K09; breach half WR-C5-LIVE)"
+ },
+ "activity": "review",
+ "head": "bd5a2735",
+ "base": "5ed53a41",
+ "worktree": ".claude/worktrees/codex-w5-composition-5",
+ "branch": "codex/w5-composition-5",
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "5 items done with fail-first, named mutants and real-service proofs; E4 2822/0; E6L j09 PASS; composition-3/-4 each needed ~1 fix round; remaining = one verify round",
+  "at": "2026-09-29T23:30:00Z"
+ },
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-5-bd5a273.md",
+  "research/plan/evidence/e/E6L-raw-da7e770/run/verdict.json"
+ ],
+ "blockers": [],
+ "wiring_requests": [
+  "WR-C5-PREFLIGHT",
+  "WR-C5-K09",
+  "WR-C5-LIVE",
+  "WR-C5-REPORT",
+  "WR-C5-PLAN",
+  "WR-C5-RECEIPT",
+  "WR-C5-PROVIDERS",
+  "WR-C5-N4-ROUTE",
+  "WR-C5-ANNOT (optional)",
+  "WR-C5-MK (optional)"
+ ]
+}
