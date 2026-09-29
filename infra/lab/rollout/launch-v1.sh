@@ -30,6 +30,17 @@ need() { [ -n "${!1:-}" ] || { printf 'set %s\n' "$1" >&2; exit 2; }; }
 RELEASE=${RELEASE:-$(git rev-parse claude/consumer-v1)}
 [[ $RELEASE =~ ^[0-9a-f]{40}$ ]] || { echo "RELEASE must be a 40-hex sha" >&2; exit 2; }
 NEWEST=$(ls apps/app/supabase/migrations | grep -E '^00[0-9]{2}_' | sort | tail -1)   # e.g. 0056_lab_control_grants.sql
+# The window applies every migration after hosted-at that this checkout carries (lab-migrate.sh
+# refuses otherwise), so the checkout's newest migration must be the newest RE-PROVEN one
+# (R151 condition 1). Newer LOCAL-ONLY migrations (0057+) land on the tip before their
+# re-proof: run the window from a worktree at the last release whose newest migration is
+# THROUGH, e.g. `git worktree add /tmp/launch-$THROUGH a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c && cd /tmp/launch-$THROUGH`.
+THROUGH=${THROUGH:-0056}; WINDOW_RELEASE_HINT=a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c
+if [ "${NEWEST:0:4}" != "$THROUGH" ]; then
+  printf 'this checkout carries %s (newer than the re-proven %s): run from a worktree at %s\n' "$NEWEST" "$THROUGH" "$WINDOW_RELEASE_HINT" >&2
+  printf '  git worktree add /tmp/launch-%s %s && cd /tmp/launch-%s && RELEASE=%s %s %s\n' "$THROUGH" "$WINDOW_RELEASE_HINT" "$THROUGH" "$WINDOW_RELEASE_HINT" "$0" "${1:-preflight}" >&2
+  exit 2
+fi
 NEWEST_N=${NEWEST:0:4}; NEWEST_NAME=${NEWEST:5}; NEWEST_NAME=${NEWEST_NAME%.sql}
 PENDING=$(ls apps/app/supabase/migrations | grep -E '^00[0-9]{2}_' | sort | awk -v at=0051 'substr($0,1,4) > at {printf "%s%s", sep, substr($0,1,4); sep=", "}')
 SSM_CONTROL_DSN=/model-inference/lab/control_database_url

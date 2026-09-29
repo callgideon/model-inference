@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 325,
- "updated": "2026-09-29T23:13:41Z",
+ "revision": 326,
+ "updated": "2026-09-29T23:21:53Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9553,11 +9553,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T20:21:25Z",
-   "updated": "2026-09-29T22:45:52Z",
+   "updated": "2026-09-29T23:21:53Z",
    "blocker": null,
-   "next_action": "merge batch #62 (WR-LR7-GRANT as 0059, WR-LR7-I-OPT, minors, R259–R260) → E8L at its local floor (k08 only)",
+   "next_action": "E8L at its local floor: only k08 NOT RUN[P-08 GPU]",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 6,
@@ -9823,22 +9823,22 @@
   {
    "id": "W5-MERGE-62",
    "task": null,
-   "slice": "merge batch #62 (Opus): lab-rollout-7 dc3ba861 (+pilot.py/lab_releases conflicts vs #60 kept both sides, 0059 lab_control_grants_2, WR-LR7-I-OPT, minors, R259–R260); workflow wf_daf503a9-854",
+   "slice": "merge batch #62 (Opus): lab-rollout-7 dc3ba861 (+pilot.py/lab_releases conflicts vs #60 kept both sides, 0059 lab_control_grants_2, WR-LR7-I-OPT, minors, R259–R260); workflow wf_daf503a9-854; integrated (R259–R260; 0059 LOCAL-ONLY on the tip)",
    "agent": "opus",
    "branch": "codex/w5-merge-62",
    "worktree": ".claude/worktrees/codex-w5-merge-62",
    "base": "a8bdd22c",
-   "head": null,
+   "head": "0688c5b5",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T22:45:52Z",
-   "updated": "2026-09-29T22:45:52Z",
+   "updated": "2026-09-29T23:21:53Z",
    "blocker": null,
-   "next_action": "integrate (sort §10; harness pins 0057/0058/0059 in order as they land)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
