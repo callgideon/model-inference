@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 260,
- "updated": "2026-09-29T02:31:37Z",
+ "revision": 261,
+ "updated": "2026-09-29T02:35:23Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7332,11 +7332,11 @@
     "prefix": "infrx-e7l-",
     "db": "e7l"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T00:53:17Z",
-   "updated": "2026-09-29T02:27:50Z",
+   "updated": "2026-09-29T02:35:23Z",
    "blocker": null,
-   "next_action": "merge batch #32 (Opus; R213; st_tombstones_ignored re-anchor) → LAB-IMPROVE-LOCAL after i07/i08 (composition-4) ",
+   "next_action": "LAB-IMPROVE-LOCAL after i07/i08 (composition-4 + WR-P2-4, WR-E7L-1)",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -7557,22 +7557,22 @@
   {
    "id": "W5-MERGE-32",
    "task": null,
-   "slice": "merge batch #32 (Opus): lab-improve-2 c3be7132 (+R213, the st_tombstones_ignored re-anchor); workflow wf_3155c195-dbb",
+   "slice": "merge batch #32 (Opus): lab-improve-2 c3be7132 (+R213, the st_tombstones_ignored re-anchor); workflow wf_3155c195-dbb; integrated d9392541",
    "agent": "opus",
    "branch": "codex/w5-merge-32",
    "worktree": ".claude/worktrees/codex-w5-merge-32",
    "base": "4f25e232",
-   "head": null,
+   "head": "f53ed6d1",
    "isolation": {
     "ports": "none",
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T02:27:50Z",
-   "updated": "2026-09-29T02:27:50Z",
+   "updated": "2026-09-29T02:35:23Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R210–R212 before R213 at integration)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
