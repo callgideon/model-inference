@@ -1,0 +1,48 @@
+{
+ "task": "E6L",
+ "activity": "review",
+ "head": "2299b82",
+ "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+ "branch": "codex/w5-lab-e2e",
+ "owned_paths": [
+  "apps/lab/tests/e2e/**",
+  "Makefile (lab-e2e target + .PHONY)",
+  "tests/integration/lab_{observe,evaluate,improve,rollout}/ (UI cell binds)",
+  "research/plan/evidence/e/LAB-E2E-*"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/LAB-E2E-2299b82.md",
+  "research/plan/evidence/e/LAB-E2E-raw-2299b82",
+  "research/plan/evidence/e/LAB-E2E-raw-9e485b3",
+  "research/plan/evidence/e/LAB-E2E-raw-c2b88a2"
+ ],
+ "slice": "j10 (EVAL-COMPARE, the provider UI) bound to apps/lab/tests/e2e/evaluate (LAB-E2E)",
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --only j10 --out research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e6l-j10",
+   "exit": 3,
+   "summary": "j10 NOT RUN[WR-B4-2,WR-LAB2-2,WR-B3-1]: suite 6/6 passed; pilot._lab_2 composes LabEvaluations without catalog, experiments, ledger (B4's tripwire, red since #11, replaced)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e6l pytest tests/integration/lab_evaluate/test_mutants.py -k st_evaluations_cancel_a_finished_run (kept e6l)",
+   "exit": 0,
+   "summary": "killed at 9e485b3; rerun at 2299b82 NOT RUN (e6l held by another lane)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 2,
+  "confidence": "medium",
+  "basis": "j10 flips when WR-B4-2/WR-LAB2-2/WR-B3-1 compose; rerun --only j10",
+  "at": "2026-09-29T12:14:01Z"
+ },
+ "blockers": [
+  "WR-B4-2",
+  "WR-LAB2-2",
+  "WR-B3-1"
+ ],
+ "wiring_requests": [
+  "WR-LE2E-3 merge with #42: lab_evaluate scenarios_pending.py empties (j09 + j10 moved) - drop P from LAYER1_FILES and unbound_case_runs"
+ ]
+}

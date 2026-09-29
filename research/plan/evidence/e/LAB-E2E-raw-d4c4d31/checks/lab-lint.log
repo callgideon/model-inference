@@ -1,0 +1,5 @@
+cd apps/lab && pnpm lint
+
+> infrx-lab@0.1.0 lint /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab
+> eslint
+

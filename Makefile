@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -119,6 +119,13 @@ lab-build:
 		echo "lab-build: not run - apps/lab/app does not exist yet (L1 owns it)"; \
 	fi
 
+# LAB-E2E: the Lab e2e suites (apps/lab/tests/e2e: observe, evaluate, improve, rollout - the E5L o10,
+# E6L j10, E7L i08 and E8L k10 UI cells) against the built Lab app on the l4 key; not in check (Docker).
+# Their stack mutant list: LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs (in apps/lab).
+lab-e2e:
+	@$(LAB_INSTALLED)
+	cd apps/lab && pnpm build && LAB_E2E_BUILT=1 LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test --test-concurrency=1 tests/e2e/observe/stack.test.ts tests/e2e/evaluate/stack.test.ts tests/e2e/improve/stack.test.ts tests/e2e/rollout/stack.test.ts
+
 # Lab mutant runners join here as their lanes merge (and console-mutants' tests/v line when V1M
 # removes tests/v); each exits non-zero on a survivor.
 lab-mutants:
@@ -131,6 +138,7 @@ lab-mutants:
 	cd apps/lab && node tests/c/content/run-mutants.mjs
 	cd apps/lab && node tests/b/run-mutants.mjs
 	cd apps/lab && node tests/n/run-mutants.mjs
+	cd apps/lab && node tests/e2e/run-mutants.mjs
 
 check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
 

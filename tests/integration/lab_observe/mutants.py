@@ -49,6 +49,8 @@ OBS, UNITS = "infra/lab/observe/", "apps/infrx-api/deploy/lab/observe/"
 JUDGE_UNIT, GAUGES_UNIT = UNITS + "infrx-lab-judge.service", UNITS + "infrx-lab-trace-gauges.service"
 TIMER, MANIFEST = UNITS + "infrx-lab-trace-gauges.timer", OBS + "observe.json"
 LAYER1_FILES = (L + "test_e5l_runner.py", L + "test_i2l_obs.py")
+E2E = "apps/lab/tests/e2e/gate.py"
+E2E_GATE = "test_e5l_the_ui_cell_passes_only_a_green_e2e_suite_and_names_its_uncomposed_ports"
 
 # the I2L-OBS cases
 OFF = "test_i2l_obs__every_observe_unit_is_off_until_its_role_env_file_exists"
@@ -174,7 +176,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '    "o08": ("test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled",),',
        '    "o08": ("test_o08_a_timed_out_submit",),', REQUIRED),
     _m("a_lane_undeclared", "a scenario waiting on a lane declares it", R,
-       '"lanes": ["LAB-E2E"]}', '"lanes": []}', LANES),
+       '"lanes": ["COMPOSITION"]}', '"lanes": []}', LANES),
     _m("another_namespace", "e5l runs in its own reserved block", R,
        'NAMESPACE = "e5l"', 'NAMESPACE = "e3l"', NAMESPACE),
     _m("judge_fake_on_the_gateway_port", "the judge fake has a port of its own", W,
@@ -197,6 +199,18 @@ MUTANTS: tuple[Mutant, ...] = (
        PROJECT),
     _m("any_project_name", "only an e5l project name is accepted", W,
        'r"e5l[a-z0-9]{0,12}"', 'r"[a-z0-9]{1,15}"', PROJECT),
+    # --- LAB-E2E (0-F2): the four gates' UI cells judge their e2e suite through gate.missing
+    _m("e2e_red_suite_is_a_pass", "a red e2e suite is never a PASSed UI cell", E2E,
+       '    assert (got["exit"], got.get("fail")', '    assert True or (got["exit"], got.get("fail")',
+       E2E_GATE),
+    _m("e2e_skipped_case_is_a_pass", "a skipped e2e case is never a PASSed UI cell", E2E,
+       'got.get("cancelled", 0), got.get("skipped"))', 'got.get("cancelled", 0), 0)', E2E_GATE),
+    _m("e2e_one_pass_is_a_suite", "a suite that ran one case is not a green suite", E2E,
+       'got.get("pass", 0) > 1', 'got.get("pass", 0) > 0', E2E_GATE),
+    _m("e2e_harness_is_a_fail", "a busy l4 key or Docker is INVALID, never a FAIL", E2E,
+       '    if got["exit"] != 0 and got.get("harness"):', "    if False:", E2E_GATE),
+    _m("e2e_composed_ports_inverted", "the cell names the ports the gateway does NOT carry",
+       E2E, "if not carried)", "if carried)", E2E_GATE),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -223,6 +237,7 @@ O09_PROJECTOR = "test_o09_a_projector_killed_after_its_insert_redelivers_and_pro
 O09_WORKER = "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once"
 O03_ROUTE = "test_o03_the_lab_traces_route_through_the_real_gateway"
 O04_PG = "test_o04_the_judge_ledger_is_d6js_postgresql_ledger"
+O10 = "test_o10_the_lab_review_panel_renders_the_routes_answer"             # LAB-E2E
 ROUTE, CONSENT = "infrx/gateway/routes/lab_traces.py", "infrx/state/lab_consent.py"
 J3 = "infrx/judge/calibration/report.py"
 #: Cases that FAIL on this base (a product finding, recorded in the evidence): no mutant can
@@ -294,6 +309,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        O04_PG),
     _m("st_j3_limited_results_calibrate", "a limited result never enters the calibration",
        J3, "        elif result.limited:", "        elif False:", O04_PG),
+    # LAB-E2E: o10, the review panel - a deleted request never reaches the provider's list
+    _m("st_traces_route_ignores_deletion", "a request its owner deleted is gone from the Lab "
+       "list and page", ROUTE, "            if REQUEST in scopes or not t3.metadata_live(",
+       "            if not t3.metadata_live(", O10),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 
@@ -328,6 +347,8 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
         shutil.copytree(API_DIR / part, root / "apps" / "infrx-api" / part, ignore=junk)
     for part in ("lab/observe", "alerts", "observe", "rollout/steps"):
         shutil.copytree(REPO / "infra" / part, root / "infra" / part, ignore=junk)
+    (root / E2E).parent.mkdir(parents=True)
+    shutil.copy2(REPO / E2E, root / E2E)
     wiring = pathlib.Path("research", "plan", "evidence", "e", "E5L-wiring")
     shutil.copytree(REPO / wiring, root / wiring)
     (root / "research" / "plan").mkdir(parents=True, exist_ok=True)
@@ -349,7 +370,8 @@ def _stack(root: pathlib.Path) -> pathlib.Path:
 
 RUNNER = Runner(name="e5l", targets=LAYER1_FILES, package="", layout=_layer1)
 #: the kept stack's identity, handed to the copy (harness.working_dir / STATE_FILE seams)
-STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_E5L_PROJECT")
+STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_E5L_PROJECT",
+             "INFRX_LAB_DIR")
 STACK_RUNNER = Runner(name="e5l-stack", package="", layout=_stack, env=STACK_ENV,
                       timeout_s=1800,
                       targets=tuple(f"../../tests/integration/lab_observe/{f}" for f in (
@@ -369,6 +391,7 @@ def claim_the_kept_stack() -> str | None:
                 "--keep first (the same INFRX_E5L_PROJECT)")
     os.environ["INFRX_E2_CHECKOUT"] = observe_world.harness.working_dir()
     os.environ["INFRX_E2_STATE_FILE"] = str(observe_world.harness.STATE_FILE)
+    os.environ["INFRX_LAB_DIR"] = str(REPO / "apps" / "lab")      # o10's UI suite (LAB-E2E)
     return None
 
 

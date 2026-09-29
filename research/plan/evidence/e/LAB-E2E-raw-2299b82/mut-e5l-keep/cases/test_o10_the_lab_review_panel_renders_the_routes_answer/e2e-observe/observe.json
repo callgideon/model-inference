@@ -1,0 +1,9 @@
+{
+  "suite": "observe",
+  "cell": "E5L o10",
+  "stand_ins": [
+    "session verifier and PostgREST RPC door (stack.door)",
+    "T2I projection and T3 ledger in memory (no ClickHouse on l4)"
+  ],
+  "composed": {}
+}

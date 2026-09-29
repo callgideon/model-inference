@@ -118,7 +118,7 @@ SCENARIOS = {
                      "rollback killed before the alias CAS on its first pass",
             "test_ids": ["ROLLOUT-RECOVER"], "lanes": []},
     "k10": {"title": "the Lab releases UI: verdict, proposal, approval and emergency rollback",
-            "test_ids": ["ROLLOUT-PIN"], "lanes": ["lab-ui-swap"]},
+            "test_ids": ["ROLLOUT-PIN"], "lanes": ["WR-R4-2"]},
 }
 REQUIRED = {
     "k01": ("test_k01_routing_off_serves_todays_request_over_a_live_release",

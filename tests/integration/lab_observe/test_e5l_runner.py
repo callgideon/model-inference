@@ -91,7 +91,7 @@ def test_e5l_every_unbound_case_is_not_run_without_touching_a_stack():
                for name in dir(module) if name.startswith("test_o")
                and "not_run(" in (HERE / f"{module.__name__}.py").read_text().split(
                    f"def {name}(")[1].split("\ndef ")[0]]
-    assert len(unbound) == 2, [case.__name__ for case in unbound]
+    assert len(unbound) == 1, [case.__name__ for case in unbound]   # o01; o10 bound (LAB-E2E)
     for case in unbound:
         with pytest.raises(pytest.skip.Exception) as skipped:
             case(None)
@@ -246,3 +246,36 @@ def test_e5l_a_compose_project_override_moves_only_the_compose_names():
     assert moved["ports"]["postgres"] == 57132 and moved["namespace"] == "e5l"
     code, refused = probe("e3c")
     assert code != 0 and "INFRX_E5L_PROJECT" in refused, "another gate's project accepted"
+
+
+def _gate():
+    """LAB-E2E's gate half (`apps/lab/tests/e2e/gate.py`), by path (R213): the four gates' UI
+    cells (o10, j10, i08's UI, k10's UI) turn its `missing()` into PASS, FAIL or INVALID."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "e5l_e2e_gate", REPO / "apps" / "lab" / "tests" / "e2e" / "gate.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_e5l_the_ui_cell_passes_only_a_green_e2e_suite_and_names_its_uncomposed_ports():
+    """0-F2. Oracles: a red suite (exit 1, fail 3, its record still written), a skipped or
+    cancelled case, a missing record or a single pass is a FAIL, never a PASS; a busy l4 key or
+    Docker is HarnessError (INVALID), never a FAIL; a green suite answers the ports its record
+    says the gateway's own composition does not carry."""
+    gate = _gate()
+    green = {"command": "c", "exit": 0, "pass": 7, "fail": 0, "skipped": 0, "cancelled": 0,
+             "harness": None, "tail": "", "record": {"composed": {"a": True, "b": False}}}
+    assert gate.missing(green) == ["b"]
+    assert gate.missing({**green, "record": {"composed": {}}}) == []
+    for red in ({"exit": 1, "fail": 3, "pass": 4, "record": {"composed": {}}},
+                {"skipped": 1}, {"cancelled": 1}, {"record": None}, {"pass": 1},
+                {"exit": 1}, {"fail": 1}):
+        with pytest.raises(AssertionError):
+            gate.missing({**green, **red})
+    busy = {**green, "exit": 1, "fail": 1, "harness": "HarnessBusy: l4 is held"}
+    with pytest.raises(gate.HarnessError, match="HarnessBusy"):
+        gate.missing(busy)
+    with pytest.raises(AssertionError):
+        gate.missing({**busy, "harness": None})

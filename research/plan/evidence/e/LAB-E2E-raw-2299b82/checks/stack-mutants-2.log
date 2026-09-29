@@ -1,0 +1,5 @@
+killed  E2E-S02 an ungranted request reads as expired content — killed by "E2E-O01 a developer's list shows its own deployment's requests with each one's content state, and nothing else"
+killed  E2E-S06 a metadata-only record shows an organization — killed by "E2E-O04 the grantor revokes: the same request reads as metadata only, with no organization or content offer"
+killed  E2E-S24 a refused label read shows an empty page instead of its refusal — killed by "E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels"
+
+stack: 20 cases named; 3 mutants, 3 killed, 0 not killed

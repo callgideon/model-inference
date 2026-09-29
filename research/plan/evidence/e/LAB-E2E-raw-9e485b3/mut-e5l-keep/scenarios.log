@@ -1,0 +1,76 @@
+F                                                                                                                                                                                                                                                                                                                                                                                                        [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+___________________________________________________________________________________________________________________________________________________________________________ test_o10_the_lab_review_panel_renders_the_routes_answer ____________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-9e485b3/mut-e5l-keep/cases/test_o10_the_lab_review_panel_renders_the_routes_answer')
+
+    def test_o10_the_lab_review_panel_renders_the_routes_answer(workdir):
+        """CONSOLE-FLOWS (LAB-E2E): `apps/lab/tests/e2e/observe` - the Lab's requests list and
+        review page built and served, signed in through the Lab's own form, over the provider trace
+        route on the real L2 and registry (l4): each request's content state, the review panels'
+        own answers (0038's feedback door, 0043's judge door, C2's unwired content port), the
+        viewer / other-provider / consumer / signed-out variants and a revocation. The ClickHouse
+        projection is o03's; here T2I/T3 are the in-memory stand-ins (the l4 key has none)."""
+        import importlib.util
+        import os
+        repo = Path(__file__).resolve().parents[3]
+        lab = Path(os.environ.get("INFRX_LAB_DIR") or repo / "apps" / "lab")
+        spec = importlib.util.spec_from_file_location("lab_observe.lab_e2e_gate",
+                                                      lab / "tests" / "e2e" / "gate.py")
+        e2e = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(e2e)
+        got = e2e.run("observe", workdir)
+>       assert e2e.missing(got) == [], got["record"]
+               ^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:188: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = {'command': 'cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/observe/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 1, ...}
+
+    def missing(got: dict) -> list[str]:
+        """Asserts the suite passed as a whole - every case ran and none failed - and answers the
+        ports the gateway's own composition does not carry yet (empty: the cell is bound for real)."""
+>       assert (got["exit"], got.get("fail"), got.get("cancelled", 0), got.get("skipped")) == \
+            (0, 0, 0, 0) and got.get("pass", 0) > 1 and got["record"] is not None, \
+            f"the e2e suite did not pass: {({k: v for k, v in got.items() if k != 'tail'})}\n{got['tail']}"
+E       AssertionError: the e2e suite did not pass: {'command': 'cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/observe/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 1, 'cancelled': 0, 'skipped': 0, 'record': None}
+E        main()
+E       #   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/observe/backend.py", line 32, in main
+E       #     conn, dsn = stack.database("observe")
+E       #                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       #   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/stack.py", line 57, in database
+E       #     pgharness.ensure()
+E       #   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/tests/d/pgharness.py", line 206, in ensure
+E       #     _acquire_lock()
+E       #   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/tests/d/pgharness.py", line 170, in _acquire_lock
+E       #     raise HarnessBusy(
+E       # tests.d.pgharness.HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1118580 checkout /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/v42); refusing to touch port 57503 or infrx-l4-postgres. Nothing was altered - wait for it, or run the two suites in sequence (08 §8 gives this task ONE port)
+E       # Subtest: E2E-O o10 the Lab review panel renders the provider trace route's answer
+E       not ok 1 - E2E-O o10 the Lab review panel renders the provider trace route's answer
+E         ---
+E         duration_ms: 5005.344205
+E         type: 'test'
+E         location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/observe/stack.test.ts:16:1'
+E         failureType: 'testCodeFailure'
+E         error: 'backend exited 1: '
+E         code: 'ERR_TEST_FAILURE'
+E         stack: |-
+E           ChildProcess.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/harness.ts:154:39)
+E           ChildProcess.emit (node:events:519:28)
+E           ChildProcess._handle.onexit (node:internal/child_process:293:12)
+E         ...
+E       1..1
+E       # tests 1
+E       # suites 0
+E       # pass 0
+E       # fail 1
+E       # cancelled 0
+E       # skipped 0
+E       # todo 0
+E       # duration_ms 5116.527679
+
+apps/lab/tests/e2e/gate.py:56: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer - AssertionError: the e2e suite did not pass: {'command': 'cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/observe/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 1, 'cancelled': 0, 'skipped': 0, 'record': None}
+1 failed, 17 deselected in 5.21s
