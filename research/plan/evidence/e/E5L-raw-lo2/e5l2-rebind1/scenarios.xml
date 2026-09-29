@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="8" time="57.883" timestamp="2026-09-29T07:45:18.362905+00:00" hostname="rey-aws"><testcase classname="tests.integration.lab_observe.scenarios_judge" name="test_o04_the_default_dry_run_mode_sends_nothing" file="tests/integration/lab_observe/scenarios_judge.py" line="38" time="9.071" /><testcase classname="tests.integration.lab_observe.scenarios_judge" name="test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet" file="tests/integration/lab_observe/scenarios_judge.py" line="52" time="7.353" /><testcase classname="tests.integration.lab_observe.scenarios_judge" name="test_o04_the_judge_ledger_is_d6js_postgresql_ledger" file="tests/integration/lab_observe/scenarios_judge.py" line="76" time="7.397"><failure message="AssertionError: assert (2 &lt; 30 and 'uncalibrated' == 'insufficient'&#10; +  where 2 = len(['3418d72e-9743-4dd9-9f6f-7f394becb910', '9c1f13ce-a223-42d3-a0da-a941f0c7d05d'])&#10;  &#10;  - insufficient&#10;  + uncalibrated)">workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind1/cases/test_o04_the_judge_ledger_is_d6js_postgresql_ledger')
+
+    def test_o04_the_judge_ledger_is_d6js_postgresql_ledger(workdir):
+        """D6J's `PgJudgeLedger` under J2's submit/collect, and J3's report published through the
+        same ledger: one POST; the scores stored once (a duplicate delivery stores nothing); the
+        named payer's budget holds nothing and settled exactly the actual; no customer wallet
+        moved; the calibration of 2 pairs is published `insufficient` (J3 never claims calibrated
+        below MIN_PAIRS) and is the configuration's latest. Oracles: a ledger that re-stores a
+        delivery, charges another payer, or keeps the hold; a report claiming calibration."""
+        from infrx.contracts.v2.money_units import ProviderUsd
+        from infrx.judge.calibration import MIN_PAIRS, publish
+        from infrx.judge.submit import collect
+        labels = ow.load("e5l_j_fakes", ow.API / "tests" / "j" / "fakes.py")
+        with ow.observe_trip(workdir) as trip:
+            alpha = trip.world.alpha
+            ids = traced(trip, 2, "o04-pg")
+            before = books(trip)
+            with ow.judge(trip, pg=True) as judge:
+                ledger, stored = judge.ledger, []
+                record = ledger.record_results
+    
+                async def kept(run_id, results):
+                    stored.extend(results)
+                    return await record(run_id, results)
+                ledger.record_results = kept
+                job = judge.job(trip, ids)
+                first = run(ow.submit(judge, trip, ids, job=job))
+                assert first.state == "submitted", first
+                [post] = judge.posts()
+                assert sorted(item["sample_id"] for item in post["items"]) == sorted(ids)
+                judge.fake.outputs[first.external_id] = [[sid, ow.judge_result()] for sid in ids]
+                done = run(collect(job.run_id, wiring=judge.wiring))
+                assert done.state == "completed" and done.actual is not None, done
+                assert run(collect(job.run_id, wiring=judge.wiring)).state == "completed"
+                assert trip.one("select count(*) from infrx.lab_judge_results where run_id = %s",
+                                job.run_id)[0] == len(ids), "a duplicate delivery stored twice"
+                reserved, settled = trip.one(
+                    "select reserved, settled from infrx.lab_budgets where provider_org_id = %s "
+                    "and payer_ref = %s", ow.PROVIDER, judge.payer)
+                assert reserved == 0 and ProviderUsd(settled) == done.actual, (reserved, settled)
+                assert len(judge.posts()) == 1
+                verdicts = [labels.label(sid, org_id=alpha.org_id) for sid in ids]
+                report = run(publish(ledger, stored[:len(ids)], verdicts,
+                                     provider_org_id=ow.PROVIDER, org_id=alpha.org_id,
+                                     judge_model=ow.JUDGE_MODEL,
+                                     rubric_version=stored[0].rubric_version))
+&gt;               assert len(ids) &lt; MIN_PAIRS and report.calibration()["state"] == "insufficient"
+E               AssertionError: assert (2 &lt; 30 and 'uncalibrated' == 'insufficient'
+E                +  where 2 = len(['3418d72e-9743-4dd9-9f6f-7f394becb910', '9c1f13ce-a223-42d3-a0da-a941f0c7d05d'])
+E                 
+E                 - insufficient
+E                 + uncalibrated)
+
+tests/integration/lab_observe/scenarios_judge.py:121: AssertionError</failure></testcase><testcase classname="tests.integration.lab_observe.scenarios_judge" name="test_o06_content_expired_or_deleted_before_egress_never_reaches_the_judge" file="tests/integration/lab_observe/scenarios_judge.py" line="156" time="7.129" /><testcase classname="tests.integration.lab_observe.scenarios_judge" name="test_o06_after_the_sweep_nothing_is_left_to_send" file="tests/integration/lab_observe/scenarios_judge.py" line="181" time="7.155" /><testcase classname="tests.integration.lab_observe.scenarios_trace" name="test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant" file="tests/integration/lab_observe/scenarios_trace.py" line="105" time="6.274" /><testcase classname="tests.integration.lab_observe.scenarios_trace" name="test_o03_the_lab_traces_route_through_the_real_gateway" file="tests/integration/lab_observe/scenarios_trace.py" line="131" time="6.571"><failure message="AssertionError: o03-route: 503 {&quot;error&quot;:{&quot;message&quot;:&quot;A required dependency is unavailable; retry later.&quot;,&quot;type&quot;:&quot;server_error&quot;,&quot;code&quot;:&quot;dependency_unavailable&quot;,&quot;request_id&quot;:&quot;89ed9e2c-411a-4f55-afb9-1c6385631e82&quot;,&quot;infrx&quot;:{&quot;retry_after">workdir = PosixPath('/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind1/cases/test_o03_the_lab_traces_route_through_the_real_gateway')
+
+    def test_o03_the_lab_traces_route_through_the_real_gateway(workdir):
+        """LAB-API's `/lab/v1/traces` on the box's gateway (LAB_TRACES on, the forwarded session
+        verified by the auth server's path, L2's access, T2I's projection, T3's retention): DEV
+        lists and reads alpha's request with its content under alpha's current grant; a consumer's
+        API key is no session; alpha's own user (no membership of A) is refused; revoked, the row
+        is metadata only (no organization, no content); deleted by its owner, it is gone.
+        Oracles: a route reading the raw projection shows the deleted request; one that skips the
+        grant shows content after the revocation."""
+        with ow.observe_trip(workdir, start=("worker",), trace_prefix="infrx/") as trip, \
+                ow.supabase_door() as door:
+            trip.box.start("gateway", **ow.lab_traces_env(trip, door))
+            alpha = trip.world.alpha
+&gt;           request_id = ow.served(trip, alpha, "o03-route")
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_observe/scenarios_trace.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+trip = &lt;pilotbox.Journey object at 0x7c9e2a54f4a0&gt;, tenant = Tenant(name='alpha', user_id='65b2030a-9c00-48bd-b26e-87b18ecff56e', org_id='e634954f-8925-4663-92b7-913da29fa689', ke...ccountView=PgAccountView, WalletDirectory=PgWalletDirectory, CatalogDirectory=PgCatalogDirectory, JobStore=PgJobStore'), tag = 'o03-route'
+
+    def served(trip, tenant, tag: str) -&gt; str:
+        """One async App request, finished and settled once: its durable request id."""
+        accepted = trip.send(tenant, "async", world.TEXT, f"e5l-{tag}-{uuid.uuid4().hex[:6]}")
+&gt;       assert accepted.status_code == 202, f"{tag}: {accepted.status_code} {accepted.text[:200]}"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: o03-route: 503 {"error":{"message":"A required dependency is unavailable; retry later.","type":"server_error","code":"dependency_unavailable","request_id":"89ed9e2c-411a-4f55-afb9-1c6385631e82","infrx":{"retry_after
+
+tests/integration/lab_observe/observe_world.py:272: AssertionError</failure></testcase><testcase classname="tests.integration.lab_observe.scenarios_trace" name="test_o06_expired_or_deleted_content_is_gone_for_every_read_before_and_after_the_sweep" file="tests/integration/lab_observe/scenarios_trace.py" line="179" time="6.757" /></testsuite></testsuites>

@@ -1,0 +1,1056 @@
+cd apps/infrx-api && uv run --frozen pytest -q
+
+==================================== ERRORS ====================================
+___ ERROR collecting tests/b/checkpoints/test_checkpoints_composition_pg.py ____
+tests/b/checkpoints/test_checkpoints_composition_pg.py:30: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________ ERROR collecting tests/b/checkpoints/test_checkpoints_pg.py __________
+tests/b/checkpoints/test_checkpoints_pg.py:29: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________ ERROR collecting tests/b/runner/test_runner_pg.py _______________
+tests/b/runner/test_runner_pg.py:34: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/content/test_content.py ________________
+tests/content/test_content.py:26: in <module>
+    from . import world_pg
+tests/content/world_pg.py:27: in <module>
+    from ..d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________ ERROR collecting tests/contracts/v2/test_v1_projection_pg.py _________
+tests/contracts/v2/test_v1_projection_pg.py:31: in <module>
+    from tests.d import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+__________________ ERROR collecting tests/d/test_admission.py __________________
+tests/d/test_admission.py:14: in <module>
+    from . import checks_admission, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_c2rpc_content.py ________________
+tests/d/test_c2rpc_content.py:32: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_catalog_pg.py __________________
+tests/d/test_catalog_pg.py:30: in <module>
+    from . import checks_admission, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/d/test_code_mutants_c2rpc.py ______________
+tests/d/test_code_mutants_c2rpc.py:12: in <module>
+    from . import code_mutants_c2rpc as mutation_list
+tests/d/code_mutants_c2rpc.py:12: in <module>
+    from . import code_mutants_d7 as d7
+tests/d/code_mutants_d7.py:20: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________ ERROR collecting tests/d/test_code_mutants_d6f.py _______________
+tests/d/test_code_mutants_d6f.py:12: in <module>
+    from . import code_mutants_d6f as mutation_list
+tests/d/code_mutants_d6f.py:18: in <module>
+    from . import code_mutants_d7 as d7
+tests/d/code_mutants_d7.py:20: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________ ERROR collecting tests/d/test_code_mutants_d6j.py _______________
+tests/d/test_code_mutants_d6j.py:12: in <module>
+    from . import code_mutants_d6j as mutation_list
+tests/d/code_mutants_d6j.py:13: in <module>
+    from . import code_mutants_d7 as d7
+tests/d/code_mutants_d7.py:20: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/d/test_code_mutants_d7.py _______________
+tests/d/test_code_mutants_d7.py:12: in <module>
+    from . import code_mutants_d7 as mutation_list
+tests/d/code_mutants_d7.py:20: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/d/test_code_mutants_d8.py _______________
+tests/d/test_code_mutants_d8.py:13: in <module>
+    from . import code_mutants_d8 as mutation_list
+tests/d/code_mutants_d8.py:14: in <module>
+    from . import code_mutants_d7 as d7
+tests/d/code_mutants_d7.py:20: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/d/test_code_mutants_d9.py _______________
+tests/d/test_code_mutants_d9.py:12: in <module>
+    from . import code_mutants_d9 as mutation_list
+tests/d/code_mutants_d9.py:12: in <module>
+    from . import code_mutants_d7 as d7
+tests/d/code_mutants_d7.py:20: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/d/test_code_mutants_l2sql.py ______________
+tests/d/test_code_mutants_l2sql.py:12: in <module>
+    from . import code_mutants_l2sql as mutation_list
+tests/d/code_mutants_l2sql.py:22: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/d/test_code_mutants_l3sql.py ______________
+tests/d/test_code_mutants_l3sql.py:12: in <module>
+    from . import code_mutants_l3sql as mutation_list
+tests/d/code_mutants_l3sql.py:19: in <module>
+    from . import code_mutants_d7 as d7
+tests/d/code_mutants_d7.py:20: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/d/test_composition_pg.py ________________
+tests/d/test_composition_pg.py:28: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________________ ERROR collecting tests/d/test_content.py ___________________
+tests/d/test_content.py:15: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________ ERROR collecting tests/d/test_credit_jobstore_conformance.py _________
+tests/d/test_credit_jobstore_conformance.py:21: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_credit_schema.py ________________
+tests/d/test_credit_schema.py:17: in <module>
+    from . import checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+__________________ ERROR collecting tests/d/test_d6f_doors.py __________________
+tests/d/test_d6f_doors.py:26: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_d6f_feedback.py _________________
+tests/d/test_d6f_feedback.py:28: in <module>
+    from . import checks, pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+__________________ ERROR collecting tests/d/test_d6f_scrub.py __________________
+tests/d/test_d6f_scrub.py:23: in <module>
+    from . import checks, checks_credit as cc, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_d6j_consent.py _________________
+tests/d/test_d6j_consent.py:28: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+__________________ ERROR collecting tests/d/test_d6j_doors.py __________________
+tests/d/test_d6j_doors.py:28: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+__________________ ERROR collecting tests/d/test_d6j_judge.py __________________
+tests/d/test_d6j_judge.py:29: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_d7_followup.py _________________
+tests/d/test_d7_followup.py:30: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_d7_lab_data.py _________________
+tests/d/test_d7_lab_data.py:30: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_d7_variant.py __________________
+tests/d/test_d7_variant.py:23: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_d8_ledgers.py __________________
+tests/d/test_d8_ledgers.py:34: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_d8_requests.py _________________
+tests/d/test_d8_requests.py:30: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_d9_release.py __________________
+tests/d/test_d9_release.py:26: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_d9_rollout.py __________________
+tests/d/test_d9_rollout.py:27: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________ ERROR collecting tests/d/test_d9_rollout_serving_ref.py ____________
+tests/d/test_d9_rollout_serving_ref.py:27: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_e3b_drills.py __________________
+tests/d/test_e3b_drills.py:26: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_followup_d10.py _________________
+tests/d/test_followup_d10.py:22: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+____________ ERROR collecting tests/d/test_jobstore_conformance.py _____________
+tests/d/test_jobstore_conformance.py:27: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________________ ERROR collecting tests/d/test_journal.py ___________________
+tests/d/test_journal.py:15: in <module>
+    from . import checks_admission, checks_journal, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_journal_races.py ________________
+tests/d/test_journal_races.py:22: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_l2sql_access.py _________________
+tests/d/test_l2sql_access.py:33: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_l2sql_self.py __________________
+tests/d/test_l2sql_self.py:28: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/d/test_l2sql_self_mutants.py ______________
+tests/d/test_l2sql_self_mutants.py:17: in <module>
+    from . import migration_mutants as _d
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_l3sql_control.py ________________
+tests/d/test_l3sql_control.py:34: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_l3sql_reads.py _________________
+tests/d/test_l3sql_reads.py:26: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_lease_races.py _________________
+tests/d/test_lease_races.py:35: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________________ ERROR collecting tests/d/test_leases.py ____________________
+tests/d/test_leases.py:20: in <module>
+    from . import checks_admission, checks_leases, pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+____________ ERROR collecting tests/d/test_lifecycle_conformance.py ____________
+tests/d/test_lifecycle_conformance.py:19: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________ ERROR collecting tests/d/test_migration_mutants.py ______________
+tests/d/test_migration_mutants.py:21: in <module>
+    from . import migration_mutants as mutation_list
+tests/d/migration_mutants.py:29: in <module>
+    from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_operations_pg.py ________________
+tests/d/test_operations_pg.py:13: in <module>
+    from . import checks_admission, checks_operations, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_operator_d10.py _________________
+tests/d/test_operator_d10.py:18: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_outbox_relay.py _________________
+tests/d/test_outbox_relay.py:31: in <module>
+    from . import pgharness, pgstore, vkstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+__________________ ERROR collecting tests/d/test_pgharness.py __________________
+tests/d/test_pgharness.py:46: in <module>
+    pgh = _load()
+          ^^^^^^^
+tests/d/test_pgharness.py:42: in _load
+    spec.loader.exec_module(module)
+<frozen importlib._bootstrap_external>:999: in exec_module
+    ???
+<frozen importlib._bootstrap>:488: in _call_with_frames_removed
+    ???
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+__________________ ERROR collecting tests/d/test_port_d10.py ___________________
+tests/d/test_port_d10.py:18: in <module>
+    from . import checks_port as cp
+tests/d/checks_port.py:39: in <module>
+    from . import checks_signup
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_postgrest_d10.py ________________
+tests/d/test_postgrest_d10.py:30: in <module>
+    from . import checks_signup
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+____________________ ERROR collecting tests/d/test_reads.py ____________________
+tests/d/test_reads.py:24: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+____________________ ERROR collecting tests/d/test_ready.py ____________________
+tests/d/test_ready.py:25: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________ ERROR collecting tests/d/test_result_fence_d10.py _______________
+tests/d/test_result_fence_d10.py:23: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/d/test_schema_postgres.py _______________
+tests/d/test_schema_postgres.py:20: in <module>
+    from . import checks, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________________ ERROR collecting tests/d/test_settle.py ____________________
+tests/d/test_settle.py:15: in <module>
+    from . import checks_admission, checks_settle, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_settle_races.py _________________
+tests/d/test_settle_races.py:25: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________________ ERROR collecting tests/d/test_signup.py ____________________
+tests/d/test_signup.py:32: in <module>
+    from . import checks, checks_credit, checks_signup, pgharness, signup_mutants
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/d/test_store_requests.py ________________
+tests/d/test_store_requests.py:14: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________ ERROR collecting tests/d/test_streamstore_conformance.py ___________
+tests/d/test_streamstore_conformance.py:24: in <module>
+    from . import pgharness, pgstore
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_upgrade_d10.py _________________
+tests/d/test_upgrade_d10.py:29: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/d/test_upgrade_lab.py _________________
+tests/d/test_upgrade_lab.py:15: in <module>
+    from . import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/d/test_upgrade_split.py ________________
+ImportError while importing test module '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/tests/d/test_upgrade_split.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+tests/d/test_upgrade_split.py:1: in <module>
+    from .test_upgrade_d10 import _split
+E   ImportError: cannot import name '_split' from 'tests.d.test_upgrade_d10' (/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/tests/d/test_upgrade_d10.py)
+____________ ERROR collecting tests/g/feedback/test_feedback_pg.py _____________
+tests/g/feedback/test_feedback_pg.py:20: in <module>
+    from ...d import checks, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________________ ERROR collecting tests/g/lab_auth _______________________
+tests/g/lab_auth/conftest.py:4: in <module>
+    from tests.l.access.conftest import (fake_world, pg_template, pg_world,  # noqa: F401
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/l/access/conftest.py:8: in <module>
+    from tests.d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________________ ERROR collecting tests/g/lab_control _____________________
+tests/g/lab_control/conftest.py:4: in <module>
+    from tests.l.access.conftest import (fake_world, pg_template, pg_world,  # noqa: F401
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/l/access/conftest.py:8: in <module>
+    from tests.d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____ ERROR collecting tests/g/lab_evaluations/test_lab_evaluations_pg.py ______
+tests/g/lab_evaluations/test_lab_evaluations_pg.py:34: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______ ERROR collecting tests/g/lab_pipelines/test_lab_pipelines_pg.py ________
+tests/g/lab_pipelines/test_lab_pipelines_pg.py:32: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________ ERROR collecting tests/g/lab_pipelines/test_lab_teachers_pg.py ________
+tests/g/lab_pipelines/test_lab_teachers_pg.py:36: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________ ERROR collecting tests/g/lab_releases/test_lab_releases_pg.py _________
+tests/g/lab_releases/test_lab_releases_pg.py:32: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________________ ERROR collecting tests/g/lab_traces ______________________
+tests/g/lab_traces/conftest.py:4: in <module>
+    from tests.l.access.conftest import (fake_world, pg_template, pg_world,  # noqa: F401
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/l/access/conftest.py:8: in <module>
+    from tests.d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________ ERROR collecting tests/g/ops/test_acceptance_pg.py ______________
+tests/g/ops/test_acceptance_pg.py:44: in <module>
+    from . import pgworld
+tests/g/ops/pgworld.py:26: in <module>
+    from tests.d import checks_admission, checks_signup, pgharness
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/g/ops/test_accounts_pg.py _______________
+tests/g/ops/test_accounts_pg.py:22: in <module>
+    from . import pgworld
+tests/g/ops/pgworld.py:26: in <module>
+    from tests.d import checks_admission, checks_signup, pgharness
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/g/ops/test_flag_pg.py _________________
+tests/g/ops/test_flag_pg.py:17: in <module>
+    from . import pgworld
+tests/g/ops/pgworld.py:26: in <module>
+    from tests.d import checks_admission, checks_signup, pgharness
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/g/ops/test_races_pg.py _________________
+tests/g/ops/test_races_pg.py:23: in <module>
+    from . import pgworld
+tests/g/ops/pgworld.py:26: in <module>
+    from tests.d import checks_admission, checks_signup, pgharness
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/g/ops/test_reversal_pg.py _______________
+tests/g/ops/test_reversal_pg.py:19: in <module>
+    from .pgworld import R, admit_credit, admit_legacy, drift, footprint, needs_pg, settle
+tests/g/ops/pgworld.py:26: in <module>
+    from tests.d import checks_admission, checks_signup, pgharness
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________ ERROR collecting tests/g/ops/test_transition_pg.py ______________
+tests/g/ops/test_transition_pg.py:27: in <module>
+    from . import pgworld
+tests/g/ops/pgworld.py:26: in <module>
+    from tests.d import checks_admission, checks_signup, pgharness
+tests/d/checks_signup.py:21: in <module>
+    from . import checks, checks_credit, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________________ ERROR collecting tests/h/test_harness.py ___________________
+tests/h/test_harness.py:26: in <module>
+    from tests.l.access.conftest import pg_template, pg_world  # noqa: F401 - the L2 world
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/l/access/conftest.py:8: in <module>
+    from tests.d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___________________ ERROR collecting tests/h/test_mutants.py ___________________
+tests/h/test_mutants.py:17: in <module>
+    from tests.d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/i/lab_eval/test_drills_pg.py ______________
+tests/i/lab_eval/test_drills_pg.py:39: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+___ ERROR collecting tests/j/calibration/test_calibration_composition_pg.py ____
+tests/j/calibration/test_calibration_composition_pg.py:23: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________ ERROR collecting tests/j/calibration/test_calibration_pg.py __________
+tests/j/calibration/test_calibration_pg.py:27: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________________ ERROR collecting tests/j/submit ________________________
+tests/j/submit/conftest.py:7: in <module>
+    from tests.d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________________ ERROR collecting tests/l/access ________________________
+tests/l/access/conftest.py:8: in <module>
+    from tests.d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________________ ERROR collecting tests/l/control _______________________
+tests/l/control/conftest.py:8: in <module>
+    from tests.d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________________ ERROR collecting tests/m/test_pilot_media.py _________________
+tests/m/test_pilot_media.py:47: in <module>
+    from ..d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/m/test_pilot_mutants.py ________________
+tests/m/test_pilot_mutants.py:14: in <module>
+    from ..d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______________ ERROR collecting tests/m/test_retention_mutants.py ______________
+tests/m/test_retention_mutants.py:21: in <module>
+    from . import test_cache_bounds, test_retention, test_upload_restart
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/m/test_upload_restart.py:135: in <module>
+    from ..d import pgharness as _pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______________ ERROR collecting tests/m/test_upload_restart.py ________________
+tests/m/test_upload_restart.py:135: in <module>
+    from ..d import pgharness as _pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+____________ ERROR collecting tests/m/test_upload_restart_stack.py _____________
+tests/m/test_upload_restart_stack.py:35: in <module>
+    from ..d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/m/test_upload_wiring.py ________________
+ImportError while importing test module '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/tests/m/test_upload_wiring.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+tests/m/test_upload_wiring.py:34: in <module>
+    from .test_pilot_media import OTHER_ROW, OTHER_TOKEN, Journal
+E   ImportError: cannot import name 'OTHER_ROW' from 'tests.m.test_pilot_media' (/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/tests/m/test_pilot_media.py)
+______________ ERROR collecting tests/n/imports/test_import_pg.py ______________
+tests/n/imports/test_import_pg.py:29: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/n/lineage/test_lineage_pg.py ______________
+tests/n/lineage/test_lineage_pg.py:38: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+____________ ERROR collecting tests/n/versions/test_versions_pg.py _____________
+tests/n/versions/test_versions_pg.py:27: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________ ERROR collecting tests/p/annotations/test_annotations_pg.py __________
+tests/p/annotations/test_annotations_pg.py:27: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______ ERROR collecting tests/p/teachers/test_teachers_composition_pg.py _______
+tests/p/teachers/test_teachers_composition_pg.py:26: in <module>
+    from .test_teachers_pg import pytestmark, world  # noqa: F401 - the p2 world and its skip
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/p/teachers/test_teachers_pg.py:35: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+____________ ERROR collecting tests/p/teachers/test_teachers_pg.py _____________
+tests/p/teachers/test_teachers_pg.py:35: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+______ ERROR collecting tests/p/training/test_training_composition_pg.py _______
+tests/p/training/test_training_composition_pg.py:32: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_________ ERROR collecting tests/p/training/test_training_services.py __________
+tests/p/training/test_training_services.py:33: in <module>
+    from ...d import checks, pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/r/control/test_control_pg.py ______________
+tests/r/control/test_control_pg.py:26: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________ ERROR collecting tests/r/optimization/test_optimization_pg.py _________
+tests/r/optimization/test_optimization_pg.py:23: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_______ ERROR collecting tests/r/routing/test_routing_composition_pg.py ________
+tests/r/routing/test_routing_composition_pg.py:25: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/r/routing/test_routing_pg.py ______________
+tests/r/routing/test_routing_pg.py:23: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+____________ ERROR collecting tests/t/feedback/test_feedback_pg.py _____________
+tests/t/feedback/test_feedback_pg.py:26: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+________________ ERROR collecting tests/t/ship/test_pins_pg.py _________________
+tests/t/ship/test_pins_pg.py:24: in <module>
+    from ...d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+_____________ ERROR collecting tests/w/test_worker_lab_eval_pg.py ______________
+ImportError while importing test module '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/tests/w/test_worker_lab_eval_pg.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+tests/w/test_worker_lab_eval_pg.py:26: in <module>
+    from ..b.runner.test_runner_pg import KEY, N, PORT, RATE_CARD, Case, Dying, restore, revoke
+E   ImportError: cannot import name 'KEY' from 'tests.b.runner.test_runner_pg' (/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/tests/b/runner/test_runner_pg.py)
+______________ ERROR collecting tests/w/test_worker_traces_pg.py _______________
+tests/w/test_worker_traces_pg.py:32: in <module>
+    from ..d import pgharness
+tests/d/pgharness.py:54: in <module>
+    SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'postgres'
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/contracts/test_config_and_imports.py::test_each_lab_gate_owns_a_compose_block_below_the_band, argvalues type: enumerate
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-2/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/b/checkpoints/test_checkpoints_composition_pg.py - KeyError: 'pos...
+ERROR tests/b/checkpoints/test_checkpoints_pg.py - KeyError: 'postgres'
+ERROR tests/b/runner/test_runner_pg.py - KeyError: 'postgres'
+ERROR tests/content/test_content.py - KeyError: 'postgres'
+ERROR tests/contracts/v2/test_v1_projection_pg.py - KeyError: 'postgres'
+ERROR tests/d/test_admission.py - KeyError: 'postgres'
+ERROR tests/d/test_c2rpc_content.py - KeyError: 'postgres'
+ERROR tests/d/test_catalog_pg.py - KeyError: 'postgres'
+ERROR tests/d/test_code_mutants_c2rpc.py - KeyError: 'postgres'
+ERROR tests/d/test_code_mutants_d6f.py - KeyError: 'postgres'
+ERROR tests/d/test_code_mutants_d6j.py - KeyError: 'postgres'
+ERROR tests/d/test_code_mutants_d7.py - KeyError: 'postgres'
+ERROR tests/d/test_code_mutants_d8.py - KeyError: 'postgres'
+ERROR tests/d/test_code_mutants_d9.py - KeyError: 'postgres'
+ERROR tests/d/test_code_mutants_l2sql.py - KeyError: 'postgres'
+ERROR tests/d/test_code_mutants_l3sql.py - KeyError: 'postgres'
+ERROR tests/d/test_composition_pg.py - KeyError: 'postgres'
+ERROR tests/d/test_content.py - KeyError: 'postgres'
+ERROR tests/d/test_credit_jobstore_conformance.py - KeyError: 'postgres'
+ERROR tests/d/test_credit_schema.py - KeyError: 'postgres'
+ERROR tests/d/test_d6f_doors.py - KeyError: 'postgres'
+ERROR tests/d/test_d6f_feedback.py - KeyError: 'postgres'
+ERROR tests/d/test_d6f_scrub.py - KeyError: 'postgres'
+ERROR tests/d/test_d6j_consent.py - KeyError: 'postgres'
+ERROR tests/d/test_d6j_doors.py - KeyError: 'postgres'
+ERROR tests/d/test_d6j_judge.py - KeyError: 'postgres'
+ERROR tests/d/test_d7_followup.py - KeyError: 'postgres'
+ERROR tests/d/test_d7_lab_data.py - KeyError: 'postgres'
+ERROR tests/d/test_d7_variant.py - KeyError: 'postgres'
+ERROR tests/d/test_d8_ledgers.py - KeyError: 'postgres'
+ERROR tests/d/test_d8_requests.py - KeyError: 'postgres'
+ERROR tests/d/test_d9_release.py - KeyError: 'postgres'
+ERROR tests/d/test_d9_rollout.py - KeyError: 'postgres'
+ERROR tests/d/test_d9_rollout_serving_ref.py - KeyError: 'postgres'
+ERROR tests/d/test_e3b_drills.py - KeyError: 'postgres'
+ERROR tests/d/test_followup_d10.py - KeyError: 'postgres'
+ERROR tests/d/test_jobstore_conformance.py - KeyError: 'postgres'
+ERROR tests/d/test_journal.py - KeyError: 'postgres'
+ERROR tests/d/test_journal_races.py - KeyError: 'postgres'
+ERROR tests/d/test_l2sql_access.py - KeyError: 'postgres'
+ERROR tests/d/test_l2sql_self.py - KeyError: 'postgres'
+ERROR tests/d/test_l2sql_self_mutants.py - KeyError: 'postgres'
+ERROR tests/d/test_l3sql_control.py - KeyError: 'postgres'
+ERROR tests/d/test_l3sql_reads.py - KeyError: 'postgres'
+ERROR tests/d/test_lease_races.py - KeyError: 'postgres'
+ERROR tests/d/test_leases.py - KeyError: 'postgres'
+ERROR tests/d/test_lifecycle_conformance.py - KeyError: 'postgres'
+ERROR tests/d/test_migration_mutants.py - KeyError: 'postgres'
+ERROR tests/d/test_operations_pg.py - KeyError: 'postgres'
+ERROR tests/d/test_operator_d10.py - KeyError: 'postgres'
+ERROR tests/d/test_outbox_relay.py - KeyError: 'postgres'
+ERROR tests/d/test_pgharness.py - KeyError: 'postgres'
+ERROR tests/d/test_port_d10.py - KeyError: 'postgres'
+ERROR tests/d/test_postgrest_d10.py - KeyError: 'postgres'
+ERROR tests/d/test_reads.py - KeyError: 'postgres'
+ERROR tests/d/test_ready.py - KeyError: 'postgres'
+ERROR tests/d/test_result_fence_d10.py - KeyError: 'postgres'
+ERROR tests/d/test_schema_postgres.py - KeyError: 'postgres'
+ERROR tests/d/test_settle.py - KeyError: 'postgres'
+ERROR tests/d/test_settle_races.py - KeyError: 'postgres'
+ERROR tests/d/test_signup.py - KeyError: 'postgres'
+ERROR tests/d/test_store_requests.py - KeyError: 'postgres'
+ERROR tests/d/test_streamstore_conformance.py - KeyError: 'postgres'
+ERROR tests/d/test_upgrade_d10.py - KeyError: 'postgres'
+ERROR tests/d/test_upgrade_lab.py - KeyError: 'postgres'
+ERROR tests/d/test_upgrade_split.py
+ERROR tests/g/feedback/test_feedback_pg.py - KeyError: 'postgres'
+ERROR tests/g/lab_auth - KeyError: 'postgres'
+ERROR tests/g/lab_control - KeyError: 'postgres'
+ERROR tests/g/lab_evaluations/test_lab_evaluations_pg.py - KeyError: 'postgres'
+ERROR tests/g/lab_pipelines/test_lab_pipelines_pg.py - KeyError: 'postgres'
+ERROR tests/g/lab_pipelines/test_lab_teachers_pg.py - KeyError: 'postgres'
+ERROR tests/g/lab_releases/test_lab_releases_pg.py - KeyError: 'postgres'
+ERROR tests/g/lab_traces - KeyError: 'postgres'
+ERROR tests/g/ops/test_acceptance_pg.py - KeyError: 'postgres'
+ERROR tests/g/ops/test_accounts_pg.py - KeyError: 'postgres'
+ERROR tests/g/ops/test_flag_pg.py - KeyError: 'postgres'
+ERROR tests/g/ops/test_races_pg.py - KeyError: 'postgres'
+ERROR tests/g/ops/test_reversal_pg.py - KeyError: 'postgres'
+ERROR tests/g/ops/test_transition_pg.py - KeyError: 'postgres'
+ERROR tests/h/test_harness.py - KeyError: 'postgres'
+ERROR tests/h/test_mutants.py - KeyError: 'postgres'
+ERROR tests/i/lab_eval/test_drills_pg.py - KeyError: 'postgres'
+ERROR tests/j/calibration/test_calibration_composition_pg.py - KeyError: 'pos...
+ERROR tests/j/calibration/test_calibration_pg.py - KeyError: 'postgres'
+ERROR tests/j/submit - KeyError: 'postgres'
+ERROR tests/l/access - KeyError: 'postgres'
+ERROR tests/l/control - KeyError: 'postgres'
+ERROR tests/m/test_pilot_media.py - KeyError: 'postgres'
+ERROR tests/m/test_pilot_mutants.py - KeyError: 'postgres'
+ERROR tests/m/test_retention_mutants.py - KeyError: 'postgres'
+ERROR tests/m/test_upload_restart.py - KeyError: 'postgres'
+ERROR tests/m/test_upload_restart_stack.py - KeyError: 'postgres'
+ERROR tests/m/test_upload_wiring.py
+ERROR tests/n/imports/test_import_pg.py - KeyError: 'postgres'
+ERROR tests/n/lineage/test_lineage_pg.py - KeyError: 'postgres'
+ERROR tests/n/versions/test_versions_pg.py - KeyError: 'postgres'
+ERROR tests/p/annotations/test_annotations_pg.py - KeyError: 'postgres'
+ERROR tests/p/teachers/test_teachers_composition_pg.py - KeyError: 'postgres'
+ERROR tests/p/teachers/test_teachers_pg.py - KeyError: 'postgres'
+ERROR tests/p/training/test_training_composition_pg.py - KeyError: 'postgres'
+ERROR tests/p/training/test_training_services.py - KeyError: 'postgres'
+ERROR tests/r/control/test_control_pg.py - KeyError: 'postgres'
+ERROR tests/r/optimization/test_optimization_pg.py - KeyError: 'postgres'
+ERROR tests/r/routing/test_routing_composition_pg.py - KeyError: 'postgres'
+ERROR tests/r/routing/test_routing_pg.py - KeyError: 'postgres'
+ERROR tests/t/feedback/test_feedback_pg.py - KeyError: 'postgres'
+ERROR tests/t/ship/test_pins_pg.py - KeyError: 'postgres'
+ERROR tests/w/test_worker_lab_eval_pg.py
+ERROR tests/w/test_worker_traces_pg.py - KeyError: 'postgres'
+!!!!!!!!!!!!!!!!!! Interrupted: 110 errors during collection !!!!!!!!!!!!!!!!!!!
+3 warnings, 110 errors in 15.68s
+make: *** [Makefile:13: api-test] Error 2
+exit=2
