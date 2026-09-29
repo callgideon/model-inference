@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 276,
- "updated": "2026-09-29T07:41:35Z",
+ "revision": 277,
+ "updated": "2026-09-29T07:46:58Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7939,31 +7939,39 @@
    "branch": "codex/w5-lab-app-control",
    "worktree": ".claude/worktrees/codex-w5-lab-app-control",
    "base": "adb84d11",
-   "head": null,
+   "head": "62d5130c",
    "isolation": {
     "ports": "l4 57503; l3 57502",
     "prefix": "infrx-l4-",
     "db": "l4"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T07:05:47Z",
-   "updated": "2026-09-29T07:05:47Z",
+   "updated": "2026-09-29T07:46:58Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge",
+   "next_action": "merge batch #38 (Opus; WR-LAC-1/2, R223) → E3L-F4/F5 in lab-control-2",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 3,
-    "pessimistic_h": 6,
-    "confidence": "medium",
-    "basis": "one HTTP port in the rollouts/http.ts style + a journey re-cut + one real stack"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT 62d5130c; merge running",
+    "at": "2026-09-29T07:46:58Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/l/LAB-APP-CONTROL-e2d6eb5.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/lab/lib/services/control/**",
     "apps/lab/tests/l/**"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-LAC-1",
+    "WR-LAC-2",
+    "E3L-F4",
+    "E3L-F5"
+   ]
   },
   {
    "id": "W5-COMPOSITION-5",
@@ -8068,6 +8076,74 @@
     "infra/lab/rollout/**",
     "tests/i/lab/**",
     "research/plan/consumer-v1/08-lab-internal-testing-rollout.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-38",
+   "task": null,
+   "slice": "merge batch #38 (Opus): lab-app-control 62d5130c (+WR-LAC-1/2, R223)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-38",
+   "worktree": ".claude/worktrees/codex-w5-merge-38",
+   "base": "97b3689b",
+   "head": null,
+   "isolation": {
+    "ports": "l4 57503",
+    "prefix": "infrx-l4-",
+    "db": "l4"
+   },
+   "activity": "running",
+   "started": "2026-09-29T07:46:58Z",
+   "updated": "2026-09-29T07:46:58Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch",
+    "at": "2026-09-29T07:46:58Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-CONTROL-2",
+   "task": "L3",
+   "slice": "(wave5 LW6 lane lab-control-2, Opus) E3L-F4 operator rejection of a publication proposal (0052) → E3L-F5 the Deployment record says what is listed; base 97b3689b",
+   "agent": "opus",
+   "branch": "codex/w5-lab-control-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-control-2",
+   "base": "97b3689b",
+   "head": null,
+   "isolation": {
+    "ports": "l3 57502; dlab 57500; l4 57503",
+    "prefix": "infrx-l3-",
+    "db": "l3"
+   },
+   "activity": "running",
+   "started": "2026-09-29T07:46:58Z",
+   "updated": "2026-09-29T07:46:58Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "medium",
+    "basis": "one new RPC + route + record change across store, fake and tests"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/lab/control/**",
+    "infrx/state/lab_control.py",
+    "apps/app/supabase/migrations/0052_*.sql",
+    "tests/l/**"
    ],
    "wiring_requests": []
   }
