@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 307,
- "updated": "2026-09-29T17:54:33Z",
+ "revision": 308,
+ "updated": "2026-09-29T18:20:18Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9089,22 +9089,22 @@
   {
    "id": "W5-LAB-SQL-LW8",
    "task": "L3",
-   "slice": "SR-LCR-1: 0056 lab_control_grants LOCAL-ONLY — infrx_lab_control EXECUTE on the families' route-half functions; the PG matrix lab column = owner column (Opus); workflow wf_c5d734e0-f5a",
+   "slice": "SR-LCR-1: 0056 lab_control_grants LOCAL-ONLY — infrx_lab_control EXECUTE on the families' route-half functions; the PG matrix lab column = owner column (Opus); workflow wf_c5d734e0-f5a; ACCEPT_WITH_FIXES at d5baa446 (0056 grants 32 route functions to infrx_lab_control; the PG matrix equal on both logins; LCR-F1 closed locally)",
    "agent": "opus",
    "branch": "codex/w5-lab-sql-lw8",
    "worktree": ".claude/worktrees/codex-w5-lab-sql-lw8",
    "base": "3f2ff579",
-   "head": null,
+   "head": "d5baa446",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T15:49:26Z",
-   "updated": "2026-09-29T15:49:26Z",
+   "updated": "2026-09-29T18:20:18Z",
    "blocker": null,
-   "next_action": "handback → merge → LCR-F1 closed",
+   "next_action": "merge batch #55 (post-grant matrix, teacher-approve grants, runbook rows, R251) → lab-local-2 (the o05 control-factory rerun)",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 3,
@@ -9292,6 +9292,43 @@
     "apps/infrx-api/tests/t/capture/",
     "research/plan/08-contracts-v1-encoding.md",
     "research/plan/evidence/t/LAB-CAPTURE-5f6a056.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-55",
+   "task": null,
+   "slice": "merge batch #55 (Opus): lab-sql-lw8 d5baa446 (+conflict resolution: post-grant matrix, Makefile, harness pin; teacher-approve grants; WR-LW8-1 runbook; R251)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-55",
+   "worktree": ".claude/worktrees/codex-w5-merge-55",
+   "base": "61c1d5a7",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T18:20:18Z",
+   "updated": "2026-09-29T18:20:18Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → 0056 LOCAL-ONLY on the tip → lab-local-2",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0056_lab_control_grants.sql",
+    "apps/infrx-api/tests/d/test_code_mutants_lw8.py",
+    "apps/infrx-api/tests/i/lab_control/test_control_routes_pg.py",
+    "tests/integration/test_harness.py",
+    "Makefile",
+    "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+    "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
   }
