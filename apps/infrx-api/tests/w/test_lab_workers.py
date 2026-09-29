@@ -89,8 +89,8 @@ def no_trace_stack(monkeypatch):
     """ClickHouse and the trace bucket are never reached: the retention is recorded."""
     built = {}
 
-    def trace_retention(limits, endpoint_url):
-        built.update(limits=limits, endpoint_url=endpoint_url)
+    def trace_retention(limits, endpoint_url, objects=None, connect=None):
+        built.update(limits=limits, endpoint_url=endpoint_url, objects=objects, connect=connect)
         return Retention()
     monkeypatch.setattr(lab_workers, "trace_retention", trace_retention)
     return built
@@ -339,6 +339,40 @@ def captured_steps(monkeypatch) -> dict:
     return steps
 
 
+def test_lab_workers__the_judge_report_job_publishes_each_configuration_on_its_ledger(
+        no_trace_stack):
+    """WR-J3-D8-C: the judge role's report job is J3's `publish` on the role's own
+    `PgJudgeLedger` (the sweep's), once per configuration, the grantor's report stored under
+    (provider, grantor, judge model, rubric version); one configuration's failure does not
+    skip the next (it is counted)."""
+    from infrx.judge.calibration import MIN_PAIRS, report
+
+    from tests.j import fakes as j1
+    from tests.j.calibration.test_calibration import agreeing, labelled
+    worker = composed("judge")
+    assert set(worker.jobs) == {"judge_report"}
+    job = worker.jobs["judge_report"]
+    assert job.ledger is worker.wiring.ledger
+    stored = []
+
+    class Ledger:
+        async def put_calibration(self, calibration, **key):
+            if key["judge_model"] == "broken":
+                raise ConnectionError("the ledger did not answer")
+            stored.append(key)
+    job.ledger = Ledger()
+    results, labels = labelled(agreeing(MIN_PAIRS))
+    base = {"results": results, "feedback": labels, "provider_org_id": j1.ORG_B,
+            "org_id": j1.ORG_A, "rubric_version": 1}
+    done = outcome(lambda: asyncio.run(job([{**base, "judge_model": "broken"},
+                                            {**base, "judge_model": "j-1"}])))
+    assert done == {"published": 1, "failed": 1}
+    assert stored == [{"provider_org_id": j1.ORG_B, "grantor_org_id": j1.ORG_A,
+                       "judge_model": "j-1", "rubric_version": 1}]
+    assert report(results, labels, org_id=j1.ORG_A, rubric_version=1).calibration()[
+        "state"] == "calibrated"
+
+
 # ------------------------------------------------------------------ datasets (WR-N3-2 pull)
 def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(monkeypatch,
                                                                              no_trace_stack):
@@ -369,20 +403,17 @@ def test_lab_workers__datasets_reconcile_every_providers_lineage_page_by_page(mo
     report = outcome(lambda: asyncio.run(step()))
     assert calls == [("p1", None), ("p1", "k1"), ("p2", None), ("p3", None)]
     assert report == {"providers": 3, "failed": 1}
+    assert no_trace_stack["objects"] is objects      # WR-N3-2a: its deletions push tombstones
 
 
 # ------------------------------------------------------------------ rollout (WR-I7-1)
 def test_lab_workers__the_rollout_pass_refuses_until_its_inputs_exist():
-    """R2's pass needs every running or rolled-back D9 release with its frozen plan, R1's
-    live aggregates and the stored report, and L3's alias reads (WR-LSQ-9): none is readable
-    on this base, so the controller unit refuses rather than report ready and do nothing."""
-    from infrx.gateway import pilot
+    """R2's pass needs every running or rolled-back D9 release with its frozen plan and R1's
+    live aggregates and the stored report: none is readable on this base, so the controller
+    unit refuses rather than report ready and do nothing (WR-LSQ-9-C wires L3's alias reads
+    for the operator surfaces via the real `PgControlStore`; this pass still needs R1/B2)."""
     with pytest.raises(RuntimeMisconfigured, match="WR-LSQ-9"):
         composed("rollout")
-    for read in ("provider_servings", "provider_deployments", "endpoint_alias",
-                 "listing_versions"):
-        waits = outcome(lambda: asyncio.run(getattr(pilot.NoControlReads(), read)("x")))
-        assert type(waits) is errors.DependencyUnavailable, read
 
 
 def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkeypatch):
@@ -416,7 +447,7 @@ def test_lab_workers__an_emergency_rollback_is_r2s_for_the_named_operator(monkey
     assert resolved == [(ref, NEMO)]
     from infrx.lab.control.operations import Serving
     assert rolled == [("ops@infrx", "policy-record", ref, "breach", PgReleaseStore, Serving,
-                       "ops@infrx", "ops@infrx", "NoControlReads")]
+                       "ops@infrx", "ops@infrx", "PgControlStore")]
     assert outcome(lambda: lab_workers.main(argv[:-1] + ["partitioned"], env=env)) == 1
 
 
@@ -434,6 +465,40 @@ def test_lab_workers__annotation_and_training_have_no_pass_and_refuse(monkeypatc
         composed("annotation", {**ENV["annotation"], "LAB_ANNOTATION_TEACHER": "hosted"})
     with pytest.raises(RuntimeMisconfigured, match="P-11"):
         composed("training", {**ENV["training"], "LAB_TRAINING_CONNECTOR": "http"})
+
+
+def test_lab_workers__the_teacher_wiring_is_p2_on_d8s_teacher_ledger():
+    """WR-P2-D8-C (1-LSI2-2): P2's `collect` records per-item failures with
+    `ledger.record_failures`, which only D8's `PgTeacherLedger` has (a plain `PgJudgeLedger`
+    dies with AttributeError at the first failure). The composition puts it, P1's import over
+    D8's label log, D7 and L2 on the role's one database, J2's provider to the local teacher
+    fake only (P-10), and N2's `redact` as given (the role refuses without it, WR-P2-4)."""
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.judge.cost import APPROVED_RATES
+    from infrx.judge.submit import HttpJudgeProvider
+    from infrx.pipelines import annotations as p1
+    from infrx.state.jobstore import connector
+    from infrx.state.lab_access import PgAccessStore
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_pipeline import PgLabelLog, PgTeacherLedger
+    connect, objects = connector(DSN), InMemoryObjectStore()
+
+    def redact(text):
+        return text
+    wiring = lab_workers.teacher_wiring(connect, objects, provider_url="http://127.0.0.1:9",
+                                        settings=DEFAULTS, redact=redact)
+    assert type(wiring.ledger) is PgTeacherLedger and callable(wiring.ledger.record_failures)
+    assert (type(wiring.members), type(wiring.store), type(wiring.log)) == (
+        PgAccessStore, PgLabDataStore, PgLabelLog)
+    assert {id(port._connect) for port in (wiring.members, wiring.ledger, wiring.store,
+                                           wiring.log)} == {id(connect)}
+    assert wiring.labels is p1.import_labels and wiring.objects is objects
+    assert (wiring.redact, wiring.rates, wiring.settings) == (redact, APPROVED_RATES, DEFAULTS)
+    assert type(wiring.provider) is HttpJudgeProvider
+    remote = outcome(lambda: lab_workers.teacher_wiring(
+        connect, objects, provider_url="https://teacher.example", settings=DEFAULTS,
+        redact=redact))
+    assert isinstance(remote, errors.DomainError), remote
 
 
 # ----------------------------------------------------------------------- health and the drain
@@ -515,3 +580,54 @@ def test_lab_workers__trace_retention_is_t3s_over_the_shippers_bucket_and_bounds
                               "http://minio.invalid:9000") and shipper_prefix == "infrx/"
     assert (built.content_days, built.metadata_months) == (13, 7)
     assert isinstance(built.objects, InMemoryObjectStore)
+
+
+def test_lab_workers__a_trace_deletion_tombstones_every_providers_lineage_copies(monkeypatch):
+    """WR-N3-2a (the push half): T3's deletion on the Lab's retention calls N3's
+    `lineage.tombstone` (signature frozen) for the deleted request, for every provider with a
+    lineage, page by page while `more`, reason `deleted` at the tombstone's instant; a repeat
+    deletion is the first receipt and pushes nothing; a push that fails never loses the
+    receipt (the hourly pull tombstones it). The judge role's retention, with no Lab objects,
+    pushes nothing."""
+    import clickhouse_connect
+
+    from infrx.datasets import lineage
+    from infrx.media.s3 import S3ObjectStore
+    monkeypatch.setattr(clickhouse_connect, "get_client", lambda **kw: "ch-client")
+    monkeypatch.setattr(S3ObjectStore, "connect",
+                        classmethod(lambda cls, *a: InMemoryObjectStore()))
+    calls, broken = [], []
+
+    async def tombstone(objects, **kw):
+        if broken:
+            raise ConnectionError("the Lab bucket did not answer")
+        calls.append(kw)
+        return {"tombstoned": 1, "more": sum(c["provider_org_id"] == kw["provider_org_id"]
+                                             for c in calls) < 2}
+    monkeypatch.setattr(lineage, "tombstone", tombstone)
+
+    class Store:
+        stones: dict = {}
+
+        async def get(self, keys):
+            return {k: {"request": self.stones[k]} for k in keys if k in self.stones}
+
+        async def put(self, stones):
+            self.stones.update({(s.org_id, s.request_id): s for s in stones})
+    objects = InMemoryObjectStore()
+    for key in ("lab/p1/lineage/samples/a.json", "lab/p2/lineage/traces/g/r/b",
+                "lab/p3/exports/e/export.json"):
+        objects.seed(key, b"{}")
+    limits = types.SimpleNamespace(clickhouse_url="http://ch", s3_trace_bucket="t",
+                                   trace_content_max_days=13, trace_metadata_months=7)
+    retention = lab_workers.trace_retention(limits, "", objects)
+    retention.store = Store()
+    stone = asyncio.run(retention.delete("g", "r", "user_request"))
+    one = {"grantor_org_id": "g", "request_id": "r", "reason": "deleted",
+           "at": stone.deleted_at}
+    assert calls == [{"provider_org_id": p, **one} for p in ("p1", "p1", "p2", "p2")]
+    assert asyncio.run(retention.delete("g", "r", "again")) == stone and len(calls) == 4
+    broken.append(True)
+    kept = outcome(lambda: asyncio.run(retention.delete("g", "r2", "user_request")))
+    assert getattr(kept, "request_id", kept) == "r2"
+    assert lab_workers.trace_retention(limits, "").deleted is None

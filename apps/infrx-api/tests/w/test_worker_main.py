@@ -1308,11 +1308,30 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
     assert projector.projection is Shipper.retention.feedback
     assert projector.retention is Shipper.retention
     from infrx.content import ContentAccess
-    holds = getattr(Shipper.retention, "holds", None)    # WR-C2-2: C2's holds on the sweep
+    # WR-C2-2 / WR-C2-2b: C2's holds are built once and handed to `build_shipper`, so the
+    # sweep and the shipper's replay (`keeps`) ask the one hold source
+    holds = built.get("holds")
     assert getattr(holds, "__func__", None) is ContentAccess.holds
-    assert holds.__self__.retention is Shipper.retention
     assert holds.__self__.refs.connect is service.jobs._connect
+    assert not hasattr(Shipper.retention, "holds")        # nothing assigned after the build
     asyncio.run(spool.close())
+
+
+def test_worker_main__the_shippers_retention_holds_what_it_was_given(monkeypatch):
+    """WR-C2-2b: `build_shipper(holds=)` is T3's `Retention(holds=)` under the shipper, the
+    one the sweep and the replay both ask; without it nothing is held."""
+    import clickhouse_connect
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.traces import ship
+    monkeypatch.setattr(clickhouse_connect, "get_client", lambda **kw: "a clickhouse client")
+    full = DEFAULTS.replace(trace_spool_dir="/var/spool/infrx", clickhouse_url="http://ch:8123",
+                            s3_trace_bucket="infrx-traces", database_url="postgresql://db/x")
+
+    async def holds(org_id, request_id):
+        return True
+    built = ship.build_shipper(full, "a spool", endpoint_url="http://127.0.0.1:1", holds=holds)
+    assert built.retention.holds is holds
+    assert ship.build_shipper(full, "a spool").retention.holds is None
 
 
 class ContentRefs:

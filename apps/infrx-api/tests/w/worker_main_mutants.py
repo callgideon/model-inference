@@ -65,6 +65,8 @@ SWITCHES_OFF = "test_worker_main__every_trace_and_lab_switch_is_off_and_composes
 TRACE_REFUSE = "test_worker_main__trace_pumps_refuse_to_start_without_their_settings"
 TRACE_ON = "test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores"
 TRACE_HOLDS = "test_worker_main__trace_pumps_refuse_without_c2s_content_refs"
+SHIPPER_HOLDS = "test_worker_main__the_shippers_retention_holds_what_it_was_given"
+SHIPPER = "traces/ship/shipper.py"
 LAB_REFUSE = "test_worker_main__the_lab_eval_worker_refuses_to_start_without_its_sources"
 LAB_ON = "test_worker_main__the_lab_eval_worker_pumps_d7s_outbox_and_recovers"
 RESUME = "test_worker_main__an_eval_run_delivery_resumes_the_created_run_never_freezes"
@@ -263,8 +265,8 @@ MUTANTS = (
        MAIN, "        chores |= lab_eval(mode, connect, objects, evaluators, targets, "
              "worker_id)\n", "        pass\n", LAB_ON),
     _m("main_trace_settings_not_required", "TRACE_PUMPS on refuses without its three settings",
-       MAIN, "    if missing:\n        raise RuntimeMisconfigured(mode, missing)\n    try:\n",
-       "    try:\n", TRACE_REFUSE),
+       MAIN, "    if missing:\n        raise RuntimeMisconfigured(mode, missing)\n    holds = ",
+       "    holds = ", TRACE_REFUSE),
     _m("main_trace_ship_without_rotate", "each ship pass seals the spool's tail first",
        MAIN, "        await spool.rotate()\n        return await shipper.ship()\n",
        "        return await shipper.ship()\n", TRACE_ON),
@@ -272,9 +274,9 @@ MUTANTS = (
        MAIN, "        await retention.expire()\n        return await retention.sweep()\n",
        "        return await retention.sweep()\n", TRACE_ON),
     _m("main_trace_shipper_endpoint_ignored", "the trace bucket is reached at the deployment's "
-       "S3 endpoint", MAIN, "        shipper = ship.build_shipper(limits, spool,\n"
-       "                                     endpoint_url=settings.deployment.s3_endpoint_url)\n",
-       "        shipper = ship.build_shipper(limits, spool)\n", TRACE_ON),
+       "S3 endpoint", MAIN,
+       "                                     endpoint_url=settings.deployment.s3_endpoint_url,\n",
+       "", TRACE_ON),
     _m("main_feedback_projection_off_the_pool", "the feedback relay runs on the worker's pool",
        MAIN, "    projector = FeedbackProjector(PgFeedbackOutbox(connect), retention.feedback,",
        "    projector = FeedbackProjector(PgFeedbackOutbox(connector(limits.database_url)), "
@@ -323,12 +325,16 @@ MUTANTS = (
        MAIN, "for ref in (record.evaluator_ref, record.serving_ref)):",
        "for ref in (record.evaluator_ref,)):", FOREIGN_REF),
     # WR-C2-2 (composition batch 2): the trace sweep keeps what a live C2 content ref holds
-    _m("main_trace_sweep_unheld", "the worker's trace sweep asks C2's holds",
-       MAIN, "    retention.holds = content_holds(mode, connect, retention)          # WR-C2-2\n",
-       "", TRACE_ON),
+    _m("main_trace_sweep_unheld", "the worker's trace sweep and replay ask C2's holds",
+       MAIN, "                                     holds=holds)                       # WR-C2-2b\n",
+       "                                     holds=None)\n", TRACE_ON),
     _m("main_trace_holds_off_the_pool", "C2's content refs are read on the worker's pool",
-       MAIN, "    return ContentAccess(PgContentRefs(connect), retention).holds",
-       "    return ContentAccess(PgContentRefs(None), retention).holds", TRACE_ON),
+       MAIN, "    return ContentAccess(PgContentRefs(connect), None).holds",
+       "    return ContentAccess(PgContentRefs(None), None).holds", TRACE_ON),
+    # WR-C2-2b: T3's build_shipper hands the holds to the Retention under the shipper
+    _m("shipper_holds_dropped", "the shipper's retention holds what it was given",
+       SHIPPER, "ClickHouseFeedbackProjection(client), objects, holds=holds,",
+       "ClickHouseFeedbackProjection(client), objects,", SHIPPER_HOLDS),
     _m("main_trace_holds_optional", "without C2's refs in the build the pumps refuse",
        MAIN, "    except ImportError:\n        raise RuntimeMisconfigured(mode, detail=\"TRACE_PUMPS",
        "    except ImportError:\n        return None\n        raise RuntimeMisconfigured(mode, "

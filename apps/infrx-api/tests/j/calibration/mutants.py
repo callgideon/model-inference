@@ -135,7 +135,7 @@ MUTANTS: tuple[Mutant, ...] = (
 
 #: the real-store half (WR-J3-D8) is outside the runner (T2I/G8's pattern): the fake cases'
 #: mutants are its oracles.
-OUTSIDE = ("test_mutants.py", "test_calibration_pg.py")
+OUTSIDE = ("test_mutants.py", "test_calibration_pg.py", "test_calibration_composition_pg.py")
 RUNNER = Runner(name="j3", targets=(SUITE,),
                 extra_args=tuple(f"--ignore={SUITE}/{name}" for name in OUTSIDE))
 

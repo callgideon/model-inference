@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import calendar
+import logging
 import operator
 from dataclasses import dataclass, fields, replace
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,7 @@ from .. import ship
 from ..feedback import TABLE as FEEDBACK
 from ..ship.shipper import TABLE as TRACES
 
+log = logging.getLogger("infrx.traces.retention")
 SCHEMA = Path(__file__).with_name("schema.sql")
 TABLE = "trace_deletions"
 REQUEST, CONTENT = "request", "content"
@@ -73,15 +75,17 @@ def _utcnow() -> datetime:
 class Retention:
     """The policy over one store (`ClickHouseRetentionStore`), the two projections and the
     trace object store. `holds(org_id, request_id) -> bool` answers whether a live grant or
-    export references the request's content (C2/G4T/N2 provide it; None holds nothing)."""
+    export references the request's content (C2/G4T/N2 provide it; None holds nothing).
+    `deleted(stone)` runs once after a new deletion (WR-N3-2a: the Lab's lineage push); its
+    failure never loses the receipt (logged; the Lab's hourly pull is the backstop)."""
 
-    def __init__(self, store, traces, feedback, objects, *, holds=None,
+    def __init__(self, store, traces, feedback, objects, *, holds=None, deleted=None,
                  content_days: int = DEFAULTS.trace_content_max_days,
                  metadata_months: int = DEFAULTS.trace_metadata_months,
                  clock=_utcnow) -> None:
         self.store, self.traces, self.feedback, self.objects = store, traces, feedback, objects
         self.holds, self.content_days, self.metadata_months = holds, content_days, metadata_months
-        self.clock = clock
+        self.deleted, self.clock = deleted, clock
 
     def content_live(self, started_at: datetime, now: datetime) -> bool:
         return now < started_at + timedelta(days=self.content_days)
@@ -101,6 +105,11 @@ class Retention:
             return existing
         stone = Tombstone(org_id, request_id, REQUEST, reason, self.clock())
         await self.store.put([stone])
+        if self.deleted is not None:
+            try:
+                await self.deleted(stone)
+            except Exception:                 # noqa: BLE001 - the receipt stands
+                log.exception("the deletion hook failed; the receipt stands")
         return stone
 
     async def receipt(self, org_id: str, request_id: str) -> tuple[Tombstone, ...]:

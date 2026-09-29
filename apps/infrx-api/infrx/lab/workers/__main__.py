@@ -26,7 +26,8 @@ never runs in a consumer process.
                refuses until they exist (otherwise every checkpoint would be rejected).
 * `judge`      JUDGE_PROVIDER_URL, CLICKHOUSE_URL, S3_TRACE_BUCKET (+ JUDGE_MODE, default
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
-               and T3's retention; its pass moves silent `submitting` runs to `ambiguous`.
+               and T3's retention; its pass moves silent `submitting` runs to `ambiguous`;
+               `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
                every provider with a lineage, every page (WR-N3-2's pull half).
 * `rollout`    `emergency-rollback` (LAB_OPERATOR_ID of the invoking shell): R2's operator
@@ -88,6 +89,7 @@ class Worker:
     tasks: dict[str, Callable[[], Awaitable[Any]]]
     ready: Callable[[], Awaitable[bool]]
     wiring: Any = field(default=None)
+    jobs: dict[str, Callable[..., Awaitable[Any]]] = field(default_factory=dict)
 
 
 def settings(mode: str, env, names) -> dict[str, str]:
@@ -125,8 +127,10 @@ def lab_objects(mode: str, env):
     return objects
 
 
-def trace_retention(limits, endpoint_url: str):
-    """T3's `Retention` over the trace projection and bucket, as `pilot._lab_traces`."""
+def trace_retention(limits, endpoint_url: str, objects=None, connect=None):
+    """T3's `Retention` over the trace projection and bucket, as `pilot._lab_traces`; with
+    the Lab objects, a deletion pushes N3's tombstones (WR-N3-2a), writing 0041 too when
+    `connect` (the datasets role's login) is given (1-C3-1)."""
     import clickhouse_connect
 
     from ...media.s3 import S3ObjectStore
@@ -138,10 +142,31 @@ def trace_retention(limits, endpoint_url: str):
                      ClickHouseFeedbackProjection(client),
                      S3ObjectStore.connect(limits.s3_trace_bucket, "infrx/", endpoint_url),
                      content_days=limits.trace_content_max_days,
-                     metadata_months=limits.trace_metadata_months)
+                     metadata_months=limits.trace_metadata_months,
+                     deleted=None if objects is None else lineage_push(objects, connect))
 
 
-def _traces(mode: str, env):
+def lineage_push(objects, connect=None):
+    """WR-N3-2a: T3's deletion hook on the Lab's retention - N3's `lineage.tombstone` of the
+    deleted request for every provider with a lineage, page by page, reason `deleted`
+    (the datasets role's hourly `reconcile` is the backstop). 1-C3-1: with `connect`, the
+    push also writes 0041's row (`PgSampleRestrictions`), not only the object record."""
+    from ...datasets import lineage
+    from ...state.lab_content import PgSampleRestrictions
+    restrictions = None if connect is None else PgSampleRestrictions(connect)
+    kw = {} if restrictions is None else {"restrictions": restrictions}
+
+    async def push(stone) -> None:
+        for provider in await lineage_providers(objects):
+            while (await lineage.tombstone(
+                    objects, provider_org_id=provider, grantor_org_id=stone.org_id,
+                    request_id=stone.request_id, reason="deleted", at=stone.deleted_at,
+                    **kw))["more"]:
+                pass
+    return push
+
+
+def _traces(mode: str, env, objects=None, connect=None):
     """The role's `PilotSettings` (JUDGE_*, CLICKHOUSE_URL, S3_TRACE_BUCKET, the trace bounds)
     and T3's retention over them."""
     try:
@@ -149,7 +174,7 @@ def _traces(mode: str, env):
     except ValueError as refused:
         raise RuntimeMisconfigured(mode, detail=str(refused)) from None
     try:
-        return limits, trace_retention(limits, env.get("LAB_S3_ENDPOINT", ""))
+        return limits, trace_retention(limits, env.get("LAB_S3_ENDPOINT", ""), objects, connect)
     except Exception as failure:          # noqa: BLE001 - every failure refuses startup
         raise RuntimeMisconfigured(mode, detail="CLICKHOUSE_URL or S3_TRACE_BUCKET did not "
                                                 f"answer ({type(failure).__name__})") from None
@@ -274,6 +299,31 @@ def _judge(mode, env, connect, objects, worker_id, **_):
                                          "judge sweep")}, wiring
 
 
+class JudgeReport:
+    """WR-J3-D8-C: J3's report job on the judge role's `PgJudgeLedger` - `publish` once per
+    configuration, each `{provider_org_id, org_id (the grantor), judge_model, rubric_version,
+    results, feedback}`; one configuration's failure is counted and the next still runs.
+    ponytail: called with its configurations; a timed pass needs lab-sql's listing of stored
+    results and operator labels per configuration (WR-J3-D8-Cb)."""
+
+    def __init__(self, ledger) -> None:
+        self.ledger = ledger
+
+    async def __call__(self, configurations) -> dict[str, int]:
+        from ...judge.calibration import publish
+        done = {"published": 0, "failed": 0}
+        for c in configurations:
+            try:
+                await publish(self.ledger, c["results"], c["feedback"],
+                              provider_org_id=c["provider_org_id"], org_id=c["org_id"],
+                              judge_model=c["judge_model"], rubric_version=c["rubric_version"])
+                done["published"] += 1
+            except Exception:                 # noqa: BLE001 - the next configuration runs
+                log.exception("judge report failed for one configuration")
+                done["failed"] += 1
+        return done
+
+
 async def lineage_providers(objects) -> list[str]:
     """Every provider with a lineage under `lab/<provider>/lineage/`.
     ponytail: lists the Lab objects; a provider listing when that is too many keys."""
@@ -284,7 +334,7 @@ async def lineage_providers(objects) -> list[str]:
 def _datasets(mode, env, connect, objects, worker_id, **_):
     from ...datasets import lineage
     from ...state.lab_access import PgAccessStore
-    _, retention = _traces(mode, env)
+    _, retention = _traces(mode, env, objects, connect)
     directory = PgAccessStore(connect)
 
     async def reconcile_all() -> dict[str, int]:
@@ -333,6 +383,28 @@ def _training(mode, env, connect, objects, worker_id, **_):
                                "run is prepared, submitted and finished through the Lab route")
 
 
+def teacher_wiring(connect, objects, *, provider_url: str, settings, redact, rates=None):
+    """WR-P2-D8-C: P2's `TeacherWiring` on the Lab database - D8's `PgTeacherLedger` (J2's
+    ledger + `record_failures`, which `collect` calls; a plain `PgJudgeLedger` dies at the
+    first per-item failure), P1's import over D8's label log, D7 and L2 on the same
+    connection; J2's provider refuses any host but the local teacher fake (P-10). `redact` is
+    N2's (WR-P2-4): the annotation role refuses until it exists, so no process builds this
+    yet."""
+    from ...judge.cost import APPROVED_RATES
+    from ...judge.submit import HttpJudgeProvider
+    from ...pipelines import annotations as p1
+    from ...pipelines.teachers import TeacherWiring
+    from ...state.lab_access import PgAccessStore
+    from ...state.lab_data import PgLabDataStore
+    from ...state.lab_pipeline import PgLabelLog, PgTeacherLedger
+    return TeacherWiring(members=PgAccessStore(connect), ledger=PgTeacherLedger(connect),
+                         provider=HttpJudgeProvider(provider_url),
+                         store=PgLabDataStore(connect), objects=objects,
+                         labels=p1.import_labels, log=PgLabelLog(connect),
+                         rates=APPROVED_RATES if rates is None else rates, settings=settings,
+                         redact=redact)
+
+
 BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
          "annotation": _annotation, "training": _training, "rollout": _rollout,
          "datasets": _datasets}
@@ -352,7 +424,10 @@ def compose(role: str, env, *, objects=None, **sources) -> Worker:
     worker_id = f"lab-{role}-{uuid.uuid4().hex[:8]}"
     tasks, wiring = BUILD[role](mode, {**env, **values}, connect, objects, worker_id,
                                 **sources)
-    return Worker(role=role, tasks=tasks, ready=database(connect), wiring=wiring)
+    worker = Worker(role=role, tasks=tasks, ready=database(connect), wiring=wiring)
+    if role == "judge":                       # WR-J3-D8-C: the sweep's ledger
+        worker.jobs["judge_report"] = JudgeReport(wiring.ledger)
+    return worker
 
 
 # --- the operator's stop (WR-I7-1) --------------------------------------------------------

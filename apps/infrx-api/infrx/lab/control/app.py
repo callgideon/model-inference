@@ -51,29 +51,24 @@ def _store():
 
 
 def _compose(lab: dict[str, str], store):
-    """`pilot._lab`'s composition on the Lab's own login, with L3's operations wired."""
+    """`pilot._lab`'s composition on the Lab's own login: L3's operations are the gateway's
+    one `lab_operations` (WR-LAB-API-2c); `store` serves `/readyz` only."""
     import httpx
 
     from ...config import from_env
     from ...gateway.lab_auth import GoTrueSessions
-    from ...gateway.pilot import _lab_traces
+    from ...gateway.pilot import _lab_traces, lab_operations
     from ...gateway.routes.lab_control import LabControl as Routes
-    from ...state.catalog import PgCatalogDirectory
     from ...state.jobstore import connector
     from ...state.lab_access import PgAccessStore
-    from ...state.operations import PgRegistry
     from ..access import LabAccess
-    from . import LabControl
-    from .operations import Operations
     settings, connect = from_env(), connector(lab[DATABASE_URL])
     # ponytail: process-lifetime client, as in `pilot._lab`.
     sessions = GoTrueSessions(httpx.AsyncClient(base_url=lab[SUPABASE_URL].rstrip("/"),
                                                 timeout=httpx.Timeout(5, connect=2)),
                               lab[SUPABASE_KEY])
     access = LabAccess(PgAccessStore(connect))
-    l3 = LabControl(access, store, PgRegistry(connect), PgCatalogDirectory(connect),
-                    engine=NoEngine())
-    control = Routes(sessions, access, Operations(l3, store))
+    control = Routes(sessions, access, lab_operations(connect, access))
     pilot = settings.pilot
     traces = _lab_traces(settings, connect, sessions, access) \
         if pilot.clickhouse_url.strip() or pilot.s3_trace_bucket.strip() else None

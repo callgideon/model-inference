@@ -18,7 +18,8 @@ API_DIR = shared.API_DIR
 SUITE_FILE = "tests/w/test_lab_workers.py"
 F = "lab/workers/__main__.py"
 P = "gateway/pilot.py"
-FILES = (F, P)
+T3 = "traces/retention/policy.py"
+FILES = (F, P, T3)
 C = "test_lab_workers__"
 SETTINGS = C + "each_role_refuses_to_start_naming_a_missing_setting"
 PROCESS = C + "the_process_refuses_an_unknown_role_and_a_missing_setting"
@@ -36,6 +37,9 @@ HEALTH = C + "readyz_is_the_database_and_every_pass_alive"
 DEAD = C + "a_dead_pass_is_not_live_and_exits_non_zero"
 EVERY = C + "the_pumps_are_every_step_forever"
 RETENTION = C + "trace_retention_is_t3s_over_the_shippers_bucket_and_bounds"
+TEACHER = C + "the_teacher_wiring_is_p2_on_d8s_teacher_ledger"
+PUSH = C + "a_trace_deletion_tombstones_every_providers_lineage_copies"
+REPORT = C + "the_judge_report_job_publishes_each_configuration_on_its_ledger"
 
 
 def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
@@ -114,6 +118,18 @@ MUTANTS: tuple[Mutant, ...] = (
        JUDGE),
     _m("lw_judge_sweep_threshold", "only a silent submission is made ambiguous",
        "lambda: ledger.sweep(JUDGE_SILENT_S)", "lambda: ledger.sweep(0)", SWEEP),
+    # --- WR-J3-D8-C: the judge report job ----------------------------------------------------
+    _m("lw_report_not_composed", "the judge role carries J3's report job",
+       '    if role == "judge":                       # WR-J3-D8-C: the sweep\'s ledger\n',
+       "    if False:\n", REPORT),
+    _m("lw_report_other_ledger", "the report job stores on the sweep's PgJudgeLedger",
+       'worker.jobs["judge_report"] = JudgeReport(wiring.ledger)',
+       'worker.jobs["judge_report"] = JudgeReport(None)', REPORT),
+    _m("lw_report_grantor_is_the_provider", "the report is the grantor's, stored under it",
+       'provider_org_id=c["provider_org_id"], org_id=c["org_id"],',
+       'provider_org_id=c["provider_org_id"], org_id=c["provider_org_id"],', REPORT),
+    _m("lw_report_one_failure_stops_all", "one configuration's failure does not skip the next",
+       '                done["failed"] += 1\n', "                raise\n", REPORT),
     # --- datasets ----------------------------------------------------------------------------------
     _m("lw_lineage_every_prefix", "only providers with a lineage are reconciled",
        '                   if key.split("/")[2:3] == ["lineage"]})',
@@ -123,14 +139,36 @@ MUTANTS: tuple[Mutant, ...] = (
        "                    if True:\n                        break\n", DATASETS),
     _m("lw_lineage_one_failure_stops_all", "one provider's failure does not skip the others",
        '                report["failed"] += 1\n', "                raise\n", DATASETS),
+    # --- WR-N3-2a: a trace deletion pushes N3's tombstones ---------------------------------
+    _m("lw_push_not_composed", "the Lab's retention pushes tombstones on a deletion",
+       "                     deleted=None if objects is None else lineage_push(objects, connect))",
+       "                     deleted=None)", PUSH),
+    _m("lw_push_datasets_without_objects", "the datasets role's retention has the Lab objects",
+       "    _, retention = _traces(mode, env, objects, connect)\n",
+       "    _, retention = _traces(mode, env)\n", DATASETS),
+    _m("lw_push_first_page_only", "every page of a provider's copies is tombstoned",
+       '**kw))["more"]:', '**kw))["more"] and False:', PUSH),
+    _m("lw_push_whole_grantor", "only the deleted request's copies are tombstoned",
+       "                    request_id=stone.request_id, reason=",
+       "                    request_id=None, reason=", PUSH),
+    _m("lw_push_reason_wrong", "a deletion's tombstone says deleted",
+       'reason="deleted", at=stone.deleted_at,\n                    **kw))',
+       'reason="grant_not_current", at=stone.deleted_at,\n                    **kw))', PUSH),
+    _m("t3_hook_skipped", "T3 runs the deletion hook after a new tombstone",
+       "        if self.deleted is not None:\n            try:\n",
+       "        if False:\n            try:\n", PUSH, file=T3),
+    _m("t3_hook_failure_loses_receipt", "a failed push never loses the receipt",
+       '                log.exception("the deletion hook failed; the receipt stands")',
+       "                raise", PUSH, file=T3),
+    _m("t3_hook_on_repeat", "a repeated deletion is the first receipt and pushes nothing",
+       "        if existing is not None:\n            return existing\n",
+       "        if existing is not None:\n            await self.deleted(existing)\n"
+       "            return existing\n", PUSH, file=T3),
     # --- rollout ------------------------------------------------------------------------------------
     _m("lw_rollout_pass_idle", "the rollout pass refuses rather than idle",
        '    raise RuntimeMisconfigured(mode, detail="the rollout pass needs every running or "',
        '    return {}, None\n    raise RuntimeMisconfigured(mode, detail="the rollout pass needs '
        'every running or "', ROLLOUT),
-    _m("lw_no_reads_answer_nothing", "an unwired L3 read is a typed 503, never an empty answer",
-       '        raise errors.DependencyUnavailable("L3\'s control reads are not wired (WR-LSQ-9)")',
-       "        return None", ROLLOUT, file=P),
     _m("lw_rollback_without_operator", "an emergency rollback names its operator",
        '    values = settings(mode, env, (DATABASE, "LAB_OPERATOR_ID"))',
        "    values = settings(mode, env, (DATABASE,))", STOP),
@@ -153,6 +191,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_connector_unapproved", "an automatic connector is refused without P-11",
        '    if env.get("LAB_TRAINING_CONNECTOR", MANUAL) != MANUAL:\n', "    if False:\n",
        NO_PASS),
+    # --- WR-P2-D8-C: the teacher wiring ------------------------------------------------------
+    _m("lw_teacher_plain_judge_ledger", "P2's ledger is D8's PgTeacherLedger (record_failures)",
+       "ledger=PgTeacherLedger(connect),", "ledger=PgTeacherLedger.__mro__[1](connect),",
+       TEACHER),
+    _m("lw_teacher_log_off_the_pool", "P1's label log is on the role's database",
+       "log=PgLabelLog(connect),", 'log=PgLabelLog(connector("")),', TEACHER),
+    _m("lw_teacher_redaction_dropped", "the teacher sees content only through N2's redaction",
+       "                         redact=redact)", "                         redact=str)",
+       TEACHER),
+    _m("lw_teacher_rates_unapproved", "a live teacher is priced by the approved rates only",
+       "rates=APPROVED_RATES if rates is None else rates,", "rates=rates,", TEACHER),
     # --- the process: health and the drain ---------------------------------------------------------
     _m("lw_ready_without_the_database", "/readyz is down while the database is",
        '            up = live and (path == "/livez" or await _answers(worker.ready))\n',
@@ -175,7 +224,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_trace_content_days_lost", "content is kept for the pilot's content bound",
        "content_days=limits.trace_content_max_days,", "content_days=30,", RETENTION),
     _m("lw_trace_metadata_months_lost", "metadata is kept for the pilot's metadata bound",
-       "metadata_months=limits.trace_metadata_months)", "metadata_months=12)", RETENTION),
+       "metadata_months=limits.trace_metadata_months,", "metadata_months=12,", RETENTION),
 )
 
 

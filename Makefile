@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate lab-rollout lab-improve
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-operate lab-evaluate lab-rollout lab-improve lab-compositions
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -155,6 +155,16 @@ app-e2e:
 # E3C: the local backend gate on its own namespace; verdict.json lands in E3C_OUT.
 backend-local:
 	$(API)/.venv/bin/python tests/integration/backend/e3c/runner.py --out "$${E3C_OUT:-$${TMPDIR:-/tmp}/infrx-e3c}" $(E3C_ARGS)
+
+# WR-C3-MK: the COMPOSITION-3 real-Postgres composition proofs sit outside the mutant runners;
+# this runs each on its own tasklocal key (docker; not in check). The checkpoints proof runs on p3
+# because the foreign infrx-b3-postgres holds the b3 key.
+lab-compositions:
+	cd $(API) && INFRX_D_TASK=p2 .venv/bin/python -m pytest -q tests/p/teachers/test_teachers_composition_pg.py
+	cd $(API) && INFRX_D_TASK=j2 .venv/bin/python -m pytest -q tests/j/calibration/test_calibration_composition_pg.py
+	cd $(API) && INFRX_D_TASK=r1 .venv/bin/python -m pytest -q tests/r/routing/test_routing_composition_pg.py
+	cd $(API) && INFRX_D_TASK=p3 .venv/bin/python -m pytest -q tests/p/training/test_training_composition_pg.py
+	cd $(API) && INFRX_D_TASK=p3 .venv/bin/python -m pytest -q tests/b/checkpoints/test_checkpoints_composition_pg.py
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:

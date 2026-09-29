@@ -234,11 +234,37 @@ def adapters_from_env(settings, **injected):
                     # (kept above G4F: its last two lines anchor given_stores_replaced)
                     **_lab(settings, connect, adapters["objects"]),
                     **_lab_checkpoints(settings, connect),
+                    # R1 (WR-R1-3-C): only when the deployment enables ROLLOUT_ROUTING
+                    **_rollouts(settings, connect),
                     # G4F (WR-G4F-1): only when the deployment enables the feedback route
                     **({"feedback": _pg_feedback(connect)}
                        if settings.deployment.feedback_api else {}),
                     **adapters}
     return adapters
+
+
+class NoShadows:
+    """R1's `ShadowRunner` until provider-funded shadow execution exists (WR-R1-3-Cb): a
+    duplicate is refused inside R1 (counted `shadow_failed`), never run, never charged."""
+
+    async def run(self, release, serving_ref, request):
+        raise errors.DependencyUnavailable("provider-funded shadow execution is not wired")
+
+
+def _rollouts(settings, connect) -> dict:
+    """WR-R1-3-C: R1's router over D9 (`PgRoutingReleases`) on this pool, only when
+    `ROLLOUT_ROUTING` is on, and only on the `infrx_runtime` login (SR-R1-1's functions are
+    EXECUTE infrx_runtime only; never service_role)."""
+    if not settings.deployment.rollout_routing:
+        return {}
+    from psycopg.conninfo import conninfo_to_dict
+    if (conninfo_to_dict(settings.pilot.database_url).get("user")
+            or "").split(".")[0] != "infrx_runtime":
+        raise RuntimeMisconfigured(runtime_mode(settings), detail="ROLLOUT_ROUTING needs "
+                                   "DATABASE_URL to log in as infrx_runtime")
+    from ..rollouts.routing import Router
+    from ..state.lab_rollout import PgRoutingReleases
+    return {"rollouts": Router(PgRoutingReleases(connect), NoShadows())}
 
 
 def _lab(settings, connect, objects=None) -> dict:
@@ -270,7 +296,7 @@ def _lab(settings, connect, objects=None) -> dict:
         from ..state.lab_data import PgLabDataStore
         from .routes.lab_datasets import LabDatasets
         lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects)
-    return {**lab, **_lab_2(deployment, connect, sessions, access)}
+    return {**lab, **_lab_2(deployment, connect, sessions, access, objects)}
 
 
 def _lab_checkpoints(settings, connect) -> dict:
@@ -296,32 +322,42 @@ def _lab_checkpoints(settings, connect) -> dict:
                                               PgLabDataStore(connect))}
 
 
-def _lab_2(deployment, connect, sessions, access) -> dict:
+class RunLedger:
+    """P3's `PgRunLedger` (D8, 0042) as the pipeline surface's `ledger`; the run and
+    checkpoint listings WR-LAB2-4 asks of lab-sql (SR-P3-1) are not written yet: 503."""
+
+    def __init__(self, ledger) -> None:
+        self.ledger = ledger
+
+    def __getattr__(self, name):
+        return getattr(self.ledger, name)
+
+    async def run_rows(self, *args):
+        raise errors.DependencyUnavailable("the run listings are not wired (WR-LAB2-4)")
+
+    checkpoint_rows = run_rows
+
+
+def _lab_2(deployment, connect, sessions, access, objects=None) -> dict:
     """LAB-API-2: the evaluation, pipeline and release surfaces for the switches that are on,
-    over D7 (`PgLabDataStore`, merged). The ports whose tables are not merged (experiments,
-    the B3 ledger listing, the catalog; the label log, run ledger, Lab objects, B3 evals; the
-    release read models, proposals and D9) are absent, so their routes answer 503."""
+    over D7 (`PgLabDataStore`, merged); the pipelines over D8's label log and run ledger
+    (WR-P1-D8-C / WR-P3-D8-C) and the Lab objects. The ports whose tables are not merged
+    (experiments, the B3 ledger listing, the catalog; the run listings, B3 evals; the release
+    read models, proposals and D9) are absent, so their routes answer 503."""
     from ..state.lab_data import PgLabDataStore
+    from ..state.lab_pipeline import PgLabelLog, PgRunLedger
     from .routes.lab_evaluations import LabEvaluations
     from .routes.lab_pipelines import LabPipelines
     from .routes.lab_releases import LabReleases
     store = PgLabDataStore(connect)
     return {**({"lab_evaluations": LabEvaluations(sessions, access, store=store)}
                if deployment.lab_evals else {}),
-            **({"lab_pipelines": LabPipelines(sessions, access, store=store)}
+            **({"lab_pipelines": LabPipelines(sessions, access, store=store, objects=objects,
+                                              log=PgLabelLog(connect),
+                                              ledger=RunLedger(PgRunLedger(connect)))}
                if deployment.lab_pipelines else {}),
             **({"lab_releases": LabReleases(sessions, access)}
                if deployment.lab_releases else {})}
-
-
-class NoControlReads:
-    """L3's `ControlReads` until lab-sql writes them (WR-LSQ-9, not in 0041-0043): each read
-    is a typed 503, so a listing or an alias read waits instead of failing as a bug."""
-
-    async def _pending(self, *args):
-        raise errors.DependencyUnavailable("L3's control reads are not wired (WR-LSQ-9)")
-
-    provider_servings = provider_deployments = endpoint_alias = listing_versions = _pending
 
 
 def lab_control(connect, access):
@@ -336,21 +372,26 @@ def lab_control(connect, access):
 
 
 def lab_operations(connect, access):
-    """WR-LAB-API-2: L3's `Operations` for `/lab/v1/control` - the gateway's and the I2L
-    control service's one composition (`infrx.lab.control.app`, WR-LAB-API-2c). Its
-    listings and registration read `ControlReads` and answer 503 until WR-LSQ-9."""
+    """WR-LAB-API-2 / WR-LSQ-9-C: L3's `Operations` for `/lab/v1/control` - the gateway's and
+    the I2L control service's one composition (`infrx.lab.control.app`, WR-LAB-API-2c). Its
+    listings and registration read `PgControlStore` (0044's `infrx_lab_control` reads:
+    provider_servings, provider_deployments, endpoint_alias, listing_versions)."""
     from ..lab.control.operations import Operations
-    return Operations(lab_control(connect, access), NoControlReads())
+    from ..state.lab_control import PgControlStore
+    return Operations(lab_control(connect, access), PgControlStore(connect))
 
 
 def control_serving(connect, principal: str):
     """WR-R2-2's composition: R2's `ServingControl` as L3's `Serving`, acting as
-    `principal` (the audited actor of every alias CAS)."""
+    `principal` (the audited actor of every alias CAS). WR-LSQ-9-C: reads are the real
+    `PgControlStore`, not a typed-503 stand-in."""
     from ..lab.access import LabAccess
     from ..lab.control.operations import Serving
     from ..operations.service import OperatorSession
     from ..state.lab_access import PgAccessStore
-    return Serving(lab_control(connect, LabAccess(PgAccessStore(connect))), NoControlReads(),
+    from ..state.lab_control import PgControlStore
+    return Serving(lab_control(connect, LabAccess(PgAccessStore(connect))),
+                   PgControlStore(connect),
                    OperatorSession(ops=None, principal=principal))
 
 

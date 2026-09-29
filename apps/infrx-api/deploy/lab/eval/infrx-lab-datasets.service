@@ -35,6 +35,9 @@ TimeoutStopSec=90
 KillSignal=SIGTERM
 KillMode=mixed
 Restart=on-failure
+# 0-F5: exit 2 is a refusal (a missing setting, or a role with no work source yet, R198):
+# final until the env file is fixed, never a restart loop. A pass that died (1) restarts.
+RestartPreventExitStatus=2
 RestartSec=10
 
 [Install]
