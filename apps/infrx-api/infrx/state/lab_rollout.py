@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Sequence
 
 from ..contracts.lab import records
 from .jobstore import Connect
@@ -77,6 +77,42 @@ def _release(doc: dict[str, Any]) -> Release:
                    started_at=datetime.fromisoformat(doc["started_at"]))
 
 
+@dataclass(frozen=True)
+class Decision:
+    """One `lab.rollout_decision.1` R2 recorded (`lab_rollout_events`'s stored move)."""
+
+    decision: str                    # expand | hold | rollback
+    reasons: tuple[str, ...]
+    evidence_refs: tuple[str, ...]
+    decided_by: str
+    at: datetime
+
+
+@dataclass(frozen=True)
+class ReleaseListing:
+    """WR-R4-1/WR-R2-3: one row of `lab_releases_in` - a `Release` plus the identity a
+    listing (never known ahead of time by a page or a pass loop) needs, and R2's latest
+    verdict, if a decision has been made yet."""
+
+    policy_id: str
+    provider_org_id: str
+    endpoint_id: str
+    policy_ref: str
+    release: Release
+    latest_decision: Decision | None
+
+
+def _listing(doc: dict[str, Any]) -> ReleaseListing:
+    d = doc.get("latest_decision")
+    return ReleaseListing(
+        policy_id=doc["policy_id"], provider_org_id=doc["provider_org_id"],
+        endpoint_id=doc["endpoint_id"], policy_ref=doc["policy_ref"],
+        release=_release(doc), latest_decision=None if d is None else Decision(
+            decision=d["decision"], reasons=tuple(d["reasons"]),
+            evidence_refs=tuple(d["evidence_refs"]), decided_by=d["decided_by"],
+            at=datetime.fromisoformat(d["at"])))
+
+
 class PgReleaseStore:
     """R2's `ReleaseStore` over D9's rollout rows: `release` by revision, `transition` a CAS
     on the rollout's fence (a stale fence or an undeclared move is `StateConflict`), each
@@ -96,6 +132,14 @@ class PgReleaseStore:
 
     async def release(self, policy_ref: str) -> Release:
         return _release(await self._call("lab_release", {"policy_ref": policy_ref}))
+
+    async def releases_in(self, states: Sequence[str] = (), *,
+                          provider_org_id: str) -> list[ReleaseListing]:
+        """WR-R4-1/WR-R2-3: the provider's releases (newest-started first), each with R2's
+        latest verdict; `states` narrows to those `lab_rollouts.state` values (empty: every
+        state). Never `NotFound` - a provider with none gets `[]`."""
+        return [_listing(doc) for doc in await self._call("lab_releases_in", {
+            "provider_org_id": provider_org_id, "states": list(states)})]
 
     async def transition(self, policy_ref: str, *, fence: int, to: str,
                          decision: dict[str, Any], reasons: tuple[str, ...]) -> int:

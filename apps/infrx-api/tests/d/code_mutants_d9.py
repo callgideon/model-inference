@@ -206,6 +206,8 @@ R_DECISION = "check_a_decision_is_this_revisions_and_matches_the_move"
 R_APPROVED = "check_approved_is_live_routes_to_the_baseline_and_expands_in_d9"
 R_RACE = "check_two_controllers_racing_decide_once"
 R_STORE = "check_the_store_composes"
+R_LISTING = "check_releases_in_lists_the_providers_releases_with_r2s_latest_verdict"
+LISTING_FILE = "0048_lab_release_listing.sql"
 
 
 def _r(name, old, new, check, why, file=RELEASE_FILE, **kw):
@@ -296,6 +298,18 @@ RELEASE = (
     _r("r2_fence_misreported", "  return jsonb_build_object('fence', o.fence);",
        "  return jsonb_build_object('fence', o.fence - 1);", R_STORE,
        "the controller is handed a stale fence"),
+    # --- WR-R4-1/WR-R2-3: the release listing, `0048_lab_release_listing.sql` -------------
+    _r("r4_listing_any_provider", "   where o.provider_org_id = (p_args->>'provider_org_id')"
+       "::uuid\n", "   where true\n", R_LISTING,
+       "a release listing page leaks another provider's releases", file=LISTING_FILE),
+    _r("r4_listing_states_ignored", "     and (p_args->'states' is null or "
+       "jsonb_array_length(p_args->'states') = 0\n          or o.state = any(array(select "
+       "jsonb_array_elements_text(p_args->'states'))))\n", "", R_LISTING,
+       "the rollout pass loop's running/rolled_back filter answers every state",
+       file=LISTING_FILE),
+    _r("r4_listing_no_verdict", "      'latest_decision', infrx.lab_release_decision_json(d))",
+       "      'latest_decision', null)", R_LISTING,
+       "the release page shows no verdict for a release that has one", file=LISTING_FILE),
 )
 RELEASE_NAMES = tuple(m.name for m in RELEASE)
 
