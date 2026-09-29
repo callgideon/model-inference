@@ -8157,7 +8157,7 @@
   {
    "id": "W5-MERGE-39",
    "task": null,
-   "slice": "merge batch #39 (Opus): lab-rollout-3 d4d0fe0b (E8L k01–k07 PASS; +BASE pin, k10 latest-decision oracle)",
+   "slice": "merge batch #39 (Opus): lab-rollout-3 d4d0fe0b (E8L k01–k07 PASS; +BASE pin, k10 latest-decision oracle); workflow wf_5a6d9d1f-572",
    "agent": "opus",
    "branch": "codex/w5-merge-39",
    "worktree": ".claude/worktrees/codex-w5-merge-39",
