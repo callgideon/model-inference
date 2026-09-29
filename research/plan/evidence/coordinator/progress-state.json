@@ -20,7 +20,7 @@
   "target": "pilot box (single L40S)"
  },
  "revision": 288,
- "updated": "2026-09-29T12:35:26Z",
+ "updated": "2026-09-29T12:35:58Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -5588,7 +5588,7 @@
   {
    "id": "W5-LAB-OBSERVE",
    "task": null,
-   "slice": "(wave5 LW5 lane lab-observe) tasks I2L-OBS → E5L runner (real cells now; the rest NOT RUN until the LW2/LW3 merges); workflow wf_c4bf9ec3-de7; base 9a48300c; paused 2026-09-28 ~09:30Z (account move to dhruv) → resumed (impl 61248ced + 1 lens cached: E5L gate 13 PASS / 1 FAIL E5L-F1 / 3 NOT RUN at 3da696a0)",
+   "slice": "(wave5 LW5 lane lab-observe) tasks I2L-OBS → E5L runner (real cells now; the rest NOT RUN until the LW2/LW3 merges); workflow wf_c4bf9ec3-de7; base 9a48300c; paused 2026-09-28 ~09:30Z (account move to dhruv) → resumed (impl 61248ced + 1 lens cached: E5L gate 13 PASS / 1 FAIL E5L-F1 / 3 NOT RUN at 3da696a0); superseded by its -2/-3/-4 successor lane (integrated)",
    "agent": "opus",
    "branch": "codex/w5-lab-observe",
    "worktree": ".claude/worktrees/codex-w5-lab-observe",
@@ -5599,11 +5599,11 @@
     "prefix": "infrx-e5l-",
     "db": "e5l"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T10:04:09Z",
+   "updated": "2026-09-29T12:35:58Z",
    "blocker": "E5L-F1: J2 submit reads the raw projection (WR-OBS-3, judge code) → fixed in the lab-sql-integration lane, then E5L o06 rerun",
-   "next_action": "DONE (runner + I2L-OBS merged): --no-ff 5a2020c5 + WR-OBS-2/4/5 2de48ddd; E5L 13 PASS / 1 FAIL (WR-OBS-3 → integration lane) / 3 NOT RUN; LAB-OBSERVE not accepted until E5L reruns green after WR-OBS-3, D6J/J3 real halves, LAB-API and the composition switches",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1.5,
     "likely_h": 4,
@@ -5628,7 +5628,7 @@
   {
    "id": "W5-LAB-EVALUATE",
    "task": null,
-   "slice": "(wave5 LW5 lane lab-evaluate) tasks E6L runner (real cells now; worker/UI cells NOT RUN until B4 + the eval worker entry point merge); workflow wf_03253542-3f5; base 9a48300c; paused 2026-09-28 ~09:30Z (account move to dhruv) → implementer cut at 829e1e41 (runner j01–j11, evidence draft) → continuation wf_41732326-e37",
+   "slice": "(wave5 LW5 lane lab-evaluate) tasks E6L runner (real cells now; worker/UI cells NOT RUN until B4 + the eval worker entry point merge); workflow wf_03253542-3f5; base 9a48300c; paused 2026-09-28 ~09:30Z (account move to dhruv) → implementer cut at 829e1e41 (runner j01–j11, evidence draft) → continuation wf_41732326-e37; superseded by its -2/-3/-4 successor lane (integrated)",
    "agent": "opus",
    "branch": "codex/w5-lab-evaluate",
    "worktree": ".claude/worktrees/codex-w5-lab-evaluate",
@@ -5639,11 +5639,11 @@
     "prefix": "infrx-e6l-",
     "db": "e6l"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T06:59:31Z",
-   "updated": "2026-09-28T10:01:03Z",
+   "updated": "2026-09-29T12:35:58Z",
    "blocker": "j11 FAIL = E6L-O1 (B1 passes the wrong video fields to H1: media_ref + duration_ms from span_ms) → integration lane; j09 needs composition batch 2's LAB_EVAL_WORKER + a checkpoint_received role; j10 needs lab-api-2's route",
-   "next_action": "DONE (runner merged): --no-ff 52de239e + WR-E6L-1/target fa2e46d5; j01–j08 PASS; LAB-EVALUATE-LOCAL not accepted until E6L-O1 (integration lane), composition batch 2 (j09) and lab-api-2 (j10) land, then `make lab-evaluate`",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -6496,7 +6496,7 @@
   {
    "id": "W5-LAB-IMPROVE",
    "task": null,
-   "slice": "(wave5 LW6 lane lab-improve) the E7L LAB-IMPROVE gate runner started early: labels → training bundle → checkpoint import → held-out evaluation → candidate; iteration 2 via N3; faults (revocation mid-iteration, duplicate teacher submit, lost training poll, R184); workflow wf_3e2acfd0-903; base b2906856; cut by a login expiry 2026-09-29 → continuation wf_a85d5613-30a from 64696c0f (runner i01–i09 committed; the real e7l run + mutants + evidence)",
+   "slice": "(wave5 LW6 lane lab-improve) the E7L LAB-IMPROVE gate runner started early: labels → training bundle → checkpoint import → held-out evaluation → candidate; iteration 2 via N3; faults (revocation mid-iteration, duplicate teacher submit, lost training poll, R184); workflow wf_3e2acfd0-903; base b2906856; cut by a login expiry 2026-09-29 → continuation wf_a85d5613-30a from 64696c0f (runner i01–i09 committed; the real e7l run + mutants + evidence); superseded by its -2/-3/-4 successor lane (integrated)",
    "agent": "opus",
    "branch": "codex/w5-lab-improve",
    "worktree": ".claude/worktrees/codex-w5-lab-improve",
@@ -6507,11 +6507,11 @@
     "prefix": "infrx-e7l-",
     "db": "e7l"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T15:38:37Z",
-   "updated": "2026-09-28T21:06:01Z",
+   "updated": "2026-09-29T12:35:58Z",
    "blocker": null,
-   "next_action": "LAB-IMPROVE-LOCAL after WR-E7L-3 (pipelines-lineage) + WR-E7L-1/4 + rerun",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1,
@@ -6542,7 +6542,7 @@
   {
    "id": "W5-LAB-ROLLOUT",
    "task": null,
-   "slice": "(wave5 LW6 lane lab-rollout) the E8L LAB-ROLLOUT gate runner started early: shadow/canary/A-B with a controller restart, non-inferiority + cost decision, rollback once through the CAS, R1 harmless when off, R3 parity NOT RUN; workflow wf_bd119196-754; base b2906856; cut by a login expiry 2026-09-29 → continuation wf_ecd4cfe1-946 from 2334e6af (runner k01–k10 committed; the real e8l run + mutants + evidence)",
+   "slice": "(wave5 LW6 lane lab-rollout) the E8L LAB-ROLLOUT gate runner started early: shadow/canary/A-B with a controller restart, non-inferiority + cost decision, rollback once through the CAS, R1 harmless when off, R3 parity NOT RUN; workflow wf_bd119196-754; base b2906856; cut by a login expiry 2026-09-29 → continuation wf_ecd4cfe1-946 from 2334e6af (runner k01–k10 committed; the real e8l run + mutants + evidence); superseded by its -2/-3/-4 successor lane (integrated)",
    "agent": "opus",
    "branch": "codex/w5-lab-rollout",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout",
@@ -6553,11 +6553,11 @@
     "prefix": "infrx-e8l-",
     "db": "e8l"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-28T15:38:37Z",
-   "updated": "2026-09-28T19:46:30Z",
+   "updated": "2026-09-29T12:35:58Z",
    "blocker": "k06 FAIL = E8L-F1 (0043 release_active resolves a candidate by serving_version_id, ignoring the R188 digest) → WR-E8L-2 lab-sql; k09 needs composition-2's rollout entry point; k10 needs lab-ui-swap (merging); k08 needs a GPU target (P-08)",
-   "next_action": "DONE (runner merged): 6175a701 + 3073954e; LAB-ROLLOUT-LOCAL not accepted until E8L-F1 (lab-sql-lw5: 0043 release_active by deployment revision + digest), the k09 bind (composition-2's rollout entry point) and k10 (lab-ui-swap merged: bind now) rerun via `make lab-rollout`",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -8448,7 +8448,12 @@
    },
    "evidence": [],
    "commands": [],
-   "owned_paths": [],
+   "owned_paths": [
+    "infra/rollout/known-good.json",
+    "tests/i/test_known_good_proof.py",
+    "tests/i/mutants.py",
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-2-*"
+   ],
    "wiring_requests": []
   },
   {
@@ -8480,7 +8485,10 @@
    },
    "evidence": [],
    "commands": [],
-   "owned_paths": [],
+   "owned_paths": [
+    "tests/integration/lab_evaluate/",
+    "research/plan/evidence/e/E6L-*"
+   ],
    "wiring_requests": []
   },
   {
@@ -8512,7 +8520,10 @@
    },
    "evidence": [],
    "commands": [],
-   "owned_paths": [],
+   "owned_paths": [
+    "tests/integration/lab_rollout/",
+    "research/plan/evidence/e/E8L-*"
+   ],
    "wiring_requests": []
   },
   {
@@ -8544,7 +8555,17 @@
    },
    "evidence": [],
    "commands": [],
-   "owned_paths": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/",
+    "apps/infrx-api/infrx/gateway/routes/lab_datasets.py",
+    "apps/infrx-api/infrx/state/lab_data.py",
+    "apps/infrx-api/infrx/state/lab_releases.py",
+    "apps/infrx-api/tests/w/",
+    "apps/infrx-api/tests/b/",
+    "apps/infrx-api/tests/r/",
+    "apps/infrx-api/tests/n/",
+    "research/plan/evidence/coordinator/COMPOSITION-6-*"
+   ],
    "wiring_requests": []
   },
   {
@@ -8576,7 +8597,10 @@
    },
    "evidence": [],
    "commands": [],
-   "owned_paths": [],
+   "owned_paths": [
+    "research/plan/evidence/e/E8L-d869ee40.md",
+    "tests/integration/lab_rollout/runner.py"
+   ],
    "wiring_requests": []
   }
  ],
