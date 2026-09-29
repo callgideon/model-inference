@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 278,
- "updated": "2026-09-29T08:00:11Z",
+ "revision": 279,
+ "updated": "2026-09-29T09:07:35Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7873,31 +7873,38 @@
    "branch": "codex/w5-lab-rollout-3",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout-3",
    "base": "57a779af",
-   "head": null,
+   "head": "d4d0fe0b",
    "isolation": {
     "ports": "e8l 57400-57499; r2 57534",
     "prefix": "infrx-e8l-",
     "db": "e8l"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T06:45:27Z",
-   "updated": "2026-09-29T06:45:27Z",
+   "updated": "2026-09-29T09:07:35Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge → E8L gate verdict",
+   "next_action": "merge batch #39 (Opus; BASE pin, k10 latest-decision oracle) → k09 loop after composition-5 (WR-R2-3) → lab-rollout-ui (WR-R4-2 + e2e) → E8L under R222",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 3,
-    "pessimistic_h": 6,
-    "confidence": "medium",
-    "basis": "one stand-in swap + one gate run; lab-rollout-2 took ~1 h of gate time"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT d4d0fe0b; merge running",
+    "at": "2026-09-29T09:07:35Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E8L-8fcd9d36.md",
+    "research/plan/evidence/e/E8L-raw-8fcd9d36/"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_rollout/**",
     "research/plan/evidence/e/E8L-*"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-R2-3",
+    "WR-R4-2"
+   ]
   },
   {
    "id": "W5-MERGE-37",
@@ -8145,6 +8152,38 @@
     "apps/app/supabase/migrations/0052_*.sql",
     "tests/l/**"
    ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-39",
+   "task": null,
+   "slice": "merge batch #39 (Opus): lab-rollout-3 d4d0fe0b (E8L k01–k07 PASS; +BASE pin, k10 latest-decision oracle)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-39",
+   "worktree": ".claude/worktrees/codex-w5-merge-39",
+   "base": "95d5c050",
+   "head": null,
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-29T09:07:35Z",
+   "updated": "2026-09-29T09:07:35Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch, layer-1 only",
+    "at": "2026-09-29T09:07:35Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
    "wiring_requests": []
   }
  ],
