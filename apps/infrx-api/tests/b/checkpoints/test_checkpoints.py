@@ -14,7 +14,7 @@ from infrx.contracts import errors
 from infrx.evaluation import checkpoints
 from infrx.evaluation.runner import Limits, Runner
 
-from ..runner.world import DEPLOYMENT, VIEWER, DevWallet
+from ..runner.world import DEPLOYMENT, VIEWER, DevWallet, uid
 from .world import DEV, NEMO, NOW, OTHER, Crash, World, safetensors, timedelta
 
 
@@ -270,3 +270,61 @@ def test_b3_a_revoked_owner_or_grant_is_a_visible_skip() -> None:
     handle(w, w.event(2))
     assert states(w, 1)[2] == ("skipped", "forbidden") and w.store.runs == {}
     assert w.store.receipts[w.event(2)["checkpoint_id"]]["state"] == "validated"
+
+
+# ------------------------------------------------- P3's Evaluations port (WR-E7L-1 / WR-B3-EVALS)
+def test_b3_p3_evaluations_freeze_one_b1_run_on_the_bundles_dataset_and_answer_d7s_state():
+    """P3's `Evaluations` over B3/B1: without a suite source (B3's subscription and L3's dev
+    deployer, WR-B3-3) nothing is frozen (a typed 503). With one, a checkpoint is ONE B1 run
+    of its private dev serving on the dataset P3 asks (the bundle's), pinned to the suite's
+    harness, evaluator, seed, cases and CREDIT run limit, as the suite's owner; a repeat - or
+    a crash after the freeze, before its record - is the same run. The recorded holdout digest
+    is what B1 froze, never the ask's (a suite that freezes fewer cases records their
+    holdout); `evaluation()` answers D7's run state; only the holdout is evaluated."""
+    import hashlib
+
+    from infrx.contracts.lab import records
+    w, asked = World(), "0" * 64
+    holdout = sorted(w.manifest["splits"]["holdout"])
+    pin = hashlib.sha256(records.canonical(holdout)).hexdigest()
+    cid, other = w.event(1)["checkpoint_id"], w.event(2)["checkpoint_id"]
+    idle = checkpoints.Evaluations(w.store, w.objects, w.access)
+    ask = {"provider_org_id": NEMO, "dataset_ref": w.dataset, "split": "holdout",
+           "holdout_sha256": asked}
+    with pytest.raises(errors.DependencyUnavailable):
+        run(idle.evaluate(checkpoint_id=cid, **ask))
+    assert w.store.runs == {} and run(idle.evaluation(provider_org_id=NEMO,
+                                                      checkpoint_id=cid)) is None
+    asks = []
+
+    async def suites(*, provider_org_id, checkpoint_id):
+        asks.append(checkpoint_id)
+        sub = w.subscription(1, max_cases=3 if checkpoint_id == cid else 1,  # its own dataset:
+                             dataset_ref=f"lab:dataset:{NEMO}:{uid(7, 0xda)}@sha256:" + "7" * 64)
+        return (checkpoints.Subscription.model_validate({**sub, "owner_user_id": DEV}),
+                f"lab:serving:{provider_org_id}:{checkpoint_id}@sha256:" + "5" * 64)
+    ev = checkpoints.Evaluations(w.store, w.objects, w.access, suites=suites)
+    ref = run(ev.evaluate(checkpoint_id=cid, **ask))
+    (run_id,) = w.store.runs
+    record = run(w.store.resolve(ref, provider_org_id=NEMO))
+    assert (record.run_id, record.dataset_ref, record.harness_ref, record.seed,
+            record.max_cases, record.environment) == (run_id, w.dataset, w.harness, 7, 3, "dev")
+    assert record.serving_ref.split(":")[3].startswith(cid)
+    assert record.budgets[0].limit.value == "10.00000000"
+    got = run(ev.evaluation(provider_org_id=NEMO, checkpoint_id=cid))
+    assert got == {"run_ref": ref, "run_id": run_id, "dataset_ref": w.dataset, "split": "holdout",
+                   "holdout_sha256": pin, "state": "queued"}
+    assert run(ev.evaluate(checkpoint_id=cid, **ask)) == ref and asks == [cid]
+    run(w.objects.delete(f"lab/{NEMO}/checkpoints/{cid}/evaluation.json"))    # a lost record,
+    w.access.store.now += timedelta(minutes=5)                                 # found later
+    assert run(ev.evaluate(checkpoint_id=cid, **ask)) == ref and list(w.store.runs) == [run_id]
+    frozen = run(checkpoints.runner.resume(w.store, run_id, evaluator=w.subscription(1)["evaluator"],
+                                           provider_org_id=NEMO))
+    run(Runner(w.store, w.objects, DevWallet("1000"), DEPLOYMENT, worker_id="w",
+               limits=Limits(30, 2, 2, 1)).run(frozen))
+    assert run(ev.evaluation(provider_org_id=NEMO, checkpoint_id=cid))["state"] == "succeeded"
+    run(ev.evaluate(checkpoint_id=other, **ask))                  # one case frozen: no holdout
+    assert run(ev.evaluation(provider_org_id=NEMO, checkpoint_id=other))["holdout_sha256"] \
+        == hashlib.sha256(records.canonical([])).hexdigest()
+    with pytest.raises(errors.InvalidRequest):
+        run(ev.evaluate(checkpoint_id=uid(9, 0xc3), **{**ask, "split": "train"}))

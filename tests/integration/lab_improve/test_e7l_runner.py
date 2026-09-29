@@ -58,8 +58,8 @@ def test_e7l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
         assert any(tid in spec["test_ids"] for spec in runner.SCENARIOS.values()), tid
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 9
-    assert runner.SCENARIOS["i07"]["lanes"] == ["composition-2", "WR-P2-4"]
-    assert runner.SCENARIOS["i08"]["lanes"] == ["LAB_PIPELINES", "P3-evaluations"]
+    assert runner.SCENARIOS["i07"]["lanes"] == ["P-11"]        # the annotation half is bound
+    assert runner.SCENARIOS["i08"]["lanes"] == []              # composition-4
     assert runner.SCENARIOS["i09"]["lanes"] == ["staging-target"]
     assert not [sid for sid in ("i01", "i02", "i03", "i04", "i05", "i06")
                 if runner.SCENARIOS[sid]["lanes"]], "a merged-code cell waits on a lane"

@@ -273,6 +273,7 @@ def _lab(settings, connect, objects=None) -> dict:
     operations are not composed until L3 merges (its routes answer 503; health is served).
     `LAB_TRACES` needs T2I's projection and trace bucket, or startup is refused."""
     deployment = settings.deployment
+    teachers = _teachers(settings, connect, objects)
     if not (deployment.lab_control or deployment.lab_traces or deployment.lab_evals
             or deployment.lab_pipelines or deployment.lab_releases or deployment.lab_datasets):
         return {}
@@ -296,7 +297,30 @@ def _lab(settings, connect, objects=None) -> dict:
         from ..state.lab_data import PgLabDataStore
         from .routes.lab_datasets import LabDatasets
         lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects)
-    return {**lab, **_lab_2(deployment, connect, sessions, access, objects)}
+    return {**lab, **_lab_2(deployment, connect, sessions, access, objects, teachers)}
+
+
+def _teachers(settings, connect, objects):
+    """WR-P4B-1: P2's `TeacherWiring` for the pipeline surface when `LAB_TEACHERS` is on -
+    the Lab workers' one composition (`teacher_wiring`) with N2's public redaction (WR-P2-4),
+    the approved rate table and the pilot settings (judge mode not live by default). Only
+    beside `LAB_PIPELINES` (it has no route of its own), and only to the local teacher fake
+    `LAB_TEACHER_URL` names (J2's provider refuses any other host until P-10)."""
+    deployment = settings.deployment
+    if not deployment.lab_teachers:
+        return None
+    mode = runtime_mode(settings)
+    if not deployment.lab_pipelines:
+        raise RuntimeMisconfigured(mode, detail="LAB_TEACHERS needs LAB_PIPELINES (its routes "
+                                                "are the pipeline surface's)")
+    from ..datasets.versions import redact_content
+    from ..lab.workers.__main__ import teacher_wiring
+    try:
+        return teacher_wiring(connect, objects, provider_url=deployment.lab_teacher_url,
+                              settings=settings.pilot, redact=redact_content)
+    except errors.DomainError:            # names the setting, never its value
+        raise RuntimeMisconfigured(mode, detail="LAB_TEACHER_URL: teacher egress is the local "
+                                                "teacher fake until P-10") from None
 
 
 def _lab_checkpoints(settings, connect) -> dict:
@@ -338,12 +362,15 @@ class RunLedger:
     checkpoint_rows = run_rows
 
 
-def _lab_2(deployment, connect, sessions, access, objects=None) -> dict:
+def _lab_2(deployment, connect, sessions, access, objects=None, teachers=None) -> dict:
     """LAB-API-2: the evaluation, pipeline and release surfaces for the switches that are on,
     over D7 (`PgLabDataStore`, merged); the pipelines over D8's label log and run ledger
-    (WR-P1-D8-C / WR-P3-D8-C) and the Lab objects. The ports whose tables are not merged
-    (experiments, the B3 ledger listing, the catalog; the run listings, B3 evals; the release
-    read models, proposals and D9) are absent, so their routes answer 503."""
+    (WR-P1-D8-C / WR-P3-D8-C), the Lab objects and P3's evaluation port over B3/B1
+    (WR-E7L-1; it freezes nothing without a suite source and dev deployer, WR-B3-3). The ports
+    whose tables are not merged (experiments, the B3 ledger listing, the catalog; the run
+    listings; the release read models, proposals and D9) are absent, so their routes answer
+    503."""
+    from ..evaluation.checkpoints import Evaluations
     from ..state.lab_data import PgLabDataStore
     from ..state.lab_pipeline import PgLabelLog, PgRunLedger
     from .routes.lab_evaluations import LabEvaluations
@@ -354,7 +381,9 @@ def _lab_2(deployment, connect, sessions, access, objects=None) -> dict:
                if deployment.lab_evals else {}),
             **({"lab_pipelines": LabPipelines(sessions, access, store=store, objects=objects,
                                               log=PgLabelLog(connect),
-                                              ledger=RunLedger(PgRunLedger(connect)))}
+                                              ledger=RunLedger(PgRunLedger(connect)),
+                                              evals=Evaluations(store, objects, access),
+                                              teachers=teachers)}
                if deployment.lab_pipelines else {}),
             **({"lab_releases": LabReleases(sessions, access)}
                if deployment.lab_releases else {})}

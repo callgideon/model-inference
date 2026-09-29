@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -218,6 +219,25 @@ def _redacted(body: dict, keys: list[str], content_path: str | None) -> dict:
     if content is _MISSING:
         raise errors.InvalidRequest("a redaction cannot remove a sample's content")
     return {**body, "original": original, "content": content}
+
+
+#: WR-P2-4: the personal data masked in text that leaves the Lab for a model (P2's teacher):
+#: an email address, and a phone number written with its `+` country code. ponytail: two
+#: shapes; a named-entity pass when a dataset carries free-form personal data.
+PERSONAL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+|\+\d[\d ().-]{6,}\d")
+
+
+def redact_content(value):
+    """N2's public redaction of a sample's content before it leaves for an external model:
+    every string of the value, at any depth, with `PERSONAL` masked; keys, numbers and ids
+    unchanged."""
+    if isinstance(value, str):
+        return PERSONAL.sub("[redacted]", value)
+    if isinstance(value, list):
+        return [redact_content(v) for v in value]
+    if isinstance(value, dict):
+        return {k: redact_content(v) for k, v in value.items()}
+    return value
 
 
 async def export(store, objects, *, provider_org_id: str, dataset_ref: str, export_id: str,

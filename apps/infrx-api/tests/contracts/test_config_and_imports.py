@@ -565,6 +565,10 @@ DEPLOYMENT_EXPECTED = {
     "LAB_CHECKPOINTS": False,
     "LAB_DATASETS": False,
     "LAB_CHECKPOINT_KEYS": "",
+    # WR-P4B-1 (composition-4): P2's teacher batches under LAB_PIPELINES, off, and the local
+    # teacher fake's URL (unset)
+    "LAB_TEACHERS": False,
+    "LAB_TEACHER_URL": "",
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

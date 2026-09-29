@@ -1,0 +1,91 @@
+{
+ "task": "COMPOSITION-4",
+ "lane": "composition-4",
+ "slice": "LW6 composition batch 4: WR-P2-4 (N2 redact_content), WR-P4B-1 (LAB_TEACHERS off), WR-P4B-2 (annotation role collects approved teacher batches), WR-DS5-2 (explicit PgSampleRestrictions in the reconcile pass), WR-E7L-1/WR-B3-EVALS (P3 Evaluations over B3/B1 under LAB_PIPELINES, off), E7L i07-annotation/i08 bound; E4 regression every switch off",
+ "activity": "review",
+ "head": "b7db806b",
+ "base": "9698e51b",
+ "worktree": ".claude/worktrees/codex-w5-composition-4",
+ "branch": "codex/w5-composition-4",
+ "at": "2026-09-29T05:40:00Z",
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/pilot.py",
+  "apps/infrx-api/infrx/config.py",
+  "apps/infrx-api/deploy/preflight.py",
+  "apps/infrx-api/infrx/lab/workers/__main__.py",
+  "apps/infrx-api/infrx/evaluation/checkpoints/__init__.py",
+  "apps/infrx-api/infrx/datasets/versions/__init__.py (WR-P2-4 helper only)",
+  "apps/infrx-api/tests/{g/test_startup.py,g/mutants.py,g/lab_pipelines,w,p/teachers,b/checkpoints}",
+  "apps/infrx-api/tests/contracts/test_config_and_imports.py (DEPLOYMENT_EXPECTED, per brief)",
+  "tests/integration/lab_improve (i07/i08 binds)",
+  "research/plan/08-contracts-v1-encoding.md \u00a75 row"
+ ],
+ "commands": [
+  {
+   "cmd": "fail-first per item (5 seams)",
+   "exit": 1,
+   "summary": "each red at base as recorded in the evidence"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p2 pytest <p2 teacher proofs incl. test_lab_teachers_composition_pg, test_lab_workers_teachers_pg>",
+   "exit": 0,
+   "summary": "6 passed (red recorded for unredacted composition and non-submitted collect)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=n3 pytest tests/w/test_lab_workers_lineage_pg.py",
+   "exit": 0,
+   "summary": "1 passed (red [None] without explicit restrictions)"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p3 pytest tests/p/training/test_training_composition_pg.py tests/b/checkpoints/test_checkpoints_composition_pg.py",
+   "exit": 0,
+   "summary": "3 passed"
+  },
+  {
+   "cmd": "tests/integration/lab_improve/runner.py --reuse (e7l) at 17176f58",
+   "exit": 3,
+   "summary": "20 PASS / 0 FAIL / 2 NOT RUN (i07-training P-11, i09 staging); i08 PASS; PIPELINE-LINEAGE PASS; torn down"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l pytest tests/integration/lab_improve/test_mutants.py -k st_worker_collects_nothing|st_evaluation_state_stale",
+   "exit": 0,
+   "summary": "2 killed on the kept stack"
+  },
+  {
+   "cmd": "E4: INFRX_D_TASK=p3 (Valkey 57531) pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py at b7db806b",
+   "exit": 0,
+   "summary": "2819 passed, 25 skipped, 0 failed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=b1 (Valkey 57521) 9 mutant lists",
+   "exit": 1,
+   "summary": "1365 passed, 7 skipped, 4 failed = lab_workers list collected before b7db806b re-cut its anchors (misdeclared, not survivors); list rerun at b7db806b below"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=b1 pytest -q tests/w/test_lab_workers_mutants.py at b7db806b",
+   "exit": 0,
+   "summary": "76 passed, 0 survivors"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.5,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "five items done with fail-first, named mutants and real-service proofs; E4 2819/0 at b7db806b; E7L 20/0/2 (PIPELINE-LINEAGE PASS); composition-3 needed one ~2 h fix round; remaining = one verify round + WR-C4-PREFLIGHT (outside the lane)",
+  "at": "2026-09-29T05:40:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-C4-PREFLIGHT: infra lab workers preflight/lab.json/README accept LAB_TEACHER_URL (local fake until P-10) for the annotation role",
+  "WR-C4-B3-SUITES: production suites() for P3 checkpoints (D7 receipt read -> B3 subscription + L3 dev deployer, WR-B3-3)",
+  "WR-C4-EVIDENCE-ROUTE: no export-evidence route exists; when built pass restrictions=PgSampleRestrictions",
+  "WR-LAB2-4 (carried): run_rows/checkpoint_rows",
+  "WR-C4-UI: bind i08's provider-UI half in apps/lab/tests/e2e/improve",
+  "WR-C4-MK (optional): lab-compositions += p2 teacher composition + worker proofs, n3 lineage twin"
+ ],
+ "evidence": [
+  "research/plan/evidence/coordinator/COMPOSITION-4-b7db806.md",
+  "research/plan/evidence/e/E7L-raw-17176f5/"
+ ]
+}

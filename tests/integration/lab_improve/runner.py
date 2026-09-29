@@ -119,10 +119,11 @@ SCENARIOS = {
     "i07": {"title": "the I6 annotation and training worker processes: a batch and a training "
                      "run driven by `python -m infrx.lab.workers <role>`, killed and restarted",
             "test_ids": ["PIPELINE-BUDGET", "TRAIN-RECOVER"],
-            "lanes": ["composition-2", "WR-P2-4"]},
-    "i08": {"title": "the provider UI (P4): labels, review, export, bundle, checkpoint and "
-                     "eligibility over /lab/v1/pipelines", "test_ids": ["PIPELINE-LINEAGE"],
-            "lanes": ["LAB_PIPELINES", "P3-evaluations"]},
+            "lanes": ["P-11"]},
+    "i08": {"title": "labels, review, export, bundle, checkpoint and eligibility over "
+                     "/lab/v1/pipelines as the gateway composes it (LAB_PIPELINES: D8's "
+                     "ledgers, P3's evaluation port over B3/B1)", "test_ids": ["PIPELINE-LINEAGE"],
+            "lanes": []},
     "i09": {"title": "the candidate proposed and approved through L3/L4 into a private or "
                      "allocated staging deployment, its traces pinned to that serving version",
             "test_ids": ["DATA-LINEAGE"], "lanes": ["staging-target"]},
@@ -148,7 +149,7 @@ REQUIRED = {
             "test_i06_an_ambiguous_run_ends_only_on_an_operators_written_confirmation"),
     "i07": ("test_i07_the_annotation_worker_process_resumes_a_batch_once",
             "test_i07_the_training_worker_process_never_resubmits"),
-    "i08": ("test_i08_the_provider_ui_drives_labels_to_an_eligible_candidate",),
+    "i08": ("test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate",),
     "i09": ("test_i09_the_candidate_is_promoted_through_l3_l4_staging",),
 }
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
