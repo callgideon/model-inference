@@ -7902,7 +7902,7 @@
   {
    "id": "W5-MERGE-37",
    "task": null,
-   "slice": "merge batch #37 (Opus): lab-operate-2 5bf07c1f (LAB-OPERATE-LOCAL PASS; +R220/R221)",
+   "slice": "merge batch #37 (Opus): lab-operate-2 5bf07c1f (LAB-OPERATE-LOCAL PASS; +R220/R221); workflow wf_3572d48c-5fb",
    "agent": "opus",
    "branch": "codex/w5-merge-37",
    "worktree": ".claude/worktrees/codex-w5-merge-37",
@@ -7934,7 +7934,7 @@
   {
    "id": "W5-LAB-APP-CONTROL",
    "task": "L4",
-   "slice": "(wave5 LW3 lane lab-app-control, Opus) WR-E3L-J: the Lab App's control HTTP adapter (controlPort over /lab/v1/control), FakeControl follows L3 (E3L-F3), J01/J02 re-cut and run on the real L3 on l4; base adb84d11",
+   "slice": "(wave5 LW3 lane lab-app-control, Opus) WR-E3L-J: the Lab App's control HTTP adapter (controlPort over /lab/v1/control), FakeControl follows L3 (E3L-F3), J01/J02 re-cut and run on the real L3 on l4; base adb84d11; workflow wf_0acf7e4d-c97",
    "agent": "opus",
    "branch": "codex/w5-lab-app-control",
    "worktree": ".claude/worktrees/codex-w5-lab-app-control",
