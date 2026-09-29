@@ -49,6 +49,8 @@ OBS, UNITS = "infra/lab/observe/", "apps/infrx-api/deploy/lab/observe/"
 JUDGE_UNIT, GAUGES_UNIT = UNITS + "infrx-lab-judge.service", UNITS + "infrx-lab-trace-gauges.service"
 TIMER, MANIFEST = UNITS + "infrx-lab-trace-gauges.timer", OBS + "observe.json"
 LAYER1_FILES = (L + "test_e5l_runner.py", L + "test_i2l_obs.py")
+E2E = "apps/lab/tests/e2e/gate.py"
+E2E_GATE = "test_e5l_the_ui_cell_passes_only_a_green_e2e_suite_and_names_its_uncomposed_ports"
 
 # the I2L-OBS cases
 OFF = "test_i2l_obs__every_observe_unit_is_off_until_its_role_env_file_exists"
@@ -197,6 +199,18 @@ MUTANTS: tuple[Mutant, ...] = (
        PROJECT),
     _m("any_project_name", "only an e5l project name is accepted", W,
        'r"e5l[a-z0-9]{0,12}"', 'r"[a-z0-9]{1,15}"', PROJECT),
+    # --- LAB-E2E (0-F2): the four gates' UI cells judge their e2e suite through gate.missing
+    _m("e2e_red_suite_is_a_pass", "a red e2e suite is never a PASSed UI cell", E2E,
+       '    assert (got["exit"], got.get("fail")', '    assert True or (got["exit"], got.get("fail")',
+       E2E_GATE),
+    _m("e2e_skipped_case_is_a_pass", "a skipped e2e case is never a PASSed UI cell", E2E,
+       'got.get("cancelled", 0), got.get("skipped"))', 'got.get("cancelled", 0), 0)', E2E_GATE),
+    _m("e2e_one_pass_is_a_suite", "a suite that ran one case is not a green suite", E2E,
+       'got.get("pass", 0) > 1', 'got.get("pass", 0) > 0', E2E_GATE),
+    _m("e2e_harness_is_a_fail", "a busy l4 key or Docker is INVALID, never a FAIL", E2E,
+       '    if got["exit"] != 0 and got.get("harness"):', "    if False:", E2E_GATE),
+    _m("e2e_composed_ports_inverted", "the cell names the ports the gateway does NOT carry",
+       E2E, "if not carried)", "if carried)", E2E_GATE),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -333,6 +347,8 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
         shutil.copytree(API_DIR / part, root / "apps" / "infrx-api" / part, ignore=junk)
     for part in ("lab/observe", "alerts", "observe", "rollout/steps"):
         shutil.copytree(REPO / "infra" / part, root / "infra" / part, ignore=junk)
+    (root / E2E).parent.mkdir(parents=True)
+    shutil.copy2(REPO / E2E, root / E2E)
     wiring = pathlib.Path("research", "plan", "evidence", "e", "E5L-wiring")
     shutil.copytree(REPO / wiring, root / wiring)
     (root / "research" / "plan").mkdir(parents=True, exist_ok=True)
