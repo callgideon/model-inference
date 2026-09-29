@@ -58,6 +58,7 @@ BROKEN = "test_an_answer_that_breaks_off_is_recorded_as_incomplete"
 ASYNC_OUT = "test_an_async_jobs_output_is_spooled_by_the_worker_under_its_job_id"
 WORKER_ONLY = "test_the_worker_spools_only_consented_async_jobs"
 NO_OUTPUT = "test_a_job_without_output_is_recorded_as_incomplete"
+JOB_MINIMAL = "test_a_minimal_async_job_is_recorded_metadata_only"
 REFUSED = "test_a_refused_completion_spools_nothing_and_raises_as_before"
 JOB_FAILS = "test_a_worker_capture_failure_never_fails_the_job"
 REMEMBER = "test_the_worker_remembers_a_bounded_number_of_jobs"
@@ -223,6 +224,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if request.execution_mode is ExecutionMode.async_ \\\n"
        "                and request.trace_policy.trace_mode is not TraceMode.off:",
        "        if request.execution_mode is ExecutionMode.async_:", WORKER_ONLY),
+    _m("job_minimal_not_recorded", "a minimal async job is recorded (metadata only)", C,
+       "        if request.execution_mode is ExecutionMode.async_ \\\n"
+       "                and request.trace_policy.trace_mode is not TraceMode.off:",
+       "        if request.execution_mode is ExecutionMode.async_ \\\n"
+       "                and request.trace_policy.trace_mode is TraceMode.full:", JOB_MINIMAL),
+    _m("job_minimal_keeps_content", "a minimal async job's output is never content (R12)", C,
+       "capture = sink.open(request.request_id, request.org_id,\n"
+       "                                request.trace_policy.trace_mode,",
+       "capture = sink.open(request.request_id, request.org_id,\n"
+       "                                TraceMode.full,", JOB_MINIMAL),
     _m("job_capture_unbounded", "the remembered attempts are bounded", C,
        "            while len(self.open) > self.remember:", "            while False:", REMEMBER),
     _m("job_output_not_kept", "the job's output reaches its record", C,

@@ -82,7 +82,7 @@
     "at": "20260929T-fix-round"
   },
   "blockers": [
-    "E5L o01 real run: the e5l port block is held by a kept foreign stack (infrx-e5l-*, checkout .../scratchpad/rv-lo3); rerun `apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01` with WR-LC-O01 applied once it is released"
+    "E5L o01 real run: BLOCKED, carried to lane lab-observe-4 at the lab-capture merge (codex/w5-merge-54; E5L o01 stays NOT RUN[product WR: WR-C6-CAPTURE] under R234 until then); the e5l port block is held by a kept foreign stack (infrx-e5l-*, checkout .../scratchpad/rv-lo3); rerun `apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01` with WR-LC-O01 applied once it is released"
   ],
   "wiring_requests": [
     "WR-LC-O01 (lab-observe files): bind o01's switch case - scenarios_trace.py, runner.py lanes [], test_e5l_runner.py no unbound case, mutants.py O01_ON + st_capture_switch_ignored + st_capture_key_opt_in_ignored + a_lane_undeclared re-cut; exact diff research/plan/evidence/t/LAB-CAPTURE-5f6a056-o01.diff",

@@ -555,6 +555,20 @@ def test_a_job_without_output_is_recorded_as_incomplete(tmp_path):
     assert not envelope.content_complete and envelope.request_id == request.request_id
 
 
+def test_a_minimal_async_job_is_recorded_metadata_only(tmp_path):
+    """Oracle (lens R6, merge #54): a `minimal` async job's output stored as content (R12),
+    or no record at all for it (the worker keeping `full` jobs only)."""
+    request = admitted(tmp_path, TraceMode.minimal)
+    worked(tmp_path, request)
+    spools = job_spools(tmp_path)
+    assert len(spools) == 1, spools
+    scan = recover(spools[0])
+    assert len(scan.records) == 1, scan.records
+    envelope = scan.records[0]
+    assert (envelope.request_id, envelope.mode) == (request.request_id, TraceMode.minimal)
+    assert scan.contents == [b""] and envelope.content_ref is None
+
+
 def test_a_refused_completion_spools_nothing_and_raises_as_before(tmp_path):
     """Oracle: a record for an attempt that lost its lease (the winner writes its own), or
     the refusal swallowed by the capture."""

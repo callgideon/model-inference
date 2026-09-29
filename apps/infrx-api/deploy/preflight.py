@@ -244,9 +244,10 @@ NOT_SETTABLE = {
                   "gateway needs the trace projection (CLICKHOUSE_URL, S3_TRACE_BUCKET), the Lab "
                   "migrations applied hosted and the E4 regression rerun, a deploy change, "
                   "not a --set",
-    "TRACE_PUMPS": "runs the trace shipper, retention and feedback projection in the worker "
-                   "(WR-T-4, off by default): enabling it needs ClickHouse, the trace bucket "
-                   "and the E4 regression rerun, a deploy change, not a --set",
+    "TRACE_PUMPS": "runs trace capture + shipping in the gateway and retention + feedback "
+                   "projection in the worker (WR-T-4, WR-C6-CAPTURE, off by default): enabling "
+                   "it needs ClickHouse, the trace bucket, one shared TRACE_SPOOL_DIR for both "
+                   "units and the E4 regression rerun, a deploy change, not a --set",
     "LAB_EVAL_WORKER": "runs the Lab eval_run worker (WR-B-5, off by default, Lab-only): the "
                        "hosted database has no Lab schema (plan rule 4), never a --set",
     "ROLLOUT_ROUTING": "routes admission through the Lab rollout router (R1, off by default): "

@@ -150,3 +150,42 @@ Commands (all on task-local key t2f):
 - `INFRX_D_TASK=t2f INFRX_MUTANTS=all pytest -q tests/t/capture/test_mutants.py`: **80 passed, 0 survivors** (74 before plus 6 new).
 - `INFRX_D_TASK=t2f pytest -q tests/t --deselect tests/t/capture/test_mutants.py`: 167 passed, 34 skipped (stack-gated).
 - E4 with every switch OFF, `INFRX_D_TASK=t2f pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py`: **2822 passed, 27 skipped, 0 failed**, identical to the step-4 count.
+
+## Coordinator rulings (merge #54, `codex/w5-merge-54`)
+
+- **R250** (08 §10, appended directly after R249): the proposed ruling above, numbered as written — capture writes where the output is produced (the gateway's own spool for a consented sync/SSE answer; the worker's job spool under the same `TRACE_SPOOL_DIR`, keyed by job id, one writer per spool directory); only the gateway ships (rotate + ship every 10 s in its lifespan); `trace_pumps` keeps retention and projection; a second gateway on the same `TRACE_SPOOL_DIR` refuses to start; the key's opt-in is capped by the org's newest consent row, read at request time with a bounded per-process cache, failing closed to off; credentials scrubbed from every occurrence and remote media URLs cut to `scheme://host/path` before spooling. Next free R251.
+- WR-LC-DOC applied with the merge: 08 §5 `TRACE_PUMPS` row, `infrx/config.py`'s `trace_pumps` comment and `deploy/preflight.py`'s `NOT_SETTABLE["TRACE_PUMPS"]` carry the replacement text; `TRACE_PUMPS` stays default OFF.
+- WR-LC-LOCAL applied (`tests/integration/lab_local/lab_world.py`: the Lab-routes gateway starts with `TRACE_PUMPS="false"`). WR-LC-MAKE applied: `api-mutants` runs `tests/t/capture/test_mutants.py` on key t2f; the t2f stack proofs (`tests/w/test_worker_traces_pg.py`, `tests/t/capture/test_capture_stack.py`) sit in `make lab-compositions` (no target carried the `test_worker_traces_pg.py` line before; lab-compositions is the real-PostgreSQL composition-proof target, not in check).
+
+## Ratified (1-LC-RS-2 / 0-LC-R5)
+
+The lane's direct edits outside its ownership are ratified by the coordinator as brief-directed wiring and stay where the lane put them (not re-homed; `LAB-CAPTURE-WR-LC-PILOT.diff` / `-WR-LC-W.diff` are superseded as records only): `infrx/gateway/pilot.py` (13 lines, inert with `TRACE_PUMPS` off), `infrx/worker/__main__.py` `compose()`, and `tests/w/{test_worker_main.py,worker_main_mutants.py,test_worker_traces_pg.py}`. Proof on the merged tree (pilot.py moved on the tip since the lane's base): `INFRX_MUTANTS=all pytest -q tests/g/test_mutants.py tests/w/test_worker_main_mutants.py` 0 survivors, anchors `BAD []` (counts in the merge lane's report).
+
+## Consent read (RS-3)
+
+Locally and on the pilot composition today, the gateway's runtime login reads `public.api_keys.trace_mode` + `infrx.consent_history` through the pilot pool (the job store's connection, `ConsentSource(connect)` in `capture.build`). The dedicated runtime login (`infrx_runtime`, 0021) has no such grant and fails closed to off; its read is WR-LC-HOSTED (below).
+
+## Rerunnable commands for each count (RS-4; from `apps/infrx-api` unless noted)
+
+- capture fakes (42 lane, 43 with R6): `.venv/bin/python -m pytest -q tests/t/capture/test_capture.py`
+- capture suite on t2f: `INFRX_D_TASK=t2f .venv/bin/python -m pytest -q tests/t/capture -rs`
+- capture mutants (80 lane, 82 with R6's two): `INFRX_MUTANTS=all INFRX_D_TASK=t2f .venv/bin/python -m pytest -q tests/t/capture/test_mutants.py`
+- worker-main mutants (88): `INFRX_MUTANTS=all .venv/bin/python -m pytest -q tests/w/test_worker_main_mutants.py`
+- G mutants on pilot/ingress (118 lane subset; the full list at merge): `INFRX_MUTANTS=all .venv/bin/python -m pytest -q tests/g/test_mutants.py`
+- t2f stack proofs (86 lane): `INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q -rs tests/t/capture tests/w/test_worker_traces_pg.py tests/t/ship tests/t/feedback --deselect tests/t/capture/test_mutants.py` (or `make lab-compositions` for the two stack files)
+- E4, every switch OFF (2822 lane base; ≥ 2830 on the tip): `INFRX_D_TASK=t2f .venv/bin/python -m pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py -rs`
+- lab_local layer 1 + list (repo root): `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/lab_local/test_lab_local_runner.py tests/integration/lab_local/test_mutants.py`
+- o01 (repo root, when e5l is free): `apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --out <dir> --only o01`
+
+## Lens minors (merge #54)
+
+- **R6 done**: `test_a_minimal_async_job_is_recorded_metadata_only` + mutants `job_minimal_not_recorded` (the worker keeps `full` jobs only) and `job_minimal_keeps_content` (the job spool opened `full`), both killed.
+- **R8 carried (red on the lane's code, not patched at merge)**: an async job whose prompt or output echoes the caller's bearer token is spooled with it verbatim — `JobCapture.spool` calls `request_line(request)` with no token and adds the output unscrubbed, and the worker never holds the caller's token. Probe at merge: a `prefer: respond-async` request saying `my key is <TOKEN>`, output `echo <TOKEN>` → the job spool contains `<TOKEN>`. Follow-up (lab-capture-2): carry a scrub key the worker can apply (e.g. the ingress scrubbing the stored request, and the output scrubbed against a per-key token digest) + the case + a mutant.
+- **R7 carried (red on the lane's code)**: `AttemptRunner` (worker/attempt.py) retries `complete` once after a lost terminal ack; `JobCapture.complete` pops the remembered attempt in `finally`, so the retry that commits finds nothing and the job is never traced. Probe at merge: first `complete` raises `ConnectionError`, the retry settles → 0 job spools (expected 1). Follow-up: pop only on success or a `DomainError` refusal; case + mutant then.
+- **R9 carried as a note**: inline media is re-hashed on the event loop in `redacted`; hash off-loop when a part is > 1 MiB (follow-up).
+
+## Carried
+
+- **WR-LC-O01 → lane lab-observe-4**: apply `LAB-CAPTURE-5f6a056-o01.diff` and run o01 on e5l once the kept lab-observe-3 stack releases it; E5L o01 stays NOT RUN[product WR: WR-C6-CAPTURE] under R234 until then. The update JSON keeps activity `review`.
+- **WR-LC-HOSTED (before any hosted enable)**: a runtime-login consent read as a LOCAL-ONLY migration (lab-sql: an RPC `infrx.trace_consent(org, key)` EXECUTE `infrx_runtime`); both systemd units mount the same `TRACE_SPOOL_DIR` (runbook).
+- R7, R8, R9 as above.

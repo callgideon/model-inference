@@ -32,6 +32,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/d/test_code_mutants_c6.py
 	# 0054's SQL list (lab-live, R244): needs Docker, skips visibly without it; task-local key r2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/d/test_code_mutants_live.py
+	# WR-LC-MAKE: the capture list (lab-capture, R250); its PostgreSQL half needs Docker, skips visibly without it; task-local key t2f
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=t2f uv run --frozen pytest -q tests/t/capture/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -185,6 +187,9 @@ lab-compositions:
 	cd $(API) && INFRX_D_TASK=r2 .venv/bin/python -m pytest -q tests/r/control/test_control_pass_pg.py
 	cd $(API) && INFRX_D_TASK=r2 .venv/bin/python -m pytest -q tests/g/lab_releases/test_lab_releases_composition_pg.py tests/r/control/test_control_report_pg.py
 	cd $(API) && INFRX_D_TASK=n3 .venv/bin/python -m pytest -q tests/g/lab_datasets/test_lab_datasets_imports_pg.py
+	# WR-LC-MAKE: the trace pumps + WR-C6-CAPTURE on real PostgreSQL/ClickHouse/MinIO (the t2f block)
+	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/w/test_worker_traces_pg.py
+	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/t/capture/test_capture_stack.py
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:
