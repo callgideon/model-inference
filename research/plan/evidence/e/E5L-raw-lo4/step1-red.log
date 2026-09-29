@@ -1,0 +1,93 @@
+...F.FF............                                                      [100%]
+=================================== FAILURES ===================================
+___________ test_e5l_r222_accepts_only_a_not_run_out_of_local_scope ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78447e2bddc0>
+
+    def test_e5l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
+        """R222/R234/R235/R253, as lab_evaluate's runner computes it: the verdict's `r222` is
+        accepted with no FAIL and every NOT RUN waiting only on a ruled out-of-scope class, by its
+        own reason and with its rerun. o01 is bound (WR-C6-CAPTURE merged, #54): it declares no
+        lane, so its NOT RUN is now in scope and open; the recorded df837faf verdict, whose o01
+        waited on WR-C6-CAPTURE, is still judged on its own lanes and stays accepted. A FAIL
+        whatever its message, a NOT RUN on in-scope work, a scenario never run or NOT RUN for
+        another reason stays open."""
+        assert runner.OUT_OF_SCOPE == {"LAB-E2E": "lab-e2e UI",
+                                       "WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}
+>       assert runner.SCENARIOS["o01"]["lanes"] == [], "o01 is bound: it waits on no lane"
+E       AssertionError: o01 is bound: it waits on no lane
+E       assert ['WR-C6-CAPTURE'] == []
+E         
+E         Left contains one more item: 'WR-C6-CAPTURE'
+E         Use -v to get more diff
+
+tests/integration/lab_observe/test_e5l_runner.py:106: AssertionError
+__________ test_e5l_the_verdict_carries_r222_and_each_scenarios_scope __________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78447e26b0e0>
+tmp_path = PosixPath('/tmp/pytest-of-rey/pytest-8221/test_e5l_the_verdict_carries_r0')
+
+    def test_e5l_the_verdict_carries_r222_and_each_scenarios_scope(monkeypatch, tmp_path):
+        """WR-LO3-RV3 (R235): verdict.json carries `r222` and, per scenario, the ruled class of each
+        lane it waits on. Through main with the namespace lock held elsewhere: no stack call."""
+        def busy(*_):
+            raise BlockingIOError
+        monkeypatch.setattr(runner.fcntl, "flock", busy)
+        monkeypatch.setattr(runner, "LOCK", tmp_path / "lock")
+        monkeypatch.setattr(runner, "pins", lambda harness: {})
+        monkeypatch.setenv("INFRX_E2_NAMESPACE", "e5l")
+        monkeypatch.setattr(sys, "path", list(sys.path))
+        assert runner.main(["--out", str(tmp_path / "v")]) == runner.EXIT["BLOCKED"]
+        verdict = json.loads((tmp_path / "v" / "verdict.json").read_text())
+        assert verdict.get("r222") == {"accepted": False,
+                                       "open": {sid: "BLOCKED" for sid in runner.SCENARIOS}}
+        scope = {entry["id"]: entry.get("scope") for entry in verdict["scenarios"]}
+        assert scope == {sid: {lane: runner.OUT_OF_SCOPE.get(lane, "local (in scope)")
+                               for lane in spec["lanes"]} for sid, spec in runner.SCENARIOS.items()}
+>       assert scope["o01"] == {}, "o01 is bound (WR-C6-CAPTURE): it waits on nothing"
+E       AssertionError: o01 is bound (WR-C6-CAPTURE): it waits on nothing
+E       assert {'WR-C6-CAPTU...R-C6-CAPTURE'} == {}
+E         
+E         Left contains 1 more item:
+E         {'WR-C6-CAPTURE': 'product WR: WR-C6-CAPTURE'}
+E         Use -v to get more diff
+
+tests/integration/lab_observe/test_e5l_runner.py:195: AssertionError
+----------------------------- Captured stdout call -----------------------------
+ BLOCKED  o01  capture -> ship -> search: off by default; a captured request ships once with its pins; only its org finds it; capture on via the switch
+ BLOCKED  o02  feedback acknowledged after commit, owned by its key, projected once
+ BLOCKED  o03  Lab review: a provider reads a grantor's trace only under a current grant, in-process and through the gateway's traces route
+ BLOCKED  o04  judge dry run: default mode sends nothing; a consented run sends once, scores once, charges no customer wallet; the D6J ledger
+ BLOCKED  o05  a grant revoked mid-queue: nothing leaves, the hold is released
+ BLOCKED  o06  content expired or deleted: gone for every read, never sent to the judge
+ BLOCKED  o07  the projection dropped (ClickHouse killed): segment held, App serving, shipped once after
+ BLOCKED  o08  a judge submit timed out and the worker restarted: quarantined, never resent, reconciled
+ BLOCKED  o09  a worker restarted: the feedback projector after its insert, the box worker mid-traffic
+ BLOCKED  o10  the Lab review panel renders the traces route's answer (browser flow)
+cells {'TRACE-BOUNDS': 'BLOCKED', 'TRACE-RECOVER': 'BLOCKED', 'TRACE-TENANT': 'BLOCKED', 'FEEDBACK-ACK': 'BLOCKED', 'JUDGE-BUDGET': 'BLOCKED', 'JUDGE-SCORES': 'BLOCKED', 'LAB-ACCESS': 'BLOCKED', 'CONSOLE-FLOWS': 'BLOCKED'}
+r222 {'accepted': False, 'open': {'o01': 'BLOCKED', 'o02': 'BLOCKED', 'o03': 'BLOCKED', 'o04': 'BLOCKED', 'o05': 'BLOCKED', 'o06': 'BLOCKED', 'o07': 'BLOCKED', 'o08': 'BLOCKED', 'o09': 'BLOCKED', 'o10': 'BLOCKED'}}
+gate BLOCKED -> /tmp/pytest-of-rey/pytest-8221/test_e5l_the_verdict_carries_r0/v/verdict.json
+_______ test_e5l_every_unbound_case_is_not_run_without_touching_a_stack ________
+
+    def test_e5l_every_unbound_case_is_not_run_without_touching_a_stack():
+        """The cases waiting on a lane skip NOT RUN before any stack call, with the exact rerun."""
+        import scenarios_judge
+        import scenarios_trace
+        unbound = [getattr(module, name) for module in (scenarios_trace, scenarios_judge)
+                   for name in dir(module) if name.startswith("test_o")
+                   and "not_run(" in (HERE / f"{module.__name__}.py").read_text().split(
+                       f"def {name}(")[1].split("\ndef ")[0]]
+>       assert unbound == [], [case.__name__ for case in unbound]   # o01 (WR-C6-CAPTURE), o10 bound
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: ['test_o01_capture_turned_on_through_the_composition_switch']
+E       assert [<function te...78447e013880>] == []
+E         
+E         Left contains one more item: <function test_o01_capture_turned_on_through_the_composition_switch at 0x78447e013880>
+E         Use -v to get more diff
+
+tests/integration/lab_observe/test_e5l_runner.py:206: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/lab_observe/test_e5l_runner.py::test_e5l_r222_accepts_only_a_not_run_out_of_local_scope
+FAILED tests/integration/lab_observe/test_e5l_runner.py::test_e5l_the_verdict_carries_r222_and_each_scenarios_scope
+FAILED tests/integration/lab_observe/test_e5l_runner.py::test_e5l_every_unbound_case_is_not_run_without_touching_a_stack
+3 failed, 16 passed in 1.04s
