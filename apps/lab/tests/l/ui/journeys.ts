@@ -101,7 +101,9 @@ export async function j02(w: JourneyWorld): Promise<void> {
     assert.deepEqual((await ofD()).map((x) => [x.proposalId, x.state]), [[p.proposalId, "rejected"]]);
   }
   const mine = new Set(value(await w.port("viewer").deployments(viewer)).map((x) => x.deploymentRevisionId));
-  for (const read of ["deployments", "models", "proposals", "aggregates"] as const) assert.deepEqual(value(await w.port("rival")[read](rival)), [], `another provider sees none of it (${read})`);
+  const theirs = w.port("rival");
+  const reads = { deployments: await theirs.deployments(rival), models: await theirs.models(rival), proposals: await theirs.proposals(rival), aggregates: await theirs.aggregates(rival) };
+  for (const [read, answer] of Object.entries(reads)) assert.deepEqual(value<unknown[]>(answer), [], `another provider sees none of it (${read})`);
   const health = value(await w.port("viewer").aggregates(viewer));
   assert.ok(health.length > 0 && health.every((a) => mine.has(a.deploymentRevisionId)), "every role reads its own aggregate health");
 }
