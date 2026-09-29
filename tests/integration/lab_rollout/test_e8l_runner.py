@@ -186,6 +186,17 @@ def test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun():
     assert "E2E-R02..R05 run over the journey adapters" in cell["note"]
     assert "WR-LR5-1" in cell["note"]
 
+
+def test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute(tmp_path, monkeypatch):
+    """WR-LR5-RV2: k10's `rollout launch` runs with cwd=apps/infrx-api, so the plan path the
+    case hands it is absolute whatever `runner.py --out` was given."""
+    lab_world = _load(f"{HERE.name}.lab_world", "lab_world.py")
+    monkeypatch.chdir(tmp_path)
+    got = lab_world.plan_file(Path("out") / "k10")
+    assert got.is_absolute(), got
+    assert got == (tmp_path / "out" / "k10" / "plan.json").resolve()
+
+
 def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     """R222/R234/R235: the gate is accepted locally with no FAIL and every NOT RUN (sub-cells
     included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), k09's breach

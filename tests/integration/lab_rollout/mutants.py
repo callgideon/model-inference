@@ -79,6 +79,7 @@ RERUN = "test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun"
 SUB_CELL = "test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun"
 K10_UI = "test_e8l_k10s_composed_ui_journey_is_a_not_run_sub_cell_with_its_rerun"
 R222 = "test_e8l_r222_accepts_only_a_not_run_out_of_local_scope"
+PLAN_PATH = "test_e8l_k10s_plan_path_handed_to_the_worker_is_absolute"
 UNBOUND = tuple(re.findall(r"^def (test_k\d\d_\w+)\(", (REPO / P).read_text(), re.M))
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -156,6 +157,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "                  if False})", R222),
     _m("r222_gpu_in_scope", "k08's GPU target is ruled out of local scope (R222)", R,
        'OUT_OF_SCOPE = {"P-08": "GPU (P-08 staging target)", ', "OUT_OF_SCOPE = {", R222),
+    _m("k10_plan_path_relative", "the plan path handed to `rollout launch` (cwd=API) is "
+       "absolute (WR-LR5-RV2)", W, '    return workdir.resolve() / "plan.json"',
+       '    return workdir / "plan.json"', PLAN_PATH),
     _m("unbound_case_runs", "a case waiting on P-08 is never a pass",
        P, "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )
@@ -370,6 +374,13 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "(R240)", LW,
        "        await controller.emergency_rollback(operator, policy, policy_ref, now=now, "
        "reason=reason)\n", "", K10_PORT),
+    # WR-LR5-RV3: `rollout decide --reject` moves nothing; an expansion's approval is refused
+    # while R1's aggregates are unreadable (WR-C5-LIVE, R240)
+    _m("st_decide_reject_moves", "a rejection decides the proposal rejected and nothing else",
+       LW, "        if not approve:\n", "        if False:\n", K10_PORT),
+    _m("st_decide_expand_approved", "an expansion's approval is refused (WR-C5-LIVE): no D9 "
+       "decision, the alias unchanged", LW, '        if found["kind"] != "rollback":\n',
+       "        if False:\n", K10_PORT),
     _m("st_claim_unmeasured", "an optimization is claimed only with measurements", R3,
        '"optimization_claimed": outcome == "equivalent" and performance is not None}',
        '"optimization_claimed": outcome == "equivalent"}', K07_STORED),

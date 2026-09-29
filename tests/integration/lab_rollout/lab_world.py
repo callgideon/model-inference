@@ -425,6 +425,12 @@ def plan(**changes):
     return r2.Plan.model_validate({**PLAN, **changes})
 
 
+def plan_file(workdir: Path) -> Path:
+    """The plan file `rollout launch --plan` reads, absolute: the worker runs with cwd=API, so a
+    relative `runner.py --out <dir>` would hand it a path that names nothing there (WR-LR5-RV2)."""
+    return workdir.resolve() / "plan.json"
+
+
 def live(counts, policy_id: str, *, now, errors_=0, p99=1_000, covered=None,
          spent="1.00000000", unit="CREDIT", lag_s=0):
     """R2's `Live` from R1's own counts for this policy (the arms the router served), with

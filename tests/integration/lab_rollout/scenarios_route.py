@@ -340,6 +340,7 @@ def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, 
     import os
     import subprocess
     import sys
+    import uuid
 
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -349,6 +350,7 @@ def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, 
     from infrx.rollouts import control as r2
     from infrx.state.jobstore import connector
     from infrx.state.lab_access import PgAccessStore
+    from infrx.state.lab_rollout import PgReleaseProposals
     from tests.g import support
     from tests.g.lab_releases.test_lab_releases import Sessions, token
     harness = lw.harness
@@ -357,7 +359,7 @@ def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, 
     promoted = lab.promote(lab.q8.W["serving_2"], 0x10c)
     candidate = lab.sql("select infrx.lab_serving_ref(%s)", promoted)[0][0]
     body = {**lab.policy(weights=(5_000,), candidates=(candidate,)), "baseline_ref": base}
-    stored = workdir / "plan.json"
+    stored = lw.plan_file(workdir)                      # absolute: the worker's cwd is API
     stored.write_text(lw.plan().model_dump_json())
     lab.objects                                         # the world's prefix, made once
     env = {**{k: v for k, v in os.environ.items()
@@ -407,6 +409,35 @@ def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, 
         refused = propose(lab.q8.DEV, "rollback").status_code, \
             propose(lab.q8.ADMIN, "expand").status_code
         assert refused == (403, 409), f"developer / expansion without a verdict: {refused}"
+        # WR-LR5-RV3: an expansion's approval is refused while R1's aggregates are unreadable
+        # (WR-C5-LIVE, R240) and a rejection moves nothing. The route files no expansion
+        # without an expand verdict (the 409 above), so this one is filed through 0043's store.
+        expand = str(uuid.uuid4())
+        run(PgReleaseProposals(connect).propose(ref, provider_org_id=lab.NEMO, proposal_id=expand,
+                                                kind="expand", fence=1, proposed_by=lab.q8.ADMIN))
+        widened = worker("decide", "--policy-ref", ref, "--proposal-id", expand, "--approve",
+                         "--reason", "widen")
+        held = page()
+        rejected = worker("decide", "--policy-ref", ref, "--proposal-id", expand, "--reject",
+                          "--reason", "not yet")
+        dropped = page()
+        lw.save(workdir, "k10-reject.json", {
+            "approve_expand": [widened.returncode, widened.stderr[-1500:]],
+            "reject": [rejected.returncode, rejected.stderr[-1500:]],
+            "held": {k: mine(held, k) for k in ("releases", "decisions", "proposals")},
+            "dropped": {k: mine(dropped, k) for k in ("releases", "decisions", "proposals")},
+            "d9": lab.decisions(ref), "listing": lab.listing()})
+        assert widened.returncode == 1 and "WR-C5-LIVE" in widened.stderr, widened.stderr[-1500:]
+        assert rejected.returncode == 0, rejected.stderr[-1500:]
+        assert [(p["proposal_id"], p["state"]) for p in mine(held, "proposals")] == \
+            [(expand, "proposed")], "a refused approval leaves the proposal pending"
+        assert [(p["proposal_id"], p["state"]) for p in mine(dropped, "proposals")] == \
+            [(expand, "rejected")]
+        for shown in (held, dropped):
+            assert mine(shown, "decisions") == [], "a refusal or a rejection decided nothing"
+            assert [(r["state"], r["fence"]) for r in mine(shown, "releases")] == [("running", 1)]
+        assert lab.decisions(ref) == [], "D9 holds a decision for a refusal or a rejection"
+        assert lab.listing()[1] == promoted, "a refusal or a rejection moved the alias"
         made = propose(lab.q8.ADMIN, "rollback")
         assert made.status_code == 201, made.text
         proposal = made.json()
@@ -435,8 +466,8 @@ def test_k10_the_composed_releases_route_proposes_and_the_operator_decides(lab, 
             ("rolled_back", 2, "rollback", reasons), row
         assert [(d["decision"], d["reasons"], d["decided_by"])
                 for d in mine(after, "decisions")] == [("rollback", reasons, lw.OPERATOR)]
-        assert [(p["proposal_id"], p["state"]) for p in mine(after, "proposals")] == \
-            [(proposal["proposal_id"], "approved")]
+        assert {p["proposal_id"]: p["state"] for p in mine(after, "proposals")} == \
+            {proposal["proposal_id"]: "approved", expand: "rejected"}
         assert listing[1] == listed[1], f"R2's stop left the alias on {listing}, not {listed}"
         assert second.returncode == 1, "a decided proposal was decided again"
         assert lab.decisions(ref) == [("rollback", "rolled_back", lw.OPERATOR, reasons)]
