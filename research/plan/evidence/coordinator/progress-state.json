@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 310,
- "updated": "2026-09-29T18:40:05Z",
+ "revision": 311,
+ "updated": "2026-09-29T18:45:40Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8883,22 +8883,22 @@
   {
    "id": "W5-LAB-OBSERVE-3",
    "task": "E5L",
-   "slice": "E5L final `make lab-observe` at the tip: o02–o10 PASS, o01 NOT RUN[product WR: WR-C6-CAPTURE]; the runner's R222 machine check (Opus); workflow wf_3ac32a6f-7b7",
+   "slice": "E5L final `make lab-observe` at the tip: o02–o10 PASS, o01 NOT RUN[product WR: WR-C6-CAPTURE]; the runner's R222 machine check (Opus); workflow wf_3ac32a6f-7b7; ACCEPT_WITH_FIXES at 7c675167 (make lab-observe at df837faf: 17 PASS / 0 FAIL / o01 NOT RUN[product WR]; r222 accepted; 60 + 20 mutants 0 survivors)",
    "agent": "opus",
    "branch": "codex/w5-lab-observe-3",
    "worktree": ".claude/worktrees/codex-w5-lab-observe-3",
    "base": "f9e6a14e",
-   "head": null,
+   "head": "7c675167",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-29T13:59:28Z",
-   "updated": "2026-09-29T13:59:28Z",
+   "updated": "2026-09-29T18:45:40Z",
    "blocker": null,
-   "next_action": "handback → merge batch → E5L flips under R222/R234 → COMPLETE-LOCAL",
+   "next_action": "merge batch #57 (RV-2/3/4, R253) → E5L implemented → COMPLETE-LOCAL",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9100,11 +9100,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T15:49:26Z",
-   "updated": "2026-09-29T18:20:18Z",
+   "updated": "2026-09-29T18:45:40Z",
    "blocker": null,
-   "next_action": "merge batch #55 (post-grant matrix, teacher-approve grants, runbook rows, R251) → lab-local-2 (the o05 control-factory rerun)",
+   "next_action": "lab-local-2 runs the o05 control-factory case; 0055/0056 hosted under a later R151 window",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 3,
@@ -9298,22 +9298,22 @@
   {
    "id": "W5-MERGE-55",
    "task": null,
-   "slice": "merge batch #55 (Opus): lab-sql-lw8 d5baa446 (+conflict resolution: post-grant matrix, Makefile, harness pin; teacher-approve grants; WR-LW8-1 runbook; R251); workflow wf_f1c44aa3-8b5",
+   "slice": "merge batch #55 (Opus): lab-sql-lw8 d5baa446 (+conflict resolution: post-grant matrix, Makefile, harness pin; teacher-approve grants; WR-LW8-1 runbook; R251); workflow wf_f1c44aa3-8b5; integrated (R251 on the tip; 0056 LOCAL-ONLY)",
    "agent": "opus",
    "branch": "codex/w5-merge-55",
    "worktree": ".claude/worktrees/codex-w5-merge-55",
    "base": "61c1d5a7",
-   "head": null,
+   "head": "52ac7738",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T18:20:18Z",
-   "updated": "2026-09-29T18:20:18Z",
+   "updated": "2026-09-29T18:45:40Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → 0056 LOCAL-ONLY on the tip → lab-local-2",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -9403,6 +9403,73 @@
     "apps/app/supabase/migrations/0057_*",
     "apps/infrx-api/tests/t/capture/",
     "research/plan/evidence/t/LAB-CAPTURE-2-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-57",
+   "task": null,
+   "slice": "merge batch #57 (Opus): lab-observe-3 7c675167 (+RV-2/3/4 cases, evidence minors, R253); E5L flips at integration",
+   "agent": "opus",
+   "branch": "codex/w5-merge-57",
+   "worktree": ".claude/worktrees/codex-w5-merge-57",
+   "base": "c77e75ac",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T18:45:40Z",
+   "updated": "2026-09-29T18:45:40Z",
+   "blocker": null,
+   "next_action": "integrate (sort §10) → E5L implemented → COMPLETE-LOCAL",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_observe/",
+    "research/plan/08-contracts-v1-encoding.md",
+    "research/plan/evidence/e/E5L-35e2f11.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-LOCAL-2",
+   "task": "I2L",
+   "slice": "`make lab-local` for real after #47/#51/#54/#55: o04 login PASS, o05 control-factory families equal to the owner (0056), e4-on pins green, an R222 machine check; stack mutants (Opus)",
+   "agent": "opus",
+   "branch": "codex/w5-lab-local-2",
+   "worktree": ".claude/worktrees/codex-w5-lab-local-2",
+   "base": "c77e75ac",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T18:45:40Z",
+   "updated": "2026-09-29T18:45:40Z",
+   "blocker": null,
+   "next_action": "handback → merge → the runbook proof table L5/E4-ON rows",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_local/",
+    "tests/integration/lab-local.sh",
+    "research/plan/evidence/e/E4ON-*",
+    "research/plan/evidence/i/LAB-LOCAL-2-*"
    ],
    "wiring_requests": []
   }
