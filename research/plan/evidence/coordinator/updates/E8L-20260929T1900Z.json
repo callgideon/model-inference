@@ -1,0 +1,27 @@
+{
+ "task": "E8L",
+ "lane": "lab-rollout-6",
+ "slice": "WR-LIVE-K09 (k09 breach half over 0054 Live) + WR-LR5-1 (rollout e2e over the Lab control unit's composition; two product-WR stand-ins kept as sub-cell k10-ui-composed) + RV-3 real-stack run + make lab-rollout",
+ "activity": "review",
+ "head": "4d394efa",
+ "base": "6ee21d2f",
+ "worktree": ".claude/worktrees/codex-w5-lab-rollout-6",
+ "branch": "codex/w5-lab-rollout-6",
+ "owned_paths": ["tests/integration/lab_rollout/", "apps/lab/tests/e2e/rollout/", "research/plan/evidence/e/E8L-*"],
+ "commands": [
+  {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/lab_rollout/test_e8l_runner.py (old runner)", "exit": 1, "summary": "red: 3 failed/13 (step 1), 2 failed/14 (step 2); green 16 passed"},
+  {"cmd": "cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/rollout/stack.test.ts (base 6ee21d2f)", "exit": 1, "summary": "red 1 pass/5 fail: WR-LDP-2's control factory mounts /lab/v1/releases over NoObjects first, shadowing the backend's route"},
+  {"cmd": "same at 653566d7", "exit": 0, "summary": "6 pass/0 fail over the control unit's own pilot.lab_releases"},
+  {"cmd": "cd apps/lab && node tests/e2e/run-mutants.mjs --only E2E-S07..S12 (+ S10 alone on a free l4)", "exit": 0, "summary": "rollout e2e mutants 6/6 killed"},
+  {"cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --reuse --keep --out <abs> --only k10", "exit": 3, "summary": "k10 PASS (listing, port half incl. RV-3 reject/refused expansion, UI 6/6)"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest -q tests/integration/lab_rollout/test_mutants.py", "exit": 1, "summary": "89 passed, 1 broken_runner (HarnessError: l4 busy) retried alone: killed -> 86 mutants (31 layer-1 + 55 stack), 0 survivors"},
+  {"cmd": "make lab-rollout (4d394efa)", "exit": 2, "summary": "runner 3: k01-k07, k09, k10 PASS; k08 NOT RUN[P-08]; sub-cell k10-ui-composed NOT RUN[WR-LIVE-DECIDE,WR-LR6-VERDICT]; r222 accepted"},
+  {"cmd": "make lab-lint; make lab-typecheck", "exit": 0, "summary": "clean"},
+  {"cmd": "pytest -q tests/integration/lab_rollout/test_e8l_runner.py tests/integration/test_lab_package_isolation.py; pytest --co tests/integration", "exit": 0, "summary": "18 passed; 681 collected"}
+ ],
+ "gate_tally": {"k01": "PASS", "k02": "PASS", "k03": "PASS", "k04": "PASS", "k05": "PASS", "k06": "PASS", "k07": "PASS", "k08": "NOT RUN[P-08]", "k09": "PASS (breach half bound)", "k10": "PASS", "k10-ui-composed": "NOT RUN[WR-LIVE-DECIDE,WR-LR6-VERDICT]", "cells": {"ROLLOUT-PIN": "PASS", "ROLLOUT-RECOVER": "PASS", "OPT-PARITY": "NOT RUN"}, "r222": {"accepted": true, "open": {}}},
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 4, "confidence": "medium", "basis": "remaining = drop the two e2e stand-ins and empty SUB_CELLS once WR-LIVE-DECIDE (composition-7) and WR-LR6-VERDICT land, then one make lab-rollout + mutant verify round (47-234 min, session-03) plus l4 contention (~30 min lost this lane); k08 is P-08 GPU operator work", "at": "2026-09-29T19:00:00Z"},
+ "blockers": ["k10-ui-composed sub-cell: WR-LR6-VERDICT (no composed read of R2's hold/expand verdict) and WR-LIVE-DECIDE (rollout decide refuses an expansion)"],
+ "wiring_requests": ["WR-LR6-VERDICT", "WR-LIVE-DECIDE (composition-7, carried)", "WR-LR6-GATE-OUT", "WR-LR6-E2E-SHADOW (observation)"],
+ "evidence": ["research/plan/evidence/e/E8L-4d394ef.md", "research/plan/evidence/e/E8L-raw-4d394efa/verdict.json", "research/plan/evidence/e/E8L-raw-lr6/"]
+}
