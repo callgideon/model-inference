@@ -41,6 +41,7 @@ ACTING = "test_wrn2_only_a_current_developer_member_acts_for_the_provider"
 JOBS = "test_n4_an_import_job_is_enqueued_once_and_worked_by_the_pool_under_its_lease"
 BEAT = "test_n4_the_default_heartbeat_keeps_a_slow_import_leased"
 LOST = "test_n4_a_lost_lease_stops_the_import_and_the_pass_goes_on"
+STOPS = "test_n4_the_heartbeat_stops_once_the_import_finishes"
 
 
 def m(name, invariant, old, new, *cases, dies_by=(), occurrences=1):
@@ -216,6 +217,8 @@ MUTANTS: tuple[Mutant, ...] = (
     m("n4_lost_finish_escapes", "a refused finish is counted, never an exception aborting the pass",
       "        except errors.StateConflict:\n            log.warning(", "        except ():\n"
       "            log.warning(", LOST),
+    m("n4_heartbeat_outlives_the_import", "the heartbeat stops once the import finishes",
+      "        beating.cancel()\n", "", STOPS),
     m("n4_claims_every_job", "a pass claims at most `limit` jobs",
       "    for job in await jobs.claim(limit=limit, worker_id=worker_id, redelivery_s=lease_s):",
       "    for job in await jobs.claim(limit=99, worker_id=worker_id, redelivery_s=lease_s):", JOBS),

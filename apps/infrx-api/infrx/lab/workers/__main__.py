@@ -700,7 +700,7 @@ async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
     from ...state.lab_rollout import PgReleaseProposals, PgReleaseStore
     connect, operator, provider = connector(values[DATABASE]), values["LAB_OPERATOR_ID"], \
         match.group(2)
-    proposals = PgReleaseProposals(connect)
+    proposals, decided = PgReleaseProposals(connect), False
     try:
         found = next((p for p in await proposals.proposals(provider_org_id=provider)
                       if str(p["proposal_id"]) == proposal_id and p["policy_ref"] == policy_ref),
@@ -719,12 +719,15 @@ async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
             "policy_ref": policy_ref, "decision": "rollback", "evidence_refs": [],
             "decided_by": operator, "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")},
             reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))
+        decided = True                        # committed: a later failure is converge-only
         policy = await PgLabDataStore(connect).resolve(policy_ref, provider_org_id=provider)
         serving = control_serving(connect, operator)
         controller = Controller(PgReleaseStore(connect), serving, actor_id=operator)
         await controller.emergency_rollback(operator, policy, policy_ref, now=now, reason=reason)
     except errors.DomainError as failed:
-        print(f"infrx.lab.workers: the proposal was not decided: {failed.code}: {failed}",
+        outcome = ("was decided; the alias did not converge (rerun emergency-rollback)"
+                   if decided else "was not decided")
+        print(f"infrx.lab.workers: the proposal {outcome}: {failed.code}: {failed}",
               file=sys.stderr)
         return 1
     return 0

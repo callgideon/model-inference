@@ -370,9 +370,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        await controller.emergency_rollback(operator, policy, policy_ref, now=now, "
        "reason=reason)\n", "", DECIDE),
     _m("lw_decide_refusal_escapes", "a refused CAS is a non-zero exit, not a crash",
-       '        print(f"infrx.lab.workers: the proposal was not decided: {failed.code}: {failed}",\n'
+       '        print(f"infrx.lab.workers: the proposal {outcome}: {failed.code}: {failed}",\n'
        "              file=sys.stderr)\n        return 1\n",
        '        raise\n', DECIDE),
+    _m("lw_decide_outcome_unfollowed", "the refusal message follows the outcome (WR-C6-F2)",
+       "        decided = True                        # committed: a later failure is "
+       "converge-only\n", "", DECIDE),
     _m("lw_decide_unparsed", "decide names a proposal and approve or reject",
        '    if args.command == "decide" and not (args.proposal_id and (args.approve or '
        'args.reject)):\n', "    if False:\n", DECIDE),

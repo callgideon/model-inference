@@ -817,7 +817,8 @@ def test_lab_workers__a_release_is_launched_with_its_plan_stored_first(monkeypat
     assert type(died) is SystemExit, died
 
 
-def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeypatch):
+def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeypatch,
+                                                                         capsys):
     """WR-R4-2: `rollout decide --policy-ref --proposal-id --approve|--reject --reason`, as
     `LAB_OPERATOR_ID`. The proposal is looked up among the provider's (the ref's) for that
     release (another release's id is a non-zero exit, nothing decided). A rejection moves
@@ -851,6 +852,8 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
 
     async def emergency_rollback(self, operator_id, policy, policy_ref, *, now, reason):
         rolled.append((operator_id, policy, policy_ref, reason, type(self._store), self._actor))
+        if reason == "unconverged":
+            raise errors.DependencyUnavailable("L3 did not answer")
     monkeypatch.setattr(PgReleaseProposals, "proposals", proposals)
     monkeypatch.setattr(PgReleaseProposals, "decide", decide)
     monkeypatch.setattr(PgLabDataStore, "resolve", resolve)
@@ -882,9 +885,17 @@ def test_lab_workers__an_operator_decides_a_lab_proposal_through_d9s_cas(monkeyp
                        operator)]
     assert {provider for _, provider in listed} == {NEMO}
     decided.clear(), rolled.clear()
+    capsys.readouterr()
     assert decide_("p-rb", "approve", reason="stale") == 1           # D9's CAS refused
     assert len(decided) == 1 and rolled == []
+    assert "the proposal was not decided" in capsys.readouterr().err
     decided.clear()
+    # WR-C6-F2: committed, then the converge failed - the message follows the outcome
+    assert decide_("p-rb", "approve", reason="unconverged") == 1
+    assert len(decided) == 1 and len(rolled) == 1
+    err = capsys.readouterr().err
+    assert "the proposal was decided" in err and "not decided" not in err, err
+    decided.clear(), rolled.clear()
     for argv in (["rollout", "decide", "--policy-ref", ref, "--reason", "x", "--approve"],
                  ["rollout", "decide", "--policy-ref", ref, "--proposal-id", "p", "--reason",
                   "x"]):

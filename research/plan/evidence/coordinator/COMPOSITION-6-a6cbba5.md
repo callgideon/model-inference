@@ -283,3 +283,14 @@ Logs: lane scratch `c6/fix-*.log`.
   - `INFRX_D_TASK=r2 pytest tests/w tests/r/control` gives 436 passed, 17 skipped, 0 failed.
   - **NOT RUN:** the merged-tree k09 kill of `st_pass_skips_the_rolled_back`. It needs a kept e8l stack (`runner.py --keep`), and this lane may not touch e8l. At merge: `INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l … tests/integration/lab_rollout/test_mutants.py -k st_pass_skips_the_rolled_back`.
 - E4 was not re-run. The fix round's production change is a same-value spelling of one argument in the rollout pass, which is covered by the tests/w run above.
+
+## Carried (coordinator, merge #50 on `codex/w5-merge-50`)
+
+- **WR-C6-CAPTURE** → lane lab-capture (replaces WR-COMP-4). E5L o01 is NOT RUN[product WR: WR-C6-CAPTURE] under R234 until it lands.
+- **WR-C6-LIVE** → lane lab-live after this merge, under R244.
+- **WR-C6-K10, WR-C6-VARIANTS, WR-C6-REQUEUE, WR-C6-B1-FLAKE** → follow-up lanes.
+- **NOT RUN here:** the merged-tree k09 kill of `st_pass_skips_the_rolled_back` (needs a kept e8l stack, which this merge lane may not touch). Command: `INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l .venv/bin/python -m pytest -q tests/integration/lab_rollout/test_mutants.py -k st_pass_skips_the_rolled_back` (repo root, after `tests/integration/lab_rollout/runner.py --keep`).
+- **1-C6-RSI-3:** 0053 carries the RECEIPT and PROVIDERS reads as well as WR-R4-2's decisions. Accepted and declared; LOCAL-ONLY per R151/R201.
+- Applied at the merge (wirings commit): WR-C6-MK (Makefile `lab-compositions` += the r2 release/report and n3 imports PG proofs; `api-mutants` += the r2 `tests/d/test_code_mutants_c6.py` line); WR-C6-F2 (`rollout decide` says "was decided; the alias did not converge" after a committed decision, one test + mutant `lw_decide_outcome_unfollowed`); WR-C6-F3 (`test_n4_the_heartbeat_stops_once_the_import_finishes` + mutant `n4_heartbeat_outlives_the_import`); WR-C6-F4 (the stale-fence refusal proven on PG r2 in `test_lab_releases_composition_pg.py`).
+
+Rulings: the proposals above are numbered R240–R243 in 08 §10, and the WR-C6-LIVE proposal is R244 (COORDINATOR DECISION), at the composition-6 merge on `codex/w5-merge-50`; next free R245.

@@ -30,6 +30,7 @@ from infrx.state.catalog import PgCatalogDirectory
 from infrx.state.jobstore import connector
 from infrx.state.lab_access import PgAccessStore
 from infrx.state.lab_control import PgControlStore
+from infrx.state.lab_rollout import PgReleaseStore
 
 from .. import support
 from ...d import checks_credit as cc
@@ -61,7 +62,9 @@ def test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides
     proposal is stored once (a second is a 409: 0043's one-pending index); the operator's
     approval is ONE D9 decision at the proposal's fence (the alias already on the baseline),
     after which the page shows the release rolled back with that decision, the proposal
-    approved, and a second decision of it fails; a rejected proposal moves nothing."""
+    approved, and a second decision of it fails; a rejected proposal moves nothing; an
+    approval at a stale fence (WR-C6-F4) is refused by D9's CAS and the proposal stays
+    pending."""
     dsn = pgharness.dsn(DB)
     connect = connector(dsn)
     public = run(PgControlStore(connect).deployment(cc.PUBLIC_DEPLOYMENT))
@@ -147,3 +150,15 @@ def test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides
     still = {r["policy_ref"]: r for r in page()["releases"]}[quiet]
     assert (still["state"], still["fence"], still["verdict"]) == ("running", 1, None)
     assert {p["state"] for p in page()["proposals"] if p["policy_ref"] == quiet} == {"rejected"}
+
+    # WR-C6-F4: a stale fence refuses the approval on D9 and leaves the proposal pending
+    stale = propose(l2.ADMIN, "rollback", quiet).json()
+    run(PgReleaseStore(connect).transition(quiet, fence=1, to="rolled_back", decision={
+        "schema": "lab.rollout_decision.1", "provider_org_id": d9.NEMO, "policy_ref": quiet,
+        "decision": "rollback", "evidence_refs": [], "decided_by": OPERATOR,
+        "decided_at": "2026-09-29T00:00:00Z"}, reasons=("operator:elsewhere",)))
+    assert decide(stale["proposal_id"], "approve", quiet) == 1
+    [pending] = [p for p in page()["proposals"] if p["proposal_id"] == stale["proposal_id"]]
+    assert pending["state"] == "proposed" and pending["decided_at"] is None
+    assert [d["reasons"] for d in page()["decisions"] if d["policy_ref"] == quiet] == \
+        [["operator:elsewhere"]]

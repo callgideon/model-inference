@@ -28,6 +28,8 @@ api-mutants:
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_rollout/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_improve/test_mutants.py
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py
+	# 0053's SQL list (composition-6): needs Docker, skips visibly without it; task-local key r2
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/d/test_code_mutants_c6.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -179,6 +181,8 @@ lab-compositions:
 	cd $(API) && INFRX_D_TASK=j2 .venv/bin/python -m pytest -q tests/w/test_lab_workers_judge_pg.py
 	cd $(API) && INFRX_D_TASK=n3 .venv/bin/python -m pytest -q tests/w/test_lab_workers_imports_pg.py
 	cd $(API) && INFRX_D_TASK=r2 .venv/bin/python -m pytest -q tests/r/control/test_control_pass_pg.py
+	cd $(API) && INFRX_D_TASK=r2 .venv/bin/python -m pytest -q tests/g/lab_releases/test_lab_releases_composition_pg.py tests/r/control/test_control_report_pg.py
+	cd $(API) && INFRX_D_TASK=n3 .venv/bin/python -m pytest -q tests/g/lab_datasets/test_lab_datasets_imports_pg.py
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:

@@ -631,6 +631,26 @@ def test_n4_the_default_heartbeat_keeps_a_slow_import_leased(monkeypatch) -> Non
     assert jobs.beats and set(jobs.beats) == {(spec["import_id"], "w")}, jobs.beats
 
 
+def test_n4_the_heartbeat_stops_once_the_import_finishes() -> None:
+    """Lens WR-C6-F3: the heartbeat lives only while its import runs - once the job is
+    finished no further heartbeat reaches the queue (a leaked one would keep renewing a lease
+    this worker no longer uses)."""
+    spec, data = fixture("benchmark")
+    store, objects, _ = world()
+    jobs = FakeJobs()
+    run(imports.enqueue(jobs, objects, {"spec": spec, "body": data.decode()},
+                        provider_org_id=NEMO, actor="dev@nemo"))
+
+    async def pass_then_wait():
+        done = await imports.work(jobs, store, objects, worker_id="w", beat_s=0.01)
+        beats = len(jobs.beats)
+        await asyncio.sleep(0.1)                  # ten heartbeat periods after the finish
+        return done, beats
+    done, beats = run(pass_then_wait())
+    assert done == {"succeeded": 1, "failed": 0, "retry": 0}
+    assert len(jobs.beats) == beats, jobs.beats[beats:]
+
+
 def test_n4_a_lost_lease_stops_the_import_and_the_pass_goes_on(monkeypatch, caplog) -> None:
     """Lens 1-C5-2: a heartbeat the queue refuses (another worker reclaimed the job) stops
     that import - it is never finished by this worker - and says so in the log; a finish the
