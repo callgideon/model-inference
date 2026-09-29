@@ -1,5 +1,6 @@
 """E6L j05-j07, j11: the evaluation half of the journey on the e6l stack - B1 runs on the real
-D7 store through `HttpDevEndpoint` against synthetic endpoints, B2's comparison and decision.
+D7 store through `HttpDevEndpoint` against synthetic endpoints (j11: finite-video clips as
+presigned MinIO URLs), B2's comparison and decision.
 
 The imported text benchmark (j01's) is the frozen case universe: 14 `lookup` and 6 `math`
 questions, one episode each. `fixtures/benchmark.json` declares which questions each
@@ -305,22 +306,35 @@ def test_j07_tool_cases_are_recorded_and_not_comparable(lab, workdir):
 
 # ------------------------------------------------------------------------------------ j11
 def test_j11_a_finite_video_case_reaches_the_dev_endpoint(lab, workdir):
-    """The imported clips through a `finite_video` harness: each case must reach H1's adapter
-    with its media and duration (comparable, sent), then the dev endpoint - whose media path
-    is L3's (HttpDevEndpoint refuses media until it merges)."""
+    """The imported clips through a `finite_video` harness to the dev endpoint (WR-E6L-J11):
+    each in-cap case (V1-V3; V4's 83 s and the bad bundle paths were rejected at import) is one
+    request whose one `video_url` part is a 600 s presigned GET of this provider's Lab media
+    object with the case's span as its fragment. Fetched from MinIO here, as the gateway
+    would, each URL answers the bytes of the fixture's clip for that span."""
+    import hashlib
+    from urllib.parse import parse_qs, urlsplit
+
+    import httpx
     video = lab.dataset("video", 2).dataset_ref
     harness_ref = lab.harness_ref(11, adapter="finite_video", template="label {{media_ref}}")
     frozen = lab.freeze(lab.run_payload(111, video, harness_ref, lab.serving("video")))
     with lw.endpoint("video") as (wallet, http):
         report = run(lab.runner(http).run(frozen))
     results = lab.results(frozen.run.run_id)
-    lw.save(workdir, "video-run.json", {"report": report, "results": results})
-    unreached = {case: body["reasons"] for case, body in results.items()
-                 if body["status"] == "unsupported"}
-    assert not unreached, (
-        "N1's finite-video content object (media_digest, span_ms) does not carry what H1's "
-        f"finite_video adapter reads (sample.media_ref, sample.duration_ms): {unreached}")
-    assert set(report["failures"].values()) == {"invalid_request"} and wallet.calls == []
-    lw.not_run("j11", "L3", why="the imported clips reach H1; HttpDevEndpoint refuses media "
-                               "until L3's media path merges")
-    pytest.fail("E6L-BIND: bind j11 to L3's media dispatch")
+    sent = {}
+    for call in wallet.calls:
+        (url,) = call["media"]
+        signed, span = url.split("#")
+        got = httpx.get(signed)
+        sent[span] = {"path": urlsplit(signed).path, "status": got.status_code,
+                      "expires": parse_qs(urlsplit(signed).query).get("X-Amz-Expires"),
+                      "sha256": hashlib.sha256(got.content).hexdigest()}
+    lw.save(workdir, "video-run.json", {"report": report, "results": results, "sent": sent})
+    assert report["failures"] == {} and len(wallet.calls) == 3
+    assert sorted(body["status"] for body in results.values()) == ["complete"] * 3
+    clip = {name: hashlib.sha256(data).hexdigest() for name, data in lw.CLIPS.items()}
+    assert {span: (s["status"], s["expires"], s["sha256"]) for span, s in sent.items()} == {
+        "t=0,30": (200, ["600"], clip["clips/a.mp4"]),
+        "t=30,60": (200, ["600"], clip["clips/a.mp4"]),
+        "t=0,82": (200, ["600"], clip["clips/b.mp4"])}
+    assert all(f"/lab/{lab.NEMO}/media/" in s["path"] for s in sent.values())
