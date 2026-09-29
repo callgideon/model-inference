@@ -2,7 +2,7 @@
  "task": "L3",
  "slice": "lab-sql-lw7: WR-C6-VARIANTS + WR-C6-REQUEUE (0055)",
  "activity": "review",
- "head": "21ca7882",
+ "head": "25c5b06b",
  "worktree": ".claude/worktrees/codex-w5-lab-sql-lw7",
  "branch": "codex/w5-lab-sql-lw7",
  "owned_paths": [
@@ -47,25 +47,49 @@
    "cmd": "INFRX_D_TASK=l3 make api-test",
    "exit": 0,
    "summary": "6778 passed, 184 skipped, 10 xfailed, 0 failed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l3sql/test_lw7.py",
+   "exit": 0,
+   "summary": "fix round: red first 1 failed (infrx_lab_control lacks EXECUTE), then 5 passed"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py",
+   "exit": 0,
+   "summary": "fix round: 29 passed; 20 SQL (+lw7_control_unit_ungranted) + 4 Python mutants, 0 survivors"
+  },
+  {
+   "cmd": "INFRX_D_TASK=l3 uv run --frozen pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "fix round E4 switches OFF: 2829 passed, 28 skipped, 0 failed"
   }
  ],
  "estimate": {
   "optimistic_h": 0.5,
-  "likely_h": 1.5,
-  "pessimistic_h": 4,
+  "likely_h": 1,
+  "pessimistic_h": 3,
   "confidence": "medium",
-  "basis": "code/tests/mutants done; remaining = coordinator applies WR-LW7-1 (verified patch) + one verify round (E4 ~23 min, lw7 line ~1 min); analogue D10-0025 1/2/5; Lab WR-LW7-2/3 not counted",
-  "at": "2026-09-29T17:12Z"
+  "basis": "fix round done (grant + docstring); remaining = coordinator applies WR-LW7-1 with the grant + one verify round (E4 ~22 min); WR-LW7-3 ruling and Lab work not counted",
+  "at": "2026-09-29T18:10Z"
  },
  "blockers": [],
  "wiring_requests": [
   "WR-LW7-1: pilot.ReleaseRecords.variants -> PgLabVariants (patch research/plan/evidence/l/LAB-SQL-LW7-wiring-variants.patch, verified then reverted)",
   "WR-LW7-2: apps/lab datasets requeue port + 'Import again' button + copy (diff in evidence)",
   "WR-LW7-3: Lab VARIANT requires base/variant Identity that R3 never stores: Lab nul(IDENTITY) now, R3 persists identities later",
-  "WR-LW7-4: Makefile lw7 line (applied in owned line)"
+  "WR-LW7-4: Makefile lw7 line (applied in owned line)",
+  "WR-LW7-5: SR-LCR-1 (lw8 0056) grant list + lab_local o05 expectations name infrx.lab_optimization_variants(jsonb) and infrx.lab_import_requeue(jsonb) (0055 grants them itself; idempotent)"
  ],
  "evidence": [
   "research/plan/evidence/l/LAB-SQL-LW7-21ca788.md",
   "research/plan/evidence/l/LAB-SQL-LW7-wiring-variants.patch"
- ]
+ ],
+ "open": [
+  "WR-C6-VARIANTS partially done until WR-LW7-3 is ruled ((b) Lab nul(IDENTITY) / (a) R3 persists identities)"
+ ],
+ "fix_round": {
+  "0-LW7-C1": "docstring fixed; WR-LW7-1/3 remain coordinator/Lab",
+  "1-LW7-SCOPE-1": "fixed (grant in 0055, checked + mutant)",
+  "1-LW7-SCOPE-2": "not fixed in-lane: needs WR-LW7-3 ruling"
+ }
 }

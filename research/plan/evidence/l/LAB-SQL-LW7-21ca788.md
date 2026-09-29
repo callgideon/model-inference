@@ -178,3 +178,25 @@ optimistic 0.5 h / likely 1.5 h / pessimistic 4 h, confidence medium. Basis: the
 mutants are done; what remains is the coordinator applying WR-LW7-1 (verified patch) and a
 verify round on the merge (E4 ~23 min + the lw7 mutant line ~1 min); WR-LW7-2/3 are Lab-lane
 work (~2-4 h there, not counted here), analogue D10-0025 at 1/2/5.
+
+## Fix round (handback 5c51f5ac; code fix 25c5b06b)
+
+| Finding | Outcome |
+|---|---|
+| 1-LW7-SCOPE-1 (control unit has no EXECUTE on 0055) | **fixed.** 0055 ends with `grant execute on function infrx.lab_optimization_variants(jsonb), infrx.lab_import_requeue(jsonb) to infrx_lab_control;` (the role exists since 0043; 0052's shape); header updated. Test first: `check_browser_roles_reach_nothing` now asserts `has_function_privilege('infrx_lab_control', …, 'execute')` for both; red before the grant (`{'lab_import_requeue': False}` / `{'lab_optimization_variants': False}`), green after. New SQL mutant `lw7_control_unit_ungranted` (drops the grant) is killed by it. For SR-LCR-1 (lw8's 0056): its explicit grant list and the o05 expectations should also name both functions; re-granting is idempotent, so either order of merge is safe. |
+| 0-LW7-C1 (listing is not port.ts's `Variant`; launched composition still 503) | **partly fixed (docstring).** `lab_variants.py`'s docstring no longer says the rows are port.ts's `Variant`: it states the Identity gap, WR-LW7-3's options and that the launched composition serves it only after WR-LW7-1. WR-LW7-1 (pilot.py) and WR-LW7-3 (apps/lab / R3) stay outside this lane's paths. |
+| 1-LW7-SCOPE-2 (both Identity objects missing) | **not fixed in-lane.** It needs the coordinator's ruling on WR-LW7-3: (b) the Lab reads `base`/`variant` as `nul(IDENTITY)` and re-cuts R4-X113, or (a) R3 persists both identities and 0055 returns them. Until then, track **WR-C6-VARIANTS as partially done**: the SQL listing, R227 isolation and the port are done, but the Lab page cannot read a non-empty listing. Apply WR-LW7-1 together with this round's grant. |
+
+Commands (apps/infrx-api, key l3):
+
+| # | Command | Exit | Result |
+|---|---|---|---|
+| F1 | `INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l3sql/test_lw7.py` (before the grant) | 1 | 1 failed / 4 passed (red: control unit lacks EXECUTE) |
+| F2 | `INFRX_D_TASK=l3 uv run --frozen pytest -q tests/l3sql tests/g/lab_datasets` | 0 | 29 passed |
+| F3 | `INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py` | 0 | 29 passed (20 SQL + 4 Python mutants, 0 survivors) |
+| F4 | `INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_upgrade_lab.py tests/d/test_l3sql_reads.py tests/d/test_l2sql_access.py tests/d/test_l3sql_control.py` | 0 | 33 passed (grant/inventory neighbours unchanged) |
+| F5 | `uv run --frozen ruff check infrx/state/lab_variants.py tests/l3sql tests/d/test_code_mutants_lw7.py` | 0 | clean |
+| F6 | root: `pytest -q tests/integration/test_harness.py` | 1 | 46 passed / 1 failed: `test_nothing_in_this_directory_points_at_production` flags `tests/integration/lab_local/mutants.py`, `ops/test_create_test_user.py` and `test_certify.py`. These files predate this lane and are not in its diff; the 0055 pin test passes |
+| F7 | `INFRX_D_TASK=l3 uv run --frozen pytest -q tests/g tests/w tests/contracts tests/i/test_packaging.py` (every switch OFF) | 0 | 2829 passed, 28 skipped, 0 failed (21:40) |
+
+Remaining estimate after this round: optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence medium. That covers the coordinator applying WR-LW7-1 with this grant, plus one verify round. The WR-LW7-3 ruling and the Lab work are not counted.
