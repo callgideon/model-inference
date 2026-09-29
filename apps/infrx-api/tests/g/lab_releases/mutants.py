@@ -12,7 +12,8 @@ Mutants live in the router and, for the two seam decisions its route cases prove
 from __future__ import annotations
 
 from ...contracts import mutants as shared
-from ...contracts.mutants import Mutant, Result
+from ...contracts.mutants import Mutant, Result, Runner
+from ..feedback.mutants import _layout
 from ..lab_auth import mutants as auth
 
 SUITE_FILES = ("tests/g/lab_releases/test_lab_releases.py",)
@@ -31,6 +32,7 @@ FOREIGN = C + "another_providers_policy_is_not_found_and_d9_is_not_read"
 UNWIRED, BODY = C + "an_unwired_port_is_unavailable_after_the_access_checks", \
     C + "a_body_is_json_and_exactly_a_proposal"
 PROGRESS = C + "a_releases_progress_is_d9s_live_null_only_before_one_is_observed"
+UNIT_REFUSED = C + "a_unit_refused_live_nulls_its_own_row_and_the_others_list"
 ADMIN = ("        who = await lab_actor(request, x.sessions, x.access,\n"
          "                              Cap.read_aggregate_health)"
          "          # the role: `propose`\n")
@@ -109,8 +111,24 @@ MUTANTS: tuple[Mutant, ...] = (
        '        "proposed_by": who.user_id})', '        "proposed_by": None})', FENCE),
     # WR-LIVE-PAGE (composition-7): progress is D9's Live of the revision (0054, R244)
     _m("page_progress_withheld", "progress is D9's Live, not null",
-       '"progress": _progress(await self.d9.live(item.policy_ref)),', '"progress": None,',
+       '"progress": _progress(live),', '"progress": None,',
        PROGRESS, file=P),
+    # C7-RV-6 (R248): one unit-refused Live nulls its own row; the listing still answers
+    _m("page_unit_refusal_fails_listing", "a unit-refused Live never fails the listing",
+       "            except errors.InvalidRequest:     # R248", "            except errors.Conflict:"
+       "     # R248", UNIT_REFUSED, file=P),
+    _m("page_any_failure_is_a_unit_refusal", "only R248's refusal degrades a row; an outage "
+       "still fails the listing", "            except errors.InvalidRequest:     # R248",
+       "            except errors.DomainError:     # R248", UNIT_REFUSED, file=P),
+    _m("page_unit_refused_verdict_shown", "a unit-refused row shows no verdict",
+       "out[-1].update(verdict=None, refused=refused)", "out[-1].update(refused=refused)",
+       UNIT_REFUSED, file=P),
+    _m("page_unit_refused_untyped", "a unit-refused row names its typed reason",
+       'live, refused = None, "unit_refused"', "live, refused = None, None", UNIT_REFUSED,
+       file=P),
+    _m("page_unit_refused_everywhere", "a row not refused carries no refusal",
+       "            if refused:\n                out[-1].update(", "            if True:\n"
+       "                out[-1].update(", UNIT_REFUSED, file=P),
     _m("page_live_of_another", "each release's Live is read for its own revision",
        "await self.d9.live(item.policy_ref)", "await self.d9.live(item.policy_id)", PROGRESS,
        file=P),
@@ -145,9 +163,22 @@ def case_names() -> set[str]:
 
 
 RUNNER = auth.runner("lab-releases", SUITE_FILES)
+# C7-RV-6 on real 0054 (the p3 key): opt-in (`INFRX_LAB_RELEASES_PG=1`, `INFRX_D_TASK=p3`),
+# since a whole-suite parent holds the key's port lock. Its own baseline, as worker_main's.
+PG_FILE = "tests/g/lab_releases/test_lab_releases_unit_refused_pg.py"
+PG_CASE = "test_lab_releases_unit_refused_pg__a_legacy_usd_release_nulls_only_its_own_row"
+PG_RUNNER = Runner(name="lab-releases-pg", targets=(PG_FILE,), layout=_layout,
+                   env=("INFRX_D_TASK",))
+PG_MUTANTS: tuple[Mutant, ...] = (
+    _m("page_unit_refusal_fails_listing_pg", "a legacy-USD release on real 0054 never fails "
+       "the listing", "            except errors.InvalidRequest:     # R248",
+       "            except errors.Conflict:     # R248", PG_CASE, file=P),
+)
 
 
 def run_mutant(mutant) -> Result:
+    if mutant in PG_MUTANTS:
+        return shared.pristine((PG_CASE,), PG_RUNNER) or shared.run_mutant(mutant, PG_RUNNER)
     return shared.run_mutant(mutant, RUNNER)
 
 

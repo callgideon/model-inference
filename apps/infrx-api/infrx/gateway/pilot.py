@@ -439,7 +439,9 @@ class ReleaseRecords:
     with D7's policy revision and the plan its launcher stored (WR-C5-PLAN; none stored: a
     503 naming it, never a guessed plan); `progress` is D9's Live of the revision (0054, R244;
     WR-LIVE-PAGE), null only while nothing is assigned - no per-serving tally is readable yet,
-    so `assignments` is empty; the verdict is D9's latest decision. Decisions are 0053's. R3's variants
+    so `assignments` is empty; the verdict is D9's latest decision. A Live R248 refuses (legacy
+    USD) nulls that row's progress and verdict with `refused: "unit_refused"`; the rest list
+    (C7-RV-6). Decisions are 0053's. R3's variants
     are 0055's listing (WR-C6-VARIANTS): none is [], never a 503."""
 
     def __init__(self, d9, store, objects, variants) -> None:
@@ -457,6 +459,10 @@ class ReleaseRecords:
             plan = Plan.model_validate_json(raw).model_dump(mode="json")
             policy = await self.store.resolve(item.policy_ref, provider_org_id=provider_org_id)
             release, d = item.release, item.latest_decision
+            try:
+                live, refused = await self.d9.live(item.policy_ref), None
+            except errors.InvalidRequest:     # R248, C7-RV-6: this row only, typed
+                live, refused = None, "unit_refused"
             out.append({
                 "policy_ref": item.policy_ref, "endpoint_id": policy.endpoint_id,
                 "version": policy.version, "baseline_ref": policy.baseline_ref,
@@ -471,10 +477,12 @@ class ReleaseRecords:
                          "budget": {"amount": plan["budget"]["value"],
                                     "unit": plan["budget"]["unit"]}},
                 "started_at": _z(release.started_at),
-                "progress": _progress(await self.d9.live(item.policy_ref)),
+                "progress": _progress(live),
                 "verdict": None if d is None else {
                     "action": d.decision, "reasons": list(d.reasons),
                     "evidence_refs": list(d.evidence_refs), "evaluated_at": _z(d.at)}})
+            if refused:
+                out[-1].update(verdict=None, refused=refused)
         return out
 
     async def decisions(self, provider_org_id: str) -> list[dict]:
