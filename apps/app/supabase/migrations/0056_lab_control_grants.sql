@@ -11,7 +11,11 @@
 -- LOCAL-ONLY (R150/R151/R201): never applied hosted; the number is the next free at merge.
 --
 --   datasets        lab_resolve, lab_publish, lab_accessible_samples (lineage status),
---                   lab_import_job_enqueue, lab_import_job (0051's queue, R243)
+--                   lab_import_job_enqueue, lab_import_job (0051's queue, R243); 0041's reads
+--                   lab_blocked_samples (lineage.status) and lab_permitted_samples
+--                   (lineage.permitted: a version's derive/export/read_part, pipelines'
+--                   label imports/select/export, training prepare). 0041's writes
+--                   (lab_bound_samples, lab_tombstone_samples) stay worker/T3-only.
 --   evaluations     lab_run_status, lab_cancel_run
 --   pipelines       D8's label log (lab_label_append, lab_label_events), the external-run
 --                   ledger (lab_external_run_get/_move, lab_run_reserve/_release/_settle,
@@ -29,6 +33,7 @@
 grant execute on function
   infrx.lab_resolve(jsonb), infrx.lab_publish(jsonb), infrx.lab_accessible_samples(jsonb),
   infrx.lab_import_job_enqueue(jsonb), infrx.lab_import_job(jsonb),
+  infrx.lab_blocked_samples(jsonb), infrx.lab_permitted_samples(jsonb),
   infrx.lab_run_status(jsonb), infrx.lab_cancel_run(jsonb),
   infrx.lab_put_evaluator(jsonb), infrx.lab_create_run(jsonb),
   infrx.lab_receive_checkpoint(jsonb), infrx.lab_checkpoint_transition(jsonb),
