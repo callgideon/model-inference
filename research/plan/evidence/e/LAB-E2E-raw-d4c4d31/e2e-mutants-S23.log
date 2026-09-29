@@ -1,0 +1,3 @@
+killed  E2E-S23 a checkpoint whose held-out evaluation is only queued reads as eligible — killed by "E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation"
+
+stack: 20 cases named; 1 mutants, 1 killed, 0 not killed

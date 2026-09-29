@@ -324,3 +324,36 @@ def test_j11_a_finite_video_case_reaches_the_dev_endpoint(lab, workdir):
     lw.not_run("j11", "L3", why="the imported clips reach H1; HttpDevEndpoint refuses media "
                                "until L3's media path merges")
     pytest.fail("E6L-BIND: bind j11 to L3's media dispatch")
+
+
+def _e2e():
+    """LAB-E2E's gate half (`apps/lab/tests/e2e/gate.py`), by path under this package's name
+    (R213); a mutant copy has no apps/lab, so INFRX_LAB_DIR names the checkout's."""
+    import importlib.util
+    import os
+    from pathlib import Path
+    lab = Path(os.environ.get("INFRX_LAB_DIR") or lw.REPO / "apps" / "lab")
+    spec = importlib.util.spec_from_file_location("lab_evaluate.lab_e2e_gate",
+                                                  lab / "tests" / "e2e" / "gate.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_j10_the_provider_ui_launches_compares_and_cancels(workdir):
+    """j10 (LAB-E2E): `apps/lab/tests/e2e/evaluate` - the Lab's evaluation pages built and
+    served, signed in through their own form, over `/lab/v1/evaluations` on the l4 key: the
+    page fails closed on the gateway's own LAB_EVALS composition, then a launch through the
+    page's form freezes two real D7 runs (B1, L2), progress and a cancel come from D7's records,
+    B2's stored report is shown with its slices and intervals, and the unsafe variants are
+    refused. A red suite fails this case; a green one is NOT RUN while the gateway's own
+    composition lacks the experiments/catalog/ledger ports (WR-B4-2, WR-LAB2-2, WR-B3-1)."""
+    e2e = _e2e()
+    got = e2e.run("evaluate", workdir)
+    lw.save(workdir, "j10.json", {k: v for k, v in got.items() if k != "tail"})
+    absent = e2e.missing(got)
+    if absent:
+        lw.not_run("j10", "WR-B4-2", "WR-LAB2-2", "WR-B3-1",
+                   why=f"{e2e.command('evaluate')} passed ({got['pass']} cases) over D7/B1/L2 "
+                       f"with the route suite's experiments/catalog/ledger, but pilot._lab_2 "
+                       f"composes LabEvaluations without {absent}")

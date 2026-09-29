@@ -1,0 +1,49 @@
+{
+ "task": "E5L",
+ "activity": "review",
+ "head": "4f9e090",
+ "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+ "branch": "codex/w5-lab-e2e",
+ "owned_paths": [
+  "apps/lab/tests/e2e/**",
+  "Makefile (lab-e2e target + .PHONY)",
+  "tests/integration/lab_{observe,evaluate,improve,rollout}/ (UI cell binds)",
+  "research/plan/evidence/e/LAB-E2E-*"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/LAB-E2E-2299b82.md",
+  "research/plan/evidence/e/LAB-E2E-raw-d4c4d31",
+  "research/plan/evidence/e/LAB-E2E-raw-2299b82"
+ ],
+ "slice": "o10 (CONSOLE-FLOWS) bound to apps/lab/tests/e2e/observe (LAB-E2E)",
+ "commands": [
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python tests/integration/lab_observe/runner.py --only o10 --out research/plan/evidence/e/LAB-E2E-raw-9e485b3/e5l-o10",
+   "exit": 3,
+   "summary": "o10 PASS, CONSOLE-FLOWS PASS (gate NOT RUN: other scenarios not selected); again PASS at 2299b82 (keep + teardown)"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e5l pytest tests/integration/lab_observe/test_mutants.py -k st_traces_route_ignores_deletion (kept e5l)",
+   "exit": 0,
+   "summary": "killed at 2299b82"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py",
+   "exit": 0,
+   "summary": "50 passed, 20 stack skipped visibly"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 2,
+  "confidence": "high",
+  "basis": "E5L remains NOT RUN only on o01 (WR-COMP-4); o10 PASS",
+  "at": "2026-09-29T13:08:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [],
+ "ui_cell": {
+  "o10": "PASS (not rerun this round; gate.py verdict now covered by a layer-1 case + 5 mutants)"
+ }
+}

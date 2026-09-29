@@ -1,0 +1,26 @@
+killed  E2E-S01 a lost capture loses its reason in the list — killed by "E2E-O01 a developer's list shows its own deployment's requests with each one's content state, and nothing else"
+NOT KILLED E2E-S02 an ungranted request reads as expired content — SURVIVED (failed only: E2E-O o10 the Lab review panel renders the provider trace route's answer)
+killed  E2E-S03 content is loaded without being asked for — killed by "E2E-O02 the review page shows the record, then each panel's own answer: content on request, the feedback door, the judge door"
+killed  E2E-S04 a refused list reads as not found, whatever the reason — killed by "E2E-O03 a viewer, another provider, a consumer-only account and a signed-out visitor see no request"
+killed  E2E-S05 a consumer-only account gets a workspace chooser — killed by "E2E-O03 a viewer, another provider, a consumer-only account and a signed-out visitor see no request"
+NOT KILLED E2E-S06 a metadata-only record shows an organization — SURVIVED (failed only: E2E-O o10 the Lab review panel renders the provider trace route's answer)
+killed  E2E-S07 an unavailable releases service reads as an empty list — killed by "E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success"
+killed  E2E-S08 a rolled-back release still offers a rollback — killed by "E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose"
+killed  E2E-S09 a decided proposal still reads as pending — killed by "E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence"
+killed  E2E-S10 an inconclusive verdict offers an expansion — killed by "E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once"
+killed  E2E-S11 a viewer is offered the proposal forms — killed by "E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing"
+killed  E2E-S12 the form proposes at another fence than the page showed — killed by "E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence"
+killed  E2E-S13 an unavailable evaluation service reads as empty lists — killed by "E2E-E01 as the gateway composes LAB_EVALS today, the page fails closed: nothing listed, nothing to launch"
+killed  E2E-S14 a launch does not land on its experiment — killed by "E2E-E02 a launch through the page's form lands on the experiment: its declared protocol and two queued runs"
+killed  E2E-S15 a finished run offers a cancel — killed by "E2E-E03 progress and a cancel come from the records: a running run is cancelled once, a finished run offers none"
+killed  E2E-S16 a stored report is shown as pending — killed by "E2E-E04 the comparison is B2's stored report as the view reads it: outcome, reasons, every estimate with its interval"
+killed  E2E-S17 a viewer is offered the launch form — killed by "E2E-E05 a viewer, another provider and a consumer-only account see and launch nothing that is not theirs"
+killed  E2E-S18 an unavailable pipeline service reads as empty lists — killed by "E2E-I01 as the gateway composes LAB_PIPELINES today: the annotations page reads, the training page fails closed"
+killed  E2E-S19 a rejected import row loses its reason — killed by "E2E-I02 labels imported through the page's form: accepted rows listed as not ground truth, rejected rows with their reason"
+killed  E2E-S20 an accepted import reads as ground truth — killed by "E2E-I03 an administrator assigns the reviewer, the developer accepts each label: an accepted import is still not ground truth"
+killed  E2E-S21 an omitted label loses its reason — killed by "E2E-I04 a train-only export through the page's form: train samples in its lineage, the held-out label omitted with its reason"
+killed  E2E-S22 a submitted manual run cannot be marked finished — killed by "E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation"
+killed  E2E-S23 a checkpoint without its held-out evaluation reads as eligible — killed by "E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation"
+NOT KILLED E2E-S24 a viewer is offered the label import and export forms — SURVIVED (suite passed)
+
+stack: 20 cases named; 24 mutants, 21 killed, 3 not killed

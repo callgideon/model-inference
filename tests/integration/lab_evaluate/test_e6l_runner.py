@@ -59,17 +59,22 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 11
     assert runner.SCENARIOS["j09"]["lanes"] == []
-    assert runner.SCENARIOS["j10"]["lanes"] == ["lab-e2e"]
+    assert runner.SCENARIOS["j10"]["lanes"] == ["WR-B4-2", "WR-LAB2-2", "WR-B3-1"], (
+        "j10 runs apps/lab/tests/e2e/evaluate (LAB-E2E); NOT RUN until the gateway's own "
+        "LAB_EVALS composition carries the experiments, catalog and ledger ports")
     assert runner.SCENARIOS["j11"]["lanes"] == ["L3"]
 
 
 def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     """R222: the gate is accepted locally with no FAIL cell and every NOT RUN waiting only on
-    out-of-local-scope work (a GPU, staging, an external provider, the lab-e2e UI harness),
-    by its own NOT RUN reason. A NOT RUN on in-scope work (j11's L3 media path), a FAIL, or a
+    out-of-local-scope work (a GPU, staging, an external provider, a product WR: j10's
+    LAB_EVALS ports), by its own NOT RUN reason. A NOT RUN on in-scope work (j11's L3 media path), a FAIL, or a
     scenario NOT RUN for another reason (deselected, a case absent) is left open."""
-    assert runner.OUT_OF_SCOPE == {"lab-e2e": "lab-e2e UI", "L3": "product WR: WR-E6L-J11"}
-    ui = "NOT RUN[lab-e2e] the UI; rerun after the merge: x --only j10"
+    assert runner.OUT_OF_SCOPE == {"lab-e2e": "lab-e2e UI", "WR-B4-2": "product WR: WR-B4-2",
+                                   "WR-LAB2-2": "product WR: WR-LAB2-2",
+                                   "WR-B3-1": "product WR: WR-B3-1",
+                                   "L3": "product WR: WR-E6L-J11"}
+    ui = "NOT RUN[WR-B4-2,WR-LAB2-2,WR-B3-1] the UI; rerun after the merge: x --only j10"
     others = [c for sid in runner.SCENARIOS if sid not in ("j10", "j11") for c in everything(sid)]
     base = [*others, *everything("j10", "skipped", ui)]
     result = runner.classify(junit(*base, *everything("j11", "skipped", "NOT RUN[L3] media")))
@@ -83,8 +88,9 @@ def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     # the lane's recorded final verdict at 24a7a065 is accepted over its statuses (WR-E6L-SCOPE)
     recorded = json.loads((REPO / "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json")
                           .read_text())
-    statuses = {s["id"]: {k: s[k] for k in ("status", "cases", "reasons")}
-                for s in recorded["scenarios"]}
+    statuses = {s["id"]: {k: s[k] for k in ("status", "cases", "reasons", "lanes")}
+                for s in recorded["scenarios"]}     # j10 recorded under its lanes then: lab-e2e
+    assert statuses["j10"]["lanes"] == ["lab-e2e"]
     assert {sid: s["status"] for sid, s in statuses.items() if s["status"] != "PASS"} == \
         {"j10": "NOT RUN", "j11": "NOT RUN"}
     assert runner.r222(statuses) == {"accepted": True, "open": {}}
@@ -97,18 +103,6 @@ def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     assert "j10" in runner.r222(result)["open"], "every reason must be the lane's wait"
     result = runner.classify(junit(*base, *everything("j11", "failure", "AssertionError")))
     assert runner.r222(result)["open"] == {"j11": "FAIL"}
-
-
-
-def test_e6l_j10_fails_its_tripwire_once_the_lab_e2e_suite_exists(tmp_path, monkeypatch):
-    """WR-E6L-RV-2: once apps/lab/tests/e2e/evaluate/ exists, j10 fails E6L-BIND (it must be
-    bound) instead of staying NOT RUN[lab-e2e]."""
-    pending = _load("e6l_pending", "scenarios_pending.py")
-    (tmp_path / "apps" / "lab" / "tests" / "e2e" / "evaluate").mkdir(parents=True)
-    monkeypatch.setattr(pending.lw, "REPO", tmp_path)
-    with pytest.raises(BaseException) as caught:    # a skip (NOT RUN) is caught, and fails
-        pending.test_j10_the_provider_ui_launches_compares_and_cancels()
-    assert caught.type is AssertionError and "lab-e2e landed" in str(caught.value), caught
 
 
 def test_e6l_the_required_cases_are_exactly_what_the_scenario_modules_define():

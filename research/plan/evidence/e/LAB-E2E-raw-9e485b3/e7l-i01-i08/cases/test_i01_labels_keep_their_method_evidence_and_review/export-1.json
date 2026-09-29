@@ -1,0 +1,117 @@
+{
+ "adapter": "sft.1",
+ "created_at": "2026-09-20T12:00:00+00:00",
+ "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da7-0000-4000-8000-000000000001@sha256:4d76dea8c80882304b5936bc1a81dc7254b1c3e184ca675040113a3f953afbfa",
+ "examples_key": "lab/b0000001-0000-4000-8000-000000000001/label-exports/000000e8-0000-4000-8000-000000000001/examples.jsonl",
+ "expires_at": "2026-09-20T13:00:00+00:00",
+ "export_id": "000000e8-0000-4000-8000-000000000001",
+ "format": "infrx.label_export.1",
+ "items": 9,
+ "lineage": [
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:4d3b5f8b-d937-43e7-a3e7-95b160957a32@sha256:d1f86d7ebeddb9d26cd264fa79f0c1bd45d68ad0eb8b6ee644c36dd6153b53b6",
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:c145bc06-b1c2-4a0a-87a8-1853b3857565@sha256:833adcd8e541d1cd6c01be90e42d070c6a01ae654f19ceeb7e82c2f7a8537e4b"
+   ],
+   "methods": [
+    "imported",
+    "synthetic"
+   ],
+   "sample_id": "2c915104-af29-43b1-87df-747db27a5da3"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:a9d75d0c-b232-41a6-912c-44fe5447ddd0@sha256:a6e68c7aec860dcb14b343248adb5ea57f7f4858eeeb212a876222f29603d932"
+   ],
+   "methods": [
+    "synthetic"
+   ],
+   "sample_id": "36e7ec6e-ae63-441a-80b0-e1327a03d85a"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:184362e8-5118-4d74-b562-f22fe65238d4@sha256:66c288912d7f7b3fcbe29b4245507dcc165376824ff2cc0bba3cf35d3ec51fea",
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:48d71bbb-b99b-4bb7-a37c-923c14174ccf@sha256:cc60d40453a2915d03b26d6df8a5a57c4b6ce242c045a5c4fd696ae5c9e03b40"
+   ],
+   "methods": [
+    "imported",
+    "synthetic"
+   ],
+   "sample_id": "50ad02e6-af59-4480-8d7d-59e94a133e17"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:377dcc09-5b77-4eb5-9ac4-ba39fb86c044@sha256:39fd1762152b24d9f8806241afe738a0e74736aef26a46c04037b4570b4673a5"
+   ],
+   "methods": [
+    "synthetic"
+   ],
+   "sample_id": "5c52582b-ae2e-4145-80e0-fae389afcdb1"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:f9800ab9-678a-48ed-858e-3a4521cd1a11@sha256:4a365f0b78436f04489ff67f4614863080f6c8effd61fec54dc2812d8406d98b"
+   ],
+   "methods": [
+    "human"
+   ],
+   "sample_id": "aaf2b8dc-c96a-41a1-82e8-27cf6333c75b"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:75d03634-bd1a-4f03-95cf-2ee3a2d6f3a3@sha256:a2db36568f0b42aedd40dcffea40da51f4ceb8bb65ac6ae5992358957cacef31",
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:9fd9a036-777f-4e94-a436-85286ed148bc@sha256:e9067a2c5d6a033150cd1de1b478471f8fa0d6507fa9dcb442dcfe0ca1ff825c"
+   ],
+   "methods": [
+    "imported",
+    "synthetic"
+   ],
+   "sample_id": "c8980deb-6377-44ea-8710-47dd4dbb1739"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:656ba336-d8a2-41ac-a54b-5bd2602eb49f@sha256:5d8b051548bf0b41be0b9c98bf618f7c43e8bb2ae9b6490f7aa2b55545f82c3a"
+   ],
+   "methods": [
+    "synthetic"
+   ],
+   "sample_id": "c8efbc48-e281-440d-840e-a1e8508a589d"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:407d3e75-66c8-4ef1-8e4d-1f8e9b7d1c2f@sha256:e46bec1910f97a735434af238ceb8914232c251073980327d4839bc3eb8e2506"
+   ],
+   "methods": [
+    "synthetic"
+   ],
+   "sample_id": "d2625b97-f35c-4c0f-821c-a65446450ddb"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:67146e81-2b5b-4024-ac7f-d85dcf4ae487@sha256:75e551561c5dc5a2ad9be8779f03cf6a872356326885d723b523195b2901a6b7",
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:a9703ad6-c69f-4589-87c8-a81353fe29bf@sha256:4503861d42e3c521c17346952ec2814c61399e0d186bb0e094d1132b72ba7e0b"
+   ],
+   "methods": [
+    "imported",
+    "synthetic"
+   ],
+   "sample_id": "dbaa3d3e-d05b-419b-8e01-0961aafce4e0"
+  }
+ ],
+ "omitted": [
+  {
+   "reason": "validation",
+   "sample_id": "268f4b3b-d8a5-43f2-8c11-369d70016e00"
+  },
+  {
+   "reason": "validation",
+   "sample_id": "3f539322-4fb7-48cd-89d8-b0168c078b8a"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "68f8c8da-a60c-40c3-87de-534ee9933e31"
+  }
+ ],
+ "sha256": "e7c39bc5a25e2a5a66d68b4525b34e877f0f1b0cf1de6e75ae03a95d696d251e",
+ "split": "train"
+}

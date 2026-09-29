@@ -1,0 +1,14 @@
+{
+  "suite": "improve",
+  "cell": "E7L i08 (UI)",
+  "composed": {
+    "listings": false,
+    "suites": false
+  },
+  "stand_ins": [
+    "session verifier and PostgREST RPC door (stack.door)",
+    "Lab objects in memory (no S3 on l4)",
+    "run and checkpoint listings over D8/D7 rows (WR-LAB2-4 to compose)",
+    "no B3 suite source in P3's evaluation port unless composed (WR-B3-3)"
+  ]
+}

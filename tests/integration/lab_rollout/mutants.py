@@ -4,7 +4,7 @@ runner (`apps/infrx-api/tests/contracts/mutants.py`, a private copy whose Python
 check is relaxed for the SQL targets, as E3L's and E6L's).
 
 * `MUTANTS` (layer 1, no stack): the runner's classification, cells, gate and exit codes, the
-  NOT RUN vocabulary, and the unbound k08-k10 cases (never a pass once they stop skipping).
+  NOT RUN vocabulary, and the unbound k08 case (never a pass once it stops skipping).
 * `STACK_MUTANTS` (the failure oracles of tasks.json E8L): the product decisions the rollout
   scenarios guard - R1's pins, eligibility, cohorts, outage, shadow bound and suppression,
   assignment key; F3's cohort hash; 0043's routing reads; R2's guardrails, horizon, approval
@@ -103,8 +103,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("a_manifest_test_id_dropped", "the cells are the manifest's test ids", R,
        'TEST_IDS = ("ROLLOUT-PIN", "ROLLOUT-RECOVER", "OPT-PARITY")',
        'TEST_IDS = ("ROLLOUT-PIN", "ROLLOUT-RECOVER")', MATRIX),
-    _m("a_waiting_leg_claimed_merged", "the UI leg waits on lab-ui-swap", R,
-       '"test_ids": ["ROLLOUT-PIN"], "lanes": ["lab-ui-swap"]},',
+    _m("a_waiting_leg_claimed_merged", "the UI leg waits on WR-R4-2's composition", R,
+       '"test_ids": ["ROLLOUT-PIN"], "lanes": ["WR-R4-2"]},',
        '"test_ids": ["ROLLOUT-PIN"], "lanes": []},', MATRIX),
     _m("a_required_case_renamed", "the required cases are the modules' cases", R,
        '    "k10": ("test_k10_the_releases_ui_over_the_real_route",\n',
@@ -123,7 +123,7 @@ MUTANTS: tuple[Mutant, ...] = (
        SUB_CELL),
     _m("sub_cell_without_its_lane", "the breach sub-cell names WR-C5-LIVE", R,
        '"parent": "k09", "lanes": ["WR-C5-LIVE"],', '"parent": "k09", "lanes": [],', SUB_CELL),
-    _m("unbound_case_runs", "a case waiting on P-08/composition-2/lab-ui-swap is never a pass",
+    _m("unbound_case_runs", "a case waiting on P-08 is never a pass",
        P, "    lw.not_run(sid, *lanes, why=why)", "    return", *UNBOUND),
 )
 
@@ -163,6 +163,8 @@ K05_SPEND = "test_k05_overspend_rolls_back_and_units_never_mix"
 K06_PROMOTED = "test_k06_an_emergency_rollback_moves_a_promoted_alias_back"
 K06_READS = "test_k06_the_worlds_alias_read_is_the_real_control_store_on_its_login"
 K10_LISTING = "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict"
+K10_UI = "test_k10_the_releases_ui_over_the_real_route"                 # LAB-E2E
+LR = "infrx/gateway/routes/lab_releases.py"
 K07_STORED = "test_k07_a_variant_is_probed_compared_and_stored"
 K07_REFUSED = "test_k07_incompatible_variants_and_unmeasured_claims_are_refused"
 
@@ -308,6 +310,12 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "(0048's lab_releases_in)", D48,
        "       order by e.fence desc limit 1) d on true",
        "       order by e.fence asc limit 1) d on true", K10_LISTING),
+    # LAB-E2E: k10's UI half - the page shows a pending proposal from the route's records
+    # (the route's own fence check is backstopped by 0043's, so the page cannot see it drop)
+    _m("st_releases_route_drops_the_proposals", "the releases answer carries the provider's "
+       "proposals (the page shows the pending one)", LR,
+       '"proposals": list(await x.port("proposals").proposals(provider))}',
+       '"proposals": []}', K10_UI),
     _m("st_claim_unmeasured", "an optimization is claimed only with measurements", R3,
        '"optimization_claimed": outcome == "equivalent" and performance is not None}',
        '"optimization_claimed": outcome == "equivalent"}', K07_STORED),
@@ -333,7 +341,7 @@ KNOWN_FAIL: set[str] = set()
 
 
 def case_names() -> set[str]:
-    """The layer-1 cases: the runner's own, and the unbound k08-k10 cases."""
+    """The layer-1 cases: the runner's own, and the unbound k08 case."""
     return set(re.findall(r"^def (test_\w+)\(", (REPO / LAYER1_FILES[0]).read_text(), re.M)) \
         | set(UNBOUND)
 
@@ -368,7 +376,7 @@ def _stack(root: pathlib.Path) -> pathlib.Path:
 
 RUNNER = Runner(name="e8l", targets=LAYER1_FILES, package="", layout=_layer1)
 #: the kept stack's identity, handed to the copy (harness.working_dir / STATE_FILE seams)
-STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE")
+STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_LAB_DIR")
 STACK_RUNNER = Runner(name="e8l-stack", package="", layout=_stack, env=STACK_ENV,
                       timeout_s=1800,
                       targets=tuple(f"../../tests/integration/lab_rollout/{f}"
@@ -387,6 +395,7 @@ def claim_the_kept_stack() -> str | None:
         return f"no kept e8l stack: run {lab_world.RUNNER} --keep first"
     os.environ["INFRX_E2_CHECKOUT"] = lab_world.harness.working_dir()
     os.environ["INFRX_E2_STATE_FILE"] = str(lab_world.harness.STATE_FILE)
+    os.environ["INFRX_LAB_DIR"] = str(REPO / "apps" / "lab")      # k10's UI suite (LAB-E2E)
     return None
 
 

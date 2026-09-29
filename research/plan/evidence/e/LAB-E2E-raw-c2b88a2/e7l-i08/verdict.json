@@ -1,0 +1,232 @@
+{
+  "task": "E7L",
+  "gate": "LAB-IMPROVE-LOCAL",
+  "verdict": "FAIL",
+  "exit": 1,
+  "cells": {
+    "DATA-LINEAGE": "NOT RUN",
+    "PIPELINE-LINEAGE": "FAIL",
+    "PIPELINE-BUDGET": "NOT RUN",
+    "TRAIN-RECOVER": "NOT RUN"
+  },
+  "label": "real PostgreSQL (every migration incl. 0027-0043) and S3-compatible MinIO, the merged N1/N2/N3/P1/P2/P3/H1/B1/B2 code, D7 receipts, L2 grants and D6F feedback; D8's ledgers and B3's P3 evaluation port as test-side stand-ins (see lab_world); owned synthetic fixtures, a deterministic evaluator, synthetic serving endpoints, the local teacher fake and the manual/protocol training connectors; no real-model improvement claim (P-07), no live teacher (P-10) or managed training (P-11) evidence, not GPU capacity, not hosted",
+  "pins": {
+    "base": "b2906856",
+    "head": "c2b88a2ba55aaa9f92e8fd8a5bf4acb9ad34b71f",
+    "dirty": true,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    },
+    "fixtures_sha256": {
+      "improve.json": "137fea578c97ec24cd695b8f5847003b4ebbcba0a030a899634903de93023e01",
+      "improve.jsonl": "e16316ae0d40610a5d84e6f8f6898eda02eef9cb4a18f8686c743121214f44ba"
+    }
+  },
+  "namespace": "e7l",
+  "ports": {
+    "postgres": 57332,
+    "valkey": 57379,
+    "clickhouse_http": 57323,
+    "clickhouse_native": 57390,
+    "s3": 57300,
+    "fake_vllm": 57380
+  },
+  "started": "2026-09-29T11:17:26+00:00",
+  "seconds": 49.4,
+  "stack": {
+    "usable": true,
+    "why_not": null,
+    "stages": [
+      {
+        "stage": "preflight",
+        "status": "PASS",
+        "seconds": 1.8
+      },
+      {
+        "stage": "services",
+        "status": "PASS",
+        "seconds": 10.6
+      },
+      {
+        "stage": "migrate",
+        "status": "PASS",
+        "seconds": 0.8
+      },
+      {
+        "stage": "backend-teardown",
+        "status": "PASS",
+        "seconds": 29.7
+      },
+      {
+        "stage": "teardown",
+        "status": "PASS",
+        "seconds": 6.5
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "i01",
+      "title": "iteration 1 labels: human rows imported through P1 and a P2 teacher batch over J2's egress to the local teacher fake, published synthetic; review and correction; forged ground truth refused; the holdout never labelled by the teacher nor exported",
+      "test_ids": [
+        "PIPELINE-LINEAGE"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i01"
+    },
+    {
+      "id": "i02",
+      "title": "iteration 1 training: the train-only label export in a manual bundle that pins (never carries) the frozen holdout; checkpoints through P3/D7 receipts evaluated by B1/B2 on that holdout; the seeded bad checkpoint with the better training loss is rejected; no eligibility without the holdout run; missing and late checkpoints rejected",
+      "test_ids": [
+        "TRAIN-RECOVER",
+        "PIPELINE-LINEAGE"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i02"
+    },
+    {
+      "id": "i03",
+      "title": "iteration 2: the grantor's traces of candidate 1's serving selected through N3 under its grant (D6F corrections kept apart), derived over the frozen holdout, corrected, exported with both iterations' lineage, trained, evaluated on the same holdout; budgets reconcile per unit",
+      "test_ids": [
+        "DATA-LINEAGE",
+        "PIPELINE-LINEAGE",
+        "PIPELINE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i03"
+    },
+    {
+      "id": "i04",
+      "title": "a revocation mid-iteration: the annotation queue, the training submit and the export reads stop; reconcile tombstones; nothing is recalled or unlearned; a re-grant resurrects nothing",
+      "test_ids": [
+        "DATA-LINEAGE"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i04"
+    },
+    {
+      "id": "i05",
+      "title": "a duplicate teacher submit is one paid job; an ambiguous submit holds its reservation, is never resubmitted and reconciles from the teacher's record; the budget stops a batch before the chunk it cannot cover",
+      "test_ids": [
+        "PIPELINE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i05"
+    },
+    {
+      "id": "i06",
+      "title": "the automatic training connector over TCP: a timeout after accept and a lost poll never create a second paid job (R184); the reported cost settles once; an ambiguous run ends only on an operator's written confirmation, releasing its hold in the same move (WR-P3-R184/R192)",
+      "test_ids": [
+        "TRAIN-RECOVER",
+        "PIPELINE-BUDGET"
+      ],
+      "lanes": [],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i06"
+    },
+    {
+      "id": "i07",
+      "title": "the I6 annotation and training worker processes: a batch and a training run driven by `python -m infrx.lab.workers <role>`, killed and restarted",
+      "test_ids": [
+        "PIPELINE-BUDGET",
+        "TRAIN-RECOVER"
+      ],
+      "lanes": [
+        "P-11"
+      ],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i07"
+    },
+    {
+      "id": "i08",
+      "title": "labels, review, export, bundle, checkpoint and eligibility over /lab/v1/pipelines as the gateway composes it (LAB_PIPELINES: D8's ledgers, P3's evaluation port over B3/B1) and through the provider UI",
+      "test_ids": [
+        "PIPELINE-LINEAGE"
+      ],
+      "lanes": [
+        "WR-B3-3"
+      ],
+      "status": "FAIL",
+      "cases": {
+        "test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate": "FAIL",
+        "test_i08_the_provider_ui_drives_labels_to_a_checkpoint": "NOT RUN"
+      },
+      "reasons": [
+        "test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate: AssertionError: {'refusal': 'unavailable'}\nassert 503 == 201\n +  where 503 = <Response [503 Service Unavailable]>.status_code",
+        "test_i08_the_provider_ui_drives_labels_to_a_checkpoint: NOT RUN[WR-B3-3] cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/improve/stack.test.ts passed (7 cases) through the returned checkpoint, but the gateway's own LAB_PIPELINES composition lacks ['suites']: the held-out evaluation and the approval to an eligible candidate are not reachable from the page; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_i"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i08"
+    },
+    {
+      "id": "i09",
+      "title": "the candidate proposed and approved through L3/L4 into a private or allocated staging deployment, its traces pinned to that serving version",
+      "test_ids": [
+        "DATA-LINEAGE"
+      ],
+      "lanes": [
+        "staging-target"
+      ],
+      "status": "NOT RUN",
+      "cases": {},
+      "reasons": [
+        "not selected (--only)"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i09"
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e7l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs --import-mode=prepend -o junit_family=xunit1 --junitxml=/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e7l-i08/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/tests/integration/lab_improve/scenarios_faults.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/tests/integration/lab_improve/scenarios_iterate.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/tests/integration/lab_improve/scenarios_pending.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/tests/integration/lab_improve/scenarios_surface.py -k test_i08_",
+      "exit": 1,
+      "seconds": 29.6,
+      "summary": "1 failed, 1 skipped, 21 deselected, 3 warnings in 28.84s",
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e7l-i08/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e7l-i08/scenarios.xml",
+    "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e7l-i08/scenarios.log",
+    "case_artifacts": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e7l-i08/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir>"
+}

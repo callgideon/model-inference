@@ -1,0 +1,10 @@
+killed  E2E-S18 an unavailable pipeline service reads as empty lists — killed by "E2E-I01 as the gateway composes LAB_PIPELINES today: the annotations page reads, the training page fails closed"
+killed  E2E-S19 a rejected import row loses its reason — killed by "E2E-I02 labels imported through the page's form: accepted rows listed as not ground truth, rejected rows with their reason"
+killed  E2E-S20 an accepted import reads as ground truth — killed by "E2E-I03 an administrator assigns the reviewer, the developer accepts each label: an accepted import is still not ground truth"
+killed  E2E-S21 an omitted label loses its reason — killed by "E2E-I04 a train-only export through the page's form: train samples in its lineage, the held-out label omitted with its reason"
+killed  E2E-S22 a submitted manual run cannot be marked finished — killed by "E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation"
+NOT KILLED E2E-S23 a checkpoint without its held-out evaluation reads as eligible — SURVIVED (suite passed)
+killed  E2E-S24 a refused label read shows an empty page instead of its refusal — killed by "E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels"
+
+stack: 20 cases named; 7 mutants, 6 killed, 1 not killed
+EXIT=1

@@ -1,0 +1,56 @@
+{
+ "task": "LAB-E2E",
+ "activity": "review",
+ "head": "2299b82",
+ "worktree": ".claude/worktrees/codex-w5-lab-e2e",
+ "branch": "codex/w5-lab-e2e",
+ "owned_paths": [
+  "apps/lab/tests/e2e/**",
+  "Makefile (lab-e2e target + .PHONY)",
+  "tests/integration/lab_{observe,evaluate,improve,rollout}/ (UI cell binds)",
+  "research/plan/evidence/e/LAB-E2E-*"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/LAB-E2E-2299b82.md",
+  "research/plan/evidence/e/LAB-E2E-raw-2299b82",
+  "research/plan/evidence/e/LAB-E2E-raw-9e485b3",
+  "research/plan/evidence/e/LAB-E2E-raw-c2b88a2"
+ ],
+ "slice": "(LW6 lab-e2e) one Lab e2e harness under apps/lab/tests/e2e binding E5L o10, E6L j10, E7L i08-UI, E8L k10-UI; make lab-e2e",
+ "commands": [
+  {
+   "cmd": "make lab-e2e",
+   "exit": 0,
+   "summary": "24/24 (4 suites, 20 cases) on l4, 98 s"
+  },
+  {
+   "cmd": "LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs",
+   "exit": 0,
+   "summary": "harness 17/17, stack 24/24 killed, every case named"
+  },
+  {
+   "cmd": "make lab-test / lab-lint / lab-typecheck / lab-build / lab-mutants",
+   "exit": 0,
+   "summary": "248 pass 14 skipped 0 fail; lint clean; tsc clean; build ok; 12 lists 0 survivors"
+  },
+  {
+   "cmd": "gate cells via runners --only",
+   "exit": 3,
+   "summary": "o10 PASS; j10 NOT RUN[WR-B4-2,WR-LAB2-2,WR-B3-1]; i08-UI NOT RUN[WR-B3-3]; k10-UI NOT RUN[WR-R4-2]"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 1,
+  "likely_h": 2,
+  "pessimistic_h": 4,
+  "confidence": "medium",
+  "basis": "one verify round + the e6l stack-mutant rerun when e6l is free; own run times (suites 98 s, mutant lists 17 min, gate keep->mutant->teardown 3-7 min)",
+  "at": "2026-09-29T12:14:01Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-LE2E-1 Makefile lab-mutants: + cd apps/lab && node tests/e2e/run-mutants.mjs",
+  "WR-LE2E-2 lab_improve scenarios_surface i08 API half: warm lab.benchmark (F1: --only i08 FAILs alone)",
+  "WR-LE2E-3 merge with #42: lab_evaluate scenarios_pending.py empties (j09 + j10 moved) - drop P from LAYER1_FILES and unbound_case_runs"
+ ]
+}

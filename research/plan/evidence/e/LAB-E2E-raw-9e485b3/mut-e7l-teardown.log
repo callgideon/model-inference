@@ -1,0 +1,13 @@
+[ok  ] backend-teardown: {"removed": []}
+[ok  ] teardown: {"removed": ["infrx-e7l-clickhouse", "infrx-e7l-postgres", "infrx-e7l-s3", "infrx-e7l-valkey"], "still_named_ours_but_not_ours": []}
+ NOT RUN  i01  iteration 1 labels: human rows imported through P1 and a P2 teacher batch over J2's egress to the local teacher fake, published synthetic; review and correction; forged ground truth refused; the holdout never labelled by the teacher nor exported
+ NOT RUN  i02  iteration 1 training: the train-only label export in a manual bundle that pins (never carries) the frozen holdout; checkpoints through P3/D7 receipts evaluated by B1/B2 on that holdout; the seeded bad checkpoint with the better training loss is rejected; no eligibility without the holdout run; missing and late checkpoints rejected
+ NOT RUN  i03  iteration 2: the grantor's traces of candidate 1's serving selected through N3 under its grant (D6F corrections kept apart), derived over the frozen holdout, corrected, exported with both iterations' lineage, trained, evaluated on the same holdout; budgets reconcile per unit
+ NOT RUN  i04  a revocation mid-iteration: the annotation queue, the training submit and the export reads stop; reconcile tombstones; nothing is recalled or unlearned; a re-grant resurrects nothing
+ NOT RUN  i05  a duplicate teacher submit is one paid job; an ambiguous submit holds its reservation, is never resubmitted and reconciles from the teacher's record; the budget stops a batch before the chunk it cannot cover
+ NOT RUN  i06  the automatic training connector over TCP: a timeout after accept and a lost poll never create a second paid job (R184); the reported cost settles once; an ambiguous run ends only on an operator's written confirmation, releasing its hold in the same move (WR-P3-R184/R192)
+ NOT RUN  i07  the I6 annotation and training worker processes: a batch and a training run driven by `python -m infrx.lab.workers <role>`, killed and restarted
+    FAIL  i08  labels, review, export, bundle, checkpoint and eligibility over /lab/v1/pipelines as the gateway composes it (LAB_PIPELINES: D8's ledgers, P3's evaluation port over B3/B1) and through the provider UI
+ NOT RUN  i09  the candidate proposed and approved through L3/L4 into a private or allocated staging deployment, its traces pinned to that serving version
+cells {'DATA-LINEAGE': 'NOT RUN', 'PIPELINE-LINEAGE': 'FAIL', 'PIPELINE-BUDGET': 'NOT RUN', 'TRAIN-RECOVER': 'NOT RUN'}
+gate FAIL -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-9e485b3/mut-e7l-teardown/verdict.json

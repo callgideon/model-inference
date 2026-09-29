@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="1" tests="2" time="22.439" timestamp="2026-09-29T11:31:40.126245+00:00" hostname="rey-aws"><testcase classname="tests.integration.lab_improve.scenarios_surface" name="test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate" file="tests/integration/lab_improve/scenarios_surface.py" line="120" time="4.175"><failure message="AssertionError: {'refusal': 'unavailable'}&#10;assert 503 == 201&#10; +  where 503 = &lt;Response [503 Service Unavailable]&gt;.status_code">lab = &lt;lab_improve.lab_world.Lab object at 0x78721ecc3350&gt;, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-9e485b3/mut-e7l-keep/cases/test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate')
+
+    def test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate(lab, workdir):
+        """PIPELINE-LINEAGE through `/lab/v1/pipelines` as composed: human labels imported and
+        reviewed, a train-only export, a manual bundle pinning the frozen holdout, submitted and
+        finished; the provider's checkpoint validated and evaluated by P3's port over B3/B1 on the
+        bundle's dataset (queued, the holdout digest what B1 froze); not eligible until the Lab
+        eval worker's run succeeds, then eligible on exactly that holdout - never public."""
+        ref = lab.import_benchmark(3).dataset_ref
+        ids, rubric, dev = lab.ids(ref), lab.rubric, lab.DEV
+        rows = "\n".join(json.dumps({"sample_id": ids[r], "method": "human",
+                                     "method_version": "e7l-8", "label": v,
+                                     "annotator": "annotator-8"})
+                         for r, v in sorted(DECL["human_labels"].items()))
+        imported = lab.call(dev, "POST", "label-imports", {
+            "import_id": lw.uid(8, 0x1b8), "dataset_ref": ref, "rubric_ref": rubric, "rows": rows})
+        assert (imported.status_code, imported.json()["accepted"]) == (201, 5), imported.json()
+        labels = lab.call(dev, "GET", "labels", dataset_ref=ref).json()["data"]
+        for label in labels:
+            assigned = lab.call(lab.ADMIN, "POST", "assignments", {
+                "dataset_ref": ref, "sample_id": label["sample_id"], "reviewer_id": dev,
+                "rubric_ref": rubric})
+            assert assigned.status_code == 200, assigned.json()
+            reviewed = lab.call(dev, "POST", "reviews", {
+                "dataset_ref": ref, "annotation_ref": label["annotation_ref"],
+                "decision": "accepted", "rubric_ref": rubric, "correction": None})
+            assert reviewed.status_code == 200, reviewed.json()
+        assert {x["state"] for x in lab.call(dev, "GET", "labels", dataset_ref=ref).json()[
+            "data"]} == {"accepted"}
+        export_id, ext, cid = lw.uid(8, 0xe88), lw.uid(8, 0xe78), lw.uid(1, 0xc78)
+        export = lab.call(dev, "POST", "label-exports", {
+            "export_id": export_id, "dataset_ref": ref, "adapter": "sft.1", "ttl_s": 3600})
+        assert export.status_code == 201, export.json()
+        prepared = lab.call(dev, "POST", "training-runs", {
+            "external_run_id": ext, "dataset_ref": ref,
+            "export": {"format": export.json()["format"], "export_id": export_id},
+            "config": {k: lw.CONFIG[k] for k in ("objective", "adaptation", "base_model")},
+            "payer_ref": lab.payer, "limit": "25.00000000"})
+        assert prepared.status_code == 201, prepared.json()
+        pin = prepared.json()["holdout"]["sha256"]
+        for op, state in (("submit", "submitted"), ("finish", "completed")):
+            moved = lab.call(dev, "POST", f"training-runs/{ext}/{op}")
+            assert (moved.status_code, moved.json().get("state")) == (200, state), moved.json()
+        from infrx.pipelines import training as p3
+        key = f"lab/{lab.NEMO}/training/{ext}/checkpoints/1.json"
+        data = json.dumps({"format": p3.DESCRIPTOR, "base_model": lw.CONFIG["base_model"],
+                           "adaptation": lw.CONFIG["adaptation"], "files": ["adapter.safetensors"],
+                           "metrics": DECL["checkpoints"]["cand1"]}).encode()
+        run(lab.objects.put_if_absent(key, data, "application/json"))
+        lab.cache.setdefault("suites", {})[cid] = (prepared.json()["run_ref"], "cand1")
+        import hashlib
+        checkpoint = lab.call(dev, "POST", "checkpoints", {
+            "external_run_id": ext, "checkpoint_id": cid, "artifact_key": key,
+            "artifact_digest": "sha256:" + hashlib.sha256(data).hexdigest()})
+&gt;       assert checkpoint.status_code == 201, checkpoint.json()
+E       AssertionError: {'refusal': 'unavailable'}
+E       assert 503 == 201
+E        +  where 503 = &lt;Response [503 Service Unavailable]&gt;.status_code
+
+tests/integration/lab_improve/scenarios_surface.py:173: AssertionError</failure></testcase><testcase classname="tests.integration.lab_improve.scenarios_surface" name="test_i08_the_provider_ui_drives_labels_to_a_checkpoint" file="tests/integration/lab_improve/scenarios_surface.py" line="203" time="18.043"><skipped type="pytest.skip" message="NOT RUN[WR-B3-3] cd apps/lab &amp;&amp; LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/improve/stack.test.ts passed (7 cases) through the returned checkpoint, but the gateway's own LAB_PIPELINES composition lacks ['suites']: the held-out evaluation and the approval to an eligible candidate are not reachable from the page; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out &lt;dir&gt; --only i08">/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/tests/integration/lab_improve/lab_world.py:85: NOT RUN[WR-B3-3] cd apps/lab &amp;&amp; LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/improve/stack.test.ts passed (7 cases) through the returned checkpoint, but the gateway's own LAB_PIPELINES composition lacks ['suites']: the held-out evaluation and the approval to an eligible candidate are not reachable from the page; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out &lt;dir&gt; --only i08</skipped></testcase></testsuite></testsuites>

@@ -170,10 +170,22 @@ def test_o03_the_lab_traces_route_through_the_real_gateway(workdir):
 
 # --- o10 the Lab review panel --------------------------------------------------------------
 def test_o10_the_lab_review_panel_renders_the_routes_answer(workdir):
-    ow.not_run("o10", "LAB-E2E", why="the V2/V3 review panels render in the Lab web (apps/lab), "
-               "which this runner does not start: the browser flow over the real route needs "
-               "the Lab e2e harness (apps/lab/tests/e2e, E6L's) and a session the Lab web can "
-               "sign in with; the route itself is o03")
+    """CONSOLE-FLOWS (LAB-E2E): `apps/lab/tests/e2e/observe` - the Lab's requests list and
+    review page built and served, signed in through the Lab's own form, over the provider trace
+    route on the real L2 and registry (l4): each request's content state, the review panels'
+    own answers (0038's feedback door, 0043's judge door, C2's unwired content port), the
+    viewer / other-provider / consumer / signed-out variants and a revocation. The ClickHouse
+    projection is o03's; here T2I/T3 are the in-memory stand-ins (the l4 key has none)."""
+    import importlib.util
+    import os
+    repo = Path(__file__).resolve().parents[3]
+    lab = Path(os.environ.get("INFRX_LAB_DIR") or repo / "apps" / "lab")
+    spec = importlib.util.spec_from_file_location("lab_observe.lab_e2e_gate",
+                                                  lab / "tests" / "e2e" / "gate.py")
+    e2e = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(e2e)
+    got = e2e.run("observe", workdir)
+    assert e2e.missing(got) == [], got["record"]
 
 
 # --- o06 expiry and deletion (the read side; the judge side is scenarios_judge) --------------

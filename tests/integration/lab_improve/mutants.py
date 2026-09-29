@@ -295,6 +295,11 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_evaluation_state_stale", "eligibility follows D7's run state through P3's port",
        B3, '        return {**record, "state": status["state"]}',
        '        return {**record, "state": "queued"}', I08_SURFACE),
+    # LAB-E2E: i08's provider-UI half - the page's import lists a forged ground truth as refused
+    _m("st_import_accepts_forged_ground_truth", "an import never claims ground truth (the page "
+       "lists the row refused with its reason)", "infrx/pipelines/annotations/__init__.py",
+       '    if row.get("ground_truth", False) is not False:', "    if False:",
+       "test_i08_the_provider_ui_drives_labels_to_a_checkpoint"),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_iterate.py", "scenarios_faults.py", "scenarios_surface.py")
@@ -336,7 +341,7 @@ def _stack(root: pathlib.Path) -> pathlib.Path:
 
 RUNNER = Runner(name="e7l", targets=LAYER1_FILES, package="", layout=_layer1)
 #: the kept stack's identity, handed to the copy (harness.working_dir / STATE_FILE seams)
-STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE")
+STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "INFRX_LAB_DIR")
 STACK_RUNNER = Runner(name="e7l-stack", package="", layout=_stack, env=STACK_ENV,
                       timeout_s=1800,
                       targets=tuple(f"../../tests/integration/lab_improve/{f}"
@@ -355,6 +360,7 @@ def claim_the_kept_stack() -> str | None:
         return f"no kept e7l stack: run {lab_world.RUNNER} --keep first"
     os.environ["INFRX_E2_CHECKOUT"] = lab_world.harness.working_dir()
     os.environ["INFRX_E2_STATE_FILE"] = str(lab_world.harness.STATE_FILE)
+    os.environ["INFRX_LAB_DIR"] = str(REPO / "apps" / "lab")      # i08's UI suite (LAB-E2E)
     return None
 
 

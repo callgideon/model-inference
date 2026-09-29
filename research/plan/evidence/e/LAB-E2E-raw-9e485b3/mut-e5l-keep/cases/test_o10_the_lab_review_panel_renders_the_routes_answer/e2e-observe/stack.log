@@ -1,0 +1,43 @@
+TAP version 13
+# (node:1153810) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/observe/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+#   from starlette.testclient import TestClient as TestClient  \# noqa
+# Traceback (most recent call last):
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/observe/backend.py", line 60, in <module>
+#     main()
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/observe/backend.py", line 32, in main
+#     conn, dsn = stack.database("observe")
+#                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/stack.py", line 57, in database
+#     pgharness.ensure()
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/tests/d/pgharness.py", line 206, in ensure
+#     _acquire_lock()
+#   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/tests/d/pgharness.py", line 170, in _acquire_lock
+#     raise HarnessBusy(
+# tests.d.pgharness.HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1118580 checkout /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/v42); refusing to touch port 57503 or infrx-l4-postgres. Nothing was altered - wait for it, or run the two suites in sequence (08 §8 gives this task ONE port)
+# Subtest: E2E-O o10 the Lab review panel renders the provider trace route's answer
+not ok 1 - E2E-O o10 the Lab review panel renders the provider trace route's answer
+  ---
+  duration_ms: 5005.344205
+  type: 'test'
+  location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/observe/stack.test.ts:16:1'
+  failureType: 'testCodeFailure'
+  error: 'backend exited 1: '
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    ChildProcess.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/harness.ts:154:39)
+    ChildProcess.emit (node:events:519:28)
+    ChildProcess._handle.onexit (node:internal/child_process:293:12)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5116.527679

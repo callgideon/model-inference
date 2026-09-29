@@ -1,0 +1,25 @@
+=== 2026-09-29T11:16:28Z lab_observe --only o10 (e5l)
+exit 1 in 24s
+ NOT RUN  o09  a worker restarted: the feedback projector after its insert, the box worker mid-traffic
+    FAIL  o10  the Lab review panel renders the traces route's answer (browser flow)
+cells {'TRACE-BOUNDS': 'NOT RUN', 'TRACE-RECOVER': 'NOT RUN', 'TRACE-TENANT': 'NOT RUN', 'FEEDBACK-ACK': 'NOT RUN', 'JUDGE-BUDGET': 'NOT RUN', 'JUDGE-SCORES': 'NOT RUN', 'LAB-ACCESS': 'NOT RUN', 'CONSOLE-FLOWS': 'FAIL'}
+gate FAIL -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e5l-o10/verdict.json
+=== 2026-09-29T11:16:52Z lab_evaluate --only j10 (e6l)
+exit 3 in 34s
+ NOT RUN  j10  the provider UI: launch, progress, cancel, compare with slices and uncertainty
+ NOT RUN  j11  a finite-video case reaches the dev endpoint through H1/B1
+cells {'DATA-IMPORT': 'NOT RUN', 'DATA-SPLIT': 'NOT RUN', 'DATA-RIGHTS': 'NOT RUN', 'EVAL-DURABLE': 'NOT RUN', 'EVAL-REPRO': 'NOT RUN', 'EVAL-COMPARE': 'NOT RUN', 'CHECKPOINT-IDEM': 'NOT RUN'}
+gate NOT RUN -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e6l-j10/verdict.json
+=== 2026-09-29T11:17:26Z lab_improve --only i08 (e7l)
+exit 1 in 50s
+    FAIL  i08  labels, review, export, bundle, checkpoint and eligibility over /lab/v1/pipelines as the gateway composes it (LAB_PIPELINES: D8's ledgers, P3's evaluation port over B3/B1) and through the provider UI
+ NOT RUN  i09  the candidate proposed and approved through L3/L4 into a private or allocated staging deployment, its traces pinned to that serving version
+cells {'DATA-LINEAGE': 'NOT RUN', 'PIPELINE-LINEAGE': 'FAIL', 'PIPELINE-BUDGET': 'NOT RUN', 'TRAIN-RECOVER': 'NOT RUN'}
+gate FAIL -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e7l-i08/verdict.json
+=== 2026-09-29T11:18:16Z lab_rollout --only k10 (e8l)
+exit 3 in 39s
+ NOT RUN  k09  the I7 controller process killed and restarted mid-rollout: the real emergency-rollback subcommand twice; the pass loop waits on WR-R2-3
+ NOT RUN  k10  the Lab releases UI: verdict, proposal, approval and emergency rollback
+cells {'ROLLOUT-PIN': 'NOT RUN', 'ROLLOUT-RECOVER': 'NOT RUN', 'OPT-PARITY': 'NOT RUN'}
+gate NOT RUN -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-c2b88a2/e8l-k10/verdict.json
+=== done 2026-09-29T11:18:55Z

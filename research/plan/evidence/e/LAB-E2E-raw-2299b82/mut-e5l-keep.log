@@ -1,0 +1,15 @@
+[ok  ] preflight: {"docker": "29.6.2", "images": {"postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb678…
+[ok  ] services: {"containers": ["infrx-e5l-clickhouse", "infrx-e5l-postgres", "infrx-e5l-s3", "infrx-e5l-valkey"], "versions": {"postgres": "PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit", "valkey": "8.1.1…
+[ok  ] migrate: {"applied": [["0001_init.sql", "b31ab5ad6117a88005cfa9dfbb878b15bcefba135b5d3151eaf2d8171831d2bc"], ["0002_seed_models.sql", "9f186e47ad8c88a1b7a97555f5ad0d6a49c3c3d5b8a66b78247e823fca629d38"], ["0003_pilot_durable_schem…
+ NOT RUN  o01  capture -> ship -> search: off by default; a captured request ships once with its pins; only its org finds it; capture on via the switch
+ NOT RUN  o02  feedback acknowledged after commit, owned by its key, projected once
+ NOT RUN  o03  Lab review: a provider reads a grantor's trace only under a current grant, in-process and through the gateway's traces route
+ NOT RUN  o04  judge dry run: default mode sends nothing; a consented run sends once, scores once, charges no customer wallet; the D6J ledger
+ NOT RUN  o05  a grant revoked mid-queue: nothing leaves, the hold is released
+ NOT RUN  o06  content expired or deleted: gone for every read, never sent to the judge
+ NOT RUN  o07  the projection dropped (ClickHouse killed): segment held, App serving, shipped once after
+ NOT RUN  o08  a judge submit timed out and the worker restarted: quarantined, never resent, reconciled
+ NOT RUN  o09  a worker restarted: the feedback projector after its insert, the box worker mid-traffic
+    PASS  o10  the Lab review panel renders the traces route's answer (browser flow)
+cells {'TRACE-BOUNDS': 'NOT RUN', 'TRACE-RECOVER': 'NOT RUN', 'TRACE-TENANT': 'NOT RUN', 'FEEDBACK-ACK': 'NOT RUN', 'JUDGE-BUDGET': 'NOT RUN', 'JUDGE-SCORES': 'NOT RUN', 'LAB-ACCESS': 'NOT RUN', 'CONSOLE-FLOWS': 'PASS'}
+gate NOT RUN -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-2299b82/mut-e5l-keep/verdict.json

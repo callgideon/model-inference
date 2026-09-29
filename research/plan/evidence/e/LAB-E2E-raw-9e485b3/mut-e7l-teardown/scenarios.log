@@ -1,0 +1,153 @@
+FF                                                                                                                                                                                                                                                                                                                                                                                                       [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+_____________________________________________________________________________________________________________________________________________________________________ test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate _____________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_improve.lab_world.Lab object at 0x72ef142c2b10>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-9e485b3/mut-e7l-teardown/cases/test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate')
+
+    def test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate(lab, workdir):
+        """PIPELINE-LINEAGE through `/lab/v1/pipelines` as composed: human labels imported and
+        reviewed, a train-only export, a manual bundle pinning the frozen holdout, submitted and
+        finished; the provider's checkpoint validated and evaluated by P3's port over B3/B1 on the
+        bundle's dataset (queued, the holdout digest what B1 froze); not eligible until the Lab
+        eval worker's run succeeds, then eligible on exactly that holdout - never public."""
+        ref = lab.import_benchmark(3).dataset_ref
+        ids, rubric, dev = lab.ids(ref), lab.rubric, lab.DEV
+        rows = "\n".join(json.dumps({"sample_id": ids[r], "method": "human",
+                                     "method_version": "e7l-8", "label": v,
+                                     "annotator": "annotator-8"})
+                         for r, v in sorted(DECL["human_labels"].items()))
+        imported = lab.call(dev, "POST", "label-imports", {
+            "import_id": lw.uid(8, 0x1b8), "dataset_ref": ref, "rubric_ref": rubric, "rows": rows})
+        assert (imported.status_code, imported.json()["accepted"]) == (201, 5), imported.json()
+        labels = lab.call(dev, "GET", "labels", dataset_ref=ref).json()["data"]
+        for label in labels:
+            assigned = lab.call(lab.ADMIN, "POST", "assignments", {
+                "dataset_ref": ref, "sample_id": label["sample_id"], "reviewer_id": dev,
+                "rubric_ref": rubric})
+            assert assigned.status_code == 200, assigned.json()
+            reviewed = lab.call(dev, "POST", "reviews", {
+                "dataset_ref": ref, "annotation_ref": label["annotation_ref"],
+                "decision": "accepted", "rubric_ref": rubric, "correction": None})
+            assert reviewed.status_code == 200, reviewed.json()
+        assert {x["state"] for x in lab.call(dev, "GET", "labels", dataset_ref=ref).json()[
+            "data"]} == {"accepted"}
+        export_id, ext, cid = lw.uid(8, 0xe88), lw.uid(8, 0xe78), lw.uid(1, 0xc78)
+        export = lab.call(dev, "POST", "label-exports", {
+            "export_id": export_id, "dataset_ref": ref, "adapter": "sft.1", "ttl_s": 3600})
+        assert export.status_code == 201, export.json()
+        prepared = lab.call(dev, "POST", "training-runs", {
+            "external_run_id": ext, "dataset_ref": ref,
+            "export": {"format": export.json()["format"], "export_id": export_id},
+            "config": {k: lw.CONFIG[k] for k in ("objective", "adaptation", "base_model")},
+            "payer_ref": lab.payer, "limit": "25.00000000"})
+        assert prepared.status_code == 201, prepared.json()
+        pin = prepared.json()["holdout"]["sha256"]
+        for op, state in (("submit", "submitted"), ("finish", "completed")):
+            moved = lab.call(dev, "POST", f"training-runs/{ext}/{op}")
+            assert (moved.status_code, moved.json().get("state")) == (200, state), moved.json()
+        from infrx.pipelines import training as p3
+        key = f"lab/{lab.NEMO}/training/{ext}/checkpoints/1.json"
+        data = json.dumps({"format": p3.DESCRIPTOR, "base_model": lw.CONFIG["base_model"],
+                           "adaptation": lw.CONFIG["adaptation"], "files": ["adapter.safetensors"],
+                           "metrics": DECL["checkpoints"]["cand1"]}).encode()
+        run(lab.objects.put_if_absent(key, data, "application/json"))
+        lab.cache.setdefault("suites", {})[cid] = (prepared.json()["run_ref"], "cand1")
+        import hashlib
+        checkpoint = lab.call(dev, "POST", "checkpoints", {
+            "external_run_id": ext, "checkpoint_id": cid, "artifact_key": key,
+            "artifact_digest": "sha256:" + hashlib.sha256(data).hexdigest()})
+>       assert checkpoint.status_code == 201, checkpoint.json()
+E       AssertionError: {'refusal': 'unavailable'}
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests/integration/lab_improve/scenarios_surface.py:173: AssertionError
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- Captured log call -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: RuntimeError
+____________________________________________________________________________________________________________________________________________________________________________ test_i08_the_provider_ui_drives_labels_to_a_checkpoint ____________________________________________________________________________________________________________________________________________________________________________
+
+workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/research/plan/evidence/e/LAB-E2E-raw-9e485b3/mut-e7l-teardown/cases/test_i08_the_provider_ui_drives_labels_to_a_checkpoint')
+
+    def test_i08_the_provider_ui_drives_labels_to_a_checkpoint(workdir):
+        """i08's provider-UI half (WR-C4-UI, LAB-E2E): `apps/lab/tests/e2e/improve` - the Lab's
+        annotations and training pages built and served, signed in through their own form, over
+        `/lab/v1/pipelines` as the gateway composes it with LAB_PIPELINES on (D8's label log and
+        run ledger, D7, L2) on the l4 key: labels imported (a forged ground truth and a foreign
+        sample refused with their reasons), assigned and reviewed, a train-only export, the manual
+        bundle prepared, submitted and finished, a checkpoint returned and never eligible without
+        its held-out evaluation, and the unsafe variants. The run and checkpoint listings are
+        WR-LAB2-4's stand-in, as the API half's (`Listing`); a red suite fails this case, a green
+        one is NOT RUN while P3's evaluation port has no B3 suite source composed (WR-B3-3)."""
+        e2e = _e2e()
+        got = e2e.run("improve", workdir)
+        lw.save(workdir, "i08-ui.json", {k: v for k, v in got.items() if k != "tail"})
+>       absent = [port for port in e2e.missing(got) if port != "listings"]
+                                   ^^^^^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_surface.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = {'command': 'cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/improve/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 1, ...}
+
+    def missing(got: dict) -> list[str]:
+        """Asserts the suite passed as a whole - every case ran and none failed - and answers the
+        ports the gateway's own composition does not carry yet (empty: the cell is bound for real)."""
+>       assert (got["exit"], got.get("fail"), got.get("cancelled", 0), got.get("skipped")) == \
+            (0, 0, 0, 0) and got.get("pass", 0) > 1 and got["record"] is not None, \
+            f"the e2e suite did not pass: {({k: v for k, v in got.items() if k != 'tail'})}\n{got['tail']}"
+E       AssertionError: the e2e suite did not pass: {'command': 'cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/improve/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 1, 'cancelled': 0, 'skipped': 0, 'record': None}
+E       rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/improve/backend.py", line 46, in main
+E       #     conn, dsn = stack.database("improve")
+E       #                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       #   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/stack.py", line 57, in database
+E       #     pgharness.ensure()
+E       #   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/tests/d/pgharness.py", line 206, in ensure
+E       #     _acquire_lock()
+E       #   File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/tests/d/pgharness.py", line 170, in _acquire_lock
+E       #     raise HarnessBusy(
+E       # tests.d.pgharness.HarnessBusy: another run holds /tmp/infrx-l4-postgres-57503.lock (pid 1118580 checkout /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/v42); refusing to touch port 57503 or infrx-l4-postgres. Nothing was altered - wait for it, or run the two suites in sequence (08 §8 gives this task ONE port)
+E       # Subtest: E2E-I i08 the pipeline surface drives labels to a checkpoint through the provider UI
+E       not ok 1 - E2E-I i08 the pipeline surface drives labels to a checkpoint through the provider UI
+E         ---
+E         duration_ms: 5147.761013
+E         type: 'test'
+E         location: '/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/improve/stack.test.ts:19:1'
+E         failureType: 'testCodeFailure'
+E         error: 'backend exited 1: '
+E         code: 'ERR_TEST_FAILURE'
+E         stack: |-
+E           ChildProcess.<anonymous> (file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/lab/tests/e2e/harness.ts:154:39)
+E           ChildProcess.emit (node:events:519:28)
+E           ChildProcess._handle.onexit (node:internal/child_process:293:12)
+E         ...
+E       1..1
+E       # tests 1
+E       # suites 0
+E       # pass 0
+E       # fail 1
+E       # cancelled 0
+E       # skipped 0
+E       # todo 0
+E       # duration_ms 5287.654248
+
+apps/lab/tests/e2e/gate.py:56: AssertionError
+=============================================================================================================================================================================================== warnings summary ===============================================================================================================================================================================================
+tests/integration/lab_improve/scenarios_surface.py::test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/integration/lab_improve/scenarios_surface.py::test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/integration/lab_improve/scenarios_surface.py::test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-e2e/apps/infrx-api/infrx/gateway/lab_auth.py:120: RuntimeWarning: coroutine 'Importer.run' was never awaited
+    return refusal(exc)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_improve/scenarios_surface.py::test_i08_the_pipeline_surface_drives_labels_to_an_eligible_candidate - AssertionError: {'refusal': 'unavailable'}
+FAILED tests/integration/lab_improve/scenarios_surface.py::test_i08_the_provider_ui_drives_labels_to_a_checkpoint - AssertionError: the e2e suite did not pass: {'command': 'cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/improve/stack.test.ts', 'exit': 1, 'pass': 0, 'fail': 1, 'cancelled': 0, 'skipped': 0, 'record': None}
+2 failed, 21 deselected, 3 warnings in 10.03s
