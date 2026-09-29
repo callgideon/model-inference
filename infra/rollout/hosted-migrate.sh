@@ -79,6 +79,9 @@ sb postgres "alter role supabase_auth_admin with password '$LOCALPW'" >/dev/null
 docker run --rm --network host -e GOTRUE_DB_DRIVER=postgres -e DATABASE_URL="postgres://supabase_auth_admin:$LOCALPW@127.0.0.1:$PORT/postgres?sslmode=disable" -e GOTRUE_JWT_SECRET=rehearsal-only-literal-not-a-secret-0000 -e GOTRUE_SITE_URL=http://localhost -e API_EXTERNAL_URL=http://localhost "$GOTRUE" auth migrate 2>&1 | tail -1 | tee -a "$LOG"
 for _ in 1 2 3 4 5; do sb template1 "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'postgres' and pid <> pg_backend_pid()" >/dev/null; sb template1 "create database infrx_rollout_copy template postgres owner postgres" >/dev/null && break; sleep 0.3; done
 sb infrx_rollout_copy "select 1" >/dev/null || { say "stop: the copy database was not created"; exit 10; }
+# the hosted dump carries policies/grants naming the runtime roles (0021+: infrx_monitor, infrx_runtime); pg_dump never
+# emits roles, so pre-create them (NOLOGIN) in the throwaway cluster or the restore fails on the first policy
+for r in infrx_monitor infrx_runtime; do sb template1 "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$r') then execute 'create role $r nologin'; end if; end \$\$" >/dev/null; done
 LOCAL="host=127.0.0.1 port=$PORT user=postgres password=$LOCALPW dbname=infrx_rollout_copy sslmode=disable"
 say "W6 restore into the copy"
 $PY infra/runbooks/pgrestore.py restore --conninfo "$LOCAL" --from "$BACKUP" 2>&1 | tee -a "$LOG"
