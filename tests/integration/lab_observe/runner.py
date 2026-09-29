@@ -66,12 +66,12 @@ SCENARIOS = {
             "test_ids": ["TRACE-BOUNDS", "TRACE-TENANT"], "lanes": ["COMPOSITION"]},
     "o02": {"title": "feedback acknowledged after commit, owned by its key, projected once",
             "test_ids": ["FEEDBACK-ACK"], "lanes": []},
-    "o03": {"title": "Lab review: a provider reads a grantor's trace only under a current grant; "
-                     "the traces route and panel", "test_ids": ["LAB-ACCESS", "CONSOLE-FLOWS"],
-            "lanes": ["LAB-API", "C3L", "G4T"]},
+    "o03": {"title": "Lab review: a provider reads a grantor's trace only under a current grant, "
+                     "in-process and through the gateway's traces route",
+            "test_ids": ["LAB-ACCESS"], "lanes": []},
     "o04": {"title": "judge dry run: default mode sends nothing; a consented run sends once, "
                      "scores once, charges no customer wallet; the D6J ledger",
-            "test_ids": ["JUDGE-BUDGET", "JUDGE-SCORES"], "lanes": ["D6J", "J3"]},
+            "test_ids": ["JUDGE-BUDGET", "JUDGE-SCORES"], "lanes": []},
     "o05": {"title": "a grant revoked mid-queue: nothing leaves, the hold is released",
             "test_ids": ["JUDGE-BUDGET", "LAB-ACCESS"], "lanes": []},
     "o06": {"title": "content expired or deleted: gone for every read, never sent to the judge",
@@ -83,6 +83,8 @@ SCENARIOS = {
     "o09": {"title": "a worker restarted: the feedback projector after its insert, the box "
                      "worker mid-traffic", "test_ids": ["TRACE-RECOVER", "FEEDBACK-ACK"],
             "lanes": []},
+    "o10": {"title": "the Lab review panel renders the traces route's answer (browser flow)",
+            "test_ids": ["CONSOLE-FLOWS"], "lanes": ["LAB-E2E"]},
 }
 REQUIRED = {
     "o01": ("test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace",
@@ -90,7 +92,7 @@ REQUIRED = {
             "test_o01_capture_turned_on_through_the_composition_switch"),
     "o02": ("test_o02_feedback_is_acknowledged_after_commit_owned_by_its_key_and_projected_once",),
     "o03": ("test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_grant",
-            "test_o03_the_lab_traces_route_and_review_panel_through_the_real_services"),
+            "test_o03_the_lab_traces_route_through_the_real_gateway"),
     "o04": ("test_o04_the_default_dry_run_mode_sends_nothing",
             "test_o04_a_consented_run_sends_once_scores_once_and_charges_no_customer_wallet",
             "test_o04_the_judge_ledger_is_d6js_postgresql_ledger"),
@@ -102,6 +104,7 @@ REQUIRED = {
     "o08": ("test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled",),
     "o09": ("test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once",
             "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once"),
+    "o10": ("test_o10_the_lab_review_panel_renders_the_routes_answer",),
 }
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
 CASE = re.compile(r"test_(?P<sid>o\d\d)_")

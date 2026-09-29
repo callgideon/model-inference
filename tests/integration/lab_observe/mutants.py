@@ -174,7 +174,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '    "o08": ("test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled",),',
        '    "o08": ("test_o08_a_timed_out_submit",),', REQUIRED),
     _m("a_lane_undeclared", "a scenario waiting on a lane declares it", R,
-       '"lanes": ["LAB-API", "C3L", "G4T"]}', '"lanes": []}', LANES),
+       '"lanes": ["LAB-E2E"]}', '"lanes": []}', LANES),
     _m("another_namespace", "e5l runs in its own reserved block", R,
        'NAMESPACE = "e5l"', 'NAMESPACE = "e3l"', NAMESPACE),
     _m("judge_fake_on_the_gateway_port", "the judge fake has a port of its own", W,
@@ -221,6 +221,10 @@ O07 = "test_o07_clickhouse_down_holds_the_segment_serves_the_app_and_ships_once_
 O08 = "test_o08_a_timed_out_submit_is_quarantined_never_resent_and_reconciled"
 O09_PROJECTOR = "test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once"
 O09_WORKER = "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once"
+O03_ROUTE = "test_o03_the_lab_traces_route_through_the_real_gateway"
+O04_PG = "test_o04_the_judge_ledger_is_d6js_postgresql_ledger"
+ROUTE, CONSENT = "infrx/gateway/routes/lab_traces.py", "infrx/state/lab_consent.py"
+J3 = "infrx/judge/calibration/report.py"
 #: Cases that FAIL on this base (a product finding, recorded in the evidence): no mutant can
 #: name them (the pristine baseline refuses a failing case), so coverage lists them here and
 #: `test_every_case_is_covered_by_a_mutant` holds the list to exactly the failing ones.
@@ -277,6 +281,18 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_worker_never_restarted", "the drill judges the job after the worker came back",
        TRACE, "        time.sleep(1.0)\n        trip.box.start(\"worker\")",
        "        time.sleep(1.0)", O09_WORKER),
+    # --- lab-observe-2: the cells the tip now supports (LAB-API route, D6J ledger, J3 report)
+    _m("st_route_content_without_a_grant", "the route shows content only under a current grant",
+       ROUTE, "            if grants[key] is not None:", "            if True:", O03_ROUTE),
+    _m("st_route_shows_a_deleted_request", "an owner-deleted request is not there for the Lab",
+       ROUTE, "            if REQUEST in scopes or not t3.metadata_live(row.started_at, now):",
+       "            if not t3.metadata_live(row.started_at, now):", O03_ROUTE),
+    _m("st_pg_reserve_another_payer", "the reservation holds the named payer's budget", CONSENT,
+       '"run_id": run_id, "provider_org_id": provider_org_id, "payer_ref": payer_ref,',
+       '"run_id": run_id, "provider_org_id": provider_org_id, "payer_ref": payer_ref + "-x",',
+       O04_PG),
+    _m("st_j3_limited_results_calibrate", "a limited result never enters the calibration",
+       J3, "        elif result.limited:", "        elif False:", O04_PG),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 

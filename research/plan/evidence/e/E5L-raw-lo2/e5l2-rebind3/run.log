@@ -1,0 +1,12 @@
+ NOT RUN  o01  capture -> ship -> search: off by default; a captured request ships once with its pins; only its org finds it; capture on via the switch
+ NOT RUN  o02  feedback acknowledged after commit, owned by its key, projected once
+ NOT RUN  o03  Lab review: a provider reads a grantor's trace only under a current grant, in-process and through the gateway's traces route
+    PASS  o04  judge dry run: default mode sends nothing; a consented run sends once, scores once, charges no customer wallet; the D6J ledger
+ NOT RUN  o05  a grant revoked mid-queue: nothing leaves, the hold is released
+ NOT RUN  o06  content expired or deleted: gone for every read, never sent to the judge
+ NOT RUN  o07  the projection dropped (ClickHouse killed): segment held, App serving, shipped once after
+    PASS  o08  a judge submit timed out and the worker restarted: quarantined, never resent, reconciled
+ NOT RUN  o09  a worker restarted: the feedback projector after its insert, the box worker mid-traffic
+ NOT RUN  o10  the Lab review panel renders the traces route's answer (browser flow)
+cells {'TRACE-BOUNDS': 'NOT RUN', 'TRACE-RECOVER': 'NOT RUN', 'TRACE-TENANT': 'NOT RUN', 'FEEDBACK-ACK': 'NOT RUN', 'JUDGE-BUDGET': 'NOT RUN', 'JUDGE-SCORES': 'PASS', 'LAB-ACCESS': 'NOT RUN', 'CONSOLE-FLOWS': 'NOT RUN'}
+gate NOT RUN -> /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e5l2-rebind3/verdict.json

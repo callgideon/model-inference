@@ -58,7 +58,7 @@ def test_e5l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert tuple(e5l["test_ids"]) == runner.TEST_IDS
     for tid in runner.TEST_IDS:
         assert any(tid in spec["test_ids"] for spec in runner.SCENARIOS.values()), tid
-    assert set(runner.REQUIRED) == set(runner.SCENARIOS) and len(runner.SCENARIOS) == 9
+    assert set(runner.REQUIRED) == set(runner.SCENARIOS) and len(runner.SCENARIOS) == 10
     titles = " ".join(spec["title"] for spec in runner.SCENARIOS.values())
     for fault in ("revoked mid-queue", "expired or deleted", "ClickHouse killed",
                   "timed out", "worker restarted"):
@@ -91,7 +91,7 @@ def test_e5l_every_unbound_case_is_not_run_without_touching_a_stack():
                for name in dir(module) if name.startswith("test_o")
                and "not_run(" in (HERE / f"{module.__name__}.py").read_text().split(
                    f"def {name}(")[1].split("\ndef ")[0]]
-    assert len(unbound) == 3, [case.__name__ for case in unbound]
+    assert len(unbound) == 2, [case.__name__ for case in unbound]
     for case in unbound:
         with pytest.raises(pytest.skip.Exception) as skipped:
             case(None)

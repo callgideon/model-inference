@@ -57,8 +57,9 @@ def test_o01_a_captured_request_ships_once_with_its_pins_and_only_its_org_finds_
 
 def test_o01_capture_turned_on_through_the_composition_switch(workdir):
     ow.not_run("o01", "COMPOSITION", why="capture off -> on in the box needs the gateway's "
-               "spool sink (WR-COMP-4) and the worker's TRACE_PUMPS switch "
-               "(codex/w5-composition), neither on this base; TRACE-BOUNDS' peak-budget "
+               "spool sink (WR-COMP-4), still absent: the worker's TRACE_PUMPS switch merged, "
+               "but the gateway builds no trace sink either way (config.py trace_pumps), so "
+               "nothing a served request does reaches a spool; TRACE-BOUNDS' peak-budget "
                "accumulation is only observable there")
 
 
@@ -128,10 +129,51 @@ def test_o03_a_provider_reads_a_grantors_trace_only_under_a_current_sharing_gran
         assert review(ow.DEV, alpha) in ("Forbidden", "NotFound"), "revoked, still read"
 
 
-def test_o03_the_lab_traces_route_and_review_panel_through_the_real_services(workdir):
-    ow.not_run("o03", "LAB-API", "C3L", "G4T", why="the provider traces route (codex/w5-lab-api) "
-               "and the provider review read (C3L/G4T) are not on this base; the V2/V3 panels "
-               "have no server read to render against")
+def test_o03_the_lab_traces_route_through_the_real_gateway(workdir):
+    """LAB-API's `/lab/v1/traces` on the box's gateway (LAB_TRACES on, the forwarded session
+    verified by the auth server's path, L2's access, T2I's projection, T3's retention): DEV
+    lists and reads alpha's request with its content under alpha's current grant; a consumer's
+    API key is no session; alpha's own user (no membership of A) is refused; revoked, the row
+    is metadata only (no organization, no content); deleted by its owner, it is gone.
+    Oracles: a route reading the raw projection shows the deleted request; one that skips the
+    grant shows content after the revocation."""
+    with ow.observe_trip(workdir, start=("worker",), trace_prefix="infrx/") as trip, \
+            ow.supabase_door(trip.box.env["SUPABASE_URL"]) as door:
+        trip.box.start("gateway", **ow.lab_traces_env(trip, door))
+        alpha = trip.world.alpha
+        request_id = ow.served(trip, alpha, "o03-route")
+        ow.captured(trip, alpha, [request_id], CONTENT)
+        assert ow.shipped(trip).rows == 1
+
+        def get(path: str, token: str):
+            return trip.http.get(path, params={"provider_org_id": ow.PROVIDER},
+                                 headers={"authorization": f"Bearer {token}"})
+        dev, one = ow.session(ow.DEV), f"/lab/v1/traces/{request_id}"
+        listed = get("/lab/v1/traces", dev)
+        assert listed.status_code == 200, listed.text
+        [item] = [i for i in listed.json()["data"] if i["request_id"] == request_id]
+        assert (item["access"], item["grantor_org_id"]) == ("content", alpha.org_id), item
+        read = get(one, dev)
+        assert read.status_code == 200 and read.json()["content"] == CONTENT.decode(), read.text
+        assert get(one, alpha.secret).status_code == 401, "an API key read the Lab route"
+        assert get(one, ow.session(alpha.user_id)).status_code in (403, 404), "a non-member read"
+        ow.revoke(trip, alpha)
+        after = get(one, dev)
+        assert after.status_code == 200, after.text
+        assert after.json()["access"] == "metadata" and not {"content", "grantor_org_id"} & set(
+            after.json()), after.json()
+        run(trip.traces.retention.delete(alpha.org_id, request_id, "owner"))
+        assert get(one, dev).status_code == 404, "an owner-deleted request is still read"
+        assert request_id not in {i["request_id"] for i in get("/lab/v1/traces", dev).json()["data"]}
+        assert door.seen and all(door.seen[:2]), "the session was never verified"
+
+
+# --- o10 the Lab review panel --------------------------------------------------------------
+def test_o10_the_lab_review_panel_renders_the_routes_answer(workdir):
+    ow.not_run("o10", "LAB-E2E", why="the V2/V3 review panels render in the Lab web (apps/lab), "
+               "which this runner does not start: the browser flow over the real route needs "
+               "the Lab e2e harness (apps/lab/tests/e2e, E6L's) and a session the Lab web can "
+               "sign in with; the route itself is o03")
 
 
 # --- o06 expiry and deletion (the read side; the judge side is scenarios_judge) --------------
