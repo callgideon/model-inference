@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 312,
- "updated": "2026-09-29T18:59:00Z",
+ "revision": 313,
+ "updated": "2026-09-29T19:01:01Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9470,6 +9470,38 @@
     "tests/integration/lab-local.sh",
     "research/plan/evidence/e/E4ON-*",
     "research/plan/evidence/i/LAB-LOCAL-2-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-OBSERVE-4",
+   "task": "E5L",
+   "slice": "WR-LC-O01: o01 bound over the capture seam (TRACE_PUMPS on in the box processes; consented traces ship, no secret in any spool byte); `--only o01` + full `make lab-observe` 18/0/0 (Opus); workflow wf_21e2ad0c-d51",
+   "agent": "opus",
+   "branch": "codex/w5-lab-observe-4",
+   "worktree": ".claude/worktrees/codex-w5-lab-observe-4",
+   "base": "be6b2fde",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-29T19:01:01Z",
+   "updated": "2026-09-29T19:01:01Z",
+   "blocker": null,
+   "next_action": "handback → merge → E5L fully PASS",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/lab_observe/",
+    "research/plan/evidence/e/E5L-*"
    ],
    "wiring_requests": []
   }
