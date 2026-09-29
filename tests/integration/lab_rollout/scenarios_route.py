@@ -282,3 +282,32 @@ def test_k03_a_release_store_outage_is_a_503_never_the_baseline(lab, workdir):
         run(routing.hook(accept, router(lab, dsn=dead))(who(lab.subjects(1)[0]),
                                                          request(lab.ALIAS, 1), None))
     assert admitted == []
+
+
+# ------------------------------------------------------------------------------------ k10
+def test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict(lab, workdir):
+    """k10's read half as this tip supports it (0048's `lab_releases_in`, merge #34):
+    `PgReleaseStore.releases_in` - the listing WR-R4-1's records port and WR-R2-3's pass loop
+    read - answers a launched release, then its rollback with R2's latest decision, narrowed
+    by state. `pilot._lab_2` still composes `LabReleases` with no records port (WR-R4-2): the
+    UI half stays NOT RUN (`scenarios_pending`)."""
+    policy, ref = lab.launch(lab.policy(weights=(5_000,), candidates=(lab.CAND,)), lw.plan())
+    store = lab.releases()
+
+    def mine(*states):
+        return [x for x in run(store.releases_in(states, provider_org_id=lab.NEMO))
+                if x.policy_ref == ref]
+    running = mine("running")
+    run(lab.controller().emergency_rollback(lw.OPERATOR, policy, ref, now=lab.now(),
+                                            reason="e8l k10 read half"))
+    after = run(store.release(ref))
+    rolled, still_running, every = mine("rolled_back"), mine("running"), mine()
+    lw.save(workdir, "listing.json", {"running": running, "rolled_back": rolled,
+                                      "running_after": still_running, "every": every})
+    assert [(x.release.state, x.endpoint_id, x.provider_org_id, x.latest_decision)
+            for x in running] == [("running", policy.endpoint_id, lab.NEMO, None)], running
+    assert still_running == [], "a rolled-back release is still listed as running"
+    assert [(x.release.state, x.release.fence) for x in rolled] == [("rolled_back", after.fence)]
+    decision = rolled[0].latest_decision
+    assert (decision.decision, decision.decided_by) == ("rollback", lw.OPERATOR), decision
+    assert every == rolled
