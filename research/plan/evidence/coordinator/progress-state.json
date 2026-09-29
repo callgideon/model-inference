@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 285,
- "updated": "2026-09-29T10:46:04Z",
+ "revision": 286,
+ "updated": "2026-09-29T11:16:24Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8155,11 +8155,11 @@
     "prefix": "infrx-l3-",
     "db": "l3"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T07:46:58Z",
-   "updated": "2026-09-29T10:46:04Z",
+   "updated": "2026-09-29T11:16:24Z",
    "blocker": null,
-   "next_action": "merge batch #43 (Opus; WR-LC2-1/2 Lab-app diffs, R231–R233); 0052 local-only until the next R151 window; known-good-reproof-2 at 0052",
+   "next_action": "0052 hosted under the next R151 window after known-good-reproof-2",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
@@ -8390,22 +8390,22 @@
   {
    "id": "W5-MERGE-43",
    "task": null,
-   "slice": "merge batch #43 (Opus): lab-control-2 d2565c4f (0052 local-only; +WR-LC2-1/2, R231–R233); workflow wf_f6b062a6-f2b",
+   "slice": "merge batch #43 (Opus): lab-control-2 d2565c4f (0052 local-only; +WR-LC2-1/2, R231–R233); workflow wf_f6b062a6-f2b; the L4-X29 re-cut 902ed4f6; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-43",
    "worktree": ".claude/worktrees/codex-w5-merge-43",
    "base": "f918dd89",
-   "head": null,
+   "head": "902ed4f6",
    "isolation": {
     "ports": "l3 57502; dlab 57500; l4 57503",
     "prefix": "infrx-l3-",
     "db": "l3"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T10:46:04Z",
-   "updated": "2026-09-29T10:46:04Z",
+   "updated": "2026-09-29T11:16:24Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge (R226–R230 before R231 at integration)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
