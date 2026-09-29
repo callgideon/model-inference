@@ -74,6 +74,7 @@ PIN_CLEAN = "test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty"
 JOURNEY_ENV = "test_lab_local_pipelines_and_traces_run_on_this_blocks_teacher_and_clickhouse"
 KEYED = "test_lab_local_an_e4_skip_on_another_key_runs_on_that_key_or_is_not_run_by_name"
 KEY_FREE = "test_lab_local_a_key_is_free_only_with_its_ports_unbound_and_its_lock_free"
+KEYED_B9 = "test_lab_local_every_e4_skip_at_b94fd337_is_planned_on_its_key"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("a_switch_left_off", "EVERY switch is ON in the composition", W,
@@ -182,6 +183,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("keyed_unlisted_rerun", "only KEYED modules are rerun", R,
        "        if module in KEYED:\n            key, env = KEYED[module]",
        "        if True:\n            key, env = KEYED.get(module, (\"d1\", {}))", KEYED),
+    _m("keyed_decide_unplanned", "composition-7's decide case runs on r1 (b94fd337's 15th "
+       "skip)", R, '    "tests.w.test_lab_workers_decide_pg": ("r1", {"INFRX_D_TASK": "r1"}),', "",
+       KEYED_B9),
     _m("key_port_unprobed", "a key whose port is bound is another lane's", R,
        '                    return f"{key}\'s {name} port {svc.host_port} is bound"',
        "                    pass", KEY_FREE),
@@ -344,8 +348,10 @@ def _layer1(root: pathlib.Path) -> pathlib.Path:
         recorded = f"research/plan/evidence/e/E4ON-raw-{head}/verdict.json"
         (root / recorded).parent.mkdir(parents=True)
         shutil.copy2(REPO / recorded, root / recorded)
-    xml = "research/plan/evidence/e/E4ON-raw-fd0aba04/e4-on.xml"          # KEYED, R222_FD
-    shutil.copy2(REPO / xml, root / xml)
+    for head in ("fd0aba04", "b94fd337"):                         # KEYED, R222_FD, KEYED_B9
+        xml = f"research/plan/evidence/e/E4ON-raw-{head}/e4-on.xml"
+        (root / xml).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO / xml, root / xml)
     return root
 
 

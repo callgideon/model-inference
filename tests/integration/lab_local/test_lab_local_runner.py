@@ -544,3 +544,18 @@ def test_lab_local_a_key_is_free_only_with_its_ports_unbound_and_its_lock_free(t
         assert runner.key_held("lltest", services=free) is None
     finally:
         lock.unlink(missing_ok=True)
+
+
+RECORDED_B9 = REPO / "research" / "plan" / "evidence" / "e" / "E4ON-raw-b94fd337"
+
+
+def test_lab_local_every_e4_skip_at_b94fd337_is_planned_on_its_key():
+    """b94fd337's e4-on skipped 15 cases: fd0aba04's 14 plus composition-7's
+    `test_lab_workers_decide_pg` (r2|r1, planned on r1: r2 is the busier key); every one is
+    planned on a key, so no skip is left open for want of a KEYED line."""
+    skipped, failures = runner.outcomes(RECORDED_B9 / "e4-on.xml")
+    plan = runner.keyed_plan(skipped)
+    assert len(skipped) == 15 and sorted(c for p in plan.values() for c in p["cases"]) == \
+        sorted(skipped)
+    assert plan["r1"]["env"] == {"INFRX_D_TASK": "r1"} and len(plan["r1"]["cases"]) == 1
+    assert plan["r1"]["cases"][0].startswith("tests.w.test_lab_workers_decide_pg::")

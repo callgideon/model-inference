@@ -158,6 +158,7 @@ KEYED = {
     "tests.w.test_lab_workers_teachers_pg": ("p2", {"INFRX_D_TASK": "p2"}),
     "tests.g.lab_releases.test_lab_releases_composition_pg": ("r2", {"INFRX_D_TASK": "r2"}),
     "tests.g.lab_releases.test_lab_releases_pg": ("r2", {"INFRX_D_TASK": "r2"}),
+    "tests.w.test_lab_workers_decide_pg": ("r1", {"INFRX_D_TASK": "r1"}),   # r2|r1 (b94fd337)
     "tests.w.test_lab_workers_judge_pg": ("j2", {"INFRX_D_TASK": "j2"}),
     "tests.w.test_worker_lab_eval_pg": ("b1", {"INFRX_D_TASK": "b1"}),
     "tests.g.lab_traces.test_lab_traces_stack": ("t2i", {"INFRX_LAB_API_STACK": "1"}),
