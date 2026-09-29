@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 261,
- "updated": "2026-09-29T02:35:23Z",
+ "revision": 262,
+ "updated": "2026-09-29T02:47:48Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7464,31 +7464,39 @@
    "branch": "codex/w5-lab-rollout-2",
    "worktree": ".claude/worktrees/codex-w5-lab-rollout-2",
    "base": "eb561d5f",
-   "head": null,
+   "head": "f6c074f6",
    "isolation": {
     "ports": "e8l 57400-57499",
     "prefix": "infrx-e8l-",
     "db": "e8l"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-09-29T01:46:45Z",
-   "updated": "2026-09-29T01:46:45Z",
+   "updated": "2026-09-29T02:47:48Z",
    "blocker": null,
-   "next_action": "handback → 2 lenses → one fix round → merge",
+   "next_action": "merge batch #33 (Opus) → LAB-ROLLOUT-LOCAL after WR-E8L-8 (rollout-identity) + WR-E8L-7 (= WR-LSQ-9-C, merge #30) + a rerun",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8,
-    "confidence": "medium",
-    "basis": "one fixture fix + two binds + one gate run"
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "ACCEPT f6c074f6; merge running",
+    "at": "2026-09-29T02:47:48Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/e/E8L-d68a1ddf.md",
+    "research/plan/evidence/e/E8L-raw-d68a1ddf/"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/integration/lab_rollout/**",
     "research/plan/evidence/e/E8L-*"
    ],
-   "wiring_requests": []
+   "wiring_requests": [
+    "WR-E8L-7",
+    "WR-E8L-8",
+    "WR-E8L-3"
+   ]
   },
   {
    "id": "W5-MERGE-30",
@@ -7584,6 +7592,72 @@
    "evidence": [],
    "commands": [],
    "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-33",
+   "task": null,
+   "slice": "merge batch #33 (Opus): lab-rollout-2 f6c074f6 (WR-E8L-2b, k09/k10 binds, E8L-F3)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-33",
+   "worktree": ".claude/worktrees/codex-w5-merge-33",
+   "base": "cd4f6e5b",
+   "head": null,
+   "isolation": {
+    "ports": "none",
+    "prefix": null,
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-29T02:47:48Z",
+   "updated": "2026-09-29T02:47:48Z",
+   "blocker": null,
+   "next_action": "verify lens → coordinator merge onto claude/consumer-v1",
+   "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "single-lane batch, layer-1 only",
+    "at": "2026-09-29T02:47:48Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-ROLLOUT-IDENTITY",
+   "task": "E8L",
+   "slice": "(wave5 LW6 lane rollout-identity, Opus) WR-E8L-8 = E8L-F2: Controller._converge compares candidates by serving identity (provider + serving_version_id / the R188 digest sans deployment revision), not the full ref; k06 rerun on e8l; base cd4f6e5b",
+   "agent": "opus",
+   "branch": "codex/w5-rollout-identity",
+   "worktree": ".claude/worktrees/codex-w5-rollout-identity",
+   "base": "cd4f6e5b",
+   "head": null,
+   "isolation": {
+    "ports": "r2 57534; e8l 57400-57499",
+    "prefix": "infrx-r2-",
+    "db": "r2"
+   },
+   "activity": "running",
+   "started": "2026-09-29T02:47:48Z",
+   "updated": "2026-09-29T02:47:48Z",
+   "blocker": null,
+   "next_action": "handback → 2 lenses → one fix round → merge (+ the E8L-F2 ruling) → LAB-ROLLOUT-LOCAL rerun",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "one product seam + one gate cell rerun"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/rollouts/**",
+    "tests/r/rollouts/**"
+   ],
    "wiring_requests": []
   }
  ],
