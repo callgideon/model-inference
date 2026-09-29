@@ -27,7 +27,8 @@ from .test_calibration_pg import DB, conn, evidence, pytestmark  # noqa: F401 - 
 
 
 def test_j3_pg_the_judge_roles_report_job_feeds_the_door(conn, monkeypatch) -> None:
-    monkeypatch.setattr(lab_workers, "trace_retention", lambda limits, url, objects=None: object())
+    monkeypatch.setattr(lab_workers, "trace_retention",
+                        lambda limits, url, objects=None, connect=None: object())
     worker = lab_workers.compose("judge", {
         "LAB_DATABASE_URL": pgharness.dsn(DB), "LAB_WORKER_HEALTH_PORT": "9",
         "JUDGE_PROVIDER_URL": "http://127.0.0.1:9", "CLICKHOUSE_URL": "http://ch.invalid:8123/x",
