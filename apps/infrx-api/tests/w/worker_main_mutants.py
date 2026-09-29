@@ -255,7 +255,20 @@ MUTANTS = (
        CONFIG, "    lab_eval_worker: bool = False\n", "    lab_eval_worker: bool = True\n",
        SWITCHES_OFF),
     _m("main_trace_switch_ignored", "TRACE_PUMPS off composes no spool, client or pump",
-       MAIN, "    if deployment.trace_pumps:  ", "    if True:  ", SWITCHES_OFF),
+       MAIN, "    if deployment.trace_pumps:                           # WR-T-4, off by default",
+       "    if True:                                             # WR-T-4, off by default",
+       SWITCHES_OFF),
+    # WR-C6-CAPTURE (c): the runner's job capture, only with TRACE_PUMPS
+    _m("main_job_capture_switch_ignored", "TRACE_PUMPS off leaves W's runner on the store",
+       MAIN, "    if deployment.trace_pumps:                           # WR-C6-CAPTURE (c), "
+             "off by default", "    if True:                                             "
+             "# WR-C6-CAPTURE (c), off by default", COMPOSITION),
+    _m("main_job_capture_not_installed", "TRACE_PUMPS on spools async output via the runner",
+       MAIN, "        capture.capture_jobs(runner, limits.trace_spool_dir, Wall, limits=limits)\n",
+       "        pass\n", TRACE_ON),
+    _m("main_job_capture_elsewhere", "the job spools live under TRACE_SPOOL_DIR",
+       MAIN, "capture.capture_jobs(runner, limits.trace_spool_dir, Wall",
+       "capture.capture_jobs(runner, limits.processing_cache_dir, Wall", TRACE_ON),
     _m("main_lab_switch_ignored", "LAB_EVAL_WORKER off composes no Lab store or pump",
        MAIN, "    if deployment.lab_eval_worker:  ", "    if True:  ", SWITCHES_OFF),
     _m("main_trace_switch_composes_nothing", "TRACE_PUMPS on runs the three trace pumps",
@@ -276,9 +289,11 @@ MUTANTS = (
     _m("main_trace_settings_not_required", "TRACE_PUMPS on refuses without its three settings",
        MAIN, "    if missing:\n        raise RuntimeMisconfigured(mode, missing)\n    holds = ",
        "    holds = ", TRACE_REFUSE),
-    _m("main_trace_ship_without_rotate", "each ship pass seals the spool's tail first",
-       MAIN, "        await spool.rotate()\n        return await shipper.ship()\n",
-       "        return await shipper.ship()\n", TRACE_ON),
+    _m("main_trace_worker_locks_the_spool", "the worker never locks the gateway's spool "
+       "(WR-C6-CAPTURE (c): one writer per directory)", MAIN,
+       "        shipper = ship.build_shipper(limits, None,",
+       "        shipper = ship.build_shipper(limits, __import__(\"infrx.traces.spool\").traces."
+       "spool.SpoolTraceSink(Wall, limits=limits),", TRACE_ON),
     _m("main_trace_sweep_without_expire", "each retention pass expires, then sweeps",
        MAIN, "        await retention.expire()\n        return await retention.sweep()\n",
        "        return await retention.sweep()\n", TRACE_ON),

@@ -1,0 +1,158 @@
+diff --git a/apps/infrx-api/tests/w/test_worker_main.py b/apps/infrx-api/tests/w/test_worker_main.py
+index 7f60a953..92184c53 100644
+--- a/apps/infrx-api/tests/w/test_worker_main.py
++++ b/apps/infrx-api/tests/w/test_worker_main.py
+@@ -1194,7 +1194,8 @@ def test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_may_not(
+ # switch that starts without what it needs, and an `eval_run` redelivery that freezes the run
+ # again (after a revocation `freeze` is refused, so the run would never end) or acknowledges
+ # a delivery whose wallet stopped it (the run would never be picked up again).
+-TRACE_PUMPS = {"trace_ship", "trace_retention", "feedback_projection"}
++# WR-C6-CAPTURE (c): the gateway ships (its lifespan); the worker keeps retention + projection
++TRACE_PUMPS = {"trace_retention", "feedback_projection"}
+ LAB_PUMPS = {"lab_eval", "lab_recover"}
+ TRACE_ENV = {"TRACE_PUMPS": "1", "CLICKHOUSE_URL": "http://ch.invalid:8123/infrx",
+              "S3_TRACE_BUCKET": "infrx-traces"}
+@@ -1249,13 +1250,14 @@ def test_worker_main__trace_pumps_refuse_to_start_without_their_settings(unset,
+ 
+ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(tmp_path,
+                                                                                monkeypatch):
+-    """On: T2I's `build_shipper` over a spool on `TRACE_SPOOL_DIR` (rotated before each ship
+-    pass, the S3 endpoint the deployment's), T3's expire-then-sweep over the shipper's own
+-    retention, and T2F's projector on the worker's pool into that retention's feedback
+-    projection, consulting it."""
++    """On: T2I's `build_shipper` (the S3 endpoint the deployment's) for T3's expire-then-sweep
++    over the shipper's own retention, and T2F's projector on the worker's pool into that
++    retention's feedback projection, consulting it. WR-C6-CAPTURE (c): the worker neither
++    ships nor locks `TRACE_SPOOL_DIR` (the gateway's: one writer per directory); its runner
++    spools each consented async job's output under `TRACE_SPOOL_DIR/jobs` (`JobCapture`)."""
++    from infrx.gateway import capture
+     from infrx.traces import ship
+     from infrx.traces.feedback.pg import PgFeedbackOutbox
+-    from infrx.traces.spool import SpoolTraceSink
+     calls, built = [], {}
+ 
+     class Retention:
+@@ -1283,20 +1285,15 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
+                                          S3_ENDPOINT_URL="http://127.0.0.1:9", **TRACE_ENV))
+     assert set(service.housekeeping) == HOUSEKEEPING | TRACE_PUMPS
+     started(service)
+-    spool = built["spool"]
+-    assert type(spool) is SpoolTraceSink and spool.spool_dir == tmp_path / "spool"
++    assert built["spool"] is None and "trace ship" not in steps
++    assert not (tmp_path / "spool" / ".writer.lock").exists()
+     assert built.get("endpoint_url") == "http://127.0.0.1:9"
+     assert built["limits"].clickhouse_url == TRACE_ENV["CLICKHOUSE_URL"]
+-    rotated = spool.rotate
+-
+-    async def rotate():
+-        calls.append("rotate")
+-        return await rotated()
+-    spool.rotate = rotate
+-    interval, step = steps["trace ship"]
+-    asyncio.run(step())
+-    assert calls == ["rotate", "ship"] and interval == worker_main.TRACE_SHIP_S
+-    calls.clear()
++    runner = service.loop.runner
++    assert type(runner.jobs) is capture.JobCapture and runner.jobs.jobs is service.jobs
++    assert runner.put_result == runner.jobs.put_result
++    assert runner.jobs._put_result == service.jobs.put_result
++    assert runner.jobs.root == tmp_path / "spool" / capture.JOBS_DIR
+     interval, step = steps["trace retention"]
+     asyncio.run(step())
+     assert calls == ["expire", "sweep"] and interval == worker_main.TRACE_RETENTION_S
+@@ -1314,7 +1311,6 @@ def test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores(
+     assert getattr(holds, "__func__", None) is ContentAccess.holds
+     assert holds.__self__.refs.connect is service.jobs._connect
+     assert not hasattr(Shipper.retention, "holds")        # nothing assigned after the build
+-    asyncio.run(spool.close())
+ 
+ 
+ def test_worker_main__the_shippers_retention_holds_what_it_was_given(monkeypatch):
+diff --git a/apps/infrx-api/tests/w/test_worker_traces_pg.py b/apps/infrx-api/tests/w/test_worker_traces_pg.py
+index ef452bd6..a4f201c2 100644
+--- a/apps/infrx-api/tests/w/test_worker_traces_pg.py
++++ b/apps/infrx-api/tests/w/test_worker_traces_pg.py
+@@ -1,5 +1,6 @@
+-"""WR-T-4 on the real services: the worker composed with `TRACE_PUMPS` on runs T2I's shipper,
+-T3's retention and T2F's feedback projection against PostgreSQL (the t2f D harness: every
++"""WR-T-4 on the real services: the worker composed with `TRACE_PUMPS` on runs T3's retention
++and T2F's feedback projection, and the gateway's capture (WR-C6-CAPTURE (c): only the gateway
++ships, `gateway.capture.build` on the same settings) ships T2I's spool, against PostgreSQL (the t2f D harness: every
+ migration, the admission seed, the `feedback` flag on), ClickHouse and MinIO (the t2f
+ block: 57543 / 57545). The composition is `worker_main.compose` from the environment; each
+ pump's step runs once, as `every` would run it.
+@@ -27,6 +28,8 @@ from infrx.scheduling.memory import MemoryScheduler
+ from infrx.traces import feedback, ship
+ from infrx.traces.retention import policy
+ from infrx.traces.spool import segment_names
++from infrx.gateway import capture as gateway_capture
++from infrx.state.jobstore import connector
+ from infrx.worker import __main__ as worker_main
+ 
+ from ..d import pgharness
+@@ -117,11 +120,12 @@ def test_worker_traces_pg__the_composed_pumps_ship_project_and_retain(tmp_path,
+                           S3_TRACE_BUCKET=BUCKET, S3_ENDPOINT_URL=endpoint)
+         service, _ = worker_main.compose(from_env(env), objects=InMemoryObjectStore(),
+                                          index=MemoryScheduler(utc_now))
+-        for name in ("trace_ship", "trace_retention", "feedback_projection"):
++        for name in ("trace_retention", "feedback_projection"):
+             run(service.housekeeping[name]())
+-        assert set(steps) == {"trace ship", "trace retention", "feedback projection"}
++        assert set(steps) == {"trace retention", "feedback projection"}
++        gateway = gateway_capture.build(from_env(env), connector(pgharness.dsn(w.database)))
+ 
+-        report = run(steps["trace ship"]())
++        report = run(gateway.ship_once())[0]
+         assert (report.shipped, report.rows, report.held) == (1, 1, {}), report
+         [row] = run(ship.ClickHouseProjection(client).find(credit.org_id, credit.request_id))
+         assert (row.serving_version_id, row.rate_card_version, row.policy_version) == (
+@@ -139,6 +143,7 @@ def test_worker_traces_pg__the_composed_pumps_ship_project_and_retain(tmp_path,
+         assert projected.feedback_id == feedback_id and pending_events(w) == 0
+ 
+         assert run(steps["trace retention"]()) == {"cleaned": 0, "held": 0, "failed": 0}
+-        assert run(steps["trace ship"]()).rows == 0            # nothing left to ship
++        assert run(gateway.ship_once())[0].rows == 0         # nothing left to ship
++        run(gateway.close())
+     finally:
+         w.owner.close()
+diff --git a/apps/infrx-api/tests/w/worker_main_mutants.py b/apps/infrx-api/tests/w/worker_main_mutants.py
+index 23e12c6c..020fe357 100644
+--- a/apps/infrx-api/tests/w/worker_main_mutants.py
++++ b/apps/infrx-api/tests/w/worker_main_mutants.py
+@@ -255,7 +255,20 @@ MUTANTS = (
+        CONFIG, "    lab_eval_worker: bool = False\n", "    lab_eval_worker: bool = True\n",
+        SWITCHES_OFF),
+     _m("main_trace_switch_ignored", "TRACE_PUMPS off composes no spool, client or pump",
+-       MAIN, "    if deployment.trace_pumps:  ", "    if True:  ", SWITCHES_OFF),
++       MAIN, "    if deployment.trace_pumps:                           # WR-T-4, off by default",
++       "    if True:                                             # WR-T-4, off by default",
++       SWITCHES_OFF),
++    # WR-C6-CAPTURE (c): the runner's job capture, only with TRACE_PUMPS
++    _m("main_job_capture_switch_ignored", "TRACE_PUMPS off leaves W's runner on the store",
++       MAIN, "    if deployment.trace_pumps:                           # WR-C6-CAPTURE (c), "
++             "off by default", "    if True:                                             "
++             "# WR-C6-CAPTURE (c), off by default", COMPOSITION),
++    _m("main_job_capture_not_installed", "TRACE_PUMPS on spools async output via the runner",
++       MAIN, "        capture.capture_jobs(runner, limits.trace_spool_dir, Wall, limits=limits)\n",
++       "        pass\n", TRACE_ON),
++    _m("main_job_capture_elsewhere", "the job spools live under TRACE_SPOOL_DIR",
++       MAIN, "capture.capture_jobs(runner, limits.trace_spool_dir, Wall",
++       "capture.capture_jobs(runner, limits.processing_cache_dir, Wall", TRACE_ON),
+     _m("main_lab_switch_ignored", "LAB_EVAL_WORKER off composes no Lab store or pump",
+        MAIN, "    if deployment.lab_eval_worker:  ", "    if True:  ", SWITCHES_OFF),
+     _m("main_trace_switch_composes_nothing", "TRACE_PUMPS on runs the three trace pumps",
+@@ -276,9 +289,11 @@ MUTANTS = (
+     _m("main_trace_settings_not_required", "TRACE_PUMPS on refuses without its three settings",
+        MAIN, "    if missing:\n        raise RuntimeMisconfigured(mode, missing)\n    holds = ",
+        "    holds = ", TRACE_REFUSE),
+-    _m("main_trace_ship_without_rotate", "each ship pass seals the spool's tail first",
+-       MAIN, "        await spool.rotate()\n        return await shipper.ship()\n",
+-       "        return await shipper.ship()\n", TRACE_ON),
++    _m("main_trace_worker_locks_the_spool", "the worker never locks the gateway's spool "
++       "(WR-C6-CAPTURE (c): one writer per directory)", MAIN,
++       "        shipper = ship.build_shipper(limits, None,",
++       "        shipper = ship.build_shipper(limits, __import__(\"infrx.traces.spool\").traces."
++       "spool.SpoolTraceSink(Wall, limits=limits),", TRACE_ON),
+     _m("main_trace_sweep_without_expire", "each retention pass expires, then sweeps",
+        MAIN, "        await retention.expire()\n        return await retention.sweep()\n",
+        "        return await retention.sweep()\n", TRACE_ON),

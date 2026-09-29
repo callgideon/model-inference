@@ -46,6 +46,7 @@ from ..scheduling.reconcile import Reconciler
 from ..state.catalog import PgCatalogDirectory
 from ..state.jobstore import PgJobStore, session_state_allowed
 from ..state.journal import PgStreamStore
+from . import capture as trace_capture
 from .routes import intake, models
 from .routes.ingress import IngressDeps
 from .routes.relay import Relay
@@ -237,6 +238,8 @@ def adapters_from_env(settings, **injected):
                     # R1 (WR-R1-3-C): only when the deployment enables ROLLOUT_ROUTING
                     **_rollouts(settings, connect),
                     # G4F (WR-G4F-1): only when the deployment enables the feedback route
+                    # WR-C6-CAPTURE: consent, capture and shipping, only with TRACE_PUMPS
+                    **trace_capture.adapters(settings, connect),
                     **({"feedback": _pg_feedback(connect)}
                        if settings.deployment.feedback_api else {}),
                     **adapters}
@@ -584,6 +587,7 @@ class Lifetime:
     reconciler: Any
     pool: Any = None
     relay: Any = None
+    capture: Any = None                       # WR-C6-CAPTURE: its ship pump (TRACE_PUMPS)
     tasks: list = field(default_factory=list)
 
 
@@ -609,7 +613,7 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                        lifecycle=None, readiness=None, feedback=None, lab_control=None,
                        lab_traces=None, rollouts=None, trace_export=None, lab_evaluations=None,
                        lab_pipelines=None, lab_releases=None, lab_checkpoints=None,
-                       lab_datasets=None) -> IngressDeps:
+                       lab_datasets=None, capture=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -666,8 +670,9 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     rt.lab_checkpoints = lab_checkpoints if deployment.lab_checkpoints else None
     rt.lab_datasets = lab_datasets if deployment.lab_datasets else None
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
-                           relay=relay)
+                           relay=relay, capture=capture)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
+                       capture=capture,
                        catalog=catalog, large_bodies=rt.large_bodies)
 
 
@@ -729,11 +734,15 @@ async def lifespan(app):
         await lifetime.pool.open()
     lifetime.tasks = [asyncio.create_task(lifetime.reconciler.run(stop)),
                       asyncio.create_task(_refresh(lifetime.probes, stop))]
+    if lifetime.capture is not None:          # WR-C6-CAPTURE (c): only the gateway ships
+        lifetime.tasks.append(asyncio.create_task(lifetime.capture.pump(stop)))
     try:
         yield
     finally:
         stop.set()
         await asyncio.gather(*lifetime.tasks, return_exceptions=True)
+        if lifetime.capture is not None:
+            await lifetime.capture.close()          # flushed and sealed for the next boot
         if lifetime.relay is not None:
             await lifetime.relay.drain(DRAIN_S)     # before the pool it needs is closed
         if lifetime.pool is not None:

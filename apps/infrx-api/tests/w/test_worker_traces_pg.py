@@ -1,5 +1,6 @@
-"""WR-T-4 on the real services: the worker composed with `TRACE_PUMPS` on runs T2I's shipper,
-T3's retention and T2F's feedback projection against PostgreSQL (the t2f D harness: every
+"""WR-T-4 on the real services: the worker composed with `TRACE_PUMPS` on runs T3's retention
+and T2F's feedback projection, and the gateway's capture (WR-C6-CAPTURE (c): only the gateway
+ships, `gateway.capture.build` on the same settings) ships T2I's spool, against PostgreSQL (the t2f D harness: every
 migration, the admission seed, the `feedback` flag on), ClickHouse and MinIO (the t2f
 block: 57543 / 57545). The composition is `worker_main.compose` from the environment; each
 pump's step runs once, as `every` would run it.
@@ -27,6 +28,8 @@ from infrx.scheduling.memory import MemoryScheduler
 from infrx.traces import feedback, ship
 from infrx.traces.retention import policy
 from infrx.traces.spool import segment_names
+from infrx.gateway import capture as gateway_capture
+from infrx.state.jobstore import connector
 from infrx.worker import __main__ as worker_main
 
 from ..d import pgharness
@@ -117,11 +120,12 @@ def test_worker_traces_pg__the_composed_pumps_ship_project_and_retain(tmp_path, 
                           S3_TRACE_BUCKET=BUCKET, S3_ENDPOINT_URL=endpoint)
         service, _ = worker_main.compose(from_env(env), objects=InMemoryObjectStore(),
                                          index=MemoryScheduler(utc_now))
-        for name in ("trace_ship", "trace_retention", "feedback_projection"):
+        for name in ("trace_retention", "feedback_projection"):
             run(service.housekeeping[name]())
-        assert set(steps) == {"trace ship", "trace retention", "feedback projection"}
+        assert set(steps) == {"trace retention", "feedback projection"}
+        gateway = gateway_capture.build(from_env(env), connector(pgharness.dsn(w.database)))
 
-        report = run(steps["trace ship"]())
+        report = run(gateway.ship_once())[0]
         assert (report.shipped, report.rows, report.held) == (1, 1, {}), report
         [row] = run(ship.ClickHouseProjection(client).find(credit.org_id, credit.request_id))
         assert (row.serving_version_id, row.rate_card_version, row.policy_version) == (
@@ -139,6 +143,7 @@ def test_worker_traces_pg__the_composed_pumps_ship_project_and_retain(tmp_path, 
         assert projected.feedback_id == feedback_id and pending_events(w) == 0
 
         assert run(steps["trace retention"]()) == {"cleaned": 0, "held": 0, "failed": 0}
-        assert run(steps["trace ship"]()).rows == 0            # nothing left to ship
+        assert run(gateway.ship_once())[0].rows == 0         # nothing left to ship
+        run(gateway.close())
     finally:
         w.owner.close()

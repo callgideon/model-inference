@@ -364,10 +364,13 @@ class DeploymentSettings:
     # store's pool. Off by default: the launched API is unchanged and no Lab route exists.
     lab_control: bool = False
     lab_traces: bool = False
-    # WR-T-4 (composition lane, LW2): the worker runs T2I's shipper (over a spool on
-    # `TRACE_SPOOL_DIR`, which it then owns), T3's retention and T2F's feedback projection.
-    # Off by default; on, `TRACE_SPOOL_DIR`, `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` are
-    # required. Capture stays off: the gateway builds no trace sink either way.
+    # WR-T-4 + WR-C6-CAPTURE (R250). On: the gateway composes `gateway.capture` - the
+    # per-key consent policy, the capture of consented sync/SSE answers into its spool on
+    # `TRACE_SPOOL_DIR`, and the ship pass in its lifespan every 10 s (its own spool, then
+    # the worker's job spools under `TRACE_SPOOL_DIR/jobs`). The worker runs T3's retention
+    # and T2F's feedback projection and spools consented async output. `TRACE_SPOOL_DIR`,
+    # `CLICKHOUSE_URL` and `S3_TRACE_BUCKET` are required by both, and there is one gateway
+    # process per `TRACE_SPOOL_DIR`. Off by default.
     trace_pumps: bool = False
     # WR-B-5 (composition lane, LW2): the worker works D7's `eval_run` outbox events (B1's
     # `resume` + `Runner`) and runs `lab_recover`. Lab-only, off by default; on, it refuses

@@ -378,7 +378,10 @@ def composition(workdir: Path, login_probe=None):
             for offset in LAB_GATEWAY_OFFSETS:    # the block is in the ephemeral range
                 labgw = world.second_gateway(trip.box, port_offset=offset)
                 try:
+                    # WR-LC-LOCAL: not the capture gateway - the main one holds the spool's
+                    # lock (one gateway process per TRACE_SPOOL_DIR, lab-capture (c)).
                     labgw.start("gateway", timeout=90.0, ROLLOUT_ROUTING="false",
+                                TRACE_PUMPS="false",
                                 DATABASE_URL=harness.pg_dsn(trip.world.database))
                     refused.pop("lab-gateway", None)
                     break
