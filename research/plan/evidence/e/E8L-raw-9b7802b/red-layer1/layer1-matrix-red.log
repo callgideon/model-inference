@@ -1,0 +1,33 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_e8l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases _____
+
+    def test_e8l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
+        """The cells are exactly tasks.json E8L's test_ids, each carried by a scenario; the brief's
+        legs are all there: R1 off, shadow, canary/A-B, the rollback and restart drills, the B2
+        non-inferiority/cost decision, the promoted alias, R3's variant, and the three legs that
+        wait (GPU parity, the I7 process, the UI)."""
+        tasks = json.loads((REPO / "research/plan/tasks.json").read_text())
+        e8l = next(task for task in tasks["tasks"] if task["id"] == "E8L")
+        assert tuple(e8l["test_ids"]) == runner.TEST_IDS
+        for tid in runner.TEST_IDS:
+            assert any(tid in spec["test_ids"] for spec in runner.SCENARIOS.values()), tid
+        assert set(runner.REQUIRED) == set(runner.SCENARIOS)
+        assert len(runner.SCENARIOS) == 10
+        assert runner.SCENARIOS["k08"]["lanes"] == ["P-08"]
+        assert runner.SCENARIOS["k09"]["lanes"] == [], (
+            "k09's I7 entry point landed (composition-2): it runs for real now, NOT RUN only "
+            "internally (WR-R2-3, the pass loop), not as a whole-scenario merge wait")
+>       assert runner.SCENARIOS["k10"]["lanes"] == [], (
+            "WR-R4-2 is composed (merge #50): k10's port half runs pilot.lab_releases and "
+            "`rollout decide` for real, its UI half apps/lab/tests/e2e/rollout (LAB-E2E, R238)")
+E       AssertionError: WR-R4-2 is composed (merge #50): k10's port half runs pilot.lab_releases and `rollout decide` for real, its UI half apps/lab/tests/e2e/rollout (LAB-E2E, R238)
+E       assert ['WR-R4-2'] == []
+E         
+E         Left contains one more item: 'WR-R4-2'
+E         Use -v to get more diff
+
+../../tests/integration/lab_rollout/test_e8l_runner.py:65: AssertionError
+=========================== short test summary info ============================
+FAILED ../../tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases
+1 failed, 11 deselected in 0.03s

@@ -1,0 +1,38 @@
+...........FF                                                            [100%]
+=================================== FAILURES ===================================
+________ test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun ________
+
+    def test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun():
+        """k09 PASS is the pass-loop half; the breach half is a NOT RUN sub-cell in verdict.json
+        naming WR-C6-LIVE and the exact rerun, so the R222 tally is not prose-only."""
+        result = runner.classify(junit(*everything("k09")))
+        assert result["k09"]["status"] == "PASS", "the sub-cell never lowers its parent"
+        (cell,) = runner.sub_cells(result)
+>       assert (cell["id"], cell["parent"], cell["parent_status"], cell["status"], cell["reason"]) \
+            == ("k09-breach", "k09", "PASS", "NOT RUN", "NOT RUN[WR-C6-LIVE]")
+E       AssertionError: assert ('k09-breach'...[WR-C5-LIVE]') == ('k09-breach'...[WR-C6-LIVE]')
+E         
+E         At index 4 diff: 'NOT RUN[WR-C5-LIVE]' != 'NOT RUN[WR-C6-LIVE]'
+E         Use -v to get more diff
+
+../../tests/integration/lab_rollout/test_e8l_runner.py:165: AssertionError
+___________ test_e8l_r222_accepts_only_a_not_run_out_of_local_scope ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7c30f1302d20>
+
+    def test_e8l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
+        """R222/R234/R235: the gate is accepted locally with no FAIL and every NOT RUN (sub-cells
+        included) waiting only on out-of-local-scope work - k08 on a GPU (P-08), k09's breach
+        half on a product WR (WR-C6-LIVE) - by its own NOT RUN reason. A NOT RUN on in-scope work
+        (k10, composed since merge #50), a FAIL, or a scenario NOT RUN for another reason
+        (deselected, never run) stays open."""
+>       assert runner.OUT_OF_SCOPE == {"P-08": "GPU (P-08 staging target)",
+               ^^^^^^^^^^^^^^^^^^^
+                                       "WR-C6-LIVE": "product WR: WR-C6-LIVE"}
+E       AttributeError: module 'e8l_runner' has no attribute 'OUT_OF_SCOPE'
+
+../../tests/integration/lab_rollout/test_e8l_runner.py:178: AttributeError
+=========================== short test summary info ============================
+FAILED ../../tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_k09s_breach_half_is_a_not_run_sub_cell_with_its_rerun
+FAILED ../../tests/integration/lab_rollout/test_e8l_runner.py::test_e8l_r222_accepts_only_a_not_run_out_of_local_scope
+2 failed, 11 passed in 0.08s
