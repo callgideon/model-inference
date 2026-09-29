@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 297,
- "updated": "2026-09-29T13:59:28Z",
+ "revision": 298,
+ "updated": "2026-09-29T14:11:33Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -8087,11 +8087,11 @@
     "prefix": "infrx-lab-on-",
     "db": "lab-on"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T07:34:02Z",
-   "updated": "2026-09-29T13:12:28Z",
+   "updated": "2026-09-29T14:11:33Z",
    "blocker": null,
-   "next_action": "merge batch #47 (WR-LDP-5 pins, WR-LDP-1/3, R236/R237) → runbook 08 + infra/lab/rollout on the tip; WR-LDP-2/F1/F3 → lane lab-control-routes",
+   "next_action": "operator: the EXPECTED_PENDING=0052 reviewed patch (R151 condition 2, classifier-denied in auto mode) + the window; box Lab units via infra/lab/rollout under the runbook",
    "estimate": {
     "optimistic_h": 5,
     "likely_h": 8,
@@ -8711,22 +8711,22 @@
   {
    "id": "W5-MERGE-47",
    "task": null,
-   "slice": "merge batch #47 (Opus): lab-deploy-prep 02ec83ac (+WR-LDP-5 pins, WR-LDP-1/3/6, R236–R237); workflow wf_e22de6b6-eed",
+   "slice": "merge batch #47 (Opus): lab-deploy-prep 02ec83ac (+WR-LDP-5 pins, WR-LDP-1/3/6, R236–R237); workflow wf_e22de6b6-eed; step-50 NEEDS follow-up 679b188d; integrated (R236–R237 sorted into §10)",
    "agent": "opus",
    "branch": "codex/w5-merge-47",
    "worktree": ".claude/worktrees/codex-w5-merge-47",
    "base": "046f4322",
-   "head": null,
+   "head": "679b188d",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T13:12:28Z",
-   "updated": "2026-09-29T13:12:28Z",
+   "updated": "2026-09-29T14:11:33Z",
    "blocker": null,
-   "next_action": "integrate → make lab-local + runbook 08 + infra/lab/rollout on the tip",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
