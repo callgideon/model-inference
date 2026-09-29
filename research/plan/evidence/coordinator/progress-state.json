@@ -8677,7 +8677,7 @@
   {
    "id": "W5-MERGE-46",
    "task": null,
-   "slice": "merge batch #46 (Opus): known-good-reproof-2 f1fb6990 (+WR-KGR2-1/2, RV-2 test; no rulings)",
+   "slice": "merge batch #46 (Opus): known-good-reproof-2 f1fb6990 (+WR-KGR2-1/2, RV-2 test; no rulings); workflow wf_0a1d4834-72a",
    "agent": "opus",
    "branch": "codex/w5-merge-46",
    "worktree": ".claude/worktrees/codex-w5-merge-46",
@@ -8711,7 +8711,7 @@
   {
    "id": "W5-MERGE-47",
    "task": null,
-   "slice": "merge batch #47 (Opus): lab-deploy-prep 02ec83ac (+WR-LDP-5 pins, WR-LDP-1/3/6, R236–R237)",
+   "slice": "merge batch #47 (Opus): lab-deploy-prep 02ec83ac (+WR-LDP-5 pins, WR-LDP-1/3/6, R236–R237); workflow wf_e22de6b6-eed",
    "agent": "opus",
    "branch": "codex/w5-merge-47",
    "worktree": ".claude/worktrees/codex-w5-merge-47",
@@ -8747,7 +8747,7 @@
   {
    "id": "W5-LAB-CONTROL-ROUTES",
    "task": "I2L",
-   "slice": "WR-LDP-2 + LDP-F1 + LDP-F3: every Lab route family mounted in the control unit (R237), typed 503s (Opus)",
+   "slice": "WR-LDP-2 + LDP-F1 + LDP-F3: every Lab route family mounted in the control unit (R237), typed 503s (Opus); workflow wf_ea4325ae-44f",
    "agent": "opus",
    "branch": "codex/w5-lab-control-routes",
    "worktree": ".claude/worktrees/codex-w5-lab-control-routes",
