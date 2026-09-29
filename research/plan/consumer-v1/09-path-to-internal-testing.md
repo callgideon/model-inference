@@ -34,6 +34,20 @@ Inputs the coordinator cannot supply (each is a user-held action):
 
 Then, in order (the lab-deploy-prep runbook `08-lab-internal-testing-rollout.md`): apply the migrations → install the Lab units and env files (SSM names only) → switches ON one family at a time with a smoke after each → deploy the Lab app → onboard the testers → run the internal-testing checklist → record the first tester's pass as INTERNAL-TESTING accepted.
 
+## Sandbox limits recorded 2026-09-29T08:50Z
+
+The operator granted permission for every blocker ("you complete all the blockers on me, yourself"). The coordinator's auto-mode classifier still refused, and these are not retried:
+
+| Action | Denial | Who runs it |
+|---|---|---|
+| `docker rm -f …` / `docker volume rm …` of the foreign leftovers | Interfere With Workloads | operator (or an allow rule) |
+| `sudo sysctl -w net.ipv4.ip_local_reserved_ports=57000-57599` | Modify Shared Resources | operator (or an allow rule) |
+| editing `infra/rollout/hosted-migrate.sh` EXPECTED_PENDING to 0027–0051, then `hosted-migrate.sh --through w6b` / `w7` | Production Deploy | operator, from the runbook (or an allow rule) |
+| the Vercel deployment of `apps/lab` (token `/callgideon/prod/VERCEL_TOKEN`), the box cutover via `infra/rollout/ssm.sh` | Production Deploy (same class) | operator, from the runbook (or an allow rule) |
+| an implementer-only lane shape (no verify lenses) | CI Bypass | not pursued: lanes keep their two lenses and one fix round |
+
+An allow rule in the operator's Claude Code settings for `infra/rollout/*.sh`, `docker rm`, `docker volume rm`, `sysctl` and `vercel` lets the coordinator run Phase B itself; otherwise the runbook `08-lab-internal-testing-rollout.md` (lane lab-deploy-prep) is the operator's script.
+
 ## Out of scope for internal testing (deferred, not blocking)
 
 G5 (callbacks, C1), I4 (fleet, C2), X1–X6 (expansion, C3): conditional waves per `07-post-launch-waves.md`; no work is scheduled.
@@ -41,3 +55,4 @@ G5 (callbacks, C1), I4 (fleet, C2), X1–X6 (expansion, C3): conditional waves p
 ## Verification log
 
 - 2026-09-29T07:35Z: written at tip b0504b44; three lanes dispatched (composition-5, lab-observe-2, lab-deploy-prep) alongside the three in flight.
+- 2026-09-29T08:50Z: sandbox limits recorded; Phase A continues unchanged (lens rounds kept); Phase B is the operator's or needs an allow rule.
