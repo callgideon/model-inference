@@ -231,3 +231,5 @@ before this lane started.
 - basis: every brief item is done and green; the only remaining risk is a merge-time
   conflict with a concurrently-landing migration number (0047-0051 are the next five free
   numbers on this base as of `eb561d5f`; per rule 3, the actual number is assigned at merge).
+
+Rulings: proposals 1 and 2 numbered R214 and R215 in `08-contracts-v1-encoding.md` §10 at the lab-sql-lw6 merge on `codex/w5-merge-34` (2026-09-29).

@@ -168,6 +168,7 @@ F = "state/lab_consent.py"
 CALLS = "test_calls__carry_the_callers_provider_and_only_the_fields_given"
 TYPED = "test_refusals__are_typed_so_a_duplicate_submit_is_never_retried_blind"
 JUDGE_UNITS = "test_judge__sends_the_ports_fields_and_types_the_answers"
+JUDGE_RUNS_IN_UNITS = "test_judge__runs_in_sends_the_providers_states_and_limit"
 
 
 def _p(name, invariant, old, new, *cases, file=F, **kw) -> Mutant:
@@ -211,6 +212,9 @@ CODE_MUTANTS = (
     _p("d6j_py_judge_created_lost", "only the creator of the intent egresses",
        '        return _run(answer["run"]), answer["created"]',
        '        return _run(answer["run"]), True', JUDGE_UNITS),
+    _p("d6j_py_judge_runs_in_unscoped", "a run listing is the caller's provider's",
+       '"provider_org_id": provider_org_id, "states": list(states), "limit": limit})]',
+       '"states": list(states), "limit": limit})]', JUDGE_RUNS_IN_UNITS),
     _p("d6j_py_untyped_refusal", "a SQL refusal is its typed error",
        "            raise domain_error(failed) from None", "            raise", TYPED,
        file="state/lab_data.py"),
